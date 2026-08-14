@@ -20,6 +20,11 @@ namespace Mailbox.App.Views;
 public sealed class CalendarPeek : Border
 {
     private readonly DateTime _today;
+
+    /// <summary>The day whose agenda is on show. Starts on today and follows a click.</summary>
+    private DateTime _selected;
+
+    private readonly Panel _agendaHost = new();
     private DateTime _month;
     private readonly Panel _monthHost = new();
     private readonly TextBlock _monthLabel = new();
@@ -27,6 +32,7 @@ public sealed class CalendarPeek : Border
     public CalendarPeek(DateTime today, bool docked)
     {
         _today = today;
+        _selected = today;
         _month = new DateTime(today.Year, today.Month, 1);
         IsDocked = docked;
 
@@ -104,7 +110,8 @@ public sealed class CalendarPeek : Border
         Bind(rule, BackgroundProperty, "border.subtle.brush");
         root.Children.Add(rule);
 
-        root.Children.Add(BuildAgenda());
+        _agendaHost.Children.Add(BuildAgenda());
+        root.Children.Add(_agendaHost);
         return root;
     }
 
@@ -178,6 +185,7 @@ public sealed class CalendarPeek : Border
     private Control BuildDayCell(DateTime date, int row, int column)
     {
         var isToday = date.Date == _today.Date;
+        var isSelected = date.Date == _selected.Date;
         var inMonth = date.Month == _month.Month;
 
         var label = new TextBlock
@@ -192,18 +200,44 @@ public sealed class CalendarPeek : Border
         else if (inMonth) Bind(label, TextBlock.ForegroundProperty, "text.primary.brush");
         else Bind(label, TextBlock.ForegroundProperty, "text.disabled.brush");
 
-        var cell = new Border
+        // Today keeps its filled marker whatever is selected; the selected day is outlined, so
+        // the two read as different things rather than one overwriting the other.
+        var cell = new Button
         {
             Height = 22,
-            Child = label,
+            Content = label,
+            Padding = default,
+            MinWidth = 0,
+            MinHeight = 0,
             CornerRadius = new CornerRadius(2),
+            BorderThickness = new Thickness(isSelected && !isToday ? 1 : 0),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Background = null,
+            Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand),
         };
 
         if (isToday) Bind(cell, BackgroundProperty, "accent.rest.brush");
+        if (isSelected && !isToday) Bind(cell, BorderBrushProperty, "accent.rest.brush");
+
+        var day = date;
+        cell.Click += (_, _) =>
+        {
+            _selected = day;
+            if (day.Month != _month.Month) _month = new DateTime(day.Year, day.Month, 1);
+            RenderMonth();
+            RenderAgenda();
+        };
 
         Grid.SetRow(cell, row);
         Grid.SetColumn(cell, column);
         return cell;
+    }
+
+    private void RenderAgenda()
+    {
+        _agendaHost.Children.Clear();
+        _agendaHost.Children.Add(BuildAgenda());
     }
 
     /// <summary>
@@ -215,7 +249,7 @@ public sealed class CalendarPeek : Border
 
         var heading = new TextBlock
         {
-            Text = _today.ToString("dddd", CultureInfo.CurrentCulture),
+            Text = _selected.ToString("dddd", CultureInfo.CurrentCulture),
             FontWeight = FontWeight.SemiBold,
         };
         Bind(heading, TextBlock.ForegroundProperty, "text.primary.brush");

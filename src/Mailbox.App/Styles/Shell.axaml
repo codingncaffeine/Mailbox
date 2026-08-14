@@ -209,6 +209,31 @@
         <Setter Property="Background" Value="{DynamicResource state.selected.brush}" />
     </Style>
 
+    <!-- ======================== Flat header controls =========================== -->
+    <!--
+        Filter pivots, column headers, group headers, the pane collapse and the status bar's
+        controls. They read as text rather than as buttons, so they carry no chrome of their
+        own until hovered — but they are buttons, and the colour comes from a token like
+        everything else. Drawn as TextBlocks they looked clickable and were not.
+    -->
+    <Style Selector="Button.flat">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="0" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Padding" Value="3,1" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+
+    <Style Selector="Button.flat:pointerover">
+        <Setter Property="Background" Value="{DynamicResource state.hover.brush}" />
+    </Style>
+
+    <Style Selector="Button.flat:pressed">
+        <Setter Property="Background" Value="{DynamicResource state.pressed.brush}" />
+    </Style>
+
     <!-- =========================== Account button ============================= -->
     <!-- While its panel is open the button reads as pressed: a light box with a hairline
          border around the circle, measured off the capture. -->

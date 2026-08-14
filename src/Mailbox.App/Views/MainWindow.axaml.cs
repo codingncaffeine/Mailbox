@@ -57,6 +57,8 @@ public partial class MainWindow : Window
         WireAccountButton(shell);
         DataContext = shell;
 
+        ApplyHarnessState(shell);
+
         // Lets the fidelity harness capture the peek states, which a screenshot otherwise
         // cannot reach because they need a click.
         switch (Environment.GetEnvironmentVariable("MAILBOX_PEEK")?.ToLowerInvariant())
@@ -257,6 +259,34 @@ public partial class MainWindow : Window
 
         e.Handled = true;
         BeginResizeDrag(edge, e);
+    }
+
+    /// <summary>
+    /// Puts the shell into a state a screenshot can be taken of. Every one of these is
+    /// reachable by clicking, and a capture cannot click — so a control wired to state nobody
+    /// photographs is a control nobody has actually checked.
+    /// </summary>
+    private static void ApplyHarnessState(ShellViewModel shell)
+    {
+        var wanted = Environment.GetEnvironmentVariable("MAILBOX_STATE");
+        if (string.IsNullOrWhiteSpace(wanted)) return;
+
+        foreach (var state in wanted.ToLowerInvariant().Split(',', StringSplitOptions.RemoveEmptyEntries))
+        {
+            switch (state.Trim())
+            {
+                case "unread": shell.ShowUnread.Execute(null); break;
+                case "sort-from": shell.SortBy("From"); break;
+                case "sort-subject": shell.SortBy("Subject"); break;
+                case "sort-asc": shell.ToggleSortDirection.Execute(null); break;
+                case "group-collapsed": shell.ToggleGroup.Execute(null); break;
+                case "nav-collapsed": shell.ToggleNav.Execute(null); break;
+                case "no-reading": shell.HideReadingPane.Execute(null); break;
+                case "zoom-in": shell.ZoomIn.Execute(null); break;
+                case "zoom-out": shell.ZoomOut.Execute(null); break;
+                default: Log.Warn($"Unknown MAILBOX_STATE: {state}"); break;
+            }
+        }
     }
 
     /// <summary>

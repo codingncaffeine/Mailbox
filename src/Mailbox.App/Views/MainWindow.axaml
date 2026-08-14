@@ -291,6 +291,7 @@
 
             <!-- Navigation pane -->
             <Border Grid.Column="1"
+                    IsVisible="{Binding NavVisible}"
                     Width="{DynamicResource nav.width.value}"
                     Background="{DynamicResource nav.background.brush}">
                 <DockPanel>
@@ -322,12 +323,13 @@
                     </Border>
 
                     <Border DockPanel.Dock="Top" Padding="4,2">
-                        <TextBlock Text="{Binding CollapseGlyph}"
-                                   FontFamily="{Binding IconFamily}"
-                                   FontSize="12"
-                                   HorizontalAlignment="Right"
-                                   Foreground="{DynamicResource nav.item.text.brush}"
-                                   ToolTip.Tip="Minimize the Folder Pane" />
+                        <Button Classes="flat"
+                                HorizontalAlignment="Right"
+                                Command="{Binding ToggleNav}"
+                                Content="{Binding CollapseGlyph}"
+                                FontSize="12"
+                                Foreground="{DynamicResource nav.item.text.brush}"
+                                ToolTip.Tip="Minimize the Folder Pane" />
                     </Border>
 
                     <ListBox ItemsSource="{Binding Folders}"
@@ -386,25 +388,33 @@
                             Background="{DynamicResource list.header.background.brush}"
                             Padding="10,5">
                         <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
-                            <TextBlock Grid.Column="0"
-                                       Text="All"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource list.header.text.brush}" />
-                            <TextBlock Grid.Column="1"
-                                       Text="Unread"
-                                       Margin="16,0,0,0"
-                                       Foreground="{DynamicResource list.header.text.brush}" />
+                            <Button Grid.Column="0"
+                                    Classes="flat"
+                                    Command="{Binding ShowAll}"
+                                    Content="All"
+                                    FontWeight="{Binding AllFilterWeight}"
+                                    Foreground="{DynamicResource list.header.text.brush}" />
+                            <Button Grid.Column="1"
+                                    Classes="flat"
+                                    Margin="13,0,0,0"
+                                    Command="{Binding ShowUnread}"
+                                    Content="Unread"
+                                    FontWeight="{Binding UnreadFilterWeight}"
+                                    Foreground="{DynamicResource list.header.text.brush}" />
                             <TextBlock Grid.Column="3"
                                        Text="{Binding ArrangementLabel}"
                                        Classes="small"
                                        Foreground="{DynamicResource list.header.text.brush}"
                                        VerticalAlignment="Center" />
-                            <TextBlock Grid.Column="4"
-                                       Text="&#x2191;"
-                                       Margin="10,0,0,0"
-                                       Classes="small"
-                                       Foreground="{DynamicResource list.header.text.brush}"
-                                       VerticalAlignment="Center" />
+                            <Button Grid.Column="4"
+                                    Classes="flat"
+                                    Margin="7,0,0,0"
+                                    Command="{Binding ToggleSortDirection}"
+                                    Content="{Binding SortGlyph}"
+                                    FontSize="{DynamicResource type.ui.size.small.value}"
+                                    Foreground="{DynamicResource list.header.text.brush}"
+                                    ToolTip.Tip="Reverse the sort order"
+                                    VerticalAlignment="Center" />
                         </Grid>
                     </Border>
 
@@ -422,15 +432,19 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:MessageColumn">
-                                    <Border Width="{Binding Width}"
+                                    <Button Classes="flat"
+                                            Width="{Binding Width}"
                                             Padding="4,3"
+                                            HorizontalContentAlignment="Left"
                                             BorderThickness="0,0,1,0"
-                                            BorderBrush="{DynamicResource border.subtle.brush}">
+                                            BorderBrush="{DynamicResource border.subtle.brush}"
+                                            Command="{Binding Sort}"
+                                            ToolTip.Tip="{Binding SortTip}">
                                         <TextBlock Text="{Binding Title}"
                                                    Classes="small"
                                                    Foreground="{DynamicResource list.header.text.brush}"
                                                    TextTrimming="CharacterEllipsis" />
-                                    </Border>
+                                    </Button>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
@@ -441,19 +455,24 @@
                             Background="{DynamicResource list.group.header.background.brush}"
                             Height="{DynamicResource list.group.header.height.value}"
                             Padding="8,0">
-                        <StackPanel Orientation="Horizontal" Spacing="6"
-                                    VerticalAlignment="Center">
-                            <TextBlock Text="&#x2304;"
-                                       Foreground="{DynamicResource list.group.header.text.brush}" />
-                            <TextBlock Text="Yesterday"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource list.group.header.text.brush}" />
-                        </StackPanel>
+                        <Button Classes="flat"
+                                Command="{Binding ToggleGroup}"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                ToolTip.Tip="Collapse this group">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="{Binding GroupGlyph}"
+                                           Foreground="{DynamicResource list.group.header.text.brush}" />
+                                <TextBlock Text="Yesterday"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource list.group.header.text.brush}" />
+                            </StackPanel>
+                        </Button>
                     </Border>
 
                     <!-- Phase 3 replaces this ListBox with the virtualizing message list:
                          group headers, conversation threading, conditional formatting. -->
-                    <ListBox ItemsSource="{Binding Messages}"
+                    <ListBox ItemsSource="{Binding VisibleMessages}"
                              SelectedItem="{Binding SelectedMessage}"
                              Background="Transparent"
                              BorderThickness="0"
@@ -510,7 +529,9 @@
                 </DockPanel>
             </Border>
 
-            <GridSplitter Grid.Column="4" ResizeDirection="Columns" />
+            <GridSplitter Grid.Column="4"
+                          IsVisible="{Binding ReadingPaneVisible}"
+                          ResizeDirection="Columns" />
 
             <!-- Docked calendar. Takes the reading pane's right edge, exactly as the reference's
                  To-Do Bar calendar does, and carries a close button to undock. -->
@@ -520,6 +541,7 @@
 
             <!-- Reading pane -->
             <Border Grid.Column="5"
+                    IsVisible="{Binding ReadingPaneVisible}"
                     Background="{DynamicResource reading.background.brush}">
                 <DockPanel>
                     <Border DockPanel.Dock="Top"
@@ -575,7 +597,7 @@
                         <TextBlock Text="{Binding SelectedMessage.Body}"
                                    TextWrapping="Wrap"
                                    FontFamily="{DynamicResource content.fontfamily}"
-                                   FontSize="{DynamicResource type.content.size.value}" />
+                                   FontSize="{Binding ReadingFontSize}" />
                     </ScrollViewer>
                 </DockPanel>
             </Border>
@@ -615,34 +637,44 @@
                 <!-- Layout toggles, then the zoom control, as the reference application parks them. -->
                 <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="2"
                             VerticalAlignment="Center">
-                    <TextBlock Text="{Binding ReadingPaneGlyph}"
-                               FontFamily="{Binding IconFamily}"
-                               FontSize="13"
-                               Margin="2,0"
-                               VerticalAlignment="Center"
-                               Foreground="{DynamicResource statusbar.foreground.brush}"
-                               ToolTip.Tip="Normal" />
-                    <TextBlock Text="{Binding ReadingGlyph}"
-                               FontFamily="{Binding IconFamily}"
-                               FontSize="13"
-                               Margin="2,0,10,0"
-                               VerticalAlignment="Center"
-                               Foreground="{DynamicResource statusbar.foreground.brush}"
-                               ToolTip.Tip="Reading" />
+                    <Button Classes="flat"
+                            Margin="2,0"
+                            Command="{Binding ShowReadingPane}"
+                            Content="{Binding ReadingPaneGlyph}"
+                            FontFamily="{Binding IconFamily}"
+                            FontSize="13"
+                            VerticalAlignment="Center"
+                            Foreground="{DynamicResource statusbar.foreground.brush}"
+                            ToolTip.Tip="Normal" />
+                    <Button Classes="flat"
+                            Margin="2,0,10,0"
+                            Command="{Binding HideReadingPane}"
+                            Content="{Binding ReadingGlyph}"
+                            FontFamily="{Binding IconFamily}"
+                            FontSize="13"
+                            VerticalAlignment="Center"
+                            Foreground="{DynamicResource statusbar.foreground.brush}"
+                            ToolTip.Tip="Reading" />
 
-                    <TextBlock Text="&#x2212;"
-                               VerticalAlignment="Center"
-                               Foreground="{DynamicResource statusbar.foreground.brush}" />
+                    <Button Classes="flat"
+                            Command="{Binding ZoomOut}"
+                            Content="&#x2212;"
+                            VerticalAlignment="Center"
+                            Foreground="{DynamicResource statusbar.foreground.brush}"
+                            ToolTip.Tip="Zoom out" />
                     <views:ZoomSlider Width="100"
                                       Margin="6,0"
                                       Minimum="50" Maximum="200"
                                       Value="{Binding ZoomPercent}"
                                       VerticalAlignment="Center"
                                       LineBrush="{DynamicResource statusbar.slider.brush}" />
-                    <TextBlock Text="+"
-                               Margin="0,0,8,0"
-                               VerticalAlignment="Center"
-                               Foreground="{DynamicResource statusbar.foreground.brush}" />
+                    <Button Classes="flat"
+                            Margin="0,0,8,0"
+                            Command="{Binding ZoomIn}"
+                            Content="+"
+                            VerticalAlignment="Center"
+                            Foreground="{DynamicResource statusbar.foreground.brush}"
+                            ToolTip.Tip="Zoom in" />
                     <TextBlock Text="{Binding ZoomLabel}"
                                MinWidth="34"
                                TextAlignment="Right"

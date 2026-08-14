@@ -213,6 +213,22 @@ public sealed class ShellViewModel : ObservableObject
 
         _selectedFolder = Folders[5];
         _selectedMessage = Messages[0];
+
+        foreach (var column in Columns)
+        {
+            var title = column.Title;
+            column.Sort = new RelayCommand(() => SortBy(title));
+        }
+
+        ShowAll = new RelayCommand(() => UnreadOnly = false);
+        ShowUnread = new RelayCommand(() => UnreadOnly = true);
+        ToggleGroup = new RelayCommand(() => GroupCollapsed = !GroupCollapsed);
+        ToggleNav = new RelayCommand(() => NavCollapsed = !NavCollapsed);
+        ToggleSortDirection = new RelayCommand(() => SortDescending = !SortDescending);
+        ShowReadingPane = new RelayCommand(() => ReadingPaneVisible = true);
+        HideReadingPane = new RelayCommand(() => ReadingPaneVisible = false);
+        ZoomIn = new RelayCommand(() => ZoomPercent += 10);
+        ZoomOut = new RelayCommand(() => ZoomPercent -= 10);
     }
 
     public ObservableCollection<string> Themes { get; }
@@ -346,14 +362,152 @@ public sealed class ShellViewModel : ObservableObject
 
     // Status-bar and pane glyphs. Held here so the XAML never names an icon codepoint.
     public FontFamily IconFamily { get; } = IconFont.Family;
+    // ---- List shaping ---------------------------------------------------------------------
+    // Filtering, sorting and grouping run over the in-memory sample for now. They are view
+    // state either way: Phase 2 swaps the source collection, not any of this.
+
+    /// <summary>All, or only what has not been read.</summary>
+    public bool UnreadOnly
+    {
+        get;
+        set
+        {
+            if (!Set(ref field, value)) return;
+            Raise(nameof(VisibleMessages));
+            Raise(nameof(AllFilterWeight));
+            Raise(nameof(UnreadFilterWeight));
+        }
+    }
+
+    public FontWeight AllFilterWeight => UnreadOnly ? FontWeight.Normal : FontWeight.SemiBold;
+    public FontWeight UnreadFilterWeight => UnreadOnly ? FontWeight.SemiBold : FontWeight.Normal;
+
+    /// <summary>Which column orders the list. Empty means the arrangement's own order.</summary>
+    public string SortColumn
+    {
+        get;
+        set { if (Set(ref field, value)) Raise(nameof(VisibleMessages)); }
+    } = string.Empty;
+
+    public bool SortDescending
+    {
+        get;
+        set
+        {
+            if (!Set(ref field, value)) return;
+            Raise(nameof(VisibleMessages));
+            Raise(nameof(SortGlyph));
+        }
+    } = true;
+
+    /// <summary>The arrow beside the arrangement label.</summary>
+    public string SortGlyph => SortDescending ? "\u2193" : "\u2191";
+
+    /// <summary>Collapsing the group hides its rows, as clicking the header does.</summary>
+    public bool GroupCollapsed
+    {
+        get;
+        set
+        {
+            if (!Set(ref field, value)) return;
+            Raise(nameof(VisibleMessages));
+            Raise(nameof(GroupGlyph));
+        }
+    }
+
+    public string GroupGlyph => GroupCollapsed ? "\u203A" : "\u2304";
+
+    /// <summary>
+    /// What the list actually shows. Recomputed rather than mutated so every control that
+    /// shapes it — filter, sort, group — goes through one path and cannot disagree.
+    /// </summary>
+    public IEnumerable<MessageRow> VisibleMessages
+    {
+        get
+        {
+            if (GroupCollapsed) return [];
+
+            var rows = UnreadOnly ? Messages.Where(m => m.IsUnread) : Messages;
+
+            return SortColumn switch
+            {
+                "From" => Ordered(rows, m => m.From),
+                "Subject" => Ordered(rows, m => m.Subject),
+                "Received" => Ordered(rows, m => m.Received),
+                _ => rows,
+            };
+        }
+    }
+
+    private IEnumerable<MessageRow> Ordered<T>(IEnumerable<MessageRow> rows,
+        Func<MessageRow, T> key)
+        => SortDescending ? rows.OrderByDescending(key) : rows.OrderBy(key);
+
+    /// <summary>Number of rows on show, which is what the status bar counts.</summary>
+    public int VisibleCount => VisibleMessages.Count();
+
+    // ---- Pane layout ----------------------------------------------------------------------
+
+    /// <summary>The folder pane collapses to nothing, leaving the rail.</summary>
+    public bool NavCollapsed
+    {
+        get;
+        set
+        {
+            if (!Set(ref field, value)) return;
+            Raise(nameof(NavVisible));
+            Raise(nameof(CollapseGlyph));
+        }
+    }
+
+    public bool NavVisible => !NavCollapsed;
+    public string CollapseGlyph => NavCollapsed ? "\u203A" : "\u2039";
+
+    /// <summary>Reading pane on the right, or off entirely — the two the status bar offers.</summary>
+    public bool ReadingPaneVisible
+    {
+        get;
+        set { if (Set(ref field, value)) Raise(); }
+    } = true;
+
+    /// <summary>Zoom applies to the reading pane's body, which is what it scales.</summary>
+    public double ReadingFontSize => 14.5 * (ZoomPercent / 100d);
+
+    // ---- Commands for the controls that shape the view -------------------------------------
+    // Built here rather than in the window so the state and the way it is changed sit together;
+    // the window only wires the things that need a Window to act on.
+
+    public RelayCommand ShowAll { get; }
+    public RelayCommand ShowUnread { get; }
+    public RelayCommand ToggleGroup { get; }
+    public RelayCommand ToggleNav { get; }
+    public RelayCommand ToggleSortDirection { get; }
+    public RelayCommand ShowReadingPane { get; }
+    public RelayCommand HideReadingPane { get; }
+    public RelayCommand ZoomIn { get; }
+    public RelayCommand ZoomOut { get; }
+
+    /// <summary>Sorts by a column, flipping direction when it is already the sort column.</summary>
+    public void SortBy(string column)
+    {
+        if (string.IsNullOrEmpty(column)) return;
+
+        if (string.Equals(SortColumn, column, StringComparison.Ordinal)) SortDescending = !SortDescending;
+        else { SortColumn = column; SortDescending = true; }
+    }
+
     public string ReadingPaneGlyph { get; } = IconGlyphs.GetOrEmpty("reading-pane", 16);
     public string ReadingGlyph { get; } = IconGlyphs.GetOrEmpty("message-preview", 16);
-    public string CollapseGlyph { get; } = IconGlyphs.GetOrEmpty("chevron-left", 16);
 
     public double ZoomPercent
     {
         get;
-        set { if (Set(ref field, value)) Raise(nameof(ZoomLabel)); }
+        set
+        {
+            if (!Set(ref field, Math.Clamp(value, 50, 200))) return;
+            Raise(nameof(ZoomLabel));
+            Raise(nameof(ReadingFontSize));
+        }
     } = 100;
 
     public string ZoomLabel => $"{ZoomPercent:0}%";
@@ -390,7 +544,7 @@ public sealed class ShellViewModel : ObservableObject
     ];
 
     public string StatusLeft =>
-        $"Items: {Messages.Count}   Unread: {Messages.Count(m => m.IsUnread)}";
+        $"Items: {VisibleCount}   Unread: {Messages.Count(m => m.IsUnread)}";
 
     /// <summary>
     /// Empty at rest — the reference's status bar carries the counts on the left and the view
@@ -409,6 +563,11 @@ public sealed class MessageColumn(string title, double width, bool isGlyph = fal
 {
     public string Title { get; } = title;
     public double Width { get; } = width;
+
+    /// <summary>Sorts the list by this column. Set by the shell, which owns the ordering.</summary>
+    public System.Windows.Input.ICommand? Sort { get; set; }
+
+    public string SortTip { get; } = isGlyph ? string.Empty : $"Sort by {title}";
 
     /// <summary>Icon-only columns render centred and unlabelled — importance, flag, attachment.</summary>
     public bool IsGlyph { get; } = isGlyph;
