@@ -4,6 +4,7 @@ using Avalonia.Markup.Xaml;
 using Mailbox.App.Theming;
 using Mailbox.App.Views;
 using Mailbox.Core.Commands;
+using Mailbox.Core.Diagnostics;
 using Mailbox.Theming;
 using Mailbox.Theming.Fonts;
 
@@ -31,6 +32,16 @@ public partial class App : Application
         Commands.RegisterRange(ViewCommands.All);
 
         _ = new ThemeResourceBridge(Resources, Themes);
+
+        Log.Info($"Theme {Themes.ThemeId}, density {Themes.Density}");
+        Log.Info($"UI font {Fonts.Resolve("Segoe UI").Rendered}, " +
+                 $"content font {Fonts.Resolve("Calibri").Rendered}");
+        Log.Info($"{Commands.Count} commands registered");
+
+        if (Fonts.MissingExpectedSubstitutes() is { Count: > 0 } missing)
+        {
+            Log.Warn($"Metric-compatible substitutes not installed: {string.Join(", ", missing)}");
+        }
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
