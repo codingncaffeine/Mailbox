@@ -29,6 +29,12 @@ public sealed class RibbonCommandEventArgs(CommandId command) : EventArgs
 public sealed class RibbonView : ContentControl
 {
     private readonly CommandCatalog _catalog;
+
+    // What Alt traversal adorns. Rebuilt with the visual tree, because the controls a KeyTip
+    // points at are thrown away and remade whenever the tab or the display mode changes.
+    private readonly List<(RibbonTab Tab, Control Control)> _tabControls = [];
+    private readonly Dictionary<CommandId, List<Control>> _itemControls = [];
+
     private RibbonLayout _layout;
     private string _activeTabId;
     private Button? _displayOptions;
@@ -109,6 +115,9 @@ public sealed class RibbonView : ContentControl
 
     private void Rebuild()
     {
+        _tabControls.Clear();
+        _itemControls.Clear();
+
         var root = new Grid
         {
             RowDefinitions = new RowDefinitions("Auto,Auto"),
@@ -214,12 +223,66 @@ public sealed class RibbonView : ContentControl
         // Top-aligned, not merely fixed-height: the strip panel can arrange taller than the
         // strip itself, and a fixed-height child with the default alignment centres in that
         // slack, which drops the rule below where it was measured.
-        return new Grid
+        var host = new Grid
         {
             Height = RibbonMetrics.TabStripHeight,
             VerticalAlignment = VerticalAlignment.Top,
             Children = { button, underline },
         };
+
+        _tabControls.Add((tab, host));
+        return host;
+    }
+
+    // ----------------------------------------------------------------------------------
+    // Alt traversal
+    // ----------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The first level: one badge per tab. Picking one selects it and descends into its
+    /// controls, except File, which opens the Backstage and ends the traversal.
+    /// </summary>
+    public IReadOnlyList<KeyTipTarget> TabKeyTips()
+        => _tabControls
+            .Where(entry => entry.Tab.KeyTip is not null)
+            .Select(entry => new KeyTipTarget
+            {
+                Tip = entry.Tab.KeyTip!,
+                Target = entry.Control,
+                Activate = entry.Tab.IsBackstage
+                    ? () => BackstageRequested?.Invoke(this, EventArgs.Empty)
+                    : () => ActiveTabId = entry.Tab.Id,
+                Children = entry.Tab.IsBackstage ? null : ActiveTabKeyTips,
+            })
+            .ToList();
+
+    /// <summary>
+    /// The second level: every command currently drawn, wherever it is drawn.
+    /// </summary>
+    /// <remarks>
+    /// Read off the controls that were built rather than off the layout document, so it needs no
+    /// knowledge of whether the ribbon is Simplified or Classic, or of which collapse variant a
+    /// group settled on. A command with more than one control — every group is built at three
+    /// sizes — contributes the one actually on screen.
+    /// </remarks>
+    public IReadOnlyList<KeyTipTarget> ActiveTabKeyTips()
+    {
+        var targets = new List<KeyTipTarget>();
+
+        foreach (var (id, controls) in _itemControls)
+        {
+            if (!_catalog.TryGet(id, out var command) || command.KeyTip is null) continue;
+            if (controls.Find(c => c.IsEffectivelyVisible) is not { } control) continue;
+
+            targets.Add(new KeyTipTarget
+            {
+                Tip = command.KeyTip,
+                Target = control,
+                Activate = () => CommandInvoked?.Invoke(this, new RibbonCommandEventArgs(id)),
+            });
+        }
+
+        return targets;
     }
 
     /// <summary>
@@ -968,6 +1031,16 @@ public sealed class RibbonView : ContentControl
         ToolTip.SetTip(button, tip);
 
         button.Click += (_, _) => CommandInvoked?.Invoke(this, new RibbonCommandEventArgs(command.Id));
+
+        // One command can have several controls — a group is built at all three collapse
+        // variants — so this is a list, and Alt traversal takes whichever is on screen.
+        if (!_itemControls.TryGetValue(command.Id, out var built))
+        {
+            built = [];
+            _itemControls[command.Id] = built;
+        }
+        built.Add(button);
+
         return button;
     }
 

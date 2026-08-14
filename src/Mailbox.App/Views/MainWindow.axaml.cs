@@ -1,9 +1,11 @@
+using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Mailbox.App.Theming;
 using Mailbox.App.ViewModels;
 using Mailbox.Controls.Ribbon;
@@ -19,6 +21,10 @@ namespace Mailbox.App.Views;
 public partial class MainWindow : Window
 {
     private readonly RibbonView _ribbon;
+    private readonly KeyTipSession _keyTips = new();
+
+    /// <summary>Alt has gone down with nothing else held, so releasing it opens the KeyTips.</summary>
+    private bool _altAlone;
 
     public MainWindow()
     {
@@ -101,7 +107,30 @@ public partial class MainWindow : Window
                 };
                 break;
         }
+
+        // KeyTips exist only while Alt is held, which a capture cannot do. `tabs` poses the
+        // first level; a tab id poses that tab's own. Driven through the real key handler
+        // rather than around it, so what gets photographed is the traversal itself.
+        if (Environment.GetEnvironmentVariable("MAILBOX_KEYTIPS")?.Trim().ToLowerInvariant()
+            is { Length: > 0 } keyTips)
+        {
+            Opened += (_, _) =>
+            {
+                _keyTips.Begin(FirstLevelKeyTips());
+
+                if (keyTips is "tabs" or "1") return;
+                if (_ribbon.Layout.FindTab(keyTips)?.KeyTip is not { } tip) return;
+
+                foreach (var character in tip) _keyTips.HandleKey(KeyFor(character));
+            };
+        }
     }
+
+    /// <summary>Types a KeyTip character into the traversal. Harness only.</summary>
+    private static Avalonia.Input.Key KeyFor(char character)
+        => char.IsAsciiDigit(character)
+            ? Avalonia.Input.Key.D0 + (character - '0')
+            : Avalonia.Input.Key.A + (char.ToUpperInvariant(character) - 'A');
 
     /// <summary>Opens the File view over everything, with its back arrow to return.</summary>
     private void ShowBackstage()
@@ -638,12 +667,94 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// F9 runs a send/receive, as every mail client since the nineties has. Handled here
-    /// rather than as a command gesture because the ribbon's Alt traversal, which will own the
-    /// gesture table, is still to come.
+    /// Alt on its own opens the KeyTip traversal; Alt as a modifier does not.
     /// </summary>
+    /// <remarks>
+    /// Which of the two it is only becomes clear on release, so the decision waits for
+    /// <see cref="OnKeyUp"/> — deciding on the way down would put badges over the ribbon every
+    /// time someone reached for Alt+Tab.
+    /// </remarks>
+    private static bool IsAltKey(Avalonia.Input.Key key)
+        => key is Avalonia.Input.Key.LeftAlt
+            or Avalonia.Input.Key.RightAlt
+            or Avalonia.Input.Key.System;
+
+    protected override void OnKeyUp(Avalonia.Input.KeyEventArgs e)
+    {
+        base.OnKeyUp(e);
+
+        if (e.Handled || !IsAltKey(e.Key) || !_altAlone) return;
+
+        _altAlone = false;
+        e.Handled = true;
+
+        if (_keyTips.IsActive) _keyTips.End();
+        else _keyTips.Begin(FirstLevelKeyTips());
+    }
+
+    /// <summary>
+    /// What Alt reveals first: the tabs, and the Quick Access Toolbar numbered left to right.
+    /// </summary>
+    private IReadOnlyList<KeyTipTarget> FirstLevelKeyTips()
+    {
+        var targets = new List<KeyTipTarget>(_ribbon.TabKeyTips());
+
+        if (this.FindControl<ItemsControl>("QuickAccessBar") is not { } qat) return targets;
+
+        var position = 0;
+        foreach (var button in qat.GetVisualDescendants().OfType<Button>())
+        {
+            // The reference numbers the QAT rather than lettering it, and stops at nine.
+            if (++position > 9) break;
+
+            var invoke = button.Command;
+            var parameter = button.CommandParameter;
+
+            targets.Add(new KeyTipTarget
+            {
+                Tip = position.ToString(CultureInfo.InvariantCulture),
+                Target = button,
+                Activate = () =>
+                {
+                    if (invoke?.CanExecute(parameter) == true) invoke.Execute(parameter);
+                },
+            });
+        }
+
+        return targets;
+    }
+
+    /// <summary>
+    /// F9 runs a send/receive, as every mail client since the nineties has.
+    /// </summary>
+    /// <remarks>
+    /// These belong in the command catalogue so the shortcut editor in Phase 8 can rebind them.
+    /// They are here for now because nothing yet reads a gesture table.
+    /// </remarks>
     protected override void OnKeyDown(Avalonia.Input.KeyEventArgs e)
     {
+        if (IsAltKey(e.Key))
+        {
+            _altAlone = e.KeyModifiers is Avalonia.Input.KeyModifiers.Alt
+                or Avalonia.Input.KeyModifiers.None;
+            return;
+        }
+
+        _altAlone = false;
+
+        // While badges are up the keyboard belongs to the traversal. A key it does not
+        // recognise dismisses it and is then handled normally, rather than vanishing.
+        if (_keyTips.IsActive)
+        {
+            if (_keyTips.HandleKey(e.Key))
+            {
+                e.Handled = true;
+                return;
+            }
+
+            _keyTips.End();
+        }
+
         base.OnKeyDown(e);
         if (e.Handled || DataContext is not ShellViewModel shell) return;
 
