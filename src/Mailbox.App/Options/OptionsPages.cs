@@ -13,6 +13,20 @@ namespace Mailbox.App.Options;
 /// </remarks>
 public static class OptionsPages
 {
+    /// <summary>
+    /// Keys for the settings something else reads. Everything else keys off its own label,
+    /// which is fine while nothing depends on it; these are named because code refers to them,
+    /// and a reworded label must not silently reset a user's choice.
+    /// </summary>
+    public static class Keys
+    {
+        public const string UserName = "general.username";
+        public const string Initials = "general.initials";
+        public const string FirstDayOfWeek = "calendar.firstdayofweek";
+        public const string ShowWeekNumbers = "calendar.showweeknumbers";
+        public const string ShowReadingPane = "panes.showreadingpane";
+    }
+
     private static IReadOnlyList<OptionsPage>? _all;
 
     /// <summary>
@@ -62,8 +76,8 @@ public static class OptionsPages
 
             new OptionSection("Personalize your copy of Mailbox",
             [
-                new TextRow("User name:", "A. Person"),
-                new TextRow("Initials:", "AP", Width: 74),
+                new TextRow("User name:", "A. Person") { Key = Keys.UserName },
+                new TextRow("Initials:", "AP", Width: 74) { Key = Keys.Initials },
                 // Filled with a live control by the window; see OptionsWindow.
                 new SlotRow("theme"),
                 new SlotRow("density"),
@@ -215,7 +229,7 @@ public static class OptionsPages
                 new CheckRow("Thu", true) { Indent = 1 },
                 new CheckRow("Fri", true) { Indent = 1 },
                 new CheckRow("Sat") { Indent = 1 },
-                new ComboRow("First day of week:", Weekdays, 0, 150, 200),
+                new ComboRow("First day of week:", Weekdays, 0, 150, 200) { Key = Keys.FirstDayOfWeek },
                 new ComboRow("First week of year:",
                     ["Starts on Jan 1", "First 4-day week", "First full week"], 0, 180, 200),
             ]),
@@ -236,7 +250,8 @@ public static class OptionsPages
             [
                 new ComboRow("Default calendar colour:", Colours, 0, 150, 240),
                 new CheckRow("Use this colour on all calendars"),
-                new CheckRow("Show week numbers in the month view and in the Date Navigator"),
+                new CheckRow("Show week numbers in the month view and in the Date Navigator")
+                    { Key = Keys.ShowWeekNumbers },
                 new CheckRow("Show a Weather bar on the calendar"),
             ]),
 
@@ -367,7 +382,7 @@ public static class OptionsPages
                 new ActionRow("layout", "Customize Mailbox panes.", "Navigation...",
                 [
                     new CheckRow("Show the To-Do Bar", true),
-                    new CheckRow("Show the Reading Pane", true),
+                    new CheckRow("Show the Reading Pane", true) { Key = Keys.ShowReadingPane },
                 ]),
             ]),
 

@@ -5,6 +5,8 @@ using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Mailbox.Theming.Icons;
 
+using Mailbox.Core.Settings;
+
 namespace Mailbox.App.Options;
 
 /// <summary>
@@ -20,6 +22,14 @@ public sealed class OptionsPageRenderer
     private const double IndentStep = 16;
 
     private readonly Dictionary<string, ContentControl> _slots = [];
+    private readonly SettingsStore _settings;
+
+    /// <summary>
+    /// Rows read and write through the store, so a page rebuilt after switching away comes back
+    /// showing what was chosen. Before this every control read a static default and discarded
+    /// whatever it was told the moment the page was left.
+    /// </summary>
+    public OptionsPageRenderer(SettingsStore settings) => _settings = settings;
 
     /// <summary>Raised when a row's button is pressed, with the button's label.</summary>
     public event EventHandler<string>? ActionInvoked;
@@ -82,9 +92,26 @@ public sealed class OptionsPageRenderer
 
     // ---- Rows --------------------------------------------------------------------------
 
+    /// <summary>
+    /// The key a row persists under: its own if it declares one, otherwise its label. Rows
+    /// without a label carry no value and are not stored.
+    /// </summary>
+    private static string? KeyFor(OptionRow row, string label)
+        => row.Key ?? (string.IsNullOrWhiteSpace(label) ? null : label);
+
     private Control Check(CheckRow row)
     {
-        var box = new CheckBox { IsChecked = row.IsChecked, Content = row.Label };
+        var key = KeyFor(row, row.Label);
+        var box = new CheckBox
+        {
+            IsChecked = key is null ? row.IsChecked : _settings.GetBool(key, row.IsChecked),
+            Content = row.Label,
+        };
+        if (key is not null)
+        {
+            box.IsCheckedChanged += (_, _) => _settings.Set(key, box.IsChecked == true);
+        }
+
         Bind(box, Avalonia.Controls.Primitives.TemplatedControl.ForegroundProperty,
             row.IsDisabled ? "text.disabled.brush" : "text.primary.brush");
         return row.HasInfo ? WithInfo(box) : box;
@@ -92,11 +119,20 @@ public sealed class OptionsPageRenderer
 
     private Control Radio(RadioRow row)
     {
+        // Radios persist under their group, holding the chosen label — an index would shift
+        // the moment an option is inserted above it.
+        var key = row.Key ?? row.Group;
         var button = new RadioButton
         {
             GroupName = row.Group,
-            IsChecked = row.IsChecked,
+            IsChecked = _settings.Has(key)
+                ? _settings.GetString(key) == row.Label
+                : row.IsChecked,
             Content = row.Label,
+        };
+        button.IsCheckedChanged += (_, _) =>
+        {
+            if (button.IsChecked == true) _settings.Set(key, row.Label);
         };
         Bind(button, Avalonia.Controls.Primitives.TemplatedControl.ForegroundProperty,
             "text.primary.brush");
@@ -105,39 +141,60 @@ public sealed class OptionsPageRenderer
 
     private Control Combo(ComboRow row)
     {
+        var key = KeyFor(row, row.Label);
         var combo = new ComboBox
         {
             ItemsSource = row.Items.ToList(),
-            SelectedIndex = row.Selected,
+            SelectedIndex = key is null
+                ? row.Selected
+                : (int)_settings.GetNumber(key, row.Selected),
             MinWidth = row.Width,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        if (key is not null)
+        {
+            combo.SelectionChanged += (_, _) => _settings.Set(key, combo.SelectedIndex);
+        }
+
         return Labelled(row.Label, combo, row.LabelWidth, row.HasInfo);
     }
 
     private Control Text(TextRow row)
     {
+        var key = KeyFor(row, row.Label);
         var box = new TextBox
         {
-            Text = row.Value,
+            Text = key is null ? row.Value : _settings.GetString(key, row.Value),
             Width = row.Width,
             PlaceholderText = row.Placeholder,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        if (key is not null)
+        {
+            box.LostFocus += (_, _) => _settings.Set(key, box.Text ?? string.Empty);
+        }
+
         return Labelled(row.Label, box, row.LabelWidth, row.HasInfo);
     }
 
     private Control Spinner(SpinnerRow row)
     {
+        var key = KeyFor(row, row.Label);
         var spinner = new NumericUpDown
         {
-            Value = row.Value,
+            Value = (decimal)(key is null ? row.Value : _settings.GetNumber(key, row.Value)),
             Minimum = row.Minimum,
             Maximum = row.Maximum,
             Increment = 1,
             Width = 78,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        if (key is not null)
+        {
+            spinner.ValueChanged += (_, _) =>
+                _settings.Set(key, (double)(spinner.Value ?? row.Value));
+        }
+
         return Labelled(row.Label, spinner, row.LabelWidth, row.HasInfo);
     }
 
