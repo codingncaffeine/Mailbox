@@ -246,16 +246,20 @@ public sealed class ShellViewModel : ObservableObject
     private string _searchText = string.Empty;
 
     private readonly AccountStores? _accounts;
+    private readonly CommandCatalog _catalog;
 
     public ShellViewModel(
         ThemeService themes,
         CommandCatalog catalog,
         RibbonLayout layout,
         ShellLayoutMode layoutMode,
-        AccountStores? accounts = null)
+        AccountStores? accounts = null,
+        QuickAccessLayout? quickAccess = null)
     {
         _accounts = accounts;
+        _catalog = catalog;
         _themes = themes;
+        QuickAccessCustomization = quickAccess;
         _selectedTheme = OfficeThemes.DisplayName(themes.ThemeId);
         LayoutMode = layoutMode;
 
@@ -263,7 +267,7 @@ public sealed class ShellViewModel : ObservableObject
             OfficeThemes.All.Select(OfficeThemes.DisplayName));
 
         QuickAccess = new ObservableCollection<QuickAccessButton>(
-            layout.QuickAccess
+            (quickAccess?.Commands ?? layout.QuickAccess)
                 .Where(id => catalog.TryGet(id, out _))
                 .Select(id => new QuickAccessButton(catalog.Get(id))));
 
@@ -371,6 +375,47 @@ public sealed class ShellViewModel : ObservableObject
     public ObservableCollection<string> Themes { get; }
     public ObservableCollection<QuickAccessButton> QuickAccess { get; }
     public ObservableCollection<QuickAccessButton> ReadingPaneActions { get; }
+
+    /// <summary>
+    /// The toolbar's customization state, or null when the shell is running without settings —
+    /// the fidelity harness and the tests both do.
+    /// </summary>
+    public QuickAccessLayout? QuickAccessCustomization { get; }
+
+    /// <summary>
+    /// The toolbar draws in one of two places, so each host binds to its own flag rather than
+    /// to the placement — a view has no business knowing what an enum member means.
+    /// </summary>
+    public bool IsQuickAccessAbove =>
+        QuickAccessCustomization is not { IsVisible: false }
+        && QuickAccessCustomization?.Placement != QuickAccessPlacement.BelowRibbon;
+
+    public bool IsQuickAccessBelow =>
+        QuickAccessCustomization is { IsVisible: true, Placement: QuickAccessPlacement.BelowRibbon };
+
+    /// <summary>
+    /// Refills the toolbar from its customization state. The buttons are replaced rather than
+    /// mutated, so whatever wired their commands has to run again — see
+    /// <c>MainWindow.WireToolbarCommands</c>.
+    /// </summary>
+    public void RebuildQuickAccess()
+    {
+        if (QuickAccessCustomization is not { } customization) return;
+
+        QuickAccess.Clear();
+        foreach (var id in customization.Commands)
+        {
+            if (_catalog.TryGet(id, out var command)) QuickAccess.Add(new QuickAccessButton(command));
+        }
+
+        RaiseQuickAccessPlacement();
+    }
+
+    public void RaiseQuickAccessPlacement()
+    {
+        Raise(nameof(IsQuickAccessAbove));
+        Raise(nameof(IsQuickAccessBelow));
+    }
 
     // ---- Shell layout -------------------------------------------------------------------
     // Classic and Modern differ structurally, not just in colour, so the shell shows and

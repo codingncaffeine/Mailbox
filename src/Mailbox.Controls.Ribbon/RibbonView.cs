@@ -61,6 +61,27 @@ public sealed class RibbonView : ContentControl
     public event EventHandler? BackstageRequested;
 
     /// <summary>
+    /// Raised by Show/Hide Quick Access Toolbar in the display-options menu.
+    /// </summary>
+    /// <remarks>
+    /// This menu is the only way back once the toolbar is hidden — the chevron that hid it goes
+    /// with it. A hide with no matching show is a control that breaks itself.
+    /// </remarks>
+    public event EventHandler? QuickAccessVisibilityToggled;
+
+    /// <summary>Whether the host is showing the toolbar, so the menu can say the right thing.</summary>
+    public bool IsQuickAccessVisible
+    {
+        get;
+        set
+        {
+            if (field == value) return;
+            field = value;
+            Rebuild();
+        }
+    } = true;
+
+    /// <summary>
     /// Which ribbon the reference application is showing. Simplified is the reference application default, so it is the
     /// default here too — the tall classic ribbon is the alternative, not the baseline.
     /// </summary>
@@ -469,7 +490,16 @@ public sealed class RibbonView : ContentControl
         always.Click += (_, _) => DisplayMode = RibbonDisplayMode.Simplified;
         flyout.Items.Add(always);
 
-        flyout.Items.Add(new MenuItem { Header = "Hide Quick Access Toolbar" });
+        var quickAccess = new MenuItem
+        {
+            Header = IsQuickAccessVisible
+                ? "Hide Quick Access Toolbar"
+                : "Show Quick Access Toolbar",
+        };
+        quickAccess.Click += (_, _) =>
+            QuickAccessVisibilityToggled?.Invoke(this, EventArgs.Empty);
+        flyout.Items.Add(quickAccess);
+
         return flyout;
     }
 

@@ -77,7 +77,8 @@
 
                 <StackPanel Grid.Column="1"
                             Orientation="Horizontal"
-                            VerticalAlignment="Center">
+                            VerticalAlignment="Center"
+                            IsVisible="{Binding IsQuickAccessAbove}">
                 <ItemsControl Name="QuickAccessBar"
                               VerticalAlignment="Center"
                               ItemsSource="{Binding QuickAccess}">
@@ -103,7 +104,8 @@
                 </ItemsControl>
 
                     <!-- Customize Quick Access Toolbar. Always last, never rearrangeable. -->
-                    <Button Padding="4,2"
+                    <Button Name="QuickAccessCustomize"
+                            Padding="4,2"
                             Background="Transparent"
                             BorderThickness="0"
                             ToolTip.Tip="Customize Quick Access Toolbar">
@@ -201,7 +203,60 @@
         <Border Grid.Row="1" Grid.Column="1"
                 ZIndex="2"
                 IsVisible="{Binding ShowRibbon}">
-            <ContentControl Name="RibbonHost" />
+            <StackPanel>
+                <ContentControl Name="RibbonHost" />
+
+                <!--
+                    The Quick Access Toolbar's other home. Below the ribbon it is a strip of its
+                    own rather than a run of glyphs in the title bar, so it carries labels'
+                    colours from the content palette and not the title bar's.
+                -->
+                <Border Name="QuickAccessBelowHost"
+                        IsVisible="{Binding IsQuickAccessBelow}"
+                        Margin="0,0,9,6"
+                        Padding="8,3"
+                        CornerRadius="8"
+                        Background="{DynamicResource ribbon.background.brush}">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <ItemsControl Name="QuickAccessBarBelow"
+                                      VerticalAlignment="Center"
+                                      ItemsSource="{Binding QuickAccess}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" Spacing="2" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:QuickAccessButton">
+                                    <Button Padding="4,2"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Command="{Binding Invoke}"
+                                            ToolTip.Tip="{Binding Tip}">
+                                        <TextBlock Text="{Binding Glyph}"
+                                                   FontFamily="{Binding IconFamily}"
+                                                   FontSize="14"
+                                                   Foreground="{DynamicResource text.primary.brush}" />
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- The chevron travels with the bar; left behind, there is no way to
+                             put the toolbar back where it was. -->
+                        <Button Name="QuickAccessCustomizeBelow"
+                                Padding="4,2"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                ToolTip.Tip="Customize Quick Access Toolbar">
+                            <TextBlock Text="{Binding CustomizeGlyph}"
+                                       FontFamily="{Binding IconFamily}"
+                                       FontSize="11"
+                                       Foreground="{DynamicResource text.primary.brush}" />
+                        </Button>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
         </Border>
 
         <Border Grid.Row="1" Grid.Column="1"

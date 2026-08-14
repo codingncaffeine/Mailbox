@@ -33,9 +33,20 @@ public sealed class OptionsWindow : Window
     private readonly ContentControl _page = new();
     private string _selected = "general";
 
-    public OptionsWindow(ThemeService themes)
+    /// <param name="initialPage">
+    /// Which page to open on, by id. Lets a control that has its own Options page — the Quick
+    /// Access Toolbar's "More Commands…" — land there instead of on General, which is the
+    /// difference between a menu item that works and one that merely opens something.
+    /// </param>
+    public OptionsWindow(ThemeService themes, string? initialPage = null)
     {
         _themes = themes;
+
+        if (!string.IsNullOrWhiteSpace(initialPage)
+            && OptionsPages.All.Any(p => string.Equals(p.Id, initialPage, StringComparison.OrdinalIgnoreCase)))
+        {
+            _selected = initialPage;
+        }
 
         Title = "Mailbox Options";
         Width = 915;

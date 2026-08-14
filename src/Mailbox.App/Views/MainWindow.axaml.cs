@@ -59,8 +59,30 @@ public partial class MainWindow : Window
         Log.Info($"UI font: {App.Fonts.Resolve("Segoe UI").Rendered}");
         Log.Info($"Body font: {App.Fonts.Resolve("Calibri").Rendered}");
 
-        var shell = new ShellViewModel(App.Themes, App.Commands, layout, layoutMode, App.Accounts);
+        var quickAccess = new QuickAccessLayout(App.Settings, layout.QuickAccess);
 
+        // The toolbar's two placements and its hidden state need a click to reach, so the
+        // harness poses them instead — without persisting, or every capture would leave the
+        // next run arranged however the last photograph wanted it.
+        switch (Environment.GetEnvironmentVariable("MAILBOX_QAT")?.Trim().ToLowerInvariant())
+        {
+            case "below": quickAccess.Pose(QuickAccessPlacement.BelowRibbon); break;
+            case "above": quickAccess.Pose(QuickAccessPlacement.AboveRibbon); break;
+            case "hidden": quickAccess.Pose(visible: false); break;
+        }
+
+        var shell = new ShellViewModel(
+            App.Themes, App.Commands, layout, layoutMode, App.Accounts, quickAccess);
+
+        _ribbon.IsQuickAccessVisible = quickAccess.IsVisible;
+        _ribbon.QuickAccessVisibilityToggled += (_, _) =>
+        {
+            quickAccess.IsVisible = !quickAccess.IsVisible;
+            _ribbon.IsQuickAccessVisible = quickAccess.IsVisible;
+            shell.RaiseQuickAccessPlacement();
+        };
+
+        WireQuickAccess(shell);
         WireRail(shell);
         WireWindowMenu();
         WireToolbarCommands(shell);
@@ -153,9 +175,9 @@ public partial class MainWindow : Window
         host.Content = null;
     }
 
-    /// <summary>Opens the Options dialog modally over the shell.</summary>
-    private async Task ShowOptions()
-        => await new OptionsWindow(App.Themes).ShowDialog<bool>(this);
+    /// <summary>Opens the Options dialog modally over the shell, optionally on a given page.</summary>
+    private async Task ShowOptions(string? page = null)
+        => await new OptionsWindow(App.Themes, page).ShowDialog<bool>(this);
 
     // ------------------------------------------------------------------------------------
     // Calendar peek and dock
@@ -436,6 +458,35 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Hangs the customize menu off the chevron at the end of the Quick Access Toolbar.
+    /// </summary>
+    private void WireQuickAccess(ShellViewModel shell)
+    {
+        if (shell.QuickAccessCustomization is not { } customization) return;
+
+        // One chevron per placement, each with its own flyout — a single flyout cannot be
+        // attached to two controls.
+        foreach (var name in new[] { "QuickAccessCustomize", "QuickAccessCustomizeBelow" })
+        {
+            if (this.FindControl<Button>(name) is not { } chevron) continue;
+
+            chevron.Flyout = QuickAccessFlyout.Build(
+                App.Commands,
+                customization,
+                changed: () =>
+                {
+                    shell.RebuildQuickAccess();
+
+                    // The buttons are new objects, so whatever bound their commands has to run
+                    // again or the rebuilt toolbar is a row of controls that do nothing.
+                    WireToolbarCommands(shell);
+                    _ribbon.IsQuickAccessVisible = customization.IsVisible;
+                },
+                moreCommands: () => _ = ShowOptions("qat"));
+        }
+    }
+
+    /// <summary>
     /// Hangs the account panel off the avatar. Done here rather than in
     /// <see cref="SetUpTitleBar"/> because that runs before the view model exists.
     /// </summary>
@@ -699,7 +750,13 @@ public partial class MainWindow : Window
     {
         var targets = new List<KeyTipTarget>(_ribbon.TabKeyTips());
 
-        if (this.FindControl<ItemsControl>("QuickAccessBar") is not { } qat) return targets;
+        // The toolbar has two homes and may be hidden altogether, so this asks which one is
+        // actually on screen rather than assuming the title bar.
+        var qat = new[] { "QuickAccessBar", "QuickAccessBarBelow" }
+            .Select(this.FindControl<ItemsControl>)
+            .FirstOrDefault(bar => bar is { IsEffectivelyVisible: true });
+
+        if (qat is null) return targets;
 
         var position = 0;
         foreach (var button in qat.GetVisualDescendants().OfType<Button>())

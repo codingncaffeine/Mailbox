@@ -17,6 +17,29 @@ namespace Mailbox.Core.Ribbon;
 /// </remarks>
 public static class DefaultRibbonLayouts
 {
+    /// <summary>
+    /// What the Quick Access Toolbar's customize flyout offers, ticked when placed.
+    /// </summary>
+    /// <remarks>
+    /// A short curated list, as the reference has, rather than the whole catalogue — the flyout
+    /// is the quick way to place a common command, and Customize Ribbon is the way to reach
+    /// everything else. Order is the reference's own, not alphabetical.
+    /// </remarks>
+    public static IReadOnlyList<CommandId> QuickAccessCandidates { get; } =
+    [
+        MailCommands.NewEmail.Id,
+        MailCommands.SendReceiveAll.Id,
+        MailCommands.Undo.Id,
+        ViewCommands.Redo.Id,
+        MailCommands.Delete.Id,
+        MailCommands.Reply.Id,
+        MailCommands.ReplyAll.Id,
+        MailCommands.Forward.Id,
+        MailCommands.MoveTo.Id,
+        MailCommands.AddressBook.Id,
+        MailCommands.WorkOffline.Id,
+    ];
+
     /// <summary>A vertical rule between clusters on the Simplified row.</summary>
     private static RibbonItem Sep => new()
     {
