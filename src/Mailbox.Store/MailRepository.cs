@@ -34,7 +34,15 @@ public sealed class MailRepository(MailStore store)
             ("$protocol", Wire(protocol)),
             ("$created", now.ToUnixTimeSeconds()));
 
-        return GetAccount(_store.LastInsertId)!;
+        var created = _store.LastInsertId;
+
+        // The first account is the default. Without one, nothing knows where to send from.
+        if (_store.ScalarLong("SELECT count(*) FROM accounts WHERE is_default = 1") == 0)
+        {
+            SetDefaultAccount(created);
+        }
+
+        return GetAccount(created)!;
     }
 
     public Account? GetAccount(long id) => _store.Query(
@@ -44,7 +52,71 @@ public sealed class MailRepository(MailStore store)
         "SELECT * FROM accounts ORDER BY ordinal, id", ReadAccount);
 
     public void RemoveAccount(long id)
-        => _store.Execute("DELETE FROM accounts WHERE id = $id", ("$id", id));
+    {
+        _store.InTransaction(() =>
+        {
+            var wasDefault = _store.ScalarLong(
+                "SELECT is_default FROM accounts WHERE id = $id", ("$id", id)) == 1;
+
+            var removed = _store.Execute("DELETE FROM accounts WHERE id = $id", ("$id", id));
+
+            // Removing the default must leave another one, or nothing knows where to send from.
+            if (wasDefault)
+            {
+                _store.Execute(
+                    """
+                    UPDATE accounts SET is_default = 1
+                    WHERE id = (SELECT id FROM accounts ORDER BY ordinal, id LIMIT 1)
+                    """);
+            }
+
+            return removed;
+        });
+    }
+
+    /// <summary>The account new mail is sent from, or null when there are none.</summary>
+    public Account? DefaultAccount() => _store.Query(
+        "SELECT * FROM accounts WHERE is_default = 1", ReadAccount).FirstOrDefault();
+
+    /// <summary>
+    /// Makes one account the default. Cleared first: the unique index allows exactly one, so
+    /// setting before clearing would fail rather than replace.
+    /// </summary>
+    public void SetDefaultAccount(long id)
+    {
+        _store.InTransaction(() =>
+        {
+            _store.Execute("UPDATE accounts SET is_default = 0 WHERE is_default = 1");
+            return _store.Execute(
+                "UPDATE accounts SET is_default = 1 WHERE id = $id", ("$id", id));
+        });
+    }
+
+    /// <summary>Renames an account, which is what the list's Name column shows.</summary>
+    public void RenameAccount(long id, string displayName) => _store.Execute(
+        "UPDATE accounts SET display_name = $name WHERE id = $id",
+        ("$name", displayName), ("$id", id));
+
+    /// <summary>Moves an account up or down the order the folder pane lists them in.</summary>
+    public void MoveAccount(long id, int direction)
+    {
+        var ordered = Accounts().ToList();
+        var index = ordered.FindIndex(a => a.Id == id);
+        var target = index + direction;
+        if (index < 0 || target < 0 || target >= ordered.Count) return;
+
+        _store.InTransaction(() =>
+        {
+            (ordered[index], ordered[target]) = (ordered[target], ordered[index]);
+            for (var i = 0; i < ordered.Count; i++)
+            {
+                _store.Execute("UPDATE accounts SET ordinal = $o WHERE id = $id",
+                    ("$o", i), ("$id", ordered[i].Id));
+            }
+
+            return 0;
+        });
+    }
 
     // ---- Folders --------------------------------------------------------------------------
 
@@ -376,7 +448,10 @@ public sealed class MailRepository(MailStore store)
         r.GetString(r.GetOrdinal("display_name")),
         r.GetString(r.GetOrdinal("protocol")) == "imap" ? MailProtocol.Imap : MailProtocol.Pop3,
         r.GetInt32(r.GetOrdinal("ordinal")),
-        DateTimeOffset.FromUnixTimeSeconds(r.GetInt64(r.GetOrdinal("created_utc"))));
+        DateTimeOffset.FromUnixTimeSeconds(r.GetInt64(r.GetOrdinal("created_utc"))))
+    {
+        IsDefault = r.GetInt32(r.GetOrdinal("is_default")) != 0,
+    };
 
     private static Folder ReadFolder(SqliteDataReader r) => new(
         r.GetInt64(r.GetOrdinal("id")),

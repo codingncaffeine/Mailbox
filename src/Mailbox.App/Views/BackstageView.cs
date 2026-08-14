@@ -237,18 +237,21 @@ public sealed class BackstageView : Border
         stack.Children.Add(BuildSection(
             "settings", "Account\nSettings", true,
             "Account Settings",
-            "Change settings for this account or set up more connections."));
+            "Change settings for this account or set up more connections.",
+            AccountSettingsMenu()));
 
         stack.Children.Add(BuildSection(
             "archive", "Tools", true,
             "Mailbox Settings",
-            "Manage the size of your mailbox by emptying Deleted Items and archiving."));
+            "Manage the size of your mailbox by emptying Deleted Items and archiving.",
+            ToolsMenu()));
 
         stack.Children.Add(BuildSection(
             "rules", "Manage Rules\n& Alerts", false,
             "Rules and Alerts",
             "Use Rules and Alerts to help organize your incoming email messages, and receive " +
-            "updates when items are added, changed, or removed."));
+            "updates when items are added, changed, or removed.",
+            action: "rules"));
 
         return new ScrollViewer { Content = stack };
     }
@@ -343,8 +346,83 @@ public sealed class BackstageView : Border
     /// A large square button on the left with its heading and explanation to the right — the
     /// shape every Backstage section uses.
     /// </summary>
+    /// <summary>Raised by every Backstage action, with the name of what was asked for.</summary>
+    public event EventHandler<string>? ActionRequested;
+
+    /// <summary>
+    /// A menu item with a title and a sentence beneath it, which is the shape every item in
+    /// these two menus takes. Built rather than templated so both lines take their own token —
+    /// a detail line in the primary colour reads as a second title.
+    /// </summary>
+    private MenuItem MenuEntry(string icon, string title, string detail, string action,
+        bool enabled = true)
+    {
+        var glyph = new TextBlock
+        {
+            Text = IconGlyphs.GetOrEmpty(icon, 16),
+            FontFamily = IconFont.Family,
+            FontSize = 16,
+            Margin = new Thickness(0, 2, 10, 0),
+            VerticalAlignment = VerticalAlignment.Top,
+        };
+        Bind(glyph, TextBlock.ForegroundProperty,
+            enabled ? "text.primary.brush" : "text.disabled.brush");
+
+        var lines = new StackPanel
+        {
+            Children =
+            {
+                new TextBlock { Text = title, Classes = { "menu-title" } },
+                new TextBlock { Text = detail, Classes = { "menu-detail" } },
+            },
+        };
+
+        var item = new MenuItem
+        {
+            IsEnabled = enabled,
+            Header = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Children = { glyph, lines },
+            },
+        };
+
+        if (enabled) item.Click += (_, _) => ActionRequested?.Invoke(this, action);
+        return item;
+    }
+
+    private MenuFlyout AccountSettingsMenu() => new()
+    {
+        Placement = PlacementMode.BottomEdgeAlignedLeft,
+        ItemsSource = new[]
+        {
+            MenuEntry("settings", "Account Settings…",
+                "Add and remove accounts, or change existing connection settings.",
+                "account.settings"),
+            MenuEntry("shield", "Update Password",
+                "Update the account password saved in Mailbox.", "account.password"),
+            MenuEntry("people", "Account Name and Sync Settings",
+                "Change the account name and what is downloaded.", "account.server"),
+            MenuEntry("settings", "Server Settings",
+                "Change the server name, port and encryption.", "account.server"),
+        },
+    };
+
+    private MenuFlyout ToolsMenu() => new()
+    {
+        Placement = PlacementMode.BottomEdgeAlignedLeft,
+        ItemsSource = new[]
+        {
+            MenuEntry("cleanup", "Mailbox Cleanup…",
+                "See what is taking up room and clear it.", "tools.cleanup"),
+            MenuEntry("delete", "Empty Deleted Items Folder",
+                "Permanently delete everything in Deleted Items.", "tools.emptydeleted"),
+        },
+    };
+
     private Control BuildSection(
-        string icon, string buttonLabel, bool hasDropdown, string heading, string description)
+        string icon, string buttonLabel, bool hasDropdown, string heading, string description,
+        MenuFlyout? menu = null, string? action = null)
     {
         var grid = new Grid
         {
@@ -397,6 +475,12 @@ public sealed class BackstageView : Border
             VerticalAlignment = VerticalAlignment.Top,
         };
         Bind(button, BackgroundProperty, "backstage.field.brush");
+        if (menu is not null) button.Flyout = menu;
+        else if (action is not null)
+        {
+            button.Click += (_, _) => ActionRequested?.Invoke(this, action);
+        }
+
         Grid.SetColumn(button, 0);
         grid.Children.Add(button);
 

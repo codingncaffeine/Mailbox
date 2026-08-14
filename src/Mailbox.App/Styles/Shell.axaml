@@ -209,6 +209,58 @@
         <Setter Property="Background" Value="{DynamicResource state.selected.brush}" />
     </Style>
 
+    <!-- ================================= Tabs ================================== -->
+    <!-- Dialog tabs. The control theme's palette follows our tokens now, but a tab strip is
+         prominent enough to be worth saying explicitly rather than inheriting. -->
+    <Style Selector="TabControl">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+
+    <Style Selector="TabItem">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource text.primary.brush}" />
+        <Setter Property="FontSize" Value="{DynamicResource type.ui.size.value}" />
+        <Setter Property="Padding" Value="10,5" />
+        <Setter Property="MinHeight" Value="0" />
+    </Style>
+
+    <Style Selector="TabItem:selected">
+        <Setter Property="Background" Value="{DynamicResource surface.raised.brush}" />
+        <Setter Property="Foreground" Value="{DynamicResource text.primary.brush}" />
+    </Style>
+
+    <Style Selector="TabItem:pointerover">
+        <Setter Property="Background" Value="{DynamicResource state.hover.brush}" />
+    </Style>
+
+    <Style Selector="TabItem:disabled">
+        <Setter Property="Foreground" Value="{DynamicResource text.disabled.brush}" />
+    </Style>
+
+    <!-- ============================ Backstage menus ============================= -->
+    <!-- The two-line items behind Account Settings and Tools: a title and a sentence under it.
+         Both lines come from tokens, so the secondary line stays legible on every theme. -->
+    <Style Selector="TextBlock.menu-title">
+        <Setter Property="Foreground" Value="{DynamicResource text.primary.brush}" />
+    </Style>
+
+    <Style Selector="TextBlock.menu-detail">
+        <Setter Property="Foreground" Value="{DynamicResource text.secondary.brush}" />
+        <Setter Property="FontSize" Value="{DynamicResource type.ui.size.small.value}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="MaxWidth" Value="260" />
+    </Style>
+
+    <Style Selector="MenuItem:disabled">
+        <Setter Property="Foreground" Value="{DynamicResource text.disabled.brush}" />
+    </Style>
+
+    <Style Selector="Separator">
+        <Setter Property="Background" Value="{DynamicResource border.subtle.brush}" />
+        <Setter Property="Height" Value="1" />
+        <Setter Property="Margin" Value="0,4" />
+    </Style>
+
     <!-- ======================== Flat header controls =========================== -->
     <!--
         Filter pivots, column headers, group headers, the pane collapse and the status bar's

@@ -135,6 +135,19 @@ public static class Migrations
 
         CREATE INDEX outbox_by_state ON outbox (state, next_try_utc);
         """,
+
+        // ---- 4: which account is the default ---------------------------------------------
+        """
+        -- Which account new mail is sent from when nothing else decides. A column rather than a
+        -- setting, because it has to be true of exactly one account and the database can say so.
+        ALTER TABLE accounts ADD COLUMN is_default INTEGER NOT NULL DEFAULT 0;
+
+        -- The first account is the default until told otherwise.
+        UPDATE accounts SET is_default = 1
+        WHERE id = (SELECT id FROM accounts ORDER BY ordinal, id LIMIT 1);
+
+        CREATE UNIQUE INDEX one_default_account ON accounts (is_default) WHERE is_default = 1;
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>

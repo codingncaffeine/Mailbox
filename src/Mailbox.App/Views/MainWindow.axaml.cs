@@ -11,6 +11,7 @@ using Mailbox.Core;
 using Mailbox.Core.Commands;
 using Mailbox.Core.Ribbon;
 using Mailbox.Protocols;
+using Mailbox.Store;
 
 namespace Mailbox.App.Views;
 
@@ -106,6 +107,7 @@ public partial class MainWindow : Window
         var backstage = new BackstageView();
         backstage.OptionsRequested += async (_, _) => await ShowOptions();
         backstage.AddAccountRequested += async (_, _) => await AddAccountAsync();
+        backstage.ActionRequested += async (_, action) => await BackstageActionAsync(action);
         backstage.CloseRequested += (_, _) => CloseBackstage();
 
         host.Content = backstage;
@@ -459,6 +461,108 @@ public partial class MainWindow : Window
     }
 
     private bool _transferring;
+
+    /// <summary>
+    /// Everything the Backstage's Account Information page can ask for. One place, so a new
+    /// entry in either menu is a case here rather than another handler wired somewhere else.
+    /// </summary>
+    private async Task BackstageActionAsync(string action)
+    {
+        if (DataContext is not ShellViewModel shell) return;
+
+        switch (action)
+        {
+            case "account.settings":
+            {
+                var dialog = new AccountSettingsDialog();
+                await dialog.ShowDialog(this);
+                if (dialog.Changed) { CloseBackstage(); shell.Refresh(); }
+                break;
+            }
+
+            case "account.password":
+                if (RequireAccount(shell) is { } forPassword)
+                {
+                    await new UpdatePasswordDialog(forPassword).ShowDialog(this);
+                }
+
+                break;
+
+            case "account.server":
+                if (RequireAccount(shell) is { } forServer)
+                {
+                    var dialog = new ServerSettingsDialog(forServer);
+                    await dialog.ShowDialog(this);
+                    if (dialog.Saved) { CloseBackstage(); shell.Refresh(); }
+                }
+
+                break;
+
+            case "tools.emptydeleted":
+                await EmptyDeletedItemsAsync(shell);
+                break;
+
+            case "tools.cleanup":
+                await new MailboxCleanupDialog().ShowDialog(this);
+                shell.Refresh();
+                break;
+
+            case "rules":
+                await new RulesAndAlertsDialog().ShowDialog(this);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// The account these dialogs act on. The default one, or nothing when none exists — in
+    /// which case saying so beats opening a dialog with no account behind it.
+    /// </summary>
+    private Account? RequireAccount(ShellViewModel shell)
+    {
+        var account = App.Mail.DefaultAccount();
+        if (account is null) shell.StatusRight = "No account is set up yet. File, Add Account.";
+        return account;
+    }
+
+    /// <summary>
+    /// Empties Deleted Items across every account. Confirmed, and the wording says how many
+    /// go, because with POP3 this store may hold the only copy.
+    /// </summary>
+    private async Task EmptyDeletedItemsAsync(ShellViewModel shell)
+    {
+        var folders = App.Mail.Accounts()
+            .Select(a => App.Mail.FolderWithRole(a.Id, FolderRole.Deleted))
+            .OfType<Folder>()
+            .ToList();
+
+        var total = folders.Sum(f => f.Total);
+        if (total == 0)
+        {
+            shell.StatusRight = "Deleted Items is already empty.";
+            return;
+        }
+
+        var confirmed = await Confirm.AskAsync(
+            this,
+            "Empty Deleted Items",
+            $"Permanently delete {total:N0} item{(total == 1 ? "" : "s")} from Deleted Items?\n\n"
+            + "This cannot be undone, and where mail was removed from the server this is the "
+            + "only copy.",
+            "Delete");
+
+        if (!confirmed) return;
+
+        foreach (var folder in folders)
+        {
+            foreach (var message in App.Mail.Messages(folder.Id, int.MaxValue))
+            {
+                App.Mail.DeleteMessage(message.Id);
+            }
+        }
+
+        shell.Refresh();
+        shell.StatusRight = $"{total:N0} item{(total == 1 ? "" : "s")} deleted.";
+    }
 
     /// <summary>
     /// Opens the account wizard, and reloads once it closes so the new account's folders
