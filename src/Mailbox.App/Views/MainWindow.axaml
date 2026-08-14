@@ -15,7 +15,7 @@
         FontFamily="{DynamicResource ui.fontfamily}"
         Icon="/Assets/Icons/mailbox-256.png"
         ExtendClientAreaToDecorationsHint="True"
-        WindowDecorations="BorderOnly">
+        WindowDecorations="None">
 
     <!--
         Rounded window. The reference rounds its outer corners at the same radius as the panels
