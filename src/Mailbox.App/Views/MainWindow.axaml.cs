@@ -58,6 +58,7 @@ public partial class MainWindow : Window
         WireWindowMenu();
         WireToolbarCommands(shell);
         WireAccountButton(shell);
+        WireArrangeMenu(shell);
         DataContext = shell;
 
         ApplyHarnessState(shell);
@@ -286,8 +287,8 @@ public partial class MainWindow : Window
                 case "unread": shell.ShowUnread.Execute(null); break;
                 case "sort-from": shell.SortBy("From"); break;
                 case "sort-subject": shell.SortBy("Subject"); break;
-                case "sort-asc": shell.ToggleSortDirection.Execute(null); break;
-                case "group-collapsed": shell.ToggleGroup.Execute(null); break;
+                case "sort-asc": shell.ToggleSort.Execute(null); break;
+                case "group-collapsed": shell.ToggleGroupCollapsed("Today"); break;
                 case "nav-collapsed": shell.ToggleNav.Execute(null); break;
                 case "no-reading": shell.HideReadingPane.Execute(null); break;
                 case "zoom-in": shell.ZoomIn.Execute(null); break;
@@ -295,6 +296,47 @@ public partial class MainWindow : Window
                 default: Log.Warn($"Unknown MAILBOX_STATE: {state}"); break;
             }
         }
+    }
+
+    /// <summary>
+    /// The arrangement menu behind the "By Date" label. Built from the arrangement list rather
+    /// than written out, so adding one is a single entry in the engine.
+    /// </summary>
+    private void WireArrangeMenu(ShellViewModel shell)
+    {
+        if (this.FindControl<Button>("ArrangeButton") is not { } button) return;
+
+        var flyout = new MenuFlyout { Placement = PlacementMode.BottomEdgeAlignedRight };
+
+        void Build()
+        {
+            var items = new List<MenuItem>();
+
+            foreach (var arrangement in shell.Arrangements_)
+            {
+                var chosen = arrangement;
+                var item = new MenuItem
+                {
+                    Header = Store.Lists.Arrangements.Label(chosen),
+                    Icon = chosen == shell.Arrangement
+                        ? new TextBlock { Text = "\u2713" }
+                        : null,
+                };
+                item.Click += (_, _) => { shell.Arrangement = chosen; Build(); };
+                items.Add(item);
+            }
+
+            var newest = new MenuItem { Header = shell.SortDescending ? "Newest on top ✓" : "Newest on top" };
+            newest.Click += (_, _) => { shell.SortDescending = true; Build(); };
+
+            var oldest = new MenuItem { Header = shell.SortDescending ? "Oldest on top" : "Oldest on top ✓" };
+            oldest.Click += (_, _) => { shell.SortDescending = false; Build(); };
+
+            flyout.ItemsSource = items.Concat([newest, oldest]).ToList();
+        }
+
+        Build();
+        button.Flyout = flyout;
     }
 
     /// <summary>
@@ -591,18 +633,80 @@ public partial class MainWindow : Window
         base.OnKeyDown(e);
         if (e.Handled || DataContext is not ShellViewModel shell) return;
 
+        var control = e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Control);
+        var shift = e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Shift);
+        var rows = SelectedRows();
+
         switch (e.Key)
         {
             case Avalonia.Input.Key.F9:
-                e.Handled = true;
                 _ = SendReceiveAsync(shell);
                 break;
 
             case Avalonia.Input.Key.F5:
-                e.Handled = true;
                 shell.Refresh();
                 break;
+
+            // Delete goes to Deleted Items; Shift+Delete asks first, because with POP3 the
+            // store may be the only copy left.
+            case Avalonia.Input.Key.Delete when shift:
+                _ = ConfirmPermanentDeleteAsync(shell, rows);
+                break;
+
+            case Avalonia.Input.Key.Delete:
+                shell.Delete(rows, permanently: false);
+                break;
+
+            case Avalonia.Input.Key.Q when control:
+                shell.SetRead(rows, read: true);
+                break;
+
+            case Avalonia.Input.Key.U when control:
+                shell.SetRead(rows, read: false);
+                break;
+
+            case Avalonia.Input.Key.G when control && shift:
+                shell.SetFlagged(rows, flagged: rows.Any(r => !r.IsFlagged));
+                break;
+
+            case Avalonia.Input.Key.I when control && shift:
+                shell.GoTo(FolderRole.Inbox);
+                break;
+
+            case Avalonia.Input.Key.O when control && shift:
+                shell.GoTo(FolderRole.Outbox);
+                break;
+
+            default:
+                return;
         }
+
+        e.Handled = true;
+    }
+
+    /// <summary>What the list has highlighted, headers excluded.</summary>
+    private IReadOnlyList<ViewModels.MessageRow> SelectedRows()
+    {
+        var list = this.FindControl<ListBox>("MessageList");
+        if (list?.SelectedItems is not { } selected) return [];
+
+        return [.. selected.OfType<ViewModels.MessageRow>()];
+    }
+
+    private async Task ConfirmPermanentDeleteAsync(ShellViewModel shell,
+        IReadOnlyList<ViewModels.MessageRow> rows)
+    {
+        if (rows.Count == 0) return;
+
+        var confirmed = await Confirm.AskAsync(
+            this,
+            "Delete permanently",
+            rows.Count == 1
+                ? $"Permanently delete \"{rows[0].Subject}\"?\n\nThis cannot be undone."
+                : $"Permanently delete {rows.Count:N0} messages?\n\nThis cannot be undone.",
+            "Delete");
+
+        if (confirmed) shell.Delete(rows, permanently: true);
     }
 
     private void ToggleWorkOffline(ShellViewModel shell)
