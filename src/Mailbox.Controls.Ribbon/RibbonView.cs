@@ -256,7 +256,9 @@ public sealed class RibbonView : ContentControl
             Orientation = Orientation.Horizontal,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        trailing.Children.Add(BuildGlyphButton("more", "More commands", 16, () => { }));
+        var overflow = BuildGlyphButton("more", "More commands", 16, () => { });
+        overflow.Flyout = BuildOverflowMenu(tab);
+        trailing.Children.Add(overflow);
 
         var chevron = BuildGlyphButton("chevron-down", "Ribbon Display Options", 14, () => { });
         chevron.HorizontalAlignment = HorizontalAlignment.Right;
@@ -336,6 +338,54 @@ public sealed class RibbonView : ContentControl
     /// The Ribbon Display Options menu behind the chevron: a Ribbon Layout section choosing
     /// Classic or Simplified, then a Show Ribbon section. Ticks mark the active choice.
     /// </summary>
+    /// <summary>
+    /// The commands this tab owns that its row has no room for, plus everything the default
+    /// layout leaves out entirely. Empty is a real answer — a tab whose row already shows
+    /// everything gets a disabled note rather than a menu that opens onto nothing.
+    /// </summary>
+    private MenuFlyout BuildOverflowMenu(RibbonTab tab)
+    {
+        var shown = (_layout.SimplifiedRows.TryGetValue(tab.Id, out var row) ? row : [])
+            .Where(i => i.Kind != RibbonItemKind.Separator)
+            .Select(i => i.Command)
+            .ToHashSet();
+
+        var hidden = tab.Groups
+            .SelectMany(g => g.Items)
+            .Where(i => i.Kind != RibbonItemKind.Separator && !shown.Contains(i.Command))
+            .Select(i => i.Command)
+            .Distinct()
+            .Concat(_catalog.BeyondDefaultLayout.Select(c => c.Id))
+            .Distinct()
+            .Where(id => _catalog.TryGet(id, out _))
+            .ToList();
+
+        var flyout = new MenuFlyout { Placement = PlacementMode.BottomEdgeAlignedRight };
+
+        if (hidden.Count == 0)
+        {
+            flyout.ItemsSource = new[]
+            {
+                new MenuItem { Header = "Nothing further on this tab", IsEnabled = false },
+            };
+            return flyout;
+        }
+
+        flyout.ItemsSource = hidden
+            .Select(id => _catalog.Get(id))
+            .OrderBy(c => c.Label, StringComparer.CurrentCulture)
+            .Select(command =>
+            {
+                var item = new MenuItem { Header = command.Label };
+                item.Click += (_, _) =>
+                    CommandInvoked?.Invoke(this, new RibbonCommandEventArgs(command.Id));
+                return item;
+            })
+            .ToList();
+
+        return flyout;
+    }
+
     private MenuFlyout BuildDisplayOptionsMenu()
     {
         var flyout = new MenuFlyout { Placement = PlacementMode.BottomEdgeAlignedRight };
@@ -551,6 +601,41 @@ public sealed class RibbonView : ContentControl
         return row;
     }
 
+    private Button GalleryArrow(string glyph, string tip, Action onClick)
+    {
+        var text = new TextBlock
+        {
+            Text = IconGlyphs.GetOrEmpty(glyph, 16),
+            FontFamily = IconFont.Family,
+            FontSize = 8,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        Bind(text, TextBlock.ForegroundProperty, "text.secondary.brush");
+
+        var button = new Button { Content = text, Classes = { "flat" }, Padding = new Thickness(2, 0) };
+        ToolTip.SetTip(button, tip);
+        button.Click += (_, _) => onClick();
+        return button;
+    }
+
+    /// <summary>Every command in the gallery, for when scrolling to one is the slower way.</summary>
+    private MenuFlyout BuildGalleryMenu(RibbonGroup group)
+    {
+        var flyout = new MenuFlyout { Placement = PlacementMode.BottomEdgeAlignedLeft };
+        flyout.ItemsSource = group.Items
+            .Where(i => i.Kind != RibbonItemKind.Separator && _catalog.TryGet(i.Command, out _))
+            .Select(i => _catalog.Get(i.Command))
+            .Select(command =>
+            {
+                var item = new MenuItem { Header = command.Label };
+                item.Click += (_, _) =>
+                    CommandInvoked?.Invoke(this, new RibbonCommandEventArgs(command.Id));
+                return item;
+            })
+            .ToList();
+        return flyout;
+    }
+
     /// <summary>
     /// A gallery: the group's entries stacked inside a bordered, differently-shaded box with a
     /// scroll chevron down its right edge. the reference's Quick Steps is the canonical example.
@@ -567,28 +652,33 @@ public sealed class RibbonView : ContentControl
             }
         }
 
+        // The entries scroll inside the box; the chevrons drive that scroller and the third
+        // glyph opens the whole gallery as a menu. Drawn as glyphs they did nothing at all.
+        var viewer = new ScrollViewer
+        {
+            Content = entries,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Hidden,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            MaxHeight = RibbonMetrics.BodyHeight - 28,
+        };
+
         var scroll = new StackPanel
         {
             Orientation = Orientation.Vertical,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(2, 0),
         };
-        foreach (var glyph in (string[])["chevron-up", "chevron-down", "more"])
-        {
-            var arrow = new TextBlock
-            {
-                Text = IconGlyphs.GetOrEmpty(glyph, 16),
-                FontFamily = IconFont.Family,
-                FontSize = 8,
-                HorizontalAlignment = HorizontalAlignment.Center,
-            };
-            Bind(arrow, TextBlock.ForegroundProperty, "text.secondary.brush");
-            scroll.Children.Add(arrow);
-        }
+
+        scroll.Children.Add(GalleryArrow("chevron-up", "Scroll up", () => viewer.LineUp()));
+        scroll.Children.Add(GalleryArrow("chevron-down", "Scroll down", () => viewer.LineDown()));
+
+        var all = GalleryArrow("more", $"All {group.Label} commands", () => { });
+        all.Flyout = BuildGalleryMenu(group);
+        scroll.Children.Add(all);
 
         var inner = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
-        Grid.SetColumn(entries, 0);
-        inner.Children.Add(entries);
+        Grid.SetColumn(viewer, 0);
+        inner.Children.Add(viewer);
         Grid.SetColumn(scroll, 1);
         inner.Children.Add(scroll);
 
@@ -619,17 +709,24 @@ public sealed class RibbonView : ContentControl
 
         if (group.DialogLauncher is null) return label;
 
-        // the reference application puts a small arrow in the group's bottom-right corner that opens its
-        // full options dialog.
-        var launcher = new TextBlock
+        // The reference puts a small arrow in the group's bottom-right corner that opens the
+        // group's full options dialog. A button, not a glyph: it was drawn as text and so did
+        // nothing and gave no hover, which is exactly what makes a control look broken.
+        var launcher = new Button
         {
-            Text = "⌄",
+            Content = "⌄",
+            Classes = { "flat" },
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 2, 0),
         };
-        Bind(launcher, TextBlock.ForegroundProperty, "ribbon.group.label.brush");
-        Bind(launcher, TextBlock.FontSizeProperty, "type.ui.size.small.value");
+        Bind(launcher, TemplatedControl.ForegroundProperty, "ribbon.group.label.brush");
+        Bind(launcher, TemplatedControl.FontSizeProperty, "type.ui.size.small.value");
+        ToolTip.SetTip(launcher, $"{group.Label} options");
+
+        var opens = group.DialogLauncher.Value;
+        launcher.Click += (_, _) =>
+            CommandInvoked?.Invoke(this, new RibbonCommandEventArgs(opens));
 
         var panel = new Grid();
         panel.Children.Add(label);
