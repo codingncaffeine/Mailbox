@@ -143,6 +143,14 @@ public static class OfficeThemes
 
         // Chrome below the title bar, measured. Colorful and White share every one of these:
         // the two themes differ only in the title bar and the search box sitting in it.
+        // The six categories. Named rather than valued so they stay legible per theme; these
+        // are the shades on a light ground.
+        t.Set(TokenKeys.Category.Red, "#D13438");
+        t.Set(TokenKeys.Category.Orange, "#E8871A");
+        t.Set(TokenKeys.Category.Yellow, "#F2C811");
+        t.Set(TokenKeys.Category.Green, "#107C10");
+        t.Set(TokenKeys.Category.Blue, "#0078D4");
+        t.Set(TokenKeys.Category.Purple, "#8764B8");
         t.Set(TokenKeys.Avatar.Background, "#004E8C");
         t.Set(TokenKeys.Avatar.Foreground, "{palette.neutral.white}");
         t.Set(TokenKeys.Rail.Background, "#EFE9E6");
@@ -198,6 +206,14 @@ public static class OfficeThemes
 
         // Chrome below the title bar, measured. Colorful and White share every one of these:
         // the two themes differ only in the title bar and the search box sitting in it.
+        // The six categories. Named rather than valued so they stay legible per theme; these
+        // are the shades on a light ground.
+        t.Set(TokenKeys.Category.Red, "#D13438");
+        t.Set(TokenKeys.Category.Orange, "#E8871A");
+        t.Set(TokenKeys.Category.Yellow, "#F2C811");
+        t.Set(TokenKeys.Category.Green, "#107C10");
+        t.Set(TokenKeys.Category.Blue, "#0078D4");
+        t.Set(TokenKeys.Category.Purple, "#8764B8");
         t.Set(TokenKeys.Avatar.Background, "#004E8C");
         t.Set(TokenKeys.Avatar.Foreground, "{palette.neutral.white}");
         t.Set(TokenKeys.Rail.Background, "#EFE9E6");
@@ -275,6 +291,13 @@ public static class OfficeThemes
         t.Set(TokenKeys.TitleBar.Search, "#BDBDBD");
         t.Set(TokenKeys.TitleBar.SearchBorder, "#808080");
         t.Set(TokenKeys.TitleBar.SearchText, "#424242");
+        // Lifted for a dark ground: the light-theme shades read as muddy against it.
+        t.Set(TokenKeys.Category.Red, "#F1707A");
+        t.Set(TokenKeys.Category.Orange, "#FFAA44");
+        t.Set(TokenKeys.Category.Yellow, "#FFE066");
+        t.Set(TokenKeys.Category.Green, "#5EC75E");
+        t.Set(TokenKeys.Category.Blue, "#5CAFEA");
+        t.Set(TokenKeys.Category.Purple, "#B79BE0");
         t.Set(TokenKeys.Avatar.Background, "#0F548C");
         t.Set(TokenKeys.Avatar.Foreground, "{palette.neutral.white}");
         t.Set(TokenKeys.Rail.Background, "{palette.chrome.rail}");
@@ -383,6 +406,13 @@ public static class OfficeThemes
         t.Set(TokenKeys.TitleBar.Search, "#1F1F1F");
         t.Set(TokenKeys.TitleBar.SearchBorder, "#1F1F1F");   // no border in the capture
         t.Set(TokenKeys.TitleBar.SearchText, "#ADADAD");
+        // Lifted for a dark ground: the light-theme shades read as muddy against it.
+        t.Set(TokenKeys.Category.Red, "#F1707A");
+        t.Set(TokenKeys.Category.Orange, "#FFAA44");
+        t.Set(TokenKeys.Category.Yellow, "#FFE066");
+        t.Set(TokenKeys.Category.Green, "#5EC75E");
+        t.Set(TokenKeys.Category.Blue, "#5CAFEA");
+        t.Set(TokenKeys.Category.Purple, "#B79BE0");
         t.Set(TokenKeys.Avatar.Background, "#0F6CBD");
         t.Set(TokenKeys.Avatar.Foreground, "{palette.neutral.white}");
         t.Set(TokenKeys.Rail.Background, "#201A17");

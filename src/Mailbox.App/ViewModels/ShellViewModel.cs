@@ -127,6 +127,22 @@ public sealed class MessageRow(
     /// <summary>Which folder it is filed in, so a conversation can tell it spans two.</summary>
     public long FolderId { get; init; }
 
+    /// <summary>
+    /// The colour tokens of the categories on this message, in order. Token names rather than
+    /// colours, so the strip is repainted by a theme change like everything else.
+    /// </summary>
+    public IReadOnlyList<string> CategoryTokens
+    {
+        get;
+        set
+        {
+            if (!Set(ref field, value)) return;
+            Raise(nameof(HasCategories));
+        }
+    } = [];
+
+    public bool HasCategories => CategoryTokens.Count > 0;
+
     /// <summary>How far the row is indented under its conversation.</summary>
     public int Depth
     {
@@ -469,6 +485,16 @@ public sealed class ShellViewModel : ObservableObject
                 ThreadKey = Store.Lists.Arrangements.NormalisedSubject(summary.Subject),
                 FolderId = summary.FolderId,
             });
+        }
+
+        // One query for the page's categories rather than one per row.
+        var categories = where.Account.Mail.CategoriesFor([.. Messages.Select(m => m.Id)]);
+        foreach (var row in Messages)
+        {
+            if (categories.TryGetValue(row.Id, out var assigned))
+            {
+                row.CategoryTokens = [.. assigned.Select(c => c.ColourToken)];
+            }
         }
 
         Rebuild();
@@ -889,6 +915,25 @@ public sealed class ShellViewModel : ObservableObject
         StatusRight = $"{Describe(rows.Count)} moved to {target.Name}.";
     }
 
+    /// <summary>
+    /// Moves messages by id into a folder the pane is showing. Taken by id because the rows
+    /// come back from a drag, which carries ids rather than objects.
+    /// </summary>
+    public void MoveToFolder(IReadOnlyList<long> ids, FolderNode target)
+    {
+        if (ids.Count == 0 || !_folderIds.TryGetValue(target, out var where)) return;
+
+        var rows = Messages.Where(m => ids.Contains(m.Id)).ToList();
+        if (rows.Count == 0) return;
+
+        where.Account.Mail.MoveMessages(ids, where.FolderId);
+        foreach (var row in rows) Messages.Remove(row);
+
+        Rebuild();
+        RefreshCounts();
+        StatusRight = $"{Describe(rows.Count)} moved to {target.Name}.";
+    }
+
     /// <summary>Selects a folder by what it is for, which is what Ctrl+Shift+I and friends do.</summary>
     public bool GoTo(FolderRole role)
     {
@@ -1003,6 +1048,12 @@ public sealed class ShellViewModel : ObservableObject
         if (Arrangement == arrangement) SortDescending = !SortDescending;
         else { Arrangement = arrangement; SortDescending = true; }
     }
+
+    // Glyphs for the buttons that appear on a row under the pointer.
+    public string ArchiveGlyph { get; } = IconGlyphs.GetOrEmpty("archive", 16);
+    public string DeleteGlyph { get; } = IconGlyphs.GetOrEmpty("delete", 16);
+    public string FlagActionGlyph { get; } = IconGlyphs.GetOrEmpty("flag", 16);
+    public string UnreadGlyph { get; } = IconGlyphs.GetOrEmpty("unread", 16);
 
     public string ReadingPaneGlyph { get; } = IconGlyphs.GetOrEmpty("reading-pane", 16);
     public string ReadingGlyph { get; } = IconGlyphs.GetOrEmpty("message-preview", 16);

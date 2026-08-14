@@ -4,6 +4,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="using:Mailbox.App.ViewModels"
         xmlns:views="using:Mailbox.App.Views"
+        xmlns:theming="using:Mailbox.App.Theming"
         mc:Ignorable="d"
         x:Class="Mailbox.App.Views.MainWindow"
         x:DataType="vm:ShellViewModel"
@@ -27,6 +28,9 @@
             ClipToBounds="True"
             Background="{DynamicResource ribbon.tabstrip.background.brush}">
     <Grid RowDefinitions="Auto,Auto,*,Auto" ColumnDefinitions="Auto,*">
+        <Grid.Resources>
+            <theming:TokenBrushConverter x:Key="TokenBrush" />
+        </Grid.Resources>
 
         <!--
             Chrome backdrop, behind everything. The title bar and the tab strip are one
@@ -333,6 +337,7 @@
                     </Border>
 
                     <ListBox ItemsSource="{Binding Folders}"
+                             Name="FolderList"
                              SelectedItem="{Binding SelectedFolder}"
                              Background="Transparent"
                              BorderThickness="0"
@@ -569,7 +574,7 @@
                                     <Grid Grid.Column="1"
                                           Margin="{Binding Indent}"
                                           RowDefinitions="Auto,Auto"
-                                          ColumnDefinitions="150,*,Auto,100">
+                                          ColumnDefinitions="150,*,Auto,Auto,100">
                                         <TextBlock Grid.Row="0" Grid.Column="0"
                                                    Text="{Binding From}"
                                                    Classes.unread="{Binding IsUnread}"
@@ -580,18 +585,75 @@
                                                    Classes.unread="{Binding IsUnread}"
                                                    FontWeight="{Binding SubjectWeight}"
                                                    TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Grid.Row="0" Grid.Column="2"
+                                        <!-- Category strip: one swatch per category, before
+                                             the flag, as the reference lays them out. -->
+                                        <ItemsControl Grid.Row="0" Grid.Column="2"
+                                                      ItemsSource="{Binding CategoryTokens}"
+                                                      IsVisible="{Binding HasCategories}"
+                                                      Margin="0,0,6,0"
+                                                      VerticalAlignment="Center">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Orientation="Horizontal" Spacing="2" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="x:String">
+                                                    <Border Width="10" Height="10"
+                                                            CornerRadius="2"
+                                                            Background="{Binding
+                                                                Converter={StaticResource TokenBrush}}" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+
+                                        <TextBlock Grid.Row="0" Grid.Column="3"
                                                    Text="{Binding FlagGlyph}"
                                                    Margin="0,0,6,0"
                                                    Foreground="{DynamicResource status.danger.brush}" />
-                                        <TextBlock Grid.Row="0" Grid.Column="3"
+                                        <TextBlock Grid.Row="0" Grid.Column="4"
+                                                   Name="RowDate"
                                                    Text="{Binding ReceivedLabel}"
                                                    Classes.unread="{Binding IsUnread}"
                                                    Classes="small"
                                                    HorizontalAlignment="Right"
                                                    TextTrimming="CharacterEllipsis" />
+                                        <!--
+                                            Hover actions. They occupy the received column's
+                                            space rather than their own, so the row does not
+                                            reflow under the pointer — the reference swaps the
+                                            date for them rather than making room.
+                                        -->
+                                        <StackPanel Grid.Row="0" Grid.Column="4"
+                                                    Name="RowActions"
+                                                    Orientation="Horizontal"
+                                                    Spacing="2"
+                                                    HorizontalAlignment="Right"
+                                                    IsVisible="False">
+                                            <Button Classes="flat rowaction"
+                                                    Tag="archive"
+                                                    Content="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).ArchiveGlyph}"
+                                                    FontFamily="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).IconFamily}"
+                                                    ToolTip.Tip="Archive" />
+                                            <Button Classes="flat rowaction"
+                                                    Tag="delete"
+                                                    Content="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).DeleteGlyph}"
+                                                    FontFamily="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).IconFamily}"
+                                                    ToolTip.Tip="Delete" />
+                                            <Button Classes="flat rowaction"
+                                                    Tag="flag"
+                                                    Content="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).FlagActionGlyph}"
+                                                    FontFamily="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).IconFamily}"
+                                                    ToolTip.Tip="Flag" />
+                                            <Button Classes="flat rowaction"
+                                                    Tag="read"
+                                                    Content="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).UnreadGlyph}"
+                                                    FontFamily="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).IconFamily}"
+                                                    ToolTip.Tip="Mark read or unread" />
+                                        </StackPanel>
+
                                         <TextBlock Grid.Row="1" Grid.Column="0"
-                                                   Grid.ColumnSpan="4"
+                                                   Grid.ColumnSpan="5"
                                                    Text="{Binding Preview}"
                                                    Classes="small secondary"
                                                    TextTrimming="CharacterEllipsis"
