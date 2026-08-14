@@ -18,6 +18,22 @@ public sealed class RibbonCommandEventArgs(CommandId command) : EventArgs
 }
 
 /// <summary>
+/// Carries the ribbon body that should float over the content while the ribbon is collapsed to
+/// its tab strip, or null when it should stop floating.
+/// </summary>
+/// <remarks>
+/// The body cannot simply be shown in place: collapsing to the tab strip means the ribbon's row
+/// is the strip's height, and putting a body back in it would push the content down, which is
+/// the opposite of what the mode is for. So the host places it on an overlay instead — an
+/// ordinary control in the window rather than a popup, because a popup is a separate surface
+/// and would not appear in a capture.
+/// </remarks>
+public sealed class RibbonFloatEventArgs(Control? body) : EventArgs
+{
+    public Control? Body { get; } = body;
+}
+
+/// <summary>
 /// Renders a <see cref="RibbonLayout"/> as an Office ribbon.
 /// </summary>
 /// <remarks>
@@ -43,8 +59,10 @@ public sealed class RibbonView : ContentControl
     {
         _catalog = catalog;
         _layout = layout;
-        // File is a Backstage trigger, so the first ordinary tab is what starts selected.
-        _activeTabId = layout.Tabs.FirstOrDefault(t => !t.IsBackstage)?.Id ?? string.Empty;
+        // File is a Backstage trigger and a contextual tab is not on screen yet, so the first
+        // ordinary tab is what starts selected.
+        _activeTabId = layout.Tabs.FirstOrDefault(t => !t.IsBackstage && !t.IsContextual)?.Id
+            ?? string.Empty;
         Rebuild();
     }
 
@@ -91,10 +109,88 @@ public sealed class RibbonView : ContentControl
         set
         {
             if (field == value) return;
+
+            // Remembered so that revealing a collapsed ribbon brings back the layout it was
+            // collapsed from, rather than always the default one.
+            if (value != RibbonDisplayMode.Collapsed) _expandedMode = value;
+
             field = value;
+            CloseFloatingBody();
             Rebuild();
         }
     } = RibbonDisplayMode.Simplified;
+
+    private RibbonDisplayMode _expandedMode = RibbonDisplayMode.Simplified;
+    private bool _isFloating;
+
+    /// <summary>
+    /// Raised while collapsed to the tab strip, with the body to float over the content or null
+    /// to stop floating. See <see cref="RibbonFloatEventArgs"/> for why the host places it.
+    /// </summary>
+    public event EventHandler<RibbonFloatEventArgs>? FloatingBodyChanged;
+
+    /// <summary>
+    /// Unrolls a collapsed ribbon over the content, as clicking its tab does. For the harness,
+    /// which cannot click.
+    /// </summary>
+    public void RevealCollapsedRibbon()
+    {
+        if (DisplayMode != RibbonDisplayMode.Collapsed) return;
+        if (_layout.FindTab(_activeTabId) is not { } tab) return;
+
+        OpenFloatingBody(tab);
+    }
+
+    /// <summary>Dismisses the floating body. The host calls this on a click elsewhere.</summary>
+    public void CloseFloatingBody()
+    {
+        if (!_isFloating) return;
+        _isFloating = false;
+        FloatingBodyChanged?.Invoke(this, new RibbonFloatEventArgs(null));
+    }
+
+    private void OpenFloatingBody(RibbonTab tab)
+    {
+        Control? body = _expandedMode == RibbonDisplayMode.Classic && tab.Groups.Count > 0
+            ? BuildBody(tab)
+            : BuildSimplifiedRow(tab);
+
+        _isFloating = true;
+        FloatingBodyChanged?.Invoke(this, new RibbonFloatEventArgs(body));
+    }
+
+    // ----------------------------------------------------------------------------------
+    // Contextual tabs
+    // ----------------------------------------------------------------------------------
+
+    private readonly HashSet<string> _contextualGroups = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Shows or hides a named set of contextual tabs — the unit Office appears and disappears
+    /// them in, rather than one tab at a time.
+    /// </summary>
+    public void SetContextualGroupVisible(string group, bool visible)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(group);
+
+        var changed = visible ? _contextualGroups.Add(group) : _contextualGroups.Remove(group);
+        if (!changed) return;
+
+        // A set going away can leave the ribbon selecting a tab that is no longer in the strip.
+        if (ContextualTabs.FallbackFor(_layout.Tabs, _contextualGroups, _activeTabId) is { } fallback)
+        {
+            _activeTabId = fallback.Id;
+        }
+
+        CloseFloatingBody();
+        Rebuild();
+    }
+
+    public bool IsContextualGroupVisible(string group) => _contextualGroups.Contains(group);
+
+    /// <summary>The tabs currently in the strip: every ordinary one, plus any active set.</summary>
+    private IEnumerable<RibbonTab> VisibleTabs =>
+        ContextualTabs.Visible(_layout.Tabs, _contextualGroups);
 
     /// <summary>Cycles Simplified → Classic → Collapsed, as the chevron at the bar's end does.</summary>
     public void CycleDisplayMode()
@@ -175,7 +271,7 @@ public sealed class RibbonView : ContentControl
             Height = RibbonMetrics.TabStripHeight,
         };
 
-        foreach (var tab in _layout.Tabs)
+        foreach (var tab in VisibleTabs)
         {
             strip.Children.Add(BuildTabButton(tab));
         }
@@ -196,8 +292,13 @@ public sealed class RibbonView : ContentControl
             VerticalAlignment = VerticalAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Center,
         };
+        // A contextual tab is tinted rather than banded. Current builds of the reference dropped
+        // the coloured header strip that older Office drew above a contextual set, and a band
+        // here would change the tab strip's measured height besides.
         Bind(label, TextBlock.ForegroundProperty,
-            selected ? "ribbon.tab.text.selected.brush" : "ribbon.tab.text.brush");
+            tab.IsContextual && !selected
+                ? "accent.rest.brush"
+                : selected ? "ribbon.tab.text.selected.brush" : "ribbon.tab.text.brush");
         Bind(label, TextBlock.FontSizeProperty, "type.ui.size.value");
 
         // The active tab is marked by a rule under its label, not by a filled pill: measured
@@ -221,8 +322,32 @@ public sealed class RibbonView : ContentControl
 
         button.Click += (_, _) =>
         {
-            if (tab.IsBackstage) BackstageRequested?.Invoke(this, EventArgs.Empty);
-            else ActiveTabId = tab.Id;
+            if (tab.IsBackstage)
+            {
+                BackstageRequested?.Invoke(this, EventArgs.Empty);
+                return;
+            }
+
+            if (DisplayMode != RibbonDisplayMode.Collapsed)
+            {
+                ActiveTabId = tab.Id;
+                return;
+            }
+
+            // Collapsed: a tab click floats the body over the content, and clicking the same
+            // tab again puts it away — which is the only way to dismiss it from the keyboard-
+            // free path, and what the reference does.
+            var sameTab = string.Equals(_activeTabId, tab.Id, StringComparison.OrdinalIgnoreCase);
+            if (sameTab && _isFloating)
+            {
+                CloseFloatingBody();
+                return;
+            }
+
+            _activeTabId = tab.Id;
+            CloseFloatingBody();
+            Rebuild();
+            OpenFloatingBody(tab);
         };
 
         // The rule marking the active tab is a sibling of the button, not its content. Inside
