@@ -184,4 +184,102 @@ public class MailRepositoryTests
         Assert.Empty(repo.Messages(inbox.Id));
         Assert.Single(repo.Messages(archive.Id));
     }
+
+    /// <summary>
+    /// Selecting a folder's worth of mail and acting on it is ordinary. The bulk paths exist so
+    /// that is one statement rather than a thousand, and they have to agree with the single-row
+    /// ones about what they did.
+    /// </summary>
+    [Fact]
+    public void MarkingManyAsReadTakesEffectOnAllOfThem()
+    {
+        var (store, repo, inbox) = Fresh();
+        using var _ = store;
+        var ids = Enumerable.Range(0, 50)
+            .Select(i => repo.AddMessage(inbox.Id, Sample($"uid-{i}"))!.Value)
+            .ToList();
+
+        Assert.Equal(50, repo.SetRead(ids, read: true));
+        Assert.Equal(0, repo.GetFolder(inbox.Id)!.Unread);
+
+        Assert.Equal(50, repo.SetRead(ids, read: false));
+        Assert.Equal(50, repo.GetFolder(inbox.Id)!.Unread);
+    }
+
+    [Fact]
+    public void FlaggingManyWorksTheSameWay()
+    {
+        var (store, repo, inbox) = Fresh();
+        using var _ = store;
+        var ids = Enumerable.Range(0, 5)
+            .Select(i => repo.AddMessage(inbox.Id, Sample($"uid-{i}"))!.Value)
+            .ToList();
+
+        repo.SetFlagged(ids, flagged: true);
+
+        Assert.All(repo.Messages(inbox.Id), m => Assert.True(m.IsFlagged));
+    }
+
+    [Fact]
+    public void MovingManyLeavesTheSourceEmpty()
+    {
+        var (store, repo, inbox) = Fresh();
+        using var _ = store;
+        var archive = repo.FolderWithRole(inbox.AccountId, FolderRole.Archive)!;
+        var ids = Enumerable.Range(0, 8)
+            .Select(i => repo.AddMessage(inbox.Id, Sample($"uid-{i}"))!.Value)
+            .ToList();
+
+        Assert.Equal(8, repo.MoveMessages(ids, archive.Id));
+        Assert.Empty(repo.Messages(inbox.Id));
+        Assert.Equal(8, repo.Messages(archive.Id).Count);
+    }
+
+    /// <summary>Bulk delete must take the raw copies too, or the store grows without bound.</summary>
+    [Fact]
+    public void DeletingManyTakesTheirBlobs()
+    {
+        var (store, repo, inbox) = Fresh();
+        using var _ = store;
+        var ids = Enumerable.Range(0, 6)
+            .Select(i => repo.AddMessage(inbox.Id, Sample($"uid-{i}"), [1, 2, 3])!.Value)
+            .ToList();
+
+        Assert.Equal(6, store.ScalarLong("SELECT count(*) FROM blobs"));
+
+        repo.DeleteMessages(ids);
+
+        Assert.Empty(repo.Messages(inbox.Id));
+        Assert.Equal(0, store.ScalarLong("SELECT count(*) FROM blobs"));
+        Assert.Empty(store.CheckIntegrity());
+    }
+
+    [Fact]
+    public void DeletingSomeLeavesTheRestAndTheirBlobs()
+    {
+        var (store, repo, inbox) = Fresh();
+        using var _ = store;
+        var keep = repo.AddMessage(inbox.Id, Sample("keep"), [1, 2, 3])!.Value;
+        var drop = repo.AddMessage(inbox.Id, Sample("drop"), [4, 5, 6])!.Value;
+
+        repo.DeleteMessages([drop]);
+
+        Assert.Single(repo.Messages(inbox.Id));
+        Assert.Equal(1, store.ScalarLong("SELECT count(*) FROM blobs"));
+        Assert.NotNull(repo.LoadRaw(keep));
+    }
+
+    [Fact]
+    public void TheBulkPathsDoNothingWhenGivenNothing()
+    {
+        var (store, repo, inbox) = Fresh();
+        using var _ = store;
+        repo.AddMessage(inbox.Id, Sample("uid-1"));
+
+        Assert.Equal(0, repo.SetRead([], true));
+        Assert.Equal(0, repo.SetFlagged([], true));
+        Assert.Equal(0, repo.MoveMessages([], inbox.Id));
+        Assert.Equal(0, repo.DeleteMessages([]));
+        Assert.Single(repo.Messages(inbox.Id));
+    }
 }

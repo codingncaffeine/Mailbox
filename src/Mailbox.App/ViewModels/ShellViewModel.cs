@@ -9,6 +9,7 @@ using Mailbox.Core.Accounts;
 using Mailbox.Core.Commands;
 using Mailbox.Core.Ribbon;
 using Mailbox.Store;
+using Mailbox.Store.Lists;
 using Mailbox.Theming;
 using Mailbox.Theming.Icons;
 using Mailbox.Theming.Themes;
@@ -89,25 +90,83 @@ public sealed class QuickAccessButton(MailboxCommand command)
         : command.Label;
 }
 
+/// <summary>
+/// One row in the message list.
+/// </summary>
+/// <remarks>
+/// Implements <see cref="IArrangeable"/> directly so the arrangement engine works on the rows
+/// the list already holds, rather than grouping store records and then converting — which would
+/// mean two representations that can disagree about what is on screen.
+/// </remarks>
 public sealed class MessageRow(
+    long id,
     string from,
     string subject,
     string preview,
-    string received,
+    DateTimeOffset received,
     bool isUnread,
     string toLine,
-    string body)
+    string body) : ObservableObject, IArrangeable
 {
+    /// <summary>The store's id, so a command knows what it is acting on.</summary>
+    public long Id { get; } = id;
+
     public string From { get; } = from;
     public string Subject { get; } = subject;
     public string Preview { get; } = preview;
-    public string Received { get; } = received;
-    public bool IsUnread { get; } = isUnread;
     public string ToLine { get; } = toLine;
     public string Body { get; } = body;
 
+    public DateTimeOffset Received { get; } = received;
+
+    public long SizeBytes { get; init; }
+
+    public bool HasAttachment { get; init; }
+
+    public string DisplayFrom => From;
+
+    /// <summary>
+    /// Mutable, because marking read is the one thing a row does to itself often enough that
+    /// rebuilding the list for it would be visible.
+    /// </summary>
+    public bool IsUnread
+    {
+        get;
+        set
+        {
+            if (!Set(ref field, value)) return;
+            Raise(nameof(SenderWeight));
+            Raise(nameof(SubjectWeight));
+        }
+    } = isUnread;
+
+    public bool IsFlagged
+    {
+        get;
+        set { if (Set(ref field, value)) Raise(nameof(FlagGlyph)); }
+    }
+
+    /// <summary>How the row writes its date: a time today, a weekday this week, else the date.</summary>
+    public string ReceivedLabel => ShellViewModel.Received(Received);
+
+    public string FlagGlyph => IsFlagged ? "\u2691" : string.Empty;
+
     public FontWeight SenderWeight => IsUnread ? FontWeight.Bold : FontWeight.Normal;
     public FontWeight SubjectWeight => IsUnread ? FontWeight.SemiBold : FontWeight.Normal;
+}
+
+/// <summary>
+/// A group header in the list. Sits in the same flat sequence as the rows it heads, which is
+/// what lets one virtualizing list draw both without nesting a panel per group.
+/// </summary>
+public sealed class GroupHeaderRow(string header, int count, bool collapsed)
+{
+    public string Header { get; } = header;
+    public int Count { get; } = count;
+    public bool IsCollapsed { get; } = collapsed;
+
+    public string Glyph => IsCollapsed ? "\u203A" : "\u2304";
+    public string CountLabel => $"({Count})";
 }
 
 /// <summary>
@@ -180,41 +239,41 @@ public sealed class ShellViewModel : ObservableObject
             new FolderNode("Search Folders", 1, 0),
         ];
 
+        // Sample shown until an account exists. Dates are relative to now so the arrangement's
+        // Today / Yesterday buckets are exercised rather than always reading "last year".
+        var now = DateTimeOffset.Now;
         Messages =
         [
-            new MessageRow(
-                "Alice Chen", "Re: Q3 numbers",
+            new MessageRow(1, "Alice Chen", "Re: Q3 numbers",
                 "Thanks for pulling those together — the variance on line 14 is the one I'd want to talk through before Thursday.",
-                "9:41 AM", true, "To: you@example.com",
+                now.AddHours(-4), true, "To: you@example.com",
                 "Thanks for pulling those together.\n\nThe variance on line 14 is the one I'd want to " +
                 "talk through before Thursday. Everything else reconciles against what finance sent " +
-                "over last week.\n\nAlice"),
-            new MessageRow(
-                "Build Notifications", "mailbox/main — build passed",
+                "over last week.\n\nAlice") { SizeBytes = 4_200 },
+            new MessageRow(2, "Build Notifications", "mailbox/main — build passed",
                 "Commit 4f2a1c9 built successfully on linux-x64. 0 warnings, 0 errors.",
-                "9:12 AM", true, "To: you@example.com",
-                "Commit 4f2a1c9 built successfully on linux-x64.\n\n0 warnings, 0 errors.\nElapsed 00:00:04.62"),
-            new MessageRow(
-                "Dana Whitfield", "Lunch Thursday?",
+                now.AddHours(-5), true, "To: you@example.com",
+                "Commit 4f2a1c9 built successfully on linux-x64.\n\n0 warnings, 0 errors.\nElapsed 00:00:04.62")
+                { SizeBytes = 1_100 },
+            new MessageRow(3, "Dana Whitfield", "Lunch Thursday?",
                 "There's a new place near the office that does a decent laksa. Around 12:30?",
-                "8:55 AM", false, "To: you@example.com; Sam Reyes",
-                "There's a new place near the office that does a decent laksa.\n\nAround 12:30?\n\nD"),
-            new MessageRow(
-                "Sam Reyes", "Draft agenda attached",
+                now.AddDays(-1), false, "To: you@example.com",
+                "There's a new place near the office that does a decent laksa.\n\nAround 12:30?")
+                { SizeBytes = 900 },
+            new MessageRow(4, "Sam Reyes", "Draft agenda attached",
                 "Rough cut for Monday. Shout if there's anything you want added before I send it round.",
-                "Yesterday", false, "To: you@example.com",
-                "Rough cut for Monday.\n\nShout if there's anything you want added before I send it round."),
-            new MessageRow(
-                "Fastmail", "Your account statement is ready",
+                now.AddDays(-1).AddHours(-3), false, "To: you@example.com",
+                "Rough cut for Monday.\n\nShout if there's anything you want added before I send it round.")
+                { SizeBytes = 38_000, HasAttachment = true },
+            new MessageRow(5, "Fastmail", "Your account statement is ready",
                 "Your monthly statement for August is available to download.",
-                "Yesterday", false, "To: you@example.com",
-                "Your monthly statement for August is available to download."),
-            new MessageRow(
-                "Priya Raman", "Re: Font substitution question",
+                now.AddDays(-3), false, "To: you@example.com",
+                "Your monthly statement for August is available to download.") { SizeBytes = 2_400 },
+            new MessageRow(6, "Priya Raman", "Re: Font substitution question",
                 "Confirmed — Carlito is metric-compatible with Calibri, so the layout holds either way.",
-                "Mon 11:02", false, "To: you@example.com",
-                "Confirmed — Carlito is metric-compatible with Calibri, so the layout holds either way.\n\n" +
-                "Worth noting DejaVu is *not* metric-compatible with Verdana, whatever the internet says."),
+                now.AddDays(-9), false, "To: you@example.com",
+                "Confirmed — Carlito is metric-compatible with Calibri, so the layout holds either way.")
+                { SizeBytes = 1_800 },
         ];
 
         _selectedFolder = Folders[5];
@@ -233,13 +292,17 @@ public sealed class ShellViewModel : ObservableObject
 
         ShowAll = new RelayCommand(() => UnreadOnly = false);
         ShowUnread = new RelayCommand(() => UnreadOnly = true);
-        ToggleGroup = new RelayCommand(() => GroupCollapsed = !GroupCollapsed);
+        ToggleSort = new RelayCommand(() => SortDescending = !SortDescending);
         ToggleNav = new RelayCommand(() => NavCollapsed = !NavCollapsed);
-        ToggleSortDirection = new RelayCommand(() => SortDescending = !SortDescending);
+
         ShowReadingPane = new RelayCommand(() => ReadingPaneVisible = true);
         HideReadingPane = new RelayCommand(() => ReadingPaneVisible = false);
         ZoomIn = new RelayCommand(() => ZoomPercent += 10);
         ZoomOut = new RelayCommand(() => ZoomPercent -= 10);
+
+        // Nothing is on screen until the rows have been grouped, and grouping is what the list
+        // binds to. Last, so it sees whichever source — store or sample — was loaded above.
+        Rebuild();
     }
 
     public ObservableCollection<string> Themes { get; }
@@ -344,17 +407,22 @@ public sealed class ShellViewModel : ObservableObject
         foreach (var summary in where.Account.Mail.Messages(where.FolderId))
         {
             Messages.Add(new MessageRow(
+                summary.Id,
                 summary.DisplayFrom,
                 summary.Subject,
                 summary.Preview,
-                Received(summary.Received),
+                summary.Received,
                 !summary.IsRead,
                 $"To: {where.Account.Account.Address}",
-                summary.Preview));
+                summary.Preview)
+            {
+                SizeBytes = summary.SizeBytes,
+                HasAttachment = summary.HasAttachment,
+                IsFlagged = summary.IsFlagged,
+            });
         }
 
-        Raise(nameof(VisibleMessages));
-        Raise(nameof(StatusLeft));
+        Rebuild();
         SelectedMessage = Messages.FirstOrDefault();
     }
 
@@ -456,6 +524,21 @@ public sealed class ShellViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// What the list has selected, which may be a group header. Headers are not messages, so
+    /// selecting one leaves the reading pane alone rather than blanking it.
+    /// </summary>
+    public object? SelectedRow
+    {
+        get;
+        set
+        {
+            if (!Set(ref field, value)) return;
+            if (value is MessageRow row) SelectedMessage = row;
+            if (value is GroupHeaderRow header) ToggleGroupCollapsed(header.Header);
+        }
+    }
+
     public MessageRow? SelectedMessage
     {
         get => _selectedMessage;
@@ -477,7 +560,7 @@ public sealed class ShellViewModel : ObservableObject
         set
         {
             if (!Set(ref field, value)) return;
-            Raise(nameof(VisibleMessages));
+            Rebuild();
             Raise(nameof(AllFilterWeight));
             Raise(nameof(UnreadFilterWeight));
         }
@@ -486,12 +569,26 @@ public sealed class ShellViewModel : ObservableObject
     public FontWeight AllFilterWeight => UnreadOnly ? FontWeight.Normal : FontWeight.SemiBold;
     public FontWeight UnreadFilterWeight => UnreadOnly ? FontWeight.SemiBold : FontWeight.Normal;
 
-    /// <summary>Which column orders the list. Empty means the arrangement's own order.</summary>
-    public string SortColumn
+    /// <summary>
+    /// How the list is grouped and ordered. Not a sort: arranging by Date groups into Today and
+    /// Yesterday, arranging by From groups by sender.
+    /// </summary>
+    public Arrangement Arrangement
     {
         get;
-        set { if (Set(ref field, value)) Raise(nameof(VisibleMessages)); }
-    } = string.Empty;
+        set
+        {
+            if (!Set(ref field, value)) return;
+            _collapsed.Clear();
+            Rebuild();
+            Raise(nameof(ArrangementLabel));
+        }
+    } = Arrangement.Date;
+
+    public string ArrangementLabel => $"By {Arrangements.Label(Arrangement)}";
+
+    /// <summary>Every arrangement, for the menu behind the label.</summary>
+    public IReadOnlyList<Arrangement> Arrangements_ => Arrangements.All;
 
     public bool SortDescending
     {
@@ -499,7 +596,7 @@ public sealed class ShellViewModel : ObservableObject
         set
         {
             if (!Set(ref field, value)) return;
-            Raise(nameof(VisibleMessages));
+            Rebuild();
             Raise(nameof(SortGlyph));
         }
     } = true;
@@ -507,48 +604,163 @@ public sealed class ShellViewModel : ObservableObject
     /// <summary>The arrow beside the arrangement label.</summary>
     public string SortGlyph => SortDescending ? "\u2193" : "\u2191";
 
-    /// <summary>Collapsing the group hides its rows, as clicking the header does.</summary>
-    public bool GroupCollapsed
-    {
-        get;
-        set
-        {
-            if (!Set(ref field, value)) return;
-            Raise(nameof(VisibleMessages));
-            Raise(nameof(GroupGlyph));
-        }
-    }
+    /// <summary>
+    /// Which groups are folded shut, by header. By header rather than by index: the indices
+    /// move whenever the arrangement or the filter changes, and a collapse that jumps to a
+    /// different group is worse than one that is forgotten.
+    /// </summary>
+    private readonly HashSet<string> _collapsed = [];
 
-    public string GroupGlyph => GroupCollapsed ? "\u203A" : "\u2304";
+    public void ToggleGroupCollapsed(string header)
+    {
+        if (!_collapsed.Remove(header)) _collapsed.Add(header);
+        Rebuild();
+    }
 
     /// <summary>
-    /// What the list actually shows. Recomputed rather than mutated so every control that
-    /// shapes it — filter, sort, group — goes through one path and cannot disagree.
+    /// The flat sequence the list draws: a header, then its rows unless it is folded shut.
+    /// Rebuilt in one pass so nothing can disagree about what is on screen.
     /// </summary>
-    public IEnumerable<MessageRow> VisibleMessages
+    public ObservableCollection<object> VisibleRows { get; } = [];
+
+    private void Rebuild()
     {
-        get
+        VisibleRows.Clear();
+
+        var rows = UnreadOnly ? Messages.Where(m => m.IsUnread) : Messages;
+        var groups = Store.Lists.Arrangements.Group(rows, Arrangement, SortDescending);
+
+        foreach (var group in groups)
         {
-            if (GroupCollapsed) return [];
+            var collapsed = _collapsed.Contains(group.Header);
+            VisibleRows.Add(new GroupHeaderRow(group.Header, group.Count, collapsed));
 
-            var rows = UnreadOnly ? Messages.Where(m => m.IsUnread) : Messages;
+            if (collapsed) continue;
 
-            return SortColumn switch
-            {
-                "From" => Ordered(rows, m => m.From),
-                "Subject" => Ordered(rows, m => m.Subject),
-                "Received" => Ordered(rows, m => m.Received),
-                _ => rows,
-            };
+            foreach (var row in group.Items) VisibleRows.Add(row);
+        }
+
+        Raise(nameof(VisibleCount));
+        Raise(nameof(StatusLeft));
+    }
+
+    // ---- Acting on a selection -------------------------------------------------------------
+    // Every one of these takes the rows explicitly rather than reading a selection property.
+    // The list owns the selection, and a command that reaches back for it can act on something
+    // other than what the user had highlighted when they pressed the key.
+
+    /// <summary>Marks rows read or unread, in the store and on screen.</summary>
+    public void SetRead(IReadOnlyList<MessageRow> rows, bool read)
+    {
+        if (rows.Count == 0) return;
+
+        Mail(rows)?.SetRead([.. rows.Select(r => r.Id)], read);
+        foreach (var row in rows) row.IsUnread = !read;
+
+        RefreshCounts();
+        StatusRight = $"{Describe(rows.Count)} marked {(read ? "read" : "unread")}.";
+    }
+
+    public void SetFlagged(IReadOnlyList<MessageRow> rows, bool flagged)
+    {
+        if (rows.Count == 0) return;
+
+        Mail(rows)?.SetFlagged([.. rows.Select(r => r.Id)], flagged);
+        foreach (var row in rows) row.IsFlagged = flagged;
+
+        StatusRight = flagged
+            ? $"{Describe(rows.Count)} flagged for follow up."
+            : $"Flag cleared on {Describe(rows.Count)}.";
+    }
+
+    /// <summary>
+    /// Deletes rows: to Deleted Items normally, or for good when asked. Moving rather than
+    /// deleting is the default because the store may hold the only copy.
+    /// </summary>
+    public void Delete(IReadOnlyList<MessageRow> rows, bool permanently)
+    {
+        if (rows.Count == 0 || Mail(rows) is not { } mail) return;
+
+        var ids = rows.Select(r => r.Id).ToList();
+        var deleted = CurrentAccount?.Mail.FolderWithRole(
+            CurrentAccount.Account.Id, FolderRole.Deleted);
+
+        if (permanently || deleted is null || SelectedFolder?.Name == deleted.Name)
+        {
+            mail.DeleteMessages(ids);
+            StatusRight = $"{Describe(rows.Count)} permanently deleted.";
+        }
+        else
+        {
+            mail.MoveMessages(ids, deleted.Id);
+            StatusRight = $"{Describe(rows.Count)} moved to Deleted Items.";
+        }
+
+        foreach (var row in rows) Messages.Remove(row);
+        Rebuild();
+        RefreshCounts();
+    }
+
+    /// <summary>Moves rows into another folder of the same account.</summary>
+    public void MoveTo(IReadOnlyList<MessageRow> rows, FolderRole role)
+    {
+        if (rows.Count == 0 || Mail(rows) is not { } mail) return;
+        if (CurrentAccount?.Mail.FolderWithRole(CurrentAccount.Account.Id, role)
+            is not { } target) return;
+
+        mail.MoveMessages([.. rows.Select(r => r.Id)], target.Id);
+        foreach (var row in rows) Messages.Remove(row);
+
+        Rebuild();
+        RefreshCounts();
+        StatusRight = $"{Describe(rows.Count)} moved to {target.Name}.";
+    }
+
+    /// <summary>Selects a folder by what it is for, which is what Ctrl+Shift+I and friends do.</summary>
+    public bool GoTo(FolderRole role)
+    {
+        foreach (var (node, where) in _folderIds)
+        {
+            var folder = where.Account.Mail.GetFolder(where.FolderId);
+            if (folder?.Role != role) continue;
+
+            SelectedFolder = node;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>The account whose folder is on screen, or the first one.</summary>
+    private OpenAccount? CurrentAccount =>
+        SelectedFolder is { } folder && _folderIds.TryGetValue(folder, out var where)
+            ? where.Account
+            : _accounts?.All.FirstOrDefault();
+
+    /// <summary>
+    /// The store the rows belong to. Null while the sample is showing, which is what keeps the
+    /// commands from pretending to act on mail that is not really there.
+    /// </summary>
+    private MailRepository? Mail(IReadOnlyList<MessageRow> rows)
+        => rows.Count == 0 ? null : CurrentAccount?.Mail;
+
+    private static string Describe(int count)
+        => count == 1 ? "1 message" : $"{count:N0} messages";
+
+    /// <summary>Re-reads the folder pane's unread counts after something changed.</summary>
+    private void RefreshCounts()
+    {
+        var selected = SelectedFolder?.Name;
+        if (_accounts is null || !LoadFromStore()) { Rebuild(); return; }
+
+        if (selected is not null)
+        {
+            SelectedFolder = Folders.FirstOrDefault(f => f.Name == selected) ?? SelectedFolder;
         }
     }
 
-    private IEnumerable<MessageRow> Ordered<T>(IEnumerable<MessageRow> rows,
-        Func<MessageRow, T> key)
-        => SortDescending ? rows.OrderByDescending(key) : rows.OrderBy(key);
-
-    /// <summary>Number of rows on show, which is what the status bar counts.</summary>
-    public int VisibleCount => VisibleMessages.Count();
+    /// <summary>Rows on show, headers excluded. What the status bar counts.</summary>
+    public int VisibleCount => VisibleRows.OfType<MessageRow>().Count();
 
     // ---- Pane layout ----------------------------------------------------------------------
 
@@ -587,21 +799,35 @@ public sealed class ShellViewModel : ObservableObject
 
     public RelayCommand ShowAll { get; }
     public RelayCommand ShowUnread { get; }
-    public RelayCommand ToggleGroup { get; }
+    public RelayCommand ToggleSort { get; }
     public RelayCommand ToggleNav { get; }
-    public RelayCommand ToggleSortDirection { get; }
+
     public RelayCommand ShowReadingPane { get; }
     public RelayCommand HideReadingPane { get; }
     public RelayCommand ZoomIn { get; }
     public RelayCommand ZoomOut { get; }
 
-    /// <summary>Sorts by a column, flipping direction when it is already the sort column.</summary>
+    /// <summary>
+    /// A column header re-arranges by that column, and clicking the same one again reverses.
+    /// A column and an arrangement are the same thing in the reference — clicking From groups
+    /// by sender, it does not merely sort within the date groups.
+    /// </summary>
     public void SortBy(string column)
     {
-        if (string.IsNullOrEmpty(column)) return;
+        var wanted = column switch
+        {
+            "From" => Arrangement.From,
+            "To" => Arrangement.To,
+            "Subject" => Arrangement.Subject,
+            "Received" => Arrangement.Date,
+            "Size" => Arrangement.Size,
+            _ => (Arrangement?)null,
+        };
 
-        if (string.Equals(SortColumn, column, StringComparison.Ordinal)) SortDescending = !SortDescending;
-        else { SortColumn = column; SortDescending = true; }
+        if (wanted is not { } arrangement) return;
+
+        if (Arrangement == arrangement) SortDescending = !SortDescending;
+        else { Arrangement = arrangement; SortDescending = true; }
     }
 
     public string ReadingPaneGlyph { get; } = IconGlyphs.GetOrEmpty("reading-pane", 16);
@@ -647,7 +873,6 @@ public sealed class ShellViewModel : ObservableObject
 
     public string AccountTip => AccountAddress;
 
-    public string ArrangementLabel => "By Date";
 
     /// <summary>
     /// Message-list columns in the reference's own order. The first four are icon-only glyph

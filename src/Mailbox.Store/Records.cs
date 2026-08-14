@@ -73,7 +73,7 @@ public sealed record MessageSummary(
     long SizeBytes,
     bool IsRead,
     bool IsFlagged,
-    bool HasAttachment)
+    bool HasAttachment) : Lists.IArrangeable
 {
     /// <summary>Who the row shows: the display name when there is one, else the address.</summary>
     public string DisplayFrom => FromName.Length > 0 ? FromName : FromAddress;

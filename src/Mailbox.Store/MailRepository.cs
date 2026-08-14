@@ -180,6 +180,70 @@ public sealed class MailRepository(MailStore store)
     public MessageSummary? GetMessage(long id) => _store.Query(
         MessageSelect + " WHERE id = $id", ReadMessage, ("$id", id)).FirstOrDefault();
 
+    /// <summary>
+    /// Marks many at once. One statement rather than one per row: selecting a thousand messages
+    /// and marking them read is an ordinary thing to do, and a thousand round trips is not.
+    /// </summary>
+    public int SetRead(IReadOnlyCollection<long> messageIds, bool read)
+    {
+        if (messageIds.Count == 0) return 0;
+
+        return _store.Execute(
+            $"UPDATE messages SET is_read = $read WHERE id IN ({Ids(messageIds)})",
+            ("$read", read ? 1 : 0));
+    }
+
+    public int SetFlagged(IReadOnlyCollection<long> messageIds, bool flagged)
+    {
+        if (messageIds.Count == 0) return 0;
+
+        return _store.Execute(
+            $"UPDATE messages SET is_flagged = $flagged WHERE id IN ({Ids(messageIds)})",
+            ("$flagged", flagged ? 1 : 0));
+    }
+
+    public int MoveMessages(IReadOnlyCollection<long> messageIds, long toFolderId)
+    {
+        if (messageIds.Count == 0) return 0;
+
+        return _store.Execute(
+            $"UPDATE messages SET folder_id = $folder WHERE id IN ({Ids(messageIds)})",
+            ("$folder", toFolderId));
+    }
+
+    /// <summary>
+    /// Deletes many, and the raw copies behind them. Messages go before blobs: while a message
+    /// exists it references its blob, and removing the blob first fails the foreign key.
+    /// </summary>
+    public int DeleteMessages(IReadOnlyCollection<long> messageIds)
+    {
+        if (messageIds.Count == 0) return 0;
+
+        return _store.InTransaction(() =>
+        {
+            var list = Ids(messageIds);
+            var blobs = _store.Query(
+                $"SELECT blob_id FROM messages WHERE id IN ({list}) AND blob_id IS NOT NULL",
+                r => r.GetInt64(0));
+
+            var removed = _store.Execute($"DELETE FROM messages WHERE id IN ({list})");
+
+            if (blobs.Count > 0)
+            {
+                _store.Execute($"DELETE FROM blobs WHERE id IN ({Ids(blobs)})");
+            }
+
+            return removed;
+        });
+    }
+
+    /// <summary>
+    /// Renders ids into an IN list. Safe because they are longs the caller already read out of
+    /// this database — there is no string here for anything to be injected through, and a
+    /// parameter per id would blow past SQLite's variable limit on a large selection.
+    /// </summary>
+    private static string Ids(IEnumerable<long> ids) => string.Join(',', ids);
+
     public void SetRead(long messageId, bool read) => _store.Execute(
         "UPDATE messages SET is_read = $read WHERE id = $id",
         ("$read", read ? 1 : 0), ("$id", messageId));

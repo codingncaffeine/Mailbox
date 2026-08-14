@@ -401,15 +401,18 @@
                                     Content="Unread"
                                     FontWeight="{Binding UnreadFilterWeight}"
                                     Foreground="{DynamicResource list.header.text.brush}" />
-                            <TextBlock Grid.Column="3"
-                                       Text="{Binding ArrangementLabel}"
-                                       Classes="small"
-                                       Foreground="{DynamicResource list.header.text.brush}"
-                                       VerticalAlignment="Center" />
+                            <Button Grid.Column="3"
+                                    Name="ArrangeButton"
+                                    Classes="flat"
+                                    Content="{Binding ArrangementLabel}"
+                                    FontSize="{DynamicResource type.ui.size.small.value}"
+                                    Foreground="{DynamicResource list.header.text.brush}"
+                                    ToolTip.Tip="Choose how the list is arranged"
+                                    VerticalAlignment="Center" />
                             <Button Grid.Column="4"
                                     Classes="flat"
                                     Margin="7,0,0,0"
-                                    Command="{Binding ToggleSortDirection}"
+                                    Command="{Binding ToggleSort}"
                                     Content="{Binding SortGlyph}"
                                     FontSize="{DynamicResource type.ui.size.small.value}"
                                     Foreground="{DynamicResource list.header.text.brush}"
@@ -450,30 +453,16 @@
                         </ItemsControl>
                     </Border>
 
-                    <!-- Collapsible arrangement group header. -->
-                    <Border DockPanel.Dock="Top"
-                            Background="{DynamicResource list.group.header.background.brush}"
-                            Height="{DynamicResource list.group.header.height.value}"
-                            Padding="8,0">
-                        <Button Classes="flat"
-                                Command="{Binding ToggleGroup}"
-                                HorizontalAlignment="Left"
-                                VerticalAlignment="Center"
-                                ToolTip.Tip="Collapse this group">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <TextBlock Text="{Binding GroupGlyph}"
-                                           Foreground="{DynamicResource list.group.header.text.brush}" />
-                                <TextBlock Text="Yesterday"
-                                           FontWeight="SemiBold"
-                                           Foreground="{DynamicResource list.group.header.text.brush}" />
-                            </StackPanel>
-                        </Button>
-                    </Border>
-
-                    <!-- Phase 3 replaces this ListBox with the virtualizing message list:
-                         group headers, conversation threading, conditional formatting. -->
-                    <ListBox ItemsSource="{Binding VisibleMessages}"
-                             SelectedItem="{Binding SelectedMessage}"
+                    <!--
+                        The list. Group headers and rows share one flat sequence and one
+                        virtualizing panel, selected by template: nesting a panel per group
+                        would cost virtualization, which is the thing that has to survive a
+                        folder of a hundred thousand messages.
+                    -->
+                    <ListBox ItemsSource="{Binding VisibleRows}"
+                             SelectedItem="{Binding SelectedRow}"
+                             SelectionMode="Multiple"
+                             Name="MessageList"
                              Background="Transparent"
                              BorderThickness="0"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
@@ -484,6 +473,30 @@
                             </Style>
                         </ListBox.Styles>
                         <ListBox.ItemTemplate>
+                          <views:RowTemplateSelector>
+                            <views:RowTemplateSelector.Header>
+                            <!-- A group header. -->
+                            <DataTemplate x:DataType="vm:GroupHeaderRow">
+                                <Border Background="{DynamicResource list.group.header.background.brush}"
+                                        Height="{DynamicResource list.group.header.height.value}"
+                                        Padding="8,0">
+                                    <StackPanel Orientation="Horizontal" Spacing="6"
+                                                VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Glyph}"
+                                                   Foreground="{DynamicResource list.group.header.text.brush}" />
+                                        <TextBlock Text="{Binding Header}"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource list.group.header.text.brush}" />
+                                        <TextBlock Text="{Binding CountLabel}"
+                                                   Classes="small"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource list.group.header.text.brush}" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                            </views:RowTemplateSelector.Header>
+
+                            <!-- A message. -->
                             <DataTemplate x:DataType="vm:MessageRow">
                                 <Grid ColumnDefinitions="4,*"
                                       Background="{DynamicResource list.row.background.brush}"
@@ -498,7 +511,7 @@
                                     <Grid Grid.Column="1"
                                           Margin="6,3,8,3"
                                           RowDefinitions="Auto,Auto"
-                                          ColumnDefinitions="150,*,100">
+                                          ColumnDefinitions="150,*,Auto,100">
                                         <TextBlock Grid.Row="0" Grid.Column="0"
                                                    Text="{Binding From}"
                                                    Classes.unread="{Binding IsUnread}"
@@ -510,13 +523,17 @@
                                                    FontWeight="{Binding SubjectWeight}"
                                                    TextTrimming="CharacterEllipsis" />
                                         <TextBlock Grid.Row="0" Grid.Column="2"
-                                                   Text="{Binding Received}"
+                                                   Text="{Binding FlagGlyph}"
+                                                   Margin="0,0,6,0"
+                                                   Foreground="{DynamicResource status.danger.brush}" />
+                                        <TextBlock Grid.Row="0" Grid.Column="3"
+                                                   Text="{Binding ReceivedLabel}"
                                                    Classes.unread="{Binding IsUnread}"
                                                    Classes="small"
                                                    HorizontalAlignment="Right"
                                                    TextTrimming="CharacterEllipsis" />
                                         <TextBlock Grid.Row="1" Grid.Column="0"
-                                                   Grid.ColumnSpan="3"
+                                                   Grid.ColumnSpan="4"
                                                    Text="{Binding Preview}"
                                                    Classes="small secondary"
                                                    TextTrimming="CharacterEllipsis"
@@ -524,10 +541,15 @@
                                     </Grid>
                                 </Grid>
                             </DataTemplate>
+                          </views:RowTemplateSelector>
                         </ListBox.ItemTemplate>
                     </ListBox>
                 </DockPanel>
             </Border>
+
+            <GridSplitter Grid.Column="2" ResizeDirection="Columns" />
+
+            <!-- Message list -->
 
             <GridSplitter Grid.Column="4"
                           IsVisible="{Binding ReadingPaneVisible}"
