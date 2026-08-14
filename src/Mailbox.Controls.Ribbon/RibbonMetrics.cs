@@ -26,6 +26,12 @@ public static class RibbonMetrics
     /// <summary>Clearance between the ribbon panel and the window's right edge.</summary>
     public const double BodyRightInset = 9;
 
+    /// <summary>
+    /// Gap between the ribbon panel and the content panel below it. The two are separate
+    /// rounded surfaces on the chrome, not one continuous block.
+    /// </summary>
+    public const double BodyBottomGap = 6;
+
     public const double SimplifiedButtonHeight = 30;
     public const double SimplifiedIconSize = 18;
 
