@@ -7,7 +7,7 @@ namespace Mailbox.App.Theming;
 /// Controls glyph rasterization, and the harness for the Phase 0 text-rendering investigation.
 /// </summary>
 /// <remarks>
-/// This is the highest fidelity risk in the whole project. Windows draws Outlook's UI with
+/// This is the highest fidelity risk in the whole project. Windows draws the reference's UI with
 /// ClearType subpixel antialiasing. Skia disables LCD subpixel rendering and gamma correction
 /// on X11, and Avalonia's <see cref="TextRenderingMode.SubpixelAntialias"/> is reported to have
 /// no effect on several Linux distributions. Grayscale antialiasing renders thinner and softer

@@ -1,12 +1,12 @@
 namespace Mailbox.Core.Commands;
 
 /// <summary>
-/// The Mail module's command set, mirroring classic Outlook's Home, Send/Receive, Folder
+/// The Mail module's command set, mirroring the reference's Home, Send/Receive, Folder
 /// and View tabs.
 /// </summary>
 /// <remarks>
 /// Commands with <see cref="MailboxCommand.InDefaultLayout"/> set to false are the additions
-/// beyond Outlook parity. They are ordinary catalogue entries — searchable, bindable,
+/// beyond the reference application parity. They are ordinary catalogue entries — searchable, bindable,
 /// placeable — and are simply not positioned by the default ribbon layout, so first run is
 /// an exact clone. See the plan, rule 5.
 /// </remarks>
@@ -290,7 +290,7 @@ public static class MailCommands
         KeyTip = "JW",
     };
 
-    /// <summary>On the Quick Access Toolbar by default, exactly as in Outlook.</summary>
+    /// <summary>On the Quick Access Toolbar by default, exactly as in the reference application.</summary>
     public static readonly MailboxCommand Undo = new()
     {
         Id = new("app.undo"),
@@ -301,7 +301,7 @@ public static class MailCommands
         DefaultGesture = "Ctrl+Z",
     };
 
-    // ---- Beyond Outlook: present, catalogued, not on the default ribbon ---------------
+    // ---- Beyond the reference application: present, catalogued, not on the default ribbon ---------------
     public static readonly MailboxCommand Snooze = new()
     {
         Id = new("mail.snooze"),

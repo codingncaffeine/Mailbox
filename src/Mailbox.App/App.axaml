@@ -9,7 +9,7 @@
             control. SimpleTheme is here for structure only — it supplies the control
             templates that ListBox, ComboBox, ScrollViewer and GridSplitter need in order to
             render at all. It contributes no colour; Shell.axaml paints everything from
-            tokens. Phase 1 onward replaces these with Outlook-specific control themes.
+            tokens. Phase 1 onward replaces these with the reference application-specific control themes.
         -->
         <SimpleTheme />
 

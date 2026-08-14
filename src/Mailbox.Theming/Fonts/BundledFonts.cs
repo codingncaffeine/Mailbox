@@ -12,10 +12,10 @@ public static class BundledFonts
     private const string Root = "avares://Mailbox.Theming/Assets/Fonts/";
 
     /// <summary>
-    /// Selawik, Microsoft's OFL-licensed metric-compatible substitute for Segoe UI.
+    /// Selawik, the vendor's OFL-licensed metric-compatible substitute for Segoe UI.
     /// </summary>
     /// <remarks>
-    /// Ships Light, Semilight, Regular, Semibold and Bold, so the weight range Outlook's chrome
+    /// Ships Light, Semilight, Regular, Semibold and Bold, so the weight range the reference's chrome
     /// uses is covered. Metric compatibility means chrome laid out against Segoe UI measurements
     /// does not shift when Selawik stands in for it.
     /// </remarks>

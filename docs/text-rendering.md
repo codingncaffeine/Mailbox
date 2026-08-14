@@ -7,10 +7,10 @@ Investigated 13 August 2026, during Phase 0.
 ## Why this was the first thing built
 
 The plan lists this as the highest fidelity risk in the project, above the rich text editor
-and above overall scope. Windows draws Outlook's UI with ClearType subpixel antialiasing.
+and above overall scope. Windows draws its UI with ClearType subpixel antialiasing.
 Grayscale antialiasing renders thinner and softer, and that single difference is most of what
-makes a Linux clone feel wrong before you can articulate why. If it could not be fixed, it
-would have capped how close Mailbox could ever get — so it needed answering before a single
+makes an application feel wrong on Linux before you can articulate why. If it could not be fixed, it
+would have capped how close Mailbox could get to that — so it needed answering before a single
 piece of chrome was drawn on top of the assumption.
 
 Prior reports were discouraging. Avalonia issue #13310 describes `SubpixelAntialias` having no
@@ -30,7 +30,7 @@ Grayscale antialiasing produces pixels whose R, G and B are equal. Subpixel anti
 produces coloured fringes on glyph edges. A 91.3%-versus-0% split is unambiguous, and the
 visual comparison shows the expected orange-and-blue fringing.
 
-This materially de-risks the project. Mailbox can match Windows glyph rendering.
+This materially de-risks the project. Mailbox can match Windows-quality glyph rendering.
 
 ## Method
 

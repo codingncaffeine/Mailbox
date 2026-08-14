@@ -19,7 +19,7 @@
 
         <!--
             Chrome backdrop. The title bar and the tab strip are one continuous surface in
-            Outlook, and painting them as one also closes the sub-pixel seam between grid
+            the reference application, and painting them as one also closes the sub-pixel seam between grid
             rows that otherwise let the window background through as a pale hairline.
         -->
         <Border Grid.Row="0" Grid.RowSpan="2"
@@ -30,7 +30,7 @@
         <!--
             Client-side decorated: the window draws its own caption so there is exactly one
             title bar. Left to the compositor there would be two — KDE's dark one stacked on
-            Outlook's coloured one — which is the mismatch that looked wrong.
+            the reference's coloured one — which is the mismatch that looked wrong.
             App icon, then the Quick Access Toolbar, title centred, caption buttons right.
         -->
         <Border Grid.Row="0"
@@ -81,7 +81,7 @@
                          Background="{DynamicResource titlebar.search.brush}"
                          FontSize="{DynamicResource type.ui.size.value}" />
 
-                <!-- Account avatar, as Outlook shows left of the caption buttons. -->
+                <!-- Account avatar, as the reference application shows left of the caption buttons. -->
                 <Border Grid.Column="3"
                         Width="26" Height="26"
                         Margin="6,0"
@@ -152,7 +152,7 @@
         <Grid Grid.Row="2" Name="PaneGrid" ColumnDefinitions="Auto,Auto,1,Auto,1,*,Auto">
 
             <!-- App rail. Modern only: the vertical module strip down the left edge, the
-                 arrangement shared with Outlook on the web, Office.com and Teams. -->
+                 arrangement shared with the reference application on the web, Office.com and Teams. -->
             <Border Grid.Column="0"
                     IsVisible="{Binding ShowAppRail}"
                     Width="48"
@@ -260,7 +260,7 @@
                     Width="{DynamicResource list.width.value}"
                     Background="{DynamicResource list.background.brush}">
                 <DockPanel>
-                    <!-- Search sits above the message list, where classic Outlook puts it.
+                    <!-- Search sits above the message list, where the reference application puts it.
                          Modern moves it into the header instead. -->
                     <Border DockPanel.Dock="Top"
                             IsVisible="{Binding ShowListSearch}"
@@ -301,7 +301,7 @@
                         </Grid>
                     </Border>
 
-                    <!-- Column headers. Outlook shows these even in the two-line compact
+                    <!-- Column headers. the reference application shows these even in the two-line compact
                          view; the first four are icon-only glyph columns. -->
                     <Border DockPanel.Dock="Top"
                             Background="{DynamicResource list.header.background.brush}"
@@ -405,7 +405,7 @@
 
             <GridSplitter Grid.Column="4" ResizeDirection="Columns" />
 
-            <!-- Docked calendar. Takes the reading pane's right edge, exactly as Outlook's
+            <!-- Docked calendar. Takes the reading pane's right edge, exactly as the reference's
                  To-Do Bar calendar does, and carries a close button to undock. -->
             <ContentControl Grid.Column="6"
                             Name="DockHost"
@@ -434,7 +434,7 @@
                                            Classes="small secondary" />
                             </StackPanel>
 
-                            <!-- Outlook puts Reply / Reply All / Forward at the top right of
+                            <!-- the reference application puts Reply / Reply All / Forward at the top right of
                                  the reading pane, mirroring the Respond ribbon group. -->
                             <ItemsControl Grid.Row="1" Grid.Column="1"
                                           VerticalAlignment="Top"
@@ -503,7 +503,7 @@
                            Foreground="{DynamicResource statusbar.foreground.brush}"
                            FontSize="{DynamicResource type.ui.size.small.value}" />
 
-                <!-- Layout toggles, then the zoom control, as Outlook parks them. -->
+                <!-- Layout toggles, then the zoom control, as the reference application parks them. -->
                 <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="2"
                             VerticalAlignment="Center">
                     <TextBlock Text="{Binding ReadingPaneGlyph}"

@@ -64,7 +64,7 @@ public class CommandCatalogTests
         => Assert.Throws<KeyNotFoundException>(() => Loaded().Get(new CommandId("mail.nope")));
 
     /// <summary>
-    /// Rule 5: additions beyond Outlook are present and findable, they are simply not placed
+    /// Rule 5: additions beyond the reference application are present and findable, they are simply not placed
     /// by the default ribbon layout. Unplaced must never mean unreachable.
     /// </summary>
     [Fact]

@@ -1,7 +1,7 @@
 namespace Mailbox.Controls.Ribbon;
 
 /// <summary>
-/// Chrome measurements taken from reference captures of classic Outlook rather than guessed.
+/// Chrome measurements taken from reference captures of the reference application rather than guessed.
 /// </summary>
 /// <remarks>
 /// These are the numbers the fidelity harness checks against. Kept in one place so a

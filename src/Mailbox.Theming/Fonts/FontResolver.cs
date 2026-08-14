@@ -153,7 +153,7 @@ public sealed class FontResolver
     }
 
     /// <summary>
-    /// Every family offered in the compose font picker, in Outlook's own order, each carrying
+    /// Every family offered in the compose font picker, in the reference's own order, each carrying
     /// its resolution so the UI can mark entries that will not match Windows exactly.
     /// </summary>
     public IReadOnlyList<FontResolution> PickerFamilies()

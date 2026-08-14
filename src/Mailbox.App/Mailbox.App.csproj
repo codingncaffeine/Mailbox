@@ -16,7 +16,7 @@
     <!-- Structural only. Simple provides bare control templates so ListBox, ComboBox and
          GridSplitter have something to render; it contributes no colour, because every
          brush still comes from the token system. Phase 1 onward replaces these with
-         Outlook-specific control themes and this reference goes away. -->
+         the reference application-specific control themes and this reference goes away. -->
     <PackageReference Include="Avalonia.Themes.Simple" Version="$(AvaloniaVersion)" />
     <!-- No Avalonia.Diagnostics: DevTools moved under the commercial licence at 12.x and is
          not published for this version. Not a runtime dependency either way. -->

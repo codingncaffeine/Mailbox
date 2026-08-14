@@ -6,10 +6,10 @@ namespace Mailbox.App.Options;
 /// Every Options page, transcribed from reference captures.
 /// </summary>
 /// <remarks>
-/// Microsoft-integration options are deliberately absent rather than stubbed: cloud settings
+/// vendor-cloud options are deliberately absent rather than stubbed: cloud settings
 /// storage, Office Background, OneDrive and SharePoint attachment handling, LinkedIn, Rights
 /// Protected message previews, Send to OneNote and the Developer tab. Everything that survives
-/// is rewritten from "Office" and "Outlook" to "Mailbox".
+/// is rewritten from "Office" and "the reference application" to "Mailbox".
 /// </remarks>
 public static class OptionsPages
 {
@@ -35,7 +35,7 @@ public static class OptionsPages
     public static OptionsPage? Find(string id)
         => All.FirstOrDefault(p => string.Equals(p.Id, id, StringComparison.Ordinal));
 
-    /// <summary>Pages that come after a rule in the rail, matching Outlook's grouping.</summary>
+    /// <summary>Pages that come after a rule in the rail, matching the reference's grouping.</summary>
     public static IReadOnlySet<string> RuleAfter { get; } =
         new HashSet<string> { "advanced", "qat" };
 
@@ -62,8 +62,8 @@ public static class OptionsPages
 
             new OptionSection("Personalize your copy of Mailbox",
             [
-                new TextRow("User name:", "Gary George"),
-                new TextRow("Initials:", "GG", Width: 74),
+                new TextRow("User name:", "A. Person"),
+                new TextRow("Initials:", "AP", Width: 74),
                 // Filled with a live control by the window; see OptionsWindow.
                 new SlotRow("theme"),
                 new SlotRow("density"),
@@ -179,7 +179,7 @@ public static class OptionsPages
             [
                 new CheckRow("Reduce message size by removing format information not necessary to display the message"),
                 new ComboRow("When sending messages in Rich Text format to Internet recipients:",
-                    ["Convert to HTML format", "Convert to Plain Text format", "Send using Outlook Rich Text format"],
+                    ["Convert to HTML format", "Convert to Plain Text format", "Send using the reference application Rich Text format"],
                     0, 300, 380),
             ]),
 

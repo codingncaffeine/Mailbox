@@ -1,7 +1,7 @@
 namespace Mailbox.Core.Commands;
 
 /// <summary>
-/// The six modules in the navigation pane, in Outlook's own order. The numeric values
+/// The six modules in the navigation pane, in the reference's own order. The numeric values
 /// match the Ctrl+1..Ctrl+8 accelerators.
 /// </summary>
 public enum MailboxModule

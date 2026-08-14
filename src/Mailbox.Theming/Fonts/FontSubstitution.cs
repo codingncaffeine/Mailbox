@@ -64,7 +64,7 @@ public static class FontSubstitution
     [
         // --- UI -------------------------------------------------------------------------
         new("Segoe UI", "Selawik", SubstitutionQuality.MetricCompatible, Sans,
-            "Microsoft's own OFL substitute. Regular and Bold only; Segoe UI's Light, " +
+            "the vendor's own OFL substitute. Regular and Bold only; Segoe UI's Light, " +
             "Semilight and Semibold have no counterpart."),
 
         // --- Metric-compatible, verified ------------------------------------------------
@@ -92,7 +92,7 @@ public static class FontSubstitution
 
         // --- Visual only. Layout will differ from what a Windows reader sees. -----------
         new("Aptos", "Inter", SubstitutionQuality.VisualOnly, Sans,
-            "The current Microsoft 365 default. No metric-compatible clone exists — too new."),
+            "The current the reference application default. No metric-compatible clone exists — too new."),
         new("Verdana", "DejaVu Sans", SubstitutionQuality.VisualOnly, Sans,
             "Commonly but wrongly described as metric-compatible. Verdana measures wider."),
         new("Tahoma", "DejaVu Sans", SubstitutionQuality.VisualOnly, Sans,
@@ -107,7 +107,7 @@ public static class FontSubstitution
         new("Arial Black", "Liberation Sans", SubstitutionQuality.VisualOnly, Sans,
             "Rendered bold; no black weight available."),
         new("Segoe UI Variable", "Selawik", SubstitutionQuality.VisualOnly, Sans,
-            "Windows 11 UI font. Irrelevant while cloning classic Outlook."),
+            "Windows 11 UI font. Irrelevant while cloning the reference application."),
         new("Bierstadt", "Inter", SubstitutionQuality.VisualOnly, Sans, "Microsoft commission."),
         new("Grandview", "Inter", SubstitutionQuality.VisualOnly, Sans, "Microsoft commission."),
         new("Seaford", "Source Sans 3", SubstitutionQuality.VisualOnly, Sans, "Microsoft commission."),

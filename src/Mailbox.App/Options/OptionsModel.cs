@@ -12,10 +12,10 @@ namespace Mailbox.App.Options;
 /// </remarks>
 public abstract record OptionRow
 {
-    /// <summary>Indent level. Outlook nests sub-options one or two steps under their parent.</summary>
+    /// <summary>Indent level. the reference application nests sub-options one or two steps under their parent.</summary>
     public int Indent { get; init; }
 
-    /// <summary>Renders the ⓘ affordance Outlook puts beside options that need explaining.</summary>
+    /// <summary>Renders the ⓘ affordance the reference application puts beside options that need explaining.</summary>
     public bool HasInfo { get; init; }
 
     /// <summary>Greyed and unclickable.</summary>
@@ -54,7 +54,7 @@ public sealed record NoteRow(string Text) : OptionRow;
 public sealed record SubHeadingRow(string Text) : OptionRow;
 
 /// <summary>
-/// Outlook's signature Options row: an icon on the left, a sentence of description, and a
+/// the reference's signature Options row: an icon on the left, a sentence of description, and a
 /// button pushed to the right edge that opens a sub-dialog.
 /// </summary>
 public sealed record ActionRow(

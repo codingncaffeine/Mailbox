@@ -13,7 +13,7 @@ public sealed record MailboxCommand
     public required string Label { get; init; }
 
     /// <summary>
-    /// Screentip body: one sentence saying what happens. Outlook's screentips are a bold
+    /// Screentip body: one sentence saying what happens. the reference's screentips are a bold
     /// heading (the <see cref="Label"/>) over a description, not a one-line tooltip.
     /// </summary>
     public required string Description { get; init; }
@@ -25,7 +25,7 @@ public sealed record MailboxCommand
 
     /// <summary>
     /// KeyTip characters shown when Alt is pressed. 1–3 uppercase characters, no whitespace,
-    /// per the Windows Ribbon Framework rules. Null means auto-assign at layout time.
+    /// per the published ribbon framework spec rules. Null means auto-assign at layout time.
     /// </summary>
     public string? KeyTip { get; init; }
 
@@ -36,13 +36,13 @@ public sealed record MailboxCommand
     public string? DefaultGesture { get; init; }
 
     /// <summary>
-    /// False for commands that exist but are not in Outlook — Snooze, Undo Send, Message
+    /// False for commands that exist but are not in the reference application — Snooze, Undo Send, Message
     /// Source. They are fully present in the catalogue and customization gallery, they are
     /// simply absent from the default ribbon layout so first run is an exact clone.
     /// </summary>
     public bool InDefaultLayout { get; init; } = true;
 
-    /// <summary>Grouping label in the customization gallery, mirroring Outlook's own grouping.</summary>
+    /// <summary>Grouping label in the customization gallery, mirroring the reference's own grouping.</summary>
     public required string Category { get; init; }
 
     /// <summary>

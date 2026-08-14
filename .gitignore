@@ -14,3 +14,7 @@ tools/Mailbox.Fidelity/output/
 tools/Mailbox.Fidelity/diffs/
 
 # Reference captures live outside the repo; docs/ holds only our own screenshots.
+
+# Internal working documents — the plan and the session handoff stay local.
+docs/PLAN.md
+docs/HANDOFF.md
