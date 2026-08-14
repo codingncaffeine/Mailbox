@@ -4,6 +4,7 @@ using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Mailbox.App.Options;
+using Mailbox.Core.Settings;
 using Mailbox.Theming;
 using Mailbox.Theming.Icons;
 using Mailbox.Theming.Themes;
@@ -196,7 +197,7 @@ public sealed class OptionsWindow : Window
         {
             try
             {
-                var renderer = new OptionsPageRenderer();
+                var renderer = new OptionsPageRenderer(App.Settings);
                 _ = renderer.Render(page);
                 Console.WriteLine($"OK    {page.Id}");
             }
@@ -212,7 +213,7 @@ public sealed class OptionsWindow : Window
     {
         if (OptionsPages.Find(id) is not { } page) return;
 
-        var renderer = new OptionsPageRenderer();
+        var renderer = new OptionsPageRenderer(App.Settings);
         renderer.ActionInvoked += (_, label) => OnAction(label);
 
         var content = renderer.Render(page);
@@ -261,7 +262,11 @@ public sealed class OptionsWindow : Window
         };
         combo.SelectionChanged += (_, _) =>
         {
-            if (combo.SelectedIndex >= 0) _themes.Apply(OfficeThemes.All[combo.SelectedIndex]);
+            if (combo.SelectedIndex < 0) return;
+
+            var id = OfficeThemes.All[combo.SelectedIndex];
+            _themes.Apply(id);
+            App.Settings.Set(App.ThemeSetting, id);
         };
         return combo;
     }
@@ -280,12 +285,17 @@ public sealed class OptionsWindow : Window
             MinWidth = 160,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        combo.SelectionChanged += (_, _) => _themes.SetDensity(combo.SelectedIndex switch
+        combo.SelectionChanged += (_, _) =>
         {
-            0 => Density.Compact,
-            2 => Density.Comfortable,
-            _ => Density.Cozy,
-        });
+            var density = combo.SelectedIndex switch
+            {
+                0 => Density.Compact,
+                2 => Density.Comfortable,
+                _ => Density.Cozy,
+            };
+            _themes.SetDensity(density);
+            App.Settings.Set(App.DensitySetting, density.ToString());
+        };
         return combo;
     }
 

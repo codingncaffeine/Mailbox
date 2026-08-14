@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Media;
+using Mailbox.App.Options;
 using Mailbox.Core;
 using Mailbox.Core.Accounts;
 using Mailbox.Core.Commands;
@@ -467,8 +468,12 @@ public sealed class ShellViewModel : ObservableObject
     public bool ReadingPaneVisible
     {
         get;
-        set { if (Set(ref field, value)) Raise(); }
-    } = true;
+        set
+        {
+            if (!Set(ref field, value)) return;
+            App.Settings.Set(OptionsPages.Keys.ShowReadingPane, value);
+        }
+    } = App.Settings.GetBool(OptionsPages.Keys.ShowReadingPane, true);
 
     /// <summary>Zoom applies to the reading pane's body, which is what it scales.</summary>
     public double ReadingFontSize => 14.5 * (ZoomPercent / 100d);
@@ -519,13 +524,23 @@ public sealed class ShellViewModel : ObservableObject
     public string AccountAddress { get; } = "you@example.com";
 
     /// <summary>
+    /// The name and initials from Options. The initials are what the account disc draws when
+    /// they are set — a user who typed their own would not expect the address's first letter.
+    /// </summary>
+    public string UserName => App.Settings.GetString(OptionsPages.Keys.UserName);
+
+    public string UserInitials => App.Settings.GetString(OptionsPages.Keys.Initials);
+
+    /// <summary>
     /// Display name shown above the address. Falls back to the address when the account has
     /// no name, which is what the reference does.
     /// </summary>
-    public string AccountName => AccountAddress;
+    public string AccountName => UserName is { Length: > 0 } named ? named : AccountAddress;
 
     /// <summary>First letter of the address, as the reference derives it.</summary>
-    public string AccountInitial => AccountIdentity.Initial(AccountAddress);
+    public string AccountInitial => UserInitials is { Length: > 0 } typed
+        ? typed[..1].ToUpperInvariant()
+        : AccountIdentity.Initial(AccountAddress);
 
     public string AccountTip => AccountAddress;
 

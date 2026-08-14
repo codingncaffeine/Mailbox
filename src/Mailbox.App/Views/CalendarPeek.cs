@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Mailbox.App.Options;
 using Mailbox.Theming.Icons;
 
 namespace Mailbox.App.Views;
@@ -140,46 +141,77 @@ public sealed class CalendarPeek : Border
     }
 
     /// <summary>
-    /// Six week-rows of seven days, starting Sunday, with leading and trailing days from the
+    /// Six week-rows of seven days, starting on the day Options names, with leading and
+    /// trailing days from the
     /// neighbouring months dimmed — the same grid the reference's date navigator draws.
     /// </summary>
     private void RenderMonth()
     {
         _monthLabel.Text = _month.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
 
+        // Options names the first day and whether week numbers show; both change the grid's
+        // shape, so they are read here rather than cached.
+        var firstDay = (DayOfWeek)(int)App.Settings.GetNumber(OptionsPages.Keys.FirstDayOfWeek, 0);
+        var weekNumbers = App.Settings.GetBool(OptionsPages.Keys.ShowWeekNumbers);
+        var dayColumns = weekNumbers ? 8 : 7;
+        var firstDayColumn = weekNumbers ? 1 : 0;
+
         var grid = new Grid();
-        for (var c = 0; c < 7; c++) grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+        for (var c = 0; c < dayColumns; c++)
+        {
+            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+        }
+
         for (var r = 0; r < 7; r++) grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
 
-        string[] headers = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
+        string[] names = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
         for (var c = 0; c < 7; c++)
         {
             var head = new TextBlock
             {
-                Text = headers[c],
+                Text = names[((int)firstDay + c) % 7],
                 FontSize = 10,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 Margin = new Thickness(0, 0, 0, 3),
             };
             Bind(head, TextBlock.ForegroundProperty, "text.secondary.brush");
-            Grid.SetColumn(head, c);
+            Grid.SetColumn(head, c + firstDayColumn);
             Grid.SetRow(head, 0);
             grid.Children.Add(head);
         }
 
-        var cursor = _month.AddDays(-(int)_month.DayOfWeek);
+        var lead = ((int)_month.DayOfWeek - (int)firstDay + 7) % 7;
+        var cursor = _month.AddDays(-lead);
 
         for (var week = 1; week <= 6; week++)
         {
             for (var day = 0; day < 7; day++)
             {
-                grid.Children.Add(BuildDayCell(cursor, week, day));
+                if (weekNumbers && day == 0) grid.Children.Add(WeekNumberCell(cursor, week));
+
+                grid.Children.Add(BuildDayCell(cursor, week, day + firstDayColumn));
                 cursor = cursor.AddDays(1);
             }
         }
 
         _monthHost.Children.Clear();
         _monthHost.Children.Add(grid);
+    }
+
+    /// <summary>The ISO week number, shown down the left when Options asks for it.</summary>
+    private Control WeekNumberCell(DateTime weekStart, int row)
+    {
+        var label = new TextBlock
+        {
+            Text = ISOWeek.GetWeekOfYear(weekStart).ToString(CultureInfo.CurrentCulture),
+            FontSize = 10,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Bind(label, TextBlock.ForegroundProperty, "text.disabled.brush");
+        Grid.SetRow(label, row);
+        Grid.SetColumn(label, 0);
+        return label;
     }
 
     private Control BuildDayCell(DateTime date, int row, int column)

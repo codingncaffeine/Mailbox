@@ -20,6 +20,17 @@ public abstract record OptionRow
 
     /// <summary>Greyed and unclickable.</summary>
     public bool IsDisabled { get; init; }
+
+    /// <summary>
+    /// Where this row's value is kept, or null for rows that carry no value.
+    /// </summary>
+    /// <remarks>
+    /// Derived from the label unless given, so declaring a setting stays one line: the label is
+    /// already unique within its page, and a key nobody has to invent is a key nobody can
+    /// mistype. Set it explicitly when the label is likely to be reworded — a renamed setting
+    /// should not silently forget what the user chose.
+    /// </remarks>
+    public string? Key { get; init; }
 }
 
 public sealed record CheckRow(string Label, bool IsChecked = false) : OptionRow;

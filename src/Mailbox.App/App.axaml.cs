@@ -4,6 +4,8 @@ using Avalonia.Markup.Xaml;
 using Mailbox.App.Theming;
 using Mailbox.App.Views;
 using Mailbox.Core.Commands;
+using Mailbox.Core.Settings;
+using Mailbox.Theming.Themes;
 using Mailbox.Core.Diagnostics;
 using Mailbox.Theming;
 using Mailbox.Theming.Fonts;
@@ -16,7 +18,39 @@ public partial class App : Application
     public static FontResolver Fonts { get; private set; } = null!;
     public static CommandCatalog Commands { get; private set; } = null!;
 
+    /// <summary>
+    /// Preferences. A JSON file rather than a database: this is a hundred-odd small values read
+    /// once and written on change, and keeping it a file means it can be read, diffed and backed
+    /// up by hand. The mail store is the thing that needs SQLite, and that is a separate store.
+    /// </summary>
+    public static SettingsStore Settings { get; private set; } = null!;
+
+    /// <summary>Keys under which the appearance choices persist.</summary>
+    public const string ThemeSetting = "appearance.theme";
+    public const string DensitySetting = "appearance.density";
+
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
+
+    /// <summary>
+    /// Applies the stored theme and density. The environment variables still win, because the
+    /// fidelity harness sets them to photograph a theme that is not the one chosen here.
+    /// </summary>
+    private static void RestoreAppearance()
+    {
+        if (Environment.GetEnvironmentVariable(ThemeService.ThemeVariable) is null
+            && Settings.GetString(ThemeSetting) is { Length: > 0 } theme
+            && OfficeThemes.All.Contains(theme))
+        {
+            Themes.Apply(theme);
+        }
+
+        if (Environment.GetEnvironmentVariable(ThemeService.DensityVariable) is not null) return;
+
+        if (Enum.TryParse<Density>(Settings.GetString(DensitySetting), out var density))
+        {
+            Themes.SetDensity(density);
+        }
+    }
 
     public override void OnFrameworkInitializationCompleted()
     {
@@ -24,8 +58,10 @@ public partial class App : Application
         // resolution happens before the theme is composed, because typography tokens are
         // rewritten to families this machine can actually draw.
         BundledFonts.Register();
+        Settings = new SettingsStore();
         Fonts = FontResolver.FromSystem();
         Themes = new ThemeService(Fonts);
+        RestoreAppearance();
 
         Commands = new CommandCatalog();
         Commands.RegisterRange(MailCommands.All);
