@@ -77,6 +77,15 @@ public sealed class OptionsWindow : Window
         Content = root;
 
         BuildRail();
+
+        // Harness: render every page and report failures, so a broken description is caught
+        // here rather than by a user clicking the rail.
+        if (Environment.GetEnvironmentVariable("MAILBOX_OPTIONS_AUDIT") == "1")
+        {
+            AuditAllPages();
+            return;
+        }
+
         ShowPage(_selected);
     }
 
@@ -179,6 +188,24 @@ public sealed class OptionsWindow : Window
             ShowPage(id);
         };
         return button;
+    }
+
+    private void AuditAllPages()
+    {
+        foreach (var page in OptionsPages.All)
+        {
+            try
+            {
+                var renderer = new OptionsPageRenderer();
+                _ = renderer.Render(page);
+                Console.WriteLine($"OK    {page.Id}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"FAIL  {page.Id}: {ex.GetType().Name}: {ex.Message}");
+            }
+        }
+        Environment.Exit(0);
     }
 
     private void ShowPage(string id)

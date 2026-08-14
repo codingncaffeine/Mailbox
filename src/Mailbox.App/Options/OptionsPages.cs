@@ -13,7 +13,18 @@ namespace Mailbox.App.Options;
 /// </remarks>
 public static class OptionsPages
 {
-    public static IReadOnlyList<OptionsPage> All { get; } =
+    private static IReadOnlyList<OptionsPage>? _all;
+
+    /// <summary>
+    /// Built on first access, not in a field initializer.
+    /// </summary>
+    /// <remarks>
+    /// Static fields initialize in declaration order, so an initializer here would run before
+    /// the shared option arrays further down the file were assigned, and every page that reads
+    /// one would be handed a null. Deferring construction removes the ordering dependency
+    /// entirely rather than relying on the declarations staying in the right sequence.
+    /// </remarks>
+    public static IReadOnlyList<OptionsPage> All => _all ??=
     [
         General(), Mail(), Calendar(), People(), Tasks(), Search(),
         Language(), Accessibility(), Advanced(),
@@ -481,6 +492,6 @@ public static class OptionsPages
     }
 
     /// <summary>Theme names for the General page's Mailbox Theme picker.</summary>
-    public static IReadOnlyList<string> ThemeNames { get; } =
+    public static IReadOnlyList<string> ThemeNames =>
         OfficeThemes.All.Select(OfficeThemes.DisplayName).ToList();
 }

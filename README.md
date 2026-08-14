@@ -8,7 +8,9 @@ All six modules — Mail, Calendar, People, Tasks, Notes, Journal. No Microsoft 
 integration, no AI features, no telemetry. Everything a personal user needs, nothing a tenant
 admin does.
 
-**Status: Phase 0 of 17, plus the ribbon from Phase 1.** The shell runs, the ribbon renders
+**Status: Phase 0 of 17, plus the ribbon from Phase 1.** Current state and next steps live in [`docs/HANDOFF.md`](docs/HANDOFF.md).
+
+**Status detail:** The shell runs, the ribbon renders
 from a layout document, and everything is styled from the token system. It does not send or
 receive mail yet — that is Phase 2. See [`docs/PLAN.md`](docs/PLAN.md).
 
