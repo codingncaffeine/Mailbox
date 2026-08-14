@@ -202,7 +202,11 @@ public static class Arrangements
     /// A subject without its reply and forward prefixes, so "Re: Budget" files under B with
     /// "Budget" rather than under R with every other reply ever sent.
     /// </summary>
-    internal static string NormalisedSubject(string subject)
+    /// <summary>
+    /// A subject without its reply and forward prefixes. Public because it is also what threads
+    /// a message with its replies, and the two must agree.
+    /// </summary>
+    public static string NormalisedSubject(string subject)
     {
         var trimmed = subject.AsSpan().Trim();
 
