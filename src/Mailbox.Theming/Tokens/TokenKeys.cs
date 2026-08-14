@@ -163,6 +163,9 @@ public static class TokenKeys
         public const string Background = "statusbar.background";
         public const string Foreground = "statusbar.foreground";
         public const string Height = "statusbar.height";
+
+        /// <summary>Track and tick of the zoom control; the reference draws both as one hairline.</summary>
+        public const string Slider = "statusbar.slider";
     }
 
     public static class Calendar
@@ -217,7 +220,7 @@ public static class TokenKeys
         List.Separator, List.Width,
         Reading.Background, Reading.HeaderBackground, Reading.InfoBarBackground,
         Reading.InfoBarText, Reading.InfoBarWarningBackground,
-        StatusBar.Background, StatusBar.Foreground, StatusBar.Height,
+        StatusBar.Background, StatusBar.Foreground, StatusBar.Height, StatusBar.Slider,
         Calendar.Background, Calendar.WorkingHoursFill, Calendar.NonWorkingFill,
         Calendar.GridLine, Calendar.CurrentTimeIndicator, Calendar.AllDayBandBackground,
         Typography.UiFamily, Typography.UiSize, Typography.UiSizeSmall, Typography.UiSizeLarge,

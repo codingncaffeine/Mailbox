@@ -299,6 +299,11 @@ public class ThemeServiceTests
     /// Base chrome colours, taken off captures of the real thing with the modal colour of each
     /// flat region. These are observations, not preferences: if one changes, either the theme
     /// drifted or someone remeasured, and both are worth stopping for.
+    /// <para>
+    /// The rail is sampled from directly behind the module icons. In the captures it is not
+    /// quite flat down its length — the real one is a translucent material picking up the
+    /// desktop behind the window, which is not something to reproduce.
+    /// </para>
     /// </summary>
     /// <remarks>
     /// Colorful and White are deliberately identical below the title bar — in the reference the
@@ -309,7 +314,7 @@ public class ThemeServiceTests
     [InlineData("colorful", "#0078D4", "#CCE4F6", "#E9EEF2", "#FFFFFF", "#EFE9E6", "#F5F5F5", "#FFFFFF")]
     [InlineData("white",    "#E9EEF2", "#FAFAFA", "#E9EEF2", "#FFFFFF", "#EFE9E6", "#F5F5F5", "#FFFFFF")]
     [InlineData("black",    "#1B2127", "#1F1F1F", "#1A2126", "#292929", "#201A17", "#141414", "#262626")]
-    [InlineData("darkgray", "#555155", "#BDBDBD", "#535154", "#BDBDBD", "#57524F", "#3D3D3D", "#666666")]
+    [InlineData("darkgray", "#555155", "#BDBDBD", "#535154", "#BDBDBD", "#575255", "#3D3D3D", "#666666")]
     public void BaseChromeMatchesTheMeasuredReference(
         string theme, string titleBar, string search, string tabStrip,
         string ribbon, string rail, string nav, string list)

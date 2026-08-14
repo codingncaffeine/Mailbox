@@ -3,18 +3,29 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="using:Mailbox.App.ViewModels"
+        xmlns:views="using:Mailbox.App.Views"
         mc:Ignorable="d"
         x:Class="Mailbox.App.Views.MainWindow"
         x:DataType="vm:ShellViewModel"
         Title="Mailbox"
         Width="1280" Height="820"
         MinWidth="760" MinHeight="480"
-        Background="{DynamicResource surface.ground.brush}"
+        Background="Transparent"
+        TransparencyLevelHint="Transparent,None"
         FontFamily="{DynamicResource ui.fontfamily}"
         Icon="/Assets/Icons/mailbox-256.png"
         ExtendClientAreaToDecorationsHint="True"
         WindowDecorations="BorderOnly">
 
+    <!--
+        Rounded window. The reference rounds its outer corners at the same radius as the panels
+        inside it, so the window is transparent and this border draws the shape. Clipping is
+        what keeps the corners honest: without it a child painting into them shows as a wedge,
+        which is the same failure the workspace's corners had.
+    -->
+    <Border CornerRadius="8"
+            ClipToBounds="True"
+            Background="{DynamicResource ribbon.tabstrip.background.brush}">
     <Grid RowDefinitions="Auto,Auto,*,Auto" ColumnDefinitions="Auto,*">
 
         <!--
@@ -604,10 +615,12 @@
                     <TextBlock Text="&#x2212;"
                                VerticalAlignment="Center"
                                Foreground="{DynamicResource statusbar.foreground.brush}" />
-                    <Slider Width="96"
-                            Minimum="50" Maximum="200"
-                            Value="{Binding ZoomPercent}"
-                            VerticalAlignment="Center" />
+                    <views:ZoomSlider Width="100"
+                                      Margin="6,0"
+                                      Minimum="50" Maximum="200"
+                                      Value="{Binding ZoomPercent}"
+                                      VerticalAlignment="Center"
+                                      LineBrush="{DynamicResource statusbar.slider.brush}" />
                     <TextBlock Text="+"
                                Margin="0,0,8,0"
                                VerticalAlignment="Center"
@@ -622,4 +635,6 @@
             </Grid>
         </Border>
     </Grid>
+    </Border>
+
 </Window>

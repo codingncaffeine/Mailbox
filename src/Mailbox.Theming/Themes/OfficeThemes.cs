@@ -149,6 +149,8 @@ public static class OfficeThemes
         t.Set(TokenKeys.Nav.Background, "#F5F5F5");
         t.Set(TokenKeys.StatusBar.Background, "#F5F5F5");
         t.Set(TokenKeys.StatusBar.Foreground, "#242424");
+        t.Set(TokenKeys.StatusBar.Slider, "#616161");
+        t.Set(TokenKeys.List.HeaderBackground, "#FFFFFF");
         t.Set(TokenKeys.Ribbon.Background, "#FFFFFF");
         t.Set(TokenKeys.Ribbon.TabStripBackground, "#E9EEF2");
         t.Set(TokenKeys.Ribbon.TabRest, "#00000000");
@@ -200,6 +202,8 @@ public static class OfficeThemes
         t.Set(TokenKeys.Nav.Background, "#F5F5F5");
         t.Set(TokenKeys.StatusBar.Background, "#F5F5F5");
         t.Set(TokenKeys.StatusBar.Foreground, "#242424");
+        t.Set(TokenKeys.StatusBar.Slider, "#616161");
+        t.Set(TokenKeys.List.HeaderBackground, "#FFFFFF");
         t.Set(TokenKeys.Ribbon.Background, "#FFFFFF");
         t.Set(TokenKeys.Ribbon.TabStripBackground, "#E9EEF2");
         t.Set(TokenKeys.Ribbon.TabRest, "#00000000");
@@ -236,7 +240,7 @@ public static class OfficeThemes
         t.Set("palette.chrome.titlebar", "#555155");
         t.Set("palette.chrome.tabstrip", "#535154");
         t.Set("palette.chrome.ribbon", "#BDBDBD");
-        t.Set("palette.chrome.rail", "#57524F");
+        t.Set("palette.chrome.rail", "#575255");
         t.Set("palette.chrome.nav", "#3D3D3D");
         t.Set("palette.chrome.navselected", "#666666");
         t.Set("palette.chrome.statusbar", "#525252");
@@ -304,6 +308,7 @@ public static class OfficeThemes
         t.Set(TokenKeys.Reading.HeaderBackground, "{palette.content.row}");
 
         t.Set(TokenKeys.StatusBar.Background, "{palette.chrome.statusbar}");
+        t.Set(TokenKeys.StatusBar.Slider, "#C7C7C7");
         t.Set(TokenKeys.StatusBar.Foreground, "{palette.neutral.white}");
 
         // Rules read as shadow, not highlight. Inheriting the light palette's #B0B0B0 painted
@@ -419,6 +424,7 @@ public static class OfficeThemes
         t.Set(TokenKeys.Reading.InfoBarWarningBackground, "#3A2E14");
 
         t.Set(TokenKeys.StatusBar.Background, "#141414");
+        t.Set(TokenKeys.StatusBar.Slider, "#B2B2B2");
         t.Set(TokenKeys.StatusBar.Foreground, "{palette.neutral.secondary}");
 
         t.Set(TokenKeys.Calendar.Background, "{palette.ground}");
