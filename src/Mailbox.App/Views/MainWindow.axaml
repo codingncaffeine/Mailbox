@@ -78,7 +78,8 @@
                 <StackPanel Grid.Column="1"
                             Orientation="Horizontal"
                             VerticalAlignment="Center">
-                <ItemsControl VerticalAlignment="Center"
+                <ItemsControl Name="QuickAccessBar"
+                              VerticalAlignment="Center"
                               ItemsSource="{Binding QuickAccess}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
