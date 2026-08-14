@@ -106,7 +106,7 @@ public sealed class MessageRow(
     DateTimeOffset received,
     bool isUnread,
     string toLine,
-    string body) : ObservableObject, IArrangeable
+    string body) : ObservableObject, IThreadable
 {
     /// <summary>The store's id, so a command knows what it is acting on.</summary>
     public long Id { get; } = id;
@@ -120,6 +120,25 @@ public sealed class MessageRow(
     public DateTimeOffset Received { get; } = received;
 
     public long SizeBytes { get; init; }
+
+    /// <summary>What threads this with its replies. The subject without its prefixes.</summary>
+    public string ThreadKey { get; init; } = string.Empty;
+
+    /// <summary>Which folder it is filed in, so a conversation can tell it spans two.</summary>
+    public long FolderId { get; init; }
+
+    /// <summary>How far the row is indented under its conversation.</summary>
+    public int Depth
+    {
+        get;
+        set { if (Set(ref field, value)) Raise(nameof(Indent)); }
+    }
+
+    /// <summary>
+    /// The row's own padding plus its indent under a conversation. One value because it is one
+    /// margin — binding the indent alone would replace the padding rather than add to it.
+    /// </summary>
+    public Thickness Indent => new(6 + (Depth * 18), 3, 8, 3);
 
     public bool HasAttachment { get; init; }
 
@@ -151,6 +170,34 @@ public sealed class MessageRow(
 
     public string FlagGlyph => IsFlagged ? "\u2691" : string.Empty;
 
+    public FontWeight SenderWeight => IsUnread ? FontWeight.Bold : FontWeight.Normal;
+    public FontWeight SubjectWeight => IsUnread ? FontWeight.SemiBold : FontWeight.Normal;
+}
+
+/// <summary>
+/// The collapsed head of a conversation: the newest message, with a count and a chevron.
+/// </summary>
+/// <remarks>
+/// Only drawn for threads of two or more. A single message is not a conversation and showing it
+/// with an expander that reveals itself would be nonsense.
+/// </remarks>
+public sealed class ConversationRow(MessageRow newest, int count, bool expanded, bool split)
+{
+    public MessageRow Newest { get; } = newest;
+    public int Count { get; } = count;
+    public bool IsExpanded { get; } = expanded;
+
+    /// <summary>The thread's messages are in more than one folder.</summary>
+    public bool IsSplit { get; } = split;
+
+    public string Glyph => IsExpanded ? "\u2304" : "\u203A";
+    public string CountLabel => Count.ToString();
+    public string SplitGlyph => IsSplit ? "\u21C4" : string.Empty;
+    public string From => Newest.From;
+    public string Subject => Newest.Subject;
+    public string Preview => Newest.Preview;
+    public string ReceivedLabel => Newest.ReceivedLabel;
+    public bool IsUnread => Newest.IsUnread;
     public FontWeight SenderWeight => IsUnread ? FontWeight.Bold : FontWeight.Normal;
     public FontWeight SubjectWeight => IsUnread ? FontWeight.SemiBold : FontWeight.Normal;
 }
@@ -249,31 +296,31 @@ public sealed class ShellViewModel : ObservableObject
                 now.AddHours(-4), true, "To: you@example.com",
                 "Thanks for pulling those together.\n\nThe variance on line 14 is the one I'd want to " +
                 "talk through before Thursday. Everything else reconciles against what finance sent " +
-                "over last week.\n\nAlice") { SizeBytes = 4_200 },
+                "over last week.\n\nAlice") { SizeBytes = 4_200, ThreadKey = "q3 numbers" },
             new MessageRow(2, "Build Notifications", "mailbox/main — build passed",
                 "Commit 4f2a1c9 built successfully on linux-x64. 0 warnings, 0 errors.",
                 now.AddHours(-5), true, "To: you@example.com",
                 "Commit 4f2a1c9 built successfully on linux-x64.\n\n0 warnings, 0 errors.\nElapsed 00:00:04.62")
-                { SizeBytes = 1_100 },
+                { SizeBytes = 1_100, ThreadKey = "mailbox/main — build passed" },
             new MessageRow(3, "Dana Whitfield", "Lunch Thursday?",
                 "There's a new place near the office that does a decent laksa. Around 12:30?",
                 now.AddDays(-1), false, "To: you@example.com",
                 "There's a new place near the office that does a decent laksa.\n\nAround 12:30?")
-                { SizeBytes = 900 },
+                { SizeBytes = 900, ThreadKey = "lunch thursday?" },
             new MessageRow(4, "Sam Reyes", "Draft agenda attached",
                 "Rough cut for Monday. Shout if there's anything you want added before I send it round.",
                 now.AddDays(-1).AddHours(-3), false, "To: you@example.com",
                 "Rough cut for Monday.\n\nShout if there's anything you want added before I send it round.")
-                { SizeBytes = 38_000, HasAttachment = true },
+                { SizeBytes = 38_000, HasAttachment = true, ThreadKey = "draft agenda attached" },
             new MessageRow(5, "Fastmail", "Your account statement is ready",
                 "Your monthly statement for August is available to download.",
                 now.AddDays(-3), false, "To: you@example.com",
-                "Your monthly statement for August is available to download.") { SizeBytes = 2_400 },
+                "Your monthly statement for August is available to download.") { SizeBytes = 2_400, ThreadKey = "your account statement is ready" },
             new MessageRow(6, "Priya Raman", "Re: Font substitution question",
                 "Confirmed — Carlito is metric-compatible with Calibri, so the layout holds either way.",
                 now.AddDays(-9), false, "To: you@example.com",
                 "Confirmed — Carlito is metric-compatible with Calibri, so the layout holds either way.")
-                { SizeBytes = 1_800 },
+                { SizeBytes = 1_800, ThreadKey = "font substitution question" },
         ];
 
         _selectedFolder = Folders[5];
@@ -419,6 +466,8 @@ public sealed class ShellViewModel : ObservableObject
                 SizeBytes = summary.SizeBytes,
                 HasAttachment = summary.HasAttachment,
                 IsFlagged = summary.IsFlagged,
+                ThreadKey = Store.Lists.Arrangements.NormalisedSubject(summary.Subject),
+                FolderId = summary.FolderId,
             });
         }
 
@@ -536,6 +585,11 @@ public sealed class ShellViewModel : ObservableObject
             if (!Set(ref field, value)) return;
             if (value is MessageRow row) SelectedMessage = row;
             if (value is GroupHeaderRow header) ToggleGroupCollapsed(header.Header);
+            if (value is ConversationRow thread)
+            {
+                SelectedMessage = thread.Newest;
+                ToggleConversation(thread);
+            }
         }
     }
 
@@ -621,11 +675,83 @@ public sealed class ShellViewModel : ObservableObject
     /// The flat sequence the list draws: a header, then its rows unless it is folded shut.
     /// Rebuilt in one pass so nothing can disagree about what is on screen.
     /// </summary>
-    public ObservableCollection<object> VisibleRows { get; } = [];
+    /// <remarks>
+    /// A list replaced wholesale, not an observable collection mutated in place. Filling a
+    /// hundred thousand rows one Add at a time raises a hundred thousand collection-changed
+    /// notifications and the list responds to every one of them — the panel virtualizes fine,
+    /// the notifications are what does not.
+    /// </remarks>
+    public IReadOnlyList<object> VisibleRows
+    {
+        get;
+        private set => Set(ref field, value);
+    } = [];
+
+    // ---- How the rows are drawn --------------------------------------------------------------
+
+    /// <summary>
+    /// Compact stacks two lines with a preview; single-line is the column grid. The reference
+    /// switches between them by pane width, and lets Change View override.
+    /// </summary>
+    public bool CompactRows
+    {
+        get;
+        set
+        {
+            if (!Set(ref field, value)) return;
+            Raise(nameof(RowHeight));
+            Raise(nameof(ShowPreviewLine));
+        }
+    } = true;
+
+    /// <summary>Preview lines under the subject: 0 to 3, as Message Preview offers.</summary>
+    public int PreviewLines
+    {
+        get;
+        set
+        {
+            if (!Set(ref field, Math.Clamp(value, 0, 3))) return;
+            Raise(nameof(RowHeight));
+            Raise(nameof(ShowPreviewLine));
+        }
+    } = 1;
+
+    public bool ShowPreviewLine => CompactRows && PreviewLines > 0;
+
+    /// <summary>
+    /// Row height follows the mode and the preview count, so a taller row is a taller row
+    /// rather than a clipped one.
+    /// </summary>
+    public double RowHeight => CompactRows ? 26 + (PreviewLines * 18) : 24;
+
+    /// <summary>
+    /// Show as Conversations. Off, the list is one row per message; on, replies fold under the
+    /// newest and the group counts what is on screen rather than what is behind it.
+    /// </summary>
+    public bool ShowAsConversations
+    {
+        get;
+        set
+        {
+            if (!Set(ref field, value)) return;
+            _expanded.Clear();
+            Rebuild();
+        }
+    }
+
+    /// <summary>Which threads are open, by key — indices move, keys do not.</summary>
+    private readonly HashSet<string> _expanded = [];
+
+    public void ToggleConversation(ConversationRow row)
+    {
+        var key = row.Newest.ThreadKey;
+        if (!_expanded.Remove(key)) _expanded.Add(key);
+        Rebuild();
+    }
 
     private void Rebuild()
     {
-        VisibleRows.Clear();
+        var built = new List<object>();
 
         var rows = UnreadOnly ? Messages.Where(m => m.IsUnread) : Messages;
         var groups = Store.Lists.Arrangements.Group(rows, Arrangement, SortDescending);
@@ -633,16 +759,63 @@ public sealed class ShellViewModel : ObservableObject
         foreach (var group in groups)
         {
             var collapsed = _collapsed.Contains(group.Header);
-            VisibleRows.Add(new GroupHeaderRow(group.Header, group.Count, collapsed));
+
+            // The header counts what the group will show. With conversations on, a thread of
+            // five is one row, and a header claiming five would not match what is beneath it.
+            var content = ShowAsConversations
+                ? Threaded(group.Items)
+                : [.. group.Items.Select(r => (object)Reset(r))];
+
+            built.Add(new GroupHeaderRow(group.Header, Countable(content), collapsed));
 
             if (collapsed) continue;
 
-            foreach (var row in group.Items) VisibleRows.Add(row);
+            built.AddRange(content);
         }
 
+        VisibleRows = built;
         Raise(nameof(VisibleCount));
         Raise(nameof(StatusLeft));
     }
+
+    /// <summary>Rows for one group with conversations folded, in the group's own order.</summary>
+    private List<object> Threaded(IReadOnlyList<MessageRow> items)
+    {
+        var rows = new List<object>();
+
+        foreach (var thread in Conversations.Build(items))
+        {
+            if (!thread.IsThread)
+            {
+                rows.Add(Reset(thread.Newest));
+                continue;
+            }
+
+            var open = _expanded.Contains(thread.Newest.ThreadKey);
+            rows.Add(new ConversationRow(thread.Newest, thread.Count, open, thread.IsSplit));
+
+            if (!open) continue;
+
+            foreach (var message in thread.Messages)
+            {
+                message.Depth = 1;
+                rows.Add(message);
+            }
+        }
+
+        return rows;
+    }
+
+    /// <summary>Clears any indent left over from a previous conversation view.</summary>
+    private static MessageRow Reset(MessageRow row)
+    {
+        row.Depth = 0;
+        return row;
+    }
+
+    /// <summary>What a group header counts: conversations and loose messages, not both.</summary>
+    private static int Countable(List<object> rows)
+        => rows.Count(r => r is ConversationRow || (r is MessageRow m && m.Depth == 0));
 
     // ---- Acting on a selection -------------------------------------------------------------
     // Every one of these takes the rows explicitly rather than reading a selection property.
@@ -760,7 +933,8 @@ public sealed class ShellViewModel : ObservableObject
     }
 
     /// <summary>Rows on show, headers excluded. What the status bar counts.</summary>
-    public int VisibleCount => VisibleRows.OfType<MessageRow>().Count();
+    public int VisibleCount => VisibleRows.Count(
+        r => r is MessageRow { Depth: 0 } or ConversationRow);
 
     // ---- Pane layout ----------------------------------------------------------------------
 

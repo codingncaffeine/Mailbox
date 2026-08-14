@@ -22,11 +22,14 @@ public sealed class RowTemplateSelector : IDataTemplate
 
     public IDataTemplate? Header { get; set; }
 
-    public bool Match(object? data) => data is MessageRow or GroupHeaderRow;
+    public IDataTemplate? Conversation { get; set; }
+
+    public bool Match(object? data) => data is MessageRow or GroupHeaderRow or ConversationRow;
 
     public Control? Build(object? data) => data switch
     {
         GroupHeaderRow => Header?.Build(data),
+        ConversationRow => Conversation?.Build(data),
         MessageRow => Message?.Build(data),
         _ => null,
     };

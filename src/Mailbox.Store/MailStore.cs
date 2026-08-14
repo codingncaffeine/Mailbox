@@ -153,14 +153,42 @@ public sealed class MailStore : IDisposable
         return rows;
     }
 
-    /// <summary>Wraps work in a transaction, rolling back if it throws.</summary>
+    /// <summary>
+    /// Wraps work in a transaction, rolling back if it throws. Re-entrant: nested calls join
+    /// the outermost one rather than failing.
+    /// </summary>
+    /// <remarks>
+    /// SQLite has no nested transactions, and the operations that want one are naturally
+    /// composed — filing a message takes a transaction, and filing ten thousand of them on a
+    /// first poll wants one around the lot. Without this the caller either fsyncs per message
+    /// or has to know which repository methods already opened one, which is the kind of thing
+    /// that is right until somebody adds a method.
+    /// </remarks>
     public T InTransaction<T>(Func<T> work)
     {
+        if (_depth > 0)
+        {
+            _depth++;
+            try { return work(); }
+            finally { _depth--; }
+        }
+
         using var transaction = _connection.BeginTransaction();
-        var result = work();
-        transaction.Commit();
-        return result;
+        _depth = 1;
+
+        try
+        {
+            var result = work();
+            transaction.Commit();
+            return result;
+        }
+        finally
+        {
+            _depth = 0;
+        }
     }
+
+    private int _depth;
 
     public SqliteCommand Command(string sql, params (string Name, object? Value)[] parameters)
     {

@@ -326,13 +326,25 @@ public partial class MainWindow : Window
                 items.Add(item);
             }
 
+            var conversations = new MenuItem
+            {
+                Header = shell.ShowAsConversations
+                    ? "Show as Conversations ✓"
+                    : "Show as Conversations",
+            };
+            conversations.Click += (_, _) =>
+            {
+                shell.ShowAsConversations = !shell.ShowAsConversations;
+                Build();
+            };
+
             var newest = new MenuItem { Header = shell.SortDescending ? "Newest on top ✓" : "Newest on top" };
             newest.Click += (_, _) => { shell.SortDescending = true; Build(); };
 
             var oldest = new MenuItem { Header = shell.SortDescending ? "Oldest on top" : "Oldest on top ✓" };
             oldest.Click += (_, _) => { shell.SortDescending = false; Build(); };
 
-            flyout.ItemsSource = items.Concat([newest, oldest]).ToList();
+            flyout.ItemsSource = items.Concat([conversations, newest, oldest]).ToList();
         }
 
         Build();
