@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The mail store. SQLite with FTS5 for search and blobs for raw RFC822.
+    Depends on Mailbox.Core for the domain model; knows nothing about UI or protocols.
+  -->
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="$(SqliteVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mailbox.Core\Mailbox.Core.csproj" />
+  </ItemGroup>
+
+</Project>

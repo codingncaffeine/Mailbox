@@ -24,7 +24,7 @@
   <PropertyGroup>
     <AvaloniaVersion>12.1.1</AvaloniaVersion>
     <MailKitVersion>4.17.0</MailKitVersion>
-    <SqliteVersion>10.0.0</SqliteVersion>
+    <SqliteVersion>10.0.11</SqliteVersion>
   </PropertyGroup>
 
 </Project>
