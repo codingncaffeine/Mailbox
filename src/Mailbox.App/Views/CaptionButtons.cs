@@ -17,15 +17,15 @@ namespace Mailbox.App.Views;
 /// them exactly costs less than finding a substitute font, and it means they stay crisp at any
 /// scale and take their colour from theme tokens.
 /// <para>
-/// Metrics follow the Windows caption: 46x30 hit targets, a 10px glyph box, and the close
+/// Metrics are measured off the reference: 48x44 hit targets, a 10px glyph box, and the close
 /// button turning red on hover with white glyph — the one caption button that does not use the
 /// neutral hover.
 /// </para>
 /// </remarks>
 public sealed class CaptionButtons : StackPanel
 {
-    private const double ButtonWidth = 46;
-    private const double ButtonHeight = 30;
+    private const double ButtonWidth = 48;
+    private const double ButtonHeight = 44;
     private const double GlyphBox = 10;
     private const double StrokeWidth = 1;
 

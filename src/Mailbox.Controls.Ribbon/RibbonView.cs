@@ -162,6 +162,11 @@ public sealed class RibbonView : ContentControl
             selected ? "ribbon.tab.text.selected.brush" : "ribbon.tab.text.brush");
         Bind(label, TextBlock.FontSizeProperty, "type.ui.size.value");
 
+        // The active tab is marked by a rule under its label, not by a filled pill: measured
+        // 2px tall, the exact width of the text, sitting 3px clear of the strip's lower edge.
+        // Every tab reserves the rule's space whether or not it is drawn, so that all the
+        // labels share one baseline instead of the active one riding higher than its
+        // neighbours.
         var button = new Button
         {
             Content = label,
@@ -181,7 +186,32 @@ public sealed class RibbonView : ContentControl
             if (tab.IsBackstage) BackstageRequested?.Invoke(this, EventArgs.Empty);
             else ActiveTabId = tab.Id;
         };
-        return button;
+
+        // The rule marking the active tab is a sibling of the button, not its content. Inside
+        // the button it would be positioned against the template's content box, which is inset
+        // by an amount the template owns and silently swallows the clearance below the rule.
+        // Out here the measurements hold: 2px tall, 3px clear of the strip's lower edge, and
+        // inset by the button's own padding so it spans exactly the label.
+        var underline = new Border
+        {
+            Height = RibbonMetrics.TabUnderlineThickness,
+            Margin = new Thickness(
+                RibbonMetrics.TabPaddingH, RibbonMetrics.TabUnderlineTop,
+                RibbonMetrics.TabPaddingH, 0),
+            VerticalAlignment = VerticalAlignment.Top,
+            IsHitTestVisible = false,
+        };
+        if (selected) Bind(underline, Border.BackgroundProperty, "ribbon.tab.underline.brush");
+
+        // Top-aligned, not merely fixed-height: the strip panel can arrange taller than the
+        // strip itself, and a fixed-height child with the default alignment centres in that
+        // slack, which drops the rule below where it was measured.
+        return new Grid
+        {
+            Height = RibbonMetrics.TabStripHeight,
+            VerticalAlignment = VerticalAlignment.Top,
+            Children = { button, underline },
+        };
     }
 
     /// <summary>
@@ -239,15 +269,19 @@ public sealed class RibbonView : ContentControl
         Grid.SetColumn(trailing, 1);
         grid.Children.Add(trailing);
 
+        // The panel is rounded and inset, so the chrome shows at its corners; a bottom border
+        // would cut across that curve, and the drop shadow already separates it from the
+        // workspace below.
         var host = new Border
         {
             Height = RibbonMetrics.SimplifiedHeight,
             Padding = new Thickness(6, 0),
             Child = grid,
-            BorderThickness = new Thickness(0, 0, 0, 1),
+            CornerRadius = new CornerRadius(RibbonMetrics.BodyCornerRadius),
+            Margin = new Thickness(0, 0, RibbonMetrics.BodyRightInset, 0),
+            ClipToBounds = true,
         };
         Bind(host, Border.BackgroundProperty, "ribbon.background.brush");
-        Bind(host, Border.BorderBrushProperty, "border.subtle.brush");
         return host;
     }
 
@@ -414,14 +448,17 @@ public sealed class RibbonView : ContentControl
             VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
         };
 
+        // Same rounded, inset panel as the Simplified row — the classic ribbon is taller, not
+        // shaped differently.
         var host = new Border
         {
             Height = RibbonMetrics.BodyHeight,
             Child = scroller,
-            BorderThickness = new Thickness(0, 0, 0, 1),
+            CornerRadius = new CornerRadius(RibbonMetrics.BodyCornerRadius),
+            Margin = new Thickness(0, 0, RibbonMetrics.BodyRightInset, 0),
+            ClipToBounds = true,
         };
         Bind(host, Border.BackgroundProperty, "ribbon.background.brush");
-        Bind(host, Border.BorderBrushProperty, "border.subtle.brush");
         return host;
     }
 

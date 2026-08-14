@@ -54,6 +54,10 @@ public sealed class ThemeResourceBridge
                 _target[key + ".value"] = number;
                 _target[key + ".thickness"] = new Thickness(number);
                 _target[key + ".gridlength"] = new GridLength(number);
+
+                // A one-sided margin. Offsets measured from a single edge are common in the
+                // chrome, and the uniform .thickness above would inset all four sides.
+                _target[key + ".leftmargin"] = new Thickness(number, 0, 0, 0);
             }
         }
 

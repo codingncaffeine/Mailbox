@@ -78,6 +78,26 @@
         <Setter Property="Foreground" Value="{DynamicResource text.secondary.brush}" />
     </Style>
 
+    <!--
+        The title-bar search box stands on the light search fill rather than the app surface,
+        so its text, caret and placeholder all take the search token. The general secondary
+        text colour is tuned for the content area and is close to invisible here.
+    -->
+    <Style Selector="TextBox.titlebar-search">
+        <Setter Property="CaretBrush" Value="{DynamicResource titlebar.search.text.brush}" />
+        <Setter Property="SelectionForegroundBrush"
+                Value="{DynamicResource titlebar.search.text.brush}" />
+    </Style>
+
+    <Style Selector="TextBox.titlebar-search /template/ TextBlock#PART_Watermark">
+        <Setter Property="Foreground" Value="{DynamicResource titlebar.search.text.brush}" />
+        <Setter Property="Opacity" Value="1" />
+    </Style>
+
+    <Style Selector="TextBox.titlebar-search /template/ TextBlock#PART_FloatingWatermark">
+        <Setter Property="Foreground" Value="{DynamicResource titlebar.search.text.brush}" />
+    </Style>
+
     <!-- ================================ ComboBox ============================== -->
 
     <Style Selector="ComboBox">

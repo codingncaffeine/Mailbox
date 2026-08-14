@@ -259,10 +259,33 @@ public sealed class ShellViewModel : ObservableObject
     public string SearchText
     {
         get => _searchText;
-        set => Set(ref _searchText, value);
+        set
+        {
+            if (Set(ref _searchText, value)) Raise(nameof(ShowSearchPlaceholder));
+        }
     }
 
-    public string SearchPlaceholder => $"Search {SelectedFolderName}";
+    /// <summary>
+    /// Drives a placeholder drawn behind the box rather than the control's own watermark. The
+    /// watermark is dimmed by the control theme, which is unreadable against the light search
+    /// fill, and its opacity is not reachable from a style selector.
+    /// </summary>
+    public bool ShowSearchPlaceholder => string.IsNullOrEmpty(_searchText);
+
+    /// <summary>
+    /// Just "Search". Measured off the reference, which does not name the folder here — the
+    /// scope is shown in the dropdown the box opens, not in the placeholder.
+    /// </summary>
+    public string SearchPlaceholder => "Search";
+
+    /// <summary>Magnifier shown inside the search box, at the measured 14px.</summary>
+    public string SearchGlyph { get; } = IconGlyphs.Get("search", 16);
+
+    /// <summary>
+    /// Opens the Quick Access Toolbar's customize menu. It sits after the last QAT button and
+    /// is always present, so it is not part of the rearrangeable command list.
+    /// </summary>
+    public string CustomizeGlyph { get; } = IconGlyphs.Get("chevron-down", 16);
 
     public ModuleTab[] Modules { get; } =
     [

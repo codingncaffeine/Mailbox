@@ -258,4 +258,37 @@ public class ThemeServiceTests
         var service = Service();
         Assert.Equal("Liberation Sans", service.Tokens.GetString(TokenKeys.Typography.UiFamily));
     }
+
+    /// <summary>
+    /// A token that happens to equal the surface behind it renders as nothing at all. Both of
+    /// these have shipped broken: the search placeholder drawn in the fill colour, and the
+    /// active tab's rule drawn in the tab strip's own colour, each invisible in exactly one
+    /// theme. The coverage audit cannot catch it, because the token is present — just useless.
+    /// </summary>
+    [Theory]
+    [InlineData(TokenKeys.Ribbon.TabUnderline, TokenKeys.Ribbon.TabStripBackground)]
+    [InlineData(TokenKeys.Ribbon.TabText, TokenKeys.Ribbon.TabStripBackground)]
+    [InlineData(TokenKeys.Ribbon.TabTextSelected, TokenKeys.Ribbon.TabStripBackground)]
+    [InlineData(TokenKeys.TitleBar.SearchText, TokenKeys.TitleBar.Search)]
+    [InlineData(TokenKeys.TitleBar.SearchBorder, TokenKeys.TitleBar.Search)]
+    [InlineData(TokenKeys.TitleBar.Foreground, TokenKeys.TitleBar.Background)]
+    [InlineData(TokenKeys.Rail.Indicator, TokenKeys.Rail.Background)]
+    [InlineData(TokenKeys.Rail.ItemText, TokenKeys.Rail.Background)]
+    [InlineData(TokenKeys.List.UnreadText, TokenKeys.List.RowBackground)]
+    [InlineData(TokenKeys.List.ReadText, TokenKeys.List.RowBackground)]
+    public void ForegroundTokensAreDistinctFromWhatSitsBehindThem(string ink, string ground)
+    {
+        foreach (var id in OfficeThemes.All)
+        {
+            var service = Service();
+            service.Apply(id);
+
+            var a = service.Tokens.GetString(ink);
+            var b = service.Tokens.GetString(ground);
+
+            Assert.False(
+                string.Equals(a, b, StringComparison.OrdinalIgnoreCase),
+                $"{id}: {ink} and {ground} are both {a}, so {ink} cannot be seen.");
+        }
+    }
 }
