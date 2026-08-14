@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
@@ -178,6 +179,73 @@ public partial class MainWindow : Window
     /// bar, double-click to maximize. Avalonia gives us the extended client area but none of
     /// the behaviour, so all of it is ours.
     /// </summary>
+    /// <summary>
+    /// Width of the invisible band along each window edge that starts a resize.
+    /// </summary>
+    /// <remarks>
+    /// The window carries no system decoration — that frame is drawn square, and against a
+    /// window with rounded corners it left a hard right angle around the curve with a
+    /// transparent wedge between the two. Dropping it takes the compositor's resize borders
+    /// with it, so the window grows its own.
+    /// </remarks>
+    private const double ResizeMargin = 6;
+
+    private static readonly (WindowEdge Edge, StandardCursorType Cursor)[] EdgeCursors =
+    [
+        (WindowEdge.NorthWest, StandardCursorType.TopLeftCorner),
+        (WindowEdge.NorthEast, StandardCursorType.TopRightCorner),
+        (WindowEdge.SouthWest, StandardCursorType.BottomLeftCorner),
+        (WindowEdge.SouthEast, StandardCursorType.BottomRightCorner),
+        (WindowEdge.North, StandardCursorType.TopSide),
+        (WindowEdge.South, StandardCursorType.BottomSide),
+        (WindowEdge.West, StandardCursorType.LeftSide),
+        (WindowEdge.East, StandardCursorType.RightSide),
+    ];
+
+    /// <summary>Which edge the pointer is over, or null when it is not near one.</summary>
+    private WindowEdge? EdgeAt(Point p)
+    {
+        if (WindowState != WindowState.Normal) return null;
+
+        var west = p.X <= ResizeMargin;
+        var east = p.X >= Bounds.Width - ResizeMargin;
+        var north = p.Y <= ResizeMargin;
+        var south = p.Y >= Bounds.Height - ResizeMargin;
+
+        return (north, south, west, east) switch
+        {
+            (true, _, true, _) => WindowEdge.NorthWest,
+            (true, _, _, true) => WindowEdge.NorthEast,
+            (_, true, true, _) => WindowEdge.SouthWest,
+            (_, true, _, true) => WindowEdge.SouthEast,
+            (true, _, _, _) => WindowEdge.North,
+            (_, true, _, _) => WindowEdge.South,
+            (_, _, true, _) => WindowEdge.West,
+            (_, _, _, true) => WindowEdge.East,
+            _ => null,
+        };
+    }
+
+    protected override void OnPointerMoved(PointerEventArgs e)
+    {
+        base.OnPointerMoved(e);
+
+        Cursor = EdgeAt(e.GetPosition(this)) is { } edge
+            ? new Cursor(EdgeCursors.First(c => c.Edge == edge).Cursor)
+            : Cursor.Default;
+    }
+
+    protected override void OnPointerPressed(PointerPressedEventArgs e)
+    {
+        base.OnPointerPressed(e);
+
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
+        if (EdgeAt(e.GetPosition(this)) is not { } edge) return;
+
+        e.Handled = true;
+        BeginResizeDrag(edge, e);
+    }
+
     private void SetUpTitleBar()
     {
         var caption = new CaptionButtons(this);
