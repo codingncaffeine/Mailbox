@@ -58,6 +58,7 @@ public sealed class ThemeResourceBridge
                 // A one-sided margin. Offsets measured from a single edge are common in the
                 // chrome, and the uniform .thickness above would inset all four sides.
                 _target[key + ".leftmargin"] = new Thickness(number, 0, 0, 0);
+                _target[key + ".rightmargin"] = new Thickness(0, 0, number, 0);
             }
         }
 

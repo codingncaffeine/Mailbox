@@ -278,8 +278,8 @@ public sealed class RibbonView : ContentControl
             Padding = new Thickness(6, 0),
             Child = grid,
             CornerRadius = new CornerRadius(RibbonMetrics.BodyCornerRadius),
-            Margin = new Thickness(0, 0, RibbonMetrics.BodyRightInset, 0),
-            ClipToBounds = true,
+            BoxShadow = BoxShadows.Parse("0 1 3 0 #94000000"),
+            Margin = new Thickness(0, 0, RibbonMetrics.BodyRightInset, RibbonMetrics.BodyBottomGap),
         };
         Bind(host, Border.BackgroundProperty, "ribbon.background.brush");
         return host;
@@ -455,8 +455,8 @@ public sealed class RibbonView : ContentControl
             Height = RibbonMetrics.BodyHeight,
             Child = scroller,
             CornerRadius = new CornerRadius(RibbonMetrics.BodyCornerRadius),
-            Margin = new Thickness(0, 0, RibbonMetrics.BodyRightInset, 0),
-            ClipToBounds = true,
+            BoxShadow = BoxShadows.Parse("0 1 3 0 #94000000"),
+            Margin = new Thickness(0, 0, RibbonMetrics.BodyRightInset, RibbonMetrics.BodyBottomGap),
         };
         Bind(host, Border.BackgroundProperty, "ribbon.background.brush");
         return host;

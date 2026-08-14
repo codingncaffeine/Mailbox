@@ -93,7 +93,10 @@ public static class OfficeThemes
         t.Set(TokenKeys.TitleBar.SearchOffset, "294");
         t.Set(TokenKeys.Rail.Width, "57");
         t.Set(TokenKeys.Rail.ItemHeight, "48");
-        t.Set(TokenKeys.Rail.IndicatorWidth, "2");
+        // The ribbon and the workspace are held the same distance off the window's right edge,
+        // which is what makes them read as a stack of separate panels rather than one block.
+        t.Set(TokenKeys.Workspace.Inset, "9");
+        t.Set(TokenKeys.Rail.IndicatorWidth, "1.5");
         t.Set(TokenKeys.Rail.IndicatorHeight, "32");
         t.Set(TokenKeys.Rail.IndicatorInset, "6");
         t.Set(TokenKeys.List.Width, "436");

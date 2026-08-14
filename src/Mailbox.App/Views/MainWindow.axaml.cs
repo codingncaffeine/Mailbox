@@ -180,7 +180,13 @@ public partial class MainWindow : Window
     /// </summary>
     private void SetUpTitleBar()
     {
-        this.FindControl<ContentControl>("CaptionHost")!.Content = new CaptionButtons(this);
+        var caption = new CaptionButtons(this);
+        this.FindControl<ContentControl>("CaptionHost")!.Content = caption;
+
+        if (Environment.GetEnvironmentVariable("MAILBOX_HOVER") is { Length: > 0 } hovered)
+        {
+            Opened += (_, _) => caption.ForceHover(hovered.ToLowerInvariant());
+        }
 
         if (this.FindControl<Control>("TitleBar") is not { } bar) return;
 

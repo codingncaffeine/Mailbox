@@ -1,8 +1,8 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
+using Avalonia.Data;
 using Avalonia.Layout;
-using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 
 namespace Mailbox.App.Views;
@@ -31,6 +31,21 @@ public sealed class CaptionButtons : StackPanel
 
     private readonly Window _window;
     private readonly Button _maximize;
+
+    /// <summary>
+    /// Forces a caption button into its hover state so the fidelity harness can photograph it.
+    /// A screenshot cannot move the pointer, and the close button's red is the one caption
+    /// colour that only exists on hover — it went unverified, and wrong, for two sessions.
+    /// </summary>
+    public void ForceHover(string which)
+    {
+        var cls = which == "close" ? "caption-close" : "caption";
+        foreach (var button in Children.OfType<Button>().Where(b => b.Classes.Contains(cls)))
+        {
+            ((IPseudoClasses)button.Classes).Add(":pointerover");
+            if (which != "close") break;
+        }
+    }
 
     public CaptionButtons(Window window)
     {
@@ -74,7 +89,6 @@ public sealed class CaptionButtons : StackPanel
             Padding = default,
             BorderThickness = default,
             CornerRadius = default,
-            Background = Brushes.Transparent,
             HorizontalContentAlignment = HorizontalAlignment.Center,
             VerticalContentAlignment = VerticalAlignment.Center,
             Classes = { isClose ? "caption-close" : "caption" },
@@ -175,9 +189,21 @@ public sealed class CaptionButtons : StackPanel
         Children = { content },
     };
 
-    private static void BindFill(Shape shape)
-        => shape[!Shape.FillProperty] = new DynamicResourceExtension("titlebar.foreground.brush");
+    /// <summary>
+    /// Glyphs follow their button's <see cref="TemplatedControl.Foreground"/> rather than
+    /// binding a brush of their own. A brush set on the shape is a local value, and a local
+    /// value cannot be overridden by a style — which is what silently defeated the close
+    /// button's white-on-red hover.
+    /// </summary>
+    private static Binding FromButton() => new Binding(nameof(Button.Foreground))
+    {
+        RelativeSource = new RelativeSource(RelativeSourceMode.FindAncestor)
+        {
+            AncestorType = typeof(Button),
+        },
+    };
 
-    private static void BindStroke(Shape shape)
-        => shape[!Shape.StrokeProperty] = new DynamicResourceExtension("titlebar.foreground.brush");
+    private static void BindFill(Shape shape) => shape[!Shape.FillProperty] = FromButton();
+
+    private static void BindStroke(Shape shape) => shape[!Shape.StrokeProperty] = FromButton();
 }

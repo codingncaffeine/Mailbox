@@ -210,8 +210,22 @@
     <!-- ========================== Caption buttons ============================= -->
     <!-- Windows hover behaviour: neutral wash on minimize and maximize, red on close. -->
 
+    <!-- Glyphs follow the button's Foreground, so hover recolours them through it. -->
+    <Style Selector="Button.caption">
+        <Setter Property="Foreground" Value="{DynamicResource titlebar.foreground.brush}" />
+    </Style>
+
+    <Style Selector="Button.caption-close">
+        <Setter Property="Foreground" Value="{DynamicResource titlebar.foreground.brush}" />
+    </Style>
+
     <Style Selector="Button.caption:pointerover">
         <Setter Property="Background" Value="#22FFFFFF" />
+    </Style>
+
+    <!-- White glyph on the red, whatever the theme's caption colour normally is. -->
+    <Style Selector="Button.caption-close:pointerover">
+        <Setter Property="Foreground" Value="#FFFFFF" />
     </Style>
 
     <Style Selector="Button.caption:pressed">

@@ -111,6 +111,12 @@ public static class TokenKeys
         public const string IndicatorInset = "rail.indicator.inset";
     }
 
+    /// <summary>The workspace below the ribbon: its own rounded surface on the chrome.</summary>
+    public static class Workspace
+    {
+        public const string Inset = "workspace.inset";
+    }
+
     public static class Nav
     {
         public const string Background = "nav.background";
@@ -202,6 +208,7 @@ public static class TokenKeys
         Ribbon.Background, Ribbon.TabStripBackground, Ribbon.TabRest, Ribbon.TabHover,
         Ribbon.TabSelected, Ribbon.TabUnderline, Ribbon.TabText, Ribbon.TabTextSelected, Ribbon.GroupLabel,
         Ribbon.GroupSeparator, Ribbon.Height, Ribbon.TabStripHeight,
+        Workspace.Inset,
         Nav.Background, Nav.ItemText, Nav.ItemHover, Nav.ItemSelected, Nav.UnreadCount, Nav.Width,
         List.Background, List.RowBackground, List.HeaderBackground, List.HeaderText,
         List.RowHeight, List.RowHeightCompact, List.RowHover, List.RowSelected,

@@ -156,8 +156,7 @@
         -->
         <Border Grid.Row="1" Grid.Column="1"
                 ZIndex="2"
-                IsVisible="{Binding ShowRibbon}"
-                BoxShadow="0 4 9 -1 #73000000">
+                IsVisible="{Binding ShowRibbon}">
             <ContentControl Name="RibbonHost" />
         </Border>
 
@@ -244,7 +243,12 @@
             </ItemsControl>
         </Border>
 
-        <Grid Grid.Row="2" Grid.Column="1" Name="PaneGrid" ColumnDefinitions="Auto,Auto,1,Auto,1,*,Auto">
+        <Border Grid.Row="2" Grid.Column="1"
+                Margin="{DynamicResource workspace.inset.rightmargin}"
+                CornerRadius="8,8,0,0"
+                ClipToBounds="True"
+                Background="{DynamicResource list.background.brush}">
+        <Grid Name="PaneGrid" ColumnDefinitions="Auto,Auto,1,Auto,1,*,Auto">
 
             <!-- Navigation pane -->
             <Border Grid.Column="1"
@@ -537,9 +541,11 @@
                 </DockPanel>
             </Border>
         </Grid>
+        </Border>
 
         <!-- Backstage. A full-window takeover across every row, so it covers the ribbon and
              the panes alike. -->
+
         <ContentControl Grid.Row="0" Grid.RowSpan="4" Grid.ColumnSpan="2"
                         Name="BackstageHost"
                         ZIndex="10"
