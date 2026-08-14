@@ -10,6 +10,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Thread keys and search sanitising are internal because nothing outside should call
+         them, but both are exactly the kind of string handling worth testing directly. -->
+    <InternalsVisibleTo Include="Mailbox.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Mailbox.Core\Mailbox.Core.csproj" />
   </ItemGroup>
 

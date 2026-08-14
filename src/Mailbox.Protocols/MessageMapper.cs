@@ -1,0 +1,140 @@
+using MimeKit;
+using Mailbox.Store;
+
+namespace Mailbox.Protocols;
+
+/// <summary>
+/// Turns a parsed MIME message into the row the list draws.
+/// </summary>
+/// <remarks>
+/// Separate from the protocols so it can be tested against a file rather than a server, which
+/// is the only practical way to cover the mail that actually turns up: missing From, dates from
+/// a machine with the wrong clock, a body that is only HTML, or only an attachment.
+/// </remarks>
+public static class MessageMapper
+{
+    /// <summary>How much of the body the list keeps for the preview line.</summary>
+    private const int PreviewLength = 200;
+
+    public static MessageSummary ToSummary(MimeMessage message, string? serverUid,
+        long sizeBytes, DateTimeOffset receivedUtc)
+    {
+        var from = message.From.Mailboxes.FirstOrDefault();
+
+        return new MessageSummary(
+            Id: 0,
+            FolderId: 0,
+            ServerUid: serverUid,
+            MessageId: string.IsNullOrWhiteSpace(message.MessageId) ? null : message.MessageId,
+            FromName: from?.Name ?? string.Empty,
+            FromAddress: from?.Address ?? UnknownSender(message),
+            Subject: message.Subject ?? string.Empty,
+            Preview: Preview(message),
+            Sent: SentDate(message),
+            Received: receivedUtc,
+            SizeBytes: sizeBytes,
+            IsRead: false,
+            IsFlagged: false,
+            HasAttachment: message.Attachments.Any());
+    }
+
+    /// <summary>
+    /// A message with no parseable From still has to show something. The envelope sender is the
+    /// next best thing; failing that, say so rather than leaving the column blank, which reads
+    /// as a rendering fault.
+    /// </summary>
+    private static string UnknownSender(MimeMessage message)
+        => message.Sender?.Address ?? "unknown sender";
+
+    /// <summary>
+    /// When it was sent. A date in the future is a wrong clock somewhere upstream, and sorting
+    /// by it pins that message to the top of the list forever, so it is not trusted.
+    /// </summary>
+    private static DateTimeOffset? SentDate(MimeMessage message)
+    {
+        if (message.Date == default) return null;
+
+        return message.Date > DateTimeOffset.UtcNow.AddDays(1) ? null : message.Date;
+    }
+
+    /// <summary>
+    /// The first line or two of the body. Plain text if the sender provided it; otherwise the
+    /// HTML converted down, because a preview of raw markup is worse than none.
+    /// </summary>
+    internal static string Preview(MimeMessage message)
+    {
+        var text = message.TextBody
+                   ?? (message.HtmlBody is { } html ? ToPlain(html) : null)
+                   ?? string.Empty;
+
+        return Condense(text, PreviewLength);
+    }
+
+    /// <summary>
+    /// Strips markup for the preview line only. Deliberately crude: this feeds two hundred
+    /// characters of plain text into a list row, never the reading pane, which gets a real
+    /// sanitiser and a renderer in Phase 4. Style and script content is dropped rather than
+    /// flattened, because CSS read as prose is worse than no preview.
+    /// </summary>
+    private static string ToPlain(string html)
+    {
+        var text = new System.Text.StringBuilder(html.Length);
+        var insideTag = false;
+        var skipUntil = (string?)null;
+
+        for (var i = 0; i < html.Length; i++)
+        {
+            if (skipUntil is not null)
+            {
+                if (!html.AsSpan(i).StartsWith(skipUntil, StringComparison.OrdinalIgnoreCase)) continue;
+
+                i += skipUntil.Length - 1;
+                skipUntil = null;
+                insideTag = false;
+                continue;
+            }
+
+            var c = html[i];
+            if (c == '<')
+            {
+                insideTag = true;
+                if (StartsTag(html, i, "script")) skipUntil = "</script";
+                else if (StartsTag(html, i, "style")) skipUntil = "</style";
+                continue;
+            }
+
+            if (c == '>') { insideTag = false; text.Append(' '); continue; }
+            if (!insideTag) text.Append(c);
+        }
+
+        return System.Net.WebUtility.HtmlDecode(text.ToString());
+    }
+
+    private static bool StartsTag(string html, int at, string name)
+        => html.AsSpan(at + 1).StartsWith(name, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Collapses whitespace to single spaces and trims to length.</summary>
+    internal static string Condense(string text, int limit)
+    {
+        var builder = new System.Text.StringBuilder(Math.Min(text.Length, limit));
+        var lastWasSpace = false;
+
+        foreach (var character in text)
+        {
+            var isSpace = char.IsWhiteSpace(character);
+            if (isSpace)
+            {
+                if (!lastWasSpace && builder.Length > 0) builder.Append(' ');
+            }
+            else
+            {
+                builder.Append(character);
+            }
+
+            lastWasSpace = isSpace;
+            if (builder.Length >= limit) break;
+        }
+
+        return builder.ToString().TrimEnd();
+    }
+}
