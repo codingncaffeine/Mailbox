@@ -330,4 +330,34 @@ public class ThemeServiceTests
         Assert.Equal(nav, service.Tokens.GetString(TokenKeys.Nav.Background));
         Assert.Equal(list, service.Tokens.GetString(TokenKeys.List.Background));
     }
+
+    /// <summary>
+    /// The control theme's palette has to follow ours, or its templates paint their own scheme
+    /// wherever we have not explicitly restyled a surface. That is how the light themes ended
+    /// up with menu flyouts on a dark presenter: dark text on dark ground, legible only under
+    /// the hover highlight.
+    /// </summary>
+    [Fact]
+    public void ControlThemePaletteFollowsTheTokens()
+    {
+        foreach (var id in OfficeThemes.All)
+        {
+            var service = Service();
+            service.Apply(id);
+
+            var resolved = ControlThemePalette.Resolve(service.Tokens)
+                .ToDictionary(p => p.Key, p => p.Value);
+
+            Assert.Equal(ControlThemePalette.Map.Count, resolved.Count);
+
+            // The pairing that actually matters: a popup's ground and the text drawn on it.
+            Assert.Equal(
+                service.Tokens.GetString(TokenKeys.Surface.Ground),
+                resolved["ThemeBackgroundBrush"]);
+            Assert.Equal(
+                service.Tokens.GetString(TokenKeys.Text.Primary),
+                resolved["ThemeForegroundBrush"]);
+            Assert.NotEqual(resolved["ThemeBackgroundBrush"], resolved["ThemeForegroundBrush"]);
+        }
+    }
 }

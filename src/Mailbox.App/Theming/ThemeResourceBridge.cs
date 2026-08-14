@@ -77,5 +77,22 @@ public sealed class ThemeResourceBridge
         {
             _target["mono.fontfamily"] = new FontFamily(monoFamily);
         }
+
+        PublishControlThemePalette(tokens);
+    }
+
+    /// <summary>
+    /// Publishes the control theme's own palette from our tokens. The mapping itself lives in
+    /// <see cref="ControlThemePalette"/>, where it can be tested without a UI thread.
+    /// </summary>
+    private void PublishControlThemePalette(ResolvedTokens tokens)
+    {
+        foreach (var (key, value) in ControlThemePalette.Resolve(tokens))
+        {
+            if (!Color.TryParse(value, out var color)) continue;
+
+            _target[key] = new ImmutableSolidColorBrush(color);
+            _target[key.Replace("Brush", "Color")] = color;
+        }
     }
 }
