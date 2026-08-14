@@ -210,8 +210,10 @@ public sealed class AccountWizard : Window
         try
         {
             var protocol = _protocol.SelectedIndex == 0 ? MailProtocol.Pop3 : MailProtocol.Imap;
-            var account = App.Mail.AddAccount(address, address, protocol);
-            App.Mail.CreateStandardFolders(account.Id);
+
+            // Creates the account's own store file, named after the address.
+            var opened = App.Accounts.Add(address, address, protocol);
+            var account = opened.Account;
 
             var settings = (_found is null
                 ? AccountSettings.From(Autoconfig.ForAddress(address))
@@ -222,7 +224,7 @@ public sealed class AccountWizard : Window
                 OutgoingHost = (_outgoingHost.Text ?? string.Empty).Trim(),
                 OutgoingPort = Port(_outgoingPort.Text, 587),
             };
-            settings.Save(App.Settings, account.Id);
+            settings.Save(App.Settings, address);
 
             var saved = await App.Secrets.SaveAsync(address, Credentials.Incoming, password);
             if (!saved)
@@ -232,7 +234,7 @@ public sealed class AccountWizard : Window
                     $"{App.Secrets.Description}.";
             }
 
-            Log.Info($"Account added: {address} ({protocol}).");
+            Log.Info($"Account added: {address} ({protocol}) at {opened.Path}.");
             Created = account;
             Close();
         }

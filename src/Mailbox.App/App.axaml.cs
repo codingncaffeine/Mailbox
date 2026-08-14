@@ -27,15 +27,14 @@ public partial class App : Application
     /// </summary>
     public static SettingsStore Settings { get; private set; } = null!;
 
-    /// <summary>The mail store, and typed access to it.</summary>
-    public static MailStore Store { get; private set; } = null!;
+    /// <summary>Every account, each with its own store file.</summary>
+    public static AccountStores Accounts { get; private set; } = null!;
 
-    public static MailRepository Mail { get; private set; } = null!;
+    /// <summary>Account order and which one is the default.</summary>
+    public static IAccountOrder AccountOrder { get; private set; } = null!;
 
-    /// <summary>Polling, sending, and the orchestration over both.</summary>
+    /// <summary>Polling, sending, and the orchestration over both, across every account.</summary>
     public static SendReceiveService Transfer { get; private set; } = null!;
-
-    public static SmtpSender Sender { get; private set; } = null!;
 
     /// <summary>Where passwords are kept. Never a file of our own.</summary>
     public static ICredentialStore Secrets { get; private set; } = null!;
@@ -78,14 +77,15 @@ public partial class App : Application
         Themes = new ThemeService(Fonts);
         RestoreAppearance();
 
-        // A store under the harness's own directory when capturing, so a screenshot run never
+        // A directory under the harness's own path when capturing, so a screenshot run never
         // touches real mail.
-        Store = new MailStore(
-            Environment.GetEnvironmentVariable("MAILBOX_STORE") ?? MailStore.DefaultPath());
-        Mail = new MailRepository(Store);
+        AccountOrder = new SettingsAccountOrder(Settings);
+        Accounts = new AccountStores(
+            Environment.GetEnvironmentVariable("MAILBOX_STORE") ?? AccountStores.DefaultDirectory(),
+            AccountOrder);
+
         Secrets = Credentials.Best();
-        Sender = new SmtpSender(Mail);
-        Transfer = new SendReceiveService(Mail, new Pop3Receiver(Mail), Sender);
+        Transfer = new SendReceiveService();
 
         Commands = new CommandCatalog();
         Commands.RegisterRange(MailCommands.All);

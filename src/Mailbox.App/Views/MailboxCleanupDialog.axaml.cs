@@ -62,27 +62,29 @@ public sealed class MailboxCleanupDialog : Window
 
     private void Populate()
     {
-        var file = new FileInfo(App.Store.Path);
-        _body.Children.Add(Line(
-            "Store on disk",
-            file.Exists ? Size(file.Length) : "not yet created",
-            emphasise: true));
+        var accounts = App.Accounts.All;
 
-        foreach (var account in App.Mail.Accounts())
+        if (accounts.Count == 0)
         {
-            _body.Children.Add(Line(account.Address, string.Empty, emphasise: true));
+            _body.Children.Add(Line("No accounts yet", string.Empty));
+            return;
+        }
 
-            foreach (var folder in App.Mail.Folders(account.Id).Where(f => f.Total > 0))
+        _body.Children.Add(Line(
+            "All accounts", Size(accounts.Sum(a => a.Bytes)), emphasise: true));
+
+        foreach (var account in accounts)
+        {
+            _body.Children.Add(Line(
+                account.Account.Address, Size(account.Bytes), emphasise: true));
+
+            foreach (var folder in account.Mail.Folders(account.Account.Id)
+                         .Where(f => f.Total > 0))
             {
-                var bytes = App.Mail.Messages(folder.Id, int.MaxValue).Sum(m => m.SizeBytes);
+                var bytes = account.Mail.Messages(folder.Id, int.MaxValue).Sum(m => m.SizeBytes);
                 _body.Children.Add(Line(
                     $"    {folder.Name}", $"{folder.Total:N0} items, {Size(bytes)}"));
             }
-        }
-
-        if (App.Mail.Accounts().Count == 0)
-        {
-            _body.Children.Add(Line("No accounts yet", string.Empty));
         }
     }
 

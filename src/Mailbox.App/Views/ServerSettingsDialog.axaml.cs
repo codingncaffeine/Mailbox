@@ -86,7 +86,7 @@ public sealed class ServerSettingsDialog : Window
     {
         _displayName.Text = _account.DisplayName;
 
-        var settings = AccountSettings.Load(App.Settings, _account.Id)
+        var settings = AccountSettings.Load(App.Settings, _account.Address)
                        ?? AccountSettings.From(Autoconfig.ForAddress(_account.Address));
 
         _incomingHost.Text = settings.IncomingHost;
@@ -244,8 +244,11 @@ public sealed class ServerSettingsDialog : Window
                 : null,
         };
 
-        settings.Save(App.Settings, _account.Id);
-        App.Mail.RenameAccount(_account.Id, (_displayName.Text ?? string.Empty).Trim());
+        settings.Save(App.Settings, _account.Address);
+        if (App.Accounts.Find(_account.Address) is { } open)
+        {
+            open.Mail.RenameAccount(_account.Id, (_displayName.Text ?? string.Empty).Trim());
+        }
 
         Log.Info($"Server settings saved for {_account.Address}.");
         Saved = true;

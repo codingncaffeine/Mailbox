@@ -28,44 +28,51 @@ public sealed record AccountSettings(
 
     public int? DeleteAfterDays { get; init; }
 
-    private static string Key(long accountId, string field) => $"account.{accountId}.{field}";
+    /// <summary>
+    /// Settings key off the address, not the row id. A row id belongs to one store file, and
+    /// the point of a file per account is that it can be restored or copied — after which the
+    /// id may differ but the address does not.
+    /// </summary>
+    private static string Key(string address, string field) => $"account.{address}.{field}";
 
-    public static AccountSettings? Load(SettingsStore settings, long accountId)
+    public static AccountSettings? Load(SettingsStore settings, string address)
     {
-        var host = settings.GetString(Key(accountId, "incoming.host"));
+        var accountKey = address;
+        var host = settings.GetString(Key(accountKey, "incoming.host"));
         if (host.Length == 0) return null;
 
         return new AccountSettings(
             host,
-            (int)settings.GetNumber(Key(accountId, "incoming.port"), 995),
+            (int)settings.GetNumber(Key(accountKey, "incoming.port"), 995),
             (SecureSocketOptions)(int)settings.GetNumber(
-                Key(accountId, "incoming.security"), (int)SecureSocketOptions.SslOnConnect),
-            settings.GetString(Key(accountId, "incoming.user")),
-            settings.GetString(Key(accountId, "outgoing.host")),
-            (int)settings.GetNumber(Key(accountId, "outgoing.port"), 587),
+                Key(accountKey, "incoming.security"), (int)SecureSocketOptions.SslOnConnect),
+            settings.GetString(Key(accountKey, "incoming.user")),
+            settings.GetString(Key(accountKey, "outgoing.host")),
+            (int)settings.GetNumber(Key(accountKey, "outgoing.port"), 587),
             (SecureSocketOptions)(int)settings.GetNumber(
-                Key(accountId, "outgoing.security"), (int)SecureSocketOptions.StartTls),
-            settings.GetString(Key(accountId, "outgoing.user")))
+                Key(accountKey, "outgoing.security"), (int)SecureSocketOptions.StartTls),
+            settings.GetString(Key(accountKey, "outgoing.user")))
         {
-            LeaveOnServer = settings.GetBool(Key(accountId, "leaveonserver"), true),
-            DeleteAfterDays = settings.Has(Key(accountId, "deleteafterdays"))
-                ? (int)settings.GetNumber(Key(accountId, "deleteafterdays"))
+            LeaveOnServer = settings.GetBool(Key(accountKey, "leaveonserver"), true),
+            DeleteAfterDays = settings.Has(Key(accountKey, "deleteafterdays"))
+                ? (int)settings.GetNumber(Key(accountKey, "deleteafterdays"))
                 : null,
         };
     }
 
-    public void Save(SettingsStore settings, long accountId)
+    public void Save(SettingsStore settings, string address)
     {
-        settings.Set(Key(accountId, "incoming.host"), IncomingHost);
-        settings.Set(Key(accountId, "incoming.port"), IncomingPort);
-        settings.Set(Key(accountId, "incoming.security"), (int)IncomingSecurity);
-        settings.Set(Key(accountId, "incoming.user"), IncomingUser);
-        settings.Set(Key(accountId, "outgoing.host"), OutgoingHost);
-        settings.Set(Key(accountId, "outgoing.port"), OutgoingPort);
-        settings.Set(Key(accountId, "outgoing.security"), (int)OutgoingSecurity);
-        settings.Set(Key(accountId, "outgoing.user"), OutgoingUser);
-        settings.Set(Key(accountId, "leaveonserver"), LeaveOnServer);
-        if (DeleteAfterDays is { } days) settings.Set(Key(accountId, "deleteafterdays"), days);
+        var accountKey = address;
+        settings.Set(Key(accountKey, "incoming.host"), IncomingHost);
+        settings.Set(Key(accountKey, "incoming.port"), IncomingPort);
+        settings.Set(Key(accountKey, "incoming.security"), (int)IncomingSecurity);
+        settings.Set(Key(accountKey, "incoming.user"), IncomingUser);
+        settings.Set(Key(accountKey, "outgoing.host"), OutgoingHost);
+        settings.Set(Key(accountKey, "outgoing.port"), OutgoingPort);
+        settings.Set(Key(accountKey, "outgoing.security"), (int)OutgoingSecurity);
+        settings.Set(Key(accountKey, "outgoing.user"), OutgoingUser);
+        settings.Set(Key(accountKey, "leaveonserver"), LeaveOnServer);
+        if (DeleteAfterDays is { } days) settings.Set(Key(accountKey, "deleteafterdays"), days);
     }
 
     /// <summary>
