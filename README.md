@@ -1,3 +1,5 @@
+![Mailbox — the modern, open source email client](docs/banner.jpg)
+
 # Mailbox
 
 An email client for everyone.
@@ -8,7 +10,7 @@ account required, no AI features and no telemetry.
 
 **Status: early. The shell runs; it does not send or receive mail yet.**
 
-![Mailbox](docs/ribbon-simplified.png)
+![The Mailbox shell: folder pane, message list and reading pane](docs/ribbon-simplified.png)
 
 ---
 

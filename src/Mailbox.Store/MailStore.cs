@@ -35,7 +35,11 @@ public sealed class MailStore : IDisposable
         {
             DataSource = path,
             Mode = path == InMemory ? SqliteOpenMode.Memory : SqliteOpenMode.ReadWriteCreate,
-            Cache = path == InMemory ? SqliteCacheMode.Shared : SqliteCacheMode.Default,
+
+            // Private, deliberately. A shared cache makes every connection naming ":memory:"
+            // the same database, so two in-memory stores alive at once — two tests, or a
+            // preview beside the real thing — would silently be one.
+            Cache = SqliteCacheMode.Private,
             ForeignKeys = true,
         }.ToString());
 
