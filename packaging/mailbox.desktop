@@ -1,0 +1,35 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Mailbox
+GenericName=Email Client
+Comment=Mail, calendar, contacts, tasks and notes
+Exec=mailbox %U
+TryExec=mailbox
+Icon=mailbox
+Terminal=false
+Categories=Network;Email;Office;
+Keywords=email;mail;calendar;contacts;tasks;notes;imap;pop3;caldav;carddav;
+StartupNotify=true
+StartupWMClass=mailbox
+
+# Registering as the system mail client. Without these Mailbox is an application you launch
+# rather than the client your desktop actually uses.
+MimeType=x-scheme-handler/mailto;message/rfc822;text/calendar;text/vcard;text/x-vcard;application/vnd.ms-outlook;
+
+Actions=Compose;NewAppointment;NewContact;
+
+[Desktop Action Compose]
+Name=New Email
+Exec=mailbox --compose
+Icon=mailbox
+
+[Desktop Action NewAppointment]
+Name=New Appointment
+Exec=mailbox --new-appointment
+Icon=mailbox
+
+[Desktop Action NewContact]
+Name=New Contact
+Exec=mailbox --new-contact
+Icon=mailbox

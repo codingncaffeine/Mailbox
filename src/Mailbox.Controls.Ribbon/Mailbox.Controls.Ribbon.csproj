@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The Office ribbon, built here because no open-source Avalonia ribbon is close to Office
+    quality and the commercial one cannot be shipped under GPL-3. Renders a layout document
+    rather than hand-authored XAML, which is what makes Customize Ribbon possible.
+  -->
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mailbox.Core\Mailbox.Core.csproj" />
+    <ProjectReference Include="..\Mailbox.Theming\Mailbox.Theming.csproj" />
+  </ItemGroup>
+
+</Project>

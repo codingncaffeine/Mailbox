@@ -1,0 +1,416 @@
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Layout;
+using Avalonia.Markup.Xaml.MarkupExtensions;
+using Avalonia.Media;
+using Mailbox.Theming.Icons;
+
+namespace Mailbox.App.Views;
+
+/// <summary>
+/// The File tab — Outlook's Backstage.
+/// </summary>
+/// <remarks>
+/// Not a ribbon tab but a full-window takeover: a back arrow returns to the mailbox, a dark
+/// rail down the left lists the pages, and the right-hand pane shows the selected one. Account
+/// Information is the landing page.
+/// <para>
+/// Each section on that page is a large square button paired with a heading and a sentence of
+/// explanation to its right, which is the layout Outlook uses throughout Backstage.
+/// </para>
+/// </remarks>
+public sealed class BackstageView : Border
+{
+    private const double RailWidth = 165;
+
+    private readonly StackPanel _rail = new();
+    private readonly ContentControl _page = new();
+    private string _selected = "info";
+
+    public BackstageView()
+    {
+        Bind(this, BackgroundProperty, "surface.ground.brush");
+
+        var grid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions($"{RailWidth},*"),
+            RowDefinitions = new RowDefinitions("Auto,*"),
+        };
+
+        var back = BuildBackButton();
+        Grid.SetRow(back, 0);
+        Grid.SetColumn(back, 0);
+        grid.Children.Add(back);
+
+        var railHost = new Border { Child = _rail, Padding = new Thickness(0, 6, 0, 12) };
+        Bind(railHost, BackgroundProperty, "backstage.rail.brush");
+        Grid.SetRow(railHost, 1);
+        Grid.SetColumn(railHost, 0);
+        grid.Children.Add(railHost);
+
+        _page.Margin = new Thickness(40, 24, 24, 24);
+        Grid.SetRow(_page, 1);
+        Grid.SetColumn(_page, 1);
+        grid.Children.Add(_page);
+
+        // The rail's background continues up behind the back arrow.
+        var railTop = new Border();
+        Bind(railTop, BackgroundProperty, "backstage.rail.brush");
+        Grid.SetRow(railTop, 0);
+        Grid.SetColumn(railTop, 0);
+        grid.Children.Insert(0, railTop);
+        grid.Children.Remove(back);
+        Grid.SetRow(back, 0);
+        Grid.SetColumn(back, 0);
+        grid.Children.Add(back);
+
+        Child = grid;
+
+        BuildRail();
+        ShowPage(_selected);
+    }
+
+    public event EventHandler? CloseRequested;
+
+    /// <summary>Raised by the Options page entry. The shell opens the dialog.</summary>
+    public event EventHandler? OptionsRequested;
+
+    private Control BuildBackButton()
+    {
+        var glyph = new TextBlock
+        {
+            Text = IconGlyphs.GetOrEmpty("chevron-left", 20),
+            FontFamily = IconFont.Family,
+            FontSize = 15,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Bind(glyph, TextBlock.ForegroundProperty, "backstage.rail.text.brush");
+
+        var circle = new Border
+        {
+            Width = 28,
+            Height = 28,
+            CornerRadius = new CornerRadius(14),
+            BorderThickness = new Thickness(1),
+            Child = glyph,
+        };
+        Bind(circle, BorderBrushProperty, "backstage.rail.text.brush");
+
+        var button = new Button
+        {
+            Content = circle,
+            Margin = new Thickness(14, 14, 0, 10),
+            Padding = default,
+            Background = Brushes.Transparent,
+            BorderThickness = default,
+            HorizontalAlignment = HorizontalAlignment.Left,
+        };
+        ToolTip.SetTip(button, "Back");
+        button.Click += (_, _) => CloseRequested?.Invoke(this, EventArgs.Empty);
+        return button;
+    }
+
+    /// <summary>
+    /// Outlook's page list, with the two rules that break it into groups and the account,
+    /// options and exit entries pinned to the bottom.
+    /// </summary>
+    private void BuildRail()
+    {
+        _rail.Children.Clear();
+
+        _rail.Children.Add(RailItem("info", "Info", "mail"));
+        _rail.Children.Add(RailItem("openexport", "Open & Export", "folder-open"));
+        _rail.Children.Add(RailRule());
+        _rail.Children.Add(RailItem("saveas", "Save As", "archive"));
+        _rail.Children.Add(RailItem("saveattachments", "Save Attachments", "attach", enabled: false));
+        _rail.Children.Add(RailItem("print", "Print", "print"));
+
+        _rail.Children.Add(new Panel { Height = 320 });
+
+        _rail.Children.Add(RailRule());
+        _rail.Children.Add(RailItem("account", "Mailbox Account", "people"));
+        _rail.Children.Add(RailItem("options", "Options", "settings"));
+        _rail.Children.Add(RailItem("exit", "Exit", "dismiss"));
+    }
+
+    private Control RailRule()
+    {
+        var rule = new Border { Height = 1, Margin = new Thickness(14, 6) };
+        Bind(rule, BackgroundProperty, "backstage.rail.rule.brush");
+        return rule;
+    }
+
+    private Control RailItem(string id, string label, string icon, bool enabled = true)
+    {
+        var selected = string.Equals(id, _selected, StringComparison.Ordinal);
+
+        var glyph = new TextBlock
+        {
+            Text = IconGlyphs.GetOrEmpty(icon, 16),
+            FontFamily = IconFont.Family,
+            FontSize = 14,
+            VerticalAlignment = VerticalAlignment.Center,
+            Width = 22,
+        };
+
+        var text = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center };
+
+        var key = !enabled ? "backstage.rail.disabled.brush"
+            : selected ? "accent.rest.brush"
+            : "backstage.rail.text.brush";
+        Bind(glyph, TextBlock.ForegroundProperty, key);
+        Bind(text, TextBlock.ForegroundProperty, key);
+
+        var row = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            Margin = new Thickness(14, 0),
+        };
+        row.Children.Add(glyph);
+        row.Children.Add(text);
+
+        var button = new Button
+        {
+            Content = row,
+            Height = 32,
+            Padding = default,
+            IsEnabled = enabled,
+            BorderThickness = new Thickness(selected ? 1 : 0),
+            Background = Brushes.Transparent,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Left,
+        };
+
+        // The selected page is outlined rather than filled, as Outlook draws it.
+        if (selected) Bind(button, BorderBrushProperty, "accent.rest.brush");
+
+        button.Click += (_, _) =>
+        {
+            if (id == "exit") { CloseRequested?.Invoke(this, EventArgs.Empty); return; }
+            if (id == "options") { OptionsRequested?.Invoke(this, EventArgs.Empty); return; }
+            _selected = id;
+            BuildRail();
+            ShowPage(id);
+        };
+        return button;
+    }
+
+    private void ShowPage(string id)
+        => _page.Content = id switch
+        {
+            "info" => BuildAccountInformation(),
+            _ => Placeholder(id),
+        };
+
+    private Control Placeholder(string id)
+    {
+        var text = new TextBlock { Text = $"{id} — not built yet.", FontSize = 15 };
+        Bind(text, TextBlock.ForegroundProperty, "text.secondary.brush");
+        return text;
+    }
+
+    // ------------------------------------------------------------------------------------
+    // Account Information — the landing page
+    // ------------------------------------------------------------------------------------
+
+    private Control BuildAccountInformation()
+    {
+        var stack = new StackPanel { Spacing = 0, MaxWidth = 720, HorizontalAlignment = HorizontalAlignment.Left };
+
+        var heading = new TextBlock
+        {
+            Text = "Account Information",
+            FontSize = 21,
+            Margin = new Thickness(0, 0, 0, 14),
+        };
+        Bind(heading, TextBlock.ForegroundProperty, "text.primary.brush");
+        stack.Children.Add(heading);
+
+        stack.Children.Add(BuildAccountPicker());
+        stack.Children.Add(BuildAddAccount());
+
+        stack.Children.Add(BuildSection(
+            "settings", "Account\nSettings", true,
+            "Account Settings",
+            "Change settings for this account or set up more connections."));
+
+        stack.Children.Add(BuildSection(
+            "archive", "Tools", true,
+            "Mailbox Settings",
+            "Manage the size of your mailbox by emptying Deleted Items and archiving."));
+
+        stack.Children.Add(BuildSection(
+            "rules", "Manage Rules\n& Alerts", false,
+            "Rules and Alerts",
+            "Use Rules and Alerts to help organize your incoming email messages, and receive " +
+            "updates when items are added, changed, or removed."));
+
+        return new ScrollViewer { Content = stack };
+    }
+
+    private Control BuildAccountPicker()
+    {
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto") };
+
+        var icon = new TextBlock
+        {
+            Text = IconGlyphs.GetOrEmpty("mail", 20),
+            FontFamily = IconFont.Family,
+            FontSize = 17,
+            Margin = new Thickness(10, 0, 10, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Bind(icon, TextBlock.ForegroundProperty, "text.primary.brush");
+        Grid.SetColumn(icon, 0);
+        grid.Children.Add(icon);
+
+        var lines = new StackPanel { Margin = new Thickness(0, 6), VerticalAlignment = VerticalAlignment.Center };
+        var address = new TextBlock { Text = "you@example.com" };
+        Bind(address, TextBlock.ForegroundProperty, "text.primary.brush");
+        var kind = new TextBlock { Text = "POP/SMTP", FontSize = 11 };
+        Bind(kind, TextBlock.ForegroundProperty, "text.secondary.brush");
+        lines.Children.Add(address);
+        lines.Children.Add(kind);
+        Grid.SetColumn(lines, 1);
+        grid.Children.Add(lines);
+
+        var chevron = new TextBlock
+        {
+            Text = IconGlyphs.GetOrEmpty("chevron-down", 16),
+            FontFamily = IconFont.Family,
+            FontSize = 11,
+            Margin = new Thickness(0, 0, 10, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Bind(chevron, TextBlock.ForegroundProperty, "text.secondary.brush");
+        Grid.SetColumn(chevron, 2);
+        grid.Children.Add(chevron);
+
+        var box = new Border
+        {
+            Child = grid,
+            Width = 560,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            CornerRadius = new CornerRadius(2),
+        };
+        Bind(box, BackgroundProperty, "backstage.field.brush");
+        return box;
+    }
+
+    private Control BuildAddAccount()
+    {
+        var row = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 6,
+            Margin = new Thickness(8, 3),
+        };
+
+        var plus = new TextBlock
+        {
+            Text = IconGlyphs.GetOrEmpty("add", 16),
+            FontFamily = IconFont.Family,
+            FontSize = 13,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Bind(plus, TextBlock.ForegroundProperty, "status.success.brush");
+        row.Children.Add(plus);
+
+        var label = new TextBlock { Text = "Add Account", VerticalAlignment = VerticalAlignment.Center };
+        Bind(label, TextBlock.ForegroundProperty, "text.primary.brush");
+        row.Children.Add(label);
+
+        var button = new Button
+        {
+            Content = row,
+            Margin = new Thickness(0, 8, 0, 18),
+            Padding = default,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            BorderThickness = new Thickness(1),
+            Background = Brushes.Transparent,
+        };
+        Bind(button, BorderBrushProperty, "border.strong.brush");
+        return button;
+    }
+
+    /// <summary>
+    /// A large square button on the left with its heading and explanation to the right — the
+    /// shape every Backstage section uses.
+    /// </summary>
+    private Control BuildSection(
+        string icon, string buttonLabel, bool hasDropdown, string heading, string description)
+    {
+        var grid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("Auto,*"),
+            Margin = new Thickness(0, 0, 0, 18),
+        };
+
+        var tile = new StackPanel { Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
+
+        var glyph = new TextBlock
+        {
+            Text = IconGlyphs.GetOrEmpty(icon, 32),
+            FontFamily = IconFont.Family,
+            FontSize = 26,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        Bind(glyph, TextBlock.ForegroundProperty, "accent.rest.brush");
+        tile.Children.Add(glyph);
+
+        var caption = new TextBlock
+        {
+            Text = buttonLabel,
+            TextAlignment = TextAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            FontSize = 11.5,
+        };
+        Bind(caption, TextBlock.ForegroundProperty, "text.primary.brush");
+        tile.Children.Add(caption);
+
+        if (hasDropdown)
+        {
+            var chevron = new TextBlock
+            {
+                Text = IconGlyphs.GetOrEmpty("chevron-down", 16),
+                FontFamily = IconFont.Family,
+                FontSize = 9,
+                HorizontalAlignment = HorizontalAlignment.Center,
+            };
+            Bind(chevron, TextBlock.ForegroundProperty, "text.secondary.brush");
+            tile.Children.Add(chevron);
+        }
+
+        var button = new Button
+        {
+            Content = tile,
+            Width = 96,
+            Height = 86,
+            Padding = new Thickness(4),
+            BorderThickness = default,
+            VerticalAlignment = VerticalAlignment.Top,
+        };
+        Bind(button, BackgroundProperty, "backstage.field.brush");
+        Grid.SetColumn(button, 0);
+        grid.Children.Add(button);
+
+        var text = new StackPanel { Margin = new Thickness(16, 2, 0, 0), Spacing = 4 };
+
+        var title = new TextBlock { Text = heading, FontSize = 15 };
+        Bind(title, TextBlock.ForegroundProperty, "text.primary.brush");
+        text.Children.Add(title);
+
+        var body = new TextBlock { Text = description, TextWrapping = TextWrapping.Wrap, MaxWidth = 460 };
+        Bind(body, TextBlock.ForegroundProperty, "text.primary.brush");
+        text.Children.Add(body);
+
+        Grid.SetColumn(text, 1);
+        grid.Children.Add(text);
+        return grid;
+    }
+
+    private static void Bind(AvaloniaObject target, AvaloniaProperty property, string key)
+        => target[!property] = new DynamicResourceExtension(key);
+}
