@@ -8,7 +8,8 @@ Mail, Calendar, People, Tasks, Notes and Journal in one desktop application for 
 protocols only — IMAP, POP3, SMTP, CalDAV, CardDAV — with no cloud service behind it, no
 account required, no AI features and no telemetry.
 
-**Status: early. The shell runs; it does not send or receive mail yet.**
+**Status: early, but it moves mail.** Add an account, press F9, and POP3 and SMTP work
+against a local SQLite store. The other five modules are still to come.
 
 ![The Mailbox shell: folder pane, message list and reading pane](docs/ribbon-simplified.png)
 
@@ -83,8 +84,10 @@ Logs are written to `$XDG_STATE_HOME/mailbox/logs`, five runs kept.
 src/Mailbox.Core             domain model, command catalogue, toolbar layout, logging
 src/Mailbox.Theming          token system, themes, font substitution, icons
 src/Mailbox.Controls.Ribbon  the toolbar control
+src/Mailbox.Store            SQLite store, migrations, backup and restore
+src/Mailbox.Protocols        POP3, SMTP, autoconfig, credentials
 src/Mailbox.App              Avalonia shell, Options, account view
-tests/Mailbox.Tests          114 tests, no UI thread required
+tests/Mailbox.Tests          247 tests, no UI thread required
 tools/generate-icons.py      regenerates the icon glyph map
 assets/                      bundled fonts and the application icon
 packaging/                   desktop entry, MIME associations, icon install

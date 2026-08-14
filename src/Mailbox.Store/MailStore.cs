@@ -174,6 +174,12 @@ public sealed class MailStore : IDisposable
         return command;
     }
 
+    /// <summary>
+    /// Copies this store into another connection using SQLite's online backup, which is safe
+    /// while the store is in use.
+    /// </summary>
+    public void BackupTo(SqliteConnection target) => _connection.BackupDatabase(target);
+
     /// <summary>Row id the last insert produced on this connection.</summary>
     public long LastInsertId => ScalarLong("SELECT last_insert_rowid()");
 

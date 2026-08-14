@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
 using Mailbox.App.Theming;
 using Mailbox.App.ViewModels;
 using Mailbox.Controls.Ribbon;
@@ -9,6 +10,7 @@ using Mailbox.Core.Diagnostics;
 using Mailbox.Core;
 using Mailbox.Core.Commands;
 using Mailbox.Core.Ribbon;
+using Mailbox.Protocols;
 
 namespace Mailbox.App.Views;
 
@@ -49,7 +51,7 @@ public partial class MainWindow : Window
         Log.Info($"UI font: {App.Fonts.Resolve("Segoe UI").Rendered}");
         Log.Info($"Body font: {App.Fonts.Resolve("Calibri").Rendered}");
 
-        var shell = new ShellViewModel(App.Themes, App.Commands, layout, layoutMode);
+        var shell = new ShellViewModel(App.Themes, App.Commands, layout, layoutMode, App.Mail);
 
         WireRail(shell);
         WireWindowMenu();
@@ -103,14 +105,18 @@ public partial class MainWindow : Window
         var host = this.FindControl<ContentControl>("BackstageHost")!;
         var backstage = new BackstageView();
         backstage.OptionsRequested += async (_, _) => await ShowOptions();
-        backstage.CloseRequested += (_, _) =>
-        {
-            host.IsVisible = false;
-            host.Content = null;
-        };
+        backstage.AddAccountRequested += async (_, _) => await AddAccountAsync();
+        backstage.CloseRequested += (_, _) => CloseBackstage();
 
         host.Content = backstage;
         host.IsVisible = true;
+    }
+
+    private void CloseBackstage()
+    {
+        var host = this.FindControl<ContentControl>("BackstageHost")!;
+        host.IsVisible = false;
+        host.Content = null;
     }
 
     /// <summary>Opens the Options dialog modally over the shell.</summary>
@@ -403,7 +409,122 @@ public partial class MainWindow : Window
         if (!App.Commands.TryGet(id, out var command)) return;
 
         Log.Debug($"Command invoked: {command.Id}");
+
+        if (id == MailCommands.SendReceiveAll.Id) { _ = SendReceiveAsync(shell); return; }
+        if (id == MailCommands.WorkOffline.Id) { ToggleWorkOffline(shell); return; }
+
         shell.StatusRight = $"{command.Label} — not wired yet ({command.Id})";
+    }
+
+    /// <summary>
+    /// Send/Receive All Folders. Runs off the UI thread and reports through the status bar;
+    /// the button is not disabled because a second press should be able to cancel, which is
+    /// what Phase 8's progress dialog will add.
+    /// </summary>
+    private async Task SendReceiveAsync(ShellViewModel shell)
+    {
+        if (_transferring) return;
+
+        var accounts = AccountConnections();
+        if (accounts.Count == 0)
+        {
+            shell.StatusRight = "No account is set up yet. File, Add Account.";
+            return;
+        }
+
+        _transferring = true;
+        void OnProgress(object? _, PollProgress p) =>
+            Dispatcher.UIThread.Post(() => shell.StatusRight = $"{p.Stage} {p.Account}…");
+
+        App.Transfer.Progress += OnProgress;
+
+        try
+        {
+            var result = await Task.Run(() =>
+                App.Transfer.RunAsync(accounts, DateTimeOffset.UtcNow));
+
+            shell.StatusRight = result.Summary();
+            shell.Refresh();
+        }
+        catch (Exception ex)
+        {
+            Log.Crash("send/receive", ex);
+            shell.StatusRight = "Send/receive could not finish. See the log.";
+        }
+        finally
+        {
+            App.Transfer.Progress -= OnProgress;
+            _transferring = false;
+        }
+    }
+
+    private bool _transferring;
+
+    /// <summary>
+    /// Opens the account wizard, and reloads once it closes so the new account's folders
+    /// appear without a restart.
+    /// </summary>
+    private async Task AddAccountAsync()
+    {
+        var wizard = new AccountWizard();
+        await wizard.ShowDialog(this);
+
+        if (wizard.Created is null) return;
+        if (DataContext is not ShellViewModel shell) return;
+
+        CloseBackstage();
+        shell.Refresh();
+        shell.StatusRight = $"{wizard.Created.Address} added. Press F9 to check for mail.";
+    }
+
+    /// <summary>
+    /// F9 runs a send/receive, as every mail client since the nineties has. Handled here
+    /// rather than as a command gesture because the ribbon's Alt traversal, which will own the
+    /// gesture table, is still to come.
+    /// </summary>
+    protected override void OnKeyDown(Avalonia.Input.KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.Handled || DataContext is not ShellViewModel shell) return;
+
+        switch (e.Key)
+        {
+            case Avalonia.Input.Key.F9:
+                e.Handled = true;
+                _ = SendReceiveAsync(shell);
+                break;
+
+            case Avalonia.Input.Key.F5:
+                e.Handled = true;
+                shell.Refresh();
+                break;
+        }
+    }
+
+    private void ToggleWorkOffline(ShellViewModel shell)
+    {
+        var ids = App.Mail.Accounts().Select(a => a.Id).ToList();
+        App.Transfer.SetWorkOffline(!App.Transfer.WorkOffline, ids);
+        shell.StatusRight = App.Transfer.WorkOffline ? "Working offline." : "Working online.";
+    }
+
+    /// <summary>
+    /// Turns stored accounts into something the transfer service can use, pulling each
+    /// password out of the keyring as late as possible.
+    /// </summary>
+    private static List<AccountConnection> AccountConnections()
+    {
+        var connections = new List<AccountConnection>();
+
+        foreach (var account in App.Mail.Accounts())
+        {
+            var settings = AccountSettings.Load(App.Settings, account.Id);
+            if (settings is null) continue;
+
+            connections.Add(settings.ToConnection(account, App.Secrets));
+        }
+
+        return connections;
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
