@@ -123,16 +123,16 @@ public sealed class ShellViewModel : ObservableObject
     private string _selectedTheme;
     private string _searchText = string.Empty;
 
-    private readonly MailRepository? _mail;
+    private readonly AccountStores? _accounts;
 
     public ShellViewModel(
         ThemeService themes,
         CommandCatalog catalog,
         RibbonLayout layout,
         ShellLayoutMode layoutMode,
-        MailRepository? mail = null)
+        AccountStores? accounts = null)
     {
-        _mail = mail;
+        _accounts = accounts;
         _themes = themes;
         _selectedTheme = OfficeThemes.DisplayName(themes.ThemeId);
         LayoutMode = layoutMode;
@@ -298,8 +298,11 @@ public sealed class ShellViewModel : ObservableObject
 
     public bool ShowSampleNotice => !HasAccount;
 
-    /// <summary>Store id of the folder each row stands for, so a click can load its mail.</summary>
-    private readonly Dictionary<FolderNode, long> _folderIds = [];
+    /// <summary>
+    /// Which account and folder each row stands for. Every account has its own store, so a
+    /// folder id alone is not enough to find its mail.
+    /// </summary>
+    private readonly Dictionary<FolderNode, (OpenAccount Account, long FolderId)> _folderIds = [];
 
     /// <summary>
     /// Replaces the sample with what the store holds. Returns false when there is no account,
@@ -307,9 +310,9 @@ public sealed class ShellViewModel : ObservableObject
     /// </summary>
     private bool LoadFromStore()
     {
-        if (_mail is null) return false;
+        if (_accounts is null) return false;
 
-        var accounts = _mail.Accounts();
+        var accounts = _accounts.All;
         if (accounts.Count == 0) return false;
 
         Folders.Clear();
@@ -317,13 +320,12 @@ public sealed class ShellViewModel : ObservableObject
 
         foreach (var account in accounts)
         {
-            var header = new FolderNode(account.Address, 0, 0, bold: true);
-            Folders.Add(header);
+            Folders.Add(new FolderNode(account.Account.Address, 0, 0, bold: true));
 
-            foreach (var folder in _mail.Folders(account.Id))
+            foreach (var folder in account.Mail.Folders(account.Account.Id))
             {
                 var node = new FolderNode(folder.Name, 1, folder.Unread);
-                _folderIds[node] = folder.Id;
+                _folderIds[node] = (account, folder.Id);
                 Folders.Add(node);
             }
         }
@@ -335,10 +337,11 @@ public sealed class ShellViewModel : ObservableObject
     /// <summary>Loads a folder's mail into the list. Called when the selection changes.</summary>
     private void LoadMessages(FolderNode? folder)
     {
-        if (_mail is null || folder is null || !_folderIds.TryGetValue(folder, out var id)) return;
+        if (_accounts is null || folder is null
+            || !_folderIds.TryGetValue(folder, out var where)) return;
 
         Messages.Clear();
-        foreach (var summary in _mail.Messages(id))
+        foreach (var summary in where.Account.Mail.Messages(where.FolderId))
         {
             Messages.Add(new MessageRow(
                 summary.DisplayFrom,
@@ -346,7 +349,7 @@ public sealed class ShellViewModel : ObservableObject
                 summary.Preview,
                 Received(summary.Received),
                 !summary.IsRead,
-                $"To: {AccountAddress}",
+                $"To: {where.Account.Account.Address}",
                 summary.Preview));
         }
 
@@ -373,7 +376,7 @@ public sealed class ShellViewModel : ObservableObject
     /// <summary>Re-reads the current folder, after a send/receive has filed new mail.</summary>
     public void Refresh()
     {
-        if (_mail is null) return;
+        if (_accounts is null) return;
 
         var selected = SelectedFolder;
         LoadFromStore();

@@ -148,6 +148,16 @@ public static class Migrations
 
         CREATE UNIQUE INDEX one_default_account ON accounts (is_default) WHERE is_default = 1;
         """,
+
+        // ---- 5: one account per file ------------------------------------------------------
+        """
+        -- Each account now has its own store file, so a file holds exactly one account and
+        -- "which is the default" is a question about the set of files rather than about any
+        -- one of them. It lives in the settings file instead; a column here could only ever
+        -- describe this file, and two files could both claim it with nothing to notice.
+        DROP INDEX IF EXISTS one_default_account;
+        ALTER TABLE accounts DROP COLUMN is_default;
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>

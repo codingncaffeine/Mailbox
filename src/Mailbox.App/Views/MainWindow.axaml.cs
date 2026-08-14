@@ -52,7 +52,7 @@ public partial class MainWindow : Window
         Log.Info($"UI font: {App.Fonts.Resolve("Segoe UI").Rendered}");
         Log.Info($"Body font: {App.Fonts.Resolve("Calibri").Rendered}");
 
-        var shell = new ShellViewModel(App.Themes, App.Commands, layout, layoutMode, App.Mail);
+        var shell = new ShellViewModel(App.Themes, App.Commands, layout, layoutMode, App.Accounts);
 
         WireRail(shell);
         WireWindowMenu();
@@ -519,7 +519,7 @@ public partial class MainWindow : Window
     /// </summary>
     private Account? RequireAccount(ShellViewModel shell)
     {
-        var account = App.Mail.DefaultAccount();
+        var account = App.Accounts.Default?.Account;
         if (account is null) shell.StatusRight = "No account is set up yet. File, Add Account.";
         return account;
     }
@@ -530,12 +530,12 @@ public partial class MainWindow : Window
     /// </summary>
     private async Task EmptyDeletedItemsAsync(ShellViewModel shell)
     {
-        var folders = App.Mail.Accounts()
-            .Select(a => App.Mail.FolderWithRole(a.Id, FolderRole.Deleted))
-            .OfType<Folder>()
+        var folders = App.Accounts.All
+            .Select(a => (Open: a, Folder: a.Mail.FolderWithRole(a.Account.Id, FolderRole.Deleted)))
+            .Where(x => x.Folder is not null)
             .ToList();
 
-        var total = folders.Sum(f => f.Total);
+        var total = folders.Sum(x => x.Folder!.Total);
         if (total == 0)
         {
             shell.StatusRight = "Deleted Items is already empty.";
@@ -552,11 +552,11 @@ public partial class MainWindow : Window
 
         if (!confirmed) return;
 
-        foreach (var folder in folders)
+        foreach (var (open, folder) in folders)
         {
-            foreach (var message in App.Mail.Messages(folder.Id, int.MaxValue))
+            foreach (var message in open.Mail.Messages(folder!.Id, int.MaxValue))
             {
-                App.Mail.DeleteMessage(message.Id);
+                open.Mail.DeleteMessage(message.Id);
             }
         }
 
@@ -607,28 +607,29 @@ public partial class MainWindow : Window
 
     private void ToggleWorkOffline(ShellViewModel shell)
     {
-        var ids = App.Mail.Accounts().Select(a => a.Id).ToList();
-        App.Transfer.SetWorkOffline(!App.Transfer.WorkOffline, ids);
+        App.Transfer.SetWorkOffline(!App.Transfer.WorkOffline, AccountConnections());
         shell.StatusRight = App.Transfer.WorkOffline ? "Working offline." : "Working online.";
     }
 
     /// <summary>
-    /// Turns stored accounts into something the transfer service can use, pulling each
-    /// password out of the keyring as late as possible.
+    /// Turns the open accounts into something the transfer service can use, pulling each
+    /// password out of the keyring as late as possible. An account whose servers were never
+    /// filled in is skipped rather than attempted against an empty hostname.
     /// </summary>
-    private static List<AccountConnection> AccountConnections()
+    private static List<TransferTarget> AccountConnections()
     {
-        var connections = new List<AccountConnection>();
+        var targets = new List<TransferTarget>();
 
-        foreach (var account in App.Mail.Accounts())
+        foreach (var open in App.Accounts.All)
         {
-            var settings = AccountSettings.Load(App.Settings, account.Id);
+            var settings = AccountSettings.Load(App.Settings, open.Account.Address);
             if (settings is null) continue;
 
-            connections.Add(settings.ToConnection(account, App.Secrets));
+            targets.Add(new TransferTarget(
+                settings.ToConnection(open.Account, App.Secrets), open.Mail));
         }
 
-        return connections;
+        return targets;
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);

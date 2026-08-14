@@ -63,17 +63,19 @@ public sealed class AccountSettingsDialog : Window
     }
 
     /// <summary>One line in the list: the two columns the reference shows.</summary>
-    private sealed record AccountRow(Account Account)
+    private sealed record AccountRow(OpenAccount Open)
     {
+        public Account Account => Open.Account;
+
         public string Name => Account.DisplayName.Length > 0
             ? Account.DisplayName
             : Account.Address;
 
-        public string Type => Account.IsDefault
+        public string Type => Open.IsDefault
             ? $"{Account.TypeLabel} (send from this account by default)"
             : Account.TypeLabel;
 
-        public string Marker => Account.IsDefault ? "✓" : string.Empty;
+        public string Marker => Open.IsDefault ? "✓" : string.Empty;
     }
 
     private Control Row(AccountRow row)
@@ -193,42 +195,47 @@ public sealed class AccountSettingsDialog : Window
     /// <summary>
     /// The store, described honestly: one file, its size, and what is filed in it.
     /// </summary>
+    /// <summary>
+    /// One file per account, listed by name. This is the tab the arrangement earns: each row is
+    /// a file that can be backed up, copied to another machine or deleted on its own.
+    /// </summary>
     private Control DataFilesTab()
     {
-        var file = new FileInfo(App.Store.Path);
-        var accounts = App.Mail.Accounts();
-        var messages = accounts.Sum(a => App.Mail.Folders(a.Id).Sum(f => f.Total));
+        var rows = new StackPanel { Spacing = 6 };
+
+        foreach (var account in App.Accounts.All)
+        {
+            var messages = account.Mail.Folders(account.Account.Id).Sum(f => f.Total);
+            rows.Children.Add(Detail(
+                Path.GetFileName(account.Path),
+                $"{MailboxCleanupDialog.Size(account.Bytes)}  ·  {messages:N0} messages"));
+        }
+
+        if (App.Accounts.All.Count == 0) rows.Children.Add(Detail("No accounts yet", string.Empty));
 
         var open = new Button { Content = "Open File Location…", Padding = new Thickness(9, 4) };
         open.Click += (_, _) => OpenStoreFolder();
 
+        rows.Children.Add(Detail("Folder", App.Accounts.Directory_));
+        rows.Children.Add(new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Margin = new Thickness(0, 10, 0, 0),
+            Children = { open },
+        });
+
         return Panel(
             "Data Files",
-            "Every account is filed in one store. Back it up and you have all of them.",
-            new StackPanel
-            {
-                Spacing = 6,
-                Children =
-                {
-                    Detail("Location", App.Store.Path),
-                    Detail("Size", file.Exists ? $"{file.Length / 1024.0 / 1024.0:N1} MB" : "not yet created"),
-                    Detail("Accounts", accounts.Count.ToString()),
-                    Detail("Messages", $"{messages:N0}"),
-                    new StackPanel
-                    {
-                        Orientation = Orientation.Horizontal,
-                        Margin = new Thickness(0, 10, 0, 0),
-                        Children = { open },
-                    },
-                },
-            });
+            "Each account is a file of its own, named after the address. Copy one somewhere "
+            + "safe and that account is backed up; delete one and only that account goes.",
+            rows);
     }
 
     private void OpenStoreFolder()
     {
         try
         {
-            var folder = Path.GetDirectoryName(App.Store.Path)!;
+            var folder = App.Accounts.Directory_;
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(folder)
             {
                 UseShellExecute = true,
@@ -310,13 +317,13 @@ public sealed class AccountSettingsDialog : Window
 
     private void Reload()
     {
-        var selectedId = Selected?.Account.Id;
+        var selectedAddress = Selected?.Account.Address;
 
-        _accounts.ItemsSource = App.Mail.Accounts().Select(a => new AccountRow(a)).ToList();
+        _accounts.ItemsSource = App.Accounts.All.Select(a => new AccountRow(a)).ToList();
         _accounts.SelectedIndex = _accounts.Items
             .OfType<AccountRow>()
             .ToList()
-            .FindIndex(r => r.Account.Id == selectedId);
+            .FindIndex(r => r.Account.Address == selectedAddress);
 
         if (_accounts.SelectedIndex < 0 && _accounts.ItemCount > 0) _accounts.SelectedIndex = 0;
         UpdateButtons();
@@ -330,20 +337,14 @@ public sealed class AccountSettingsDialog : Window
         _change.IsEnabled = row is not null;
         _repair.IsEnabled = row is not null;
         _remove.IsEnabled = row is not null;
-        _setDefault.IsEnabled = row is not null && !row.Account.IsDefault;
+        _setDefault.IsEnabled = row is not null && !row.Open.IsDefault;
         _up.IsEnabled = row is not null && _accounts.SelectedIndex > 0;
         _down.IsEnabled = row is not null && _accounts.SelectedIndex < _accounts.ItemCount - 1;
 
         _delivery.Text = row is null
             ? "No account selected."
-            : $"{row.Account.Address}\\Inbox  —  in {MailStoreDescription()}";
+            : $"{row.Account.Address}\\Inbox  —  in {row.Open.Path}";
     }
-
-    /// <summary>
-    /// Where mail actually lands. The reference names a .pst per account; there is one store
-    /// here and every account lives in it, so saying so is more use than inventing a path.
-    /// </summary>
-    private static string MailStoreDescription() => App.Store.Path;
 
     private async Task AddAsync()
     {
@@ -376,7 +377,7 @@ public sealed class AccountSettingsDialog : Window
     {
         if (Selected is not { } row) return;
 
-        var current = AccountSettings.Load(App.Settings, row.Account.Id);
+        var current = AccountSettings.Load(App.Settings, row.Account.Address);
         var found = Autoconfig.ForAddress(
             row.Account.Address,
             row.Account.Protocol == MailProtocol.Imap
@@ -417,7 +418,7 @@ public sealed class AccountSettingsDialog : Window
         {
             LeaveOnServer = current.LeaveOnServer,
             DeleteAfterDays = current.DeleteAfterDays,
-        }).Save(App.Settings, row.Account.Id);
+        }).Save(App.Settings, row.Account.Address);
 
         Changed = true;
         Reload();
@@ -427,7 +428,7 @@ public sealed class AccountSettingsDialog : Window
     {
         if (Selected is not { } row) return;
 
-        App.Mail.SetDefaultAccount(row.Account.Id);
+        App.AccountOrder.DefaultAddress = row.Account.Address;
         Changed = true;
         Reload();
     }
@@ -436,7 +437,7 @@ public sealed class AccountSettingsDialog : Window
     {
         if (Selected is not { } row) return;
 
-        App.Mail.MoveAccount(row.Account.Id, direction);
+        App.AccountOrder.Move(row.Account.Address, direction);
         Changed = true;
         Reload();
     }
@@ -449,23 +450,23 @@ public sealed class AccountSettingsDialog : Window
     {
         if (Selected is not { } row) return;
 
-        var folders = App.Mail.Folders(row.Account.Id);
-        var messages = folders.Sum(f => f.Total);
+        var messages = row.Open.Mail.Folders(row.Account.Id).Sum(f => f.Total);
 
         var confirmed = await Confirm.AskAsync(
             this,
             "Remove account",
             $"Remove {row.Account.Address}?\n\n" +
             (messages > 0
-                ? $"{messages:N0} message{(messages == 1 ? "" : "s")} filed under this account " +
-                  "will be deleted from this computer. Where mail was downloaded and removed " +
-                  "from the server, this is the only copy."
-                : "No mail is filed under this account."),
+                ? $"{messages:N0} message{(messages == 1 ? "" : "s")} will be deleted with it. " +
+                  "Where mail was downloaded and removed from the server, this is the only " +
+                  $"copy.\n\nThe file {Path.GetFileName(row.Open.Path)} will be deleted."
+                : $"No mail is filed under this account. The file " +
+                  $"{Path.GetFileName(row.Open.Path)} will be deleted."),
             "Remove");
 
         if (!confirmed) return;
 
-        App.Mail.RemoveAccount(row.Account.Id);
+        App.Accounts.Remove(row.Account.Address);
         Changed = true;
         Reload();
     }

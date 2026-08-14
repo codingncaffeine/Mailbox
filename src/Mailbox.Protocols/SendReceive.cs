@@ -3,6 +3,9 @@ using Mailbox.Store;
 
 namespace Mailbox.Protocols;
 
+/// <summary>An account to transfer for, and the store its mail is filed in.</summary>
+public sealed record TransferTarget(AccountConnection Connection, MailRepository Mail);
+
 /// <summary>What one account's turn in a send/receive did.</summary>
 public sealed record AccountRunResult(
     string Address,
@@ -51,13 +54,17 @@ public sealed record SendReceiveResult(IReadOnlyList<AccountRunResult> Accounts)
 /// </para>
 /// </remarks>
 public sealed class SendReceiveService(
-    MailRepository repository,
-    Pop3Receiver receiver,
-    SmtpSender sender)
+    Func<MailRepository, Pop3Receiver>? receiver = null,
+    Func<MailRepository, SmtpSender>? sender = null)
 {
-    private readonly MailRepository _repository = repository;
-    private readonly Pop3Receiver _receiver = receiver;
-    private readonly SmtpSender _sender = sender;
+    // Every account has its own store, so a receiver and a sender belong to a repository rather
+    // than to the service. Factories rather than instances: the service is long-lived and the
+    // set of accounts is not.
+    private readonly Func<MailRepository, Pop3Receiver> _receiver =
+        receiver ?? (mail => new Pop3Receiver(mail));
+
+    private readonly Func<MailRepository, SmtpSender> _sender =
+        sender ?? (mail => new SmtpSender(mail));
 
     /// <summary>
     /// Nothing goes out and nothing is fetched while this is set, and queued mail is held
@@ -68,22 +75,22 @@ public sealed class SendReceiveService(
     /// <summary>Raised when the run's progress changes, for the dialog and the status bar.</summary>
     public event EventHandler<PollProgress>? Progress;
 
-    public void SetWorkOffline(bool offline, IEnumerable<long> accountIds)
+    public void SetWorkOffline(bool offline, IEnumerable<TransferTarget> targets)
     {
         if (WorkOffline == offline) return;
 
         WorkOffline = offline;
-        foreach (var id in accountIds)
+        foreach (var target in targets)
         {
-            if (offline) _repository.HoldOutbox(id);
-            else _repository.ReleaseOutbox(id);
+            if (offline) target.Mail.HoldOutbox(target.Connection.AccountId);
+            else target.Mail.ReleaseOutbox(target.Connection.AccountId);
         }
 
         Log.Info(offline ? "Working offline." : "Working online.");
     }
 
     public async Task<SendReceiveResult> RunAsync(
-        IReadOnlyList<AccountConnection> accounts,
+        IReadOnlyList<TransferTarget> accounts,
         DateTimeOffset now,
         CancellationToken cancellation = default)
     {
@@ -95,10 +102,10 @@ public sealed class SendReceiveService(
 
         var results = new List<AccountRunResult>(accounts.Count);
 
-        foreach (var account in accounts)
+        foreach (var target in accounts)
         {
             cancellation.ThrowIfCancellationRequested();
-            results.Add(await RunOneAsync(account, now, cancellation));
+            results.Add(await RunOneAsync(target, now, cancellation));
         }
 
         var result = new SendReceiveResult(results);
@@ -106,16 +113,17 @@ public sealed class SendReceiveService(
         return result;
     }
 
-    private async Task<AccountRunResult> RunOneAsync(AccountConnection account,
+    private async Task<AccountRunResult> RunOneAsync(TransferTarget target,
         DateTimeOffset now, CancellationToken cancellation)
     {
+        var account = target.Connection;
         var sent = 0;
         string? error = null;
 
         try
         {
             Progress?.Invoke(this, new PollProgress(account.Address, 0, 0, "Sending"));
-            sent = await _sender.DrainAsync(account, now, cancellation);
+            sent = await _sender(target.Mail).DrainAsync(account, now, cancellation);
         }
         catch (OperationCanceledException)
         {
@@ -129,7 +137,7 @@ public sealed class SendReceiveService(
             error = SmtpSender.Classify(ex).Error;
         }
 
-        var inbox = _repository.FolderWithRole(account.AccountId, FolderRole.Inbox);
+        var inbox = target.Mail.FolderWithRole(account.AccountId, FolderRole.Inbox);
         if (inbox is null)
         {
             return new AccountRunResult(account.Address, 0, sent,
@@ -137,7 +145,7 @@ public sealed class SendReceiveService(
         }
 
         var progress = new Progress<PollProgress>(p => Progress?.Invoke(this, p));
-        var poll = await _receiver.PollAsync(account, inbox, progress, cancellation);
+        var poll = await _receiver(target.Mail).PollAsync(account, inbox, progress, cancellation);
 
         return new AccountRunResult(account.Address, poll.Downloaded, sent, error ?? poll.Error);
     }
