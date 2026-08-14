@@ -79,6 +79,9 @@ public sealed record MessageSummary(
     public string DisplayFrom => FromName.Length > 0 ? FromName : FromAddress;
 }
 
+/// <summary>A named colour a message can carry.</summary>
+public sealed record Category(long Id, string Name, string ColourToken, string? Shortcut, int Ordinal);
+
 /// <summary>State of one message in the send queue.</summary>
 public enum OutboxState
 {

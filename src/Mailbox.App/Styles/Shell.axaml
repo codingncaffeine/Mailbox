@@ -286,6 +286,31 @@
         <Setter Property="Background" Value="{DynamicResource state.pressed.brush}" />
     </Style>
 
+    <!-- ============================= Row actions =============================== -->
+    <!--
+        The buttons that appear on a message row under the pointer. Hidden rather than
+        transparent: a transparent button still takes the click, and a row whose date cannot be
+        selected because an invisible Delete is sitting on it is a nasty bug to find.
+    -->
+    <Style Selector="ListBoxItem:pointerover StackPanel#RowActions">
+        <Setter Property="IsVisible" Value="True" />
+    </Style>
+
+    <Style Selector="ListBoxItem:pointerover TextBlock#RowDate">
+        <Setter Property="IsVisible" Value="False" />
+    </Style>
+
+    <Style Selector="Button.rowaction">
+        <Setter Property="Padding" Value="4,1" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Foreground" Value="{DynamicResource text.secondary.brush}" />
+    </Style>
+
+    <Style Selector="Button.rowaction:pointerover">
+        <Setter Property="Foreground" Value="{DynamicResource text.primary.brush}" />
+        <Setter Property="Background" Value="{DynamicResource state.hover.brush}" />
+    </Style>
+
     <!-- =========================== Account button ============================= -->
     <!-- While its panel is open the button reads as pressed: a light box with a hairline
          border around the circle, measured off the capture. -->

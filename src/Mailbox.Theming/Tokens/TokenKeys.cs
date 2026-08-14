@@ -77,6 +77,20 @@ public static class TokenKeys
         public const string Foreground = "avatar.foreground";
     }
 
+    /// <summary>The six colour categories, by name rather than by value.</summary>
+    public static class Category
+    {
+        public const string Red = "category.red";
+        public const string Orange = "category.orange";
+        public const string Yellow = "category.yellow";
+        public const string Green = "category.green";
+        public const string Blue = "category.blue";
+        public const string Purple = "category.purple";
+
+        public static readonly IReadOnlyList<string> All =
+            [Red, Orange, Yellow, Green, Blue, Purple];
+    }
+
     public static class Ribbon
     {
         public const string Background = "ribbon.background";
@@ -213,6 +227,8 @@ public static class TokenKeys
         TitleBar.SearchBorder, TitleBar.SearchText, TitleBar.Height,
         TitleBar.SearchWidth, TitleBar.SearchHeight, TitleBar.SearchOffset,
         Avatar.Background, Avatar.Foreground,
+        Category.Red, Category.Orange, Category.Yellow,
+        Category.Green, Category.Blue, Category.Purple,
         Rail.Background, Rail.ItemText, Rail.ItemActive, Rail.Width, Rail.ItemHeight,
         Rail.Indicator, Rail.IndicatorWidth, Rail.IndicatorHeight, Rail.IndicatorInset,
         Backstage.Rail, Backstage.RailText, Backstage.RailDisabled,

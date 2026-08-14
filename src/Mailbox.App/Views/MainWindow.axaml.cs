@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using Mailbox.App.Theming;
@@ -59,6 +60,7 @@ public partial class MainWindow : Window
         WireToolbarCommands(shell);
         WireAccountButton(shell);
         WireArrangeMenu(shell);
+        WireListInteraction(shell);
         DataContext = shell;
 
         ApplyHarnessState(shell);
@@ -695,6 +697,133 @@ public partial class MainWindow : Window
 
         e.Handled = true;
     }
+
+    /// <summary>
+    /// The row actions and dragging to a folder.
+    /// </summary>
+    /// <remarks>
+    /// Both are handled on the list rather than per row: rows are virtualized and recycled, so
+    /// anything attached to one is attached to whatever scrolls into its place next.
+    /// </remarks>
+    private void WireListInteraction(ShellViewModel shell)
+    {
+        if (this.FindControl<ListBox>("MessageList") is not { } list) return;
+
+        // The action buttons. Found by walking up from what was clicked, because the button
+        // itself lives inside a template the list owns.
+        list.AddHandler(Button.ClickEvent, (object? sender, RoutedEventArgs e) =>
+        {
+            if (e.Source is not Button { Tag: string action } button) return;
+            if (button.DataContext is not ViewModels.MessageRow row) return;
+
+            e.Handled = true;
+            switch (action)
+            {
+                case "archive": shell.MoveTo([row], FolderRole.Archive); break;
+                case "delete": shell.Delete([row], permanently: false); break;
+                case "flag": shell.SetFlagged([row], !row.IsFlagged); break;
+                case "read": shell.SetRead([row], row.IsUnread); break;
+            }
+        }, RoutingStrategies.Tunnel);
+
+        // Dragging out of the list. Begun from the press, which is what the platform needs;
+        // Avalonia holds it until the pointer actually moves, so a plain click still selects.
+        list.AddHandler(PointerPressedEvent, async (object? _, PointerPressedEventArgs e) =>
+        {
+            if (!e.GetCurrentPoint(list).Properties.IsLeftButtonPressed) return;
+            if ((e.Source as Control)?.DataContext is not ViewModels.MessageRow pressed) return;
+            if (_dragging) return;
+
+            // Whatever is selected, or the row under the pointer when it is not one of them.
+            var rows = SelectedRows();
+            if (!rows.Contains(pressed)) rows = [pressed];
+
+            _dragging = true;
+            try
+            {
+                using var transfer = new DataTransfer();
+                transfer.Add(DataTransferItem.Create(MessageDragFormat, Pack(rows)));
+
+                await DragDrop.DoDragDropAsync(e, transfer, DragDropEffects.Move);
+            }
+            finally
+            {
+                _dragging = false;
+            }
+        }, RoutingStrategies.Bubble);
+
+        WireFolderDropTarget(shell);
+    }
+
+    /// <summary>
+    /// Our own drag format, in-process only. Message ids mean nothing outside this application
+    /// and offering them to other windows would be inviting a paste of numbers.
+    /// </summary>
+    private static readonly DataFormat<byte[]> MessageDragFormat =
+        DataFormat.CreateBytesApplicationFormat("mailbox-message-ids");
+
+    private bool _dragging;
+
+    /// <summary>
+    /// Message ids as bytes. The platform's drag payload is bytes, and eight per id is both
+    /// exact and cheap — no text encoding to get wrong, and no ambiguity about the separator.
+    /// </summary>
+    private static byte[] Pack(IReadOnlyList<ViewModels.MessageRow> rows)
+    {
+        var bytes = new byte[rows.Count * sizeof(long)];
+        for (var i = 0; i < rows.Count; i++)
+        {
+            BitConverter.TryWriteBytes(bytes.AsSpan(i * sizeof(long)), rows[i].Id);
+        }
+
+        return bytes;
+    }
+
+    private static IReadOnlyList<long> Unpack(byte[]? bytes)
+    {
+        if (bytes is null || bytes.Length == 0 || bytes.Length % sizeof(long) != 0) return [];
+
+        var ids = new long[bytes.Length / sizeof(long)];
+        for (var i = 0; i < ids.Length; i++)
+        {
+            ids[i] = BitConverter.ToInt64(bytes, i * sizeof(long));
+        }
+
+        return ids;
+    }
+
+    /// <summary>
+    /// The folder pane accepts messages dropped on it. The drop target is the list rather than
+    /// each row, so the folder under the pointer is worked out at drop time from what is
+    /// actually there.
+    /// </summary>
+    private void WireFolderDropTarget(ShellViewModel shell)
+    {
+        if (this.FindControl<ListBox>("FolderList") is not { } folders) return;
+
+        DragDrop.SetAllowDrop(folders, true);
+
+        folders.AddHandler(DragDrop.DragOverEvent, (object? _, DragEventArgs e) =>
+        {
+            e.DragEffects = e.DataTransfer.Contains(MessageDragFormat) && FolderUnder(e) is not null
+                ? DragDropEffects.Move
+                : DragDropEffects.None;
+            e.Handled = true;
+        });
+
+        folders.AddHandler(DragDrop.DropEvent, (object? _, DragEventArgs e) =>
+        {
+            e.Handled = true;
+            if (Unpack(e.DataTransfer.TryGetValue(MessageDragFormat)) is not { Count: > 0 } ids) return;
+            if (FolderUnder(e) is not { } target) return;
+
+            shell.MoveToFolder(ids, target);
+        });
+    }
+
+    /// <summary>Which folder row the pointer is over, or null when it is over nothing.</summary>
+    private static ViewModels.FolderNode? FolderUnder(DragEventArgs e)
+        => (e.Source as Control)?.DataContext as ViewModels.FolderNode;
 
     /// <summary>What the list has highlighted, headers excluded.</summary>
     private IReadOnlyList<ViewModels.MessageRow> SelectedRows()

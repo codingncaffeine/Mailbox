@@ -303,6 +303,81 @@ public sealed class MailRepository(MailStore store)
         term.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
             .Select(word => '"' + word.Replace("\"", "\"\"") + '"'));
 
+    // ---- Categories -------------------------------------------------------------------------
+
+    public IReadOnlyList<Category> Categories() => _store.Query(
+        "SELECT * FROM categories ORDER BY ordinal, id",
+        r => new Category(
+            r.GetInt64(r.GetOrdinal("id")),
+            r.GetString(r.GetOrdinal("name")),
+            r.GetString(r.GetOrdinal("colour_token")),
+            Nullable(r, "shortcut"),
+            r.GetInt32(r.GetOrdinal("ordinal"))));
+
+    /// <summary>
+    /// Categories for a set of messages, keyed by message. One query rather than one per row:
+    /// the list asks for a page at a time and a query per row would undo the page.
+    /// </summary>
+    public Dictionary<long, List<Category>> CategoriesFor(IReadOnlyCollection<long> messageIds)
+    {
+        var found = new Dictionary<long, List<Category>>();
+        if (messageIds.Count == 0) return found;
+
+        foreach (var (messageId, category) in _store.Query(
+            $"""
+             SELECT mc.message_id, c.* FROM message_categories mc
+             JOIN categories c ON c.id = mc.category_id
+             WHERE mc.message_id IN ({Ids(messageIds)})
+             ORDER BY c.ordinal, c.id
+             """,
+            r => (
+                r.GetInt64(r.GetOrdinal("message_id")),
+                new Category(
+                    r.GetInt64(r.GetOrdinal("id")),
+                    r.GetString(r.GetOrdinal("name")),
+                    r.GetString(r.GetOrdinal("colour_token")),
+                    Nullable(r, "shortcut"),
+                    r.GetInt32(r.GetOrdinal("ordinal"))))))
+        {
+            if (!found.TryGetValue(messageId, out var list)) found[messageId] = list = [];
+            list.Add(category);
+        }
+
+        return found;
+    }
+
+    public void Assign(IReadOnlyCollection<long> messageIds, long categoryId)
+    {
+        if (messageIds.Count == 0) return;
+
+        _store.InTransaction(() =>
+        {
+            foreach (var id in messageIds)
+            {
+                _store.Execute(
+                    """
+                    INSERT OR IGNORE INTO message_categories (message_id, category_id)
+                    VALUES ($message, $category)
+                    """,
+                    ("$message", id), ("$category", categoryId));
+            }
+
+            return 0;
+        });
+    }
+
+    public void Unassign(IReadOnlyCollection<long> messageIds, long categoryId)
+    {
+        if (messageIds.Count == 0) return;
+
+        _store.Execute(
+            $"""
+             DELETE FROM message_categories
+             WHERE category_id = $category AND message_id IN ({Ids(messageIds)})
+             """,
+            ("$category", categoryId));
+    }
+
     // ---- Outbox ---------------------------------------------------------------------------
 
     /// <summary>

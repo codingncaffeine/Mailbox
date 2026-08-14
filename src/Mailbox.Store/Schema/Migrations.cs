@@ -158,6 +158,38 @@ public static class Migrations
         DROP INDEX IF EXISTS one_default_account;
         ALTER TABLE accounts DROP COLUMN is_default;
         """,
+
+        // ---- 6: colour categories ---------------------------------------------------------
+        """
+        -- Categories are named colours a message can carry several of. The colour is a token
+        -- name rather than a value, so a category stays legible when the theme changes — a
+        -- category holding #FF0000 would be invisible on the Black theme with nothing to do
+        -- about it.
+        CREATE TABLE categories (
+            id            INTEGER PRIMARY KEY,
+            name          TEXT    NOT NULL UNIQUE,
+            colour_token  TEXT    NOT NULL,
+            shortcut      TEXT,
+            ordinal       INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE TABLE message_categories (
+            message_id    INTEGER NOT NULL REFERENCES messages(id)   ON DELETE CASCADE,
+            category_id   INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+            PRIMARY KEY (message_id, category_id)
+        );
+
+        CREATE INDEX categories_by_message ON message_categories (message_id);
+
+        -- The reference's own six, by the names people already know them by.
+        INSERT INTO categories (name, colour_token, ordinal) VALUES
+            ('Red Category',    'category.red',    0),
+            ('Orange Category', 'category.orange', 1),
+            ('Yellow Category', 'category.yellow', 2),
+            ('Green Category',  'category.green',  3),
+            ('Blue Category',   'category.blue',   4),
+            ('Purple Category', 'category.purple', 5);
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>
