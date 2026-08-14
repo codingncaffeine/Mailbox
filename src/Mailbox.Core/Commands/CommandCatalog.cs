@@ -69,7 +69,7 @@ public sealed class CommandCatalog
     }
 
     /// <summary>
-    /// Commands absent from the shipped ribbon layout. These are the additions beyond Outlook
+    /// Commands absent from the shipped ribbon layout. These are the additions beyond the reference application
     /// parity — present, searchable and placeable, just not on screen at first run.
     /// </summary>
     public IEnumerable<MailboxCommand> BeyondDefaultLayout =>

@@ -135,7 +135,7 @@ public partial class MainWindow : Window
         peek.DockRequested += (_, _) => DockPeek();
 
         // Anchored just right of the rail, near the icon that opened it — the position
-        // Outlook uses so the peek reads as belonging to that module.
+        // the reference application uses so the peek reads as belonging to that module.
         Canvas.SetLeft(peek, 52);
         Canvas.SetTop(peek, 8);
 

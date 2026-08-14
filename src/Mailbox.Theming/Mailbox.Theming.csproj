@@ -16,9 +16,9 @@
     <AvaloniaResource Include="..\..\assets\fonts\FluentSystemIcons-Regular.ttf"
                       Link="Assets/Fonts/FluentSystemIcons-Regular.ttf" />
 
-    <!-- Selawik (OFL-1.1), Microsoft's own metric-compatible Segoe UI substitute. Bundled
+    <!-- Selawik (OFL-1.1), a metric-compatible Segoe UI substitute. Bundled
          because no distro reliably packages it. Ships five weights — Light, Semilight,
-         Regular, Semibold and Bold — which covers Segoe UI's range in Outlook's chrome. -->
+         Regular, Semibold and Bold — which covers Segoe UI's range in the reference's chrome. -->
     <AvaloniaResource Include="..\..\assets\fonts\selawk.ttf"   Link="Assets/Fonts/selawk.ttf" />
     <AvaloniaResource Include="..\..\assets\fonts\selawkb.ttf"  Link="Assets/Fonts/selawkb.ttf" />
     <AvaloniaResource Include="..\..\assets\fonts\selawkl.ttf"  Link="Assets/Fonts/selawkl.ttf" />

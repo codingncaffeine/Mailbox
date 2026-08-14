@@ -12,7 +12,7 @@ namespace Mailbox.App.Views;
 /// The calendar peek: a mini month plus the day's agenda.
 /// </summary>
 /// <remarks>
-/// Outlook shows this two ways from the same content — floating over the window when a rail
+/// the reference application shows this two ways from the same content — floating over the window when a rail
 /// icon is clicked, and docked down the right-hand edge once the little button in the peek's
 /// corner is pressed. Docked, it takes the reading pane's place and gains a close button that
 /// undocks it again. Building one control for both keeps them from drifting apart.
@@ -134,7 +134,7 @@ public sealed class CalendarPeek : Border
 
     /// <summary>
     /// Six week-rows of seven days, starting Sunday, with leading and trailing days from the
-    /// neighbouring months dimmed — the same grid Outlook's date navigator draws.
+    /// neighbouring months dimmed — the same grid the reference's date navigator draws.
     /// </summary>
     private void RenderMonth()
     {
@@ -221,8 +221,8 @@ public sealed class CalendarPeek : Border
         Bind(heading, TextBlock.ForegroundProperty, "text.primary.brush");
         stack.Children.Add(heading);
 
-        stack.Children.Add(BuildAppointment("5:00 PM", "Gary change trays",
-            "https://meet.google.com/tyc-bzhs…"));
+        stack.Children.Add(BuildAppointment("5:00 PM", "Design review",
+            "https://example.com/meet/design-review"));
 
         return stack;
     }

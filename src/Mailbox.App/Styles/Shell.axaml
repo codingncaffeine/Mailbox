@@ -206,7 +206,7 @@
         <Setter Property="Background" Value="#F1707A" />
     </Style>
 
-    <!-- Unread messages are blue in Outlook, not merely bold. -->
+    <!-- Unread messages are blue in the reference application, not merely bold. -->
     <Style Selector="TextBlock.unread">
         <Setter Property="Foreground" Value="{DynamicResource list.row.unread.text.brush}" />
     </Style>
@@ -217,7 +217,7 @@
     </Style>
 
     <!--
-        Splitters are invisible at rest. Outlook draws no rule between the folder pane, the
+        Splitters are invisible at rest. the reference application draws no rule between the folder pane, the
         message list and the reading pane — the panes simply abut, and their own background
         colours are what separate them. The splitter only shows on hover, as a grab hint.
     -->

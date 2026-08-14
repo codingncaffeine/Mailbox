@@ -95,7 +95,7 @@ public static class OfficeThemes
     }
 
     // ------------------------------------------------------------------------------------
-    // Colorful — the Microsoft 365 default. Brand-blue title bar and tab strip, white ribbon.
+    // Colorful — the reference application default. Brand-blue title bar and tab strip, white ribbon.
     // ------------------------------------------------------------------------------------
     private static TokenSet BuildColorful()
     {

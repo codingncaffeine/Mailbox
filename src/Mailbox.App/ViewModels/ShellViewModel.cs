@@ -99,7 +99,7 @@ public sealed class MessageRow(
 
 /// <summary>
 /// Phase 0 shell state. Backed by sample data — the point of this phase is that the chrome
-/// passes a squint test against real Outlook, not that it moves mail. Phases 2 onward replace
+/// passes a squint test against real the reference application, not that it moves mail. Phases 2 onward replace
 /// each collection with the real store.
 /// </summary>
 public sealed class ShellViewModel : ObservableObject
@@ -133,7 +133,7 @@ public sealed class ShellViewModel : ObservableObject
                 .Where(id => catalog.TryGet(id, out _))
                 .Select(id => new QuickAccessButton(catalog.Get(id))));
 
-        // New Outlook's command bar: New mail, then the actions that used to be the Delete,
+        // New the reference's command bar: New mail, then the actions that used to be the Delete,
         // Respond and Tags groups, flattened into one row.
         foreach (var id in new[]
                  {
@@ -218,7 +218,7 @@ public sealed class ShellViewModel : ObservableObject
     public bool IsModern => LayoutMode == ShellLayoutMode.Modern;
 
     /// <summary>
-    /// Search lives in the title bar in both layouts. Current Microsoft 365 builds moved it
+    /// Search lives in the title bar in both layouts. Current the reference application builds moved it
     /// there in Classic too — it is not above the message list any more.
     /// </summary>
     public bool ShowHeaderSearch => true;
@@ -230,17 +230,17 @@ public sealed class ShellViewModel : ObservableObject
     /// </summary>
     public bool ShowAppRail => true;
 
-    /// <summary>Superseded by the app rail; kept for the pre-move Outlook look.</summary>
+    /// <summary>Superseded by the app rail; kept for the pre-move the reference application look.</summary>
     public bool ShowBottomModuleStrip => false;
 
-    // No "Try the new Outlook" toggle. That pill exists to move people onto Microsoft's web
+    // No "Try the new the reference application" toggle. That pill exists to move people onto the vendor's web
     // app; Mailbox is the thing it is nagging them away from. The space stays empty.
 
     /// <summary>Modern replaces the ribbon with a single-row command bar.</summary>
     public bool ShowRibbon => IsClassic;
     public bool ShowCommandBar => IsModern;
 
-    /// <summary>Commands on the Modern command bar, in Outlook's own order.</summary>
+    /// <summary>Commands on the Modern command bar, in the reference's own order.</summary>
     public ObservableCollection<QuickAccessButton> CommandBar { get; } = [];
 
     /// <summary>
@@ -255,7 +255,7 @@ public sealed class ShellViewModel : ObservableObject
     public ObservableCollection<FolderNode> Folders { get; }
     public ObservableCollection<MessageRow> Messages { get; }
 
-    /// <summary>Classic Outlook puts search above the message list, not in the title bar.</summary>
+    /// <summary>The reference application puts search above the message list, not in the title bar.</summary>
     public string SearchText
     {
         get => _searchText;
@@ -324,13 +324,13 @@ public sealed class ShellViewModel : ObservableObject
 
     public string ZoomLabel => $"{ZoomPercent:0}%";
 
-    public string AccountInitial => "G";
+    public string AccountInitial => "A";
     public string AccountTip => "you@example.com";
 
     public string ArrangementLabel => "By Date";
 
     /// <summary>
-    /// Message-list columns in Outlook's own order. The first four are icon-only glyph
+    /// Message-list columns in the reference's own order. The first four are icon-only glyph
     /// columns — importance, reminder, item type and attachment.
     /// </summary>
     public MessageColumn[] Columns { get; } =

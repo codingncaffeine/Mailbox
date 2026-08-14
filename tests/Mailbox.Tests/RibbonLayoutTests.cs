@@ -30,7 +30,7 @@ public class RibbonLayoutTests
     }
 
     /// <summary>
-    /// Outlook's Home tab, left to right. Order is the whole point of a clone — getting the
+    /// the reference's Home tab, left to right. Order is the whole point of a clone — getting the
     /// commands right but the order wrong still reads as wrong.
     /// </summary>
     [Fact]
@@ -45,7 +45,7 @@ public class RibbonLayoutTests
     }
 
     /// <summary>
-    /// Current Microsoft 365 builds ship File, Home, Send/Receive, View, Help — no Folder tab.
+    /// Current the reference application builds ship File, Home, Send/Receive, View, Help — no Folder tab.
     /// File is leftmost and opens the Backstage rather than swapping the ribbon beneath.
     /// </summary>
     [Fact]
@@ -65,7 +65,7 @@ public class RibbonLayoutTests
     }
 
     /// <summary>
-    /// Simplified is the Microsoft 365 default, so every tab that shows commands needs a row
+    /// Simplified is the reference application default, so every tab that shows commands needs a row
     /// for it — a tab with groups but no simplified row would render empty by default.
     /// </summary>
     [Fact]
@@ -152,7 +152,7 @@ public class RibbonLayoutTests
         Assert.All(tags.Items.Skip(1), i => Assert.Equal(RibbonItemSize.Small, i.Size));
     }
 
-    /// <summary>Outlook ships Send/Receive All Folders and Undo on the QAT, in that order.</summary>
+    /// <summary>the reference application ships Send/Receive All Folders and Undo on the QAT, in that order.</summary>
     [Fact]
     public void QuickAccessToolbarMatchesOutlookDefault()
         => Assert.Equal(
@@ -160,7 +160,7 @@ public class RibbonLayoutTests
             DefaultRibbonLayouts.Mail.QuickAccess.Select(c => c.Value).ToArray());
 
     /// <summary>
-    /// Rule 5 at the layout level: the shipped ribbon places only what Outlook places.
+    /// Rule 5 at the layout level: the shipped ribbon places only what the reference application places.
     /// Additions live in the catalogue and reach the ribbon through Customize Ribbon.
     /// </summary>
     [Fact]
@@ -202,7 +202,7 @@ public class RibbonLayoutTests
         }
     }
 
-    /// <summary>Respond is the last group Outlook collapses, because it is the most used.</summary>
+    /// <summary>Respond is the last group the reference application collapses, because it is the most used.</summary>
     [Fact]
     public void RespondCollapsesLast()
     {

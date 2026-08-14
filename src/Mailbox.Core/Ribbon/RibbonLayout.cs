@@ -3,7 +3,7 @@ using Mailbox.Core.Commands;
 namespace Mailbox.Core.Ribbon;
 
 /// <summary>
-/// How large a ribbon item renders. Mirrors the Windows Ribbon Framework's size definitions:
+/// How large a ribbon item renders. Mirrors the published ribbon framework spec's size definitions:
 /// a group declares its preference at each size, and the scaling policy degrades groups in a
 /// declared order as the window narrows.
 /// </summary>
@@ -17,12 +17,12 @@ public enum RibbonItemSize
 }
 
 /// <summary>
-/// Outlook's own ribbon display modes, toggled from the chevron at the right end of the bar.
+/// the reference's own ribbon display modes, toggled from the chevron at the right end of the bar.
 /// </summary>
 public enum RibbonDisplayMode
 {
     /// <summary>
-    /// The Microsoft 365 default: one row of icon-and-label commands with separators, an
+    /// The the reference application default: one row of icon-and-label commands with separators, an
     /// overflow menu, and no group labels. Compact enough that the message list keeps the
     /// screen.
     /// </summary>
@@ -52,7 +52,7 @@ public enum RibbonItemKind
     Separator,
 
     /// <summary>
-    /// An editable field sitting in the ribbon. Outlook's Find group puts the Search People box
+    /// An editable field sitting in the ribbon. the reference's Find group puts the Search People box
     /// directly on the bar rather than behind a button.
     /// </summary>
     TextBox,
@@ -66,7 +66,7 @@ public sealed record RibbonItem
     public RibbonItemKind Kind { get; init; } = RibbonItemKind.Button;
 
     /// <summary>
-    /// False for the icon-only small buttons Outlook uses where the icon alone is unambiguous —
+    /// False for the icon-only small buttons the reference application uses where the icon alone is unambiguous —
     /// the Ignore / Clean Up / Junk stack in the Delete group, for instance.
     /// </summary>
     public bool ShowLabel { get; init; } = true;
@@ -105,14 +105,14 @@ public sealed record RibbonGroup
     public required IReadOnlyList<RibbonItem> Items { get; init; }
 
     /// <summary>
-    /// Opens the group's full options dialog. Outlook shows this as a small arrow in the
+    /// Opens the group's full options dialog. the reference application shows this as a small arrow in the
     /// bottom-right corner of the group.
     /// </summary>
     public CommandId? DialogLauncher { get; init; }
 
     /// <summary>
     /// Renders the group's items inside a bordered, differently-shaded container with its own
-    /// scroll chevron — the Quick Steps box on Outlook's Home tab. A gallery is one control
+    /// scroll chevron — the Quick Steps box on the reference's Home tab. A gallery is one control
     /// showing several entries, not several controls side by side.
     /// </summary>
     public bool IsGallery { get; init; }
@@ -120,7 +120,7 @@ public sealed record RibbonGroup
     /// <summary>
     /// Position in the collapse order. Groups with a higher number degrade to a popup button
     /// first as the window narrows. Mirrors <c>ReduceOrder</c> in Fluent.Ribbon and the
-    /// ordering of <c>Scale</c> declarations in the Windows Ribbon Framework.
+    /// ordering of <c>Scale</c> declarations in the published ribbon framework spec.
     /// </summary>
     public int CollapsePriority { get; init; }
 }
@@ -150,7 +150,7 @@ public sealed record RibbonTab
 /// </summary>
 /// <remarks>
 /// The ribbon renders a layout document rather than hand-authored XAML. The shipped default is
-/// authored to Outlook parity; a user layout overrides it; both are the same shape, and either
+/// authored to the reference application parity; a user layout overrides it; both are the same shape, and either
 /// can be exported, shared or reset. Customize Ribbon then falls out almost free — and plugin
 /// commands are placed through the identical path as built-ins, with no second code path.
 /// <para>
@@ -173,7 +173,7 @@ public sealed record RibbonLayout
     /// </summary>
     /// <remarks>
     /// Held separately from <see cref="RibbonTab.Groups"/> because Simplified is not a
-    /// rendering of the classic groups — Outlook curates a different, shorter command set for
+    /// rendering of the classic groups — the reference application curates a different, shorter command set for
     /// it, drops the group labels entirely, and reorders to put the common actions first.
     /// </remarks>
     public IReadOnlyDictionary<string, IReadOnlyList<RibbonItem>> SimplifiedRows { get; init; }

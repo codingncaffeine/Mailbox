@@ -3,15 +3,15 @@ using Mailbox.Core.Commands;
 namespace Mailbox.Core.Ribbon;
 
 /// <summary>
-/// The shipped ribbon layouts, authored to classic Outlook parity.
+/// The shipped ribbon layouts, authored to the reference application parity.
 /// </summary>
 /// <remarks>
 /// This is the load-bearing half of rule 5. Everything Mailbox can do is in the command
 /// catalogue; what makes first run an exact clone is that <em>this document</em> places only
-/// the commands Outlook places. Snooze, View Source and the rest are absent here and present
+/// the commands the reference application places. Snooze, View Source and the rest are absent here and present
 /// everywhere else — searchable, bindable, and one drag away in Customize Ribbon.
 /// <para>
-/// Group order, item order and sizes follow Outlook's Home tab: New | Delete | Respond |
+/// Group order, item order and sizes follow the reference's Home tab: New | Delete | Respond |
 /// Quick Steps | Move | Tags | Find.
 /// </para>
 /// </remarks>
@@ -28,15 +28,15 @@ public static class DefaultRibbonLayouts
     public static RibbonLayout Mail { get; } = new()
     {
         Module = MailboxModule.Mail,
-        // Outlook's shipped QAT: Send/Receive All Folders, then Undo.
+        // the reference's shipped QAT: Send/Receive All Folders, then Undo.
         QuickAccess =
         [
             MailCommands.SendReceiveAll.Id,
             MailCommands.Undo.Id,
         ],
 
-        // The Simplified ribbon, which is what Microsoft 365 ships by default. Transcribed
-        // left to right from a running copy, separators included — Outlook curates a shorter,
+        // The Simplified ribbon, which is what the reference application ships by default. Transcribed
+        // left to right from a running copy, separators included — the reference application curates a shorter,
         // reordered set here rather than flattening the classic groups.
         SimplifiedRows = new Dictionary<string, IReadOnlyList<RibbonItem>>
         {
@@ -155,7 +155,7 @@ public static class DefaultRibbonLayouts
                         ],
                     },
 
-                    // Outlook's Quick Steps is a gallery: a bordered box listing the saved
+                    // the reference's Quick Steps is a gallery: a bordered box listing the saved
                     // steps, not a button. Its default entries are Move to, To Manager and
                     // Team Email.
                     new RibbonGroup
@@ -173,8 +173,8 @@ public static class DefaultRibbonLayouts
                         ],
                     },
 
-                    // Outlook stacks Move as small buttons, not large ones. Its third entry is
-                    // OneNote, which is Microsoft integration and therefore out of scope.
+                    // the reference application stacks Move as small buttons, not large ones. Its third entry is
+                    // OneNote, which is vendor cloud integration and therefore out of scope.
                     new RibbonGroup
                     {
                         Id = "move",
@@ -273,7 +273,7 @@ public static class DefaultRibbonLayouts
                 ],
             },
 
-            // No Folder tab: current Microsoft 365 builds ship File, Home, Send/Receive,
+            // No Folder tab: current the reference application builds ship File, Home, Send/Receive,
             // View and Help, with the folder commands folded elsewhere.
             new RibbonTab
             {

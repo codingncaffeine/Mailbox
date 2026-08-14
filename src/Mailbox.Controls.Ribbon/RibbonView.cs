@@ -47,7 +47,7 @@ public sealed class RibbonView : ContentControl
     public event EventHandler? BackstageRequested;
 
     /// <summary>
-    /// Which ribbon Outlook is showing. Simplified is the Microsoft 365 default, so it is the
+    /// Which ribbon the reference application is showing. Simplified is the reference application default, so it is the
     /// default here too — the tall classic ribbon is the alternative, not the baseline.
     /// </summary>
     public RibbonDisplayMode DisplayMode
@@ -403,7 +403,7 @@ public sealed class RibbonView : ContentControl
             }
         }
 
-        // Hidden, not Auto: a visible scrollbar steals height from the group labels. Outlook
+        // Hidden, not Auto: a visible scrollbar steals height from the group labels. the reference application
         // never scrolls the ribbon — it collapses the lowest-priority groups to popup buttons
         // instead. That variant sizing is modelled in RibbonGroup.CollapsePriority and is the
         // proper fix; scrolling is the interim behaviour until it is implemented.
@@ -507,7 +507,7 @@ public sealed class RibbonView : ContentControl
 
     /// <summary>
     /// A gallery: the group's entries stacked inside a bordered, differently-shaded box with a
-    /// scroll chevron down its right edge. Outlook's Quick Steps is the canonical example.
+    /// scroll chevron down its right edge. the reference's Quick Steps is the canonical example.
     /// </summary>
     private Control BuildGallery(RibbonGroup group)
     {
@@ -573,7 +573,7 @@ public sealed class RibbonView : ContentControl
 
         if (group.DialogLauncher is null) return label;
 
-        // Outlook puts a small arrow in the group's bottom-right corner that opens its
+        // the reference application puts a small arrow in the group's bottom-right corner that opens its
         // full options dialog.
         var launcher = new TextBlock
         {

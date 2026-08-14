@@ -1,7 +1,7 @@
 namespace Mailbox.Core.Commands;
 
 /// <summary>
-/// The Send/Receive and View tabs, transcribed from classic Outlook running the Simplified
+/// The Send/Receive and View tabs, transcribed from the reference application running the Simplified
 /// ribbon. Order here is the order on screen.
 /// </summary>
 public static class ViewCommands
@@ -153,7 +153,7 @@ public static class ViewCommands
     };
 
     /// <summary>
-    /// Reads the selected message aloud. Outlook greys this out with nothing selected, which is
+    /// Reads the selected message aloud. the reference application greys this out with nothing selected, which is
     /// the state the reference capture shows.
     /// </summary>
     public static readonly MailboxCommand ReadAloud = new()
@@ -169,7 +169,7 @@ public static class ViewCommands
     };
 
     /// <summary>
-    /// Outlook's third Move entry is Send to OneNote. Deliberately absent: that is Microsoft
+    /// the reference's third Move entry is Send to OneNote. Deliberately absent: that is Microsoft
     /// integration, which the project excludes, so the group ships with two entries.
     /// </summary>
     public static readonly MailboxCommand MoveToQuick = new()

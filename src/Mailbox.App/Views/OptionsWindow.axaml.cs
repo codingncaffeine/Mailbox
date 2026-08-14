@@ -174,7 +174,7 @@ public sealed class OptionsWindow : Window
             Background = Brushes.Transparent,
         };
 
-        // Outlook outlines the selected page and lightens its fill.
+        // the reference application outlines the selected page and lightens its fill.
         if (selected)
         {
             Bind(button, BorderBrushProperty, "text.primary.brush");

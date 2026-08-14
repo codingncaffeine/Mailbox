@@ -8,7 +8,7 @@ using Mailbox.Theming.Icons;
 namespace Mailbox.App.Views;
 
 /// <summary>
-/// The File tab — Outlook's Backstage.
+/// The File tab — the reference's Backstage.
 /// </summary>
 /// <remarks>
 /// Not a ribbon tab but a full-window takeover: a back arrow returns to the mailbox, a dark
@@ -16,7 +16,7 @@ namespace Mailbox.App.Views;
 /// Information is the landing page.
 /// <para>
 /// Each section on that page is a large square button paired with a heading and a sentence of
-/// explanation to its right, which is the layout Outlook uses throughout Backstage.
+/// explanation to its right, which is the layout the reference application uses throughout Backstage.
 /// </para>
 /// </remarks>
 public sealed class BackstageView : Border
@@ -112,7 +112,7 @@ public sealed class BackstageView : Border
     }
 
     /// <summary>
-    /// Outlook's page list, with the two rules that break it into groups and the account,
+    /// the reference's page list, with the two rules that break it into groups and the account,
     /// options and exit entries pinned to the bottom.
     /// </summary>
     private void BuildRail()
@@ -183,7 +183,7 @@ public sealed class BackstageView : Border
             HorizontalContentAlignment = HorizontalAlignment.Left,
         };
 
-        // The selected page is outlined rather than filled, as Outlook draws it.
+        // The selected page is outlined rather than filled, as the reference application draws it.
         if (selected) Bind(button, BorderBrushProperty, "accent.rest.brush");
 
         button.Click += (_, _) =>

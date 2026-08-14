@@ -1,7 +1,7 @@
 namespace Mailbox.Core;
 
 /// <summary>
-/// Which generation of Outlook the shell imitates. Orthogonal to the colour theme: any of the
+/// Which generation of the reference application the shell imitates. Orthogonal to the colour theme: any of the
 /// four Office palettes works with either layout.
 /// </summary>
 /// <remarks>
@@ -12,15 +12,15 @@ namespace Mailbox.Core;
 public enum ShellLayoutMode
 {
     /// <summary>
-    /// Classic Outlook. Full ribbon with a tab strip, Quick Access Toolbar in the title bar,
+    /// The reference application. Full ribbon with a tab strip, Quick Access Toolbar in the title bar,
     /// module switcher along the bottom of the folder pane, search above the message list.
     /// </summary>
     Classic,
 
     /// <summary>
-    /// New Outlook for Windows. A thin unified header carrying search, a single-row command
+    /// New the reference application for Windows. A thin unified header carrying search, a single-row command
     /// bar in place of the ribbon, and a vertical app rail down the left edge holding Mail,
-    /// Calendar, People, Tasks and Apps — the arrangement shared with Outlook on the web,
+    /// Calendar, People, Tasks and Apps — the arrangement shared with the reference application on the web,
     /// Office.com and Teams.
     /// </summary>
     Modern,
