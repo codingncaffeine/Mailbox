@@ -52,6 +52,8 @@ public partial class MainWindow : Window
         var shell = new ShellViewModel(App.Themes, App.Commands, layout, layoutMode);
 
         WireRail(shell);
+        WireWindowMenu();
+        WireToolbarCommands(shell);
         WireAccountButton(shell);
         DataContext = shell;
 
@@ -258,6 +260,59 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// The window menu behind the app icon. With no system frame the window owns this too.
+    /// </summary>
+    private void WireWindowMenu()
+    {
+        if (this.FindControl<Button>("WindowMenuButton") is not { } button) return;
+
+        var menu = new MenuFlyout { Placement = PlacementMode.BottomEdgeAlignedLeft };
+
+        MenuItem Item(string header, Action run, Func<bool>? enabled = null)
+        {
+            var item = new MenuItem { Header = header, IsEnabled = enabled?.Invoke() ?? true };
+            item.Click += (_, _) => run();
+            return item;
+        }
+
+        void Rebuild()
+        {
+            var maximized = WindowState == WindowState.Maximized;
+            menu.ItemsSource = new[]
+            {
+                Item("Restore", () => WindowState = WindowState.Normal, () => maximized),
+                Item("Minimize", () => WindowState = WindowState.Minimized),
+                Item("Maximize", () => WindowState = WindowState.Maximized, () => !maximized),
+                Item("Close", Close),
+            };
+        }
+
+        Rebuild();
+        button.Flyout = menu;
+        button.Click += (_, _) => Rebuild();
+    }
+
+    /// <summary>
+    /// Routes the toolbar buttons through the same handler the ribbon uses.
+    /// </summary>
+    /// <remarks>
+    /// The Quick Access Toolbar, the reading pane's actions and the Modern command bar are all
+    /// built from the same view model, and none of them was bound to anything — the identical
+    /// command was live on the ribbon and dead everywhere else. Anything that stands for a
+    /// command routes to one place, so wiring a command wires every way of reaching it.
+    /// </remarks>
+    private void WireToolbarCommands(ShellViewModel shell)
+    {
+        foreach (var button in shell.QuickAccess
+                     .Concat(shell.ReadingPaneActions)
+                     .Concat(shell.CommandBar))
+        {
+            var id = button.Command;
+            button.Invoke = new RelayCommand(() => RunCommand(id));
+        }
+    }
+
+    /// <summary>
     /// Hangs the account panel off the avatar. Done here rather than in
     /// <see cref="SetUpTitleBar"/> because that runs before the view model exists.
     /// </summary>
@@ -305,11 +360,19 @@ public partial class MainWindow : Window
     /// Phase 0 has no behaviour behind the commands yet; this proves the catalogue round-trip
     /// from ribbon click to a resolved command. Phases 2 onward attach real handlers.
     /// </summary>
-    private void OnRibbonCommand(object? sender, RibbonCommandEventArgs e)
+    private void OnRibbonCommand(object? sender, RibbonCommandEventArgs e) => RunCommand(e.Command);
+
+    /// <summary>
+    /// The single place a command arrives, whichever control raised it. Phases 2 onward replace
+    /// the placeholder with real handlers; until then every route reports the same thing, which
+    /// is at least honest about what is and is not built.
+    /// </summary>
+    private void RunCommand(CommandId id)
     {
         if (DataContext is not ShellViewModel shell) return;
-        if (!App.Commands.TryGet(e.Command, out var command)) return;
+        if (!App.Commands.TryGet(id, out var command)) return;
 
+        Log.Debug($"Command invoked: {command.Id}");
         shell.StatusRight = $"{command.Label} — not wired yet ({command.Id})";
     }
 

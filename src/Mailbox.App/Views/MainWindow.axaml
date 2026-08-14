@@ -59,11 +59,17 @@
                 Background="{DynamicResource titlebar.background.brush}"
                 Height="{DynamicResource titlebar.height.value}">
             <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto">
-                <Image Grid.Column="0"
-                       Source="/Assets/Icons/mailbox-32.png"
-                       Width="16" Height="16"
-                       Margin="17,0,6,0"
-                       VerticalAlignment="Center" />
+                <!-- The app icon carries the window menu, which the window itself must now
+                     provide: it is drawn without a system frame. -->
+                <Button Grid.Column="0"
+                        Name="WindowMenuButton"
+                        Padding="0"
+                        Margin="17,0,6,0"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        VerticalAlignment="Center">
+                    <Image Source="/Assets/Icons/mailbox-32.png" Width="16" Height="16" />
+                </Button>
 
                 <StackPanel Grid.Column="1"
                             Orientation="Horizontal"
@@ -80,6 +86,7 @@
                             <Button Padding="4,2"
                                     Background="Transparent"
                                     BorderThickness="0"
+                                    Command="{Binding Invoke}"
                                     ToolTip.Tip="{Binding Tip}">
                                 <TextBlock Text="{Binding Glyph}"
                                            FontFamily="{Binding IconFamily}"
@@ -208,7 +215,7 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:QuickAccessButton">
-                        <Button Padding="8,5" ToolTip.Tip="{Binding Tip}">
+                        <Button Padding="8,5" Command="{Binding Invoke}" ToolTip.Tip="{Binding Tip}">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <TextBlock Text="{Binding Glyph}"
                                            FontFamily="{Binding IconFamily}"
@@ -546,7 +553,7 @@
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="vm:QuickAccessButton">
-                                        <Button Padding="7,4" ToolTip.Tip="{Binding Tip}">
+                                        <Button Padding="7,4" Command="{Binding Invoke}" ToolTip.Tip="{Binding Tip}">
                                             <StackPanel Orientation="Horizontal" Spacing="5">
                                                 <TextBlock Text="{Binding Glyph}"
                                                            FontFamily="{Binding IconFamily}"

@@ -72,6 +72,16 @@ public sealed class QuickAccessButton(MailboxCommand command)
     public string Glyph { get; } = IconGlyphs.GetOrEmpty(command.Icon, 16);
     public FontFamily IconFamily { get; } = IconFont.Family;
 
+    /// <summary>
+    /// The command this button stands for. It routes through the catalogue exactly as the
+    /// ribbon does — the same command reached from the toolbar, the reading pane or the
+    /// ribbon has to arrive at one place, or wiring it once will not wire it everywhere.
+    /// </summary>
+    public CommandId Command { get; } = command.Id;
+
+    /// <summary>Set by the shell so a click reaches the same handler as a ribbon click.</summary>
+    public System.Windows.Input.ICommand? Invoke { get; set; }
+
     public string Tip { get; } = command.DefaultGesture is { } gesture
         ? $"{command.Label} ({gesture})"
         : command.Label;
