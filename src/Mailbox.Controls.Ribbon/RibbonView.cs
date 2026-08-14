@@ -480,39 +480,32 @@ public sealed class RibbonView : ContentControl
 
     private Control BuildBody(RibbonTab tab)
     {
-        var groups = new StackPanel
+        // Every group is built at all three sizes up front, because the panel chooses between
+        // them during measure and cannot rebuild a tree from in there. RibbonGroupsPanel
+        // explains why that constraint is real rather than fussiness.
+        var slots = tab.Groups
+            .Select(group => new RibbonGroupSlot(
+                group.Id,
+                group.CollapsePriority,
+                BuildGroup(group, RibbonGroupVariant.Normal),
+                BuildGroup(group, RibbonGroupVariant.Compact),
+                BuildGroup(group, RibbonGroupVariant.Popup)))
+            .ToList();
+
+        var groups = new RibbonGroupsPanel(slots, BuildGroupSeparator)
         {
-            Orientation = Orientation.Horizontal,
             Height = RibbonMetrics.BodyHeight,
-        };
-
-        for (var i = 0; i < tab.Groups.Count; i++)
-        {
-            groups.Children.Add(BuildGroup(tab.Groups[i]));
-
-            if (i < tab.Groups.Count - 1)
-            {
-                groups.Children.Add(BuildGroupSeparator());
-            }
-        }
-
-        // Hidden, not Auto: a visible scrollbar steals height from the group labels. the reference application
-        // never scrolls the ribbon — it collapses the lowest-priority groups to popup buttons
-        // instead. That variant sizing is modelled in RibbonGroup.CollapsePriority and is the
-        // proper fix; scrolling is the interim behaviour until it is implemented.
-        var scroller = new ScrollViewer
-        {
-            Content = groups,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            HorizontalAlignment = HorizontalAlignment.Left,
         };
 
         // Same rounded, inset panel as the Simplified row — the classic ribbon is taller, not
-        // shaped differently.
+        // shaped differently. Clipped because the panel is what used to sit in a ScrollViewer:
+        // without it, a group that will not fit paints straight through the rounded corner.
         var host = new Border
         {
             Height = RibbonMetrics.BodyHeight,
-            Child = scroller,
+            Child = groups,
+            ClipToBounds = true,
             CornerRadius = new CornerRadius(RibbonMetrics.BodyCornerRadius),
             BoxShadow = BoxShadows.Parse("0 1 3 0 #94000000"),
             Margin = new Thickness(0, 0, RibbonMetrics.BodyRightInset, RibbonMetrics.BodyBottomGap),
@@ -533,13 +526,95 @@ public sealed class RibbonView : ContentControl
         return rule;
     }
 
-    private Control BuildGroup(RibbonGroup group)
+    private Control BuildGroup(RibbonGroup group, RibbonGroupVariant variant)
     {
         var grid = new Grid
         {
             RowDefinitions = new RowDefinitions($"*,{RibbonMetrics.GroupLabelHeight}"),
             MinWidth = RibbonMetrics.GroupMinWidth,
             Margin = new Thickness(RibbonMetrics.GroupPaddingH, 0),
+        };
+
+        // The label strip stays whichever variant is drawn, so a collapsed group keeps its name
+        // on the same baseline as its uncollapsed neighbours instead of riding higher than them.
+        Control items = variant switch
+        {
+            RibbonGroupVariant.Popup => BuildCollapsedGroupButton(group),
+            _ when group.IsGallery => BuildGallery(group),
+            _ => BuildGroupItems(group, compact: variant == RibbonGroupVariant.Compact),
+        };
+        Grid.SetRow(items, 0);
+        grid.Children.Add(items);
+
+        // A collapsed group is only as wide as its button, so a launcher arrow in the footer
+        // ends up hard against the label and reads as punctuation — "Tags," rather than "Tags".
+        // It moves into the flyout, where the group is full width and it has somewhere to sit.
+        var footer = BuildGroupFooter(group, withLauncher: variant != RibbonGroupVariant.Popup);
+        Grid.SetRow(footer, 1);
+        grid.Children.Add(footer);
+
+        return grid;
+    }
+
+    /// <summary>
+    /// A group reduced to one button — its leading command's icon over a chevron — opening the
+    /// whole group as a flyout. The group's name stays in the footer beneath, so the button
+    /// carries no label of its own.
+    /// </summary>
+    private Control BuildCollapsedGroupButton(RibbonGroup group)
+    {
+        var stack = new StackPanel
+        {
+            Orientation = Orientation.Vertical,
+            Spacing = 2,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        stack.Children.Add(BuildIcon(CollapsedGroupIcon(group), RibbonMetrics.LargeIconSize, 24));
+
+        var chevron = new TextBlock
+        {
+            Text = "⌄",
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, -4, 0, 0),
+        };
+        Bind(chevron, TextBlock.ForegroundProperty, "text.secondary.brush");
+        Bind(chevron, TextBlock.FontSizeProperty, "type.ui.size.small.value");
+        stack.Children.Add(chevron);
+
+        var button = new Button
+        {
+            Content = stack,
+            Padding = new Thickness(4, 4, 4, 2),
+            MinWidth = RibbonMetrics.LargeButtonMinWidth,
+            Height = RibbonMetrics.ItemAreaHeight,
+            BorderThickness = default,
+            CornerRadius = new CornerRadius(2),
+            Background = Brushes.Transparent,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+        };
+        ToolTip.SetTip(button, GroupLabel(group));
+
+        // Built when it is first opened rather than with the button. Most collapsed groups are
+        // never opened, and this tree is the same size as the one the group would have drawn.
+        var flyout = new Flyout { Placement = PlacementMode.BottomEdgeAlignedLeft };
+        flyout.Opening += (_, _) => flyout.Content ??= BuildCollapsedGroupContent(group);
+        button.Flyout = flyout;
+
+        return button;
+    }
+
+    /// <summary>
+    /// The group as it would have drawn had it fitted — items, label and dialog launcher — so a
+    /// collapsed group loses no command, only its place on the bar.
+    /// </summary>
+    private Control BuildCollapsedGroupContent(RibbonGroup group)
+    {
+        var grid = new Grid
+        {
+            RowDefinitions = new RowDefinitions($"*,{RibbonMetrics.GroupLabelHeight}"),
+            Height = RibbonMetrics.BodyHeight,
         };
 
         var items = group.IsGallery ? BuildGallery(group) : BuildGroupItems(group);
@@ -550,14 +625,43 @@ public sealed class RibbonView : ContentControl
         Grid.SetRow(footer, 1);
         grid.Children.Add(footer);
 
-        return grid;
+        var body = new Border
+        {
+            Padding = new Thickness(RibbonMetrics.GroupPaddingH, 2),
+            Child = grid,
+        };
+        Bind(body, Border.BackgroundProperty, "ribbon.background.brush");
+        return body;
     }
+
+    /// <summary>
+    /// The group's leading command's icon. The reference application gives each group its own
+    /// artwork; ours has none in the layout document, and the first command is what that artwork
+    /// almost always depicts.
+    /// </summary>
+    private string CollapsedGroupIcon(RibbonGroup group)
+    {
+        foreach (var item in group.Items)
+        {
+            if (item.Kind == RibbonItemKind.Separator) continue;
+            if (_catalog.TryGet(item.Command, out var command)) return command.Icon;
+        }
+
+        return "more";
+    }
+
+    private static string GroupLabel(RibbonGroup group)
+        => group.Label.Replace("&amp;", "&", StringComparison.Ordinal);
 
     /// <summary>
     /// Lays a group's items out the way Office does: large buttons sit side by side, and runs
     /// of small buttons pack into columns of three.
     /// </summary>
-    private Control BuildGroupItems(RibbonGroup group)
+    /// <param name="compact">
+    /// Demotes the group's large buttons to small ones, which packs them three to a column and
+    /// is the middle rung of the collapse ladder in <see cref="RibbonCollapsePolicy"/>.
+    /// </param>
+    private Control BuildGroupItems(RibbonGroup group, bool compact = false)
     {
         var row = new StackPanel
         {
@@ -578,7 +682,7 @@ public sealed class RibbonView : ContentControl
 
             if (!_catalog.TryGet(item.Command, out var command)) continue;
 
-            if (item.Size == RibbonItemSize.Large)
+            if (!compact && item.Size == RibbonItemSize.Large)
             {
                 smallColumn = null;
                 row.Children.Add(BuildLargeButton(command, item));
@@ -696,18 +800,18 @@ public sealed class RibbonView : ContentControl
         return box;
     }
 
-    private Control BuildGroupFooter(RibbonGroup group)
+    private Control BuildGroupFooter(RibbonGroup group, bool withLauncher = true)
     {
         var label = new TextBlock
         {
-            Text = group.Label.Replace("&amp;", "&", StringComparison.Ordinal),
+            Text = GroupLabel(group),
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         };
         Bind(label, TextBlock.ForegroundProperty, "ribbon.group.label.brush");
         Bind(label, TextBlock.FontSizeProperty, "type.ui.size.small.value");
 
-        if (group.DialogLauncher is null) return label;
+        if (group.DialogLauncher is null || !withLauncher) return label;
 
         // The reference puts a small arrow in the group's bottom-right corner that opens the
         // group's full options dialog. A button, not a glyph: it was drawn as text and so did
