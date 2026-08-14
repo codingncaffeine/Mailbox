@@ -32,7 +32,14 @@ public sealed record Account(
     string DisplayName,
     MailProtocol Protocol,
     int Ordinal,
-    DateTimeOffset Created);
+    DateTimeOffset Created)
+{
+    /// <summary>Where new mail is sent from unless something else decides.</summary>
+    public bool IsDefault { get; init; }
+
+    /// <summary>What the account list's Type column shows.</summary>
+    public string TypeLabel => Protocol == MailProtocol.Imap ? "IMAP/SMTP" : "POP/SMTP";
+}
 
 public sealed record Folder(
     long Id,

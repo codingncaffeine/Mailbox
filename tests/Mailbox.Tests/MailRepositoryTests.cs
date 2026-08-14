@@ -184,4 +184,93 @@ public class MailRepositoryTests
         Assert.Empty(repo.Messages(inbox.Id));
         Assert.Single(repo.Messages(archive.Id));
     }
+
+    /// <summary>
+    /// Exactly one account is the default, always. Nothing knows where to send from otherwise,
+    /// and the database enforces it rather than trusting every caller to.
+    /// </summary>
+    [Fact]
+    public void TheFirstAccountBecomesTheDefault()
+    {
+        using var store = MailStore.Transient();
+        var repo = new MailRepository(store);
+
+        var first = repo.AddAccount("one@example.com", "One", MailProtocol.Pop3);
+        var second = repo.AddAccount("two@example.com", "Two", MailProtocol.Pop3);
+
+        Assert.True(repo.GetAccount(first.Id)!.IsDefault);
+        Assert.False(repo.GetAccount(second.Id)!.IsDefault);
+        Assert.Equal(first.Id, repo.DefaultAccount()!.Id);
+    }
+
+    [Fact]
+    public void MakingAnotherAccountTheDefaultReplacesTheFirst()
+    {
+        using var store = MailStore.Transient();
+        var repo = new MailRepository(store);
+        var first = repo.AddAccount("one@example.com", "One", MailProtocol.Pop3);
+        var second = repo.AddAccount("two@example.com", "Two", MailProtocol.Pop3);
+
+        repo.SetDefaultAccount(second.Id);
+
+        Assert.False(repo.GetAccount(first.Id)!.IsDefault);
+        Assert.Equal(second.Id, repo.DefaultAccount()!.Id);
+    }
+
+    /// <summary>Removing the default has to leave one behind, not none.</summary>
+    [Fact]
+    public void RemovingTheDefaultPromotesAnother()
+    {
+        using var store = MailStore.Transient();
+        var repo = new MailRepository(store);
+        var first = repo.AddAccount("one@example.com", "One", MailProtocol.Pop3);
+        var second = repo.AddAccount("two@example.com", "Two", MailProtocol.Pop3);
+
+        repo.RemoveAccount(first.Id);
+
+        Assert.Equal(second.Id, repo.DefaultAccount()!.Id);
+    }
+
+    [Fact]
+    public void RemovingTheLastAccountLeavesNoDefaultRatherThanADanglingOne()
+    {
+        using var store = MailStore.Transient();
+        var repo = new MailRepository(store);
+        var only = repo.AddAccount("one@example.com", "One", MailProtocol.Pop3);
+
+        repo.RemoveAccount(only.Id);
+
+        Assert.Null(repo.DefaultAccount());
+        Assert.Empty(repo.Accounts());
+    }
+
+    [Fact]
+    public void AccountsCanBeReorderedAndRenamed()
+    {
+        using var store = MailStore.Transient();
+        var repo = new MailRepository(store);
+        var first = repo.AddAccount("one@example.com", "One", MailProtocol.Pop3);
+        var second = repo.AddAccount("two@example.com", "Two", MailProtocol.Pop3);
+
+        repo.MoveAccount(second.Id, -1);
+        repo.RenameAccount(first.Id, "Renamed");
+
+        Assert.Equal(["two@example.com", "one@example.com"],
+            repo.Accounts().Select(a => a.Address));
+        Assert.Equal("Renamed", repo.GetAccount(first.Id)!.DisplayName);
+    }
+
+    [Fact]
+    public void MovingPastEitherEndDoesNothing()
+    {
+        using var store = MailStore.Transient();
+        var repo = new MailRepository(store);
+        var first = repo.AddAccount("one@example.com", "One", MailProtocol.Pop3);
+        repo.AddAccount("two@example.com", "Two", MailProtocol.Pop3);
+
+        repo.MoveAccount(first.Id, -1);
+
+        Assert.Equal(["one@example.com", "two@example.com"],
+            repo.Accounts().Select(a => a.Address));
+    }
 }
