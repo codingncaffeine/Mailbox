@@ -264,13 +264,16 @@ public class ThemeServiceTests
     /// these have shipped broken: the search placeholder drawn in the fill colour, and the
     /// active tab's rule drawn in the tab strip's own colour, each invisible in exactly one
     /// theme. The coverage audit cannot catch it, because the token is present — just useless.
+    /// <para>
+    /// Only ink-on-ground pairs belong here. A border matching its fill is not a bug: two of
+    /// the four themes draw no border around the search box at all.
+    /// </para>
     /// </summary>
     [Theory]
     [InlineData(TokenKeys.Ribbon.TabUnderline, TokenKeys.Ribbon.TabStripBackground)]
     [InlineData(TokenKeys.Ribbon.TabText, TokenKeys.Ribbon.TabStripBackground)]
     [InlineData(TokenKeys.Ribbon.TabTextSelected, TokenKeys.Ribbon.TabStripBackground)]
     [InlineData(TokenKeys.TitleBar.SearchText, TokenKeys.TitleBar.Search)]
-    [InlineData(TokenKeys.TitleBar.SearchBorder, TokenKeys.TitleBar.Search)]
     [InlineData(TokenKeys.TitleBar.Foreground, TokenKeys.TitleBar.Background)]
     [InlineData(TokenKeys.Rail.Indicator, TokenKeys.Rail.Background)]
     [InlineData(TokenKeys.Rail.ItemText, TokenKeys.Rail.Background)]
@@ -290,5 +293,36 @@ public class ThemeServiceTests
                 string.Equals(a, b, StringComparison.OrdinalIgnoreCase),
                 $"{id}: {ink} and {ground} are both {a}, so {ink} cannot be seen.");
         }
+    }
+
+    /// <summary>
+    /// Base chrome colours, taken off captures of the real thing with the modal colour of each
+    /// flat region. These are observations, not preferences: if one changes, either the theme
+    /// drifted or someone remeasured, and both are worth stopping for.
+    /// </summary>
+    /// <remarks>
+    /// Colorful and White are deliberately identical below the title bar — in the reference the
+    /// blue is the only difference between them.
+    /// </remarks>
+    [Theory]
+    // theme, titlebar, search fill, tab strip, ribbon, rail, nav, list
+    [InlineData("colorful", "#0078D4", "#CCE4F6", "#E9EEF2", "#FFFFFF", "#EFE9E6", "#F5F5F5", "#FFFFFF")]
+    [InlineData("white",    "#E9EEF2", "#FAFAFA", "#E9EEF2", "#FFFFFF", "#EFE9E6", "#F5F5F5", "#FFFFFF")]
+    [InlineData("black",    "#1B2127", "#1F1F1F", "#1A2126", "#292929", "#201A17", "#141414", "#262626")]
+    [InlineData("darkgray", "#555155", "#BDBDBD", "#535154", "#BDBDBD", "#57524F", "#3D3D3D", "#666666")]
+    public void BaseChromeMatchesTheMeasuredReference(
+        string theme, string titleBar, string search, string tabStrip,
+        string ribbon, string rail, string nav, string list)
+    {
+        var service = Service();
+        service.Apply(theme);
+
+        Assert.Equal(titleBar, service.Tokens.GetString(TokenKeys.TitleBar.Background));
+        Assert.Equal(search, service.Tokens.GetString(TokenKeys.TitleBar.Search));
+        Assert.Equal(tabStrip, service.Tokens.GetString(TokenKeys.Ribbon.TabStripBackground));
+        Assert.Equal(ribbon, service.Tokens.GetString(TokenKeys.Ribbon.Background));
+        Assert.Equal(rail, service.Tokens.GetString(TokenKeys.Rail.Background));
+        Assert.Equal(nav, service.Tokens.GetString(TokenKeys.Nav.Background));
+        Assert.Equal(list, service.Tokens.GetString(TokenKeys.List.Background));
     }
 }

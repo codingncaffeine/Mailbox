@@ -18,11 +18,16 @@
     <Grid RowDefinitions="Auto,Auto,*,Auto" ColumnDefinitions="Auto,*">
 
         <!--
-            Chrome backdrop. The title bar and the tab strip are one continuous surface in
-            the reference application, and painting them as one also closes the sub-pixel seam between grid
-            rows that otherwise let the window background through as a pale hairline.
+            Chrome backdrop, behind everything. The title bar and the tab strip are one
+            continuous surface in the reference application, and painting them as one also
+            closes the sub-pixel seam between grid rows that otherwise let the window
+            background through as a pale hairline.
+
+            It spans every row because the panels above it are rounded: their corners have to
+            reveal chrome. Stopping at the ribbon left the window's own background showing
+            through the workspace's top corners as pale wedges.
         -->
-        <Border Grid.Row="0" Grid.RowSpan="2" Grid.ColumnSpan="2"
+        <Border Grid.Row="0" Grid.RowSpan="4" Grid.ColumnSpan="2"
                 ZIndex="0"
                 Background="{DynamicResource titlebar.background.brush}" />
 

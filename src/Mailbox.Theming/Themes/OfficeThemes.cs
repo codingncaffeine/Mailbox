@@ -133,18 +133,30 @@ public static class OfficeThemes
         LightSemantics(t);
         LightChrome(t);
 
-        t.Set(TokenKeys.TitleBar.Background, "{palette.brand.primary}");
+        // The title bar alone carries the hue. The tab strip below it is light, which is what
+        // an earlier guess got wrong — it had the blue running down through the tab strip.
+        t.Set(TokenKeys.TitleBar.Background, "#0078D4");
         t.Set(TokenKeys.TitleBar.Foreground, "{palette.neutral.white}");
-        t.Set(TokenKeys.TitleBar.Search, "#2E88D6");
-        t.Set(TokenKeys.TitleBar.SearchBorder, "#5AA0DF");
-        t.Set(TokenKeys.TitleBar.SearchText, "{palette.neutral.white}");
-        t.Set(TokenKeys.Ribbon.TabStripBackground, "{palette.brand.primary}");
+        t.Set(TokenKeys.TitleBar.Search, "#CCE4F6");
+        t.Set(TokenKeys.TitleBar.SearchBorder, "#CCE4F6");   // no border in the capture
+        t.Set(TokenKeys.TitleBar.SearchText, "#1664A7");
+
+        // Chrome below the title bar, measured. Colorful and White share every one of these:
+        // the two themes differ only in the title bar and the search box sitting in it.
+        t.Set(TokenKeys.Rail.Background, "#EFE9E6");
+        t.Set(TokenKeys.Rail.ItemText, "#242424");
+        t.Set(TokenKeys.Rail.Indicator, "#0072C6");
+        t.Set(TokenKeys.Nav.Background, "#F5F5F5");
+        t.Set(TokenKeys.StatusBar.Background, "#F5F5F5");
+        t.Set(TokenKeys.StatusBar.Foreground, "#242424");
+        t.Set(TokenKeys.Ribbon.Background, "#FFFFFF");
+        t.Set(TokenKeys.Ribbon.TabStripBackground, "#E9EEF2");
         t.Set(TokenKeys.Ribbon.TabRest, "#00000000");
-        t.Set(TokenKeys.Ribbon.TabHover, "#1AFFFFFF");
+        t.Set(TokenKeys.Ribbon.TabHover, "#14000000");
         t.Set(TokenKeys.Ribbon.TabSelected, "#00000000");
-        t.Set(TokenKeys.Ribbon.TabUnderline, "{palette.neutral.white}");
-        t.Set(TokenKeys.Ribbon.TabText, "{palette.neutral.white}");
-        t.Set(TokenKeys.Ribbon.TabTextSelected, "{palette.neutral.white}");
+        t.Set(TokenKeys.Ribbon.TabUnderline, "#106EBE");
+        t.Set(TokenKeys.Ribbon.TabText, "#242424");
+        t.Set(TokenKeys.Ribbon.TabTextSelected, "#242424");
 
         return t;
     }
@@ -172,18 +184,30 @@ public static class OfficeThemes
         LightSemantics(t);
         LightChrome(t);
 
-        t.Set(TokenKeys.TitleBar.Background, "{palette.neutral.white}");
-        t.Set(TokenKeys.TitleBar.Foreground, "{palette.neutral.primary}");
-        t.Set(TokenKeys.TitleBar.Search, "{palette.neutral.lighter}");
-        t.Set(TokenKeys.TitleBar.SearchBorder, "{palette.neutral.light}");
-        t.Set(TokenKeys.TitleBar.SearchText, "#424242");
-        t.Set(TokenKeys.Ribbon.TabStripBackground, "{palette.neutral.white}");
+        // Not actually white: the title bar is the same pale blue-grey as the tab strip, and
+        // only the ribbon and the content behind it are truly white.
+        t.Set(TokenKeys.TitleBar.Background, "#E9EEF2");
+        t.Set(TokenKeys.TitleBar.Foreground, "#242424");
+        t.Set(TokenKeys.TitleBar.Search, "#FAFAFA");
+        t.Set(TokenKeys.TitleBar.SearchBorder, "#D6D6D6");
+        t.Set(TokenKeys.TitleBar.SearchText, "#616161");
+
+        // Chrome below the title bar, measured. Colorful and White share every one of these:
+        // the two themes differ only in the title bar and the search box sitting in it.
+        t.Set(TokenKeys.Rail.Background, "#EFE9E6");
+        t.Set(TokenKeys.Rail.ItemText, "#242424");
+        t.Set(TokenKeys.Rail.Indicator, "#0072C6");
+        t.Set(TokenKeys.Nav.Background, "#F5F5F5");
+        t.Set(TokenKeys.StatusBar.Background, "#F5F5F5");
+        t.Set(TokenKeys.StatusBar.Foreground, "#242424");
+        t.Set(TokenKeys.Ribbon.Background, "#FFFFFF");
+        t.Set(TokenKeys.Ribbon.TabStripBackground, "#E9EEF2");
         t.Set(TokenKeys.Ribbon.TabRest, "#00000000");
-        t.Set(TokenKeys.Ribbon.TabHover, "{palette.neutral.light}");
+        t.Set(TokenKeys.Ribbon.TabHover, "#14000000");
         t.Set(TokenKeys.Ribbon.TabSelected, "#00000000");
-        t.Set(TokenKeys.Ribbon.TabUnderline, "{palette.brand.primary}");
-        t.Set(TokenKeys.Ribbon.TabText, "{palette.neutral.secondary}");
-        t.Set(TokenKeys.Ribbon.TabTextSelected, "{palette.neutral.secondary}");
+        t.Set(TokenKeys.Ribbon.TabUnderline, "#106EBE");
+        t.Set(TokenKeys.Ribbon.TabText, "#242424");
+        t.Set(TokenKeys.Ribbon.TabTextSelected, "#242424");
 
         return t;
     }
@@ -341,39 +365,41 @@ public static class OfficeThemes
         t.Set(TokenKeys.Status.Danger, "#E8776F");
         t.Set(TokenKeys.Status.Info, "{palette.brand.primary}");
 
-        t.Set(TokenKeys.TitleBar.Background, "#1B1B1B");
-        t.Set(TokenKeys.TitleBar.Foreground, "{palette.neutral.primary}");
-        t.Set(TokenKeys.TitleBar.Search, "#2B2B2B");
-        t.Set(TokenKeys.TitleBar.SearchBorder, "#4A4A4A");
-        t.Set(TokenKeys.TitleBar.SearchText, "#E0E0E0");
-        t.Set(TokenKeys.Rail.Background, "#171717");
-        t.Set(TokenKeys.Rail.ItemText, "{palette.neutral.secondary}");
-        t.Set(TokenKeys.Rail.ItemActive, "{palette.brand.primary}");
-        t.Set(TokenKeys.Rail.Indicator, "#0072C6");
+        // Measured. The chrome is not neutral black — it carries a blue cast, while the rail
+        // goes the other way and is warm.
+        t.Set(TokenKeys.TitleBar.Background, "#1B2127");
+        t.Set(TokenKeys.TitleBar.Foreground, "#FFFFFF");
+        t.Set(TokenKeys.TitleBar.Search, "#1F1F1F");
+        t.Set(TokenKeys.TitleBar.SearchBorder, "#1F1F1F");   // no border in the capture
+        t.Set(TokenKeys.TitleBar.SearchText, "#ADADAD");
+        t.Set(TokenKeys.Rail.Background, "#201A17");
+        t.Set(TokenKeys.Rail.ItemText, "#FFFFFF");
+        t.Set(TokenKeys.Rail.ItemActive, "#58B8FE");
+        t.Set(TokenKeys.Rail.Indicator, "#58B8FE");
         t.Set(TokenKeys.Backstage.Rail, "#1B1B1B");
         t.Set(TokenKeys.Backstage.RailText, "{palette.neutral.primary}");
         t.Set(TokenKeys.Backstage.RailDisabled, "{palette.neutral.tertiary}");
         t.Set(TokenKeys.Backstage.RailRule, "{palette.neutral.quaternary}");
         t.Set(TokenKeys.Backstage.Field, "{palette.raised}");
-        t.Set(TokenKeys.Ribbon.Background, "{palette.neutral.lighter}");
-        t.Set(TokenKeys.Ribbon.TabStripBackground, "#1B1B1B");
+        t.Set(TokenKeys.Ribbon.Background, "#292929");
+        t.Set(TokenKeys.Ribbon.TabStripBackground, "#1A2126");
         t.Set(TokenKeys.Ribbon.TabRest, "#00000000");
         t.Set(TokenKeys.Ribbon.TabHover, "#1AFFFFFF");
         t.Set(TokenKeys.Ribbon.TabSelected, "#00000000");
-        t.Set(TokenKeys.Ribbon.TabUnderline, "#8FC3F0");
-        t.Set(TokenKeys.Ribbon.TabText, "{palette.neutral.secondary}");
-        t.Set(TokenKeys.Ribbon.TabTextSelected, "{palette.neutral.secondary}");
+        t.Set(TokenKeys.Ribbon.TabUnderline, "#82C7FF");
+        t.Set(TokenKeys.Ribbon.TabText, "#FFFFFF");
+        t.Set(TokenKeys.Ribbon.TabTextSelected, "#FFFFFF");
         t.Set(TokenKeys.Ribbon.GroupLabel, "{palette.neutral.secondary}");
         t.Set(TokenKeys.Ribbon.GroupSeparator, "{palette.neutral.quaternary}");
 
-        t.Set(TokenKeys.Nav.Background, "{palette.sunken}");
+        t.Set(TokenKeys.Nav.Background, "#141414");
         t.Set(TokenKeys.Nav.ItemText, "{palette.neutral.primary}");
         t.Set(TokenKeys.Nav.ItemHover, "{state.hover}");
         t.Set(TokenKeys.Nav.ItemSelected, "{state.selected}");
         t.Set(TokenKeys.Nav.UnreadCount, "{palette.brand.primary}");
 
-        t.Set(TokenKeys.List.Background, "{palette.ground}");
-        t.Set(TokenKeys.List.RowBackground, "{palette.ground}");
+        t.Set(TokenKeys.List.Background, "#262626");
+        t.Set(TokenKeys.List.RowBackground, "#262626");
         t.Set(TokenKeys.List.HeaderBackground, "{palette.raised}");
         t.Set(TokenKeys.List.HeaderText, "{palette.neutral.secondary}");
         t.Set(TokenKeys.List.RowHover, "{state.hover}");
@@ -392,7 +418,7 @@ public static class OfficeThemes
         t.Set(TokenKeys.Reading.InfoBarText, "{palette.neutral.primary}");
         t.Set(TokenKeys.Reading.InfoBarWarningBackground, "#3A2E14");
 
-        t.Set(TokenKeys.StatusBar.Background, "#1B1B1B");
+        t.Set(TokenKeys.StatusBar.Background, "#141414");
         t.Set(TokenKeys.StatusBar.Foreground, "{palette.neutral.secondary}");
 
         t.Set(TokenKeys.Calendar.Background, "{palette.ground}");
