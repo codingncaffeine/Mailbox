@@ -5,6 +5,7 @@ using Avalonia.Markup.Xaml;
 using Mailbox.App.Theming;
 using Mailbox.App.ViewModels;
 using Mailbox.Controls.Ribbon;
+using Mailbox.Core.Diagnostics;
 using Mailbox.Core;
 using Mailbox.Core.Commands;
 using Mailbox.Core.Ribbon;
@@ -42,13 +43,13 @@ public partial class MainWindow : Window
         _ribbon.BackstageRequested += (_, _) => ShowBackstage();
         this.FindControl<ContentControl>("RibbonHost")!.Content = _ribbon;
 
-        var shell = new ShellViewModel(App.Themes, App.Commands, layout, layoutMode)
-        {
-            // Phase 0 surfaces rendering diagnostics where the connection state will later go.
-            StatusRight = $"{TextRendering.Describe()}   |   "
-                        + $"UI {App.Fonts.Resolve("Segoe UI").Rendered}   |   "
-                        + $"Body {App.Fonts.Resolve("Calibri").Rendered}",
-        };
+        // The rendering diagnostics the text investigation needs go to the log, not the status
+        // bar. In the reference the bar carries the item counts and nothing else.
+        Log.Info($"Text rendering: {TextRendering.Describe()}");
+        Log.Info($"UI font: {App.Fonts.Resolve("Segoe UI").Rendered}");
+        Log.Info($"Body font: {App.Fonts.Resolve("Calibri").Rendered}");
+
+        var shell = new ShellViewModel(App.Themes, App.Commands, layout, layoutMode);
 
         WireRail(shell);
         DataContext = shell;
@@ -60,6 +61,15 @@ public partial class MainWindow : Window
             case "calendar": Opened += (_, _) => TogglePeek(); break;
             case "docked": Opened += (_, _) => DockPeek(); break;
             case "backstage": Opened += (_, _) => ShowBackstage(); break;
+
+            // Opens the ribbon's display-options menu, so a capture can check a popup's colours.
+            case "menu":
+                Opened += async (_, _) =>
+                {
+                    _ribbon?.OpenDisplayOptions();
+                    await Task.Yield();
+                };
+                break;
 
             // Options is its own window, so the harness captures that rather than the shell.
             case "options":

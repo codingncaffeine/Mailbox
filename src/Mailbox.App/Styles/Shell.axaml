@@ -130,6 +130,12 @@
 
     <!-- Kept as separate blocks: a grouped selector resolves to the common base type, which
          has no Background, and fails to compile. -->
+    <Style Selector="MenuFlyoutPresenter">
+        <Setter Property="Background" Value="{DynamicResource surface.overlay.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource border.subtle.brush}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
     <Style Selector="FlyoutPresenter">
         <Setter Property="Background" Value="{DynamicResource surface.overlay.brush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource border.subtle.brush}" />

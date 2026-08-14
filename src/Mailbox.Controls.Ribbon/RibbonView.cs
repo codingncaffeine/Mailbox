@@ -31,6 +31,7 @@ public sealed class RibbonView : ContentControl
     private readonly CommandCatalog _catalog;
     private RibbonLayout _layout;
     private string _activeTabId;
+    private Button? _displayOptions;
 
     public RibbonView(CommandCatalog catalog, RibbonLayout layout)
     {
@@ -40,6 +41,13 @@ public sealed class RibbonView : ContentControl
         _activeTabId = layout.Tabs.FirstOrDefault(t => !t.IsBackstage)?.Id ?? string.Empty;
         Rebuild();
     }
+
+    /// <summary>
+    /// Drops the Ribbon Display Options menu open so the fidelity harness can photograph it.
+    /// A menu that no capture ever opens is a menu whose colours go unchecked — which is how
+    /// the light themes shipped with dark-on-dark items, legible only while hovered.
+    /// </summary>
+    public void OpenDisplayOptions() => _displayOptions?.Flyout?.ShowAt(_displayOptions);
 
     public event EventHandler<RibbonCommandEventArgs>? CommandInvoked;
 
@@ -253,6 +261,7 @@ public sealed class RibbonView : ContentControl
         var chevron = BuildGlyphButton("chevron-down", "Ribbon Display Options", 14, () => { });
         chevron.HorizontalAlignment = HorizontalAlignment.Right;
         chevron.Flyout = BuildDisplayOptionsMenu();
+        _displayOptions = chevron;
         trailing.Children.Add(chevron);
 
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };

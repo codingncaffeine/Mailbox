@@ -368,14 +368,15 @@ public sealed class ShellViewModel : ObservableObject
         $"Items: {Messages.Count}   Unread: {Messages.Count(m => m.IsUnread)}";
 
     /// <summary>
-    /// Phase 0 shows the rendering diagnostics that the text-rendering investigation needs.
-    /// Replaced by the real connection state once accounts exist in Phase 2.
+    /// Empty at rest — the reference's status bar carries the counts on the left and the view
+    /// and zoom controls on the right, with nothing between them. Transient messages land here
+    /// and the connection state will once accounts exist in Phase 2.
     /// </summary>
     public string StatusRight
     {
         get;
         set { if (Set(ref field, value)) Raise(); }
-    } = "Connected";
+    } = string.Empty;
 }
 
 /// <summary>One header cell in the message list's column strip.</summary>
