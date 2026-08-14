@@ -180,10 +180,6 @@
     </Style>
 
     <!-- Zoom slider in the status bar sits on the accent bar, so it takes that foreground. -->
-    <Style Selector="Slider /template/ Thumb">
-        <Setter Property="Background" Value="{DynamicResource statusbar.foreground.brush}" />
-    </Style>
-
     <!-- ================================ Lists ================================= -->
 
     <Style Selector="ListBox">
