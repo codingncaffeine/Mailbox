@@ -143,6 +143,8 @@ public static class OfficeThemes
 
         // Chrome below the title bar, measured. Colorful and White share every one of these:
         // the two themes differ only in the title bar and the search box sitting in it.
+        t.Set(TokenKeys.Avatar.Background, "#004E8C");
+        t.Set(TokenKeys.Avatar.Foreground, "{palette.neutral.white}");
         t.Set(TokenKeys.Rail.Background, "#EFE9E6");
         t.Set(TokenKeys.Rail.ItemText, "#242424");
         t.Set(TokenKeys.Rail.Indicator, "#0072C6");
@@ -196,6 +198,8 @@ public static class OfficeThemes
 
         // Chrome below the title bar, measured. Colorful and White share every one of these:
         // the two themes differ only in the title bar and the search box sitting in it.
+        t.Set(TokenKeys.Avatar.Background, "#004E8C");
+        t.Set(TokenKeys.Avatar.Foreground, "{palette.neutral.white}");
         t.Set(TokenKeys.Rail.Background, "#EFE9E6");
         t.Set(TokenKeys.Rail.ItemText, "#242424");
         t.Set(TokenKeys.Rail.Indicator, "#0072C6");
@@ -271,6 +275,8 @@ public static class OfficeThemes
         t.Set(TokenKeys.TitleBar.Search, "#BDBDBD");
         t.Set(TokenKeys.TitleBar.SearchBorder, "#808080");
         t.Set(TokenKeys.TitleBar.SearchText, "#424242");
+        t.Set(TokenKeys.Avatar.Background, "#0F548C");
+        t.Set(TokenKeys.Avatar.Foreground, "{palette.neutral.white}");
         t.Set(TokenKeys.Rail.Background, "{palette.chrome.rail}");
         t.Set(TokenKeys.Rail.ItemText, "#E8E8E8");
         t.Set(TokenKeys.Rail.ItemActive, "#8FC3F0");
@@ -377,6 +383,8 @@ public static class OfficeThemes
         t.Set(TokenKeys.TitleBar.Search, "#1F1F1F");
         t.Set(TokenKeys.TitleBar.SearchBorder, "#1F1F1F");   // no border in the capture
         t.Set(TokenKeys.TitleBar.SearchText, "#ADADAD");
+        t.Set(TokenKeys.Avatar.Background, "#0F6CBD");
+        t.Set(TokenKeys.Avatar.Foreground, "{palette.neutral.white}");
         t.Set(TokenKeys.Rail.Background, "#201A17");
         t.Set(TokenKeys.Rail.ItemText, "#FFFFFF");
         t.Set(TokenKeys.Rail.ItemActive, "#58B8FE");

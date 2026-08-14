@@ -74,6 +74,7 @@ public static class IconGlyphs
         ["new-task"] = new() { [20] = "\uF788", [24] = "\uF789" },
         ["next-7"] = new() { [20] = "\uE26D", [24] = "\uF23F" },
         ["notes"] = new() { [16] = "\uF663", [20] = "\uF56B", [24] = "\uF56C" },
+        ["person-add"] = new() { [16] = "\uE921", [20] = "\uF5C2", [24] = "\uF5C3", [32] = "\U000F044F" },
         ["people"] = new() { [16] = "\uF5A7", [20] = "\uF5A8", [24] = "\uF5A9", [32] = "\uE8EC" },
         ["pin"] = new() { [16] = "\uF600", [20] = "\uF601", [24] = "\uF602", [32] = "\uE983" },
         ["print"] = new() { [16] = "\uF6FA", [20] = "\uF62A", [24] = "\uF62B", [32] = "\uE9CD" },

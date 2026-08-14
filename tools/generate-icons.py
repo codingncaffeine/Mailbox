@@ -47,6 +47,7 @@ WANTED = {
     "mail": "mail",
     "calendar": "calendar_ltr",
     "people": "people",
+    "person-add": "person_add",
     "tasks": "task_list_square_ltr",
     "notes": "note",
     "journal": "book",
