@@ -23,13 +23,18 @@
             closes the sub-pixel seam between grid rows that otherwise let the window
             background through as a pale hairline.
 
-            It spans every row because the panels above it are rounded: their corners have to
-            reveal chrome. Stopping at the ribbon left the window's own background showing
-            through the workspace's top corners as pale wedges.
+            It spans every row because the panels above it are rounded: their corners, and the
+            gap between the ribbon and the workspace, have to reveal chrome. Stopping at the
+            ribbon left the window's own background showing through as pale wedges.
+
+            It paints the tab strip's colour rather than the title bar's. The two are within a
+            shade of each other in Dark Gray, which hid the distinction, but in Colorful the
+            title bar is brand blue and the surface behind the panels is not — using the title
+            bar's colour ran a blue strip through the gap.
         -->
         <Border Grid.Row="0" Grid.RowSpan="4" Grid.ColumnSpan="2"
                 ZIndex="0"
-                Background="{DynamicResource titlebar.background.brush}" />
+                Background="{DynamicResource ribbon.tabstrip.background.brush}" />
 
         <!-- ============================ Title bar ============================ -->
         <!--
