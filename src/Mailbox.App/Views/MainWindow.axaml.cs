@@ -45,12 +45,14 @@ public partial class MainWindow : Window
                 switch
                 {
                     "classic" => RibbonDisplayMode.Classic,
-                    "collapsed" => RibbonDisplayMode.Collapsed,
+                    "collapsed" or "revealed" => RibbonDisplayMode.Collapsed,
                     _ => RibbonDisplayMode.Simplified,
                 },
         };
         _ribbon.CommandInvoked += OnRibbonCommand;
         _ribbon.BackstageRequested += (_, _) => ShowBackstage();
+        _ribbon.FloatingBodyChanged += (_, e) => ShowFloatingRibbon(e.Body);
+        AddHandler(PointerPressedEvent, OnWindowPointerPressed, RoutingStrategies.Tunnel);
         this.FindControl<ContentControl>("RibbonHost")!.Content = _ribbon;
 
         // The rendering diagnostics the text investigation needs go to the log, not the status
@@ -128,6 +130,15 @@ public partial class MainWindow : Window
                     await dialog.ShowDialog(this);
                 };
                 break;
+        }
+
+        // A collapsed ribbon only unrolls on a tab click, which a capture cannot make.
+        if (string.Equals(
+                Environment.GetEnvironmentVariable("MAILBOX_RIBBON"),
+                "revealed",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            Opened += (_, _) => _ribbon.RevealCollapsedRibbon();
         }
 
         // KeyTips exist only while Alt is held, which a capture cannot do. `tabs` poses the
@@ -226,6 +237,40 @@ public partial class MainWindow : Window
         if (_floatingPeek is null) return;
         this.FindControl<Canvas>("PeekLayer")!.Children.Remove(_floatingPeek);
         _floatingPeek = null;
+    }
+
+    private Control? _floatingRibbon;
+
+    /// <summary>
+    /// Shows the ribbon body over the content while the ribbon is collapsed to its tab strip,
+    /// or takes it away when passed null.
+    /// </summary>
+    /// <remarks>
+    /// It goes on the same overlay canvas the calendar peek uses. An ordinary control in the
+    /// window rather than a popup, so it clips and z-orders with everything else and the
+    /// fidelity harness can photograph it — a popup is a separate surface and would not appear
+    /// in a window capture at all.
+    /// </remarks>
+    private void ShowFloatingRibbon(Control? body)
+    {
+        var layer = this.FindControl<Canvas>("PeekLayer")!;
+
+        if (_floatingRibbon is not null)
+        {
+            layer.Children.Remove(_floatingRibbon);
+            _floatingRibbon = null;
+        }
+
+        if (body is null) return;
+
+        // Full width of the workspace, hard against its top edge, so it reads as the ribbon
+        // having unrolled rather than as a panel that happens to be there.
+        body.Width = layer.Bounds.Width > 0 ? layer.Bounds.Width : Width;
+        Canvas.SetLeft(body, 0);
+        Canvas.SetTop(body, 0);
+
+        layer.Children.Add(body);
+        _floatingRibbon = body;
     }
 
     /// <summary>
@@ -534,7 +579,29 @@ public partial class MainWindow : Window
     /// Phase 0 has no behaviour behind the commands yet; this proves the catalogue round-trip
     /// from ribbon click to a resolved command. Phases 2 onward attach real handlers.
     /// </summary>
-    private void OnRibbonCommand(object? sender, RibbonCommandEventArgs e) => RunCommand(e.Command);
+    private void OnRibbonCommand(object? sender, RibbonCommandEventArgs e)
+    {
+        // A collapsed ribbon rolls back up once it has been used, which is the whole bargain of
+        // the mode: it is there when wanted and gone the rest of the time.
+        _ribbon.CloseFloatingBody();
+        RunCommand(e.Command);
+    }
+
+    /// <summary>
+    /// Puts the floating ribbon away when the click lands outside it and outside the tab strip
+    /// that raised it. Tunnelled, so it runs before whatever was clicked handles the press.
+    /// </summary>
+    private void OnWindowPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (_floatingRibbon is null || e.Source is not Visual source) return;
+        if (IsWithin(source, _floatingRibbon) || IsWithin(source, _ribbon)) return;
+
+        _ribbon.CloseFloatingBody();
+    }
+
+    private static bool IsWithin(Visual node, Visual? ancestor)
+        => ancestor is not null
+           && (ReferenceEquals(node, ancestor) || node.GetVisualAncestors().Contains(ancestor));
 
     /// <summary>
     /// The single place a command arrives, whichever control raised it. Phases 2 onward replace

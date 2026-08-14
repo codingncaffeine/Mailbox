@@ -136,7 +136,18 @@ public sealed record RibbonTab
     public string? KeyTip { get; init; }
 
     /// <summary>Contextual tabs appear only while something is selected, and are tinted.</summary>
-    public bool IsContextual { get; init; }
+    public bool IsContextual => ContextualGroup is not null;
+
+    /// <summary>
+    /// The named set this tab belongs to, or null for an ordinary tab.
+    /// </summary>
+    /// <remarks>
+    /// Office contextual tabs arrive in labelled sets rather than one at a time — "Table Tools"
+    /// carrying Design and Layout — with the set's name on a header spanning them and a tint
+    /// marking the whole run. The set is the unit that appears and disappears, so it is what a
+    /// host switches on.
+    /// </remarks>
+    public string? ContextualGroup { get; init; }
 
     /// <summary>
     /// True for File. It sits leftmost in the strip like any other tab, but selecting it opens
