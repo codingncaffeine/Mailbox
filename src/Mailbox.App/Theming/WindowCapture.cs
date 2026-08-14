@@ -23,6 +23,7 @@ public static class WindowCapture
 {
     public const string PathVariable = "MAILBOX_CAPTURE";
     public const string ScaleVariable = "MAILBOX_CAPTURE_SCALE";
+    public const string SizeVariable = "MAILBOX_SIZE";
 
     /// <summary>How long to let layout, fonts and the first render settle before capturing.</summary>
     private static readonly TimeSpan SettleDelay = TimeSpan.FromMilliseconds(900);
@@ -35,6 +36,50 @@ public static class WindowCapture
         => double.TryParse(Environment.GetEnvironmentVariable(ScaleVariable), out var s) && s > 0
             ? s
             : 1.0;
+
+    /// <summary>
+    /// Poses the window at an exact size, given as <c>MAILBOX_SIZE=1024x820</c>.
+    /// </summary>
+    /// <remarks>
+    /// Anything that responds to width — ribbon group collapse, the splitters, the search box's
+    /// alignment — can only be checked at a width the harness chose. Dragging a window by hand
+    /// is not a measurement anyone can repeat, and the collapse ladder in particular has a
+    /// different answer every hundred pixels.
+    /// <para>
+    /// Applied on an interactive run too, so a width can be eyeballed before it is photographed.
+    /// </para>
+    /// </remarks>
+    public static void ApplyRequestedSize(Window window)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+
+        var requested = Environment.GetEnvironmentVariable(SizeVariable);
+        if (string.IsNullOrWhiteSpace(requested)) return;
+
+        var parts = requested.Split('x', 'X', '*', ',');
+        if (parts.Length != 2
+            || !double.TryParse(parts[0], out var width)
+            || !double.TryParse(parts[1], out var height)
+            || width <= 0
+            || height <= 0)
+        {
+            Console.Error.WriteLine($"{SizeVariable}='{requested}' is not WIDTHxHEIGHT; ignoring.");
+            return;
+        }
+
+        // Below the window's own minimum the request cannot be honoured, and silently getting a
+        // different size than the one asked for is how a fidelity measurement goes wrong.
+        if (width < window.MinWidth || height < window.MinHeight)
+        {
+            Console.Error.WriteLine(
+                $"{SizeVariable}='{requested}' is below the window minimum of " +
+                $"{window.MinWidth}x{window.MinHeight}; clamping.");
+        }
+
+        window.WindowStartupLocation = WindowStartupLocation.Manual;
+        window.Width = Math.Max(width, window.MinWidth);
+        window.Height = Math.Max(height, window.MinHeight);
+    }
 
     /// <summary>
     /// Captures once the window has settled, then shuts the application down. Wired only when

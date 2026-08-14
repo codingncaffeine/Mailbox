@@ -108,7 +108,9 @@ public partial class App : Application
             var window = new MainWindow();
             desktop.MainWindow = window;
 
-            // Fidelity harness: render once and exit when MAILBOX_CAPTURE is set.
+            // Fidelity harness: pose the window at an exact width, then render once and exit
+            // when MAILBOX_CAPTURE is set.
+            WindowCapture.ApplyRequestedSize(window);
             WindowCapture.AttachTo(window, () => desktop.Shutdown());
         }
 

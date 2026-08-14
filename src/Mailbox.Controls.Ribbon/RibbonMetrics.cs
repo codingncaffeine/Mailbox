@@ -74,7 +74,4 @@ public static class RibbonMetrics
     public const int SmallButtonsPerColumn = 3;
 
     public const double SeparatorMargin = 3;
-
-    /// <summary>Width below which the ribbon starts collapsing groups to popup buttons.</summary>
-    public const double CollapseThreshold = 40;
 }
