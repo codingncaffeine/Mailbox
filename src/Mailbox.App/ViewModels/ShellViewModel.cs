@@ -8,6 +8,7 @@ using Mailbox.Core;
 using Mailbox.Core.Accounts;
 using Mailbox.Core.Commands;
 using Mailbox.Core.Ribbon;
+using Mailbox.Store;
 using Mailbox.Theming;
 using Mailbox.Theming.Icons;
 using Mailbox.Theming.Themes;
@@ -122,12 +123,16 @@ public sealed class ShellViewModel : ObservableObject
     private string _selectedTheme;
     private string _searchText = string.Empty;
 
+    private readonly MailRepository? _mail;
+
     public ShellViewModel(
         ThemeService themes,
         CommandCatalog catalog,
         RibbonLayout layout,
-        ShellLayoutMode layoutMode)
+        ShellLayoutMode layoutMode,
+        MailRepository? mail = null)
     {
+        _mail = mail;
         _themes = themes;
         _selectedTheme = OfficeThemes.DisplayName(themes.ThemeId);
         LayoutMode = layoutMode;
@@ -213,7 +218,12 @@ public sealed class ShellViewModel : ObservableObject
         ];
 
         _selectedFolder = Folders[5];
-        _selectedMessage = Messages[0];
+        // With an account configured the shell shows that account. Without one it shows the
+        // sample above, which is what makes an unconfigured Mailbox worth looking at — and is
+        // replaced the moment there is real mail rather than mixed with it.
+        if (LoadFromStore()) HasAccount = true;
+
+        _selectedMessage = Messages.FirstOrDefault();
 
         foreach (var column in Columns)
         {
@@ -283,6 +293,95 @@ public sealed class ShellViewModel : ObservableObject
     public ObservableCollection<FolderNode> Folders { get; }
     public ObservableCollection<MessageRow> Messages { get; }
 
+    /// <summary>True once an account exists. Until then the shell is showing the sample.</summary>
+    public bool HasAccount { get; private set; }
+
+    public bool ShowSampleNotice => !HasAccount;
+
+    /// <summary>Store id of the folder each row stands for, so a click can load its mail.</summary>
+    private readonly Dictionary<FolderNode, long> _folderIds = [];
+
+    /// <summary>
+    /// Replaces the sample with what the store holds. Returns false when there is no account,
+    /// which leaves the sample in place.
+    /// </summary>
+    private bool LoadFromStore()
+    {
+        if (_mail is null) return false;
+
+        var accounts = _mail.Accounts();
+        if (accounts.Count == 0) return false;
+
+        Folders.Clear();
+        _folderIds.Clear();
+
+        foreach (var account in accounts)
+        {
+            var header = new FolderNode(account.Address, 0, 0, bold: true);
+            Folders.Add(header);
+
+            foreach (var folder in _mail.Folders(account.Id))
+            {
+                var node = new FolderNode(folder.Name, 1, folder.Unread);
+                _folderIds[node] = folder.Id;
+                Folders.Add(node);
+            }
+        }
+
+        SelectedFolder = Folders.FirstOrDefault(f => _folderIds.ContainsKey(f));
+        return true;
+    }
+
+    /// <summary>Loads a folder's mail into the list. Called when the selection changes.</summary>
+    private void LoadMessages(FolderNode? folder)
+    {
+        if (_mail is null || folder is null || !_folderIds.TryGetValue(folder, out var id)) return;
+
+        Messages.Clear();
+        foreach (var summary in _mail.Messages(id))
+        {
+            Messages.Add(new MessageRow(
+                summary.DisplayFrom,
+                summary.Subject,
+                summary.Preview,
+                Received(summary.Received),
+                !summary.IsRead,
+                $"To: {AccountAddress}",
+                summary.Preview));
+        }
+
+        Raise(nameof(VisibleMessages));
+        Raise(nameof(StatusLeft));
+        SelectedMessage = Messages.FirstOrDefault();
+    }
+
+    /// <summary>
+    /// How the list writes a date: a time for today, a weekday within the week, otherwise the
+    /// date. Matches what the reference shows.
+    /// </summary>
+    internal static string Received(DateTimeOffset when, DateTimeOffset? today = null)
+    {
+        var now = today ?? DateTimeOffset.Now;
+        var local = when.ToLocalTime();
+
+        if (local.Date == now.Date) return local.ToString("h:mm tt");
+        if (local.Date == now.Date.AddDays(-1)) return "Yesterday";
+        if (now.Date - local.Date < TimeSpan.FromDays(7)) return local.ToString("ddd h:mm tt");
+        return local.ToString("ddd dd/MM/yyyy");
+    }
+
+    /// <summary>Re-reads the current folder, after a send/receive has filed new mail.</summary>
+    public void Refresh()
+    {
+        if (_mail is null) return;
+
+        var selected = SelectedFolder;
+        LoadFromStore();
+        SelectedFolder = selected is null
+            ? Folders.FirstOrDefault(f => _folderIds.ContainsKey(f))
+            : Folders.FirstOrDefault(f => f.Name == selected.Name) ?? SelectedFolder;
+    }
+
     /// <summary>The reference application puts search above the message list, not in the title bar.</summary>
     public string SearchText
     {
@@ -347,6 +446,7 @@ public sealed class ShellViewModel : ObservableObject
         {
             if (!Set(ref _selectedFolder, value)) return;
             Raise(nameof(SelectedFolderName));
+            LoadMessages(_selectedFolder);
             Raise(nameof(SearchPlaceholder));
             Raise(nameof(WindowTitle));
             Raise(nameof(StatusLeft));

@@ -5,6 +5,8 @@ using Mailbox.App.Theming;
 using Mailbox.App.Views;
 using Mailbox.Core.Commands;
 using Mailbox.Core.Settings;
+using Mailbox.Protocols;
+using Mailbox.Store;
 using Mailbox.Theming.Themes;
 using Mailbox.Core.Diagnostics;
 using Mailbox.Theming;
@@ -24,6 +26,19 @@ public partial class App : Application
     /// up by hand. The mail store is the thing that needs SQLite, and that is a separate store.
     /// </summary>
     public static SettingsStore Settings { get; private set; } = null!;
+
+    /// <summary>The mail store, and typed access to it.</summary>
+    public static MailStore Store { get; private set; } = null!;
+
+    public static MailRepository Mail { get; private set; } = null!;
+
+    /// <summary>Polling, sending, and the orchestration over both.</summary>
+    public static SendReceiveService Transfer { get; private set; } = null!;
+
+    public static SmtpSender Sender { get; private set; } = null!;
+
+    /// <summary>Where passwords are kept. Never a file of our own.</summary>
+    public static ICredentialStore Secrets { get; private set; } = null!;
 
     /// <summary>Keys under which the appearance choices persist.</summary>
     public const string ThemeSetting = "appearance.theme";
@@ -62,6 +77,15 @@ public partial class App : Application
         Fonts = FontResolver.FromSystem();
         Themes = new ThemeService(Fonts);
         RestoreAppearance();
+
+        // A store under the harness's own directory when capturing, so a screenshot run never
+        // touches real mail.
+        Store = new MailStore(
+            Environment.GetEnvironmentVariable("MAILBOX_STORE") ?? MailStore.DefaultPath());
+        Mail = new MailRepository(Store);
+        Secrets = Credentials.Best();
+        Sender = new SmtpSender(Mail);
+        Transfer = new SendReceiveService(Mail, new Pop3Receiver(Mail), Sender);
 
         Commands = new CommandCatalog();
         Commands.RegisterRange(MailCommands.All);

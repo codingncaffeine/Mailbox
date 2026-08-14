@@ -75,6 +75,9 @@ public sealed class BackstageView : Border
     /// <summary>Raised by the Options page entry. The shell opens the dialog.</summary>
     public event EventHandler? OptionsRequested;
 
+    /// <summary>Raised by Add Account. The shell owns the window, and the reload after it.</summary>
+    public event EventHandler? AddAccountRequested;
+
     private Control BuildBackButton()
     {
         var glyph = new TextBlock
@@ -332,6 +335,7 @@ public sealed class BackstageView : Border
             Background = Brushes.Transparent,
         };
         Bind(button, BorderBrushProperty, "border.strong.brush");
+        button.Click += (_, _) => AddAccountRequested?.Invoke(this, EventArgs.Empty);
         return button;
     }
 
