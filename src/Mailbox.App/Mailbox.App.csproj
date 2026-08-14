@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>mailbox</AssemblyName>
+    <RootNamespace>Mailbox.App</RootNamespace>
+    <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Desktop" Version="$(AvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="$(AvaloniaVersion)" />
+    <!-- Structural only. Simple provides bare control templates so ListBox, ComboBox and
+         GridSplitter have something to render; it contributes no colour, because every
+         brush still comes from the token system. Phase 1 onward replaces these with
+         Outlook-specific control themes and this reference goes away. -->
+    <PackageReference Include="Avalonia.Themes.Simple" Version="$(AvaloniaVersion)" />
+    <!-- No Avalonia.Diagnostics: DevTools moved under the commercial licence at 12.x and is
+         not published for this version. Not a runtime dependency either way. -->
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- App icon, corners already cut to transparency. -->
+    <AvaloniaResource Include="..\..\assets\icons\mailbox-*.png" Link="Assets/Icons/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mailbox.Core\Mailbox.Core.csproj" />
+    <ProjectReference Include="..\Mailbox.Theming\Mailbox.Theming.csproj" />
+    <ProjectReference Include="..\Mailbox.Controls.Ribbon\Mailbox.Controls.Ribbon.csproj" />
+  </ItemGroup>
+
+</Project>

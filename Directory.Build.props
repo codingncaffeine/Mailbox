@@ -1,0 +1,30 @@
+<Project>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <NuGetAudit>false</NuGetAudit>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Product>Mailbox</Product>
+    <Company>Mailbox</Company>
+    <Authors>codingncaffeine</Authors>
+    <Copyright>Copyright (C) 2026 Mailbox contributors</Copyright>
+    <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
+    <VersionPrefix>0.1.0</VersionPrefix>
+  </PropertyGroup>
+
+  <!-- Central package versions. Bump here, nowhere else. -->
+  <PropertyGroup>
+    <AvaloniaVersion>12.1.1</AvaloniaVersion>
+    <MailKitVersion>4.17.0</MailKitVersion>
+    <SqliteVersion>10.0.0</SqliteVersion>
+  </PropertyGroup>
+
+</Project>

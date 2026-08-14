@@ -1,0 +1,261 @@
+using Mailbox.Theming;
+using Mailbox.Theming.Fonts;
+using Mailbox.Theming.Themes;
+using Mailbox.Theming.Tokens;
+
+namespace Mailbox.Tests;
+
+public class TokenSetTests
+{
+    [Fact]
+    public void ExpandsReferences()
+    {
+        var tokens = new TokenSet();
+        tokens.Set("palette.blue", "#0F6CBD");
+        tokens.Set("accent.rest", "{palette.blue}");
+        tokens.Set("ribbon.tab.selected", "{accent.rest}");
+
+        var resolved = tokens.Resolve();
+        Assert.Equal("#0F6CBD", resolved.GetString("ribbon.tab.selected"));
+    }
+
+    [Fact]
+    public void DetectsReferenceCycles()
+    {
+        var tokens = new TokenSet();
+        tokens.Set("a", "{b}");
+        tokens.Set("b", "{a}");
+
+        var ex = Assert.Throws<ThemeResolutionException>(() => tokens.Resolve());
+        Assert.Contains("cycle", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ReportsDanglingReferences()
+    {
+        var tokens = new TokenSet();
+        tokens.Set("accent.rest", "{palette.missing}");
+
+        var ex = Assert.Throws<ThemeResolutionException>(() => tokens.Resolve());
+        Assert.Contains("palette.missing", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void OverlayIsLastWins()
+    {
+        var basis = new TokenSet();
+        basis.Set("accent.rest", "#111111");
+        basis.Set("text.primary", "#222222");
+
+        var overrides = new TokenSet();
+        overrides.Set("accent.rest", "#FF0000");
+
+        var merged = basis.OverlaidWith(overrides).Resolve();
+        Assert.Equal("#FF0000", merged.GetString("accent.rest"));
+        Assert.Equal("#222222", merged.GetString("text.primary"));
+    }
+
+    /// <summary>
+    /// The five-line theme. Overriding one primitive must restyle everything downstream —
+    /// this is what lets a theme author ignore the layer system entirely.
+    /// </summary>
+    [Fact]
+    public void OverridingOnePrimitiveCascadesThroughEveryLayer()
+    {
+        var basis = new TokenSet();
+        basis.Set("palette.brand.primary", "#0F6CBD");
+        basis.Set("accent.rest", "{palette.brand.primary}");
+        basis.Set("list.row.unread.bar", "{accent.rest}");
+        basis.Set("nav.unreadcount", "{accent.rest}");
+
+        var overrides = new TokenSet();
+        overrides.Set("palette.brand.primary", "#B4009E");
+
+        var resolved = basis.OverlaidWith(overrides).Resolve();
+        Assert.Equal("#B4009E", resolved.GetString("list.row.unread.bar"));
+        Assert.Equal("#B4009E", resolved.GetString("nav.unreadcount"));
+    }
+
+    [Theory]
+    [InlineData("palette.blue.60", TokenLayer.Primitive)]
+    [InlineData("type.ui.size", TokenLayer.Primitive)]
+    [InlineData("surface.ground", TokenLayer.Semantic)]
+    [InlineData("accent.rest", TokenLayer.Semantic)]
+    [InlineData("ribbon.tab.selected", TokenLayer.Component)]
+    [InlineData("list.row.unread.bar", TokenLayer.Component)]
+    public void InfersLayerFromKey(string key, TokenLayer expected)
+        => Assert.Equal(expected, TokenLayerExtensions.InferLayer(key));
+}
+
+public class OfficeThemeTests
+{
+    public static TheoryData<string> AllThemes()
+    {
+        var data = new TheoryData<string>();
+        foreach (var id in OfficeThemes.All) data.Add(id);
+        return data;
+    }
+
+    /// <summary>
+    /// The coverage gate. This is the requirement Thunderbird missed: a theme with holes leaves
+    /// some surface — its compose window, in Thunderbird's case — permanently unthemeable.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(AllThemes))]
+    public void EveryBuiltInDefinesEveryRequiredToken(string themeId)
+    {
+        var resolved = OfficeThemes.Build(themeId).Resolve();
+
+        var missing = TokenKeys.Required.Where(k => !resolved.Contains(k)).ToList();
+        Assert.True(missing.Count == 0,
+            $"Theme '{themeId}' is missing: {string.Join(", ", missing)}");
+    }
+
+    [Theory]
+    [MemberData(nameof(AllThemes))]
+    public void EveryColourTokenParses(string themeId)
+    {
+        var resolved = OfficeThemes.Build(themeId).Resolve();
+
+        foreach (var key in TokenKeys.Required)
+        {
+            var raw = resolved.GetString(key);
+            if (!raw.StartsWith('#')) continue;
+
+            var ex = Record.Exception(() => resolved.GetColor(key));
+            Assert.True(ex is null, $"{themeId}/{key} = '{raw}' did not parse: {ex?.Message}");
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(AllThemes))]
+    public void GeometryTokensAreNumeric(string themeId)
+    {
+        var resolved = OfficeThemes.Build(themeId).Resolve();
+
+        foreach (var key in (string[])
+                 [TokenKeys.Ribbon.Height, TokenKeys.Ribbon.TabStripHeight, TokenKeys.Nav.Width,
+                  TokenKeys.List.Width, TokenKeys.List.RowHeight, TokenKeys.List.RowHeightCompact,
+                  TokenKeys.List.UnreadBarWidth, TokenKeys.List.GroupHeaderHeight,
+                  TokenKeys.StatusBar.Height])
+        {
+            Assert.True(resolved.GetDouble(key) > 0, $"{themeId}/{key} should be positive");
+        }
+    }
+
+    /// <summary>
+    /// Built-ins are authored as complete explicit sets, never derived from one another. If
+    /// Black were an inversion of Colorful the two would share values; they must not.
+    /// </summary>
+    [Fact]
+    public void BuiltInsAreIndependentlyAuthoredNotDerived()
+    {
+        var colorful = OfficeThemes.Build(OfficeThemes.Colorful).Resolve();
+        var black = OfficeThemes.Build(OfficeThemes.Black).Resolve();
+
+        Assert.NotEqual(colorful.GetString(TokenKeys.Surface.Ground),
+                        black.GetString(TokenKeys.Surface.Ground));
+        Assert.NotEqual(colorful.GetString(TokenKeys.Text.Primary),
+                        black.GetString(TokenKeys.Text.Primary));
+
+        // Geometry is shared on purpose: Office themes change colour, not layout.
+        Assert.Equal(colorful.GetDouble(TokenKeys.List.RowHeight),
+                     black.GetDouble(TokenKeys.List.RowHeight));
+    }
+
+    [Fact]
+    public void OnlyBlackIsDark()
+    {
+        Assert.True(OfficeThemes.IsDark(OfficeThemes.Black));
+        Assert.False(OfficeThemes.IsDark(OfficeThemes.Colorful));
+        Assert.False(OfficeThemes.IsDark(OfficeThemes.White));
+        Assert.False(OfficeThemes.IsDark(OfficeThemes.DarkGray));
+    }
+
+    [Fact]
+    public void UnknownThemeIdThrows()
+        => Assert.Throws<ArgumentException>(() => OfficeThemes.Build("teal"));
+}
+
+public class ThemeServiceTests
+{
+    private static ThemeService Service()
+        => new(new FontResolver(["Liberation Sans", "Liberation Serif", "Liberation Mono"]));
+
+    [Fact]
+    public void DefaultsToColorfulCozy()
+    {
+        var service = Service();
+        Assert.Equal(OfficeThemes.Colorful, service.ThemeId);
+        Assert.Equal(Density.Cozy, service.Density);
+    }
+
+    [Fact]
+    public void RaisesChangedOnApply()
+    {
+        var service = Service();
+        var fired = 0;
+        service.Changed += (_, _) => fired++;
+
+        service.Apply(OfficeThemes.Black);
+
+        Assert.Equal(1, fired);
+        Assert.Equal(OfficeThemes.Black, service.ThemeId);
+        Assert.True(service.IsDark);
+    }
+
+    /// <summary>Density touches spacing only. Colour must be untouched by it.</summary>
+    [Fact]
+    public void DensityChangesGeometryButNotColour()
+    {
+        var service = Service();
+        var cozyAccent = service.Tokens.GetString(TokenKeys.Accent.Rest);
+        var cozyRow = service.Tokens.GetDouble(TokenKeys.List.RowHeight);
+
+        service.SetDensity(Density.Compact);
+
+        Assert.Equal(cozyAccent, service.Tokens.GetString(TokenKeys.Accent.Rest));
+        Assert.True(service.Tokens.GetDouble(TokenKeys.List.RowHeight) < cozyRow);
+
+        service.SetDensity(Density.Comfortable);
+        Assert.True(service.Tokens.GetDouble(TokenKeys.List.RowHeight) > cozyRow);
+    }
+
+    [Fact]
+    public void UserOverridesApplyOverTheBuiltIn()
+    {
+        var service = Service();
+        var overrides = new TokenSet();
+        overrides.Set("palette.brand.primary", "#B4009E");
+
+        service.Apply(OfficeThemes.Colorful, overrides: overrides);
+
+        Assert.Equal("#B4009E", service.Tokens.GetString(TokenKeys.Accent.Rest));
+        Assert.Equal("#B4009E", service.Tokens.GetString(TokenKeys.List.UnreadBar));
+    }
+
+    [Fact]
+    public void ClearingOverridesRestoresTheBuiltInExactly()
+    {
+        var service = Service();
+        var original = service.Tokens.GetString(TokenKeys.Accent.Rest);
+
+        var overrides = new TokenSet();
+        overrides.Set("palette.brand.primary", "#B4009E");
+        service.Apply(OfficeThemes.Colorful, overrides: overrides);
+        service.ClearOverrides();
+
+        Assert.Equal(original, service.Tokens.GetString(TokenKeys.Accent.Rest));
+    }
+
+    /// <summary>
+    /// Typography tokens name logical families; the resolver rewrites them to something this
+    /// machine can actually draw before the UI ever sees them.
+    /// </summary>
+    [Fact]
+    public void TypographyTokensResolveToInstalledFamilies()
+    {
+        var service = Service();
+        Assert.Equal("Liberation Sans", service.Tokens.GetString(TokenKeys.Typography.UiFamily));
+    }
+}

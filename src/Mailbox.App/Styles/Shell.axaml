@@ -1,0 +1,234 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        Base chrome styling. Every colour here comes from a token; nothing is literal.
+        SimpleTheme supplies the control templates but carries its own palette, so anything
+        it colours has to be overridden here or its scheme shows through — the search box
+        rendering black was exactly that.
+    -->
+
+    <!-- ============================== Typography ============================== -->
+
+    <!--
+        Text rendering mode is NOT set here. Avalonia 12.1 exposes TextOptions through
+        Get/Set methods rather than public attached-property fields, so XAML cannot reach it.
+        TextRendering.Apply() sets it on the window in code, which also lets the mode be
+        switched at runtime for the Phase 0 investigation. See docs/text-rendering.md.
+    -->
+    <Style Selector="TextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource ui.fontfamily}" />
+        <Setter Property="FontSize" Value="{DynamicResource type.ui.size.value}" />
+        <Setter Property="Foreground" Value="{DynamicResource text.primary.brush}" />
+    </Style>
+
+    <Style Selector="TextBlock.secondary">
+        <Setter Property="Foreground" Value="{DynamicResource text.secondary.brush}" />
+    </Style>
+
+    <Style Selector="TextBlock.small">
+        <Setter Property="FontSize" Value="{DynamicResource type.ui.size.small.value}" />
+    </Style>
+
+    <!-- ================================ Buttons =============================== -->
+
+    <Style Selector="Button">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource text.primary.brush}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="FontFamily" Value="{DynamicResource ui.fontfamily}" />
+        <Setter Property="FontSize" Value="{DynamicResource type.ui.size.value}" />
+    </Style>
+
+    <Style Selector="Button:pointerover">
+        <Setter Property="Background" Value="{DynamicResource state.hover.brush}" />
+    </Style>
+
+    <Style Selector="Button:pressed">
+        <Setter Property="Background" Value="{DynamicResource state.pressed.brush}" />
+    </Style>
+
+    <Style Selector="Button:disabled">
+        <Setter Property="Foreground" Value="{DynamicResource text.disabled.brush}" />
+    </Style>
+
+    <!-- ============================== Text input ============================== -->
+
+    <Style Selector="TextBox">
+        <Setter Property="Background" Value="{DynamicResource surface.ground.brush}" />
+        <Setter Property="Foreground" Value="{DynamicResource text.primary.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource border.subtle.brush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CaretBrush" Value="{DynamicResource text.primary.brush}" />
+        <Setter Property="SelectionBrush" Value="{DynamicResource state.selected.brush}" />
+        <Setter Property="SelectionForegroundBrush" Value="{DynamicResource text.primary.brush}" />
+        <Setter Property="FontFamily" Value="{DynamicResource ui.fontfamily}" />
+    </Style>
+
+    <Style Selector="TextBox:pointerover">
+        <Setter Property="BorderBrush" Value="{DynamicResource border.strong.brush}" />
+    </Style>
+
+    <Style Selector="TextBox:focus">
+        <Setter Property="BorderBrush" Value="{DynamicResource border.focus.brush}" />
+    </Style>
+
+    <Style Selector="TextBox /template/ TextBlock#PART_Watermark,
+                     TextBox /template/ TextBlock#PART_FloatingWatermark">
+        <Setter Property="Foreground" Value="{DynamicResource text.secondary.brush}" />
+    </Style>
+
+    <!-- ================================ ComboBox ============================== -->
+
+    <Style Selector="ComboBox">
+        <Setter Property="Background" Value="{DynamicResource surface.ground.brush}" />
+        <Setter Property="Foreground" Value="{DynamicResource text.primary.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource border.subtle.brush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="FontFamily" Value="{DynamicResource ui.fontfamily}" />
+    </Style>
+
+    <Style Selector="ComboBox:pointerover">
+        <Setter Property="BorderBrush" Value="{DynamicResource border.strong.brush}" />
+    </Style>
+
+    <Style Selector="ComboBoxItem">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource text.primary.brush}" />
+        <Setter Property="Padding" Value="8,4" />
+    </Style>
+
+    <Style Selector="ComboBoxItem:pointerover">
+        <Setter Property="Background" Value="{DynamicResource state.hover.brush}" />
+    </Style>
+
+    <Style Selector="ComboBoxItem:selected">
+        <Setter Property="Background" Value="{DynamicResource state.selected.brush}" />
+    </Style>
+
+    <!-- ============================== Popups/menus ============================ -->
+
+    <!-- Kept as separate blocks: a grouped selector resolves to the common base type, which
+         has no Background, and fails to compile. -->
+    <Style Selector="FlyoutPresenter">
+        <Setter Property="Background" Value="{DynamicResource surface.overlay.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource border.subtle.brush}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
+    <Style Selector="ContextMenu">
+        <Setter Property="Background" Value="{DynamicResource surface.overlay.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource border.subtle.brush}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
+    <Style Selector="MenuItem">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource text.primary.brush}" />
+    </Style>
+
+    <Style Selector="MenuItem:pointerover">
+        <Setter Property="Background" Value="{DynamicResource state.hover.brush}" />
+    </Style>
+
+    <Style Selector="ToolTip">
+        <Setter Property="Background" Value="{DynamicResource surface.overlay.brush}" />
+        <Setter Property="Foreground" Value="{DynamicResource text.primary.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource border.strong.brush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="0" />
+        <Setter Property="Padding" Value="8,6" />
+        <Setter Property="MaxWidth" Value="280" />
+    </Style>
+
+    <!-- =============================== Scrollbars ============================= -->
+
+    <Style Selector="ScrollBar">
+        <Setter Property="Background" Value="{DynamicResource surface.sunken.brush}" />
+    </Style>
+
+    <Style Selector="ScrollBar /template/ Thumb">
+        <Setter Property="Background" Value="{DynamicResource border.strong.brush}" />
+    </Style>
+
+    <Style Selector="ScrollBar /template/ Thumb:pointerover">
+        <Setter Property="Background" Value="{DynamicResource text.secondary.brush}" />
+    </Style>
+
+    <Style Selector="ScrollBar /template/ RepeatButton">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+
+    <!-- Zoom slider in the status bar sits on the accent bar, so it takes that foreground. -->
+    <Style Selector="Slider /template/ Thumb">
+        <Setter Property="Background" Value="{DynamicResource statusbar.foreground.brush}" />
+    </Style>
+
+    <!-- ================================ Lists ================================= -->
+
+    <Style Selector="ListBox">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+
+    <Style Selector="ListBoxItem">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource text.primary.brush}" />
+    </Style>
+
+    <Style Selector="ListBoxItem:pointerover">
+        <Setter Property="Background" Value="{DynamicResource state.hover.brush}" />
+    </Style>
+
+    <Style Selector="ListBoxItem:selected">
+        <Setter Property="Background" Value="{DynamicResource state.selected.brush}" />
+    </Style>
+
+    <Style Selector="ListBoxItem:selected:pointerover">
+        <Setter Property="Background" Value="{DynamicResource state.selected.brush}" />
+    </Style>
+
+    <!-- ========================== Caption buttons ============================= -->
+    <!-- Windows hover behaviour: neutral wash on minimize and maximize, red on close. -->
+
+    <Style Selector="Button.caption:pointerover">
+        <Setter Property="Background" Value="#22FFFFFF" />
+    </Style>
+
+    <Style Selector="Button.caption:pressed">
+        <Setter Property="Background" Value="#33FFFFFF" />
+    </Style>
+
+    <Style Selector="Button.caption-close:pointerover">
+        <Setter Property="Background" Value="#E81123" />
+    </Style>
+
+    <Style Selector="Button.caption-close:pressed">
+        <Setter Property="Background" Value="#F1707A" />
+    </Style>
+
+    <!-- Unread messages are blue in Outlook, not merely bold. -->
+    <Style Selector="TextBlock.unread">
+        <Setter Property="Foreground" Value="{DynamicResource list.row.unread.text.brush}" />
+    </Style>
+
+    <!-- Module switcher: the active module is accented, the rest are quiet. -->
+    <Style Selector="Button.active > TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource rail.item.active.brush}" />
+    </Style>
+
+    <!--
+        Splitters are invisible at rest. Outlook draws no rule between the folder pane, the
+        message list and the reading pane — the panes simply abut, and their own background
+        colours are what separate them. The splitter only shows on hover, as a grab hint.
+    -->
+    <Style Selector="GridSplitter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="MinWidth" Value="1" />
+        <Setter Property="MinHeight" Value="1" />
+    </Style>
+
+    <Style Selector="GridSplitter:pointerover">
+        <Setter Property="Background" Value="{DynamicResource accent.rest.brush}" />
+    </Style>
+
+</Styles>

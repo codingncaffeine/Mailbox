@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Token system, the four built-in Office themes, and font substitution.
+    Deliberately has no Avalonia dependency beyond the base package: themes are
+    data, and the resolver is testable without a UI thread.
+  -->
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Fluent UI System Icons (MIT). Bundled whole rather than subset: 2.8 MB is nothing
+         beside a self-contained runtime, and it means adding an icon later costs nothing. -->
+    <AvaloniaResource Include="..\..\assets\fonts\FluentSystemIcons-Regular.ttf"
+                      Link="Assets/Fonts/FluentSystemIcons-Regular.ttf" />
+
+    <!-- Selawik (OFL-1.1), Microsoft's own metric-compatible Segoe UI substitute. Bundled
+         because no distro reliably packages it. Ships five weights — Light, Semilight,
+         Regular, Semibold and Bold — which covers Segoe UI's range in Outlook's chrome. -->
+    <AvaloniaResource Include="..\..\assets\fonts\selawk.ttf"   Link="Assets/Fonts/selawk.ttf" />
+    <AvaloniaResource Include="..\..\assets\fonts\selawkb.ttf"  Link="Assets/Fonts/selawkb.ttf" />
+    <AvaloniaResource Include="..\..\assets\fonts\selawkl.ttf"  Link="Assets/Fonts/selawkl.ttf" />
+    <AvaloniaResource Include="..\..\assets\fonts\selawksb.ttf" Link="Assets/Fonts/selawksb.ttf" />
+    <AvaloniaResource Include="..\..\assets\fonts\selawksl.ttf" Link="Assets/Fonts/selawksl.ttf" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mailbox.Core\Mailbox.Core.csproj" />
+  </ItemGroup>
+
+</Project>

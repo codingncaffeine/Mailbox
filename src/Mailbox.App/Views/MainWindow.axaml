@@ -1,0 +1,545 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:Mailbox.App.ViewModels"
+        mc:Ignorable="d"
+        x:Class="Mailbox.App.Views.MainWindow"
+        x:DataType="vm:ShellViewModel"
+        Title="Mailbox"
+        Width="1280" Height="820"
+        MinWidth="760" MinHeight="480"
+        Background="{DynamicResource surface.ground.brush}"
+        FontFamily="{DynamicResource ui.fontfamily}"
+        Icon="/Assets/Icons/mailbox-256.png"
+        ExtendClientAreaToDecorationsHint="True"
+        WindowDecorations="BorderOnly">
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+        <!--
+            Chrome backdrop. The title bar and the tab strip are one continuous surface in
+            Outlook, and painting them as one also closes the sub-pixel seam between grid
+            rows that otherwise let the window background through as a pale hairline.
+        -->
+        <Border Grid.Row="0" Grid.RowSpan="2"
+                ZIndex="0"
+                Background="{DynamicResource titlebar.background.brush}" />
+
+        <!-- ============================ Title bar ============================ -->
+        <!--
+            Client-side decorated: the window draws its own caption so there is exactly one
+            title bar. Left to the compositor there would be two — KDE's dark one stacked on
+            Outlook's coloured one — which is the mismatch that looked wrong.
+            App icon, then the Quick Access Toolbar, title centred, caption buttons right.
+        -->
+        <Border Grid.Row="0"
+                Name="TitleBar"
+                Background="{DynamicResource titlebar.background.brush}"
+                Height="30">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto">
+                <Image Grid.Column="0"
+                       Source="/Assets/Icons/mailbox-32.png"
+                       Width="16" Height="16"
+                       Margin="8,0,6,0"
+                       VerticalAlignment="Center" />
+
+                <ItemsControl Grid.Column="1"
+                              VerticalAlignment="Center"
+                              ItemsSource="{Binding QuickAccess}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="2" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:QuickAccessButton">
+                            <Button Padding="4,2"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    ToolTip.Tip="{Binding Tip}">
+                                <TextBlock Text="{Binding Glyph}"
+                                           FontFamily="{Binding IconFamily}"
+                                           FontSize="14"
+                                           Foreground="{DynamicResource titlebar.foreground.brush}" />
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- Search sits centred in the title bar in both layouts. -->
+                <TextBox Grid.Column="2"
+                         IsVisible="{Binding ShowHeaderSearch}"
+                         Text="{Binding SearchText}"
+                         PlaceholderText="{Binding SearchPlaceholder}"
+                         MaxWidth="520"
+                         Margin="24,3"
+                         Padding="8,2"
+                         MinHeight="24"
+                         BorderThickness="0"
+                         CornerRadius="4"
+                         Background="{DynamicResource titlebar.search.brush}"
+                         FontSize="{DynamicResource type.ui.size.value}" />
+
+                <!-- Account avatar, as Outlook shows left of the caption buttons. -->
+                <Border Grid.Column="3"
+                        Width="26" Height="26"
+                        Margin="6,0"
+                        CornerRadius="13"
+                        VerticalAlignment="Center"
+                        Background="{DynamicResource accent.rest.brush}"
+                        ToolTip.Tip="{Binding AccountTip}">
+                    <TextBlock Text="{Binding AccountInitial}"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource text.onaccent.brush}" />
+                </Border>
+
+                <!-- Windows-style caption buttons, added in code. -->
+                <ContentControl Grid.Column="5" Name="CaptionHost" />
+            </Grid>
+        </Border>
+
+        <!-- ====================== Ribbon / command bar ======================= -->
+        <!-- Classic: the full ribbon, built by RibbonView from the layout document.
+             Modern: a single-row command bar, which is what replaced the ribbon. -->
+        <!--
+            The ribbon floats above the workspace and casts a shadow onto it — measured at
+            roughly 7px in the reference, darkest right under the bar. ZIndex lifts it over
+            the panes so the shadow is not clipped by the row below.
+        -->
+        <Border Grid.Row="1"
+                ZIndex="2"
+                IsVisible="{Binding ShowRibbon}"
+                BoxShadow="0 4 9 -1 #73000000">
+            <ContentControl Name="RibbonHost" />
+        </Border>
+
+        <Border Grid.Row="1"
+                ZIndex="2"
+                BoxShadow="0 4 9 -1 #73000000"
+                IsVisible="{Binding ShowCommandBar}"
+                Background="{DynamicResource ribbon.background.brush}"
+                BorderThickness="0,0,0,1"
+                BorderBrush="{DynamicResource border.subtle.brush}"
+                Padding="8,4">
+            <ItemsControl ItemsSource="{Binding CommandBar}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" Spacing="2" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:QuickAccessButton">
+                        <Button Padding="8,5" ToolTip.Tip="{Binding Tip}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="{Binding Glyph}"
+                                           FontFamily="{Binding IconFamily}"
+                                           FontSize="15"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource accent.rest.brush}" />
+                                <TextBlock Text="{Binding Label}"
+                                           VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Border>
+
+        <!-- =========================== Three panes =========================== -->
+        <Grid Grid.Row="2" Name="PaneGrid" ColumnDefinitions="Auto,Auto,1,Auto,1,*,Auto">
+
+            <!-- App rail. Modern only: the vertical module strip down the left edge, the
+                 arrangement shared with Outlook on the web, Office.com and Teams. -->
+            <Border Grid.Column="0"
+                    IsVisible="{Binding ShowAppRail}"
+                    Width="48"
+                    Background="{DynamicResource rail.background.brush}">
+                <ItemsControl ItemsSource="{Binding Modules}" Margin="0,6,0,0">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Vertical" Spacing="2" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ModuleTab">
+                            <Button Width="40" Height="40"
+                                    Margin="4,0"
+                                    Command="{Binding Activate}"
+                                    Classes.active="{Binding IsActive}"
+                                    ToolTip.Tip="{Binding Tip}">
+                                <TextBlock Text="{Binding RailGlyph}"
+                                           FontFamily="{Binding IconFamily}"
+                                           FontSize="19"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource rail.item.text.brush}" />
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+
+            <!-- Navigation pane -->
+            <Border Grid.Column="1"
+                    Width="{DynamicResource nav.width.value}"
+                    Background="{DynamicResource nav.background.brush}">
+                <DockPanel>
+                    <!-- Module switcher: Ctrl+1..Ctrl+8 -->
+                    <Border DockPanel.Dock="Bottom"
+                            IsVisible="{Binding ShowBottomModuleStrip}"
+                            Padding="6,5"
+                            BorderThickness="0,1,0,0"
+                            BorderBrush="{DynamicResource border.subtle.brush}">
+                        <ItemsControl ItemsSource="{Binding Modules}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" Spacing="1" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ModuleTab">
+                                    <Button Padding="5,2"
+                                            Classes.active="{Binding IsActive}"
+                                            ToolTip.Tip="{Binding Tip}">
+                                        <TextBlock Text="{Binding Glyph}"
+                                                   FontFamily="{Binding IconFamily}"
+                                                   FontSize="15"
+                                                   Foreground="{DynamicResource text.secondary.brush}" />
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Border>
+
+                    <Border DockPanel.Dock="Top" Padding="4,2">
+                        <TextBlock Text="{Binding CollapseGlyph}"
+                                   FontFamily="{Binding IconFamily}"
+                                   FontSize="12"
+                                   HorizontalAlignment="Right"
+                                   Foreground="{DynamicResource nav.item.text.brush}"
+                                   ToolTip.Tip="Minimize the Folder Pane" />
+                    </Border>
+
+                    <ListBox ItemsSource="{Binding Folders}"
+                             SelectedItem="{Binding SelectedFolder}"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.Styles>
+                            <Style Selector="ListBoxItem">
+                                <Setter Property="Padding" Value="8,3" />
+                                <Setter Property="MinHeight" Value="22" />
+                            </Style>
+                        </ListBox.Styles>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:FolderNode">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0"
+                                               Text="{Binding Name}"
+                                               Margin="{Binding IndentMargin}"
+                                               Foreground="{DynamicResource nav.item.text.brush}"
+                                               FontWeight="{Binding Weight}" />
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding UnreadDisplay}"
+                                               Foreground="{DynamicResource nav.unreadcount.brush}"
+                                               FontWeight="SemiBold" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+
+            <GridSplitter Grid.Column="2" ResizeDirection="Columns" />
+
+            <!-- Message list -->
+            <Border Grid.Column="3"
+                    Width="{DynamicResource list.width.value}"
+                    Background="{DynamicResource list.background.brush}">
+                <DockPanel>
+                    <!-- Search sits above the message list, where classic Outlook puts it.
+                         Modern moves it into the header instead. -->
+                    <Border DockPanel.Dock="Top"
+                            IsVisible="{Binding ShowListSearch}"
+                            Padding="6,5"
+                            BorderThickness="0,0,0,1"
+                            BorderBrush="{DynamicResource border.subtle.brush}">
+                        <TextBox Text="{Binding SearchText}"
+                                 PlaceholderText="{Binding SearchPlaceholder}"
+                                 FontSize="{DynamicResource type.ui.size.value}"
+                                 Padding="6,3"
+                                 MinHeight="24" />
+                    </Border>
+
+                    <!-- All / Unread pivot, with the arrangement and sort direction right. -->
+                    <Border DockPanel.Dock="Top"
+                            Background="{DynamicResource list.header.background.brush}"
+                            Padding="10,5">
+                        <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
+                            <TextBlock Grid.Column="0"
+                                       Text="All"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource list.header.text.brush}" />
+                            <TextBlock Grid.Column="1"
+                                       Text="Unread"
+                                       Margin="16,0,0,0"
+                                       Foreground="{DynamicResource list.header.text.brush}" />
+                            <TextBlock Grid.Column="3"
+                                       Text="{Binding ArrangementLabel}"
+                                       Classes="small"
+                                       Foreground="{DynamicResource list.header.text.brush}"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="4"
+                                       Text="&#x2191;"
+                                       Margin="10,0,0,0"
+                                       Classes="small"
+                                       Foreground="{DynamicResource list.header.text.brush}"
+                                       VerticalAlignment="Center" />
+                        </Grid>
+                    </Border>
+
+                    <!-- Column headers. Outlook shows these even in the two-line compact
+                         view; the first four are icon-only glyph columns. -->
+                    <Border DockPanel.Dock="Top"
+                            Background="{DynamicResource list.header.background.brush}"
+                            BorderThickness="0,1,0,1"
+                            BorderBrush="{DynamicResource border.subtle.brush}">
+                        <ItemsControl ItemsSource="{Binding Columns}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:MessageColumn">
+                                    <Border Width="{Binding Width}"
+                                            Padding="4,3"
+                                            BorderThickness="0,0,1,0"
+                                            BorderBrush="{DynamicResource border.subtle.brush}">
+                                        <TextBlock Text="{Binding Title}"
+                                                   Classes="small"
+                                                   Foreground="{DynamicResource list.header.text.brush}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Border>
+
+                    <!-- Collapsible arrangement group header. -->
+                    <Border DockPanel.Dock="Top"
+                            Background="{DynamicResource list.group.header.background.brush}"
+                            Height="{DynamicResource list.group.header.height.value}"
+                            Padding="8,0">
+                        <StackPanel Orientation="Horizontal" Spacing="6"
+                                    VerticalAlignment="Center">
+                            <TextBlock Text="&#x2304;"
+                                       Foreground="{DynamicResource list.group.header.text.brush}" />
+                            <TextBlock Text="Yesterday"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource list.group.header.text.brush}" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Phase 3 replaces this ListBox with the virtualizing message list:
+                         group headers, conversation threading, conditional formatting. -->
+                    <ListBox ItemsSource="{Binding Messages}"
+                             SelectedItem="{Binding SelectedMessage}"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.Styles>
+                            <Style Selector="ListBoxItem">
+                                <Setter Property="Padding" Value="0" />
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            </Style>
+                        </ListBox.Styles>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:MessageRow">
+                                <Grid ColumnDefinitions="4,*"
+                                      Background="{DynamicResource list.row.background.brush}"
+                                      Height="{DynamicResource list.row.height.value}">
+                                    <!-- The unread bar. 4px, accent, only when unread. -->
+                                    <Rectangle Grid.Column="0"
+                                               Fill="{DynamicResource list.row.unread.bar.brush}"
+                                               IsVisible="{Binding IsUnread}" />
+
+                                    <!-- Two lines, laid out in the header columns: From,
+                                         Subject and Received on top, preview beneath. -->
+                                    <Grid Grid.Column="1"
+                                          Margin="6,3,8,3"
+                                          RowDefinitions="Auto,Auto"
+                                          ColumnDefinitions="150,*,100">
+                                        <TextBlock Grid.Row="0" Grid.Column="0"
+                                                   Text="{Binding From}"
+                                                   Classes.unread="{Binding IsUnread}"
+                                                   FontWeight="{Binding SenderWeight}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Grid.Row="0" Grid.Column="1"
+                                                   Text="{Binding Subject}"
+                                                   Classes.unread="{Binding IsUnread}"
+                                                   FontWeight="{Binding SubjectWeight}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Grid.Row="0" Grid.Column="2"
+                                                   Text="{Binding Received}"
+                                                   Classes.unread="{Binding IsUnread}"
+                                                   Classes="small"
+                                                   HorizontalAlignment="Right"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Grid.Row="1" Grid.Column="0"
+                                                   Grid.ColumnSpan="3"
+                                                   Text="{Binding Preview}"
+                                                   Classes="small secondary"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   MaxLines="1" />
+                                    </Grid>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+
+            <GridSplitter Grid.Column="4" ResizeDirection="Columns" />
+
+            <!-- Docked calendar. Takes the reading pane's right edge, exactly as Outlook's
+                 To-Do Bar calendar does, and carries a close button to undock. -->
+            <ContentControl Grid.Column="6"
+                            Name="DockHost"
+                            IsVisible="{Binding IsCalendarDocked}" />
+
+            <!-- Reading pane -->
+            <Border Grid.Column="5"
+                    Background="{DynamicResource reading.background.brush}">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top"
+                            Background="{DynamicResource reading.header.background.brush}"
+                            Padding="20,12"
+                            BorderThickness="0,0,0,1"
+                            BorderBrush="{DynamicResource border.subtle.brush}">
+                        <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2"
+                                       Text="{Binding SelectedMessage.Subject}"
+                                       FontSize="18"
+                                       Margin="0,0,0,8"
+                                       TextWrapping="Wrap" />
+
+                            <StackPanel Grid.Row="1" Grid.Column="0" Spacing="2">
+                                <TextBlock Text="{Binding SelectedMessage.From}"
+                                           FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding SelectedMessage.ToLine}"
+                                           Classes="small secondary" />
+                            </StackPanel>
+
+                            <!-- Outlook puts Reply / Reply All / Forward at the top right of
+                                 the reading pane, mirroring the Respond ribbon group. -->
+                            <ItemsControl Grid.Row="1" Grid.Column="1"
+                                          VerticalAlignment="Top"
+                                          ItemsSource="{Binding ReadingPaneActions}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" Spacing="2" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:QuickAccessButton">
+                                        <Button Padding="7,4" ToolTip.Tip="{Binding Tip}">
+                                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                                <TextBlock Text="{Binding Glyph}"
+                                                           FontFamily="{Binding IconFamily}"
+                                                           FontSize="15"
+                                                           Foreground="{DynamicResource accent.rest.brush}" />
+                                                <TextBlock Text="{Binding Label}"
+                                                           Classes="small" />
+                                            </StackPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Grid>
+                    </Border>
+
+                    <!-- Phase 4 replaces this with the WebView reading pane, the
+                         mailbox:// scheme handler and remote-image blocking. -->
+                    <ScrollViewer Padding="20,16">
+                        <TextBlock Text="{Binding SelectedMessage.Body}"
+                                   TextWrapping="Wrap"
+                                   FontFamily="{DynamicResource content.fontfamily}"
+                                   FontSize="{DynamicResource type.content.size.value}" />
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+        </Grid>
+
+        <!-- Backstage. A full-window takeover across every row, so it covers the ribbon and
+             the panes alike. -->
+        <ContentControl Grid.Row="0" Grid.RowSpan="4"
+                        Name="BackstageHost"
+                        ZIndex="10"
+                        IsVisible="False" />
+
+        <!-- Floating peek layer. Sits over the panes so the peek can overlap them, which is
+             what makes it a peek rather than another pane. -->
+        <Canvas Grid.Row="2" Name="PeekLayer" IsHitTestVisible="True" />
+
+        <!-- ============================ Status bar =========================== -->
+        <Border Grid.Row="3"
+                Background="{DynamicResource statusbar.background.brush}"
+                Height="{DynamicResource statusbar.height.value}">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="10,0">
+                <TextBlock Grid.Column="0"
+                           Text="{Binding StatusLeft}"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource statusbar.foreground.brush}"
+                           FontSize="{DynamicResource type.ui.size.small.value}" />
+
+                <TextBlock Grid.Column="2"
+                           Text="{Binding StatusRight}"
+                           Margin="0,0,14,0"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource statusbar.foreground.brush}"
+                           FontSize="{DynamicResource type.ui.size.small.value}" />
+
+                <!-- Layout toggles, then the zoom control, as Outlook parks them. -->
+                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="2"
+                            VerticalAlignment="Center">
+                    <TextBlock Text="{Binding ReadingPaneGlyph}"
+                               FontFamily="{Binding IconFamily}"
+                               FontSize="13"
+                               Margin="2,0"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource statusbar.foreground.brush}"
+                               ToolTip.Tip="Normal" />
+                    <TextBlock Text="{Binding ReadingGlyph}"
+                               FontFamily="{Binding IconFamily}"
+                               FontSize="13"
+                               Margin="2,0,10,0"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource statusbar.foreground.brush}"
+                               ToolTip.Tip="Reading" />
+
+                    <TextBlock Text="&#x2212;"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource statusbar.foreground.brush}" />
+                    <Slider Width="96"
+                            Minimum="50" Maximum="200"
+                            Value="{Binding ZoomPercent}"
+                            VerticalAlignment="Center" />
+                    <TextBlock Text="+"
+                               Margin="0,0,8,0"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource statusbar.foreground.brush}" />
+                    <TextBlock Text="{Binding ZoomLabel}"
+                               MinWidth="34"
+                               TextAlignment="Right"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource statusbar.foreground.brush}"
+                               FontSize="{DynamicResource type.ui.size.small.value}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

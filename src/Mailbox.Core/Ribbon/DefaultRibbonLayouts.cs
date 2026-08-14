@@ -1,0 +1,301 @@
+using Mailbox.Core.Commands;
+
+namespace Mailbox.Core.Ribbon;
+
+/// <summary>
+/// The shipped ribbon layouts, authored to classic Outlook parity.
+/// </summary>
+/// <remarks>
+/// This is the load-bearing half of rule 5. Everything Mailbox can do is in the command
+/// catalogue; what makes first run an exact clone is that <em>this document</em> places only
+/// the commands Outlook places. Snooze, View Source and the rest are absent here and present
+/// everywhere else — searchable, bindable, and one drag away in Customize Ribbon.
+/// <para>
+/// Group order, item order and sizes follow Outlook's Home tab: New | Delete | Respond |
+/// Quick Steps | Move | Tags | Find.
+/// </para>
+/// </remarks>
+public static class DefaultRibbonLayouts
+{
+    /// <summary>A vertical rule between clusters on the Simplified row.</summary>
+    private static RibbonItem Sep => new()
+    {
+        Command = new CommandId("app.separator"),
+        Kind = RibbonItemKind.Separator,
+        Size = RibbonItemSize.Small,
+    };
+
+    public static RibbonLayout Mail { get; } = new()
+    {
+        Module = MailboxModule.Mail,
+        // Outlook's shipped QAT: Send/Receive All Folders, then Undo.
+        QuickAccess =
+        [
+            MailCommands.SendReceiveAll.Id,
+            MailCommands.Undo.Id,
+        ],
+
+        // The Simplified ribbon, which is what Microsoft 365 ships by default. Transcribed
+        // left to right from a running copy, separators included — Outlook curates a shorter,
+        // reordered set here rather than flattening the classic groups.
+        SimplifiedRows = new Dictionary<string, IReadOnlyList<RibbonItem>>
+        {
+            ["home"] =
+            [
+                RibbonItem.Small(MailCommands.NewEmail.Id, RibbonItemKind.SplitButton),
+                Sep,
+                RibbonItem.Small(MailCommands.Delete.Id, RibbonItemKind.SplitButton),
+                RibbonItem.Small(MailCommands.Archive.Id),
+                RibbonItem.Small(MailCommands.MoveTo.Id, RibbonItemKind.SplitButton),
+                Sep,
+                RibbonItem.Small(MailCommands.Reply.Id),
+                RibbonItem.Small(MailCommands.ReplyAll.Id),
+                RibbonItem.Small(MailCommands.Forward.Id),
+                Sep,
+                RibbonItem.Small(MailCommands.Unread.Id),
+                RibbonItem.Small(MailCommands.Categorize.Id, RibbonItemKind.DropDown),
+                RibbonItem.Small(MailCommands.FollowUp.Id, RibbonItemKind.DropDown),
+                Sep,
+                RibbonItem.Small(ViewCommands.SearchPeople.Id),
+                RibbonItem.Small(MailCommands.AddressBook.Id),
+                RibbonItem.Small(MailCommands.FilterEmail.Id, RibbonItemKind.DropDown),
+                Sep,
+                RibbonItem.Small(ViewCommands.Apps.Id),
+                Sep,
+                RibbonItem.Small(MailCommands.SendReceiveAll.Id),
+            ],
+
+            ["sendreceive"] =
+            [
+                RibbonItem.Small(MailCommands.SendReceiveAll.Id),
+                RibbonItem.Small(ViewCommands.SendAll.Id),
+                RibbonItem.Small(ViewCommands.UpdateFolder.Id),
+                RibbonItem.Small(ViewCommands.SendReceiveGroups.Id, RibbonItemKind.DropDown),
+                Sep,
+                RibbonItem.Small(ViewCommands.ShowProgress.Id),
+                RibbonItem.Small(ViewCommands.CancelAll.Id),
+                Sep,
+                RibbonItem.Small(MailCommands.WorkOffline.Id),
+            ],
+
+            ["view"] =
+            [
+                RibbonItem.Small(ViewCommands.ChangeView.Id, RibbonItemKind.DropDown),
+                RibbonItem.Small(ViewCommands.ViewSettings.Id, RibbonItemKind.DropDown),
+                Sep,
+                RibbonItem.Small(ViewCommands.ArrangeBy.Id, RibbonItemKind.DropDown),
+                RibbonItem.Small(ViewCommands.ReverseSort.Id),
+                RibbonItem.Small(ViewCommands.TighterSpacing.Id),
+                Sep,
+                RibbonItem.Small(ViewCommands.LayoutMenu.Id, RibbonItemKind.DropDown),
+                RibbonItem.Small(ViewCommands.ImmersiveReader.Id),
+            ],
+
+            ["help"] = [],
+        },
+        Tabs =
+        [
+            // Leftmost, ahead of Home, and it opens the Backstage rather than a ribbon.
+            new RibbonTab
+            {
+                Id = "file",
+                Label = "File",
+                KeyTip = "F",
+                IsBackstage = true,
+                Groups = [],
+            },
+
+            new RibbonTab
+            {
+                Id = "home",
+                Label = "Home",
+                KeyTip = "H",
+                Groups =
+                [
+                    new RibbonGroup
+                    {
+                        Id = "new",
+                        Label = "New",
+                        CollapsePriority = 7,
+                        Items =
+                        [
+                            RibbonItem.Large(MailCommands.NewEmail.Id),
+                            RibbonItem.Large(MailCommands.NewItems.Id, RibbonItemKind.DropDown),
+                        ],
+                    },
+
+                    new RibbonGroup
+                    {
+                        Id = "delete",
+                        Label = "Delete",
+                        CollapsePriority = 4,
+                        // The stack is icon-only; only Delete and Archive carry labels.
+                        Items =
+                        [
+                            RibbonItem.Glyph(MailCommands.Ignore.Id),
+                            RibbonItem.Glyph(MailCommands.CleanUp.Id, RibbonItemKind.DropDown),
+                            RibbonItem.Glyph(MailCommands.Junk.Id, RibbonItemKind.DropDown),
+                            RibbonItem.Large(MailCommands.Delete.Id),
+                            RibbonItem.Large(MailCommands.Archive.Id),
+                        ],
+                    },
+
+                    new RibbonGroup
+                    {
+                        Id = "respond",
+                        Label = "Respond",
+                        CollapsePriority = 1,
+                        Items =
+                        [
+                            RibbonItem.Large(MailCommands.Reply.Id),
+                            RibbonItem.Large(MailCommands.ReplyAll.Id),
+                            RibbonItem.Large(MailCommands.Forward.Id),
+                            RibbonItem.Glyph(MailCommands.Meeting.Id),
+                            RibbonItem.Glyph(MailCommands.MoreRespond.Id, RibbonItemKind.DropDown),
+                        ],
+                    },
+
+                    // Outlook's Quick Steps is a gallery: a bordered box listing the saved
+                    // steps, not a button. Its default entries are Move to, To Manager and
+                    // Team Email.
+                    new RibbonGroup
+                    {
+                        Id = "quicksteps",
+                        Label = "Quick Steps",
+                        CollapsePriority = 6,
+                        IsGallery = true,
+                        DialogLauncher = MailCommands.QuickSteps.Id,
+                        Items =
+                        [
+                            RibbonItem.Small(ViewCommands.MoveToQuick.Id),
+                            RibbonItem.Small(ViewCommands.ToManager.Id),
+                            RibbonItem.Small(ViewCommands.TeamEmail.Id),
+                        ],
+                    },
+
+                    // Outlook stacks Move as small buttons, not large ones. Its third entry is
+                    // OneNote, which is Microsoft integration and therefore out of scope.
+                    new RibbonGroup
+                    {
+                        Id = "move",
+                        Label = "Move",
+                        CollapsePriority = 5,
+                        Items =
+                        [
+                            RibbonItem.Small(MailCommands.MoveTo.Id, RibbonItemKind.DropDown),
+                            RibbonItem.Small(MailCommands.Rules.Id, RibbonItemKind.DropDown),
+                        ],
+                    },
+
+                    new RibbonGroup
+                    {
+                        Id = "tags",
+                        Label = "Tags",
+                        CollapsePriority = 3,
+                        DialogLauncher = MailCommands.FollowUp.Id,
+                        Items =
+                        [
+                            RibbonItem.Large(MailCommands.Unread.Id),
+                            RibbonItem.Small(MailCommands.Categorize.Id, RibbonItemKind.DropDown),
+                            RibbonItem.Small(MailCommands.FollowUp.Id, RibbonItemKind.DropDown),
+                        ],
+                    },
+
+                    new RibbonGroup
+                    {
+                        Id = "find",
+                        Label = "Find",
+                        CollapsePriority = 2,
+                        Items =
+                        [
+                            RibbonItem.Small(ViewCommands.SearchPeople.Id, RibbonItemKind.TextBox),
+                            RibbonItem.Small(MailCommands.AddressBook.Id),
+                            RibbonItem.Small(MailCommands.FilterEmail.Id, RibbonItemKind.DropDown),
+                        ],
+                    },
+
+                    // The three single-button groups that close out the Home tab.
+                    new RibbonGroup
+                    {
+                        Id = "speech",
+                        Label = "Speech",
+                        CollapsePriority = 10,
+                        Items =
+                        [
+                            new RibbonItem
+                            {
+                                Command = ViewCommands.ReadAloud.Id,
+                                Size = RibbonItemSize.Large,
+                                IsDisabled = true,
+                            },
+                        ],
+                    },
+
+                    new RibbonGroup
+                    {
+                        Id = "apps",
+                        Label = "Apps",
+                        CollapsePriority = 9,
+                        Items = [RibbonItem.Large(ViewCommands.Apps.Id)],
+                    },
+
+                    new RibbonGroup
+                    {
+                        Id = "sendreceivegroup",
+                        Label = "Send/Receive",
+                        CollapsePriority = 8,
+                        Items = [RibbonItem.Large(MailCommands.SendReceiveAll.Id)],
+                    },
+                ],
+            },
+
+            new RibbonTab
+            {
+                Id = "sendreceive",
+                Label = "Send / Receive",
+                KeyTip = "S",
+                Groups =
+                [
+                    new RibbonGroup
+                    {
+                        Id = "sendreceive",
+                        Label = "Send &amp; Receive",
+                        CollapsePriority = 1,
+                        Items = [RibbonItem.Large(MailCommands.SendReceiveAll.Id)],
+                    },
+                    new RibbonGroup
+                    {
+                        Id = "preferences",
+                        Label = "Preferences",
+                        CollapsePriority = 2,
+                        Items = [RibbonItem.Large(MailCommands.WorkOffline.Id)],
+                    },
+                ],
+            },
+
+            // No Folder tab: current Microsoft 365 builds ship File, Home, Send/Receive,
+            // View and Help, with the folder commands folded elsewhere.
+            new RibbonTab
+            {
+                Id = "view",
+                Label = "View",
+                KeyTip = "V",
+                Groups = [],
+            },
+
+            new RibbonTab
+            {
+                Id = "help",
+                Label = "Help",
+                KeyTip = "Y",
+                Groups = [],
+            },
+        ],
+    };
+
+    public static RibbonLayout For(MailboxModule module) => module switch
+    {
+        MailboxModule.Mail => Mail,
+        _ => new RibbonLayout { Module = module, Tabs = [] },
+    };
+}

@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Domain model and the command catalogue. No UI, no protocol, no I/O.
+    Everything else in the solution may depend on this; it depends on nothing.
+  -->
+</Project>

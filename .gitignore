@@ -1,0 +1,16 @@
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.idea/
+.vscode/
+artifacts/
+OUT/
+*.log
+
+# fidelity harness output — reference captures are tracked, diffs are not
+tools/Mailbox.Fidelity/output/
+tools/Mailbox.Fidelity/diffs/
+
+# Reference captures live outside the repo; docs/ holds only our own screenshots.

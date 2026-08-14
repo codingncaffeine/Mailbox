@@ -1,0 +1,21 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Mailbox.App.App"
+             RequestedThemeVariant="Default">
+
+    <Application.Styles>
+        <!--
+            Deliberately no FluentTheme: its WinUI look would fight the clone at every
+            control. SimpleTheme is here for structure only — it supplies the control
+            templates that ListBox, ComboBox, ScrollViewer and GridSplitter need in order to
+            render at all. It contributes no colour; Shell.axaml paints everything from
+            tokens. Phase 1 onward replaces these with Outlook-specific control themes.
+        -->
+        <SimpleTheme />
+
+        <!-- Relative rather than avares:// so it survives the assembly being named
+             'mailbox' for the Linux binary. -->
+        <StyleInclude Source="/Styles/Shell.axaml" />
+    </Application.Styles>
+
+</Application>
