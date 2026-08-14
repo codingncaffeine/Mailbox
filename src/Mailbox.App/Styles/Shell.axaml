@@ -209,6 +209,34 @@
         <Setter Property="Background" Value="{DynamicResource state.selected.brush}" />
     </Style>
 
+    <!-- =========================== Account button ============================= -->
+    <!-- While its panel is open the button reads as pressed: a light box with a hairline
+         border around the circle, measured off the capture. -->
+    <Style Selector="Button.account">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="0" />
+    </Style>
+
+    <Style Selector="Button.account:pointerover">
+        <Setter Property="Background" Value="{DynamicResource state.hover.brush}" />
+    </Style>
+
+    <Style Selector="Button.account:flyout-open">
+        <Setter Property="Background" Value="{DynamicResource surface.overlay.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource border.strong.brush}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
+    <!-- The panel itself carries no padding of its own; the sections inside supply it. -->
+    <Style Selector="FlyoutPresenter.account">
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="Background" Value="{DynamicResource surface.overlay.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource border.strong.brush}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
     <!-- ========================== Caption buttons ============================= -->
     <!-- Windows hover behaviour: neutral wash on minimize and maximize, red on close. -->
 

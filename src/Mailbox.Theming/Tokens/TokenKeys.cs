@@ -69,6 +69,14 @@ public static class TokenKeys
         public const string SearchOffset = "titlebar.search.offset";
     }
 
+    /// <summary>The account button in the title bar, and the panel it opens.</summary>
+    public static class Avatar
+    {
+        /// <summary>Fill of the initial circle. Theme-driven, not derived from the account.</summary>
+        public const string Background = "avatar.background";
+        public const string Foreground = "avatar.foreground";
+    }
+
     public static class Ribbon
     {
         public const string Background = "ribbon.background";
@@ -204,6 +212,7 @@ public static class TokenKeys
         TitleBar.Background, TitleBar.Foreground, TitleBar.Search,
         TitleBar.SearchBorder, TitleBar.SearchText, TitleBar.Height,
         TitleBar.SearchWidth, TitleBar.SearchHeight, TitleBar.SearchOffset,
+        Avatar.Background, Avatar.Foreground,
         Rail.Background, Rail.ItemText, Rail.ItemActive, Rail.Width, Rail.ItemHeight,
         Rail.Indicator, Rail.IndicatorWidth, Rail.IndicatorHeight, Rail.IndicatorInset,
         Backstage.Rail, Backstage.RailText, Backstage.RailDisabled,

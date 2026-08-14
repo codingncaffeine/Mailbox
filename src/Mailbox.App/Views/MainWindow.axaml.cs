@@ -52,6 +52,7 @@ public partial class MainWindow : Window
         var shell = new ShellViewModel(App.Themes, App.Commands, layout, layoutMode);
 
         WireRail(shell);
+        WireAccountButton(shell);
         DataContext = shell;
 
         // Lets the fidelity harness capture the peek states, which a screenshot otherwise
@@ -254,6 +255,21 @@ public partial class MainWindow : Window
 
         e.Handled = true;
         BeginResizeDrag(edge, e);
+    }
+
+    /// <summary>
+    /// Hangs the account panel off the avatar. Done here rather than in
+    /// <see cref="SetUpTitleBar"/> because that runs before the view model exists.
+    /// </summary>
+    private void WireAccountButton(ShellViewModel shell)
+    {
+        if (this.FindControl<Button>("AccountButton") is not { } account) return;
+
+        account.Flyout = AccountFlyout.Build(
+            shell.AccountAddress,
+            shell.AccountInitial,
+            onViewAccount: () => shell.StatusRight = "View account — not wired yet",
+            onAddAccount: () => shell.StatusRight = "Add an account — not wired yet");
     }
 
     private void SetUpTitleBar()

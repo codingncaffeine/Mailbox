@@ -147,20 +147,31 @@
                     </Grid>
                 </Border>
 
-                <!-- Account avatar, as the reference application shows left of the caption buttons. -->
-                <Border Grid.Column="3"
-                        Width="26" Height="26"
-                        Margin="6,0"
-                        CornerRadius="13"
+                <!--
+                    Account button, left of the caption buttons. A button, not an ornament: it
+                    opens the account panel. The circle is 24px inside a 50x48 hit box, both
+                    measured, and the letter is the first character of the address.
+                -->
+                <Button Grid.Column="3"
+                        Name="AccountButton"
+                        Width="50" Height="48"
+                        Padding="0"
+                        Classes="account"
                         VerticalAlignment="Center"
-                        Background="{DynamicResource accent.rest.brush}"
+                        HorizontalContentAlignment="Center"
+                        VerticalContentAlignment="Center"
                         ToolTip.Tip="{Binding AccountTip}">
-                    <TextBlock Text="{Binding AccountInitial}"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource text.onaccent.brush}" />
-                </Border>
+                    <Border Width="24" Height="24"
+                            CornerRadius="12"
+                            Background="{DynamicResource avatar.background.brush}">
+                        <TextBlock Text="{Binding AccountInitial}"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource avatar.foreground.brush}" />
+                    </Border>
+                </Button>
 
                 <!-- Windows-style caption buttons, added in code. -->
                 <ContentControl Grid.Column="5" Name="CaptionHost" />

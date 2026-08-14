@@ -1,3 +1,4 @@
+using Mailbox.Core.Accounts;
 using Mailbox.Core.Commands;
 
 namespace Mailbox.Tests;
@@ -186,4 +187,26 @@ public class CommandCatalogTests
             Assert.Equal(tip.ToUpperInvariant(), tip);
         }
     }
+}
+
+/// <summary>The letter drawn on the account disc when there is no photograph.</summary>
+public class AccountIdentityTests
+{
+    [Theory]
+    [InlineData("you@example.com", "Y")]
+    [InlineData("alice.chen@example.com", "A")]
+    [InlineData("7hills@example.com", "7")]
+    [InlineData("  spaced@example.com", "S")]
+    [InlineData("\"quoted\"@example.com", "Q")]
+    [InlineData("<wrapped@example.com>", "W")]
+    public void TakesTheFirstLetterOrDigit(string address, string expected)
+        => Assert.Equal(expected, AccountIdentity.Initial(address));
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("@#$%")]
+    public void FallsBackWhenThereIsNothingToDraw(string? address)
+        => Assert.Equal(AccountIdentity.Unknown, AccountIdentity.Initial(address));
 }

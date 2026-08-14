@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Media;
 using Mailbox.Core;
+using Mailbox.Core.Accounts;
 using Mailbox.Core.Commands;
 using Mailbox.Core.Ribbon;
 using Mailbox.Theming;
@@ -347,8 +348,22 @@ public sealed class ShellViewModel : ObservableObject
 
     public string ZoomLabel => $"{ZoomPercent:0}%";
 
-    public string AccountInitial => "A";
-    public string AccountTip => "you@example.com";
+    /// <summary>
+    /// The signed-in address. Phase 2 replaces this with the real account; until then the
+    /// avatar and its flyout read from here so there is one source for both.
+    /// </summary>
+    public string AccountAddress { get; } = "you@example.com";
+
+    /// <summary>
+    /// Display name shown above the address. Falls back to the address when the account has
+    /// no name, which is what the reference does.
+    /// </summary>
+    public string AccountName => AccountAddress;
+
+    /// <summary>First letter of the address, as the reference derives it.</summary>
+    public string AccountInitial => AccountIdentity.Initial(AccountAddress);
+
+    public string AccountTip => AccountAddress;
 
     public string ArrangementLabel => "By Date";
 
