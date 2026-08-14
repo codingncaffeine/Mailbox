@@ -61,6 +61,12 @@ public static class TokenKeys
         public const string Background = "titlebar.background";
         public const string Foreground = "titlebar.foreground";
         public const string Search = "titlebar.search";
+        public const string SearchBorder = "titlebar.search.border";
+        public const string SearchText = "titlebar.search.text";
+        public const string Height = "titlebar.height";
+        public const string SearchWidth = "titlebar.search.width";
+        public const string SearchHeight = "titlebar.search.height";
+        public const string SearchOffset = "titlebar.search.offset";
     }
 
     public static class Ribbon
@@ -70,6 +76,7 @@ public static class TokenKeys
         public const string TabRest = "ribbon.tab.rest";
         public const string TabHover = "ribbon.tab.hover";
         public const string TabSelected = "ribbon.tab.selected";
+        public const string TabUnderline = "ribbon.tab.underline";
         public const string TabText = "ribbon.tab.text";
         public const string TabTextSelected = "ribbon.tab.text.selected";
         public const string GroupLabel = "ribbon.group.label";
@@ -96,6 +103,12 @@ public static class TokenKeys
         public const string Background = "rail.background";
         public const string ItemText = "rail.item.text";
         public const string ItemActive = "rail.item.active";
+        public const string Width = "rail.width";
+        public const string ItemHeight = "rail.item.height";
+        public const string Indicator = "rail.indicator";
+        public const string IndicatorWidth = "rail.indicator.width";
+        public const string IndicatorHeight = "rail.indicator.height";
+        public const string IndicatorInset = "rail.indicator.inset";
     }
 
     public static class Nav
@@ -180,11 +193,14 @@ public static class TokenKeys
         State.Hover, State.Selected, State.SelectedInactive, State.Pressed,
         Status.Success, Status.Warning, Status.Danger, Status.Info,
         TitleBar.Background, TitleBar.Foreground, TitleBar.Search,
-        Rail.Background, Rail.ItemText, Rail.ItemActive,
+        TitleBar.SearchBorder, TitleBar.SearchText, TitleBar.Height,
+        TitleBar.SearchWidth, TitleBar.SearchHeight, TitleBar.SearchOffset,
+        Rail.Background, Rail.ItemText, Rail.ItemActive, Rail.Width, Rail.ItemHeight,
+        Rail.Indicator, Rail.IndicatorWidth, Rail.IndicatorHeight, Rail.IndicatorInset,
         Backstage.Rail, Backstage.RailText, Backstage.RailDisabled,
         Backstage.RailRule, Backstage.Field,
         Ribbon.Background, Ribbon.TabStripBackground, Ribbon.TabRest, Ribbon.TabHover,
-        Ribbon.TabSelected, Ribbon.TabText, Ribbon.TabTextSelected, Ribbon.GroupLabel,
+        Ribbon.TabSelected, Ribbon.TabUnderline, Ribbon.TabText, Ribbon.TabTextSelected, Ribbon.GroupLabel,
         Ribbon.GroupSeparator, Ribbon.Height, Ribbon.TabStripHeight,
         Nav.Background, Nav.ItemText, Nav.ItemHover, Nav.ItemSelected, Nav.UnreadCount, Nav.Width,
         List.Background, List.RowBackground, List.HeaderBackground, List.HeaderText,

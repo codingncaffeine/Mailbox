@@ -11,10 +11,20 @@ namespace Mailbox.Controls.Ribbon;
 public static class RibbonMetrics
 {
     /// <summary>Height of the tab strip alone.</summary>
-    public const double TabStripHeight = 26;
+    public const double TabStripHeight = 29;
 
     /// <summary>Height of the Simplified single-row bar. Roughly a third of the classic body.</summary>
-    public const double SimplifiedHeight = 40;
+    public const double SimplifiedHeight = 49;
+
+    /// <summary>
+    /// The ribbon body is a rounded panel floating on the chrome rather than a full-bleed
+    /// band: measured 8px corners, flush against the app rail on the left and held 9px off
+    /// the window's right edge.
+    /// </summary>
+    public const double BodyCornerRadius = 8;
+
+    /// <summary>Clearance between the ribbon panel and the window's right edge.</summary>
+    public const double BodyRightInset = 9;
 
     public const double SimplifiedButtonHeight = 30;
     public const double SimplifiedIconSize = 18;
@@ -29,6 +39,20 @@ public static class RibbonMetrics
     public const double ItemAreaHeight = BodyHeight - GroupLabelHeight;
 
     public const double TabPaddingH = 11;
+
+    /// <summary>Thickness of the rule marking the active tab.</summary>
+    public const double TabUnderlineThickness = 2;
+
+    /// <summary>Clearance between that rule and the bottom of the tab strip.</summary>
+    public const double TabUnderlineGap = 3;
+
+    /// <summary>
+    /// Where the rule starts, measured from the top of the strip. Derived from the gap rather
+    /// than bottom-aligning the rule, because the control it sits in is not always exactly the
+    /// strip's height and the overflow is clipped from the bottom.
+    /// </summary>
+    public const double TabUnderlineTop =
+        TabStripHeight - TabUnderlineGap - TabUnderlineThickness;
     public const double GroupPaddingH = 6;
     public const double GroupMinWidth = 32;
 

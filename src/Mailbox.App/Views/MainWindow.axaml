@@ -15,14 +15,14 @@
         ExtendClientAreaToDecorationsHint="True"
         WindowDecorations="BorderOnly">
 
-    <Grid RowDefinitions="Auto,Auto,*,Auto">
+    <Grid RowDefinitions="Auto,Auto,*,Auto" ColumnDefinitions="Auto,*">
 
         <!--
             Chrome backdrop. The title bar and the tab strip are one continuous surface in
             the reference application, and painting them as one also closes the sub-pixel seam between grid
             rows that otherwise let the window background through as a pale hairline.
         -->
-        <Border Grid.Row="0" Grid.RowSpan="2"
+        <Border Grid.Row="0" Grid.RowSpan="2" Grid.ColumnSpan="2"
                 ZIndex="0"
                 Background="{DynamicResource titlebar.background.brush}" />
 
@@ -33,19 +33,21 @@
             the reference's coloured one — which is the mismatch that looked wrong.
             App icon, then the Quick Access Toolbar, title centred, caption buttons right.
         -->
-        <Border Grid.Row="0"
+        <Border Grid.Row="0" Grid.ColumnSpan="2"
                 Name="TitleBar"
                 Background="{DynamicResource titlebar.background.brush}"
-                Height="30">
+                Height="{DynamicResource titlebar.height.value}">
             <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto">
                 <Image Grid.Column="0"
                        Source="/Assets/Icons/mailbox-32.png"
                        Width="16" Height="16"
-                       Margin="8,0,6,0"
+                       Margin="17,0,6,0"
                        VerticalAlignment="Center" />
 
-                <ItemsControl Grid.Column="1"
-                              VerticalAlignment="Center"
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center">
+                <ItemsControl VerticalAlignment="Center"
                               ItemsSource="{Binding QuickAccess}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
@@ -67,19 +69,62 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <!-- Search sits centred in the title bar in both layouts. -->
-                <TextBox Grid.Column="2"
-                         IsVisible="{Binding ShowHeaderSearch}"
-                         Text="{Binding SearchText}"
-                         PlaceholderText="{Binding SearchPlaceholder}"
-                         MaxWidth="520"
-                         Margin="24,3"
-                         Padding="8,2"
-                         MinHeight="24"
-                         BorderThickness="0"
-                         CornerRadius="4"
-                         Background="{DynamicResource titlebar.search.brush}"
-                         FontSize="{DynamicResource type.ui.size.value}" />
+                    <!-- Customize Quick Access Toolbar. Always last, never rearrangeable. -->
+                    <Button Padding="4,2"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            ToolTip.Tip="Customize Quick Access Toolbar">
+                        <TextBlock Text="{Binding CustomizeGlyph}"
+                                   FontFamily="{Binding IconFamily}"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource titlebar.foreground.brush}" />
+                    </Button>
+                </StackPanel>
+
+                <!--
+                    Search is neither centred nor stretched. Its left edge lines up with the
+                    start of the message list — the app rail plus the folder pane — and its
+                    width is fixed, both confirmed against captures at two window widths.
+                    It spans the columns rather than sitting in one so that position is
+                    absolute and does not drift as the Quick Access Toolbar gains buttons.
+                -->
+                <Border Grid.Column="0" Grid.ColumnSpan="6"
+                        IsVisible="{Binding ShowHeaderSearch}"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        Margin="{DynamicResource titlebar.search.offset.leftmargin}"
+                        Width="{DynamicResource titlebar.search.width.value}"
+                        Height="{DynamicResource titlebar.search.height.value}"
+                        CornerRadius="4"
+                        BorderThickness="1"
+                        Background="{DynamicResource titlebar.search.brush}"
+                        BorderBrush="{DynamicResource titlebar.search.border.brush}">
+                    <Grid ColumnDefinitions="Auto,*">
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding SearchGlyph}"
+                                   FontFamily="{Binding IconFamily}"
+                                   FontSize="16"
+                                   Margin="20,0,16,0"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource titlebar.search.text.brush}" />
+                        <Panel Grid.Column="1">
+                            <TextBlock Text="{Binding SearchPlaceholder}"
+                                       IsVisible="{Binding ShowSearchPlaceholder}"
+                                       VerticalAlignment="Center"
+                                       IsHitTestVisible="False"
+                                       Foreground="{DynamicResource titlebar.search.text.brush}"
+                                       FontSize="{DynamicResource type.ui.size.value}" />
+                            <TextBox Text="{Binding SearchText}"
+                                     Classes="titlebar-search"
+                                     VerticalAlignment="Center"
+                                     Padding="0"
+                                     BorderThickness="0"
+                                     Background="Transparent"
+                                     Foreground="{DynamicResource titlebar.search.text.brush}"
+                                     FontSize="{DynamicResource type.ui.size.value}" />
+                        </Panel>
+                    </Grid>
+                </Border>
 
                 <!-- Account avatar, as the reference application shows left of the caption buttons. -->
                 <Border Grid.Column="3"
@@ -109,14 +154,14 @@
             roughly 7px in the reference, darkest right under the bar. ZIndex lifts it over
             the panes so the shadow is not clipped by the row below.
         -->
-        <Border Grid.Row="1"
+        <Border Grid.Row="1" Grid.Column="1"
                 ZIndex="2"
                 IsVisible="{Binding ShowRibbon}"
                 BoxShadow="0 4 9 -1 #73000000">
             <ContentControl Name="RibbonHost" />
         </Border>
 
-        <Border Grid.Row="1"
+        <Border Grid.Row="1" Grid.Column="1"
                 ZIndex="2"
                 BoxShadow="0 4 9 -1 #73000000"
                 IsVisible="{Binding ShowCommandBar}"
@@ -149,24 +194,40 @@
         </Border>
 
         <!-- =========================== Three panes =========================== -->
-        <Grid Grid.Row="2" Name="PaneGrid" ColumnDefinitions="Auto,Auto,1,Auto,1,*,Auto">
-
-            <!-- App rail. Modern only: the vertical module strip down the left edge, the
-                 arrangement shared with the reference application on the web, Office.com and Teams. -->
-            <Border Grid.Column="0"
-                    IsVisible="{Binding ShowAppRail}"
-                    Width="48"
-                    Background="{DynamicResource rail.background.brush}">
-                <ItemsControl ItemsSource="{Binding Modules}" Margin="0,6,0,0">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <StackPanel Orientation="Vertical" Spacing="2" />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:ModuleTab">
+        <!--
+            App rail. Modern only. It begins at the tab strip rather than below the ribbon,
+            which is why it lives in the outer grid spanning both rows: in the reference the
+            ribbon starts to the right of the rail, not across the top of it.
+        -->
+        <Border Grid.Row="1" Grid.RowSpan="2" Grid.Column="0"
+                IsVisible="{Binding ShowAppRail}"
+                Width="{DynamicResource rail.width.value}"
+                Background="{DynamicResource rail.background.brush}">
+            <ItemsControl ItemsSource="{Binding Modules}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Vertical" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ModuleTab">
+                        <!--
+                            One 48px slot per module, the first sitting level with the tab
+                            strip so the mail icon reads as being above and left of File.
+                            The active module is marked by a rule against the rail's left
+                            edge, measured 2x32 and set in 6px.
+                        -->
+                        <Grid Height="{DynamicResource rail.item.height.value}">
+                            <Border Width="{DynamicResource rail.indicator.width.value}"
+                                    Height="{DynamicResource rail.indicator.height.value}"
+                                    Margin="{DynamicResource rail.indicator.inset.leftmargin}"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center"
+                                    IsVisible="{Binding IsActive}"
+                                    Background="{DynamicResource rail.indicator.brush}" />
                             <Button Width="40" Height="40"
-                                    Margin="4,0"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
                                     Command="{Binding Activate}"
                                     Classes.active="{Binding IsActive}"
                                     ToolTip.Tip="{Binding Tip}">
@@ -177,10 +238,13 @@
                                            VerticalAlignment="Center"
                                            Foreground="{DynamicResource rail.item.text.brush}" />
                             </Button>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </Border>
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Border>
+
+        <Grid Grid.Row="2" Grid.Column="1" Name="PaneGrid" ColumnDefinitions="Auto,Auto,1,Auto,1,*,Auto">
 
             <!-- Navigation pane -->
             <Border Grid.Column="1"
@@ -476,17 +540,17 @@
 
         <!-- Backstage. A full-window takeover across every row, so it covers the ribbon and
              the panes alike. -->
-        <ContentControl Grid.Row="0" Grid.RowSpan="4"
+        <ContentControl Grid.Row="0" Grid.RowSpan="4" Grid.ColumnSpan="2"
                         Name="BackstageHost"
                         ZIndex="10"
                         IsVisible="False" />
 
         <!-- Floating peek layer. Sits over the panes so the peek can overlap them, which is
              what makes it a peek rather than another pane. -->
-        <Canvas Grid.Row="2" Name="PeekLayer" IsHitTestVisible="True" />
+        <Canvas Grid.Row="2" Grid.Column="1" Name="PeekLayer" IsHitTestVisible="True" />
 
         <!-- ============================ Status bar =========================== -->
-        <Border Grid.Row="3"
+        <Border Grid.Row="3" Grid.ColumnSpan="2"
                 Background="{DynamicResource statusbar.background.brush}"
                 Height="{DynamicResource statusbar.height.value}">
             <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="10,0">

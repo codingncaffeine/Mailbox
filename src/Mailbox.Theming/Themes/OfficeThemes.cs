@@ -83,7 +83,19 @@ public static class OfficeThemes
         // Chrome geometry, measured from reference captures.
         t.Set(TokenKeys.Ribbon.TabStripHeight, "28");
         t.Set(TokenKeys.Ribbon.Height, "94");
-        t.Set(TokenKeys.Nav.Width, "232");
+        t.Set(TokenKeys.Nav.Width, "236");
+
+        // Title bar, all measured. The search box clears the top by 7px and its left edge
+        // sits where the message list starts: rail (57) + folder pane (236) + splitter (1).
+        t.Set(TokenKeys.TitleBar.Height, "49");
+        t.Set(TokenKeys.TitleBar.SearchWidth, "511");
+        t.Set(TokenKeys.TitleBar.SearchHeight, "34");
+        t.Set(TokenKeys.TitleBar.SearchOffset, "294");
+        t.Set(TokenKeys.Rail.Width, "57");
+        t.Set(TokenKeys.Rail.ItemHeight, "48");
+        t.Set(TokenKeys.Rail.IndicatorWidth, "2");
+        t.Set(TokenKeys.Rail.IndicatorHeight, "32");
+        t.Set(TokenKeys.Rail.IndicatorInset, "6");
         t.Set(TokenKeys.List.Width, "436");
         t.Set(TokenKeys.List.RowHeight, "44");
         t.Set(TokenKeys.List.RowHeightCompact, "22");
@@ -121,12 +133,15 @@ public static class OfficeThemes
         t.Set(TokenKeys.TitleBar.Background, "{palette.brand.primary}");
         t.Set(TokenKeys.TitleBar.Foreground, "{palette.neutral.white}");
         t.Set(TokenKeys.TitleBar.Search, "#2E88D6");
+        t.Set(TokenKeys.TitleBar.SearchBorder, "#5AA0DF");
+        t.Set(TokenKeys.TitleBar.SearchText, "{palette.neutral.white}");
         t.Set(TokenKeys.Ribbon.TabStripBackground, "{palette.brand.primary}");
         t.Set(TokenKeys.Ribbon.TabRest, "#00000000");
         t.Set(TokenKeys.Ribbon.TabHover, "#1AFFFFFF");
-        t.Set(TokenKeys.Ribbon.TabSelected, "{palette.neutral.white}");
+        t.Set(TokenKeys.Ribbon.TabSelected, "#00000000");
+        t.Set(TokenKeys.Ribbon.TabUnderline, "{palette.neutral.white}");
         t.Set(TokenKeys.Ribbon.TabText, "{palette.neutral.white}");
-        t.Set(TokenKeys.Ribbon.TabTextSelected, "{palette.brand.primary}");
+        t.Set(TokenKeys.Ribbon.TabTextSelected, "{palette.neutral.white}");
 
         return t;
     }
@@ -157,12 +172,15 @@ public static class OfficeThemes
         t.Set(TokenKeys.TitleBar.Background, "{palette.neutral.white}");
         t.Set(TokenKeys.TitleBar.Foreground, "{palette.neutral.primary}");
         t.Set(TokenKeys.TitleBar.Search, "{palette.neutral.lighter}");
+        t.Set(TokenKeys.TitleBar.SearchBorder, "{palette.neutral.light}");
+        t.Set(TokenKeys.TitleBar.SearchText, "#424242");
         t.Set(TokenKeys.Ribbon.TabStripBackground, "{palette.neutral.white}");
         t.Set(TokenKeys.Ribbon.TabRest, "#00000000");
         t.Set(TokenKeys.Ribbon.TabHover, "{palette.neutral.light}");
-        t.Set(TokenKeys.Ribbon.TabSelected, "{palette.neutral.white}");
+        t.Set(TokenKeys.Ribbon.TabSelected, "#00000000");
+        t.Set(TokenKeys.Ribbon.TabUnderline, "{palette.brand.primary}");
         t.Set(TokenKeys.Ribbon.TabText, "{palette.neutral.secondary}");
-        t.Set(TokenKeys.Ribbon.TabTextSelected, "{palette.brand.primary}");
+        t.Set(TokenKeys.Ribbon.TabTextSelected, "{palette.neutral.secondary}");
 
         return t;
     }
@@ -219,18 +237,22 @@ public static class OfficeThemes
 
         t.Set(TokenKeys.TitleBar.Background, "{palette.chrome.titlebar}");
         t.Set(TokenKeys.TitleBar.Foreground, "{palette.neutral.white}");
-        t.Set(TokenKeys.TitleBar.Search, "#615D61");
+        t.Set(TokenKeys.TitleBar.Search, "#BDBDBD");
+        t.Set(TokenKeys.TitleBar.SearchBorder, "#808080");
+        t.Set(TokenKeys.TitleBar.SearchText, "#424242");
         t.Set(TokenKeys.Rail.Background, "{palette.chrome.rail}");
         t.Set(TokenKeys.Rail.ItemText, "#E8E8E8");
         t.Set(TokenKeys.Rail.ItemActive, "#8FC3F0");
+        t.Set(TokenKeys.Rail.Indicator, "#0072C6");
         t.Set(TokenKeys.Backstage.Field, "#9C9C9C");
         t.Set(TokenKeys.Ribbon.Background, "{palette.chrome.ribbon}");
         t.Set(TokenKeys.Ribbon.TabStripBackground, "{palette.chrome.tabstrip}");
         t.Set(TokenKeys.Ribbon.TabRest, "#00000000");
         t.Set(TokenKeys.Ribbon.TabHover, "#1AFFFFFF");
-        t.Set(TokenKeys.Ribbon.TabSelected, "{palette.chrome.ribbon}");
+        t.Set(TokenKeys.Ribbon.TabSelected, "#00000000");
+        t.Set(TokenKeys.Ribbon.TabUnderline, "#B3D6F2");
         t.Set(TokenKeys.Ribbon.TabText, "{palette.neutral.white}");
-        t.Set(TokenKeys.Ribbon.TabTextSelected, "{palette.neutral.primary}");
+        t.Set(TokenKeys.Ribbon.TabTextSelected, "{palette.neutral.white}");
 
         t.Set(TokenKeys.Nav.Background, "{palette.chrome.nav}");
         t.Set(TokenKeys.Nav.ItemText, "{palette.neutral.white}");
@@ -319,9 +341,12 @@ public static class OfficeThemes
         t.Set(TokenKeys.TitleBar.Background, "#1B1B1B");
         t.Set(TokenKeys.TitleBar.Foreground, "{palette.neutral.primary}");
         t.Set(TokenKeys.TitleBar.Search, "#2B2B2B");
+        t.Set(TokenKeys.TitleBar.SearchBorder, "#4A4A4A");
+        t.Set(TokenKeys.TitleBar.SearchText, "#E0E0E0");
         t.Set(TokenKeys.Rail.Background, "#171717");
         t.Set(TokenKeys.Rail.ItemText, "{palette.neutral.secondary}");
         t.Set(TokenKeys.Rail.ItemActive, "{palette.brand.primary}");
+        t.Set(TokenKeys.Rail.Indicator, "#0072C6");
         t.Set(TokenKeys.Backstage.Rail, "#1B1B1B");
         t.Set(TokenKeys.Backstage.RailText, "{palette.neutral.primary}");
         t.Set(TokenKeys.Backstage.RailDisabled, "{palette.neutral.tertiary}");
@@ -331,9 +356,10 @@ public static class OfficeThemes
         t.Set(TokenKeys.Ribbon.TabStripBackground, "#1B1B1B");
         t.Set(TokenKeys.Ribbon.TabRest, "#00000000");
         t.Set(TokenKeys.Ribbon.TabHover, "#1AFFFFFF");
-        t.Set(TokenKeys.Ribbon.TabSelected, "{palette.neutral.lighter}");
+        t.Set(TokenKeys.Ribbon.TabSelected, "#00000000");
+        t.Set(TokenKeys.Ribbon.TabUnderline, "#8FC3F0");
         t.Set(TokenKeys.Ribbon.TabText, "{palette.neutral.secondary}");
-        t.Set(TokenKeys.Ribbon.TabTextSelected, "{palette.neutral.primary}");
+        t.Set(TokenKeys.Ribbon.TabTextSelected, "{palette.neutral.secondary}");
         t.Set(TokenKeys.Ribbon.GroupLabel, "{palette.neutral.secondary}");
         t.Set(TokenKeys.Ribbon.GroupSeparator, "{palette.neutral.quaternary}");
 
@@ -418,6 +444,7 @@ public static class OfficeThemes
         t.Set(TokenKeys.Rail.Background, "{palette.neutral.lighter}");
         t.Set(TokenKeys.Rail.ItemText, "{palette.neutral.secondary}");
         t.Set(TokenKeys.Rail.ItemActive, "{palette.brand.primary}");
+        t.Set(TokenKeys.Rail.Indicator, "#0072C6");
 
         // Backstage keeps a dark rail whatever the theme, so these are literal rather than
         // derived from the light palette around them.
