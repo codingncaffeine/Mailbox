@@ -688,7 +688,11 @@ public sealed class RibbonView : ContentControl
 
     private Control BuildSimplifiedButton(MailboxCommand command, RibbonItem item)
     {
-        if (item.Kind == RibbonItemKind.TextBox) return BuildSimplifiedField(command, item);
+        if (item.Kind is RibbonItemKind.TextBox or RibbonItemKind.ComboBox
+            or RibbonItemKind.BoxedButton)
+        {
+            return BuildSimplifiedField(command, item);
+        }
         if (item.Kind == RibbonItemKind.DialogLauncher) return BuildSimplifiedLauncher(command);
 
         var row = new StackPanel
@@ -747,25 +751,50 @@ public sealed class RibbonView : ContentControl
     /// </remarks>
     private Control BuildSimplifiedField(MailboxCommand command, RibbonItem item)
     {
-        var text = new TextBlock
+        // Three shapes share one box: a plain input, a picker, and a command drawn inside a
+        // box. They differ in what sits in the box, not in the box.
+        var inner = new StackPanel
         {
-            Text = item.Text,
+            Orientation = Orientation.Horizontal,
+            Spacing = 6,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(6, 0, 0, 0),
         };
-        Bind(text, TextBlock.ForegroundProperty, "text.primary.brush");
-        Bind(text, TextBlock.FontSizeProperty, "type.ui.size.value");
 
-        var chevron = new TextBlock
+        if (item.Kind == RibbonItemKind.BoxedButton)
         {
-            Text = IconGlyphs.GetOrEmpty("chevron-down", 16),
-            FontFamily = IconFont.Family,
-            FontSize = 8,
+            inner.Children.Add(BuildIcon(
+                command.Icon, RibbonMetrics.SimplifiedIconSize, 20, command.NeutralIcon,
+                RibbonMetrics.SimplifiedIconFontSize));
+        }
+
+        var text = new TextBlock
+        {
+            Text = item.Kind == RibbonItemKind.BoxedButton ? command.Label : item.Text,
             VerticalAlignment = VerticalAlignment.Center,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 0, 6, 0),
         };
-        Bind(chevron, TextBlock.ForegroundProperty, "text.secondary.brush");
+        Bind(text, TextBlock.ForegroundProperty,
+            item.Kind == RibbonItemKind.TextBox ? "text.secondary.brush" : "text.primary.brush");
+        Bind(text, TextBlock.FontSizeProperty, "type.ui.size.value");
+        inner.Children.Add(text);
+
+        var content = new Panel { Children = { inner } };
+
+        // A plain input has no chevron; it accepts rather than picks.
+        if (item.Kind != RibbonItemKind.TextBox)
+        {
+            var chevron = new TextBlock
+            {
+                Text = IconGlyphs.GetOrEmpty("chevron-down", 16),
+                FontFamily = IconFont.Family,
+                FontSize = 8,
+                VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Margin = new Thickness(0, 0, 6, 0),
+            };
+            Bind(chevron, TextBlock.ForegroundProperty, "text.secondary.brush");
+            content.Children.Add(chevron);
+        }
 
         var box = new Border
         {
@@ -774,7 +803,7 @@ public sealed class RibbonView : ContentControl
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(2),
             VerticalAlignment = VerticalAlignment.Center,
-            Child = new Panel { Children = { text, chevron } },
+            Child = content,
         };
         Bind(box, Border.BorderBrushProperty, "border.strong.brush");
         Bind(box, Border.BackgroundProperty, "surface.raised.brush");

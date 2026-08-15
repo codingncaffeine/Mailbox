@@ -52,10 +52,22 @@ public enum RibbonItemKind
     Separator,
 
     /// <summary>
-    /// An editable field sitting in the ribbon. the reference's Find group puts the Search People box
-    /// directly on the bar rather than behind a button.
+    /// An editable field sitting in the ribbon, with no chevron. The reference's Find group puts
+    /// the Search People box directly on the bar rather than behind a button.
     /// </summary>
     TextBox,
+
+    /// <summary>
+    /// A bordered box showing a value and a chevron — the Font and Font Size boxes on the
+    /// compose ribbon. Distinct from <see cref="TextBox"/> because it picks rather than accepts.
+    /// </summary>
+    ComboBox,
+
+    /// <summary>
+    /// A command drawn inside a bordered box rather than as a bare button: the Quick Steps entry
+    /// on the Home row, which the reference boxes to mark it as one of a gallery.
+    /// </summary>
+    BoxedButton,
 
     /// <summary>
     /// The "…" that ends a cluster on the Simplified bar, opening the commands that cluster has
@@ -146,8 +158,20 @@ public sealed record RibbonItem
             ShowLabel = false,
         };
 
-    /// <summary>A fixed-width field on the bar, like the Font and Font Size boxes.</summary>
+    /// <summary>A fixed-width picker on the bar, like the Font and Font Size boxes.</summary>
     public static RibbonItem Combo(CommandId command, double width, string text = "")
+        => new()
+        {
+            Command = command,
+            Size = RibbonItemSize.Small,
+            Kind = RibbonItemKind.ComboBox,
+            ShowLabel = false,
+            Width = width,
+            Text = text,
+        };
+
+    /// <summary>A fixed-width input on the bar, like Search People.</summary>
+    public static RibbonItem Field(CommandId command, double width, string placeholder = "")
         => new()
         {
             Command = command,
@@ -155,7 +179,17 @@ public sealed record RibbonItem
             Kind = RibbonItemKind.TextBox,
             ShowLabel = false,
             Width = width,
-            Text = text,
+            Text = placeholder,
+        };
+
+    /// <summary>A command boxed on the bar, like the Quick Steps entry.</summary>
+    public static RibbonItem Boxed(CommandId command, double width)
+        => new()
+        {
+            Command = command,
+            Size = RibbonItemSize.Small,
+            Kind = RibbonItemKind.BoxedButton,
+            Width = width,
         };
 }
 

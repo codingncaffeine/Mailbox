@@ -51,6 +51,14 @@ public static class DefaultRibbonLayouts
         MailCommands.WorkOffline.Id,
     ];
 
+    /// <summary>
+    /// The boxed Quick Steps entry on the Home row, measured from x=470 to x=576.
+    /// </summary>
+    private const double QuickStepBoxWidth = 106;
+
+    /// <summary>The Search People input beside it, measured from x=840 to x=950.</summary>
+    private const double SearchPeopleWidth = 110;
+
     /// <summary>A vertical rule between clusters on the Simplified row.</summary>
     private static RibbonItem Sep => new()
     {
@@ -74,29 +82,36 @@ public static class DefaultRibbonLayouts
         // reordered set here rather than flattening the classic groups.
         SimplifiedRows = new Dictionary<string, IReadOnlyList<RibbonItem>>
         {
+            // Transcribed from home.png, with the cluster rules measured at x = 191, 341, 457,
+            // 596, 831, 1049, 1093 and 1289. Only New Email, Unread/Read and Send/Receive All
+            // Folders carry text; everything else is icon-only, which is why the row fits.
+            // Quick Steps is boxed and Search People is a real input, not a button.
             ["home"] =
             [
                 RibbonItem.Small(MailCommands.NewEmail.Id, RibbonItemKind.SplitButton),
                 Sep,
-                RibbonItem.Small(MailCommands.Delete.Id, RibbonItemKind.SplitButton),
-                RibbonItem.Small(MailCommands.Archive.Id),
-                RibbonItem.Small(MailCommands.MoveTo.Id, RibbonItemKind.SplitButton),
+                RibbonItem.Glyph(MailCommands.Delete.Id, RibbonItemKind.SplitButton),
+                RibbonItem.Glyph(MailCommands.Archive.Id),
+                RibbonItem.Glyph(MailCommands.MoveTo.Id, RibbonItemKind.SplitButton),
                 Sep,
-                RibbonItem.Small(MailCommands.Reply.Id),
-                RibbonItem.Small(MailCommands.ReplyAll.Id),
-                RibbonItem.Small(MailCommands.Forward.Id),
+                RibbonItem.Glyph(MailCommands.Reply.Id),
+                RibbonItem.Glyph(MailCommands.ReplyAll.Id),
+                RibbonItem.Glyph(MailCommands.Forward.Id),
+                Sep,
+                RibbonItem.Boxed(ViewCommands.MoveToQuick.Id, QuickStepBoxWidth),
                 Sep,
                 RibbonItem.Small(MailCommands.Unread.Id),
-                RibbonItem.Small(MailCommands.Categorize.Id, RibbonItemKind.DropDown),
-                RibbonItem.Small(MailCommands.FollowUp.Id, RibbonItemKind.DropDown),
+                RibbonItem.Glyph(MailCommands.Categorize.Id, RibbonItemKind.DropDown),
+                RibbonItem.Glyph(MailCommands.FollowUp.Id, RibbonItemKind.DropDown),
                 Sep,
-                RibbonItem.Small(ViewCommands.SearchPeople.Id),
-                RibbonItem.Small(MailCommands.AddressBook.Id),
-                RibbonItem.Small(MailCommands.FilterEmail.Id, RibbonItemKind.DropDown),
+                RibbonItem.Field(ViewCommands.SearchPeople.Id, SearchPeopleWidth, "Search People"),
+                RibbonItem.Glyph(MailCommands.AddressBook.Id),
+                RibbonItem.Glyph(MailCommands.FilterEmail.Id, RibbonItemKind.DropDown),
                 Sep,
-                RibbonItem.Small(ViewCommands.Apps.Id),
+                RibbonItem.Glyph(ViewCommands.Apps.Id),
                 Sep,
                 RibbonItem.Small(MailCommands.SendReceiveAll.Id),
+                Sep,
             ],
 
             ["sendreceive"] =
