@@ -40,6 +40,9 @@ public partial class App : Application
     /// </remarks>
     public static QuickAccessLayout QuickAccess { get; private set; } = null!;
 
+    /// <summary>Which accounts are checked together, and when.</summary>
+    public static SendReceiveGroups Groups { get; private set; } = null!;
+
     /// <summary>The user's ribbon edits, and the layout that comes of applying them.</summary>
     public static RibbonCustomization RibbonEdits { get; private set; } = null!;
 
@@ -110,6 +113,7 @@ public partial class App : Application
 
         RibbonEdits = new RibbonCustomization();
         QuickAccess = new QuickAccessLayout(Settings, DefaultRibbonLayouts.Mail.QuickAccess);
+        Groups = new SendReceiveGroups(Settings);
 
         _ = new ThemeResourceBridge(Resources, Themes);
 
