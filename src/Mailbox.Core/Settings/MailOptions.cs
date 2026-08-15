@@ -43,6 +43,7 @@ public sealed class MailOptions(SettingsStore settings)
     public const string OpenRepliesInNewWindowKey = "mail.reply.newwindow";
     public const string CloseOriginalOnReplyKey = "mail.reply.closeoriginal";
     public const string JunkLevelKey = "mail.junk.level";
+    public const string DesktopAlertKey = "mail.arrival.alert";
     public const string RequestDeliveryReceiptKey = "mail.tracking.delivery";
     public const string RequestReadReceiptKey = "mail.tracking.read";
     public const string EmptyDeletedOnExitKey = "mail.exit.emptydeleted";
@@ -131,6 +132,9 @@ public sealed class MailOptions(SettingsStore settings)
     /// reference's default: only the most obvious junk, few wanted messages caught by mistake.
     /// </summary>
     public int JunkLevelIndex => (int)_settings.GetNumber(JunkLevelKey, 1);
+
+    /// <summary>Whether a send/receive that brought new mail shows a desktop notification.</summary>
+    public bool DisplayDesktopAlert => _settings.GetBool(DesktopAlertKey, true);
 
     public bool RequestDeliveryReceipt => _settings.GetBool(RequestDeliveryReceiptKey, false);
 

@@ -740,6 +740,7 @@ public partial class MainWindow : Window
     }
 
     private readonly UndoSendToast _undoSend = new();
+    private readonly Notifications.INotifier _notifier = new Notifications.DesktopNotifier();
 
     private ReadingPaneBody? _reading;
     private readonly AttachmentStrip _attachments = new();
@@ -2056,6 +2057,15 @@ public partial class MainWindow : Window
             _tasks.Finish(result);
             shell.StatusRight = result.Summary();
             shell.Refresh();
+
+            // The Options page's "Display a Desktop Alert": a toast when a run brought new mail,
+            // saying how many and — with more than one account — from where. Nothing pops when
+            // nothing arrived, which is most polls.
+            if (App.MailOptions.DisplayDesktopAlert
+                && NewMailNotice.For(result) is { } notice)
+            {
+                _notifier.Notify(notice.Summary, notice.Body);
+            }
         }
         catch (OperationCanceledException)
         {

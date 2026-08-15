@@ -134,7 +134,7 @@ public static class OptionsPages
                 new CheckRow("Play a sound", true) { Indent = 1 },
                 new CheckRow("Briefly change the mouse pointer") { Indent = 1 },
                 new CheckRow("Show an envelope icon in the taskbar", true) { Indent = 1 },
-                new CheckRow("Display a Desktop Alert", true) { Indent = 1 },
+                new CheckRow("Display a Desktop Alert", true) { Indent = 1, Key = MailOptions.DesktopAlertKey },
             ]),
 
             new OptionSection("Conversation Clean Up",
