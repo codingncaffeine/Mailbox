@@ -17,7 +17,7 @@ public static class MessageMapper
     private const int PreviewLength = 200;
 
     public static MessageSummary ToSummary(MimeMessage message, string? serverUid,
-        long sizeBytes, DateTimeOffset receivedUtc)
+        long sizeBytes, DateTimeOffset receivedUtc, bool isRead = false, bool isFlagged = false)
     {
         var from = message.From.Mailboxes.FirstOrDefault();
 
@@ -33,8 +33,8 @@ public static class MessageMapper
             Sent: SentDate(message),
             Received: receivedUtc,
             SizeBytes: sizeBytes,
-            IsRead: false,
-            IsFlagged: false,
+            IsRead: isRead,
+            IsFlagged: isFlagged,
             HasAttachment: message.Attachments.Any());
     }
 

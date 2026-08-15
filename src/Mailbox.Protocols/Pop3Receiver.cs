@@ -157,27 +157,9 @@ public sealed class Pop3Receiver(MailRepository repository, Func<DateTimeOffset>
         var summary = MessageMapper.ToSummary(message, uid, raw.Length, _now());
         var id = _repository.AddMessage(inbox.Id, summary, raw);
 
-        if (id is not { } messageId || Authentication is null) return;
-
-        // A signature that cannot be checked must not stop the mail being collected. The
-        // message is already stored by this point, so the worst this can cost is a message
-        // with no recorded verdict — which reads as "not checked", which is the truth.
-        try
+        if (id is { } messageId)
         {
-            var result = await Authentication.VerifyAsync(message, cancellation);
-            if (result.Verdict is AuthVerdict.None) return;
-
-            _repository.RecordAuthentication(
-                messageId, result.Verdict.ToString().ToLowerInvariant(),
-                result.SigningDomain, _now());
-        }
-        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            Log.Warn("Could not check a message's signature as it arrived.", ex);
+            await Arrival.RecordSignatureAsync(_repository, Authentication, messageId, message, _now(), cancellation);
         }
     }
 

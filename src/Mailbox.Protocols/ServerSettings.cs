@@ -1,4 +1,5 @@
 using MailKit.Security;
+using Mailbox.Store;
 
 namespace Mailbox.Protocols;
 
@@ -42,6 +43,24 @@ public sealed record Pop3Policy
     public int MaxPerPoll { get; init; } = 500;
 }
 
+/// <summary>
+/// How much of an IMAP mailbox is kept here.
+/// </summary>
+/// <remarks>
+/// The reference's "Mail to keep offline" slider. A mailbox is often years deep, and the first
+/// sync of all of it is the difference between a client that is usable in a minute and one that
+/// is downloading for an afternoon. Older mail stays on the server, and the folder says so.
+/// </remarks>
+public sealed record ImapPolicy
+{
+    /// <summary>Months of mail to keep here, counted from now; 0 keeps everything.</summary>
+    public int OfflineMonths { get; init; } = 12;
+
+    /// <summary>The oldest arrival worth downloading, or null for no limit.</summary>
+    public DateTimeOffset? Cutoff(DateTimeOffset now) =>
+        OfflineMonths <= 0 ? null : now.AddMonths(-OfflineMonths);
+}
+
 /// <summary>Everything needed to poll and send for one account.</summary>
 public sealed record AccountConnection(
     long AccountId,
@@ -49,5 +68,10 @@ public sealed record AccountConnection(
     ServerSettings Incoming,
     ServerSettings Outgoing)
 {
+    /// <summary>Which protocol collects this account's mail. POP3 unless said otherwise.</summary>
+    public MailProtocol Protocol { get; init; } = MailProtocol.Pop3;
+
     public Pop3Policy Policy { get; init; } = new();
+
+    public ImapPolicy Sync { get; init; } = new();
 }

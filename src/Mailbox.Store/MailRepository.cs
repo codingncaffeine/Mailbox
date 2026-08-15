@@ -23,6 +23,7 @@ public sealed class MailRepository(MailStore store)
 
     public Account AddAccount(string address, string displayName, MailProtocol protocol)
     {
+        _isImap = null;
         var now = DateTimeOffset.UtcNow;
         _store.Execute(
             """
@@ -54,19 +55,78 @@ public sealed class MailRepository(MailStore store)
     // ---- Folders --------------------------------------------------------------------------
 
     public Folder AddFolder(long accountId, string name, FolderRole role = FolderRole.None,
-        long? parentId = null)
+        long? parentId = null, string? imapPath = null)
     {
         _store.Execute(
             """
-            INSERT INTO folders (account_id, parent_id, name, role, ordinal)
+            INSERT INTO folders (account_id, parent_id, name, role, ordinal, imap_path)
             VALUES ($account, $parent, $name, $role,
-                    (SELECT count(*) FROM folders WHERE account_id = $account))
+                    (SELECT count(*) FROM folders WHERE account_id = $account), $path)
             """,
             ("$account", accountId), ("$parent", parentId), ("$name", name),
-            ("$role", role.ToString().ToLowerInvariant()));
+            ("$role", role.ToString().ToLowerInvariant()), ("$path", imapPath));
 
         return GetFolder(_store.LastInsertId)!;
     }
+
+    /// <summary>The folder standing for a server folder, by the server's name for it.</summary>
+    public Folder? FolderByPath(long accountId, string imapPath) => _store.Query(
+        FolderSelect + " WHERE f.account_id = $account AND f.imap_path = $path",
+        ReadFolder, ("$account", accountId), ("$path", imapPath)).FirstOrDefault();
+
+    /// <summary>
+    /// Ties a folder to a server folder, taking the server's name and place for it. A role
+    /// folder created before the account was ever synced becomes the server's own this way,
+    /// rather than sitting beside it as a second Sent Items.
+    /// </summary>
+    public void MapFolder(long folderId, string imapPath, string name, long? parentId) => _store.Execute(
+        """
+        UPDATE folders SET imap_path = $path, name = $name, parent_id = $parent WHERE id = $id
+        """,
+        ("$path", imapPath), ("$name", name), ("$parent", parentId), ("$id", folderId));
+
+    /// <summary>Records where a folder's sync has got to.</summary>
+    public void SetFolderSyncState(long folderId, long? uidValidity, long? uidNext, long? highestModSeq)
+        => _store.Execute(
+            """
+            UPDATE folders SET uidvalidity = $validity, uidnext = $next, highestmodseq = $modseq
+            WHERE id = $id
+            """,
+            ("$validity", uidValidity), ("$next", uidNext), ("$modseq", highestModSeq), ("$id", folderId));
+
+    /// <summary>Whether a server folder is pulled as well as listed.</summary>
+    public void SetFolderSynced(long folderId, bool synced) => _store.Execute(
+        "UPDATE folders SET synced = $synced WHERE id = $id",
+        ("$synced", synced ? 1 : 0), ("$id", folderId));
+
+    /// <summary>
+    /// Forgets everything a folder held from the server: its messages, and where the sync had
+    /// got to. What UIDVALIDITY changing means — every UID it knew is now meaningless — and the
+    /// next sync fetches the folder afresh, flags and all.
+    /// </summary>
+    public int ResetFolderFromServer(long folderId) => _store.InTransaction(() =>
+    {
+        var ids = _store.Query(
+            "SELECT id FROM messages WHERE folder_id = $folder AND server_uid IS NOT NULL",
+            r => r.GetInt64(0), ("$folder", folderId));
+
+        var removed = ids.Count == 0 ? 0 : DeleteRows(ids);
+        _store.Execute(
+            "DELETE FROM sync_ops WHERE folder_id = $folder OR target_folder_id = $folder",
+            ("$folder", folderId));
+        SetFolderSyncState(folderId, null, null, null);
+        return removed;
+    });
+
+    /// <summary>Removes a folder and everything in it. A server folder that has gone.</summary>
+    public void RemoveFolder(long folderId) => _store.InTransaction(() =>
+    {
+        var ids = _store.Query(
+            "SELECT id FROM messages WHERE folder_id = $folder", r => r.GetInt64(0), ("$folder", folderId));
+        if (ids.Count > 0) DeleteRows(ids);
+        _store.Execute("DELETE FROM folders WHERE id = $id", ("$id", folderId));
+        return 0;
+    });
 
     public Folder? GetFolder(long id) => _store.Query(
         FolderSelect + " WHERE f.id = $id", ReadFolder, ("$id", id)).FirstOrDefault();
@@ -152,13 +212,99 @@ public sealed class MailRepository(MailStore store)
                 ("$flagged", message.IsFlagged ? 1 : 0),
                 ("$attachment", message.HasAttachment ? 1 : 0));
 
-            if (inserted != 0) return _store.LastInsertId;
+            if (inserted != 0)
+            {
+                var id = _store.LastInsertId;
+
+                // A row with no server id in a folder that stands for one on the server was
+                // made here — a sent copy, a draft — and belongs on the server too.
+                if (message.ServerUid is null && raw is not null && IsSyncedFolder(folderId))
+                {
+                    JournalAppend(folderId, id);
+                }
+
+                return id;
+            }
 
             // Nothing filed, so the blob written above has nothing pointing at it.
             if (blobId is { } orphan) _store.Execute("DELETE FROM blobs WHERE id = $id", ("$id", orphan));
             return null;
         });
     }
+
+    /// <summary>Stamps the server's id on a row, after a move or an append has given it one.</summary>
+    public void SetServerUid(long messageId, string? serverUid) => _store.Execute(
+        "UPDATE messages SET server_uid = $uid WHERE id = $id",
+        ("$uid", serverUid), ("$id", messageId));
+
+    /// <summary>
+    /// Stamps a server UID onto a message already in the folder that has none but the same
+    /// Message-ID, and returns true if it did.
+    /// </summary>
+    /// <remarks>
+    /// The backstop for a move whose new UID could not be written back at the time — a server
+    /// without UIDPLUS, found by nothing. Without it, the moved row (its UID cleared by the
+    /// move) would look like a new message on the next pull of its folder and be downloaded a
+    /// second time. Matched on the Message-ID, which travels with the message.
+    /// </remarks>
+    public bool AdoptServerUid(long folderId, string messageIdHeader, string serverUid)
+    {
+        if (string.IsNullOrEmpty(messageIdHeader)) return false;
+
+        return _store.Execute(
+            """
+            UPDATE messages SET server_uid = $uid
+            WHERE folder_id = $folder AND server_uid IS NULL AND message_id = $mid
+            """,
+            ("$uid", serverUid), ("$folder", folderId), ("$mid", messageIdHeader)) > 0;
+    }
+
+    /// <summary>The rows in a folder keyed by server id, for reconciling against the server.</summary>
+    public Dictionary<string, long> MessageIdsByServerUid(long folderId) => _store.Query(
+        "SELECT server_uid, id FROM messages WHERE folder_id = $folder AND server_uid IS NOT NULL",
+        r => (Uid: r.GetString(0), Id: r.GetInt64(1)), ("$folder", folderId))
+        .ToDictionary(x => x.Uid, x => x.Id, StringComparer.Ordinal);
+
+    /// <summary>
+    /// Takes the server's word for a message's flags. Used by the sync for changes made
+    /// elsewhere; the journal is not written, because this is the server telling us.
+    /// </summary>
+    public void ApplyServerFlags(long messageId, bool read, bool flagged) => _store.Execute(
+        "UPDATE messages SET is_read = $read, is_flagged = $flagged WHERE id = $id",
+        ("$read", read ? 1 : 0), ("$flagged", flagged ? 1 : 0), ("$id", messageId));
+
+    /// <summary>The read and flagged state of a row, for deciding whether the server differs.</summary>
+    public (bool IsRead, bool IsFlagged)? Flags(long messageId) => _store.Query(
+        "SELECT is_read, is_flagged FROM messages WHERE id = $id",
+        r => (r.GetInt32(0) != 0, r.GetInt32(1) != 0), ("$id", messageId))
+        .Select(f => ((bool, bool)?)f).FirstOrDefault();
+
+    /// <summary>
+    /// Removes rows the server no longer has. Not journalled: the change came from the server.
+    /// </summary>
+    public int DeleteByServerUids(long folderId, IReadOnlyCollection<string> serverUids)
+    {
+        if (serverUids.Count == 0) return 0;
+
+        return _store.InTransaction(() =>
+        {
+            var removed = 0;
+            foreach (var chunk in serverUids.Chunk(500))
+            {
+                var ids = _store.Query(
+                    $"""
+                     SELECT id FROM messages
+                     WHERE folder_id = $folder AND server_uid IN ({string.Join(',', chunk.Select(Quote))})
+                     """,
+                    r => r.GetInt64(0), ("$folder", folderId));
+                if (ids.Count > 0) removed += DeleteRows(ids);
+            }
+
+            return removed;
+        });
+    }
+
+    private static string Quote(string value) => "'" + value.Replace("'", "''") + "'";
 
     /// <summary>True when this folder already holds that server id.</summary>
     public bool HasServerUid(long folderId, string serverUid) => _store.ScalarLong(
@@ -209,27 +355,53 @@ public sealed class MailRepository(MailStore store)
     {
         if (messageIds.Count == 0) return 0;
 
-        return _store.Execute(
-            $"UPDATE messages SET is_read = $read WHERE id IN ({Ids(messageIds)})",
-            ("$read", read ? 1 : 0));
+        return _store.InTransaction(() =>
+        {
+            var changed = _store.Execute(
+                $"UPDATE messages SET is_read = $read WHERE id IN ({Ids(messageIds)})",
+                ("$read", read ? 1 : 0));
+            JournalFlag(messageIds, SyncFlag.Seen, read);
+            return changed;
+        });
     }
 
     public int SetFlagged(IReadOnlyCollection<long> messageIds, bool flagged)
     {
         if (messageIds.Count == 0) return 0;
 
-        return _store.Execute(
-            $"UPDATE messages SET is_flagged = $flagged WHERE id IN ({Ids(messageIds)})",
-            ("$flagged", flagged ? 1 : 0));
+        return _store.InTransaction(() =>
+        {
+            var changed = _store.Execute(
+                $"UPDATE messages SET is_flagged = $flagged WHERE id IN ({Ids(messageIds)})",
+                ("$flagged", flagged ? 1 : 0));
+            JournalFlag(messageIds, SyncFlag.Flagged, flagged);
+            return changed;
+        });
     }
 
+    /// <summary>
+    /// Moves messages between folders. On a synced account the move is journalled for the
+    /// server as well, and the row gives up its server id until the server has said what the
+    /// message is called where it now lives — UIDs belong to a folder, and the old one could
+    /// collide with a message already there.
+    /// </summary>
     public int MoveMessages(IReadOnlyCollection<long> messageIds, long toFolderId)
     {
         if (messageIds.Count == 0) return 0;
 
-        return _store.Execute(
-            $"UPDATE messages SET folder_id = $folder WHERE id IN ({Ids(messageIds)})",
-            ("$folder", toFolderId));
+        return _store.InTransaction(() =>
+        {
+            var moving = messageIds.Where(id => JournalMove(id, toFolderId)).ToList();
+            if (moving.Count > 0)
+            {
+                _store.Execute(
+                    $"UPDATE messages SET server_uid = NULL WHERE id IN ({Ids(moving)})");
+            }
+
+            return _store.Execute(
+                $"UPDATE messages SET folder_id = $folder WHERE id IN ({Ids(messageIds)})",
+                ("$folder", toFolderId));
+        });
     }
 
     /// <summary>
@@ -242,20 +414,27 @@ public sealed class MailRepository(MailStore store)
 
         return _store.InTransaction(() =>
         {
-            var list = Ids(messageIds);
-            var blobs = _store.Query(
-                $"SELECT blob_id FROM messages WHERE id IN ({list}) AND blob_id IS NOT NULL",
-                r => r.GetInt64(0));
-
-            var removed = _store.Execute($"DELETE FROM messages WHERE id IN ({list})");
-
-            if (blobs.Count > 0)
-            {
-                _store.Execute($"DELETE FROM blobs WHERE id IN ({Ids(blobs)})");
-            }
-
-            return removed;
+            foreach (var id in messageIds) JournalDelete(id);
+            return DeleteRows(messageIds);
         });
+    }
+
+    /// <summary>The rows and their blobs, no journal. What every delete ends in.</summary>
+    private int DeleteRows(IReadOnlyCollection<long> messageIds)
+    {
+        var list = Ids(messageIds);
+        var blobs = _store.Query(
+            $"SELECT blob_id FROM messages WHERE id IN ({list}) AND blob_id IS NOT NULL",
+            r => r.GetInt64(0));
+
+        var removed = _store.Execute($"DELETE FROM messages WHERE id IN ({list})");
+
+        if (blobs.Count > 0)
+        {
+            _store.Execute($"DELETE FROM blobs WHERE id IN ({Ids(blobs)})");
+        }
+
+        return removed;
     }
 
     /// <summary>
@@ -265,36 +444,293 @@ public sealed class MailRepository(MailStore store)
     /// </summary>
     private static string Ids(IEnumerable<long> ids) => string.Join(',', ids);
 
-    public void SetRead(long messageId, bool read) => _store.Execute(
-        "UPDATE messages SET is_read = $read WHERE id = $id",
-        ("$read", read ? 1 : 0), ("$id", messageId));
+    public void SetRead(long messageId, bool read) => SetRead([messageId], read);
 
-    public void SetFlagged(long messageId, bool flagged) => _store.Execute(
-        "UPDATE messages SET is_flagged = $flagged WHERE id = $id",
-        ("$flagged", flagged ? 1 : 0), ("$id", messageId));
+    public void SetFlagged(long messageId, bool flagged) => SetFlagged([messageId], flagged);
 
-    public void MoveMessage(long messageId, long toFolderId) => _store.Execute(
-        "UPDATE messages SET folder_id = $folder WHERE id = $id",
-        ("$folder", toFolderId), ("$id", messageId));
+    public void MoveMessage(long messageId, long toFolderId) => MoveMessages([messageId], toFolderId);
+
+    /// <summary>Removes a message and the raw copy behind it.</summary>
+    public void DeleteMessage(long messageId) => DeleteMessages([messageId]);
+
+    // ---- The sync journal ---------------------------------------------------------------------
+    //
+    // The store is authoritative (§4), and IMAP is a two-way sync of the part of its state the
+    // server also keeps. So a change made here to a synced folder is written to the journal as
+    // well as to the row, in the same transaction, and the next send/receive plays the journal to
+    // the server before it pulls. Every entry names the server folder and UID it acts on, because
+    // by the time it is played the row may have moved again, or gone.
+
+    private bool? _isImap;
 
     /// <summary>
-    /// Removes a message and the raw copy behind it. The message goes first: while it exists it
-    /// references the blob, and deleting the blob out from under it fails the foreign key.
+    /// Whether this store belongs to an IMAP account. A store holds exactly one account, so this
+    /// is a fact about the file; cached once an account exists, because it is asked on every
+    /// flag change.
     /// </summary>
-    public void DeleteMessage(long messageId)
+    private bool IsImapStore
+    {
+        get
+        {
+            if (_isImap is { } known) return known;
+
+            var protocol = _store.Query(
+                "SELECT protocol FROM accounts ORDER BY id LIMIT 1", r => r.GetString(0)).FirstOrDefault();
+            if (protocol is null) return false;
+
+            _isImap = protocol == "imap";
+            return _isImap.Value;
+        }
+    }
+
+    /// <summary>A folder that stands for one on the server and is pulled from it.</summary>
+    private bool IsSyncedFolder(long folderId) => IsImapStore && _store.ScalarLong(
+        "SELECT count(*) FROM folders WHERE id = $id AND imap_path IS NOT NULL AND synced = 1",
+        ("$id", folderId)) > 0;
+
+    /// <summary>What the journal needs to know about a row before it changes.</summary>
+    private sealed record RowOrigin(long Id, long FolderId, string? ServerUid, bool Synced);
+
+    private RowOrigin? Origin(long messageId) => _store.Query(
+        """
+        SELECT m.id, m.folder_id, m.server_uid, f.imap_path IS NOT NULL AND f.synced = 1
+        FROM messages m JOIN folders f ON f.id = m.folder_id
+        WHERE m.id = $id
+        """,
+        r => new RowOrigin(r.GetInt64(0), r.GetInt64(1), Nullable(r, "server_uid"), r.GetInt64(3) != 0),
+        ("$id", messageId)).FirstOrDefault();
+
+    private void JournalFlag(IReadOnlyCollection<long> messageIds, SyncFlag flag, bool value)
+    {
+        if (!IsImapStore) return;
+
+        foreach (var id in messageIds)
+        {
+            if (Origin(id) is not { Synced: true, ServerUid: { } uid } origin) continue;
+
+            // The latest word on a flag is the only one worth keeping: two entries for the same
+            // flag on the same message would be played in order and land on the last anyway.
+            _store.Execute(
+                """
+                DELETE FROM sync_ops
+                WHERE kind = 'flags' AND folder_id = $folder AND server_uid = $uid AND flag = $flag
+                """,
+                ("$folder", origin.FolderId), ("$uid", uid), ("$flag", Wire(flag)));
+
+            _store.Execute(
+                """
+                INSERT INTO sync_ops (kind, folder_id, server_uid, message_id, flag, value, created_utc)
+                VALUES ('flags', $folder, $uid, $message, $flag, $value, $now)
+                """,
+                ("$folder", origin.FolderId), ("$uid", uid), ("$message", id),
+                ("$flag", Wire(flag)), ("$value", value ? 1 : 0), ("$now", Now()));
+        }
+    }
+
+    /// <summary>
+    /// Journals a move, and says whether the row must give up its server id.
+    /// </summary>
+    /// <remarks>
+    /// The interesting cases are the ones where the message is already on its way somewhere:
+    /// a row waiting to be appended is simply appended where it is going instead; a row whose
+    /// earlier move is still waiting has that move retargeted, or cancelled outright if it is
+    /// going back where it came from. A move to a folder that is only local takes the message
+    /// off the server, which is what dragging server mail into a local folder means.
+    /// </remarks>
+    private bool JournalMove(long messageId, long toFolderId)
+    {
+        if (!IsImapStore) return false;
+        if (Origin(messageId) is not { } origin || origin.FolderId == toFolderId) return false;
+
+        var targetSynced = IsSyncedFolder(toFolderId);
+
+        if (origin.ServerUid is null)
+        {
+            // Not on the server yet, or between folders. Whatever is pending follows the row.
+            if (PendingAppend(messageId) is { } append)
+            {
+                if (targetSynced)
+                {
+                    _store.Execute("UPDATE sync_ops SET folder_id = $to WHERE id = $id",
+                        ("$to", toFolderId), ("$id", append.Id));
+                }
+                else
+                {
+                    _store.Execute("DELETE FROM sync_ops WHERE id = $id", ("$id", append.Id));
+                }
+            }
+            else if (PendingMove(messageId) is { } move)
+            {
+                if (move.FolderId == toFolderId)
+                {
+                    // Back where it started: nothing for the server to do, and the row takes
+                    // its old id back.
+                    _store.Execute("DELETE FROM sync_ops WHERE id = $id", ("$id", move.Id));
+                    _store.Execute("UPDATE messages SET server_uid = $uid WHERE id = $id",
+                        ("$uid", move.ServerUid), ("$id", messageId));
+                }
+                else if (targetSynced)
+                {
+                    _store.Execute("UPDATE sync_ops SET target_folder_id = $to WHERE id = $id",
+                        ("$to", toFolderId), ("$id", move.Id));
+                }
+                else
+                {
+                    _store.Execute(
+                        "UPDATE sync_ops SET kind = 'delete', target_folder_id = NULL WHERE id = $id",
+                        ("$id", move.Id));
+                }
+            }
+
+            return false;
+        }
+
+        if (!origin.Synced) return false;
+
+        _store.Execute(
+            """
+            INSERT INTO sync_ops (kind, folder_id, server_uid, message_id, target_folder_id, created_utc)
+            VALUES ($kind, $folder, $uid, $message, $target, $now)
+            """,
+            ("$kind", targetSynced ? "move" : "delete"),
+            ("$folder", origin.FolderId), ("$uid", origin.ServerUid), ("$message", messageId),
+            ("$target", targetSynced ? toFolderId : null), ("$now", Now()));
+
+        return true;
+    }
+
+    private void JournalDelete(long messageId)
+    {
+        if (!IsImapStore) return;
+        if (Origin(messageId) is not { } origin) return;
+
+        // Flags on a message about to go are moot.
+        _store.Execute(
+            "DELETE FROM sync_ops WHERE kind = 'flags' AND message_id = $id", ("$id", messageId));
+
+        if (origin.ServerUid is null)
+        {
+            if (PendingAppend(messageId) is { } append)
+            {
+                _store.Execute("DELETE FROM sync_ops WHERE id = $id", ("$id", append.Id));
+            }
+            else if (PendingMove(messageId) is { } move)
+            {
+                _store.Execute(
+                    "UPDATE sync_ops SET kind = 'delete', target_folder_id = NULL WHERE id = $id",
+                    ("$id", move.Id));
+            }
+
+            return;
+        }
+
+        if (!origin.Synced) return;
+
+        _store.Execute(
+            """
+            INSERT INTO sync_ops (kind, folder_id, server_uid, message_id, created_utc)
+            VALUES ('delete', $folder, $uid, $message, $now)
+            """,
+            ("$folder", origin.FolderId), ("$uid", origin.ServerUid), ("$message", messageId), ("$now", Now()));
+    }
+
+    private void JournalAppend(long folderId, long messageId) => _store.Execute(
+        """
+        INSERT INTO sync_ops (kind, folder_id, message_id, created_utc)
+        VALUES ('append', $folder, $message, $now)
+        """,
+        ("$folder", folderId), ("$message", messageId), ("$now", Now()));
+
+    private SyncOp? PendingAppend(long messageId) => _store.Query(
+        SyncOpSelect + " WHERE kind = 'append' AND message_id = $id", ReadSyncOp, ("$id", messageId))
+        .FirstOrDefault();
+
+    private SyncOp? PendingMove(long messageId) => _store.Query(
+        SyncOpSelect + " WHERE kind = 'move' AND message_id = $id", ReadSyncOp, ("$id", messageId))
+        .FirstOrDefault();
+
+    /// <summary>Everything waiting to be played, oldest first.</summary>
+    public IReadOnlyList<SyncOp> PendingOps() => _store.Query(
+        SyncOpSelect + " ORDER BY id", ReadSyncOp);
+
+    /// <summary>
+    /// The server ids in a folder that a pending op still refers to. The sync leaves these
+    /// alone when it reconciles: a message with a delete waiting is not "new on the server",
+    /// and one with a flag waiting keeps the flag it was given here.
+    /// </summary>
+    public HashSet<string> PendingUidsIn(long folderId) =>
+    [
+        .. _store.Query(
+            "SELECT server_uid FROM sync_ops WHERE folder_id = $folder AND server_uid IS NOT NULL",
+            r => r.GetString(0), ("$folder", folderId)),
+    ];
+
+    public void CompleteOps(IEnumerable<long> opIds)
+    {
+        var list = Ids(opIds);
+        if (list.Length == 0) return;
+        _store.Execute($"DELETE FROM sync_ops WHERE id IN ({list})");
+    }
+
+    /// <summary>Counts a failed attempt and keeps why, so a persistent one can be reported.</summary>
+    public void FailOps(IEnumerable<long> opIds, string error)
+    {
+        var list = Ids(opIds);
+        if (list.Length == 0) return;
+        _store.Execute(
+            $"UPDATE sync_ops SET attempts = attempts + 1, last_error = $error WHERE id IN ({list})",
+            ("$error", error));
+    }
+
+    /// <summary>
+    /// Gives up on a move the server would not make: the row goes back where it was, with the
+    /// id it had, so the store says what the server says rather than something in between.
+    /// </summary>
+    public void AbandonMove(SyncOp op)
     {
         _store.InTransaction(() =>
         {
-            var blobId = _store.Query(
-                "SELECT blob_id FROM messages WHERE id = $id AND blob_id IS NOT NULL",
-                r => r.GetInt64(0), ("$id", messageId)).FirstOrDefault();
+            if (op.MessageId is { } id && op.ServerUid is not null)
+            {
+                _store.Execute(
+                    "UPDATE messages SET folder_id = $folder, server_uid = $uid WHERE id = $id",
+                    ("$folder", op.FolderId), ("$uid", op.ServerUid), ("$id", id));
+            }
 
-            var removed = _store.Execute("DELETE FROM messages WHERE id = $id", ("$id", messageId));
-
-            if (blobId != 0) _store.Execute("DELETE FROM blobs WHERE id = $id", ("$id", blobId));
-            return removed;
+            _store.Execute("DELETE FROM sync_ops WHERE id = $id", ("$id", op.Id));
+            return 0;
         });
     }
+
+    private const string SyncOpSelect =
+        """
+        SELECT id, kind, folder_id, server_uid, message_id, target_folder_id, flag, value,
+               created_utc, attempts, last_error
+        FROM sync_ops
+        """;
+
+    private static SyncOp ReadSyncOp(SqliteDataReader r) => new(
+        r.GetInt64(0),
+        r.GetString(1) switch
+        {
+            "move" => SyncOpKind.Move,
+            "delete" => SyncOpKind.Delete,
+            "append" => SyncOpKind.Append,
+            _ => SyncOpKind.Flags,
+        },
+        r.GetInt64(2),
+        r.IsDBNull(3) ? null : r.GetString(3),
+        r.IsDBNull(4) ? null : r.GetInt64(4),
+        r.IsDBNull(5) ? null : r.GetInt64(5),
+        r.IsDBNull(6) ? null : r.GetString(6) == "flagged" ? SyncFlag.Flagged : SyncFlag.Seen,
+        r.IsDBNull(7) ? null : r.GetInt64(7) != 0,
+        DateTimeOffset.FromUnixTimeSeconds(r.GetInt64(8)),
+        r.GetInt32(9),
+        r.IsDBNull(10) ? null : r.GetString(10));
+
+    private static string Wire(SyncFlag flag) => flag == SyncFlag.Flagged ? "flagged" : "seen";
+
+    private static long Now() => DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
     /// <summary>Search. Ranked by BM25, which FTS5 provides without asking.</summary>
     public IReadOnlyList<MessageSummary> Search(string term, long? folderId = null, int limit = 200)
@@ -797,7 +1233,18 @@ public sealed class MailRepository(MailStore store)
     {
         Total = r.GetInt32(r.GetOrdinal("total")),
         Unread = r.GetInt32(r.GetOrdinal("unread")),
+        ImapPath = Nullable(r, "imap_path"),
+        Synced = r.GetInt32(r.GetOrdinal("synced")) != 0,
+        UidValidity = NullableLong(r, "uidvalidity"),
+        UidNext = NullableLong(r, "uidnext"),
+        HighestModSeq = NullableLong(r, "highestmodseq"),
     };
+
+    private static long? NullableLong(SqliteDataReader r, string column)
+    {
+        var i = r.GetOrdinal(column);
+        return r.IsDBNull(i) ? null : r.GetInt64(i);
+    }
 
     private static MessageSummary ReadMessage(SqliteDataReader r) => new(
         r.GetInt64(r.GetOrdinal("id")),
