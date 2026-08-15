@@ -33,10 +33,24 @@ public abstract class ObservableObject : INotifyPropertyChanged
     }
 }
 
-public sealed class FolderNode(string name, int depth, int unread, bool bold = false)
+/// <summary>What a row in the folder pane stands for, beyond a folder of mail.</summary>
+public enum FolderNodeKind
+{
+    /// <summary>An account's heading, or a folder of mail.</summary>
+    Folder,
+
+    /// <summary>The "Search Folders" heading under an account.</summary>
+    SearchFolders,
+
+    /// <summary>One search folder — a saved query, listed under the heading.</summary>
+    SearchFolder,
+}
+
+public sealed class FolderNode(string name, int depth, int unread, bool bold = false, FolderNodeKind kind = FolderNodeKind.Folder)
 {
     public string Name { get; } = name;
     public int Unread { get; } = unread;
+    public FolderNodeKind Kind { get; } = kind;
     public Thickness IndentMargin { get; } = new(depth * 14, 0, 0, 0);
     public FontWeight Weight { get; } = bold || unread > 0 ? FontWeight.SemiBold : FontWeight.Normal;
     public string UnreadDisplay { get; } = unread > 0 ? unread.ToString() : string.Empty;
@@ -526,6 +540,12 @@ public sealed class ShellViewModel : ObservableObject
     /// </summary>
     private readonly Dictionary<FolderNode, (OpenAccount Account, long FolderId, FolderRole Role)> _folderIds = [];
 
+    /// <summary>The search-folder nodes, and the saved query each stands for.</summary>
+    private readonly Dictionary<FolderNode, (OpenAccount Account, SearchFolder Folder)> _searchFolderIds = [];
+
+    /// <summary>Each account's "Search Folders" heading, so a right-click on it knows the account.</summary>
+    private readonly Dictionary<FolderNode, OpenAccount> _searchFolderRoots = [];
+
     /// <summary>
     /// Replaces the sample with what the store holds. Returns false when there is no account,
     /// which leaves the sample in place.
@@ -539,6 +559,11 @@ public sealed class ShellViewModel : ObservableObject
 
         Folders.Clear();
         _folderIds.Clear();
+        _searchFolderIds.Clear();
+        _searchFolderRoots.Clear();
+
+        var own = accounts.Select(a => a.Account.Address).ToList();
+        var now = DateTimeOffset.UtcNow;
 
         foreach (var account in accounts)
         {
@@ -559,6 +584,30 @@ public sealed class ShellViewModel : ObservableObject
 
                 var node = new FolderNode(folder.Name, depth, folder.Unread);
                 _folderIds[node] = (account, folder.Id, folder.Role);
+                Folders.Add(node);
+            }
+
+            // Search Folders last, as the reference lists them: the heading, then each saved
+            // query with its unread count.
+            var root = new FolderNode("Search Folders", 1, 0, kind: FolderNodeKind.SearchFolders);
+            _searchFolderRoots[root] = account;
+            Folders.Add(root);
+
+            foreach (var search in account.Mail.SearchFolders())
+            {
+                int unread;
+                try
+                {
+                    unread = account.Mail.SearchFolderUnread(search.Query, own, now);
+                }
+                catch (Exception ex)
+                {
+                    Log.Warn($"Search folder “{search.Name}” could not be counted.", ex);
+                    unread = 0;
+                }
+
+                var node = new FolderNode(search.Name, 2, unread, kind: FolderNodeKind.SearchFolder);
+                _searchFolderIds[node] = (account, search);
                 Folders.Add(node);
             }
         }
@@ -702,8 +751,25 @@ public sealed class ShellViewModel : ObservableObject
     /// <summary>Loads a folder's mail into the list. Called when the selection changes.</summary>
     private void LoadMessages(FolderNode? folder)
     {
-        if (_accounts is null || folder is null
-            || !_folderIds.TryGetValue(folder, out var where)) return;
+        if (_accounts is null || folder is null) return;
+
+        // A search folder: the saved query's results, each row saying which folder it is in.
+        if (_searchFolderIds.TryGetValue(folder, out var search))
+        {
+            LoadSearchFolder(search.Account, search.Folder);
+            return;
+        }
+
+        // The Search Folders heading itself holds nothing; the list empties.
+        if (_searchFolderRoots.ContainsKey(folder))
+        {
+            Messages.Clear();
+            Rebuild();
+            SelectedMessage = null;
+            return;
+        }
+
+        if (!_folderIds.TryGetValue(folder, out var where)) return;
 
         Messages.Clear();
 
@@ -964,6 +1030,71 @@ public sealed class ShellViewModel : ObservableObject
         Raise(nameof(SearchResultSummary));
         Rebuild();
         SelectedMessage = Messages.FirstOrDefault();
+    }
+
+    /// <summary>The results of a saved query, as the list draws a search: with folder labels.</summary>
+    private void LoadSearchFolder(OpenAccount account, SearchFolder search)
+    {
+        Messages.Clear();
+        var names = FolderNamesFor(account);
+        var own = _accounts?.All.Select(a => a.Account.Address).ToList() ?? [];
+
+        IReadOnlyList<MessageSummary> results;
+        try
+        {
+            results = account.Mail.SearchFolderResults(search.Query, own, DateTimeOffset.UtcNow);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Search folder “{search.Name}” could not be run.", ex);
+            results = [];
+            StatusRight = $"The search folder “{search.Name}” could not be run.";
+        }
+
+        foreach (var summary in results)
+        {
+            Messages.Add(new MessageRow(
+                summary.Id,
+                summary.DisplayFrom,
+                summary.Subject,
+                summary.Preview,
+                summary.Received,
+                !summary.IsRead,
+                $"To: {account.Account.Address}",
+                summary.Preview)
+            {
+                SizeBytes = summary.SizeBytes,
+                HasAttachment = summary.HasAttachment,
+                IsFlagged = summary.IsFlagged,
+                FollowUpComplete = summary.FollowUpComplete,
+                FollowUpDue = summary.FollowUpDue,
+                SnoozedUntil = summary.SnoozedUntil,
+                ThreadKey = Store.Lists.Arrangements.NormalisedSubject(summary.Subject),
+                FolderId = summary.FolderId,
+                FolderLabel = names.GetValueOrDefault(summary.FolderId, string.Empty),
+            });
+        }
+
+        LoadCategoriesForVisible();
+        Rebuild();
+        SelectedMessage = Messages.FirstOrDefault();
+    }
+
+    /// <summary>The account a search-folder node belongs to, for the pane's menu; null for other nodes.</summary>
+    public OpenAccount? SearchFolderAccount(FolderNode node)
+        => _searchFolderRoots.TryGetValue(node, out var root) ? root
+            : _searchFolderIds.TryGetValue(node, out var search) ? search.Account
+            : null;
+
+    /// <summary>The saved query a node stands for, or null for the heading and ordinary folders.</summary>
+    public SearchFolder? SearchFolderOf(FolderNode node)
+        => _searchFolderIds.TryGetValue(node, out var search) ? search.Folder : null;
+
+    /// <summary>Selects the search folder with this id after the pane has been rebuilt.</summary>
+    public void SelectSearchFolder(long id)
+    {
+        Refresh();
+        SelectedFolder = _searchFolderIds.FirstOrDefault(kv => kv.Value.Folder.Id == id).Key ?? SelectedFolder;
     }
 
     /// <summary>Folder id to display name for one account, for labelling a search result.</summary>
@@ -1544,10 +1675,13 @@ public sealed class ShellViewModel : ObservableObject
             ? where.Role
             : FolderRole.None;
 
-    /// <summary>The account whose folder is on screen, or the first one.</summary>
+    /// <summary>The account whose folder — or search folder — is on screen, or the first one.</summary>
     private OpenAccount? CurrentAccount =>
-        SelectedFolder is { } folder && _folderIds.TryGetValue(folder, out var where)
-            ? where.Account
+        SelectedFolder is { } folder
+            ? _folderIds.TryGetValue(folder, out var where) ? where.Account
+              : _searchFolderIds.TryGetValue(folder, out var search) ? search.Account
+              : _searchFolderRoots.TryGetValue(folder, out var root) ? root
+              : _accounts?.All.FirstOrDefault()
             : _accounts?.All.FirstOrDefault();
 
     /// <summary>The account whose categories a management dialog should edit — the current one.</summary>
