@@ -112,6 +112,93 @@ public class RibbonLayoutTests
         Assert.Equal("mail.forward", row[reply + 2]);
     }
 
+    /// <summary>
+    /// The names Customize Ribbon lists under Home. Simplified groups its commands differently
+    /// to the classic ribbon — Delete and Move are one cluster here — so these are not the
+    /// classic group labels with the order changed.
+    /// </summary>
+    [Fact]
+    public void SimplifiedHomeClustersAreNamedAsTheEditorListsThem()
+    {
+        string[] expected =
+        [
+            "New", "Move & Delete", "Respond", "Quick Steps", "Tags", "Find", "Apps",
+            "Send/Receive",
+        ];
+
+        Assert.Equal(
+            expected,
+            DefaultRibbonLayouts.Mail.Simplified["home"].Groups.Select(g => g.Label).ToArray());
+    }
+
+    /// <summary>
+    /// The rendered row is the clusters with a rule between them and one closing the run, so a
+    /// cluster cannot be renamed into disagreeing with what is drawn.
+    /// </summary>
+    [Fact]
+    public void SimplifiedRowIsTheClustersWithRulesBetweenThem()
+    {
+        var bar = DefaultRibbonLayouts.Mail.Simplified["home"];
+        var row = DefaultRibbonLayouts.Mail.SimplifiedRows["home"];
+
+        var rules = row.Count(i => i.Kind == RibbonItemKind.Separator);
+        Assert.Equal(bar.Groups.Count, rules);
+        Assert.Equal(RibbonItemKind.Separator, row[^1].Kind);
+
+        Assert.Equal(
+            bar.Groups.SelectMany(g => g.Items).Select(i => i.Command.Value).ToArray(),
+            row.Where(i => i.Kind != RibbonItemKind.Separator).Select(i => i.Command.Value).ToArray());
+    }
+
+    /// <summary>
+    /// Measured at x = 568: the rule falls after Reverse Sort, so Use Tighter Spacing opens the
+    /// Layout cluster rather than closing the Arrangement one.
+    /// </summary>
+    [Fact]
+    public void UseTighterSpacingBelongsToTheLayoutCluster()
+    {
+        var groups = DefaultRibbonLayouts.Mail.Simplified["view"].Groups;
+
+        Assert.Equal(
+            ["view.arrangeby", "view.reversesort"],
+            groups.Single(g => g.Id == "arrangement").Items.Select(i => i.Command.Value).ToArray());
+
+        Assert.Equal(
+            ["view.tighterspacing", "view.layout", "view.reader"],
+            groups.Single(g => g.Id == "layout").Items.Select(i => i.Command.Value).ToArray());
+    }
+
+    /// <summary>
+    /// A host with no use for the tree authors its rows directly, and they must survive the
+    /// derivation — the compose window is one, and it has no Simplified clusters at all.
+    /// </summary>
+    [Fact]
+    public void AuthoredRowsSurviveWhereATabDeclaresNoClusters()
+    {
+        Assert.Empty(DefaultRibbonLayouts.Compose.Simplified);
+        Assert.NotEmpty(DefaultRibbonLayouts.Compose.SimplifiedRows);
+    }
+
+    /// <summary>
+    /// The View tab has no classic groups, so reading only those reported everything on it as
+    /// unplaced — and Customize Ribbon would have offered to add commands already on the bar.
+    /// </summary>
+    [Fact]
+    public void PlacedCommandsCountsTheSimplifiedBar()
+    {
+        var placed = DefaultRibbonLayouts.Mail.PlacedCommands.Select(c => c.Value).ToHashSet();
+
+        Assert.Contains("view.change", placed);
+        Assert.Contains("view.reader", placed);
+    }
+
+    [Fact]
+    public void GroupLabelsCarryNoMarkupEntities()
+        => Assert.All(
+            DefaultRibbonLayouts.Mail.Tabs.SelectMany(t => t.Groups)
+                .Concat(DefaultRibbonLayouts.Mail.Simplified.Values.SelectMany(b => b.Groups)),
+            g => Assert.DoesNotContain("&amp;", g.Label, StringComparison.Ordinal));
+
     [Fact]
     public void RespondGroupHasReplyReplyAllForwardAsLargeButtonsInOrder()
     {

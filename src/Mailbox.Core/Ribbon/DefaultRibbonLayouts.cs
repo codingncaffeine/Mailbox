@@ -59,13 +59,11 @@ public static class DefaultRibbonLayouts
     /// <summary>The Search People input beside it, measured from x=840 to x=950.</summary>
     private const double SearchPeopleWidth = 110;
 
-    /// <summary>A vertical rule between clusters on the Simplified row.</summary>
-    private static RibbonItem Sep => new()
-    {
-        Command = new CommandId("app.separator"),
-        Kind = RibbonItemKind.Separator,
-        Size = RibbonItemSize.Small,
-    };
+    /// <summary>A cluster of the Simplified bar, named as Customize Ribbon names it.</summary>
+    private static SimplifiedBar Bar(params RibbonGroup[] groups) => new() { Groups = groups };
+
+    private static RibbonGroup Cluster(string id, string label, params RibbonItem[] items)
+        => new() { Id = id, Label = label, Items = items };
 
     public static RibbonLayout Mail { get; } = new()
     {
@@ -77,70 +75,84 @@ public static class DefaultRibbonLayouts
             MailCommands.Undo.Id,
         ],
 
-        // The Simplified ribbon, which is what the reference application ships by default. Transcribed
-        // left to right from a running copy, separators included — the reference application curates a shorter,
-        // reordered set here rather than flattening the classic groups.
-        SimplifiedRows = new Dictionary<string, IReadOnlyList<RibbonItem>>
+        // The Simplified ribbon, which is what the reference application ships by default.
+        // Transcribed left to right from a running copy — the reference curates a shorter,
+        // reordered set here rather than flattening the classic groups, and groups it
+        // differently too: Delete and Move are one cluster called "Move & Delete". The group
+        // names are the ones Customize Ribbon lists.
+        Simplified = new Dictionary<string, SimplifiedBar>
         {
             // Transcribed from home.png, with the cluster rules measured at x = 191, 341, 457,
             // 596, 831, 1049, 1093 and 1289. Only New Email, Unread/Read and Send/Receive All
             // Folders carry text; everything else is icon-only, which is why the row fits.
             // Quick Steps is boxed and Search People is a real input, not a button.
-            ["home"] =
-            [
-                RibbonItem.Small(MailCommands.NewEmail.Id, RibbonItemKind.SplitButton),
-                Sep,
-                RibbonItem.Glyph(MailCommands.Delete.Id, RibbonItemKind.SplitButton),
-                RibbonItem.Glyph(MailCommands.Archive.Id),
-                RibbonItem.Glyph(MailCommands.MoveTo.Id, RibbonItemKind.SplitButton),
-                Sep,
-                RibbonItem.Glyph(MailCommands.Reply.Id),
-                RibbonItem.Glyph(MailCommands.ReplyAll.Id),
-                RibbonItem.Glyph(MailCommands.Forward.Id),
-                Sep,
-                RibbonItem.Boxed(ViewCommands.MoveToQuick.Id, QuickStepBoxWidth),
-                Sep,
-                RibbonItem.Small(MailCommands.Unread.Id),
-                RibbonItem.Glyph(MailCommands.Categorize.Id, RibbonItemKind.DropDown),
-                RibbonItem.Glyph(MailCommands.FollowUp.Id, RibbonItemKind.DropDown),
-                Sep,
-                RibbonItem.Field(ViewCommands.SearchPeople.Id, SearchPeopleWidth, "Search People"),
-                RibbonItem.Glyph(MailCommands.AddressBook.Id),
-                RibbonItem.Glyph(MailCommands.FilterEmail.Id, RibbonItemKind.DropDown),
-                Sep,
-                RibbonItem.Glyph(ViewCommands.Apps.Id),
-                Sep,
-                RibbonItem.Small(MailCommands.SendReceiveAll.Id),
-                Sep,
-            ],
+            ["home"] = Bar(
+                Cluster("new", "New",
+                    RibbonItem.Small(MailCommands.NewEmail.Id, RibbonItemKind.SplitButton)),
 
-            ["sendreceive"] =
-            [
-                RibbonItem.Small(MailCommands.SendReceiveAll.Id),
-                RibbonItem.Small(ViewCommands.SendAll.Id),
-                RibbonItem.Small(ViewCommands.UpdateFolder.Id),
-                RibbonItem.Small(ViewCommands.SendReceiveGroups.Id, RibbonItemKind.DropDown),
-                Sep,
-                RibbonItem.Small(ViewCommands.ShowProgress.Id),
-                RibbonItem.Small(ViewCommands.CancelAll.Id),
-                Sep,
-                RibbonItem.Small(MailCommands.WorkOffline.Id),
-            ],
+                Cluster("movedelete", "Move & Delete",
+                    RibbonItem.Glyph(MailCommands.Delete.Id, RibbonItemKind.SplitButton),
+                    RibbonItem.Glyph(MailCommands.Archive.Id),
+                    RibbonItem.Glyph(MailCommands.MoveTo.Id, RibbonItemKind.SplitButton)),
 
-            ["view"] =
-            [
-                RibbonItem.Small(ViewCommands.ChangeView.Id, RibbonItemKind.DropDown),
-                RibbonItem.Small(ViewCommands.ViewSettings.Id, RibbonItemKind.DropDown),
-                Sep,
-                RibbonItem.Small(ViewCommands.ArrangeBy.Id, RibbonItemKind.DropDown),
-                RibbonItem.Small(ViewCommands.ReverseSort.Id),
-                RibbonItem.Small(ViewCommands.TighterSpacing.Id),
-                Sep,
-                RibbonItem.Small(ViewCommands.LayoutMenu.Id, RibbonItemKind.DropDown),
-                RibbonItem.Small(ViewCommands.ImmersiveReader.Id),
-            ],
+                Cluster("respond", "Respond",
+                    RibbonItem.Glyph(MailCommands.Reply.Id),
+                    RibbonItem.Glyph(MailCommands.ReplyAll.Id),
+                    RibbonItem.Glyph(MailCommands.Forward.Id)),
 
-            ["help"] = [],
+                Cluster("quicksteps", "Quick Steps",
+                    RibbonItem.Boxed(ViewCommands.MoveToQuick.Id, QuickStepBoxWidth)),
+
+                Cluster("tags", "Tags",
+                    RibbonItem.Small(MailCommands.Unread.Id),
+                    RibbonItem.Glyph(MailCommands.Categorize.Id, RibbonItemKind.DropDown),
+                    RibbonItem.Glyph(MailCommands.FollowUp.Id, RibbonItemKind.DropDown)),
+
+                Cluster("find", "Find",
+                    RibbonItem.Field(ViewCommands.SearchPeople.Id, SearchPeopleWidth, "Search People"),
+                    RibbonItem.Glyph(MailCommands.AddressBook.Id),
+                    RibbonItem.Glyph(MailCommands.FilterEmail.Id, RibbonItemKind.DropDown)),
+
+                Cluster("apps", "Apps",
+                    RibbonItem.Glyph(ViewCommands.Apps.Id)),
+
+                Cluster("sendreceivegroup", "Send/Receive",
+                    RibbonItem.Small(MailCommands.SendReceiveAll.Id))),
+
+            // Rules measured at x = 655, 896 and 1019: Work Offline is its own cluster, not the
+            // tail of the download one.
+            ["sendreceive"] = Bar(
+                Cluster("sendreceive", "Send & Receive",
+                    RibbonItem.Small(MailCommands.SendReceiveAll.Id),
+                    RibbonItem.Small(ViewCommands.SendAll.Id),
+                    RibbonItem.Small(ViewCommands.UpdateFolder.Id),
+                    RibbonItem.Small(ViewCommands.SendReceiveGroups.Id, RibbonItemKind.DropDown)),
+
+                Cluster("download", "Download",
+                    RibbonItem.Small(ViewCommands.ShowProgress.Id),
+                    RibbonItem.Small(ViewCommands.CancelAll.Id)),
+
+                Cluster("preferences", "Preferences",
+                    RibbonItem.Small(MailCommands.WorkOffline.Id))),
+
+            // Rules measured at x = 324, 568 and 977. Use Tighter Spacing opens the Layout
+            // cluster rather than closing the Arrangement one, which the flat transcription
+            // had the wrong side of.
+            ["view"] = Bar(
+                Cluster("currentview", "Current View",
+                    RibbonItem.Small(ViewCommands.ChangeView.Id, RibbonItemKind.DropDown),
+                    RibbonItem.Small(ViewCommands.ViewSettings.Id, RibbonItemKind.DropDown)),
+
+                Cluster("arrangement", "Arrangement",
+                    RibbonItem.Small(ViewCommands.ArrangeBy.Id, RibbonItemKind.DropDown),
+                    RibbonItem.Small(ViewCommands.ReverseSort.Id)),
+
+                Cluster("layout", "Layout",
+                    RibbonItem.Small(ViewCommands.TighterSpacing.Id),
+                    RibbonItem.Small(ViewCommands.LayoutMenu.Id, RibbonItemKind.DropDown),
+                    RibbonItem.Small(ViewCommands.ImmersiveReader.Id))),
+
+            ["help"] = new SimplifiedBar { Groups = [] },
         },
         Tabs =
         [
@@ -308,7 +320,7 @@ public static class DefaultRibbonLayouts
                     new RibbonGroup
                     {
                         Id = "sendreceive",
-                        Label = "Send &amp; Receive",
+                        Label = "Send & Receive",
                         CollapsePriority = 1,
                         Items = [RibbonItem.Large(MailCommands.SendReceiveAll.Id)],
                     },

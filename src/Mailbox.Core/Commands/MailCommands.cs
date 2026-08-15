@@ -275,7 +275,7 @@ public static class MailCommands
         Label = "Send/Receive All Folders",
         Description = "Check every account for new mail and send anything waiting in the Outbox.",
         Icon = "send-receive",
-        Category = "Send &amp; Receive",
+        Category = "Send & Receive",
         KeyTip = "AA",
         DefaultGesture = "F9",
     };

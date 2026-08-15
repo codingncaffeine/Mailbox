@@ -13,7 +13,7 @@ public static class ViewCommands
         Label = "Send All",
         Description = "Send everything waiting in the Outbox without checking for new mail.",
         Icon = "send",
-        Category = "Send &amp; Receive",
+        Category = "Send & Receive",
         KeyTip = "SA",
     };
 
@@ -23,7 +23,7 @@ public static class ViewCommands
         Label = "Update Folder",
         Description = "Check the current folder for new messages.",
         Icon = "update-folder",
-        Category = "Send &amp; Receive",
+        Category = "Send & Receive",
         KeyTip = "U",
         DefaultGesture = "Shift+F9",
     };
@@ -34,7 +34,7 @@ public static class ViewCommands
         Label = "Send/Receive Groups",
         Description = "Choose which accounts and folders are included in each send and receive.",
         Icon = "sr-groups",
-        Category = "Send &amp; Receive",
+        Category = "Send & Receive",
         KeyTip = "G",
     };
 
