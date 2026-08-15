@@ -353,3 +353,60 @@ public class HtmlSanitizerTests
     private static Multipart Multipart(MimeMessage carrier, string html)
         => Multipart(carrier.BodyParts.OfType<MimePart>().First(p => p.ContentId is not null), html);
 }
+
+public class PrintStyleTests
+{
+    private static string Document(PrintHeader? header)
+        => MessageRenderer.RenderHtml("<p>x</p>", options: new RenderOptions { PrintHeader = header }).Html;
+
+    /// <summary>
+    /// The pane's own header is Avalonia chrome and the engine cannot see it, so a printed copy
+    /// without this is a page of body text with nothing saying who sent it.
+    /// </summary>
+    [Fact]
+    public void TheMemoHeaderIsInTheDocument()
+    {
+        var html = Document(new PrintHeader("A. Person", "Friday, 1 August 2026 09:00",
+            "you@example.com", "Q3 numbers"));
+
+        Assert.Contains("A. Person", html, StringComparison.Ordinal);
+        Assert.Contains("Q3 numbers", html, StringComparison.Ordinal);
+        Assert.Contains("Friday, 1 August 2026 09:00", html, StringComparison.Ordinal);
+    }
+
+    /// <summary>On screen the pane already says all of it, so it only appears on paper.</summary>
+    [Fact]
+    public void ItIsHiddenUntilThePageIsPrinted()
+    {
+        var html = Document(new PrintHeader("A. Person", "now", "you@example.com", "x"));
+
+        Assert.Contains(".memo{display:none;}", html, StringComparison.Ordinal);
+        Assert.Contains("@media print", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CcAppearsOnlyWhenThereIsOne()
+    {
+        var without = Document(new PrintHeader("A", "now", "you@example.com", "x"));
+        Assert.DoesNotContain("Cc:", without, StringComparison.Ordinal);
+
+        var with = Document(new PrintHeader("A", "now", "you@example.com", "x")
+        {
+            Cc = "other@example.com",
+        });
+        Assert.Contains("Cc:", with, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AHeaderIsEscapedLikeAnythingElseFromAMessage()
+    {
+        var html = Document(new PrintHeader("<script>", "now", "you@example.com", "x"));
+
+        Assert.Contains("&lt;script&gt;", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<script>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NoHeaderMeansNoBlock()
+        => Assert.DoesNotContain("class=\"memo\"", Document(null), StringComparison.Ordinal);
+}

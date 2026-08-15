@@ -4,6 +4,7 @@ using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.Platform;
+using Avalonia.Platform.Storage;
 using Mailbox.Core.Diagnostics;
 using Mailbox.Rendering;
 using RenderOptions = Mailbox.Rendering.RenderOptions;
@@ -123,7 +124,12 @@ public sealed class ReadingPaneBody : UserControl
         var trust = SenderTrust.Evaluate(_message, _mail()?.FamiliarDomains() ?? []);
         if (trust.Warnings.Count > 0) _bars.Children.Add(TrustBar(trust));
 
-        var options = new RenderOptions { Style = Style(), Inlined = _inlined };
+        var options = new RenderOptions
+        {
+            Style = Style(),
+            Inlined = _inlined,
+            PrintHeader = Memo(_message),
+        };
         _rendered = MessageRenderer.Render(_message, options);
 
         if (_rendered.HasRemoteContent) _bars.Children.Add(RemoteImageBar(_rendered));
@@ -304,6 +310,22 @@ public sealed class ReadingPaneBody : UserControl
 
         if (_web is not null) _surface.Content = new ScrollViewer { Content = _fallback };
     }
+
+    /// <summary>
+    /// What a printed copy says above the message, in the reference's Memo style.
+    /// </summary>
+    /// <remarks>
+    /// Built here because the engine cannot see the pane's own header — that is Avalonia chrome,
+    /// and printing without this produces a page of body text with nothing saying who sent it.
+    /// </remarks>
+    private static PrintHeader Memo(MimeMessage message) => new(
+        message.From.ToString(),
+        message.Date.ToLocalTime().ToString("dddd, d MMMM yyyy HH:mm"),
+        message.To.ToString(),
+        message.Subject ?? string.Empty)
+    {
+        Cc = message.Cc.Count > 0 ? message.Cc.ToString() : null,
+    };
 
     /// <summary>The document's colours and type, resolved from the active theme.</summary>
     private RenderStyle Style() => new(
@@ -497,6 +519,53 @@ public sealed class ReadingPaneBody : UserControl
 
         _web.ShowPrintUI();
         return true;
+    }
+
+    /// <summary>
+    /// Writes the message to a PDF the reader chooses, through the engine's own printer.
+    /// </summary>
+    /// <remarks>
+    /// The same Memo layout a printed copy gets: the print stylesheet is part of the document,
+    /// so paper and PDF cannot drift apart.
+    /// </remarks>
+    public async Task<bool> PrintToPdfAsync()
+    {
+        if (_web is null) return false;
+        if (TopLevel.GetTopLevel(this) is not { } top) return false;
+
+        var file = await top.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Save as PDF",
+            SuggestedFileName = Suggested(),
+            DefaultExtension = "pdf",
+        });
+
+        if (file?.TryGetLocalPath() is not { } path) return false;
+
+        try
+        {
+            await using var pdf = await _web.PrintToPdfStreamAsync();
+            await using var destination = File.Create(path);
+            await pdf.CopyToAsync(destination);
+
+            Log.Info("Wrote a message to PDF.");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Could not write the message to PDF.", ex);
+            return false;
+        }
+    }
+
+    /// <summary>A file name from the subject, with what a file system will not take removed.</summary>
+    private string Suggested()
+    {
+        var subject = _message?.Subject;
+        if (string.IsNullOrWhiteSpace(subject)) return "message.pdf";
+
+        var clean = new string([.. subject.Where(c => !Path.GetInvalidFileNameChars().Contains(c))]);
+        return (clean.Length > 60 ? clean[..60] : clean).Trim() + ".pdf";
     }
 
     private async Task ExplainAsync(string title, string detail)

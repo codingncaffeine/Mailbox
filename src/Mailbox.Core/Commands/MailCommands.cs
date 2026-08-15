@@ -354,6 +354,22 @@ public static class MailCommands
         RequiresSingleSelection = true,
     };
 
+    /// <summary>
+    /// Not in the reference, which prints to whatever the system offers. On Linux the engine
+    /// writes a PDF directly, so the step through a print dialog is one nobody needs.
+    /// </summary>
+    public static readonly MailboxCommand PrintToPdf = new()
+    {
+        Id = new("mail.print.pdf"),
+        Label = "Print to PDF",
+        Description = "Write the selected message to a PDF file.",
+        Icon = "print",
+        Category = "Actions",
+        Scope = ModuleScope.Mail,
+        RequiresSingleSelection = true,
+        InDefaultLayout = false,
+    };
+
     public static readonly MailboxCommand AuthenticationDetails = new()
     {
         Id = new("mail.authresults"),
@@ -375,6 +391,6 @@ public static class MailCommands
         Unread, Categorize, FollowUp,
         Search, AddressBook, FilterEmail,
         SendReceiveAll, WorkOffline, Undo,
-        Snooze, ViewSource, TrackerReport, AuthenticationDetails, Print,
+        Snooze, ViewSource, TrackerReport, AuthenticationDetails, Print, PrintToPdf,
     ];
 }
