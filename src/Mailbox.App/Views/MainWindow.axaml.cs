@@ -151,6 +151,32 @@ public partial class MainWindow : Window
             }, DispatcherPriority.Background);
         }
 
+        // Presses a Snooze preset on the posed selection: MAILBOX_SNOOZE=<0..3>, or `wake` to
+        // run the timer's wake pass now. A menu cannot be pressed by a capture; what it does can
+        // be read back out of the store.
+        if (Environment.GetEnvironmentVariable("MAILBOX_SNOOZE") is { Length: > 0 } snooze)
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(() =>
+            {
+                if (DataContext is not ShellViewModel s) return;
+
+                if (snooze == "wake")
+                {
+                    var woken = s.WakeSnoozed(DateTimeOffset.UtcNow);
+                    Log.Info($"Harness: woke {woken.Count} snoozed message(s).");
+                    return;
+                }
+
+                if (int.TryParse(snooze, out var index))
+                {
+                    var presets = Mailbox.Core.SnoozePresets.For(DateTimeOffset.Now);
+                    var (header, until) = presets[Math.Clamp(index, 0, presets.Count - 1)];
+                    s.Snooze(SelectedRows(), until);
+                    Log.Info($"Harness: {header} → status “{s.StatusRight}”");
+                }
+            }, DispatcherPriority.Background);
+        }
+
         // Raises the new-mail toast for a message already in the store, as if it had just
         // arrived, and optionally presses one of its buttons: MAILBOX_NOTIFY=<subject part>
         // or MAILBOX_NOTIFY=<subject part>:reply|delete|read|default. The toast itself goes
@@ -1867,6 +1893,7 @@ public partial class MainWindow : Window
         if (id == MailCommands.FollowUp.Id) { ShowFollowUpMenu(shell, rows); return true; }
 
         if (id == MailCommands.Categorize.Id) { ShowCategorizeMenu(shell, rows); return true; }
+        if (id == MailCommands.Snooze.Id) { ShowSnoozeMenu(shell, rows); return true; }
         if (id == MailCommands.MoveTo.Id || id == ViewCommands.MoveToQuick.Id) { ShowMoveMenu(shell, rows); return true; }
         if (id == MailCommands.Rules.Id) { _ = new RulesAndAlertsDialog().ShowDialog(this); return true; }
         if (id == MailCommands.NewItems.Id) { ShowNewItemsMenu(); return true; }
@@ -1947,6 +1974,60 @@ public partial class MainWindow : Window
         var clear = new MenuItem { Header = "Clear Flag" };
         clear.Click += (_, _) => shell.ClearFollowUpFlag(rows);
         flyout.Items.Add(clear);
+
+        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+    }
+
+    /// <summary>
+    /// The Snooze menu (§12): presets in the flag menu's shape — Later Today, Tomorrow, This
+    /// Weekend, Next Week, Custom — and Unsnooze for a message that is snoozed. The presets
+    /// are the reference's own times: four hours from now, and eight in the morning otherwise.
+    /// </summary>
+    private void ShowSnoozeMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
+    {
+        var flyout = new MenuFlyout();
+
+        if (rows.Count == 0)
+        {
+            flyout.Items.Add(new MenuItem { Header = "Select a message first", IsEnabled = false });
+            flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+            return;
+        }
+
+        foreach (var (header, until) in Mailbox.Core.SnoozePresets.For(DateTimeOffset.Now))
+        {
+            var item = new MenuItem { Header = header };
+            var when = until;
+            item.Click += (_, _) => shell.Snooze(rows, when);
+            flyout.Items.Add(item);
+        }
+
+        var custom = new MenuItem { Header = "Custom…" };
+        custom.Click += async (_, _) =>
+        {
+            var entered = await Prompt.AskAsync(this, "Snooze until", "Date and time (yyyy-MM-dd HH:mm):",
+                DateTime.Now.AddHours(4).ToString("yyyy-MM-dd HH:mm"));
+            if (entered is null) return;
+
+            if (DateTime.TryParse(entered, System.Globalization.CultureInfo.CurrentCulture,
+                    System.Globalization.DateTimeStyles.AssumeLocal, out var when) && when > DateTime.Now)
+            {
+                shell.Snooze(rows, new DateTimeOffset(when));
+            }
+            else
+            {
+                shell.StatusRight = $"Could not read “{entered}” as a time still to come.";
+            }
+        };
+        flyout.Items.Add(custom);
+
+        if (rows.Any(r => r.IsSnoozed))
+        {
+            flyout.Items.Add(new Separator());
+            var wake = new MenuItem { Header = "Unsnooze" };
+            wake.Click += (_, _) => shell.Unsnooze(rows);
+            flyout.Items.Add(wake);
+        }
 
         flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
     }
@@ -2116,6 +2197,11 @@ public partial class MainWindow : Window
         unread.Click += (_, _) => shell.UnreadOnly = !shell.UnreadOnly;
         flyout.Items.Add(unread);
 
+        // Snoozed mail is nowhere until it comes back; this is where to see what is waiting.
+        var snoozed = new MenuItem { Header = "Snoozed", Icon = shell.ShowSnoozed ? Tick() : null };
+        snoozed.Click += (_, _) => shell.ShowSnoozed = !shell.ShowSnoozed;
+        flyout.Items.Add(snoozed);
+
         foreach (var label in new[] { "Has Attachments", "Flagged", "Important", "Categorized", "This Week" })
         {
             var item = new MenuItem { Header = label, IsEnabled = false };
@@ -2166,6 +2252,7 @@ public partial class MainWindow : Window
 
             Command("Categorize…", MailCommands.Categorize.Id);
             Command(rows.Any(r => !r.IsFlagged) ? "Follow Up" : "Clear Flag", MailCommands.FollowUp.Id);
+            Command("Snooze", MailCommands.Snooze.Id);
             flyout.Items.Add(new Separator());
 
             Command("Rules…", MailCommands.Rules.Id);
@@ -2218,6 +2305,8 @@ public partial class MainWindow : Window
 
         timer.Tick += (_, _) =>
         {
+            WakeSnoozed(shell);
+
             if (_transferring || App.Transfer.WorkOffline) return;
 
             var now = DateTimeOffset.UtcNow;
@@ -2241,6 +2330,27 @@ public partial class MainWindow : Window
         Closed += (_, _) => timer.Stop();
 
         WireIdleWatchers(shell);
+    }
+
+    /// <summary>
+    /// Brings back the snoozed messages whose time has come, and announces them the way new mail
+    /// is announced — a message that returns is the new mail it was snoozed to become.
+    /// </summary>
+    private void WakeSnoozed(ShellViewModel shell)
+    {
+        var woken = shell.WakeSnoozed(DateTimeOffset.UtcNow);
+        if (woken.Count == 0 || !App.MailOptions.DisplayDesktopAlert) return;
+
+        var result = new SendReceiveResult(
+        [
+            .. woken.GroupBy(w => w.Address).Select(g =>
+                new AccountRunResult(g.Key, g.Count(), 0) { Arrived = [.. g.Select(w => w.MessageId)] }),
+        ]);
+
+        foreach (var toast in NewMailNotice.Toasts(result, DescribeArrival))
+        {
+            _notifier.Notify(ToastFor(toast));
+        }
     }
 
     private readonly List<ImapIdleWatcher> _watchers = [];

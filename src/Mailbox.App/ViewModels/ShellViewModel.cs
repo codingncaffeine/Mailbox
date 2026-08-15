@@ -212,6 +212,11 @@ public sealed class MessageRow(
     /// <summary>When a follow-up is due, for the tooltip and the flag menu's state.</summary>
     public DateTimeOffset? FollowUpDue { get; init; }
 
+    /// <summary>When a snoozed message comes back, or null for one that is awake (§12).</summary>
+    public DateTimeOffset? SnoozedUntil { get; init; }
+
+    public bool IsSnoozed => SnoozedUntil is not null;
+
     /// <summary>How the row writes its date: a time today, a weekday this week, else the date.</summary>
     public string ReceivedLabel => ShellViewModel.Received(Received);
 
@@ -717,13 +722,23 @@ public sealed class ShellViewModel : ObservableObject
             return;
         }
 
-        foreach (var summary in where.Account.Mail.Messages(where.FolderId))
+        // The folder's awake mail, or — Filter Email › Snoozed — only what is snoozed, each row
+        // saying when it comes back where the preview would be.
+        var summaries = ShowSnoozed
+            ? where.Account.Mail.Snoozed(where.FolderId)
+            : where.Account.Mail.Messages(where.FolderId);
+
+        foreach (var summary in summaries)
         {
+            var preview = summary.SnoozedUntil is { } until
+                ? $"Snoozed until {SnoozeLabel(until)} — {summary.Preview}"
+                : summary.Preview;
+
             Messages.Add(new MessageRow(
                 summary.Id,
                 summary.DisplayFrom,
                 summary.Subject,
-                summary.Preview,
+                preview,
                 summary.Received,
                 !summary.IsRead,
                 $"To: {where.Account.Account.Address}",
@@ -734,6 +749,7 @@ public sealed class ShellViewModel : ObservableObject
                 IsFlagged = summary.IsFlagged,
                 FollowUpComplete = summary.FollowUpComplete,
                 FollowUpDue = summary.FollowUpDue,
+                SnoozedUntil = summary.SnoozedUntil,
                 ThreadKey = Store.Lists.Arrangements.NormalisedSubject(summary.Subject),
                 FolderId = summary.FolderId,
             });
@@ -751,6 +767,14 @@ public sealed class ShellViewModel : ObservableObject
 
         Rebuild();
         SelectedMessage = Messages.FirstOrDefault();
+    }
+
+    /// <summary>How a snooze time is written: a time today, else the day and time.</summary>
+    internal static string SnoozeLabel(DateTimeOffset until, DateTimeOffset? today = null)
+    {
+        var now = today ?? DateTimeOffset.Now;
+        var local = until.ToLocalTime();
+        return local.Date == now.Date ? local.ToString("h:mm tt") : local.ToString("ddd d MMM, h:mm tt");
     }
 
     /// <summary>
@@ -1604,6 +1628,72 @@ public sealed class ShellViewModel : ObservableObject
         }
 
         MoveTo(rows, notJunk ? FolderRole.Inbox : FolderRole.Junk);
+    }
+
+    // ---- Snooze (§12) -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Show only the folder's snoozed messages — Filter Email › Snoozed. Off, the list shows
+    /// what is awake, and a snoozed message is nowhere until its time comes.
+    /// </summary>
+    public bool ShowSnoozed
+    {
+        get;
+        set
+        {
+            if (!Set(ref field, value)) return;
+            LoadMessages(_selectedFolder);
+        }
+    }
+
+    /// <summary>Hides the rows until <paramref name="until"/>. They leave the list at once.</summary>
+    public void Snooze(IReadOnlyList<MessageRow> rows, DateTimeOffset until)
+    {
+        if (rows.Count == 0 || Mail(rows) is not { } mail) return;
+
+        mail.Snooze([.. rows.Select(r => r.Id)], until);
+        foreach (var row in rows) Messages.Remove(row);
+        Rebuild();
+        RefreshCounts();
+
+        var local = until.LocalDateTime;
+        var when = local.Date == DateTime.Today ? local.ToString("h:mm tt") : local.ToString("ddd d MMM, h:mm tt");
+        StatusRight = $"{Describe(rows.Count)} snoozed until {when}.";
+    }
+
+    /// <summary>Brings the rows back now, unread and at the top of the folder.</summary>
+    public void Unsnooze(IReadOnlyList<MessageRow> rows)
+    {
+        if (rows.Count == 0 || Mail(rows) is not { } mail) return;
+
+        mail.Unsnooze([.. rows.Select(r => r.Id)], DateTimeOffset.UtcNow);
+        ReloadCurrentView();
+        RefreshCounts();
+        StatusRight = $"{Describe(rows.Count)} back in the Inbox.";
+    }
+
+    /// <summary>
+    /// Brings back every snoozed message whose time has come, across every account, and says
+    /// which — for the toast, which treats a returned message as the new mail it now is.
+    /// </summary>
+    public IReadOnlyList<(string Address, long MessageId)> WakeSnoozed(DateTimeOffset now)
+    {
+        var woken = new List<(string, long)>();
+        foreach (var account in _accounts?.All ?? [])
+        {
+            foreach (var (_, id) in account.Mail.WakeSnoozed(now))
+            {
+                woken.Add((account.Account.Address, id));
+            }
+        }
+
+        if (woken.Count > 0)
+        {
+            ReloadCurrentView();
+            RefreshCounts();
+        }
+
+        return woken;
     }
 
     /// <summary>The distinct sender addresses of the rows, lower-cased, read from the store.</summary>

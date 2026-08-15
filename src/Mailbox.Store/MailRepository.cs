@@ -400,9 +400,74 @@ public sealed class MailRepository(MailStore store)
         });
     }
 
+    /// <summary>
+    /// A folder's messages, newest first — the ones on show. A snoozed message is not among
+    /// them until its time comes; <see cref="Snoozed"/> lists those.
+    /// </summary>
     public IReadOnlyList<MessageSummary> Messages(long folderId, int limit = 500) => _store.Query(
-        MessageSelect + " WHERE folder_id = $folder ORDER BY received_utc DESC LIMIT $limit",
+        MessageSelect + " WHERE folder_id = $folder" + Awake + " ORDER BY received_utc DESC LIMIT $limit",
         ReadMessage, ("$folder", folderId), ("$limit", limit));
+
+    /// <summary>The clause that keeps a snoozed message out of a list, on the store's own clock.</summary>
+    private const string Awake = " AND (snooze_until IS NULL OR snooze_until <= strftime('%s','now'))";
+
+    // ---- Snooze (§12) -----------------------------------------------------------------------
+    //
+    // A snoozed message leaves the list and comes back at the set time, unread and at the top —
+    // its received time is moved to the moment it returned, which is what puts it there. Local
+    // only: the server never hears of it, and the message stays in its folder throughout.
+
+    /// <summary>The messages of a folder that are snoozed, soonest to return first.</summary>
+    public IReadOnlyList<MessageSummary> Snoozed(long folderId) => _store.Query(
+        MessageSelect + " WHERE folder_id = $folder AND snooze_until IS NOT NULL AND snooze_until > strftime('%s','now')"
+        + " ORDER BY snooze_until, received_utc DESC",
+        ReadMessage, ("$folder", folderId));
+
+    /// <summary>Hides messages until <paramref name="until"/>.</summary>
+    public int Snooze(IReadOnlyCollection<long> messageIds, DateTimeOffset until)
+    {
+        if (messageIds.Count == 0) return 0;
+
+        return _store.Execute(
+            $"UPDATE messages SET snooze_until = $until WHERE id IN ({Ids(messageIds)})",
+            ("$until", until.ToUnixTimeSeconds()));
+    }
+
+    /// <summary>Brings messages back now, without waiting: they return unread and at the top.</summary>
+    public int Unsnooze(IReadOnlyCollection<long> messageIds, DateTimeOffset now)
+    {
+        if (messageIds.Count == 0) return 0;
+
+        return _store.Execute(
+            $"""
+             UPDATE messages SET snooze_until = NULL, is_read = 0, received_utc = $now
+             WHERE id IN ({Ids(messageIds)}) AND snooze_until IS NOT NULL
+             """,
+            ("$now", now.ToUnixTimeSeconds()));
+    }
+
+    /// <summary>
+    /// Brings back every message whose time has come: unread, at the top of its folder. Called
+    /// on a timer; returns what woke, for the toast, and nothing when nothing did.
+    /// </summary>
+    public IReadOnlyList<(long FolderId, long MessageId)> WakeSnoozed(DateTimeOffset now) => _store.InTransaction(() =>
+    {
+        var due = _store.Query(
+            "SELECT folder_id, id FROM messages WHERE snooze_until IS NOT NULL AND snooze_until <= $now",
+            r => (r.GetInt64(0), r.GetInt64(1)), ("$now", now.ToUnixTimeSeconds()));
+
+        if (due.Count > 0)
+        {
+            _store.Execute(
+                $"""
+                 UPDATE messages SET snooze_until = NULL, is_read = 0, received_utc = $now
+                 WHERE id IN ({Ids(due.Select(d => d.Item2))})
+                 """,
+                ("$now", now.ToUnixTimeSeconds()));
+        }
+
+        return (IReadOnlyList<(long, long)>)due;
+    });
 
     public MessageSummary? GetMessage(long id) => _store.Query(
         MessageSelect + " WHERE id = $id", ReadMessage, ("$id", id)).FirstOrDefault();
@@ -1520,11 +1585,15 @@ public sealed class MailRepository(MailStore store)
 
     // ---- Reading rows -----------------------------------------------------------------------
 
+    // A snoozed message is out of sight, so it is out of the counts too: the badge on a folder
+    // says what is there to read, and a message that will come back at four is not there yet.
     private const string FolderSelect =
         """
         SELECT f.*,
-               (SELECT count(*) FROM messages m WHERE m.folder_id = f.id) AS total,
-               (SELECT count(*) FROM messages m WHERE m.folder_id = f.id AND m.is_read = 0) AS unread
+               (SELECT count(*) FROM messages m WHERE m.folder_id = f.id
+                  AND (m.snooze_until IS NULL OR m.snooze_until <= strftime('%s','now'))) AS total,
+               (SELECT count(*) FROM messages m WHERE m.folder_id = f.id AND m.is_read = 0
+                  AND (m.snooze_until IS NULL OR m.snooze_until <= strftime('%s','now'))) AS unread
         FROM folders f
         """;
 
@@ -1585,6 +1654,9 @@ public sealed class MailRepository(MailStore store)
             ? DateTimeOffset.FromUnixTimeSeconds(due)
             : null,
         FollowUpComplete = r.GetInt32(r.GetOrdinal("follow_up_complete")) != 0,
+        SnoozedUntil = NullableLong(r, "snooze_until") is { } until
+            ? DateTimeOffset.FromUnixTimeSeconds(until)
+            : null,
     };
 
     private static string? Nullable(SqliteDataReader r, string column)

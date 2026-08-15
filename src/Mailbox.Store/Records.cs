@@ -153,6 +153,9 @@ public sealed record MessageSummary(
 
     /// <summary>Whether a follow-up has been marked complete — a check where the flag was.</summary>
     public bool FollowUpComplete { get; init; }
+
+    /// <summary>When a snoozed message comes back, or null for one that is not snoozed (§12).</summary>
+    public DateTimeOffset? SnoozedUntil { get; init; }
 }
 
 /// <summary>
