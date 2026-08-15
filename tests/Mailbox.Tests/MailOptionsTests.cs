@@ -37,6 +37,12 @@ public class MailOptionsTests : IDisposable
         Assert.False(options.RequestReadReceipt);
         Assert.False(options.EmptyDeletedItemsOnExit);
         Assert.Equal(">", options.ReplyPrefix);
+        Assert.True(options.UseAutoCompleteList);
+
+        // Replies grow inline in the reading pane by default, as the reference has them; the
+        // separate-window behaviour is the switch-back, and closing the original is off.
+        Assert.False(options.OpenRepliesInNewWindow);
+        Assert.False(options.CloseOriginalOnReply);
     }
 
     /// <summary>The combo persists an index in the reference's own order; this names it.</summary>

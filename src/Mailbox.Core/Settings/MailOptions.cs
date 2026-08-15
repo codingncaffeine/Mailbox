@@ -40,6 +40,8 @@ public sealed class MailOptions(SettingsStore settings)
     public const string AutomaticNameCheckingKey = "mail.send.checknames";
     public const string CtrlEnterSendsKey = "mail.send.ctrlenter";
     public const string UseAutoCompleteListKey = "mail.send.autocomplete";
+    public const string OpenRepliesInNewWindowKey = "mail.reply.newwindow";
+    public const string CloseOriginalOnReplyKey = "mail.reply.closeoriginal";
     public const string RequestDeliveryReceiptKey = "mail.tracking.delivery";
     public const string RequestReadReceiptKey = "mail.tracking.read";
     public const string EmptyDeletedOnExitKey = "mail.exit.emptydeleted";
@@ -113,6 +115,15 @@ public sealed class MailOptions(SettingsStore settings)
     /// typed. Off, the list is still fed — turning it back on has something to offer.
     /// </summary>
     public bool UseAutoCompleteList => _settings.GetBool(UseAutoCompleteListKey, true);
+
+    /// <summary>
+    /// Whether Reply, Reply All and Forward open a separate window rather than an inline strip
+    /// in the reading pane. Off, as the reference has it: the reply grows where the message is.
+    /// </summary>
+    public bool OpenRepliesInNewWindow => _settings.GetBool(OpenRepliesInNewWindowKey, false);
+
+    /// <summary>Whether replying to or forwarding a message in its own window closes that window.</summary>
+    public bool CloseOriginalOnReply => _settings.GetBool(CloseOriginalOnReplyKey, false);
 
     public bool RequestDeliveryReceipt => _settings.GetBool(RequestDeliveryReceiptKey, false);
 

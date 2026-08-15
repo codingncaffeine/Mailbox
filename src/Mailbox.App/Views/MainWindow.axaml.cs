@@ -4,6 +4,8 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
+using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -131,9 +133,14 @@ public partial class MainWindow : Window
                 {
                     Log.Info($"Harness: running {id}.");
 
-                    // A command that opens a window — reply, forward — is photographed through
-                    // that window rather than this one.
-                    if (id is "mail.reply" or "mail.reply.all" or "mail.forward") CaptureNextWindow();
+                    // Reply and forward open a window only when the Options page asks for one;
+                    // otherwise they grow inline in this window, which this window's own capture
+                    // shows. Photograph the next window only in the windowed case.
+                    if (id is "mail.reply" or "mail.reply.all" or "mail.forward"
+                        && App.MailOptions.OpenRepliesInNewWindow)
+                    {
+                        CaptureNextWindow();
+                    }
 
                     RunCommand(new CommandId(id));
                     if (DataContext is ShellViewModel s) Log.Info($"Harness: status \u201c{s.StatusRight}\u201d");
@@ -1209,6 +1216,15 @@ public partial class MainWindow : Window
         // A collapsed ribbon rolls back up once it has been used, which is the whole bargain of
         // the mode: it is there when wanted and gone the rest of the time.
         _ribbon.CloseFloatingBody();
+
+        // While an inline reply is open the ribbon shows the compose tabs, and its commands act
+        // on that surface rather than on the message list behind it.
+        if (_inlineCompose is { } surface)
+        {
+            surface.Invoke(e.Command);
+            return;
+        }
+
         RunCommand(e.Command);
     }
 
@@ -1294,10 +1310,27 @@ public partial class MainWindow : Window
             PlainText = App.MailOptions.ComposeFormat == ComposeFormat.PlainText,
         });
 
+        // The account the message arrived in, which is what a reply means.
+        var address = shell.CurrentAddress;
+
+        // The reference grows the reply where the message is; the Options page's "Open replies
+        // and forwards in a new window" is the switch back to a separate window. An inline reply
+        // is already open — a reply to a reply — reuses the strip rather than stacking a second.
+        if (App.MailOptions.OpenRepliesInNewWindow)
+        {
+            OpenReplyWindow(shell, draft, kind, address);
+        }
+        else
+        {
+            OpenInlineReply(shell, draft, kind, address);
+        }
+    }
+
+    private void OpenReplyWindow(ShellViewModel shell, ReplyDraft draft, ReplyKind kind, string? address)
+    {
         var compose = new ComposeWindow(App.Commands, App.Accounts);
 
-        // From the account the message arrived in, which is what a reply means.
-        if (shell.CurrentAddress is { Length: > 0 } address) compose.SendFromAccount(address);
+        if (address is { Length: > 0 }) compose.SendFromAccount(address);
 
         compose.Prefill(draft, kind);
         compose.Queued += (_, e) => OnQueued(e);
@@ -1312,6 +1345,154 @@ public partial class MainWindow : Window
         }
 
         compose.Show(this);
+    }
+
+    /// <summary>The compose surface shown inline in the reading pane, or null when reading.</summary>
+    private ComposeSurface? _inlineCompose;
+
+    /// <summary>
+    /// Grows a reply where the message is: the reading pane's read view is covered by a compose
+    /// surface, and the shell's ribbon becomes the compose ribbon aimed at it.
+    /// </summary>
+    /// <remarks>
+    /// The same <see cref="ComposeSurface"/> the compose window hosts, so a reply written here is
+    /// the same reply written there — the serializer, the threading headers, the Auto-Complete
+    /// List, all of it. What differs is the chrome: no title bar, a strip of its own for Pop Out
+    /// and Discard, and the shell's ribbon rather than a window's.
+    /// </remarks>
+    private void OpenInlineReply(ShellViewModel shell, ReplyDraft draft, ReplyKind kind, string? address)
+    {
+        // A reply already open — a reply to a reply, or Forward pressed twice — is dismissed
+        // first, so there is one inline surface at a time rather than a stack nobody asked for.
+        if (_inlineCompose is not null) CloseInlineCompose(shell);
+
+        var surface = new ComposeSurface(App.Commands, App.Accounts);
+        if (address is { Length: > 0 }) surface.SendFromAccount(address);
+        surface.Prefill(draft, kind);
+
+        // Every handler is guarded against a surface that has since been popped out into a
+        // window: the window re-subscribes for itself, and these must go quiet rather than
+        // fire alongside it. A control's events cannot be unsubscribed by lambda, so the guard
+        // is the identity check.
+        surface.Queued += (_, e) => { if (ReferenceEquals(_inlineCompose, surface)) OnQueued(e); };
+        surface.EnablementChanged += (_, _) => { if (ReferenceEquals(_inlineCompose, surface)) _ribbon.RefreshEnablement(); };
+        surface.CloseRequested += (_, _) => { if (ReferenceEquals(_inlineCompose, surface)) CloseInlineCompose(shell); };
+
+        _inlineCompose = surface;
+
+        // The ribbon becomes the compose ribbon, aimed at the surface. Its enablement predicate
+        // and its commands both point there until the reply closes.
+        _savedRibbonEnabled = _ribbon.CommandEnabled;
+        _ribbon.Layout = DefaultRibbonLayouts.Compose;
+        _ribbon.CommandEnabled = surface.IsCommandEnabled;
+        _ribbon.RefreshEnablement();
+
+        this.FindControl<ContentControl>("ReadingComposeHost")!.Content = InlineComposeChrome(shell, surface);
+        this.FindControl<ContentControl>("ReadingComposeHost")!.IsVisible = true;
+
+        // The harness sends the inline reply too, so its wire form — the threading headers most
+        // of all — can be read back out of the outbox exactly as the windowed reply's is.
+        if (Environment.GetEnvironmentVariable("MAILBOX_COMPOSE_QUEUE") is { Length: > 0 })
+        {
+            if (kind == ReplyKind.Forward) surface.PoseHeader("b.person@example.com", string.Empty, string.Empty);
+            Dispatcher.UIThread.Post(() => surface.PressSend(), DispatcherPriority.Background);
+        }
+
+        // The harness pops the reply out, so the live re-parent into a window is exercised and
+        // photographed — a control moving between two visual trees is the fiddly part.
+        if (Environment.GetEnvironmentVariable("MAILBOX_INLINE_POPOUT") is { Length: > 0 })
+        {
+            CaptureNextWindow();
+            Dispatcher.UIThread.Post(() => PopOutInline(shell), DispatcherPriority.Background);
+        }
+    }
+
+    private Func<CommandId, bool>? _savedRibbonEnabled;
+
+    /// <summary>
+    /// The inline reply's own chrome: a thin bar carrying Pop Out and Discard above the surface.
+    /// Send lives in the surface's own header, as it does in the window.
+    /// </summary>
+    private Control InlineComposeChrome(ShellViewModel shell, ComposeSurface surface)
+    {
+        var popOut = new Button { Content = "Pop Out", Padding = new Thickness(10, 4), Margin = new Thickness(0, 0, 6, 0) };
+        ToolTip.SetTip(popOut, "Open this reply in its own window");
+        popOut.Click += (_, _) => PopOutInline(shell);
+
+        var discard = new Button { Content = "Discard", Padding = new Thickness(10, 4) };
+        ToolTip.SetTip(discard, "Discard this reply");
+        discard.Click += (_, _) => surface.Invoke(ComposeCommands.Discard.Id);
+
+        var bar = new Border
+        {
+            Padding = new Thickness(12, 6),
+            BorderThickness = new Thickness(0, 0, 0, 1),
+            [!Border.BackgroundProperty] = new DynamicResourceExtension("reading.header.background.brush"),
+            [!Border.BorderBrushProperty] = new DynamicResourceExtension("border.subtle.brush"),
+            Child = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Children = { popOut, discard },
+            },
+        };
+        DockPanel.SetDock(bar, Dock.Top);
+
+        var host = new DockPanel { LastChildFill = true };
+        host.Children.Add(bar);
+        host.Children.Add(surface);
+
+        return new Border
+        {
+            Child = host,
+            [!Border.BackgroundProperty] = new DynamicResourceExtension("reading.background.brush"),
+        };
+    }
+
+    /// <summary>Takes the live inline reply out of the pane and into its own window, state intact.</summary>
+    private void PopOutInline(ShellViewModel shell)
+    {
+        if (_inlineCompose is not { } surface) return;
+
+        // Detach the surface from the inline chrome before the window adopts it — a control has
+        // exactly one parent, and clearing the host's Content is not enough: the surface's
+        // immediate parent is the chrome's own panel, and that reference is what the window would
+        // collide with. Remove it from there, then drop the empty chrome.
+        if (surface.Parent is Panel panel) panel.Children.Remove(surface);
+        this.FindControl<ContentControl>("ReadingComposeHost")!.Content = null;
+
+        var compose = new ComposeWindow(App.Commands, surface);
+        compose.Queued += (_, e) => OnQueued(e);
+        compose.Closed += (_, _) => shell.Refresh();
+
+        // Put the reading pane back the way it was, without discarding: the reply lives in the
+        // window now, not gone.
+        RestoreReadingRibbon();
+        this.FindControl<ContentControl>("ReadingComposeHost")!.IsVisible = false;
+        _inlineCompose = null;
+
+        compose.Show(this);
+    }
+
+    /// <summary>Dismisses the inline reply and puts the reading pane back to reading.</summary>
+    private void CloseInlineCompose(ShellViewModel shell)
+    {
+        if (_inlineCompose is null) return;
+
+        this.FindControl<ContentControl>("ReadingComposeHost")!.IsVisible = false;
+        this.FindControl<ContentControl>("ReadingComposeHost")!.Content = null;
+        _inlineCompose = null;
+
+        RestoreReadingRibbon();
+        shell.Refresh();
+    }
+
+    private void RestoreReadingRibbon()
+    {
+        _ribbon.Layout = App.MailRibbon();
+        _ribbon.CommandEnabled = _savedRibbonEnabled;
+        _ribbon.RefreshEnablement();
+        _savedRibbonEnabled = null;
     }
 
     /// <summary>
