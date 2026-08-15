@@ -55,10 +55,14 @@ public static class ComposeAvailability
         new(ComposeCommands.SaveDraft.Id, ComposeCommandState.Working, "Saves to Drafts."),
         new(ComposeCommands.Discard.Id, ComposeCommandState.Working,
             "Closes the window, asking first if anything was typed."),
+        // Not Phase 4, which is done and opens messages in their own windows. What these want
+        // is for the window to know which list it came from, so there is a next item to go to.
         new(ComposeCommands.PreviousItem.Id, ComposeCommandState.Blocked,
-            "Phase 4 — opening an existing message in its own window."),
+            "Phase 8 — a compose window does not yet know which list it was opened from, so "
+            + "there is no previous item to step to."),
         new(ComposeCommands.NextItem.Id, ComposeCommandState.Blocked,
-            "Phase 4 — opening an existing message in its own window."),
+            "Phase 8 — a compose window does not yet know which list it was opened from, so "
+            + "there is no next item to step to."),
         new(MailCommands.Undo.Id, ComposeCommandState.Working, "Undoes the last edit to the body."),
         new(ViewCommands.Redo.Id, ComposeCommandState.Working, "Redoes it."),
 
@@ -149,7 +153,8 @@ public static class ComposeAvailability
         new(ComposeCommands.AttachFile.Id, ComposeCommandState.Working,
             "Picks files and attaches them to the sent message."),
         new(ComposeCommands.AttachItem.Id, ComposeCommandState.Blocked,
-            "Phase 4 — attaching another stored message needs the message picker."),
+            "Phase 8 — attaching another stored message needs the message picker, which Search "
+            + "builds."),
         new(ComposeCommands.Signature.Id, ComposeCommandState.Working,
             "Inserts a signature at the caret, and is where they are written and removed. An "
             + "account can sign new messages automatically; none does unless asked to."),
