@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -11,6 +12,7 @@ using Avalonia.Threading;
 using Mailbox.App.Theming;
 using Mailbox.Controls.Ribbon;
 using Mailbox.Editor;
+using Mailbox.Rendering;
 using Mailbox.Core.Commands;
 using Mailbox.Core.Diagnostics;
 using Mailbox.Core.Ribbon;
@@ -92,6 +94,16 @@ public sealed class ComposeWindow : Window
     private Border _attachmentRow = null!;
 
     private readonly List<IStorageFile> _attachments = [];
+
+    /// <summary>
+    /// Attachments that came from a message rather than a file: a forward's, or an attached
+    /// original. Already MIME, so they go into the message as they are.
+    /// </summary>
+    private readonly List<CarriedPart> _carried = [];
+
+    /// <summary>The threading headers a reply carries, so the recipient's client can join it up.</summary>
+    private string? _inReplyTo;
+    private IReadOnlyList<string> _references = [];
 
     private MessageImportance _importance = MessageImportance.Normal;
     private bool _wantsReadReceipt;
@@ -334,6 +346,63 @@ public sealed class ComposeWindow : Window
     }
 
     /// <summary>
+    /// Opens on a reply or a forward: recipients, subject, threading headers, the reply
+    /// signature, and the original quoted below the caret.
+    /// </summary>
+    /// <remarks>
+    /// The caret goes at the top and the quote below, which is the reference's arrangement and
+    /// the one every recipient reading top-down expects. LoadHtml rather than InsertHtml, for
+    /// the same reason the automatic signature uses it: it is what leaves the caret at the top.
+    /// </remarks>
+    public void Prefill(ReplyDraft draft, ReplyKind kind)
+    {
+        ArgumentNullException.ThrowIfNull(draft);
+
+        _to.Text = string.Join("; ", draft.To);
+        _cc.Text = string.Join("; ", draft.Cc);
+        _subject.Text = draft.Subject;
+        _inReplyTo = draft.InReplyTo;
+        _references = draft.References;
+
+        _carried.AddRange(draft.Attachments);
+        if (_carried.Count > 0)
+        {
+            _attachmentStrip.Text = "Attached: " + string.Join(", ", _carried.Select(c => c.Name));
+            _attachmentRow.IsVisible = true;
+        }
+
+        // The signature for a reply, if the account has one, then the quote — with two blank
+        // lines above the lot for the answer to go in.
+        var signature = SendingAccount() is { } account
+            ? App.Signatures.ForReply(account.Account.Address)
+            : null;
+
+        var html = new StringBuilder("<p>&nbsp;</p><p>&nbsp;</p>");
+        if (signature is { IsEmpty: false }) html.Append(signature.Html);
+
+        if (_plainText || draft.QuotedHtml.Length == 0)
+        {
+            html.Append(SignatureEditor.AsHtml(draft.QuotedText));
+        }
+        else
+        {
+            html.Append(draft.QuotedHtml);
+        }
+
+        _body.LoadHtml(html.ToString());
+        _dirty = false;
+
+        UpdateTitle();
+        UpdateStatus();
+        _ribbon.RefreshEnablement();
+
+        // A forward wants a recipient; a reply has one already and wants the words. Focus
+        // follows, which is what stops the first keystroke going into the wrong box.
+        if (kind == ReplyKind.Forward) _to.AttachedToVisualTree += (_, _) => _to.Focus();
+        else Opened += (_, _) => _body.Focus();
+    }
+
+    /// <summary>
     /// Opens a draft for more writing, so saving or sending it acts on that draft.
     /// </summary>
     /// <remarks>
@@ -407,7 +476,7 @@ public sealed class ComposeWindow : Window
     {
         _to.Text = to;
         _cc.Text = cc;
-        _subject.Text = subject;
+        if (subject.Length > 0 && !subject.Contains(" - Message (", StringComparison.Ordinal)) _subject.Text = subject;
     }
 
     // ----------------------------------------------------------------------------------
@@ -2032,6 +2101,13 @@ public sealed class ComposeWindow : Window
             message.Headers.Add("Sensitivity", sensitivity);
         }
 
+        // What lets the recipient's client put a reply under the message it answers.
+        if (_inReplyTo is { Length: > 0 } inReplyTo)
+        {
+            message.InReplyTo = inReplyTo;
+            foreach (var reference in _references) message.References.Add(reference);
+        }
+
         // Both halves, always. A recipient whose client shows plain text — or who has told it
         // to — gets a readable message rather than a page of markup, and the two are the same
         // message rather than two that can disagree, because both come off one document.
@@ -2074,6 +2150,10 @@ public sealed class ComposeWindow : Window
             await stream.CopyToAsync(buffer);
             builder.Attachments.Add(file.Name, buffer.ToArray());
         }
+
+        // A forward's attachments, or an attached original — already MIME, carried as they are
+        // rather than decoded and re-encoded, which would be a lossy trip for no reason.
+        foreach (var carried in _carried) builder.Attachments.Add(carried.Entity);
 
         message.Body = builder.ToMessageBody();
         return message;

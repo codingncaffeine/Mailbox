@@ -47,6 +47,12 @@ public static class WindowCapture
 
     public static bool IsRequested => !string.IsNullOrWhiteSpace(RequestedPath);
 
+    /// <summary>
+    /// Set by whoever is about to photograph a different window, so the main window's own
+    /// capture stands down rather than racing it to the file and the shutdown.
+    /// </summary>
+    public static bool AnotherWindowWillBeCaptured { get; set; }
+
     public static double Scale
         => double.TryParse(Environment.GetEnvironmentVariable(ScaleVariable), out var s) && s > 0
             ? s
@@ -111,6 +117,12 @@ public static class WindowCapture
             try
             {
                 await Task.Delay(SettleDelay);
+
+                // A harness pose that opens another window photographs that one instead, and
+                // says so before this timer is up. Two captures racing to one path and one exit
+                // is how a run photographs the wrong window and calls it done.
+                if (AnotherWindowWillBeCaptured) return;
+
                 await Dispatcher.UIThread.InvokeAsync(() => Capture(window, path, Scale));
                 Console.WriteLine($"Captured {path}");
             }
@@ -120,7 +132,7 @@ public static class WindowCapture
             }
             finally
             {
-                shutdown();
+                if (!AnotherWindowWillBeCaptured) shutdown();
             }
         };
     }

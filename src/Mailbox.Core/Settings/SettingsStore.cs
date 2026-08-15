@@ -43,6 +43,34 @@ public sealed class SettingsStore
         _values = values;
     }
 
+    /// <summary>
+    /// A store over a copy of the real file, in a temporary place, for a run that must leave
+    /// the real one alone.
+    /// </summary>
+    /// <remarks>
+    /// The fidelity harness poses states that persist — the reading pane's visibility, the
+    /// nav's, the zoom — and a photograph must not change what the person sees when they next
+    /// open the application. The copy carries everything in and nothing out.
+    /// </remarks>
+    public static SettingsStore ScratchCopy()
+    {
+        var scratch = Path.Combine(
+            Path.GetTempPath(), $"mailbox-settings-{Environment.ProcessId}.json");
+
+        try
+        {
+            var real = DefaultPath();
+            if (File.Exists(real)) File.Copy(real, scratch, overwrite: true);
+        }
+        catch (Exception)
+        {
+            // No real file to copy, or one we may not read: the scratch starts empty, which is
+            // what a first run looks like anyway.
+        }
+
+        return new SettingsStore(scratch);
+    }
+
     public static string DefaultPath()
     {
         var config = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");

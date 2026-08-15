@@ -136,6 +136,8 @@ public static partial class MessageRenderer
     /// </remarks>
     private static string Document(string body, RenderOptions options)
     {
+        if (options.Fragment) return body;
+
         var style = options.Style;
         var size = style.FontSize.ToString("0.##", CultureInfo.InvariantCulture);
 

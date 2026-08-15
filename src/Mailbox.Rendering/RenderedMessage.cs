@@ -79,6 +79,17 @@ public sealed record RenderOptions
     /// rather than turned into several megabytes of base64 in the document.
     /// </summary>
     public int MaxInlineBytes { get; init; } = 8 * 1024 * 1024;
+
+    /// <summary>
+    /// The sanitized body alone, with no document around it.
+    /// </summary>
+    /// <remarks>
+    /// For a reply, which loads the original into the editor under its own words: a second
+    /// <c>&lt;html&gt;</c> inside the message would be nonsense, and the print stylesheet and the
+    /// content policy belong to the reading pane's document, not to a quotation. Everything the
+    /// sanitizer does still happens — that is the point of coming through here.
+    /// </remarks>
+    public bool Fragment { get; init; }
 }
 
 /// <summary>A message turned into a document with nothing left in it to fetch.</summary>
