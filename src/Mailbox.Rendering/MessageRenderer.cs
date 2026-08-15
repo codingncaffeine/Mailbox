@@ -108,6 +108,12 @@ public static partial class MessageRenderer
     /// Its own rules come first so the message's can override them, which is the right way
     /// round: the frame decides what an unstyled message looks like, and a styled one is
     /// allowed to look like itself. The values are the theme's, passed in.
+    /// <para>
+    /// The policy is belt and braces. Nothing that could act on it should have survived
+    /// sanitizing — there is no script left, and no remote URL — so it exists to be wrong
+    /// twice before anything leaks: <c>default-src 'none'</c> denies every fetch, images are
+    /// allowed only from the <c>data:</c> URIs we produced, and a form has nowhere to post to.
+    /// </para>
     /// </remarks>
     private static string Document(string body, RenderStyle style)
     {
@@ -118,6 +124,7 @@ public static partial class MessageRenderer
             <!DOCTYPE html>
             <html><head><meta charset="utf-8">
             <meta name="referrer" content="no-referrer">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; form-action 'none'; base-uri 'none'">
             <style>
             html,body{margin:0;padding:0;background:{{style.Background}};color:{{style.Foreground}};
             font-family:{{style.FontFamily}};font-size:{{size}}px;line-height:1.45;

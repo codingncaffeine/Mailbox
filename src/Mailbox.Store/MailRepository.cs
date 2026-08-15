@@ -324,6 +324,64 @@ public sealed class MailRepository(MailStore store)
         term.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
             .Select(word => '"' + word.Replace("\"", "\"\"") + '"'));
 
+    // ---- Safe senders -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Whether this sender's remote images may load without asking.
+    /// </summary>
+    /// <remarks>
+    /// Matched on the address rather than the domain. "Always allow images from this sender" is
+    /// a statement about one correspondent, and a domain is shared with everyone else who has
+    /// an account there.
+    /// </remarks>
+    public bool IsSafeSender(string address)
+    {
+        if (string.IsNullOrWhiteSpace(address)) return false;
+
+        return _store.ScalarLong(
+            "SELECT count(*) FROM safe_senders WHERE address = $address",
+            ("$address", address.Trim().ToLowerInvariant())) > 0;
+    }
+
+    public void AddSafeSender(string address, DateTimeOffset now)
+    {
+        if (string.IsNullOrWhiteSpace(address)) return;
+
+        _store.Execute(
+            """
+            INSERT INTO safe_senders (address, added_utc) VALUES ($address, $now)
+            ON CONFLICT(address) DO NOTHING
+            """,
+            ("$address", address.Trim().ToLowerInvariant()),
+            ("$now", now.ToUnixTimeSeconds()));
+    }
+
+    public void RemoveSafeSender(string address) => _store.Execute(
+        "DELETE FROM safe_senders WHERE address = $address",
+        ("$address", address.Trim().ToLowerInvariant()));
+
+    public IReadOnlyList<string> SafeSenders() => _store.Query(
+        "SELECT address FROM safe_senders ORDER BY address", r => r.GetString(0));
+
+    /// <summary>
+    /// Every domain this mailbox deals with: its own accounts, and everyone it has mail from.
+    /// </summary>
+    /// <remarks>
+    /// The input to the lookalike check. A domain one character away from one of these is worth
+    /// warning about; one character away from a domain nobody here has ever heard of is not.
+    /// </remarks>
+    public IReadOnlyList<string> FamiliarDomains() => _store.Query(
+        """
+        SELECT DISTINCT lower(substr(from_address, instr(from_address, '@') + 1)) AS domain
+        FROM messages
+        WHERE instr(from_address, '@') > 0
+        UNION
+        SELECT DISTINCT lower(substr(address, instr(address, '@') + 1))
+        FROM accounts
+        WHERE instr(address, '@') > 0
+        """,
+        r => r.GetString(0));
+
     // ---- Categories -------------------------------------------------------------------------
 
     public IReadOnlyList<Category> Categories() => _store.Query(

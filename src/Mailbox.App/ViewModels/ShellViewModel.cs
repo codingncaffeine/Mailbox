@@ -1036,6 +1036,18 @@ public sealed class ShellViewModel : ObservableObject
     private MailRepository? Mail(IReadOnlyList<MessageRow> rows)
         => rows.Count == 0 ? null : CurrentAccount?.Mail;
 
+    /// <summary>
+    /// The store behind what is on screen, for the reading pane.
+    /// </summary>
+    /// <remarks>
+    /// Null while the sample is showing, which is what tells the pane to render the row's text
+    /// rather than go looking for MIME that was never received.
+    /// </remarks>
+    public MailRepository? CurrentMail => HasAccount ? CurrentAccount?.Mail : null;
+
+    /// <summary>The selected message as it arrived, or null when there is no such thing.</summary>
+    public byte[]? SelectedRaw => SelectedMessage is { } row ? CurrentMail?.LoadRaw(row.Id) : null;
+
     private static string Describe(int count)
         => count == 1 ? "1 message" : $"{count:N0} messages";
 
