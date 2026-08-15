@@ -316,6 +316,37 @@ public static class Migrations
             VALUES (new.id, new.subject, new.from_name, new.from_address, new.preview, new.body_text);
         END;
         """,
+
+        // ---- 12: the junk filter's corpus and the blocked list -------------------------------
+        //
+        // §7.8's naive-Bayes filter is trained on the user's own Mark as Junk and Not Junk, and
+        // this is where the training lives. `junk_tokens` holds each token's spam and ham counts;
+        // `junk_corpus` holds the message totals those counts are normalised against — a single
+        // row, because there is one corpus per account file. The corpus is local and this table
+        // is the whole of it: nothing is uploaded, there is no shared reputation (§7.8, §19).
+        //
+        // `blocked_senders` is the other half of the lists that always win over the classifier,
+        // the mirror of `safe_senders` from schema 7.
+        """
+        CREATE TABLE junk_tokens (
+            token       TEXT    NOT NULL PRIMARY KEY,
+            spam_count  INTEGER NOT NULL DEFAULT 0,
+            ham_count   INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE TABLE junk_corpus (
+            id             INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+            spam_messages  INTEGER NOT NULL DEFAULT 0,
+            ham_messages   INTEGER NOT NULL DEFAULT 0
+        );
+
+        INSERT INTO junk_corpus (id, spam_messages, ham_messages) VALUES (1, 0, 0);
+
+        CREATE TABLE blocked_senders (
+            address    TEXT    NOT NULL PRIMARY KEY,
+            added_utc  INTEGER NOT NULL
+        );
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>

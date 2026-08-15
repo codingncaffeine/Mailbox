@@ -388,4 +388,43 @@ public class Pop3ReceiverTests
 
         Assert.Empty(server.Deleted);
     }
+
+    /// <summary>
+    /// A message the junk filter flags is filed straight into Junk, not the inbox — and the
+    /// account-wide dedupe means it is not downloaded again on the next poll just because the
+    /// inbox does not hold it.
+    /// </summary>
+    [Fact]
+    public async Task JunkIsFiledIntoJunkAndNotReDownloaded()
+    {
+        var (store, repo, inbox) = Fresh();
+        using var _ = store;
+        var junk = repo.FolderWithRole(inbox.AccountId, FolderRole.Junk)!;
+
+        var server = new FakePop3().With("uid-spam", "Cheap pills").With("uid-good", "Re: lunch");
+
+        // Flag exactly the spam by subject.
+        var receiver = new Pop3Receiver(repo)
+        {
+            SessionFactory = () => server,
+            IsJunk = message => message.Subject == "Cheap pills",
+        };
+
+        var first = await receiver.PollAsync(Connection(), inbox, null, Ct);
+        Assert.Equal(2, first.Downloaded);
+
+        Assert.Equal("Re: lunch", Assert.Single(repo.Messages(inbox.Id)).Subject);
+        Assert.Equal("Cheap pills", Assert.Single(repo.Messages(junk.Id)).Subject);
+
+        // A second poll of the unchanged mailbox downloads nothing: both are known, one in the
+        // inbox and one in Junk.
+        var second = await new Pop3Receiver(repo)
+        {
+            SessionFactory = () => server,
+            IsJunk = message => message.Subject == "Cheap pills",
+        }.PollAsync(Connection(), inbox, null, Ct);
+
+        Assert.Equal(0, second.Downloaded);
+        Assert.Single(repo.Messages(junk.Id));
+    }
 }

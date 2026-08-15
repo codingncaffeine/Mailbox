@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    §7.8's junk filter: a naive-Bayes content classifier trained on the user's own Mark as Junk
+    and Not Junk. Pure logic — it tokenizes strings and scores them against a corpus it is handed
+    through an interface, so it talks to no store, no network, and nothing leaves the machine. The
+    corpus lives in the mail store; the adapter that backs this interface with SQLite is there.
+  -->
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Mailbox.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -42,6 +42,7 @@ public sealed class MailOptions(SettingsStore settings)
     public const string UseAutoCompleteListKey = "mail.send.autocomplete";
     public const string OpenRepliesInNewWindowKey = "mail.reply.newwindow";
     public const string CloseOriginalOnReplyKey = "mail.reply.closeoriginal";
+    public const string JunkLevelKey = "mail.junk.level";
     public const string RequestDeliveryReceiptKey = "mail.tracking.delivery";
     public const string RequestReadReceiptKey = "mail.tracking.read";
     public const string EmptyDeletedOnExitKey = "mail.exit.emptydeleted";
@@ -124,6 +125,12 @@ public sealed class MailOptions(SettingsStore settings)
 
     /// <summary>Whether replying to or forwarding a message in its own window closes that window.</summary>
     public bool CloseOriginalOnReply => _settings.GetBool(CloseOriginalOnReplyKey, false);
+
+    /// <summary>
+    /// How hard the junk filter works, 0..3 = Off / Low / High / Safe Lists Only. Low is the
+    /// reference's default: only the most obvious junk, few wanted messages caught by mistake.
+    /// </summary>
+    public int JunkLevelIndex => (int)_settings.GetNumber(JunkLevelKey, 1);
 
     public bool RequestDeliveryReceipt => _settings.GetBool(RequestDeliveryReceiptKey, false);
 

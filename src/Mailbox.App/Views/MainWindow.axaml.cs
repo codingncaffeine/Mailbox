@@ -1532,7 +1532,7 @@ public partial class MainWindow : Window
 
         if (id == MailCommands.Delete.Id) { shell.Delete(rows, permanently: false); return true; }
         if (id == MailCommands.Archive.Id) { shell.MoveTo(rows, FolderRole.Archive); return true; }
-        if (id == MailCommands.Junk.Id) { shell.MoveTo(rows, FolderRole.Junk); return true; }
+        if (id == MailCommands.Junk.Id) { shell.MarkJunk(rows); return true; }
 
         // The reference's Unread/Read button toggles: unread if the selection is all read, read
         // otherwise. Same for the flag.
