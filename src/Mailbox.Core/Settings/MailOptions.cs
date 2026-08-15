@@ -43,6 +43,11 @@ public sealed class MailOptions(SettingsStore settings)
     public const string OpenRepliesInNewWindowKey = "mail.reply.newwindow";
     public const string CloseOriginalOnReplyKey = "mail.reply.closeoriginal";
     public const string JunkLevelKey = "mail.junk.level";
+    public const string JunkDeleteKey = "mail.junk.delete";
+    public const string JunkDisableLinksKey = "mail.junk.disablelinks";
+    public const string JunkWarnDomainsKey = "mail.junk.warndomains";
+    public const string JunkTrustContactsKey = "mail.junk.trustcontacts";
+    public const string JunkSafeAutoAddKey = "mail.junk.autoaddrecipients";
     public const string DesktopAlertKey = "mail.arrival.alert";
     public const string RequestDeliveryReceiptKey = "mail.tracking.delivery";
     public const string RequestReadReceiptKey = "mail.tracking.read";
@@ -131,7 +136,52 @@ public sealed class MailOptions(SettingsStore settings)
     /// How hard the junk filter works, 0..3 = Off / Low / High / Safe Lists Only. Low is the
     /// reference's default: only the most obvious junk, few wanted messages caught by mistake.
     /// </summary>
-    public int JunkLevelIndex => (int)_settings.GetNumber(JunkLevelKey, 1);
+    public int JunkLevelIndex
+    {
+        get => (int)_settings.GetNumber(JunkLevelKey, 1);
+        set => _settings.Set(JunkLevelKey, Math.Clamp(value, 0, 3));
+    }
+
+    /// <summary>
+    /// Whether suspected junk is deleted outright rather than filed in Junk. Off, and the
+    /// dialog says why it is a bad idea: a message the filter got wrong is gone.
+    /// </summary>
+    public bool DeleteSuspectedJunk
+    {
+        get => _settings.GetBool(JunkDeleteKey, false);
+        set => _settings.Set(JunkDeleteKey, value);
+    }
+
+    /// <summary>Whether links in a message in the Junk folder are drawn inert. On.</summary>
+    public bool DisableLinksInJunk
+    {
+        get => _settings.GetBool(JunkDisableLinksKey, true);
+        set => _settings.Set(JunkDisableLinksKey, value);
+    }
+
+    /// <summary>Whether the reading pane warns about lookalike sender domains. On.</summary>
+    public bool WarnAboutSuspiciousDomains
+    {
+        get => _settings.GetBool(JunkWarnDomainsKey, true);
+        set => _settings.Set(JunkWarnDomainsKey, value);
+    }
+
+    /// <summary>
+    /// Whether everyone a message is sent to joins the safe-senders list. Off, as the reference
+    /// has it: it makes the list large and the Auto-Complete List already remembers them.
+    /// </summary>
+    public bool AutoAddRecipientsToSafeSenders
+    {
+        get => _settings.GetBool(JunkSafeAutoAddKey, false);
+        set => _settings.Set(JunkSafeAutoAddKey, value);
+    }
+
+    /// <summary>Whether mail from a contact is never junk. On; the contacts arrive with Phase 12.</summary>
+    public bool TrustContacts
+    {
+        get => _settings.GetBool(JunkTrustContactsKey, true);
+        set => _settings.Set(JunkTrustContactsKey, value);
+    }
 
     /// <summary>Whether a send/receive that brought new mail shows a desktop notification.</summary>
     public bool DisplayDesktopAlert => _settings.GetBool(DesktopAlertKey, true);

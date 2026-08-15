@@ -343,7 +343,8 @@ public sealed class MailRepository(MailStore store)
     /// <remarks>
     /// <c>received_utc</c> is when the message was written here, not the date in its header, so
     /// the age is time-since-download — which is what the setting means and the only reading of
-    /// it that cannot delete mail off a server the moment it is collected.
+    /// it that cannot delete mail off a server the moment it is collected. The seen list counts
+    /// too, so a message deleted here still comes off the server on the day it would have.
     /// </remarks>
     public HashSet<string> ServerUidsOlderThan(long folderId, DateTimeOffset cutoff) =>
     [
@@ -351,11 +352,53 @@ public sealed class MailRepository(MailStore store)
             """
             SELECT server_uid FROM messages
             WHERE folder_id = $folder AND server_uid IS NOT NULL AND received_utc < $cutoff
+            UNION
+            SELECT uidl FROM pop3_seen WHERE first_seen_utc < $cutoff
             """,
             r => r.GetString(0),
             ("$folder", folderId),
             ("$cutoff", cutoff.ToUnixTimeSeconds())),
     ];
+
+    // ---- What POP3 has collected --------------------------------------------------------------
+    //
+    // A poll decides what is new by what it has seen, not by what it still holds: a message
+    // deleted here for good must not come back as new mail on the next poll because the server,
+    // asked to leave it, left it. So every collected UIDL is written here, and the list is
+    // trimmed to what the server still lists after each poll.
+
+    /// <summary>Every UIDL this account has ever collected and the server still lists.</summary>
+    public HashSet<string> SeenUidls() =>
+        [.. _store.Query("SELECT uidl FROM pop3_seen", r => r.GetString(0))];
+
+    /// <summary>Records that a UIDL has been collected, whatever becomes of the message.</summary>
+    public void RecordSeenUidl(string uidl, DateTimeOffset now) => _store.Execute(
+        "INSERT OR IGNORE INTO pop3_seen (uidl, first_seen_utc) VALUES ($uidl, $now)",
+        ("$uidl", uidl), ("$now", now.ToUnixTimeSeconds()));
+
+    /// <summary>
+    /// Forgets the UIDLs the server no longer lists. Run after a poll has the server's full
+    /// list, so the table tracks the mailbox rather than its whole history.
+    /// </summary>
+    public int PruneSeenUidls(IReadOnlyCollection<string> stillOnServer)
+    {
+        if (stillOnServer.Count == 0) return _store.Execute("DELETE FROM pop3_seen");
+
+        return _store.InTransaction(() =>
+        {
+            _store.Execute("CREATE TEMP TABLE IF NOT EXISTS pop3_listed (uidl TEXT PRIMARY KEY)");
+            _store.Execute("DELETE FROM pop3_listed");
+            foreach (var chunk in stillOnServer.Chunk(500))
+            {
+                _store.Execute(
+                    $"INSERT OR IGNORE INTO pop3_listed (uidl) VALUES {string.Join(',', chunk.Select(u => "(" + Quote(u) + ")"))}");
+            }
+
+            var pruned = _store.Execute("DELETE FROM pop3_seen WHERE uidl NOT IN (SELECT uidl FROM pop3_listed)");
+            _store.Execute("DELETE FROM pop3_listed");
+            return pruned;
+        });
+    }
 
     public IReadOnlyList<MessageSummary> Messages(long folderId, int limit = 500) => _store.Query(
         MessageSelect + " WHERE folder_id = $folder ORDER BY received_utc DESC LIMIT $limit",
@@ -833,72 +876,140 @@ public sealed class MailRepository(MailStore store)
         term.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
             .Select(word => '"' + word.Replace("\"", "\"\"") + '"'));
 
-    // ---- Safe senders -------------------------------------------------------------------------
+    // ---- The junk lists -----------------------------------------------------------------------
+    //
+    // Five lists, one table each, and one shape: an entry is an address, or a whole domain
+    // written as "@example.com", both lower-cased. A sender matches a list when its address is
+    // on it or its domain is. Lists win over the classifier in both directions (§7.8), and the
+    // safe-senders list doubles as the reading pane's "always allow images from this sender".
 
     /// <summary>
-    /// Whether this sender's remote images may load without asking.
+    /// The list entries a sender address matches: itself, and its domain in the "@domain" form.
+    /// </summary>
+    internal static (string Address, string? Domain) ListKeys(string address)
+    {
+        var trimmed = address.Trim().ToLowerInvariant();
+        var at = trimmed.LastIndexOf('@');
+        var domain = at >= 0 && at < trimmed.Length - 1 ? trimmed[at..] : null;
+        return (trimmed, domain);
+    }
+
+    private bool ListHas(string table, string address)
+    {
+        if (string.IsNullOrWhiteSpace(address)) return false;
+
+        var (exact, domain) = ListKeys(address);
+        return _store.ScalarLong(
+            $"SELECT count(*) FROM {table} WHERE address = $address OR ($domain IS NOT NULL AND address = $domain)",
+            ("$address", exact), ("$domain", domain)) > 0;
+    }
+
+    private void ListAdd(string table, string entry, DateTimeOffset now)
+    {
+        if (string.IsNullOrWhiteSpace(entry)) return;
+
+        _store.Execute(
+            $"INSERT INTO {table} (address, added_utc) VALUES ($address, $now) ON CONFLICT(address) DO NOTHING",
+            ("$address", entry.Trim().ToLowerInvariant()), ("$now", now.ToUnixTimeSeconds()));
+    }
+
+    private void ListRemove(string table, string entry) => _store.Execute(
+        $"DELETE FROM {table} WHERE address = $address", ("$address", entry.Trim().ToLowerInvariant()));
+
+    private IReadOnlyList<string> ListAll(string table) => _store.Query(
+        $"SELECT address FROM {table} ORDER BY address", r => r.GetString(0));
+
+    /// <summary>
+    /// Whether this sender's mail is never junk, and its remote images may load without asking.
     /// </summary>
     /// <remarks>
-    /// Matched on the address rather than the domain. "Always allow images from this sender" is
-    /// a statement about one correspondent, and a domain is shared with everyone else who has
-    /// an account there.
+    /// The address, or its whole domain if that was what was added — "Never Block Sender's
+    /// Domain". Allowing images for a domain is a wider grant than for one correspondent, which
+    /// is why the reading pane's bar adds the address alone; the domain form is the junk menu's.
     /// </remarks>
-    public bool IsSafeSender(string address)
-    {
-        if (string.IsNullOrWhiteSpace(address)) return false;
+    public bool IsSafeSender(string address) => ListHas("safe_senders", address);
 
-        return _store.ScalarLong(
-            "SELECT count(*) FROM safe_senders WHERE address = $address",
-            ("$address", address.Trim().ToLowerInvariant())) > 0;
-    }
+    public void AddSafeSender(string entry, DateTimeOffset now) => ListAdd("safe_senders", entry, now);
 
-    public void AddSafeSender(string address, DateTimeOffset now)
-    {
-        if (string.IsNullOrWhiteSpace(address)) return;
+    public void RemoveSafeSender(string entry) => ListRemove("safe_senders", entry);
 
-        _store.Execute(
-            """
-            INSERT INTO safe_senders (address, added_utc) VALUES ($address, $now)
-            ON CONFLICT(address) DO NOTHING
-            """,
-            ("$address", address.Trim().ToLowerInvariant()),
-            ("$now", now.ToUnixTimeSeconds()));
-    }
-
-    public void RemoveSafeSender(string address) => _store.Execute(
-        "DELETE FROM safe_senders WHERE address = $address",
-        ("$address", address.Trim().ToLowerInvariant()));
-
-    public IReadOnlyList<string> SafeSenders() => _store.Query(
-        "SELECT address FROM safe_senders ORDER BY address", r => r.GetString(0));
-
-    // ---- Blocked senders ----------------------------------------------------------------------
+    public IReadOnlyList<string> SafeSenders() => ListAll("safe_senders");
 
     /// <summary>Whether this sender is on the blocked list — junked whatever the classifier says.</summary>
-    public bool IsBlockedSender(string address)
+    public bool IsBlockedSender(string address) => ListHas("blocked_senders", address);
+
+    public void AddBlockedSender(string entry, DateTimeOffset now) => ListAdd("blocked_senders", entry, now);
+
+    public void RemoveBlockedSender(string entry) => ListRemove("blocked_senders", entry);
+
+    public IReadOnlyList<string> BlockedSenders() => ListAll("blocked_senders");
+
+    /// <summary>
+    /// Whether mail addressed to any of these — a list, an alias — is never junk. The Safe
+    /// Recipients list: membership of a list is vouched for by the list, not by each sender.
+    /// </summary>
+    public bool IsSafeRecipient(IEnumerable<string> recipients)
+        => recipients.Any(r => ListHas("safe_recipients", r));
+
+    public void AddSafeRecipient(string entry, DateTimeOffset now) => ListAdd("safe_recipients", entry, now);
+
+    public void RemoveSafeRecipient(string entry) => ListRemove("safe_recipients", entry);
+
+    public IReadOnlyList<string> SafeRecipients() => ListAll("safe_recipients");
+
+    /// <summary>Whether the sender's top-level domain is one the reader has blocked outright.</summary>
+    public bool IsBlockedTld(string address)
     {
         if (string.IsNullOrWhiteSpace(address)) return false;
 
+        var dot = address.LastIndexOf('.');
+        var at = address.LastIndexOf('@');
+        if (dot < 0 || dot < at || dot == address.Length - 1) return false;
+
         return _store.ScalarLong(
-            "SELECT count(*) FROM blocked_senders WHERE address = $address",
-            ("$address", address.Trim().ToLowerInvariant())) > 0;
+            "SELECT count(*) FROM blocked_tlds WHERE tld = $tld",
+            ("$tld", address[(dot + 1)..].Trim().ToLowerInvariant())) > 0;
     }
 
-    public void AddBlockedSender(string address, DateTimeOffset now)
+    public void SetBlockedTlds(IEnumerable<string> tlds, DateTimeOffset now) => _store.InTransaction(() =>
     {
-        if (string.IsNullOrWhiteSpace(address)) return;
+        _store.Execute("DELETE FROM blocked_tlds");
+        foreach (var tld in tlds.Select(t => t.Trim().TrimStart('.').ToLowerInvariant()).Where(t => t.Length > 0).Distinct())
+        {
+            _store.Execute("INSERT OR IGNORE INTO blocked_tlds (tld, added_utc) VALUES ($tld, $now)",
+                ("$tld", tld), ("$now", now.ToUnixTimeSeconds()));
+        }
 
-        _store.Execute(
-            "INSERT INTO blocked_senders (address, added_utc) VALUES ($address, $now) ON CONFLICT(address) DO NOTHING",
-            ("$address", address.Trim().ToLowerInvariant()), ("$now", now.ToUnixTimeSeconds()));
+        return 0;
+    });
+
+    public IReadOnlyList<string> BlockedTlds() => _store.Query(
+        "SELECT tld FROM blocked_tlds ORDER BY tld", r => r.GetString(0));
+
+    /// <summary>Whether a message written in this character set is blocked outright.</summary>
+    public bool IsBlockedEncoding(string? charset)
+    {
+        if (string.IsNullOrWhiteSpace(charset)) return false;
+
+        return _store.ScalarLong(
+            "SELECT count(*) FROM blocked_encodings WHERE charset = $charset",
+            ("$charset", charset.Trim().ToLowerInvariant())) > 0;
     }
 
-    public void RemoveBlockedSender(string address) => _store.Execute(
-        "DELETE FROM blocked_senders WHERE address = $address",
-        ("$address", address.Trim().ToLowerInvariant()));
+    public void SetBlockedEncodings(IEnumerable<string> charsets, DateTimeOffset now) => _store.InTransaction(() =>
+    {
+        _store.Execute("DELETE FROM blocked_encodings");
+        foreach (var charset in charsets.Select(c => c.Trim().ToLowerInvariant()).Where(c => c.Length > 0).Distinct())
+        {
+            _store.Execute("INSERT OR IGNORE INTO blocked_encodings (charset, added_utc) VALUES ($charset, $now)",
+                ("$charset", charset), ("$now", now.ToUnixTimeSeconds()));
+        }
 
-    public IReadOnlyList<string> BlockedSenders() => _store.Query(
-        "SELECT address FROM blocked_senders ORDER BY address", r => r.GetString(0));
+        return 0;
+    });
+
+    public IReadOnlyList<string> BlockedEncodings() => _store.Query(
+        "SELECT charset FROM blocked_encodings ORDER BY charset", r => r.GetString(0));
 
     // ---- The junk corpus ----------------------------------------------------------------------
     //

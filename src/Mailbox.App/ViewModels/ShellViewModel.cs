@@ -1606,6 +1606,119 @@ public sealed class ShellViewModel : ObservableObject
         MoveTo(rows, notJunk ? FolderRole.Inbox : FolderRole.Junk);
     }
 
+    /// <summary>The distinct sender addresses of the rows, lower-cased, read from the store.</summary>
+    private List<string> Senders(IReadOnlyList<MessageRow> rows)
+    {
+        if (Mail(rows) is not { } mail) return [];
+
+        return rows
+            .Select(r => mail.GetMessage(r.Id)?.FromAddress.Trim().ToLowerInvariant())
+            .Where(a => !string.IsNullOrEmpty(a))
+            .Distinct()
+            .ToList()!;
+    }
+
+    /// <summary>The distinct sender domains of the rows, for the Junk menu's domain entry.</summary>
+    public IReadOnlyList<string> SenderDomains(IReadOnlyList<MessageRow> rows) =>
+    [
+        .. Senders(rows)
+            .Select(a => a.LastIndexOf('@') is var at && at >= 0 && at < a.Length - 1 ? a[(at + 1)..] : null)
+            .Where(d => d is not null)
+            .Distinct()!,
+    ];
+
+    /// <summary>
+    /// Block Sender: the senders join the Blocked Senders list, and the messages go to Junk with
+    /// the filter trained on them — the reference's menu entry does all three.
+    /// </summary>
+    public void BlockSenders(IReadOnlyList<MessageRow> rows)
+    {
+        if (rows.Count == 0 || Mail(rows) is not { } mail) return;
+
+        var now = DateTimeOffset.UtcNow;
+        var senders = Senders(rows);
+        foreach (var sender in senders)
+        {
+            mail.AddBlockedSender(sender, now);
+            mail.RemoveSafeSender(sender);
+        }
+
+        if (CurrentFolderRole != FolderRole.Junk) MarkJunk(rows);
+
+        StatusRight = senders.Count == 1
+            ? $"{senders[0]} added to the Blocked Senders list."
+            : $"{senders.Count} senders added to the Blocked Senders list.";
+    }
+
+    /// <summary>
+    /// Never Block Sender, and Never Block Sender's Domain: the senders — or their whole domains
+    /// — join the Safe Senders list and leave the blocked one, and a message in Junk comes back.
+    /// </summary>
+    public void NeverBlockSenders(IReadOnlyList<MessageRow> rows, bool domain)
+    {
+        if (rows.Count == 0 || Mail(rows) is not { } mail) return;
+
+        var now = DateTimeOffset.UtcNow;
+        var entries = domain
+            ? SenderDomains(rows).Select(d => "@" + d).ToList()
+            : Senders(rows);
+
+        foreach (var entry in entries)
+        {
+            mail.AddSafeSender(entry, now);
+            mail.RemoveBlockedSender(entry);
+        }
+
+        if (CurrentFolderRole == FolderRole.Junk) MarkJunk(rows);
+
+        StatusRight = entries.Count == 1
+            ? $"{entries[0]} added to the Safe Senders list."
+            : $"{entries.Count} entries added to the Safe Senders list.";
+    }
+
+    /// <summary>
+    /// Never Block this Group or Mailing List: the addresses the messages were sent to — the
+    /// list, the alias — join the Safe Recipients list, and a message in Junk comes back.
+    /// </summary>
+    public void NeverBlockRecipients(IReadOnlyList<MessageRow> rows)
+    {
+        if (rows.Count == 0 || Mail(rows) is not { } mail) return;
+
+        var now = DateTimeOffset.UtcNow;
+        var own = new HashSet<string>(
+            _accounts?.All.Select(a => a.Account.Address.ToLowerInvariant()) ?? [],
+            StringComparer.OrdinalIgnoreCase);
+        var added = new List<string>();
+
+        foreach (var row in rows)
+        {
+            if (mail.LoadRaw(row.Id) is not { } raw || Parse(raw) is not { } message) continue;
+
+            // The list's own address, which is whatever the message was addressed to that is
+            // not one of ours; falling back to ours when that is all there is.
+            var recipients = message.To.Mailboxes.Concat(message.Cc.Mailboxes)
+                .Select(m => m.Address.Trim().ToLowerInvariant())
+                .Where(a => a.Length > 0)
+                .ToList();
+            var lists = recipients.Where(a => !own.Contains(a)).ToList();
+
+            foreach (var address in lists.Count > 0 ? lists : recipients)
+            {
+                mail.AddSafeRecipient(address, now);
+                if (!added.Contains(address)) added.Add(address);
+            }
+        }
+
+        if (CurrentFolderRole == FolderRole.Junk) MarkJunk(rows);
+
+        StatusRight = added.Count switch
+        {
+            0 => "The message names no recipient to add.",
+            1 => $"{added[0]} added to the Safe Recipients list.",
+            _ => $"{added.Count} addresses added to the Safe Recipients list.",
+        };
+    }
+
     /// <summary>
     /// The store the rows belong to. Null while the sample is showing, which is what keeps the
     /// commands from pretending to act on mail that is not really there.

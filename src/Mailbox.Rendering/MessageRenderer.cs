@@ -38,7 +38,7 @@ public static partial class MessageRenderer
         }
 
         var text = message.TextBody ?? string.Empty;
-        return new RenderedMessage(Document(FromPlainText(text), options), [], WasHtml: false);
+        return new RenderedMessage(Document(FromPlainText(text, options.DisableLinks), options), [], WasHtml: false);
     }
 
     /// <summary>
@@ -68,9 +68,10 @@ public static partial class MessageRenderer
     /// wrapped rather than reflowed. Linkifying is the one liberty taken, because a URL nobody
     /// can click is one that gets copied out by hand.
     /// </remarks>
-    private static string FromPlainText(string text)
+    private static string FromPlainText(string text, bool disableLinks = false)
     {
         var escaped = Escape(text);
+        if (disableLinks) return $"<div class=\"plain\">{escaped}</div>";
 
         var linked = BareUrl.Replace(escaped, match =>
         {

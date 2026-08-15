@@ -390,9 +390,8 @@ public class Pop3ReceiverTests
     }
 
     /// <summary>
-    /// A message the junk filter flags is filed straight into Junk, not the inbox — and the
-    /// account-wide dedupe means it is not downloaded again on the next poll just because the
-    /// inbox does not hold it.
+    /// A message the arrival handler moves to Junk lands there rather than in the inbox, and is
+    /// not fetched again on the next poll: it is known by having been seen, not by where it is.
     /// </summary>
     [Fact]
     public async Task JunkIsFiledIntoJunkAndNotReDownloaded()
@@ -404,11 +403,8 @@ public class Pop3ReceiverTests
         var server = new FakePop3().With("uid-spam", "Cheap pills").With("uid-good", "Re: lunch");
 
         // Flag exactly the spam by subject.
-        var receiver = new Pop3Receiver(repo)
-        {
-            SessionFactory = () => server,
-            IsJunk = message => message.Subject == "Cheap pills",
-        };
+        var handler = new SubjectJunk("Cheap pills");
+        var receiver = new Pop3Receiver(repo) { SessionFactory = () => server, OnArrival = handler };
 
         var first = await receiver.PollAsync(Connection(), inbox, null, Ct);
         Assert.Equal(2, first.Downloaded);
@@ -416,15 +412,68 @@ public class Pop3ReceiverTests
         Assert.Equal("Re: lunch", Assert.Single(repo.Messages(inbox.Id)).Subject);
         Assert.Equal("Cheap pills", Assert.Single(repo.Messages(junk.Id)).Subject);
 
+        // Only what stayed in the inbox is an arrival worth a toast.
+        Assert.Equal([repo.Messages(inbox.Id)[0].Id], first.Arrived);
+
         // A second poll of the unchanged mailbox downloads nothing: both are known, one in the
         // inbox and one in Junk.
-        var second = await new Pop3Receiver(repo)
-        {
-            SessionFactory = () => server,
-            IsJunk = message => message.Subject == "Cheap pills",
-        }.PollAsync(Connection(), inbox, null, Ct);
+        var second = await new Pop3Receiver(repo) { SessionFactory = () => server, OnArrival = handler }
+            .PollAsync(Connection(), inbox, null, Ct);
 
         Assert.Equal(0, second.Downloaded);
         Assert.Single(repo.Messages(junk.Id));
+    }
+
+    /// <summary>Moves a message whose subject matches to Junk; the shape the junk filter has.</summary>
+    private sealed class SubjectJunk(string subject) : IArrivalHandler
+    {
+        public long? Handle(MailRepository mail, Folder folder, long messageId, MimeMessage message)
+        {
+            if (message.Subject != subject) return folder.Id;
+            var junk = mail.FolderWithRole(folder.AccountId, FolderRole.Junk)!;
+            mail.MoveMessages([messageId], junk.Id);
+            return junk.Id;
+        }
+    }
+
+    /// <summary>
+    /// The trap this table exists for: with leave-on-server (the default) a message deleted here
+    /// for good — Deleted Items emptied — must not come back as new mail on the next poll.
+    /// </summary>
+    [Fact]
+    public async Task AMessageDeletedHereIsNotFetchedAgain()
+    {
+        var (store, repo, inbox) = Fresh();
+        using var _ = store;
+
+        var server = new FakePop3().With("uid-1", "Keep me").With("uid-2", "Bin me");
+        await Receiver(repo, server).PollAsync(Connection(), inbox, null, Ct);
+        Assert.Equal(2, repo.Messages(inbox.Id).Count);
+
+        var binned = repo.Messages(inbox.Id).Single(m => m.Subject == "Bin me");
+        repo.DeleteMessage(binned.Id);
+        Assert.Single(repo.Messages(inbox.Id));
+
+        var again = await Receiver(repo, server).PollAsync(Connection(), inbox, null, Ct);
+        Assert.Equal(0, again.Downloaded);
+        Assert.Equal(2, again.AlreadyHad);
+        Assert.Equal("Keep me", Assert.Single(repo.Messages(inbox.Id)).Subject);
+    }
+
+    /// <summary>The seen list tracks the mailbox: what the server no longer lists is forgotten.</summary>
+    [Fact]
+    public async Task TheSeenListIsPrunedToWhatTheServerStillLists()
+    {
+        var (store, repo, inbox) = Fresh();
+        using var _ = store;
+
+        var server = new FakePop3().With("uid-1", "One").With("uid-2", "Two");
+        await Receiver(repo, server).PollAsync(Connection(), inbox, null, Ct);
+        Assert.Equal(2, repo.SeenUidls().Count);
+
+        // The server drops one — someone else collected it, or it expired there.
+        var smaller = new FakePop3().With("uid-1", "One");
+        await Receiver(repo, smaller).PollAsync(Connection(), inbox, null, Ct);
+        Assert.Equal(["uid-1"], repo.SeenUidls().Order());
     }
 }

@@ -72,6 +72,80 @@ public static class MailCommands
         RequiresSelection = true,
     };
 
+    // The Junk menu's entries, as commands of their own: unplaced on the default ribbon — the
+    // reference shows them only under Junk — but searchable, placeable and pressable like
+    // everything else. Blocked and Safe are the lists in Junk Email Options.
+    public static readonly MailboxCommand BlockSender = new()
+    {
+        Id = new("mail.junk.block"),
+        Label = "Block Sender",
+        Description = "Add the sender to the Blocked Senders list and move the message to Junk Email.",
+        Icon = "junk",
+        Category = "Delete",
+        Scope = ModuleScope.Mail,
+        RequiresSelection = true,
+        InDefaultLayout = false,
+    };
+
+    public static readonly MailboxCommand NeverBlockSender = new()
+    {
+        Id = new("mail.junk.neverblock"),
+        Label = "Never Block Sender",
+        Description = "Add the sender to the Safe Senders list.",
+        Icon = "shield",
+        Category = "Delete",
+        Scope = ModuleScope.Mail,
+        RequiresSelection = true,
+        InDefaultLayout = false,
+    };
+
+    public static readonly MailboxCommand NeverBlockDomain = new()
+    {
+        Id = new("mail.junk.neverblockdomain"),
+        Label = "Never Block Sender's Domain",
+        Description = "Add the sender's whole domain to the Safe Senders list.",
+        Icon = "shield",
+        Category = "Delete",
+        Scope = ModuleScope.Mail,
+        RequiresSelection = true,
+        InDefaultLayout = false,
+    };
+
+    public static readonly MailboxCommand NeverBlockGroup = new()
+    {
+        Id = new("mail.junk.neverblockgroup"),
+        Label = "Never Block this Group or Mailing List",
+        Description = "Add the addresses the message was sent to — a list you belong to — to the Safe Recipients list.",
+        Icon = "people",
+        Category = "Delete",
+        Scope = ModuleScope.Mail,
+        RequiresSelection = true,
+        InDefaultLayout = false,
+    };
+
+    public static readonly MailboxCommand NotJunk = new()
+    {
+        Id = new("mail.junk.notjunk"),
+        Label = "Not Junk",
+        Description = "Move the message back to the Inbox and teach the filter it is not junk.",
+        Icon = "mail",
+        Category = "Delete",
+        Scope = ModuleScope.Mail,
+        RequiresSelection = true,
+        InDefaultLayout = false,
+    };
+
+    public static readonly MailboxCommand JunkOptions = new()
+    {
+        Id = new("mail.junk.options"),
+        Label = "Junk Email Options",
+        Description = "Set the junk filter's level and manage the safe and blocked lists.",
+        Icon = "settings",
+        Category = "Delete",
+        Scope = ModuleScope.Mail,
+        InDefaultLayout = false,
+    };
+
     public static readonly MailboxCommand Delete = new()
     {
         Id = new("mail.delete"),
@@ -399,6 +473,7 @@ public static class MailCommands
     [
         NewEmail, NewItems,
         Ignore, CleanUp, Junk, Delete, Archive,
+        BlockSender, NeverBlockSender, NeverBlockDomain, NeverBlockGroup, NotJunk, JunkOptions,
         Reply, ReplyAll, Forward, Meeting, MoreRespond,
         MoveTo, Rules, QuickSteps,
         Unread, Categorize, FollowUp,

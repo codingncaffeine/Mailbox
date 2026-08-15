@@ -101,11 +101,13 @@ public sealed class ReadingPaneBody : UserControl
     /// resolves a name the sender chose, and §19 does not allow that on the path that draws a
     /// message. Nothing here ever asks the network anything.
     /// </param>
-    public void Show(MimeMessage? message, string fallbackText, DkimResult? verified = null)
+    public void Show(MimeMessage? message, string fallbackText, DkimResult? verified = null,
+        bool suspectedJunk = false)
     {
         _message = message;
         _fallbackText = fallbackText;
         _verified = verified;
+        _suspectedJunk = suspectedJunk;
 
         // A decision belongs to the message it was made about. Carrying "show images" from one
         // message to the next would allow a sender the reader never agreed to.
@@ -114,6 +116,13 @@ public sealed class ReadingPaneBody : UserControl
 
         Refresh();
     }
+
+    /// <summary>
+    /// Whether the message on show is in the Junk folder, so the Junk Options dialog's "disable
+    /// links" applies to it: the reference draws a suspected message's links inert, on the
+    /// grounds that the one thing junk wants is a click.
+    /// </summary>
+    private bool _suspectedJunk;
 
     /// <summary>The sender's address, for the safe-sender decision.</summary>
     private string SenderAddress => _message?.From.Mailboxes.FirstOrDefault()?.Address ?? string.Empty;
@@ -129,20 +138,57 @@ public sealed class ReadingPaneBody : UserControl
             return;
         }
 
-        var trust = SenderTrust.Evaluate(_message, _mail()?.FamiliarDomains() ?? [], _verified);
+        var trust = SenderTrust.Evaluate(_message, FamiliarDomains(), _verified);
         if (trust.Warnings.Count > 0) _bars.Children.Add(TrustBar(trust));
+
+        var disableLinks = _suspectedJunk && App.MailOptions.DisableLinksInJunk;
 
         var options = new RenderOptions
         {
             Style = Style(),
             Inlined = _inlined,
             PrintHeader = Memo(_message),
+            DisableLinks = disableLinks,
         };
         _rendered = MessageRenderer.Render(_message, options);
 
+        if (disableLinks) _bars.Children.Add(JunkBar());
         if (_rendered.HasRemoteContent) _bars.Children.Add(RemoteImageBar(_rendered));
 
         Load(_rendered.Html);
+    }
+
+    /// <summary>
+    /// The domains the lookalike check compares against — or none, when the Junk Options
+    /// dialog's "warn me about suspicious domain names" is off, which is what turns that one
+    /// warning off without touching the rest of the trust bar.
+    /// </summary>
+    private IEnumerable<string> FamiliarDomains()
+        => App.MailOptions.WarnAboutSuspiciousDomains ? _mail()?.FamiliarDomains() ?? [] : [];
+
+    /// <summary>The bar above a message in Junk whose links have been drawn inert.</summary>
+    private Control JunkBar()
+    {
+        var bar = Bar("reading.infobar.background.brush");
+        var row = Row();
+
+        var glyph = Glyph("junk");
+        Grid.SetColumn(glyph, 0);
+        row.Children.Add(glyph);
+
+        var text = new TextBlock
+        {
+            Text = "This message is in the Junk Email folder, so its links have been turned off. "
+                   + "Not Junk moves it back to the Inbox.",
+            TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+        Bind(text, TextBlock.ForegroundProperty, "reading.infobar.text.brush");
+        Grid.SetColumn(text, 1);
+        row.Children.Add(text);
+
+        bar.Child = row;
+        return bar;
     }
 
     /// <summary>

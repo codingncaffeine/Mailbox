@@ -48,6 +48,14 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
     /// <summary>Checks each arriving message's DKIM as the receiver does, or null to check nothing.</summary>
     public DkimVerification? Authentication { get; set; }
 
+    /// <summary>
+    /// What acts on a message once it is stored — the junk filter, the rules — or null to leave
+    /// everything where the server had it. Only mail new to the Inbox is handed over: a message
+    /// pulled from Sent Items or an archive folder is the server catching up, not an arrival,
+    /// and a rule that moved it would be undoing what the reader already did elsewhere.
+    /// </summary>
+    public IArrivalHandler? OnArrival { get; set; }
+
     public async Task<SyncResult> SyncAsync(
         AccountConnection account,
         IProgress<PollProgress>? progress = null,
@@ -73,7 +81,7 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
                 var (got, gone) = await PullAsync(session, account, folder, progress, cancellation);
                 downloaded += got.Count;
                 removed += gone;
-                if (folder.Role == FolderRole.Inbox) arrived.AddRange(got);
+                if (folder.Role == FolderRole.Inbox) arrived.AddRange(got.InPlace);
             }
 
             return new SyncResult(downloaded, played, removed) { Arrived = arrived };
@@ -321,7 +329,7 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
     /// <summary>
     /// Brings one folder into step: new messages down, gone messages out, changed flags in.
     /// </summary>
-    private async Task<(IReadOnlyList<long> Downloaded, int Removed)> PullAsync(
+    private async Task<(Pulled Downloaded, int Removed)> PullAsync(
         IImapSession session,
         AccountConnection account,
         Folder folder,
@@ -404,8 +412,12 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
         }
     }
 
-    /// <returns>The store ids of the rows written, in the order they were downloaded.</returns>
-    private async Task<IReadOnlyList<long>> DownloadAsync(
+    /// <summary>What a pull of one folder brought: how many, and which of them stayed put.</summary>
+    /// <param name="Count">Messages downloaded and stored, wherever the handler then put them.</param>
+    /// <param name="InPlace">The ids still in the folder they were pulled into — the arrivals a toast is about.</param>
+    private sealed record Pulled(int Count, IReadOnlyList<long> InPlace);
+
+    private async Task<Pulled> DownloadAsync(
         IImapSession session,
         Folder folder,
         IReadOnlyList<long> uids,
@@ -414,7 +426,7 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
         string address,
         CancellationToken cancellation)
     {
-        if (uids.Count == 0) return [];
+        if (uids.Count == 0) return new Pulled(0, []);
 
         // Ask the server for arrival dates and flags first, in one fetch, then decide what is
         // within the offline window from that — rather than assuming UID order tracks arrival
@@ -430,7 +442,8 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
             .OrderByDescending(u => u)
             .ToList();
 
-        var downloaded = new List<long>();
+        var count = 0;
+        var inPlace = new List<long>();
         foreach (var uid in wanted)
         {
             cancellation.ThrowIfCancellationRequested();
@@ -446,7 +459,7 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
                 continue;
             }
 
-            progress?.Report(new PollProgress(address, downloaded.Count + 1, wanted.Count, "Receiving"));
+            progress?.Report(new PollProgress(address, count + 1, wanted.Count, "Receiving"));
 
             var meta2 = info.GetValueOrDefault(uid);
             var read = meta2?.Flags.HasFlag(MessageFlags.Seen) ?? false;
@@ -461,11 +474,22 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
 
             if (id is { } messageId)
             {
-                downloaded.Add(messageId);
+                count++;
+
+                // Handed to the junk filter and the rules only when it is new to the Inbox. What
+                // they do to it — a move, a delete — is journalled to the server like any change
+                // made here, which is why it is stored where the server had it first.
+                var endedIn = folder.Role == FolderRole.Inbox
+                    ? Arrival.Handle(OnArrival, _repository, folder, messageId, message)
+                    : folder.Id;
+
+                if (endedIn is null) continue;
+
+                if (endedIn == folder.Id) inPlace.Add(messageId);
                 await Arrival.RecordSignatureAsync(_repository, Authentication, messageId, message, _now(), cancellation);
             }
         }
 
-        return downloaded;
+        return new Pulled(count, inPlace);
     }
 }

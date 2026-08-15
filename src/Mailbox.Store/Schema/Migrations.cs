@@ -362,6 +362,52 @@ public static class Migrations
         CREATE INDEX messages_by_followup ON messages (follow_up_due)
             WHERE follow_up_due IS NOT NULL;
         """,
+
+        // ---- 14: what POP3 has already collected, whatever became of it -----------------------
+        //
+        // A POP3 poll knew what it had by the messages it held, so a message deleted here for
+        // good — Deleted Items emptied, junk dropped — was a message it no longer knew, and with
+        // leave-on-server on (the default) the next poll fetched it again as new. The UIDL of
+        // everything collected is kept here for as long as the server still lists it, so a poll
+        // asks "have I seen this?" rather than "do I still hold this?". Pruned against the
+        // server's list after each poll, so it never outgrows the mailbox. One row per UIDL:
+        // one account per file, so no account column.
+        """
+        CREATE TABLE pop3_seen (
+            uidl            TEXT    NOT NULL PRIMARY KEY,
+            first_seen_utc  INTEGER NOT NULL
+        );
+
+        INSERT OR IGNORE INTO pop3_seen (uidl, first_seen_utc)
+        SELECT m.server_uid, m.received_utc
+        FROM messages m JOIN folders f ON f.id = m.folder_id
+        WHERE m.server_uid IS NOT NULL AND f.imap_path IS NULL
+          AND (SELECT protocol FROM accounts ORDER BY id LIMIT 1) = 'pop3';
+        """,
+
+        // ---- 15: the rest of the junk lists -------------------------------------------------
+        //
+        // The Junk Options dialog's other three lists, beside safe_senders (7) and
+        // blocked_senders (12). Safe recipients: a list or alias mail is addressed to whose
+        // members are never junked, matched against To and Cc. Blocked top-level domains and
+        // blocked encodings: the International tab, both matched on arrival. Senders and
+        // recipients may be a whole domain, written as "@example.com" in the same column.
+        """
+        CREATE TABLE safe_recipients (
+            address    TEXT    NOT NULL PRIMARY KEY,
+            added_utc  INTEGER NOT NULL
+        );
+
+        CREATE TABLE blocked_tlds (
+            tld        TEXT    NOT NULL PRIMARY KEY,
+            added_utc  INTEGER NOT NULL
+        );
+
+        CREATE TABLE blocked_encodings (
+            charset    TEXT    NOT NULL PRIMARY KEY,
+            added_utc  INTEGER NOT NULL
+        );
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>
