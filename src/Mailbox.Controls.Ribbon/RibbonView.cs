@@ -551,15 +551,17 @@ public sealed class RibbonView : ContentControl
     {
         var items = _layout.SimplifiedRows.TryGetValue(tab.Id, out var row) ? row : [];
 
-        var strip = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
+        // The panel that gives way the way the reference's bar does — labels first, from the
+        // right, then whole controls into the "…" — rather than a stack that clips. See the
+        // panel for the rules; the primary command is the first labelled one, and it keeps its
+        // label longest.
+        var strip = new SimplifiedRowPanel { VerticalAlignment = VerticalAlignment.Center };
+        var primaryClaimed = false;
 
         // Walked cluster by cluster rather than item by item, because a cluster's "…" lists what
         // that cluster leaves out and so has to know which cluster it ends.
         var cluster = new List<RibbonItem>();
+        var clusterIndex = 0;
         var start = 0;
 
         for (var i = 0; i <= items.Count; i++)
@@ -574,30 +576,43 @@ public sealed class RibbonView : ContentControl
             {
                 if (item.Kind == RibbonItemKind.Overflow)
                 {
-                    strip.Children.Add(BuildClusterOverflow(tab, cluster));
+                    strip.Add(new SimplifiedEntry(
+                        BuildClusterOverflow(tab, cluster), null, null, false, clusterIndex, false));
                     continue;
                 }
 
                 if (_catalog.TryGet(item.Command, out var command))
                 {
-                    strip.Children.Add(BuildSimplifiedButton(command, item));
+                    var control = BuildSimplifiedButton(command, item, out var label);
+                    var primary = label is not null && !primaryClaimed;
+                    if (primary) primaryClaimed = true;
+
+                    strip.Add(new SimplifiedEntry(control, label, command.Id, primary, clusterIndex, false));
                 }
             }
 
-            if (i < items.Count) strip.Children.Add(BuildInlineSeparator());
+            if (i < items.Count)
+            {
+                strip.Add(new SimplifiedEntry(BuildInlineSeparator(), null, null, false, clusterIndex, true));
+            }
 
             cluster = [];
+            clusterIndex++;
             start = i + 1;
         }
 
-        // Overflow, then the chevron that switches Simplified / Classic / Collapsed.
+        // Overflow, then the chevron that switches Simplified / Classic / Collapsed. The overflow
+        // menu is built when it opens, so it lists what the bar pushed off at this width on top
+        // of what the row never had.
         var trailing = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             VerticalAlignment = VerticalAlignment.Center,
         };
         var overflow = BuildGlyphButton("more", "More commands", 16, () => { });
-        overflow.Flyout = BuildOverflowMenu(tab);
+        var overflowMenu = new MenuFlyout { Placement = PlacementMode.BottomEdgeAlignedRight };
+        overflowMenu.Opening += (_, _) => FillOverflowMenu(overflowMenu, tab, strip.Overflowed);
+        overflow.Flyout = overflowMenu;
         trailing.Children.Add(overflow);
 
         var chevron = BuildGlyphButton("chevron-down", "Ribbon Display Options", 14, () => { });
@@ -608,14 +623,11 @@ public sealed class RibbonView : ContentControl
 
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
 
-        var scroller = new ScrollViewer
-        {
-            Content = strip,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
-        };
-        Grid.SetColumn(scroller, 0);
-        grid.Children.Add(scroller);
+        // The panel takes what the column gives it and decides what to show; nothing scrolls
+        // and nothing is clipped, which is the point of it.
+        strip.HorizontalAlignment = HorizontalAlignment.Left;
+        Grid.SetColumn(strip, 0);
+        grid.Children.Add(strip);
 
         Grid.SetColumn(trailing, 1);
         grid.Children.Add(trailing);
@@ -769,7 +781,16 @@ public sealed class RibbonView : ContentControl
     }
 
     private Control BuildSimplifiedButton(MailboxCommand command, RibbonItem item)
+        => BuildSimplifiedButton(command, item, out _);
+
+    /// <param name="label">
+    /// The label the row's panel may take away when the bar is short of room, or null for a
+    /// control that has none to give — an icon-only button, a field, a launcher.
+    /// </param>
+    private Control BuildSimplifiedButton(MailboxCommand command, RibbonItem item, out TextBlock? label)
     {
+        label = null;
+
         if (item.Kind is RibbonItemKind.TextBox or RibbonItemKind.ComboBox
             or RibbonItemKind.BoxedButton)
         {
@@ -793,7 +814,7 @@ public sealed class RibbonView : ContentControl
         // cluster into half the bar. Honouring ShowLabel is what makes those rows fit.
         if (item.ShowLabel)
         {
-            var label = new TextBlock
+            label = new TextBlock
             {
                 Text = command.Label,
                 VerticalAlignment = VerticalAlignment.Center,
@@ -913,6 +934,34 @@ public sealed class RibbonView : ContentControl
     /// layout leaves out entirely. Empty is a real answer — a tab whose row already shows
     /// everything gets a disabled note rather than a menu that opens onto nothing.
     /// </summary>
+    /// <summary>
+    /// The "…" menu at the bar's end: what the bar pushed off at this width, then what the row
+    /// never had.
+    /// </summary>
+    /// <remarks>
+    /// Filled when it opens, because the first part changes with every resize. What was pushed
+    /// off comes first and in bar order, so a reader who saw a button disappear finds it where
+    /// they would look; a rule separates it from the rest.
+    /// </remarks>
+    private void FillOverflowMenu(MenuFlyout flyout, RibbonTab tab, IReadOnlyList<CommandId> pushedOff)
+    {
+        flyout.Items.Clear();
+
+        foreach (var id in pushedOff)
+        {
+            if (!_catalog.TryGet(id, out var command)) continue;
+            flyout.Items.Add(MenuItemFor(command));
+        }
+
+        if (pushedOff.Count > 0) flyout.Items.Add(new Separator());
+
+        var rest = BuildOverflowMenu(tab);
+        if (rest.ItemsSource is IEnumerable<object> items)
+        {
+            foreach (var item in items) flyout.Items.Add(item);
+        }
+    }
+
     private MenuFlyout BuildOverflowMenu(RibbonTab tab)
     {
         var shown = (_layout.SimplifiedRows.TryGetValue(tab.Id, out var row) ? row : [])
@@ -954,6 +1003,14 @@ public sealed class RibbonView : ContentControl
             .ToList();
 
         return flyout;
+    }
+
+    /// <summary>A menu entry that runs a command, as every entry on the bar's menus does.</summary>
+    private MenuItem MenuItemFor(MailboxCommand command)
+    {
+        var item = new MenuItem { Header = command.Label };
+        item.Click += (_, _) => CommandInvoked?.Invoke(this, new RibbonCommandEventArgs(command.Id));
+        return item;
     }
 
     private MenuFlyout BuildDisplayOptionsMenu()
