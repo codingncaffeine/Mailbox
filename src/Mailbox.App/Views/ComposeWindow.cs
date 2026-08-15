@@ -122,8 +122,7 @@ public sealed class ComposeWindow : Window
         _body.TextChanged += (_, _) => _ribbon.RefreshEnablement();
 
         _ribbon.CommandInvoked += (_, e) => Run(e.Command);
-        _ribbon.BackstageRequested += (_, _) =>
-            Report("The compose window's File page is Phase 6.");
+        _ribbon.BackstageRequested += (_, _) => ShowBackstage();
 
         Content = BuildRoot();
         UpdateStatus();
@@ -161,7 +160,17 @@ public sealed class ComposeWindow : Window
     }
 
     /// <summary>Selects a ribbon tab by id. Used by the fidelity harness, which cannot click.</summary>
-    public void SelectTab(string tabId) => _ribbon.ActiveTabId = tabId;
+    public void SelectTab(string tabId)
+    {
+        // "file" is not a tab with a body — it opens the Backstage over the window.
+        if (string.Equals(tabId, "file", StringComparison.OrdinalIgnoreCase))
+        {
+            ShowBackstage();
+            return;
+        }
+
+        _ribbon.ActiveTabId = tabId;
+    }
 
     /// <summary>Puts text in the body, so a capture can show the ribbon in its enabled state.</summary>
     public void PoseBodyText(string text)
@@ -193,6 +202,10 @@ public sealed class ComposeWindow : Window
     /// </remarks>
     private Control BuildRoot()
     {
+        // The Backstage takes the whole window over, so the content sits under an overlay
+        // rather than beside it. File does the same thing here as in the shell — it just
+        // happens in this window.
+        var layered = new Grid();
         var root = new DockPanel { LastChildFill = true };
 
         var title = BuildTitleBar();
@@ -223,7 +236,42 @@ public sealed class ComposeWindow : Window
         Bind(body, Border.BackgroundProperty, "compose.body.background.brush");
         root.Children.Add(body);
 
-        return root;
+        layered.Children.Add(root);
+
+        _backstage = new ContentControl { ZIndex = 10, IsVisible = false };
+        layered.Children.Add(_backstage);
+
+        return layered;
+    }
+
+    private ContentControl _backstage = null!;
+
+    /// <summary>
+    /// Opens the Backstage over this window. Same pages and same behaviour as the shell's —
+    /// <see cref="BackstageActions"/> is the one implementation — it simply takes over the
+    /// compose window rather than the main one.
+    /// </summary>
+    private void ShowBackstage()
+    {
+        var host = new BackstageHost(this, Report, PopulateAccounts, CloseBackstage);
+
+        var backstage = new BackstageView();
+        backstage.OptionsRequested += async (_, _) =>
+            await new OptionsWindow(App.Themes).ShowDialog<bool>(this);
+        backstage.AddAccountRequested += async (_, _) =>
+            await BackstageActions.AddAccountAsync(host);
+        backstage.ActionRequested += async (_, action) =>
+            await BackstageActions.RunAsync(host, action);
+        backstage.CloseRequested += (_, _) => CloseBackstage();
+
+        _backstage.Content = backstage;
+        _backstage.IsVisible = true;
+    }
+
+    private void CloseBackstage()
+    {
+        _backstage.IsVisible = false;
+        _backstage.Content = null;
     }
 
     /// <summary>
