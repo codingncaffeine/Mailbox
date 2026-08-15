@@ -93,6 +93,16 @@ public sealed record MessageAuthentication(string Dkim, string? SigningDomain, D
 /// <summary>A named colour a message can carry.</summary>
 public sealed record Category(long Id, string Name, string ColourToken, string? Shortcut, int Ordinal);
 
+/// <summary>
+/// One entry in the Auto-Complete List: an address mail has gone to, the name it went under,
+/// and how much it has been used.
+/// </summary>
+public sealed record Nickname(string Address, string DisplayName, int Weight, DateTimeOffset LastUsed)
+{
+    /// <summary>The entry as the To line writes it: <c>Name &lt;address&gt;</c>, or the address alone.</summary>
+    public string Formatted => DisplayName.Length > 0 ? $"{DisplayName} <{Address}>" : Address;
+}
+
 /// <summary>State of one message in the send queue.</summary>
 public enum OutboxState
 {

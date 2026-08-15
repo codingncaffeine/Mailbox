@@ -185,7 +185,8 @@ public static class OptionsPages
                 new CheckRow("Automatic name checking", true) { Key = MailOptions.AutomaticNameCheckingKey },
                 new CheckRow("Delete meeting request from Inbox when responding", true),
                 new CheckRow("CTRL+ENTER sends a message", true) { Key = MailOptions.CtrlEnterSendsKey },
-                new CheckRow("Use Auto-Complete List to suggest names when typing", true),
+                // Live: the switch and the Empty button share the row, as the reference has it.
+                new SlotRow("autocomplete"),
             ]),
 
             new OptionSection("Tracking",

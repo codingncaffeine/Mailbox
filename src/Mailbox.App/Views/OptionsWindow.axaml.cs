@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
@@ -250,7 +251,17 @@ public sealed class OptionsWindow : Window
         var content = renderer.Render(page);
 
         FillLiveSlots(renderer);
-        _page.Content = new ScrollViewer { Content = content };
+        var scroller = new ScrollViewer { Content = content };
+        _page.Content = scroller;
+
+        // The harness cannot scroll, and the long pages — Mail, Advanced — hold rows a capture
+        // at the dialog's own height never reaches. MAILBOX_OPTIONS_SCROLL=<pixels> poses the
+        // page part-way down, after the first layout has given the scroller an extent.
+        if (Environment.GetEnvironmentVariable("MAILBOX_OPTIONS_SCROLL") is { Length: > 0 } scroll
+            && double.TryParse(scroll, System.Globalization.CultureInfo.InvariantCulture, out var offset))
+        {
+            scroller.Loaded += (_, _) => scroller.Offset = new Vector(0, offset);
+        }
     }
 
     private Control? BuildEditor(OptionsPage page)
@@ -368,6 +379,62 @@ public sealed class OptionsWindow : Window
         {
             schedule.Content = ScheduleRow();
         }
+
+        if (renderer.Slots.TryGetValue("autocomplete", out var autocomplete))
+        {
+            autocomplete.Content = AutoCompleteRow();
+        }
+    }
+
+    /// <summary>
+    /// The Auto-Complete List's row: whether the To, Cc and Bcc lines offer names, and the
+    /// button that empties the list. One row, as the reference draws it.
+    /// </summary>
+    /// <remarks>
+    /// Emptying is across every account, because the list is offered merged across them — a
+    /// button that emptied one file's list would leave the names coming back from another's.
+    /// </remarks>
+    private Control AutoCompleteRow()
+    {
+        var enabled = new CheckBox
+        {
+            Content = "Use Auto-Complete List to suggest names when typing in the To, Cc, and Bcc lines",
+            IsChecked = App.MailOptions.UseAutoCompleteList,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Bind(enabled, TemplatedControl.ForegroundProperty, "dialog.foreground.brush");
+        enabled.IsCheckedChanged += (_, _) =>
+            App.Settings.Set(MailOptions.UseAutoCompleteListKey, enabled.IsChecked == true);
+
+        var empty = new Button
+        {
+            Content = "Empty Auto-Complete List",
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(12, 0, 0, 0),
+        };
+        empty.Click += async (_, _) =>
+        {
+            var count = App.Accounts.All.Sum(a => a.Mail.RecipientCount());
+            if (count == 0)
+            {
+                await Confirm.AskAsync(this, "Empty Auto-Complete List",
+                    "The Auto-Complete List is already empty.", "OK", destructive: false);
+                return;
+            }
+
+            var go = await Confirm.AskAsync(this, "Empty Auto-Complete List",
+                $"Remove all {count} entr{(count == 1 ? "y" : "ies")} from the Auto-Complete List?",
+                "Empty", destructive: true);
+            if (!go) return;
+
+            foreach (var account in App.Accounts.All) account.Mail.ClearRecipients();
+        };
+
+        return new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Children = { enabled, empty },
+        };
     }
 
     /// <summary>
