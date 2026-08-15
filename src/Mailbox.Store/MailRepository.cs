@@ -397,6 +397,62 @@ public sealed class MailRepository(MailStore store)
     }
 
     /// <summary>
+    /// Flags messages for follow-up with an optional due date, clearing any completed mark.
+    /// </summary>
+    /// <remarks>
+    /// A follow-up is a flag with a date and a done state — the reference's flag menu. The flag
+    /// itself is <c>is_flagged</c>, so it journals to an IMAP server like any flag; the due date
+    /// and the completed state are local, because IMAP has no notion of either.
+    /// </remarks>
+    public void SetFollowUp(IReadOnlyCollection<long> messageIds, DateTimeOffset? due)
+    {
+        if (messageIds.Count == 0) return;
+
+        _store.InTransaction(() =>
+        {
+            _store.Execute(
+                $"""
+                 UPDATE messages SET is_flagged = 1, follow_up_complete = 0, follow_up_due = $due
+                 WHERE id IN ({Ids(messageIds)})
+                 """,
+                ("$due", due?.ToUnixTimeSeconds()));
+            JournalFlag(messageIds, SyncFlag.Flagged, true);
+            return 0;
+        });
+    }
+
+    /// <summary>Marks a follow-up complete: the flag clears, and a check takes its place.</summary>
+    public void CompleteFollowUp(IReadOnlyCollection<long> messageIds)
+    {
+        if (messageIds.Count == 0) return;
+
+        _store.InTransaction(() =>
+        {
+            _store.Execute(
+                $"UPDATE messages SET is_flagged = 0, follow_up_complete = 1 WHERE id IN ({Ids(messageIds)})");
+            JournalFlag(messageIds, SyncFlag.Flagged, false);
+            return 0;
+        });
+    }
+
+    /// <summary>Clears a follow-up entirely — no flag, no date, no completed mark.</summary>
+    public void ClearFollowUp(IReadOnlyCollection<long> messageIds)
+    {
+        if (messageIds.Count == 0) return;
+
+        _store.InTransaction(() =>
+        {
+            _store.Execute(
+                $"""
+                 UPDATE messages SET is_flagged = 0, follow_up_complete = 0, follow_up_due = NULL
+                 WHERE id IN ({Ids(messageIds)})
+                 """);
+            JournalFlag(messageIds, SyncFlag.Flagged, false);
+            return 0;
+        });
+    }
+
+    /// <summary>
     /// Moves messages between folders. On a synced account the move is journalled for the
     /// server as well, and the row gives up its server id until the server has said what the
     /// message is called where it now lives — UIDs belong to a folder, and the old one could
@@ -1412,7 +1468,13 @@ public sealed class MailRepository(MailStore store)
         r.GetInt64(r.GetOrdinal("size_bytes")),
         r.GetInt32(r.GetOrdinal("is_read")) != 0,
         r.GetInt32(r.GetOrdinal("is_flagged")) != 0,
-        r.GetInt32(r.GetOrdinal("has_attachment")) != 0);
+        r.GetInt32(r.GetOrdinal("has_attachment")) != 0)
+    {
+        FollowUpDue = NullableLong(r, "follow_up_due") is { } due
+            ? DateTimeOffset.FromUnixTimeSeconds(due)
+            : null,
+        FollowUpComplete = r.GetInt32(r.GetOrdinal("follow_up_complete")) != 0,
+    };
 
     private static string? Nullable(SqliteDataReader r, string column)
     {

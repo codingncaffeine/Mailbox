@@ -309,6 +309,50 @@ public class MailRepositoryTests
         Assert.Empty(repo.Search("quarterly", archive.Id));
     }
 
+    /// <summary>
+    /// A follow-up is a flag with a due date and a done state: flagging sets all three, completing
+    /// clears the flag and leaves the check, and clearing wipes the lot.
+    /// </summary>
+    [Fact]
+    public void FollowUpFlagsCarryADueDateAndAComplete()
+    {
+        var (store, repo, inbox) = Fresh();
+        using var _ = store;
+        var id = repo.AddMessage(inbox.Id, Sample("uid-1"))!.Value;
+        var due = new DateTimeOffset(2026, 8, 20, 17, 0, 0, TimeSpan.Zero);
+
+        repo.SetFollowUp([id], due);
+        var flagged = repo.GetMessage(id)!;
+        Assert.True(flagged.IsFlagged);
+        Assert.False(flagged.FollowUpComplete);
+        Assert.Equal(due, flagged.FollowUpDue);
+
+        repo.CompleteFollowUp([id]);
+        var done = repo.GetMessage(id)!;
+        Assert.False(done.IsFlagged);
+        Assert.True(done.FollowUpComplete);
+
+        repo.ClearFollowUp([id]);
+        var cleared = repo.GetMessage(id)!;
+        Assert.False(cleared.IsFlagged);
+        Assert.False(cleared.FollowUpComplete);
+        Assert.Null(cleared.FollowUpDue);
+    }
+
+    /// <summary>Flagging with no date is a flag without a due date, not no flag.</summary>
+    [Fact]
+    public void AFollowUpCanHaveNoDate()
+    {
+        var (store, repo, inbox) = Fresh();
+        using var _ = store;
+        var id = repo.AddMessage(inbox.Id, Sample("uid-1"))!.Value;
+
+        repo.SetFollowUp([id], due: null);
+        var flagged = repo.GetMessage(id)!;
+        Assert.True(flagged.IsFlagged);
+        Assert.Null(flagged.FollowUpDue);
+    }
+
     /// <summary>A word only in the body, in no subject or sender, is found — schema 11 indexes it.</summary>
     [Fact]
     public void SearchReachesTheBody()
