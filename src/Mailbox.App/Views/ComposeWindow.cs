@@ -77,6 +77,10 @@ public sealed class ComposeWindow : Window
         MinWidth = 620;
         MinHeight = 420;
         Icon = new WindowIcon(AssetLoaderIcon());
+
+        // Without this the compositor keeps drawing its own frame, so the window carried two
+        // sets of caption buttons and two titles — the system's centred above ours.
+        WindowFrame.Apply(this);
         FontFamily = (FontFamily)(Application.Current!.FindResource("ui.fontfamily") ?? FontFamily.Default);
         Bind(this, BackgroundProperty, "ribbon.tabstrip.background.brush");
 
@@ -90,8 +94,10 @@ public sealed class ComposeWindow : Window
             BorderThickness = default,
             VerticalContentAlignment = VerticalAlignment.Top,
         };
-        Bind(_body, TemplatedControl.BackgroundProperty, "surface.ground.brush");
-        Bind(_body, TemplatedControl.ForegroundProperty, "text.primary.brush");
+        // The body is a document page, not a pane — white even in Dark Gray, where the reading
+        // pane is not. See the compose tokens in each theme.
+        Bind(_body, TemplatedControl.BackgroundProperty, "compose.body.background.brush");
+        Bind(_body, TemplatedControl.ForegroundProperty, "compose.body.text.brush");
 
         _ribbon = new RibbonView(catalog, DefaultRibbonLayouts.Compose)
         {
@@ -201,44 +207,76 @@ public sealed class ComposeWindow : Window
         root.Children.Add(status);
 
         var body = new Border { Child = _body, Padding = new Thickness(12, 8) };
-        Bind(body, Border.BackgroundProperty, "surface.ground.brush");
+        Bind(body, Border.BackgroundProperty, "compose.body.background.brush");
         root.Children.Add(body);
 
         return root;
     }
 
+    /// <summary>
+    /// The title bar, in the reference's order: application icon, the Quick Access Toolbar and
+    /// its customize chevron, then the title — <em>left aligned, immediately after them</em>,
+    /// not centred — and the caption buttons at the far right.
+    /// </summary>
     private Control BuildTitleBar()
     {
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto") };
 
-        // The compose QAT, which the reference puts in the title bar exactly as the shell does.
-        var quickAccess = new StackPanel
+        var leading = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             Spacing = 2,
-            Margin = new Thickness(12, 0, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
         };
+
+        // The application icon belongs on this bar. With the system frame still on it was drawn
+        // by the compositor on a strip of its own above ours, which is why it looked like it was
+        // sitting on the wrong bar.
+        leading.Children.Add(new Image
+        {
+            Source = new Avalonia.Media.Imaging.Bitmap(AssetLoaderIcon()),
+            Width = 16,
+            Height = 16,
+            Margin = new Thickness(14, 0, 8, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+        });
 
         foreach (var id in DefaultRibbonLayouts.Compose.QuickAccess)
         {
             if (!_catalog.TryGet(id, out var command)) continue;
-            quickAccess.Children.Add(QuickAccessButton(command));
+            leading.Children.Add(QuickAccessButton(command));
         }
 
-        Grid.SetColumn(quickAccess, 0);
-        grid.Children.Add(quickAccess);
+        // The customize chevron closes the toolbar, as it does in the shell.
+        var chevron = new Button
+        {
+            Content = new TextBlock
+            {
+                Text = IconGlyphs.GetOrEmpty("chevron-down", 16),
+                FontFamily = IconFont.Family,
+                FontSize = 11,
+                [!TextBlock.ForegroundProperty] =
+                    new DynamicResourceExtension("titlebar.foreground.brush"),
+            },
+            Padding = new Thickness(4, 2),
+            Background = Brushes.Transparent,
+            BorderThickness = default,
+        };
+        ToolTip.SetTip(chevron, "Customize Quick Access Toolbar");
+        leading.Children.Add(chevron);
 
         var caption = new TextBlock
         {
             Text = Title,
             VerticalAlignment = VerticalAlignment.Center,
-            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(10, 0, 0, 0),
         };
         Bind(caption, TextBlock.ForegroundProperty, "titlebar.foreground.brush");
         Bind(caption, TextBlock.FontSizeProperty, "type.ui.size.value");
-        Grid.SetColumn(caption, 1);
-        grid.Children.Add(caption);
+        leading.Children.Add(caption);
+
+        Grid.SetColumn(leading, 0);
+        grid.Children.Add(leading);
 
         var buttons = new CaptionButtons(this) { VerticalAlignment = VerticalAlignment.Top };
         Grid.SetColumn(buttons, 2);
@@ -246,6 +284,7 @@ public sealed class ComposeWindow : Window
 
         var host = new Border { Child = grid, Height = 40 };
         Bind(host, Border.BackgroundProperty, "titlebar.background.brush");
+        WindowFrame.Drags(this, host);
 
         // Keeps the caption text following the window title as the subject is typed.
         _subject.PropertyChanged += (_, e) =>
@@ -322,11 +361,14 @@ public sealed class ComposeWindow : Window
                     new TextBlock { Text = "Send", HorizontalAlignment = HorizontalAlignment.Center },
                 },
             },
-            Width = 64,
-            Height = 62,
-            Margin = new Thickness(0, 0, 12, 0),
+            Width = SendWidth,
+            Height = RowHeight * 2 + RowGap,
+            Margin = new Thickness(SendInset, 0, LabelInset, 0),
             VerticalAlignment = VerticalAlignment.Top,
+            BorderThickness = new Thickness(1),
         };
+        Bind(send, TemplatedControl.BackgroundProperty, "surface.raised.brush");
+        Bind(send, TemplatedControl.BorderBrushProperty, "border.strong.brush");
         ToolTip.SetTip(send, "Send this message  (Ctrl+Enter)");
         send.Click += (_, _) => Run(ComposeCommands.Send.Id);
 
@@ -338,7 +380,7 @@ public sealed class ComposeWindow : Window
         var grid = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("Auto,*"),
-            Margin = new Thickness(14, 10, 14, 8),
+            Margin = new Thickness(0, 10, 14, 10),
         };
         Grid.SetColumn(send, 0);
         grid.Children.Add(send);
@@ -346,9 +388,20 @@ public sealed class ComposeWindow : Window
         grid.Children.Add(rows);
 
         var host = new Border { Child = grid };
-        Bind(host, Border.BackgroundProperty, "surface.ground.brush");
+        Bind(host, Border.BackgroundProperty, "compose.header.background.brush");
         return host;
     }
+
+    // Measured off the compose capture. The header's own background runs from x=13; Send is a
+    // filled button at x=34–93; the From/To/Cc buttons start at x=110; and the field rules begin
+    // at x=202. Rows sit 40px apart with 31px of button in each.
+    private const double SendInset = 21;
+    private const double SendWidth = 58;
+    private const double LabelInset = 17;
+    private const double LabelWidth = 80;
+    private const double FieldInset = 12;
+    private const double RowHeight = 31;
+    private const double RowGap = 9;
 
     /// <summary>
     /// One address row — its label and its field as a single control, so the pair is shown and
@@ -357,7 +410,12 @@ public sealed class ComposeWindow : Window
     private Control AddressRow(
         StackPanel rows, string label, Control field, bool opensAddressBook = true)
     {
-        var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
+        var row = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("Auto,*"),
+            Height = RowHeight,
+            Margin = new Thickness(0, 0, 0, RowGap),
+        };
 
         Control caption;
         if (opensAddressBook)
@@ -365,10 +423,14 @@ public sealed class ComposeWindow : Window
             var button = new Button
             {
                 Content = label,
-                Width = 68,
-                Margin = new Thickness(0, 0, 8, 0),
+                Width = LabelWidth,
+                Height = RowHeight,
                 HorizontalContentAlignment = HorizontalAlignment.Center,
+                VerticalContentAlignment = VerticalAlignment.Center,
+                BorderThickness = new Thickness(1),
             };
+            Bind(button, TemplatedControl.BackgroundProperty, "surface.raised.brush");
+            Bind(button, TemplatedControl.BorderBrushProperty, "border.strong.brush");
             ToolTip.SetTip(button, $"Choose {label} recipients from the address book");
             button.Click += (_, _) => Run(MailCommands.AddressBook.Id);
             caption = button;
@@ -379,10 +441,9 @@ public sealed class ComposeWindow : Window
             var text = new TextBlock
             {
                 Text = label,
-                Width = 68,
-                Margin = new Thickness(0, 0, 8, 0),
+                Width = LabelWidth,
                 VerticalAlignment = VerticalAlignment.Center,
-                HorizontalAlignment = HorizontalAlignment.Center,
+                TextAlignment = TextAlignment.Center,
             };
             Bind(text, TextBlock.ForegroundProperty, "text.secondary.brush");
             caption = text;
@@ -390,6 +451,20 @@ public sealed class ComposeWindow : Window
 
         Grid.SetColumn(caption, 0);
         row.Children.Add(caption);
+
+        // The fields carry no box. The reference draws a single rule under each one and nothing
+        // else, so the address block reads as writing lines rather than as a form.
+        if (field is TextBox box)
+        {
+            box.BorderThickness = new Thickness(0, 0, 0, 1);
+            box.CornerRadius = default;
+            box.Background = Brushes.Transparent;
+            Bind(box, TemplatedControl.BorderBrushProperty, "compose.field.rule.brush");
+            Bind(box, TemplatedControl.ForegroundProperty, "text.primary.brush");
+        }
+
+        field.Margin = new Thickness(FieldInset, 0, 0, 0);
+        field.VerticalAlignment = VerticalAlignment.Stretch;
 
         Grid.SetColumn(field, 1);
         row.Children.Add(field);
