@@ -1,6 +1,9 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Markup.Xaml.MarkupExtensions;
+using Avalonia.Media;
+using Mailbox.Controls.Ribbon;
 
 namespace Mailbox.App.Views;
 
@@ -34,7 +37,16 @@ internal static class WindowFrame
         (WindowEdge.East, StandardCursorType.RightSide),
     ];
 
-    /// <summary>Turns off the system frame and gives the window its own resize edges.</summary>
+    /// <summary>
+    /// Turns off the system frame, makes the window transparent so it can draw its own rounded
+    /// shape, and gives it its own resize edges.
+    /// </summary>
+    /// <remarks>
+    /// The transparent background is half of the rounding and is easy to miss: the window is
+    /// not the thing with corners — <see cref="Rounded"/> is — so anything the window itself
+    /// paints shows as a square behind the curve. Leaving it opaque is precisely how a rounded
+    /// window ends up with leftover corners.
+    /// </remarks>
     internal static void Apply(Window window)
     {
         ArgumentNullException.ThrowIfNull(window);
@@ -43,6 +55,10 @@ internal static class WindowFrame
         // window it traced the curve with a hard right angle and a transparent wedge between.
         window.ExtendClientAreaToDecorationsHint = true;
         window.WindowDecorations = WindowDecorations.None;
+
+        window.Background = Brushes.Transparent;
+        window.TransparencyLevelHint =
+            [WindowTransparencyLevel.Transparent, WindowTransparencyLevel.None];
 
         window.PointerMoved += (_, e) =>
         {
@@ -59,6 +75,31 @@ internal static class WindowFrame
             e.Handled = true;
             window.BeginResizeDrag(edge, e);
         });
+    }
+
+    /// <summary>
+    /// Wraps a window's content in the rounded, clipping surface that draws its shape.
+    /// </summary>
+    /// <remarks>
+    /// The clip is the load-bearing half. The reference rounds a window's outer corners at the
+    /// same radius as the panels inside it, and without clipping any child painting into a
+    /// corner shows through as a wedge — the same failure the workspace's own corners had.
+    /// The background belongs here rather than on the window, which is transparent.
+    /// </remarks>
+    internal static Control Rounded(Control content)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+
+        var border = new Border
+        {
+            CornerRadius = new CornerRadius(RibbonMetrics.BodyCornerRadius),
+            ClipToBounds = true,
+            Child = content,
+        };
+        border[!Border.BackgroundProperty] =
+            new DynamicResourceExtension("ribbon.tabstrip.background.brush");
+
+        return border;
     }
 
     /// <summary>Makes a control drag the window, and double-click toggle maximize.</summary>

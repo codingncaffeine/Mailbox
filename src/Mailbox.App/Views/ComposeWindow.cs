@@ -92,10 +92,10 @@ public sealed class ComposeWindow : Window
         Icon = new WindowIcon(AssetLoaderIcon());
 
         // Without this the compositor keeps drawing its own frame, so the window carried two
-        // sets of caption buttons and two titles — the system's centred above ours.
+        // sets of caption buttons and two titles — the system's centred above ours. It also
+        // makes the window transparent, which is what lets WindowFrame.Rounded draw the shape.
         WindowFrame.Apply(this);
         FontFamily = (FontFamily)(Application.Current!.FindResource("ui.fontfamily") ?? FontFamily.Default);
-        Bind(this, BackgroundProperty, "ribbon.tabstrip.background.brush");
 
         TextRendering.Apply(this);
 
@@ -241,7 +241,7 @@ public sealed class ComposeWindow : Window
         _backstage = new ContentControl { ZIndex = 10, IsVisible = false };
         layered.Children.Add(_backstage);
 
-        return layered;
+        return WindowFrame.Rounded(layered);
     }
 
     private ContentControl _backstage = null!;
