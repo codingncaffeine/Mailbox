@@ -26,7 +26,7 @@ internal sealed class HtmlSanitizer(ResourceMap resources, RenderOptions options
         "a", "abbr", "address", "article", "aside", "b", "bdi", "bdo", "big", "blockquote",
         "body", "br", "caption", "center", "cite", "code", "col", "colgroup", "dd", "del",
         "details", "dfn", "div", "dl", "dt", "em", "figcaption", "figure", "font", "footer",
-        "h1", "h2", "h3", "h4", "h5", "h6", "header", "hgroup", "hr", "html", "i", "img",
+        "h1", "h2", "h3", "h4", "h5", "h6", "head", "header", "hgroup", "hr", "html", "i", "img",
         "ins", "kbd", "li", "main", "mark", "nav", "ol", "p", "pre", "q", "rp", "rt", "ruby",
         "s", "samp", "section", "small", "span", "strike", "strong", "sub", "summary", "sup",
         "table", "tbody", "td", "tfoot", "th", "thead", "time", "tr", "tt", "u", "ul", "var",
@@ -45,9 +45,25 @@ internal sealed class HtmlSanitizer(ResourceMap resources, RenderOptions options
     {
         "script", "noscript", "iframe", "frame", "frameset", "object", "embed", "applet",
         "form", "input", "button", "select", "option", "optgroup", "textarea", "label",
-        "fieldset", "legend", "base", "link", "meta", "title", "head", "svg", "math",
+        "fieldset", "legend", "base", "link", "meta", "title", "svg", "math",
         "template", "canvas", "audio", "video", "source", "track", "param", "map", "area",
         "portal", "slot", "dialog", "marquee",
+    };
+
+    /// <summary>
+    /// Elements that never have an end tag, whatever a message writes.
+    /// </summary>
+    /// <remarks>
+    /// Load-bearing for the ones that are also dropped. Skipping runs until the matching end tag
+    /// arrives, and for <c>&lt;meta&gt;</c> or <c>&lt;link&gt;</c> it never does — so without this
+    /// a single stray one swallows the whole of the rest of the message, silently, and the reader
+    /// sees a message that simply stops. Self-closing them (<c>&lt;meta /&gt;</c>) happened to
+    /// work, which is exactly why nobody noticed: HTML is not usually written that way.
+    /// </remarks>
+    private static readonly HashSet<string> Void = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "area", "base", "br", "col", "embed", "frame", "hr", "img", "input", "link", "meta",
+        "param", "source", "track", "wbr",
     };
 
     /// <summary>
@@ -159,7 +175,7 @@ internal sealed class HtmlSanitizer(ResourceMap resources, RenderOptions options
 
         if (Dropped.Contains(name))
         {
-            if (tag.IsEndTag || tag.IsEmptyElement) return;
+            if (tag.IsEndTag || tag.IsEmptyElement || Void.Contains(name)) return;
             _skipping = name;
             _skipDepth = 1;
             return;
@@ -167,8 +183,12 @@ internal sealed class HtmlSanitizer(ResourceMap resources, RenderOptions options
 
         if (!Allowed.Contains(name)) return;
 
-        // html and body would nest inside the document this is wrapped in.
-        if (name is "html" or "body") return;
+        // html, head and body would nest inside the document this is wrapped in. head is dropped
+        // as a tag rather than with its contents on purpose: everything in one that must not
+        // survive — title, meta, link, base, script — is named above and dropped on its own
+        // merits, and the one thing worth keeping is the stylesheet, which is where most real
+        // mail keeps its styling.
+        if (name is "html" or "head" or "body") return;
 
         if (tag.IsEndTag)
         {

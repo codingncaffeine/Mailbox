@@ -59,7 +59,9 @@ public class SeedHarness
             WithAttachment("Sam Reyes", "sam@example.net", "Draft agenda attached",
                 "Rough cut for Monday. Shout if there's anything you want added before I send "
                 + "it round.",
-                "agenda.pdf", "application/pdf", 38_000));
+                "agenda.pdf", "application/pdf", 38_000),
+
+            Forwarded());
     }
 
     // ---- The messages ----------------------------------------------------------------------
@@ -86,6 +88,36 @@ public class SeedHarness
                 Content = new MimeContent(new MemoryStream(new byte[size])),
                 ContentDisposition = new ContentDisposition(ContentDisposition.Attachment),
                 ContentTransferEncoding = ContentEncoding.Base64,
+            },
+        };
+
+        return message;
+    }
+
+    /// <summary>
+    /// A message forwarded as an attachment, which is a whole message inside a message.
+    /// </summary>
+    /// <remarks>
+    /// Here because the attachment strip has a case for it that no other seeded message reaches:
+    /// a <c>message/rfc822</c> part is not a <c>MimePart</c>, and a strip that matches only the
+    /// latter shows nothing at all for the commonest way of passing mail on.
+    /// </remarks>
+    private static MimeMessage Forwarded()
+    {
+        var original = Envelope("Dana Whitfield", "dana@example.org", "Venue options");
+        original.Body = new TextPart("plain")
+        {
+            Text = "Three places can take us on the 14th. Costs attached.\n\nDana",
+        };
+
+        var message = Envelope("Priya Raman", "priya@example.net", "FW: Venue options");
+        message.Body = new Multipart("mixed")
+        {
+            new TextPart("plain") { Text = "Forwarding Dana's note — see what you think." },
+            new MessagePart
+            {
+                Message = original,
+                ContentDisposition = new ContentDisposition(ContentDisposition.Attachment),
             },
         };
 

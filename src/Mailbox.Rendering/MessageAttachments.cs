@@ -4,13 +4,16 @@ using MimeKit.Tnef;
 namespace Mailbox.Rendering;
 
 /// <summary>One thing attached to a message.</summary>
-public sealed record Attachment(string Name, string MimeType, long Size, MimePart Part)
+public sealed record Attachment(string Name, string MimeType, long Size, MimeEntity Part)
 {
     /// <summary>
     /// True for something the message carried inside a <c>winmail.dat</c> rather than as a
     /// part of its own.
     /// </summary>
     public bool FromTnef { get; init; }
+
+    /// <summary>True for a whole message carried inside this one, as forwarding produces.</summary>
+    public bool IsMessage => Part is MessagePart;
 
     /// <summary>The size as a reader reads it.</summary>
     public string Describe() => Size switch
@@ -20,11 +23,56 @@ public sealed record Attachment(string Name, string MimeType, long Size, MimePar
         _ => $"{Size / (1024.0 * 1024):0.#} MB",
     };
 
-    /// <summary>Writes the part's decoded bytes.</summary>
+    /// <summary>
+    /// The name to offer a save dialog, with what a file system will not take removed.
+    /// </summary>
+    /// <remarks>
+    /// A file name is text a stranger wrote, and it arrives with the message rather than from
+    /// anywhere trusted. Only the last segment is kept — a sender writing <c>../../.bashrc</c>
+    /// gets <c>.bashrc</c> suggested, in the directory the reader picked, and nowhere else.
+    /// Backslash counts as a separator too: it is a legal character on this platform, but a
+    /// Windows-shaped path is what a Windows sender's client puts there.
+    /// <para>
+    /// Then the characters a file system will not take, and the control characters that would
+    /// let a name misrepresent itself in a dialog. A name left with nothing meaningful in it is
+    /// replaced rather than offered empty.
+    /// </para>
+    /// </remarks>
+    public string SafeName
+    {
+        get
+        {
+            var segment = Name.Split(['/', '\\']).LastOrDefault(part => part.Trim().Length > 0)
+                          ?? string.Empty;
+
+            var invalid = Path.GetInvalidFileNameChars();
+            var clean = new string([.. segment.Where(
+                c => !invalid.Contains(c) && !char.IsControl(c))]).Trim();
+
+            // "." and ".." name a directory rather than a file.
+            return clean.Length == 0 || clean.All(c => c == '.') ? "attachment" : clean;
+        }
+    }
+
+    /// <summary>Writes the attachment's bytes, decoded.</summary>
+    /// <remarks>
+    /// A carried message is written as the RFC822 it is, so what lands on disk is a
+    /// <c>.eml</c> any mail client can open — including this one, once import lands.
+    /// </remarks>
     public void SaveTo(Stream destination)
     {
         ArgumentNullException.ThrowIfNull(destination);
-        Part.Content?.DecodeTo(destination);
+
+        switch (Part)
+        {
+            case MessagePart carried:
+                carried.Message?.WriteTo(destination);
+                break;
+
+            case MimePart part:
+                part.Content?.DecodeTo(destination);
+                break;
+        }
     }
 }
 
@@ -52,6 +100,15 @@ public static class MessageAttachments
             {
                 case TnefPart tnef:
                     found.AddRange(FromTnef(tnef));
+                    break;
+
+                // A whole message carried inside this one — what forwarding as an attachment
+                // produces, and what a bounce puts the message it is bouncing into. It is not a
+                // MimePart and has no content of its own, so it is listed and saved separately;
+                // matching only MimePart left it invisible, and a forwarded message showed an
+                // empty strip rather than the mail it came with.
+                case MessagePart carried:
+                    found.Add(Describe(carried));
                     break;
 
                 case MimePart part when IsAttachment(part):
@@ -96,6 +153,45 @@ public static class MessageAttachments
         }
 
         return extracted.OfType<MimePart>().Select(part => Describe(part, fromTnef: true));
+    }
+
+    /// <summary>
+    /// A carried message, named the way a reader would name it.
+    /// </summary>
+    /// <remarks>
+    /// Such a part rarely carries a file name, so the subject becomes one. Its size is the size
+    /// of the RFC822 it serializes to, which is what saving it writes — a decoded length would
+    /// be a number that matches no file.
+    /// </remarks>
+    private static Attachment Describe(MessagePart carried)
+    {
+        var subject = carried.Message?.Subject;
+
+        var name = FileNameOf(carried)
+                   ?? (string.IsNullOrWhiteSpace(subject) ? "message.eml" : subject.Trim() + ".eml");
+
+        return new Attachment(name, "message/rfc822", Measure(carried), carried);
+    }
+
+    /// <summary>The name a part gives itself, from either place one can be written.</summary>
+    private static string? FileNameOf(MimeEntity entity)
+    {
+        if (entity.ContentDisposition?.FileName is { Length: > 0 } disposition) return disposition;
+        return entity.ContentType?.Name is { Length: > 0 } name ? name : null;
+    }
+
+    private static long Measure(MessagePart carried)
+    {
+        try
+        {
+            using var counter = new MemoryStream();
+            carried.Message?.WriteTo(counter);
+            return counter.Length;
+        }
+        catch (Exception)
+        {
+            return 0;
+        }
     }
 
     private static Attachment Describe(MimePart part, bool fromTnef)
