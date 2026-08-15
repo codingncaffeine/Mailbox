@@ -414,9 +414,9 @@ public static class OptionsPages
 
             new OptionSection("Reminders",
             [
-                new CheckRow("Show reminders", true),
-                new CheckRow("Play reminder sound", true),
-                new CheckRow("Show reminders on top of other windows", true),
+                new CheckRow("Show reminders", true) { Key = MailOptions.ShowRemindersKey },
+                new CheckRow("Play reminder sound", true) { Key = MailOptions.ReminderSoundKey },
+                new CheckRow("Show reminders on top of other windows", true) { Key = MailOptions.RemindersOnTopKey },
             ]),
 
             new OptionSection("Export",

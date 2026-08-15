@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Media;
 using Mailbox.App.Options;
+using Mailbox.App.Views;
 using Mailbox.Core;
 using Mailbox.Core.Accounts;
 using Mailbox.Core.Commands;
@@ -1753,6 +1754,22 @@ public sealed class ShellViewModel : ObservableObject
         StatusRight = due is { } d
             ? $"{Describe(rows.Count)} flagged, due {d.LocalDateTime:ddd d MMM}."
             : $"{Describe(rows.Count)} flagged for follow-up.";
+    }
+
+    /// <summary>The store's row for a list row, for a dialog that shows its present values.</summary>
+    public MessageSummary? SummaryOf(MessageRow row) => Mail([row])?.GetMessage(row.Id);
+
+    /// <summary>The Custom flag dialog's whole flag: what it says, its dates, and its reminder.</summary>
+    public void SetCustomFlag(IReadOnlyList<MessageRow> rows, CustomFlag flag)
+    {
+        if (rows.Count == 0 || Mail(rows) is not { } mail) return;
+
+        mail.SetCustomFollowUp([.. rows.Select(r => r.Id)], flag.Type, flag.Start, flag.Due, flag.Reminder);
+        ReloadCurrentView();
+        RefreshCounts();
+        StatusRight = flag.Reminder is { } when
+            ? $"{Describe(rows.Count)} flagged; reminder {SnoozeLabel(when)}."
+            : flag.Due is { } d ? $"{Describe(rows.Count)} flagged, due {d.LocalDateTime:ddd d MMM}." : $"{Describe(rows.Count)} flagged.";
     }
 
     /// <summary>Marks the selection's follow-up complete: a check takes the flag's place.</summary>

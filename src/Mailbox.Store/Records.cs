@@ -154,6 +154,15 @@ public sealed record MessageSummary(
     /// <summary>Whether a follow-up has been marked complete — a check where the flag was.</summary>
     public bool FollowUpComplete { get; init; }
 
+    /// <summary>What the flag says — "Follow up", "Call", "Review" — or null for the plain flag.</summary>
+    public string? FollowUpType { get; init; }
+
+    /// <summary>When the follow-up starts, if a start was set.</summary>
+    public DateTimeOffset? FollowUpStart { get; init; }
+
+    /// <summary>When to be reminded, or null for no reminder or one already dismissed.</summary>
+    public DateTimeOffset? Reminder { get; init; }
+
     /// <summary>When a snoozed message comes back, or null for one that is not snoozed (§12).</summary>
     public DateTimeOffset? SnoozedUntil { get; init; }
 
