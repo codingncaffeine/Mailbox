@@ -343,6 +343,13 @@ public partial class MainWindow : Window
                 // so anything toggled afterwards photographs at its old size.
                 compose.ShowOptionalFields();
 
+                // The address rows are measured against the reference, and an empty field
+                // cannot be measured — the thing being checked is where the text sits.
+                if (Environment.GetEnvironmentVariable("MAILBOX_COMPOSE_HEADER") is { Length: > 0 })
+                {
+                    compose.PoseHeader("a.person@example.com", "b.person@example.com", "Subject line");
+                }
+
                 compose.Opened += async (_, _) =>
                 {
                     await Task.Delay(700);

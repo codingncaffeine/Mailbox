@@ -260,28 +260,36 @@ public class ThemeServiceTests
     }
 
     /// <summary>
-    /// A token that happens to equal the surface behind it renders as nothing at all. Both of
-    /// these have shipped broken: the search placeholder drawn in the fill colour, and the
-    /// active tab's rule drawn in the tab strip's own colour, each invisible in exactly one
-    /// theme. The coverage audit cannot catch it, because the token is present — just useless.
+    /// A token that cannot be read against the surface behind it renders as nothing at all.
+    /// Three of these have shipped broken: the search placeholder drawn in the fill colour, the
+    /// active tab's rule drawn in the tab strip's own colour, and the whole compose header drawn
+    /// in content ink — near-black on Dark Gray's near-black chrome, in the one theme the owner
+    /// runs. The coverage audit cannot catch any of them, because the token is present.
+    /// <para>
+    /// <b>Contrast, not inequality.</b> This asserted only that the two values differed until
+    /// the compose header went wrong, and #262626 on #666666 differs perfectly well while being
+    /// unreadable. It is a ratio now — the WCAG one, at 3:1, which is the threshold for large
+    /// text and the loosest that still means "can be read".
+    /// </para>
     /// <para>
     /// Only ink-on-ground pairs belong here. A border matching its fill is not a bug: two of
     /// the four themes draw no border around the search box at all.
     /// </para>
     /// </summary>
     [Theory]
-    [InlineData(TokenKeys.Ribbon.TabUnderline, TokenKeys.Ribbon.TabStripBackground)]
     [InlineData(TokenKeys.Ribbon.TabText, TokenKeys.Ribbon.TabStripBackground)]
     [InlineData(TokenKeys.Ribbon.TabTextSelected, TokenKeys.Ribbon.TabStripBackground)]
     [InlineData(TokenKeys.TitleBar.SearchText, TokenKeys.TitleBar.Search)]
     [InlineData(TokenKeys.TitleBar.Foreground, TokenKeys.TitleBar.Background)]
-    [InlineData(TokenKeys.Rail.Indicator, TokenKeys.Rail.Background)]
     [InlineData(TokenKeys.Rail.ItemText, TokenKeys.Rail.Background)]
     [InlineData(TokenKeys.List.UnreadText, TokenKeys.List.RowBackground)]
     [InlineData(TokenKeys.List.ReadText, TokenKeys.List.RowBackground)]
     [InlineData(TokenKeys.Dialog.Foreground, TokenKeys.Dialog.Background)]
     [InlineData(TokenKeys.Dialog.ForegroundSubtle, TokenKeys.Dialog.Background)]
     [InlineData(TokenKeys.Dialog.SurfaceText, TokenKeys.Dialog.Surface)]
+    [InlineData(TokenKeys.Compose.HeaderText, TokenKeys.Compose.HeaderBackground)]
+    [InlineData(TokenKeys.Compose.HeaderLabel, TokenKeys.Compose.HeaderBackground)]
+    [InlineData(TokenKeys.Compose.BodyText, TokenKeys.Compose.BodyBackground)]
     public void ForegroundTokensAreDistinctFromWhatSitsBehindThem(string ink, string ground)
     {
         foreach (var id in OfficeThemes.All)
@@ -291,11 +299,68 @@ public class ThemeServiceTests
 
             var a = service.Tokens.GetString(ink);
             var b = service.Tokens.GetString(ground);
+            var ratio = Contrast(a, b);
+
+            Assert.True(
+                ratio >= 3.0,
+                $"{id}: {ink} ({a}) on {ground} ({b}) has a contrast ratio of {ratio:0.00}, "
+                + $"so {ink} cannot be read.");
+        }
+    }
+
+    /// <summary>
+    /// A mark is not text, and the text threshold is the wrong standard for one.
+    /// </summary>
+    /// <remarks>
+    /// The rail's selection indicator and the active tab's rule are shapes, not writing: they
+    /// are read by being somewhere rather than by being legible, and both are the accent colour
+    /// the reference itself uses. Dark Gray's indicator sits at 1.54:1 against its rail and is
+    /// perfectly visible, because it is four pixels of saturated blue against grey rather than a
+    /// word. So they keep the older, weaker rule — different from what is behind them — and the
+    /// contrast rule above is reserved for things somebody has to read.
+    /// </remarks>
+    [Theory]
+    [InlineData(TokenKeys.Ribbon.TabUnderline, TokenKeys.Ribbon.TabStripBackground)]
+    [InlineData(TokenKeys.Rail.Indicator, TokenKeys.Rail.Background)]
+    public void MarksAreAtLeastDistinctFromWhatSitsBehindThem(string mark, string ground)
+    {
+        foreach (var id in OfficeThemes.All)
+        {
+            var service = Service();
+            service.Apply(id);
+
+            var a = service.Tokens.GetString(mark);
+            var b = service.Tokens.GetString(ground);
 
             Assert.False(
                 string.Equals(a, b, StringComparison.OrdinalIgnoreCase),
-                $"{id}: {ink} and {ground} are both {a}, so {ink} cannot be seen.");
+                $"{id}: {mark} and {ground} are both {a}, so {mark} cannot be seen.");
         }
+    }
+
+    /// <summary>The WCAG contrast ratio between two colours, 1.0 (identical) to 21.0.</summary>
+    private static double Contrast(string first, string second)
+    {
+        var a = Luminance(first);
+        var b = Luminance(second);
+
+        return (Math.Max(a, b) + 0.05) / (Math.Min(a, b) + 0.05);
+    }
+
+    /// <summary>WCAG relative luminance: sRGB linearised, then weighted for the eye.</summary>
+    private static double Luminance(string hex)
+    {
+        var colour = Avalonia.Media.Color.Parse(hex);
+
+        static double Channel(byte value)
+        {
+            var v = value / 255.0;
+            return v <= 0.03928 ? v / 12.92 : Math.Pow((v + 0.055) / 1.055, 2.4);
+        }
+
+        return (0.2126 * Channel(colour.R))
+               + (0.7152 * Channel(colour.G))
+               + (0.0722 * Channel(colour.B));
     }
 
     /// <summary>
