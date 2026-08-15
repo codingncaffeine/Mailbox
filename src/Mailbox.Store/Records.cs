@@ -147,6 +147,12 @@ public sealed record MessageSummary(
     /// the whole body, so a search reaches a word buried in it. Empty for a row built by hand.
     /// </summary>
     public string BodyText { get; init; } = string.Empty;
+
+    /// <summary>When a follow-up is due, or null for a flag with no date or no flag at all.</summary>
+    public DateTimeOffset? FollowUpDue { get; init; }
+
+    /// <summary>Whether a follow-up has been marked complete — a check where the flag was.</summary>
+    public bool FollowUpComplete { get; init; }
 }
 
 /// <summary>

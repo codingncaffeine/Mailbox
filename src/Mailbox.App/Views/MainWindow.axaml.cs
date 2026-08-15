@@ -1548,7 +1548,7 @@ public partial class MainWindow : Window
         // The reference's Unread/Read button toggles: unread if the selection is all read, read
         // otherwise. Same for the flag.
         if (id == MailCommands.Unread.Id) { shell.SetRead(rows, read: rows.Any(r => r.IsUnread)); return true; }
-        if (id == MailCommands.FollowUp.Id) { shell.SetFlagged(rows, flagged: rows.Any(r => !r.IsFlagged)); return true; }
+        if (id == MailCommands.FollowUp.Id) { ShowFollowUpMenu(shell, rows); return true; }
 
         if (id == MailCommands.Categorize.Id) { ShowCategorizeMenu(shell, rows); return true; }
         if (id == MailCommands.MoveTo.Id || id == ViewCommands.MoveToQuick.Id) { ShowMoveMenu(shell, rows); return true; }
@@ -1569,6 +1569,72 @@ public partial class MainWindow : Window
     }
 
     /// <summary>The Categorize menu: the account's six, ticked where the whole selection has one.</summary>
+    /// <summary>
+    /// The flag menu, in the reference's order: the date presets, a custom date, Complete, and
+    /// Clear. Today's the default a click on the flag column takes; this is the menu the ribbon's
+    /// Follow Up opens.
+    /// </summary>
+    private void ShowFollowUpMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
+    {
+        var flyout = new MenuFlyout();
+
+        if (rows.Count == 0)
+        {
+            flyout.Items.Add(new MenuItem { Header = "Select a message first", IsEnabled = false });
+            flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+            return;
+        }
+
+        var now = DateTimeOffset.Now;
+        DateTimeOffset EndOf(DateTimeOffset day) => new(day.Year, day.Month, day.Day, 17, 0, 0, day.Offset);
+
+        // The reference's own presets. This Week is the coming Friday; Next Week the one after.
+        var daysToFriday = ((int)DayOfWeek.Friday - (int)now.DayOfWeek + 7) % 7;
+
+        void Preset(string header, DateTimeOffset? due)
+        {
+            var item = new MenuItem { Header = header };
+            item.Click += (_, _) => shell.FlagForFollowUp(rows, due);
+            flyout.Items.Add(item);
+        }
+
+        Preset("Today", EndOf(now));
+        Preset("Tomorrow", EndOf(now.AddDays(1)));
+        Preset("This Week", EndOf(now.AddDays(daysToFriday)));
+        Preset("Next Week", EndOf(now.AddDays(daysToFriday + 7)));
+        Preset("No Date", null);
+
+        var custom = new MenuItem { Header = "Custom…" };
+        custom.Click += async (_, _) =>
+        {
+            var entered = await Prompt.AskAsync(this, "Custom Follow Up", "Due (yyyy-MM-dd):");
+            if (entered is null) return;
+
+            if (DateTime.TryParse(entered, System.Globalization.CultureInfo.CurrentCulture,
+                    System.Globalization.DateTimeStyles.AssumeLocal, out var when))
+            {
+                shell.FlagForFollowUp(rows, new DateTimeOffset(when.Date.AddHours(17)));
+            }
+            else if (DataContext is ShellViewModel s)
+            {
+                s.StatusRight = $"Could not read “{entered}” as a date.";
+            }
+        };
+        flyout.Items.Add(custom);
+
+        flyout.Items.Add(new Separator());
+
+        var complete = new MenuItem { Header = "Mark Complete" };
+        complete.Click += (_, _) => shell.MarkFollowUpComplete(rows);
+        flyout.Items.Add(complete);
+
+        var clear = new MenuItem { Header = "Clear Flag" };
+        clear.Click += (_, _) => shell.ClearFollowUpFlag(rows);
+        flyout.Items.Add(clear);
+
+        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+    }
+
     private void ShowCategorizeMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
     {
         var flyout = new MenuFlyout();

@@ -347,6 +347,21 @@ public static class Migrations
             added_utc  INTEGER NOT NULL
         );
         """,
+
+        // ---- 13: follow-up flags with a due date --------------------------------------------
+        //
+        // A message could be flagged (is_flagged from schema 1); this gives the flag a due date
+        // and a completed state, which is what makes it a follow-up rather than a bookmark. A
+        // completed follow-up keeps its record — the reference shows a check where the flag was —
+        // so the two are separate: is_flagged says there is a follow-up, follow_up_complete says
+        // it is done. Reminders (a popup at the due time) wait on Phase 9's notification surface.
+        """
+        ALTER TABLE messages ADD COLUMN follow_up_due      INTEGER;
+        ALTER TABLE messages ADD COLUMN follow_up_complete INTEGER NOT NULL DEFAULT 0;
+
+        CREATE INDEX messages_by_followup ON messages (follow_up_due)
+            WHERE follow_up_due IS NOT NULL;
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>

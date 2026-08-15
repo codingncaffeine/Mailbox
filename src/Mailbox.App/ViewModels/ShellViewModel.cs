@@ -206,10 +206,17 @@ public sealed class MessageRow(
         set { if (Set(ref field, value)) Raise(nameof(FlagGlyph)); }
     }
 
+    /// <summary>Whether a follow-up on this message has been marked complete.</summary>
+    public bool FollowUpComplete { get; init; }
+
+    /// <summary>When a follow-up is due, for the tooltip and the flag menu's state.</summary>
+    public DateTimeOffset? FollowUpDue { get; init; }
+
     /// <summary>How the row writes its date: a time today, a weekday this week, else the date.</summary>
     public string ReceivedLabel => ShellViewModel.Received(Received);
 
-    public string FlagGlyph => IsFlagged ? "\u2691" : string.Empty;
+    /// <summary>A flag while a follow-up is open, a check once it is complete, nothing otherwise.</summary>
+    public string FlagGlyph => IsFlagged ? "\u2691" : FollowUpComplete ? "\u2713" : string.Empty;
 
     public FontWeight SenderWeight => IsUnread ? FontWeight.Bold : FontWeight.Normal;
     public FontWeight SubjectWeight => IsUnread ? FontWeight.SemiBold : FontWeight.Normal;
@@ -724,6 +731,8 @@ public sealed class ShellViewModel : ObservableObject
                 SizeBytes = summary.SizeBytes,
                 HasAttachment = summary.HasAttachment,
                 IsFlagged = summary.IsFlagged,
+                FollowUpComplete = summary.FollowUpComplete,
+                FollowUpDue = summary.FollowUpDue,
                 ThreadKey = Store.Lists.Arrangements.NormalisedSubject(summary.Subject),
                 FolderId = summary.FolderId,
             });
@@ -915,6 +924,8 @@ public sealed class ShellViewModel : ObservableObject
                     SizeBytes = summary.SizeBytes,
                     HasAttachment = summary.HasAttachment,
                     IsFlagged = summary.IsFlagged,
+                    FollowUpComplete = summary.FollowUpComplete,
+                    FollowUpDue = summary.FollowUpDue,
                     ThreadKey = Store.Lists.Arrangements.NormalisedSubject(summary.Subject),
                     FolderId = summary.FolderId,
                     FolderLabel = label,
@@ -1471,6 +1482,48 @@ public sealed class ShellViewModel : ObservableObject
 
     /// <summary>The account whose categories a management dialog should edit — the current one.</summary>
     public OpenAccount? CurrentAccountForCategories() => CurrentAccount;
+
+    /// <summary>Re-reads what is on screen — the search results, or the folder — after a change to a row's state.</summary>
+    private void ReloadCurrentView()
+    {
+        if (IsSearching) RunSearch();
+        else LoadMessages(_selectedFolder);
+    }
+
+    /// <summary>Flags the selection for follow-up, with an optional due date. The reference's flag menu.</summary>
+    public void FlagForFollowUp(IReadOnlyList<MessageRow> rows, DateTimeOffset? due)
+    {
+        if (rows.Count == 0 || Mail(rows) is not { } mail) return;
+
+        mail.SetFollowUp([.. rows.Select(r => r.Id)], due);
+        ReloadCurrentView();
+        RefreshCounts();
+        StatusRight = due is { } d
+            ? $"{Describe(rows.Count)} flagged, due {d.LocalDateTime:ddd d MMM}."
+            : $"{Describe(rows.Count)} flagged for follow-up.";
+    }
+
+    /// <summary>Marks the selection's follow-up complete: a check takes the flag's place.</summary>
+    public void MarkFollowUpComplete(IReadOnlyList<MessageRow> rows)
+    {
+        if (rows.Count == 0 || Mail(rows) is not { } mail) return;
+
+        mail.CompleteFollowUp([.. rows.Select(r => r.Id)]);
+        ReloadCurrentView();
+        RefreshCounts();
+        StatusRight = $"{Describe(rows.Count)} marked complete.";
+    }
+
+    /// <summary>Clears the selection's follow-up flag entirely.</summary>
+    public void ClearFollowUpFlag(IReadOnlyList<MessageRow> rows)
+    {
+        if (rows.Count == 0 || Mail(rows) is not { } mail) return;
+
+        mail.ClearFollowUp([.. rows.Select(r => r.Id)]);
+        ReloadCurrentView();
+        RefreshCounts();
+        StatusRight = $"Flag cleared.";
+    }
 
     /// <summary>
     /// Mark as Junk, or Not Junk when the selection is already in the Junk folder.
