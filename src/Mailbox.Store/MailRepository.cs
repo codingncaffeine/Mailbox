@@ -173,6 +173,27 @@ public sealed class MailRepository(MailStore store)
             r => r.GetString(0), ("$folder", folderId)),
     ];
 
+    /// <summary>
+    /// Server ids downloaded before <paramref name="cutoff"/>, for "remove from the server
+    /// after this many days".
+    /// </summary>
+    /// <remarks>
+    /// <c>received_utc</c> is when the message was written here, not the date in its header, so
+    /// the age is time-since-download — which is what the setting means and the only reading of
+    /// it that cannot delete mail off a server the moment it is collected.
+    /// </remarks>
+    public HashSet<string> ServerUidsOlderThan(long folderId, DateTimeOffset cutoff) =>
+    [
+        .. _store.Query(
+            """
+            SELECT server_uid FROM messages
+            WHERE folder_id = $folder AND server_uid IS NOT NULL AND received_utc < $cutoff
+            """,
+            r => r.GetString(0),
+            ("$folder", folderId),
+            ("$cutoff", cutoff.ToUnixTimeSeconds())),
+    ];
+
     public IReadOnlyList<MessageSummary> Messages(long folderId, int limit = 500) => _store.Query(
         MessageSelect + " WHERE folder_id = $folder ORDER BY received_utc DESC LIMIT $limit",
         ReadMessage, ("$folder", folderId), ("$limit", limit));
