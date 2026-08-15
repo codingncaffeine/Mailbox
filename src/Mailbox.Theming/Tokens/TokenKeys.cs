@@ -219,6 +219,9 @@ public static class TokenKeys
         /// <summary>Labels, headings and notes standing directly on that ground.</summary>
         public const string Foreground = "dialog.foreground";
 
+        /// <summary>Quieter ink on it: explanatory notes, a field's units, a status line.</summary>
+        public const string ForegroundSubtle = "dialog.foreground.subtle";
+
         /// <summary>The boxes on it: the page rail, list panes, buttons and fields.</summary>
         public const string Surface = "dialog.surface";
 
@@ -290,7 +293,8 @@ public static class TokenKeys
         Reading.Background, Reading.HeaderBackground, Reading.InfoBarBackground,
         Reading.InfoBarText, Reading.InfoBarWarningBackground,
         StatusBar.Background, StatusBar.Foreground, StatusBar.Height, StatusBar.Slider,
-        Dialog.Background, Dialog.Foreground, Dialog.Surface, Dialog.SurfaceText,
+        Dialog.Background, Dialog.Foreground, Dialog.ForegroundSubtle,
+        Dialog.Surface, Dialog.SurfaceText,
         Dialog.Border, Dialog.Selection,
         Calendar.Background, Calendar.WorkingHoursFill, Calendar.NonWorkingFill,
         Calendar.GridLine, Calendar.CurrentTimeIndicator, Calendar.AllDayBandBackground,

@@ -1,6 +1,5 @@
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 
@@ -38,7 +37,6 @@ public static class Prompt
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             ShowInTaskbar = false,
         };
-        Bind(window, TemplatedControl.BackgroundProperty, "dialog.background.brush");
 
         var cancel = new Button { Content = "Cancel", IsCancel = true };
         cancel.Click += (_, _) => window.Close();
@@ -50,7 +48,7 @@ public static class Prompt
             window.Close();
         };
 
-        window.Content = new StackPanel
+        var body = new StackPanel
         {
             Margin = new Thickness(22),
             Spacing = 12,
@@ -67,6 +65,8 @@ public static class Prompt
                 },
             },
         };
+
+        DialogChrome.Apply(window, body);
 
         // The name is what the dialog is for, so it opens ready to be typed over.
         window.Opened += (_, _) =>

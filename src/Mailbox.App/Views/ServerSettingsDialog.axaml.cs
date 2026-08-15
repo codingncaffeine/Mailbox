@@ -55,7 +55,7 @@ public sealed class ServerSettingsDialog : Window
         CanResize = false;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
-        Content = Layout();
+        DialogChrome.Apply(this, Layout());
         Bind(this, BackgroundProperty, "surface.ground.brush");
         Load();
     }
@@ -184,7 +184,7 @@ public sealed class ServerSettingsDialog : Window
             FontWeight = FontWeight.SemiBold,
             Margin = new Thickness(0, 10, 0, 2),
         };
-        Bind(block, TextBlock.ForegroundProperty, "text.primary.brush");
+        Bind(block, TextBlock.ForegroundProperty, "dialog.foreground.brush");
         return block;
     }
 
@@ -215,7 +215,7 @@ public sealed class ServerSettingsDialog : Window
             Width = width,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        Bind(block, TextBlock.ForegroundProperty, "text.primary.brush");
+        Bind(block, TextBlock.ForegroundProperty, "dialog.foreground.brush");
         return block;
     }
 

@@ -57,7 +57,7 @@ public sealed class AccountSettingsDialog : Window
         _accounts.SelectionChanged += (_, _) => UpdateButtons();
         _accounts.ItemTemplate = new FuncDataTemplate<AccountRow>((row, _) => Row(row));
 
-        Content = Layout();
+        DialogChrome.Apply(this, Layout());
         Bind(this, BackgroundProperty, "surface.ground.brush");
         Reload();
     }
@@ -84,10 +84,10 @@ public sealed class AccountSettingsDialog : Window
         Bind(marker, TextBlock.ForegroundProperty, "accent.rest.brush");
 
         var name = new TextBlock { Text = row.Name, Width = 300 };
-        Bind(name, TextBlock.ForegroundProperty, "text.primary.brush");
+        Bind(name, TextBlock.ForegroundProperty, "dialog.foreground.brush");
 
         var type = new TextBlock { Text = row.Type };
-        Bind(type, TextBlock.ForegroundProperty, "text.secondary.brush");
+        Bind(type, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
 
         return new StackPanel
         {
@@ -100,7 +100,7 @@ public sealed class AccountSettingsDialog : Window
     private Control Layout()
     {
         var heading = new TextBlock { Text = "Email Accounts", FontWeight = FontWeight.SemiBold };
-        Bind(heading, TextBlock.ForegroundProperty, "text.primary.brush");
+        Bind(heading, TextBlock.ForegroundProperty, "dialog.foreground.brush");
 
         var explain = new TextBlock
         {
@@ -109,7 +109,7 @@ public sealed class AccountSettingsDialog : Window
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 2, 0, 14),
         };
-        Bind(explain, TextBlock.ForegroundProperty, "text.secondary.brush");
+        Bind(explain, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
 
         var toolbar = new StackPanel
         {
@@ -123,7 +123,7 @@ public sealed class AccountSettingsDialog : Window
             },
         };
 
-        Bind(_delivery, TextBlock.ForegroundProperty, "text.secondary.brush");
+        Bind(_delivery, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
         _delivery.TextWrapping = TextWrapping.Wrap;
         _delivery.Margin = new Thickness(0, 14, 0, 0);
 
@@ -250,10 +250,10 @@ public sealed class AccountSettingsDialog : Window
     private Control Detail(string label, string value)
     {
         var name = new TextBlock { Text = label, Width = 90 };
-        Bind(name, TextBlock.ForegroundProperty, "text.secondary.brush");
+        Bind(name, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
 
         var text = new TextBlock { Text = value, TextWrapping = TextWrapping.Wrap, MaxWidth = 420 };
-        Bind(text, TextBlock.ForegroundProperty, "text.primary.brush");
+        Bind(text, TextBlock.ForegroundProperty, "dialog.foreground.brush");
 
         return new StackPanel
         {
@@ -276,14 +276,14 @@ public sealed class AccountSettingsDialog : Window
             MaxWidth = 460,
             Margin = new Thickness(0, 16, 0, 0),
         };
-        Bind(pending, TextBlock.ForegroundProperty, "text.secondary.brush");
+        Bind(pending, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
         return Panel(heading, explain, pending);
     }
 
     private Control Panel(string heading, string explain, Control body)
     {
         var title = new TextBlock { Text = heading, FontWeight = FontWeight.SemiBold };
-        Bind(title, TextBlock.ForegroundProperty, "text.primary.brush");
+        Bind(title, TextBlock.ForegroundProperty, "dialog.foreground.brush");
 
         var description = new TextBlock
         {
@@ -292,7 +292,7 @@ public sealed class AccountSettingsDialog : Window
             MaxWidth = 500,
             Margin = new Thickness(0, 2, 0, 12),
         };
-        Bind(description, TextBlock.ForegroundProperty, "text.secondary.brush");
+        Bind(description, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
 
         return new StackPanel
         {

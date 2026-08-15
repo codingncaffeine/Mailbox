@@ -325,6 +325,7 @@ public static class OfficeThemes
         // them, and #CCCCCC under a selected row.
         t.Set(TokenKeys.Dialog.Background, "{palette.chrome.statusbar}");
         t.Set(TokenKeys.Dialog.Foreground, "{palette.neutral.white}");
+        t.Set(TokenKeys.Dialog.ForegroundSubtle, "{palette.neutral.light}");
         t.Set(TokenKeys.Dialog.Surface, "{palette.chrome.ribbon}");
         t.Set(TokenKeys.Dialog.SurfaceText, "{palette.neutral.primary}");
         t.Set(TokenKeys.Dialog.Border, "#808080");
@@ -496,6 +497,7 @@ public static class OfficeThemes
         // theme — a lighter box on this ground would read as a highlight.
         t.Set(TokenKeys.Dialog.Background, "{palette.raised}");
         t.Set(TokenKeys.Dialog.Foreground, "{palette.neutral.primary}");
+        t.Set(TokenKeys.Dialog.ForegroundSubtle, "{palette.neutral.secondary}");
         t.Set(TokenKeys.Dialog.Surface, "{palette.ground}");
         t.Set(TokenKeys.Dialog.SurfaceText, "{palette.neutral.primary}");
         t.Set(TokenKeys.Dialog.Border, "{palette.neutral.quaternary}");
@@ -600,6 +602,7 @@ public static class OfficeThemes
         // all six, because there the two are a long way apart.
         t.Set(TokenKeys.Dialog.Background, "{palette.neutral.white}");
         t.Set(TokenKeys.Dialog.Foreground, "{palette.neutral.primary}");
+        t.Set(TokenKeys.Dialog.ForegroundSubtle, "{palette.neutral.secondary}");
         t.Set(TokenKeys.Dialog.Surface, "{palette.neutral.white}");
         t.Set(TokenKeys.Dialog.SurfaceText, "{palette.neutral.primary}");
         t.Set(TokenKeys.Dialog.Border, "{palette.neutral.tertiary}");

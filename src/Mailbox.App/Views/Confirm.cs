@@ -35,7 +35,7 @@ public static class Confirm
             TextWrapping = TextWrapping.Wrap,
             MaxWidth = 420,
         };
-        Bind(text, TextBlock.ForegroundProperty, "text.primary.brush");
+        Bind(text, TextBlock.ForegroundProperty, "dialog.foreground.brush");
 
         var window = new Window
         {
@@ -45,7 +45,6 @@ public static class Confirm
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             ShowInTaskbar = false,
         };
-        Bind(window, TemplatedControl.BackgroundProperty, "surface.ground.brush");
 
         var cancel = new Button { Content = "Cancel", IsCancel = true, IsDefault = !destructive };
         cancel.Click += (_, _) => window.Close();
@@ -54,7 +53,7 @@ public static class Confirm
         confirm.Click += (_, _) => { answer = true; window.Close(); };
         if (destructive) Bind(confirm, TemplatedControl.ForegroundProperty, "status.danger.brush");
 
-        window.Content = new StackPanel
+        var body = new StackPanel
         {
             Margin = new Thickness(22),
             Spacing = 18,
@@ -70,6 +69,8 @@ public static class Confirm
                 },
             },
         };
+
+        DialogChrome.Apply(window, body);
 
         await window.ShowDialog(owner);
         return answer;

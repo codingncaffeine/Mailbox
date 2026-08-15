@@ -49,7 +49,7 @@ public sealed class RulesAndAlertsDialog : Window
             HorizontalAlignment = HorizontalAlignment.Center,
             Margin = new Thickness(0, 40, 0, 0),
         };
-        Bind(empty, TextBlock.ForegroundProperty, "text.secondary.brush");
+        Bind(empty, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
 
         var list = new Border
         {
@@ -68,12 +68,12 @@ public sealed class RulesAndAlertsDialog : Window
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 14, 0, 0),
         };
-        Bind(note, TextBlock.ForegroundProperty, "text.secondary.brush");
+        Bind(note, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
 
         var heading = new TextBlock { Text = "Email Rules", FontWeight = FontWeight.SemiBold };
-        Bind(heading, TextBlock.ForegroundProperty, "text.primary.brush");
+        Bind(heading, TextBlock.ForegroundProperty, "dialog.foreground.brush");
 
-        Content = new DockPanel
+        var body = new DockPanel
         {
             Margin = new Thickness(18),
             Children =
@@ -89,6 +89,8 @@ public sealed class RulesAndAlertsDialog : Window
                 new StackPanel { Children = { heading, toolbar, list, note } },
             },
         };
+
+        DialogChrome.Apply(this, body);
 
         Bind(this, BackgroundProperty, "surface.ground.brush");
     }

@@ -55,8 +55,6 @@ public sealed class OptionsWindow : Window
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         CanResize = true;
 
-        Bind(this, BackgroundProperty, "dialog.background.brush");
-
         var root = new Grid
         {
             RowDefinitions = new RowDefinitions("Auto,*,Auto"),
@@ -88,7 +86,7 @@ public sealed class OptionsWindow : Window
         Grid.SetColumnSpan(buttons, 2);
         root.Children.Add(buttons);
 
-        Content = root;
+        DialogChrome.Apply(this, root);
 
         BuildRail();
 

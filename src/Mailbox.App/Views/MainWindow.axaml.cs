@@ -1,6 +1,7 @@
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
@@ -102,6 +103,54 @@ public partial class MainWindow : Window
 
         // Lets the fidelity harness capture the peek states, which a screenshot otherwise
         // cannot reach because they need a click.
+        WireHarnessPeek();
+
+        // The compose window is its own window, so the harness captures that rather than the
+        // shell. The value is which of its tabs to open on.
+        WireHarnessCompose();
+
+        // A collapsed ribbon only unrolls on a tab click, which a capture cannot make.
+        if (string.Equals(
+                Environment.GetEnvironmentVariable("MAILBOX_RIBBON"),
+                "revealed",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            Opened += (_, _) => _ribbon.RevealCollapsedRibbon();
+        }
+    }
+
+    /// <summary>
+    /// Photographs whichever window opens next.
+    /// </summary>
+    /// <remarks>
+    /// Confirm and Prompt build their own window and hand back an answer rather than the
+    /// window, so the harness finds it in the application's window list instead of being given
+    /// it. Everything else here is passed the window it is photographing.
+    /// </remarks>
+    private void CaptureNextWindow()
+    {
+        if (WindowCapture.RequestedPath is not { } path) return;
+
+        _ = Dispatcher.UIThread.InvokeAsync(async () =>
+        {
+            await Task.Delay(700);
+
+            var dialog = (Application.Current?.ApplicationLifetime
+                    as IClassicDesktopStyleApplicationLifetime)
+                ?.Windows.FirstOrDefault(w => !ReferenceEquals(w, this));
+
+            if (dialog is not null)
+            {
+                WindowCapture.Capture(dialog, path, WindowCapture.Scale);
+                Console.WriteLine($"Captured {path}");
+            }
+
+            Environment.Exit(0);
+        });
+    }
+
+    private void WireHarnessPeek()
+    {
         switch (Environment.GetEnvironmentVariable("MAILBOX_PEEK")?.ToLowerInvariant())
         {
             case "calendar": Opened += (_, _) => TogglePeek(); break;
@@ -138,10 +187,61 @@ public partial class MainWindow : Window
                     await dialog.ShowDialog(this);
                 };
                 break;
-        }
 
-        // The compose window is its own window, so the harness captures that rather than the
-        // shell. The value is which of its tabs to open on.
+            // The small dialogs size themselves to their content, which is the awkward case for
+            // a frame that draws its own rounded shape — nothing else in the application has a
+            // window whose height is decided after it is built.
+            case "confirm":
+                Opened += async (_, _) =>
+                {
+                    CaptureNextWindow();
+                    await Confirm.AskAsync(
+                        this,
+                        "Delete items",
+                        "The selected messages will be deleted permanently. This cannot be "
+                        + "undone.",
+                        "Delete");
+                };
+                break;
+
+            case "prompt":
+                Opened += async (_, _) =>
+                {
+                    CaptureNextWindow();
+                    await Prompt.AskAsync(this, "Rename", "Display name:", "New Group");
+                };
+                break;
+
+            // The dialogs behind the Backstage's menus, which otherwise take three clicks to
+            // reach and so have never been photographed.
+            case "accounts":
+                Opened += async (_, _) =>
+                {
+                    CaptureNextWindow();
+                    await new AccountSettingsDialog().ShowDialog(this);
+                };
+                break;
+
+            case "cleanup":
+                Opened += async (_, _) =>
+                {
+                    CaptureNextWindow();
+                    await new MailboxCleanupDialog().ShowDialog(this);
+                };
+                break;
+
+            case "rules":
+                Opened += async (_, _) =>
+                {
+                    CaptureNextWindow();
+                    await new RulesAndAlertsDialog().ShowDialog(this);
+                };
+                break;
+        }
+    }
+
+    private void WireHarnessCompose()
+    {
         if (Environment.GetEnvironmentVariable("MAILBOX_COMPOSE")?.Trim().ToLowerInvariant()
             is { Length: > 0 } composeTab)
         {
@@ -174,15 +274,6 @@ public partial class MainWindow : Window
                 };
                 await compose.ShowDialog(this);
             };
-        }
-
-        // A collapsed ribbon only unrolls on a tab click, which a capture cannot make.
-        if (string.Equals(
-                Environment.GetEnvironmentVariable("MAILBOX_RIBBON"),
-                "revealed",
-                StringComparison.OrdinalIgnoreCase))
-        {
-            Opened += (_, _) => _ribbon.RevealCollapsedRibbon();
         }
 
         // KeyTips exist only while Alt is held, which a capture cannot do. `tabs` poses the
