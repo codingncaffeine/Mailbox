@@ -472,6 +472,18 @@ public static class MailCommands
         InDefaultLayout = false,
     };
 
+    /// <summary>The reference's Folder tab has it; here it is on the folder pane's menu and in the catalogue.</summary>
+    public static readonly MailboxCommand NewSearchFolder = new()
+    {
+        Id = new("mail.searchfolder.new"),
+        Label = "New Search Folder",
+        Description = "Create a folder that shows the mail matching a saved search.",
+        Icon = "search",
+        Category = "Find",
+        Scope = ModuleScope.Mail,
+        InDefaultLayout = false,
+    };
+
     public static readonly MailboxCommand AuthenticationDetails = new()
     {
         Id = new("mail.authresults"),
@@ -495,6 +507,6 @@ public static class MailCommands
         Search, AddressBook, FilterEmail,
         SendReceiveAll, WorkOffline, Undo,
         Snooze, ViewSource, TrackerReport, AuthenticationDetails, Print, PrintToPdf, PrintList,
-        RecoverDeleted,
+        RecoverDeleted, NewSearchFolder,
     ];
 }

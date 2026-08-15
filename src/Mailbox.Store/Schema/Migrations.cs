@@ -470,6 +470,28 @@ public static class Migrations
 
         CREATE INDEX recoverable_by_deleted ON recoverable (deleted_utc);
         """,
+
+        // ---- 19: search folders, and the columns their queries need -------------------------
+        //
+        // A search folder is a saved query listed under Search Folders in the folder pane (§15
+        // Phase 8), kept per account as Core's JSON document. Three of the reference's templates
+        // — mail sent directly to me, to a public group, marked important — ask things the row
+        // could not answer: who a message was sent to, and its importance. Both are on the row
+        // now, filled as mail arrives; existing rows read as sent to nobody at normal importance
+        // until they are refetched, and the templates say so.
+        """
+        ALTER TABLE messages ADD COLUMN importance   INTEGER NOT NULL DEFAULT 1;
+        ALTER TABLE messages ADD COLUMN to_addresses TEXT    NOT NULL DEFAULT '';
+        ALTER TABLE messages ADD COLUMN cc_addresses TEXT    NOT NULL DEFAULT '';
+
+        CREATE TABLE search_folders (
+            id            INTEGER PRIMARY KEY,
+            name          TEXT    NOT NULL,
+            ordinal       INTEGER NOT NULL DEFAULT 0,
+            definition    TEXT    NOT NULL,
+            created_utc   INTEGER NOT NULL
+        );
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>

@@ -190,11 +190,11 @@ public sealed class MailRepository(MailStore store)
                 INSERT OR IGNORE INTO messages
                     (folder_id, blob_id, server_uid, message_id, in_reply_to, thread_key,
                      from_name, from_address, subject, preview, body_text, sent_utc, received_utc,
-                     size_bytes, is_read, is_flagged, has_attachment)
+                     size_bytes, is_read, is_flagged, has_attachment, importance, to_addresses, cc_addresses)
                 VALUES
                     ($folder, $blob, $uid, $messageId, NULL, $thread,
                      $fromName, $fromAddress, $subject, $preview, $bodyText, $sent, $received,
-                     $size, $read, $flagged, $attachment)
+                     $size, $read, $flagged, $attachment, $importance, $to, $cc)
                 """,
                 ("$folder", folderId),
                 ("$blob", blobId),
@@ -211,7 +211,10 @@ public sealed class MailRepository(MailStore store)
                 ("$size", message.SizeBytes),
                 ("$read", message.IsRead ? 1 : 0),
                 ("$flagged", message.IsFlagged ? 1 : 0),
-                ("$attachment", message.HasAttachment ? 1 : 0));
+                ("$attachment", message.HasAttachment ? 1 : 0),
+                ("$importance", message.Importance),
+                ("$to", string.Join(',', message.To)),
+                ("$cc", string.Join(',', message.Cc)));
 
             if (inserted != 0)
             {
@@ -1518,6 +1521,199 @@ public sealed class MailRepository(MailStore store)
     public string? OwnAddress() => _store.Query(
         "SELECT address FROM accounts ORDER BY id LIMIT 1", r => r.GetString(0)).FirstOrDefault();
 
+    // ---- Search folders --------------------------------------------------------------------------
+    //
+    // A saved query, listed under Search Folders in the pane. Templates run as SQL over the
+    // columns; a custom folder's conditions — the rules' own — are evaluated over the rows in
+    // managed code, so the two never disagree about what "from" means.
+
+    /// <summary>Every search folder, in order.</summary>
+    public IReadOnlyList<SearchFolder> SearchFolders() => _store.Query(
+        "SELECT id, name, ordinal, definition FROM search_folders ORDER BY ordinal, id",
+        r => new SearchFolder(r.GetInt64(0), r.GetString(1), r.GetInt32(2),
+            Mailbox.Core.Search.SearchFolderQuery.FromJson(r.GetString(3))));
+
+    public SearchFolder AddSearchFolder(string name, Mailbox.Core.Search.SearchFolderQuery query, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        _store.Execute(
+            """
+            INSERT INTO search_folders (name, ordinal, definition, created_utc)
+            VALUES ($name, (SELECT count(*) FROM search_folders), $definition, $now)
+            """,
+            ("$name", name), ("$definition", query.ToJson()), ("$now", now.ToUnixTimeSeconds()));
+
+        return SearchFolders().Single(f => f.Id == _store.LastInsertId);
+    }
+
+    public void UpdateSearchFolder(long id, string name, Mailbox.Core.Search.SearchFolderQuery query) => _store.Execute(
+        "UPDATE search_folders SET name = $name, definition = $definition WHERE id = $id",
+        ("$name", name), ("$definition", query.ToJson()), ("$id", id));
+
+    public void DeleteSearchFolder(long id) => _store.Execute("DELETE FROM search_folders WHERE id = $id", ("$id", id));
+
+    /// <summary>
+    /// What a search folder finds: the account's messages that match, newest first, from every
+    /// folder but the Outbox — and Deleted Items and Junk unless the query includes them.
+    /// </summary>
+    /// <param name="ownAddresses">The reader's addresses, for the "me" and "public groups" templates.</param>
+    public IReadOnlyList<MessageSummary> SearchFolderResults(
+        Mailbox.Core.Search.SearchFolderQuery query, IReadOnlyList<string> ownAddresses, DateTimeOffset now, int limit = 500)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentNullException.ThrowIfNull(ownAddresses);
+
+        var excluded = query.IncludeDeleted ? "'outbox'" : "'outbox', 'deleted', 'junk'";
+        var scope = $"""
+            SELECT m.* FROM messages m JOIN folders f ON f.id = m.folder_id
+            WHERE f.role NOT IN ({excluded}){Awake.Replace("snooze_until", "m.snooze_until")}
+            """;
+
+        var (where, parameters) = Clause(query, ownAddresses, now);
+        var custom = query.Kind == Mailbox.Core.Search.SearchFolderKind.Custom && query.Conditions.Count > 0;
+
+        // The body text rides along only for a custom folder, whose conditions may read it; a
+        // template's rows are list rows and stay as light as the list's own.
+        Func<SqliteDataReader, MessageSummary> read = custom
+            ? r => ReadMessage(r) with { BodyText = r.GetString(r.GetOrdinal("body_text")) }
+            : ReadMessage;
+        var rows = _store.Query(
+            $"{scope} AND ({where}) ORDER BY m.received_utc DESC LIMIT $limit",
+            read,
+            [.. parameters, ("$limit", (object?)limit)]);
+
+        if (!custom) return rows;
+
+        // A custom folder: the SQL above narrowed by scope alone; the conditions decide here,
+        // over the row's own facts. What a row cannot say — a header, the body beyond its text —
+        // is read from the raw message when a condition needs it.
+        var facts = new List<MessageSummary>();
+        foreach (var row in rows)
+        {
+            var rule = new Mailbox.Core.Rules.MailRule { Conditions = query.Conditions };
+            if (Mailbox.Core.Rules.RuleEvaluator.Matches(rule, FactsFor(row, ownAddresses))) facts.Add(row);
+        }
+
+        return facts;
+    }
+
+    /// <summary>How many of a search folder's results are unread, for the folder pane's count.</summary>
+    /// <remarks>
+    /// A count in SQL for a template, so the pane's badge costs a query rather than the rows;
+    /// a custom folder has to run its conditions and counts what came back.
+    /// </remarks>
+    public int SearchFolderUnread(Mailbox.Core.Search.SearchFolderQuery query, IReadOnlyList<string> ownAddresses, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentNullException.ThrowIfNull(ownAddresses);
+
+        if (query.Kind == Mailbox.Core.Search.SearchFolderKind.Custom && query.Conditions.Count > 0)
+        {
+            return SearchFolderResults(query, ownAddresses, now, int.MaxValue).Count(m => !m.IsRead);
+        }
+
+        var excluded = query.IncludeDeleted ? "'outbox'" : "'outbox', 'deleted', 'junk'";
+        var (where, parameters) = Clause(query, ownAddresses, now);
+        return (int)_store.ScalarLong(
+            $"""
+             SELECT count(*) FROM messages m JOIN folders f ON f.id = m.folder_id
+             WHERE f.role NOT IN ({excluded}) AND m.is_read = 0{Awake.Replace("snooze_until", "m.snooze_until")} AND ({where})
+             """,
+            parameters);
+    }
+
+    /// <summary>The WHERE clause for a template, and its parameters. A custom folder is scope alone.</summary>
+    private (string Where, (string, object?)[] Parameters) Clause(
+        Mailbox.Core.Search.SearchFolderQuery query, IReadOnlyList<string> own, DateTimeOffset now)
+    {
+        var mine = own.Select(a => a.Trim().ToLowerInvariant()).Where(a => a.Length > 0).ToList();
+        string MineIn(string column) => mine.Count == 0
+            ? "0"
+            : string.Join(" OR ", mine.Select(a => $"(',' || m.{column} || ',') LIKE '%,' || {Quote(a)} || ',%'"));
+
+        switch (query.Kind)
+        {
+            case Mailbox.Core.Search.SearchFolderKind.Unread:
+                return ("m.is_read = 0", []);
+            case Mailbox.Core.Search.SearchFolderKind.Flagged:
+                return ("m.is_flagged = 1", []);
+            case Mailbox.Core.Search.SearchFolderKind.UnreadOrFlagged:
+                return ("m.is_read = 0 OR m.is_flagged = 1", []);
+            case Mailbox.Core.Search.SearchFolderKind.Important:
+                return ("m.importance = 2", []);
+            case Mailbox.Core.Search.SearchFolderKind.From:
+            case Mailbox.Core.Search.SearchFolderKind.FromOrTo:
+            {
+                if (query.Values.Count == 0) return ("0", []);
+                var people = query.Values.Select(v => v.Trim().ToLowerInvariant()).Where(v => v.Length > 0).ToList();
+                var from = string.Join(" OR ", people.Select(p => p.StartsWith('@')
+                    ? $"lower(m.from_address) LIKE '%' || {Quote(p)}"
+                    : $"(lower(m.from_address) = {Quote(p)} OR lower(m.from_name) = {Quote(p)})"));
+                if (query.Kind == Mailbox.Core.Search.SearchFolderKind.From) return (from, []);
+                var to = string.Join(" OR ", people.Select(p => p.StartsWith('@')
+                    ? $"(',' || m.to_addresses || ',' || m.cc_addresses || ',') LIKE '%' || {Quote(p)} || ',%'"
+                    : $"(',' || m.to_addresses || ',' || m.cc_addresses || ',') LIKE '%,' || {Quote(p)} || ',%'"));
+                return ($"({from}) OR ({to})", []);
+            }
+            case Mailbox.Core.Search.SearchFolderKind.SentDirectlyToMe:
+                return ($"({MineIn("to_addresses")})", []);
+            case Mailbox.Core.Search.SearchFolderKind.SentToLists:
+                // Not addressed to any of the reader's own addresses: it came through a list or
+                // an alias. Rows from before the recipient columns existed read as unaddressed,
+                // so they are left out rather than all matching.
+                return ($"m.to_addresses <> '' AND NOT ({MineIn("to_addresses")}) AND NOT ({MineIn("cc_addresses")})", []);
+            case Mailbox.Core.Search.SearchFolderKind.Categorized:
+            {
+                if (query.Values.Count == 0)
+                {
+                    return ("EXISTS (SELECT 1 FROM message_categories mc WHERE mc.message_id = m.id)", []);
+                }
+
+                var names = string.Join(',', query.Values.Select(Quote));
+                return ($"EXISTS (SELECT 1 FROM message_categories mc JOIN categories c ON c.id = mc.category_id WHERE mc.message_id = m.id AND c.name IN ({names}))", []);
+            }
+            case Mailbox.Core.Search.SearchFolderKind.Large:
+                return ("m.size_bytes > $threshold", [("$threshold", (long)Math.Max(0, query.Threshold) * 1024)]);
+            case Mailbox.Core.Search.SearchFolderKind.Old:
+                return ("m.received_utc < $cutoff", [("$cutoff", now.AddDays(-Math.Max(0, query.Threshold)).ToUnixTimeSeconds())]);
+            case Mailbox.Core.Search.SearchFolderKind.WithAttachments:
+                return ("m.has_attachment = 1", []);
+            case Mailbox.Core.Search.SearchFolderKind.WithWords:
+            {
+                if (query.Values.Count == 0) return ("0", []);
+                var words = string.Join(" OR ", query.Values.Select(w =>
+                    $"(m.subject LIKE '%' || {Quote(w)} || '%' OR m.body_text LIKE '%' || {Quote(w)} || '%')"));
+                return (words, []);
+            }
+            default:
+                return ("1", []);
+        }
+    }
+
+    /// <summary>A row's facts, for a custom search folder's conditions.</summary>
+    private Mailbox.Core.Rules.RuleFacts FactsFor(MessageSummary row, IReadOnlyList<string> own)
+    {
+        var categories = CategoriesFor([row.Id]).GetValueOrDefault(row.Id)?.Select(c => c.Name).ToList() ?? [];
+        return new Mailbox.Core.Rules.RuleFacts
+        {
+            FromAddress = row.FromAddress,
+            FromName = row.FromName,
+            To = row.To,
+            Cc = row.Cc,
+            Subject = row.Subject,
+            Body = row.BodyText.Length > 0 ? row.BodyText : row.Preview,
+            Headers = string.Empty,
+            SizeBytes = row.SizeBytes,
+            HasAttachment = row.HasAttachment,
+            Importance = row.Importance,
+            Received = row.Received,
+            Categories = categories,
+            IsFlagged = row.IsFlagged,
+            OwnAddresses = own,
+        };
+    }
+
     // ---- Auto-Complete List -------------------------------------------------------------------
 
     /// <summary>
@@ -1856,7 +2052,13 @@ public sealed class MailRepository(MailStore store)
         SnoozedUntil = NullableLong(r, "snooze_until") is { } until
             ? DateTimeOffset.FromUnixTimeSeconds(until)
             : null,
+        Importance = r.GetInt32(r.GetOrdinal("importance")),
+        To = Split(r.GetString(r.GetOrdinal("to_addresses"))),
+        Cc = Split(r.GetString(r.GetOrdinal("cc_addresses"))),
     };
+
+    private static IReadOnlyList<string> Split(string joined)
+        => joined.Length == 0 ? [] : joined.Split(',', StringSplitOptions.RemoveEmptyEntries);
 
     private static string? Nullable(SqliteDataReader r, string column)
     {

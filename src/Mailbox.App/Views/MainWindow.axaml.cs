@@ -105,6 +105,7 @@ public partial class MainWindow : Window
         WireArrangeMenu(shell);
         WireListInteraction(shell);
         WireReadingPane(shell);
+        WireFolderMenu(shell);
         this.FindControl<ContentControl>("UndoSendHost")!.Content = _undoSend;
         WireSchedule(shell);
         DataContext = shell;
@@ -409,6 +410,14 @@ public partial class MainWindow : Window
                 {
                     CaptureNextWindow();
                     await new RecoverDeletedItemsDialog(DataContext is ShellViewModel s ? s.CurrentAddress : null).ShowDialog(this);
+                };
+                break;
+
+            case "searchfolder":
+                Opened += async (_, _) =>
+                {
+                    CaptureNextWindow();
+                    await new NewSearchFolderDialog(DataContext is ShellViewModel s ? s.CurrentAccountForCategories() : null).ShowDialog(this);
                 };
                 break;
 
@@ -1252,6 +1261,88 @@ public partial class MainWindow : Window
         new PrintPreviewWindow(App.Themes, shell.SelectedFolderName, rows).Show(this);
     }
 
+    /// <summary>New Search Folder, for an account or the current one, then selects what it made.</summary>
+    private async Task NewSearchFolderAsync(ShellViewModel shell, OpenAccount? account)
+    {
+        var dialog = new NewSearchFolderDialog(account ?? shell.CurrentAccountForCategories());
+        await dialog.ShowDialog(this);
+        if (dialog.Result is not { } made) return;
+
+        var folder = made.Account.Mail.AddSearchFolder(made.Name, made.Query, DateTimeOffset.UtcNow);
+        shell.SelectSearchFolder(folder.Id);
+    }
+
+    /// <summary>
+    /// The folder pane's right-click menu: the search-folder entries on the Search Folders
+    /// heading and on each search folder — New Search Folder, Customize This Search Folder,
+    /// Rename Folder, Delete Folder.
+    /// </summary>
+    private void WireFolderMenu(ShellViewModel shell)
+    {
+        if (this.FindControl<ListBox>("FolderList") is not { } folders) return;
+
+        var flyout = new MenuFlyout();
+        ViewModels.FolderNode? pressed = null;
+
+        folders.AddHandler(PointerPressedEvent, (object? _, PointerPressedEventArgs e) =>
+        {
+            if (!e.GetCurrentPoint(folders).Properties.IsRightButtonPressed) return;
+            pressed = (e.Source as Control)?.DataContext as ViewModels.FolderNode;
+        }, RoutingStrategies.Tunnel);
+
+        flyout.Opening += (_, _) =>
+        {
+            flyout.Items.Clear();
+            if (pressed is null || shell.SearchFolderAccount(pressed) is not { } account)
+            {
+                flyout.Items.Add(new MenuItem { Header = "No actions here yet", IsEnabled = false });
+                return;
+            }
+
+            var make = new MenuItem { Header = "New Search Folder…" };
+            make.Click += async (_, _) => await NewSearchFolderAsync(shell, account);
+            flyout.Items.Add(make);
+
+            if (shell.SearchFolderOf(pressed) is not { } search) return;
+
+            flyout.Items.Add(new Separator());
+
+            var customize = new MenuItem { Header = "Customize This Search Folder…" };
+            customize.Click += async (_, _) =>
+            {
+                var dialog = new NewSearchFolderDialog(account, search);
+                await dialog.ShowDialog(this);
+                if (dialog.Result is not { } edited) return;
+                account.Mail.UpdateSearchFolder(search.Id, edited.Name, edited.Query);
+                shell.SelectSearchFolder(search.Id);
+            };
+            flyout.Items.Add(customize);
+
+            var rename = new MenuItem { Header = "Rename Folder" };
+            rename.Click += async (_, _) =>
+            {
+                var name = await Prompt.AskAsync(this, "Rename Folder", "New name:", search.Name);
+                if (string.IsNullOrWhiteSpace(name)) return;
+                account.Mail.UpdateSearchFolder(search.Id, name.Trim(), search.Query);
+                shell.SelectSearchFolder(search.Id);
+            };
+            flyout.Items.Add(rename);
+
+            var delete = new MenuItem { Header = "Delete Folder" };
+            delete.Click += async (_, _) =>
+            {
+                var go = await Confirm.AskAsync(this, "Delete Folder",
+                    $"Delete the search folder “{search.Name}”? The mail it shows stays where it is.", "Delete");
+                if (!go) return;
+                account.Mail.DeleteSearchFolder(search.Id);
+                shell.Refresh();
+            };
+            flyout.Items.Add(delete);
+        };
+
+        folders.ContextFlyout = flyout;
+    }
+
     private async Task ShowRecoverDeletedAsync(ShellViewModel shell)
     {
         await new RecoverDeletedItemsDialog(shell.CurrentAddress).ShowDialog(this);
@@ -1714,6 +1805,7 @@ public partial class MainWindow : Window
         if (id == MailCommands.PrintToPdf.Id) { _ = PrintToPdfAsync(shell); return; }
         if (id == MailCommands.PrintList.Id) { PrintList(shell); return; }
         if (id == MailCommands.RecoverDeleted.Id) { _ = ShowRecoverDeletedAsync(shell); return; }
+        if (id == MailCommands.NewSearchFolder.Id) { _ = NewSearchFolderAsync(shell, null); return; }
         if (id == ViewCommands.CancelAll.Id) { CancelTransfer(); return; }
         if (id == ViewCommands.SendReceiveGroups.Id) { ShowGroupsMenu(shell); return; }
 

@@ -38,6 +38,19 @@ public static class MessageMapper
             HasAttachment: message.Attachments.Any())
         {
             BodyText = FullText(message),
+            Importance = message.Importance switch
+            {
+                MessageImportance.Low => 0,
+                MessageImportance.High => 2,
+                _ => message.Priority switch
+                {
+                    MessagePriority.NonUrgent => 0,
+                    MessagePriority.Urgent => 2,
+                    _ => 1,
+                },
+            },
+            To = [.. message.To.Mailboxes.Select(m => m.Address.Trim().ToLowerInvariant()).Where(a => a.Length > 0)],
+            Cc = [.. message.Cc.Mailboxes.Select(m => m.Address.Trim().ToLowerInvariant()).Where(a => a.Length > 0)],
         };
     }
 
