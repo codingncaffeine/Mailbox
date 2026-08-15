@@ -450,6 +450,51 @@
         <Setter Property="Foreground" Value="{DynamicResource dialog.surface.text.brush}" />
     </Style>
 
+    <!--
+        Fields and combo boxes in a dialog are boxes on the ground as well. The reference draws
+        them in the same fill and line as the list boxes (Dark Gray: #BDBDBD inside #808080,
+        with #262626 ink), where the general field styles above paint the content surface,
+        which is a different shade of grey in that theme.
+    -->
+    <Style Selector="Border.dialogroot TextBox">
+        <Setter Property="Background" Value="{DynamicResource dialog.surface.brush}" />
+        <Setter Property="Foreground" Value="{DynamicResource dialog.surface.text.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource dialog.border.brush}" />
+        <Setter Property="CaretBrush" Value="{DynamicResource dialog.surface.text.brush}" />
+        <Setter Property="SelectionForegroundBrush"
+                Value="{DynamicResource dialog.surface.text.brush}" />
+    </Style>
+
+    <!-- Declared after the rule above, or its BorderBrush would win over these too. -->
+    <Style Selector="Border.dialogroot TextBox:pointerover">
+        <Setter Property="BorderBrush" Value="{DynamicResource border.strong.brush}" />
+    </Style>
+
+    <Style Selector="Border.dialogroot TextBox:focus">
+        <Setter Property="BorderBrush" Value="{DynamicResource border.focus.brush}" />
+    </Style>
+
+    <Style Selector="Border.dialogroot ComboBox">
+        <Setter Property="Background" Value="{DynamicResource dialog.surface.brush}" />
+        <Setter Property="Foreground" Value="{DynamicResource dialog.surface.text.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource dialog.border.brush}" />
+    </Style>
+
+    <Style Selector="Border.dialogroot ComboBox:pointerover">
+        <Setter Property="BorderBrush" Value="{DynamicResource border.strong.brush}" />
+    </Style>
+
+    <!--
+        A combo box shows its selection through a presenter that builds a TextBlock, and that
+        TextBlock is a descendant of the dialog root — so the ground-ink rule at the top of this
+        block reached it and painted the selected item in the ground's colour on the box's fill:
+        white on light grey in Dark Gray. A text box is immune, because it draws through a
+        TextPresenter, which is what made the two look different in the same dialog.
+    -->
+    <Style Selector="Border.dialogroot ComboBox TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource dialog.surface.text.brush}" />
+    </Style>
+
     <!-- Unread messages are blue in the reference application, not merely bold. -->
     <Style Selector="TextBlock.unread">
         <Setter Property="Foreground" Value="{DynamicResource list.row.unread.text.brush}" />
