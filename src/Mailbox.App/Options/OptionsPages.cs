@@ -423,8 +423,11 @@ public static class OptionsPages
             new OptionSection("Send and receive",
             [
                 new SubHeadingRow("Set send and receive schedules and choose what is included."),
-                new CheckRow("Send immediately when connected", true),
-                new SpinnerRow("Schedule an automatic send/receive every this many minutes:", 30, 1, 1440, 380),
+                new CheckRow("Send immediately when connected", true) { Key = MailOptions.SendImmediatelyKey },
+                // The schedule itself lives on the send/receive groups, where the reference keeps
+                // it too; this spinner is that dialog's number for the All Accounts group and is
+                // wired to the same state, not a second copy of it.
+                new SlotRow("schedule"),
             ]),
 
             new OptionSection("Developers",

@@ -492,10 +492,48 @@ public partial class MainWindow : Window
 
         // §12's Undo Send. The window closes the moment it queues, so the offer to take it back
         // belongs here — and it is the shell that still exists to show it.
-        compose.Queued += (_, e) => _undoSend.Offer(e, Withdraw);
+        compose.Queued += (_, e) => OnQueued(e);
 
         compose.Show(this);
     }
+
+    /// <summary>
+    /// A message has been queued to go: offer the way back while there is one, and send it when
+    /// there is not.
+    /// </summary>
+    /// <remarks>
+    /// "Send immediately when connected" is the Options page's name for the second half, and it
+    /// is on by default: a message that sits in the outbox until somebody presses F9 is a
+    /// message people think went. Undo Send's hold is respected — the send is scheduled for
+    /// the moment it expires, and an undo before then cancels it.
+    /// </remarks>
+    private void OnQueued(QueuedMessageEventArgs queued)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var remaining = queued.Remaining(now);
+
+        if (remaining > TimeSpan.Zero) _undoSend.Offer(queued, Withdraw);
+
+        if (!App.MailOptions.SendImmediately) return;
+
+        _pendingSend?.Stop();
+        _pendingSend = new DispatcherTimer
+        {
+            // A moment past the hold, so the sender finds the row due rather than a second
+            // early.
+            Interval = remaining + TimeSpan.FromMilliseconds(750),
+        };
+        _pendingSend.Tick += (_, _) =>
+        {
+            _pendingSend?.Stop();
+            _pendingSend = null;
+            if (DataContext is ShellViewModel shell) _ = SendReceiveAsync(shell);
+        };
+        _pendingSend.Start();
+    }
+
+    /// <summary>The send waiting for a hold to expire, so an undo can cancel it.</summary>
+    private DispatcherTimer? _pendingSend;
 
     /// <summary>
     /// Pulls a message back out of the outbox, if it is still there.
@@ -523,6 +561,11 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Nothing to send now, so no need to connect for it. The next F9 or the schedule
+        // will still send anything else that is waiting.
+        _pendingSend?.Stop();
+        _pendingSend = null;
+
         shell.Refresh();
         shell.StatusRight = "Message pulled back out of the Outbox.";
 
@@ -533,7 +576,7 @@ public partial class MainWindow : Window
 
             var compose = new ComposeWindow(App.Commands, App.Accounts);
             compose.Restore(message);
-            compose.Queued += (_, e) => _undoSend.Offer(e, Withdraw);
+            compose.Queued += (_, e) => OnQueued(e);
             compose.Closed += (_, _) => shell.Refresh();
             compose.Show(this);
         }
@@ -710,7 +753,7 @@ public partial class MainWindow : Window
         {
             var compose = new ComposeWindow(App.Commands, App.Accounts);
             compose.EditDraft(draft.Id, message);
-            compose.Queued += (_, e) => _undoSend.Offer(e, Withdraw);
+            compose.Queued += (_, e) => OnQueued(e);
             compose.Closed += (_, _) => shell.Refresh();
             compose.Show(this);
             return;

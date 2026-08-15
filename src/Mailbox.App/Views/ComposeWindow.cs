@@ -144,7 +144,8 @@ public sealed class ComposeWindow : Window
     private SpellCheck? _spelling;
 
     /// <summary>
-    /// Raised when a message went to the outbox under a hold that can still be undone.
+    /// Raised when a message went to the outbox and is meant to go as soon as it can — under
+    /// Undo Send's hold if that is on, at once if it is not.
     /// </summary>
     /// <remarks>
     /// An event rather than the window putting up its own toast, because the window closes the
@@ -1954,13 +1955,19 @@ public sealed class ComposeWindow : Window
 
             Report(_notBefore is { } held
                 ? $"Queued, held until {held.LocalDateTime:g}."
-                : "Queued in the Outbox. It goes out on the next send/receive.");
+                : App.MailOptions.SendImmediately
+                    ? "Sending."
+                    : "Queued in the Outbox. It goes out on the next send/receive.");
 
-            // The window is about to close, so whoever opened it is who offers the way back.
-            if (undo is { } expires)
+            // The window is about to close, so whoever opened it is who offers the way back —
+            // and who sends it when the hold is up. Not raised for a message the writer asked to
+            // hold until a chosen time: that one goes on the schedule, as asked, and offering
+            // to undo Thursday's message today would be odd.
+            if (_notBefore is null)
             {
                 Queued?.Invoke(this, new QueuedMessageEventArgs(
-                    account.Account.Address, outboxId, expires, message.Subject ?? string.Empty));
+                    account.Account.Address, outboxId, undo ?? DateTimeOffset.UtcNow,
+                    message.Subject ?? string.Empty));
             }
 
             Close();

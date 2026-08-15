@@ -363,6 +363,87 @@ public sealed class OptionsWindow : Window
         {
             undo.Content = UndoSendRow();
         }
+
+        if (renderer.Slots.TryGetValue("schedule", out var schedule))
+        {
+            schedule.Content = ScheduleRow();
+        }
+    }
+
+    /// <summary>
+    /// The All Accounts group's schedule, as one row: whether, and how often.
+    /// </summary>
+    /// <remarks>
+    /// The same state the Send/Receive Groups dialog edits, so the two cannot disagree. A group
+    /// somebody has renamed or removed leaves this row with nothing to edit, and it says so.
+    /// </remarks>
+    private Control ScheduleRow()
+    {
+        var group = App.Groups.Find(SendReceiveGroups.AllAccounts.Name);
+
+        if (group is null)
+        {
+            var gone = new TextBlock
+            {
+                Text = "The All Accounts group has been removed. Schedules are on File › "
+                    + "Send/Receive Groups.",
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            Bind(gone, TextBlock.ForegroundProperty, "dialog.foreground.brush");
+            return gone;
+        }
+
+        var minutes = new NumericUpDown
+        {
+            Minimum = 1,
+            Maximum = 1440,
+            Increment = 1,
+            FormatString = "0",
+            Value = group.ScheduleMinutes,
+            Width = 100,
+            VerticalAlignment = VerticalAlignment.Center,
+            IsEnabled = group.ScheduleEnabled,
+        };
+
+        var enabled = new CheckBox
+        {
+            Content = "Schedule an automatic send/receive every",
+            IsChecked = group.ScheduleEnabled,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        void Save()
+        {
+            var current = App.Groups.Find(SendReceiveGroups.AllAccounts.Name);
+            if (current is null) return;
+
+            var updated = current with
+            {
+                ScheduleEnabled = enabled.IsChecked == true,
+                ScheduleMinutes = (int)(minutes.Value ?? current.ScheduleMinutes),
+            };
+
+            App.Groups.Replace(App.Groups.All.Select(g => ReferenceEquals(g, current) ? updated : g));
+            minutes.IsEnabled = updated.ScheduleEnabled;
+        }
+
+        enabled.IsCheckedChanged += (_, _) => Save();
+        minutes.ValueChanged += (_, _) => Save();
+
+        var after = new TextBlock
+        {
+            Text = "minutes",
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(8, 0, 0, 0),
+        };
+        Bind(after, TextBlock.ForegroundProperty, "dialog.foreground.brush");
+
+        return new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            Children = { enabled, minutes, after },
+        };
     }
 
     /// <summary>
