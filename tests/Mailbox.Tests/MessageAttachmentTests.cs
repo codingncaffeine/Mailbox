@@ -107,4 +107,99 @@ public class MessageAttachmentTests
 
         Assert.Equal("hello", System.Text.Encoding.UTF8.GetString(buffer.ToArray()));
     }
+
+    // ---- A message carried inside a message ---------------------------------------------
+
+    private static MessagePart Carried(string subject, string body = "The original.")
+    {
+        var inner = new MimeMessage { Subject = subject };
+        inner.From.Add(new MailboxAddress("B. Person", "b@example.net"));
+        inner.To.Add(new MailboxAddress("A. Person", "you@example.com"));
+        inner.Body = new TextPart("plain") { Text = body };
+
+        return new MessagePart
+        {
+            Message = inner,
+            ContentDisposition = new ContentDisposition(ContentDisposition.Attachment),
+        };
+    }
+
+    /// <summary>
+    /// Forwarding as an attachment produces a <c>message/rfc822</c> part, which is a
+    /// <c>MessagePart</c> and not a <c>MimePart</c> — so matching only the latter listed nothing
+    /// at all, and a forwarded message showed an empty strip.
+    /// </summary>
+    [Fact]
+    public void ACarriedMessageIsAnAttachment()
+    {
+        var found = Assert.Single(MessageAttachments.List(With(Carried("Q3 numbers"))));
+
+        Assert.Equal("Q3 numbers.eml", found.Name);
+        Assert.Equal("message/rfc822", found.MimeType);
+        Assert.True(found.IsMessage);
+        Assert.True(found.Size > 0);
+    }
+
+    [Fact]
+    public void ACarriedMessagePrefersTheNameItWasGiven()
+    {
+        var carried = Carried("Q3 numbers");
+        carried.ContentDisposition!.FileName = "forwarded.eml";
+
+        Assert.Equal("forwarded.eml", Assert.Single(MessageAttachments.List(With(carried))).Name);
+    }
+
+    [Fact]
+    public void ACarriedMessageWithNoSubjectStillHasAName()
+        => Assert.Equal("message.eml",
+            Assert.Single(MessageAttachments.List(With(Carried(string.Empty)))).Name);
+
+    /// <summary>Saved as the RFC822 it is, so what lands on disk is an .eml that opens.</summary>
+    [Fact]
+    public void SavingACarriedMessageWritesTheWholeMessage()
+    {
+        var attachment = Assert.Single(MessageAttachments.List(With(Carried("Q3 numbers"))));
+
+        using var buffer = new MemoryStream();
+        attachment.SaveTo(buffer);
+        buffer.Position = 0;
+
+        Assert.Equal("Q3 numbers",
+            MimeMessage.Load(buffer, TestContext.Current.CancellationToken).Subject);
+    }
+
+    /// <summary>What the forwarded message carried belongs to it, not to the message quoting it.</summary>
+    [Fact]
+    public void WhatIsInsideACarriedMessageIsNotHoistedOut()
+    {
+        var carried = Carried("Q3 numbers");
+        carried.Message!.Body = new Multipart("mixed")
+        {
+            new TextPart("plain") { Text = "The original." },
+            File("inner.zip", "application/zip"),
+        };
+
+        var found = Assert.Single(MessageAttachments.List(With(carried)));
+        Assert.Equal("Q3 numbers.eml", found.Name);
+    }
+
+    // ---- Names are text a stranger wrote --------------------------------------------------
+
+    [Theory]
+    [InlineData("../../.bashrc", ".bashrc")]
+    [InlineData("/etc/passwd", "passwd")]
+    [InlineData("C:\\Windows\\System32\\drivers\\etc\\hosts", "hosts")]
+    [InlineData("re\nport.pdf", "report.pdf")]
+    [InlineData("..", "attachment")]
+    [InlineData("../", "attachment")]
+    [InlineData("   ", "attachment")]
+    [InlineData("", "attachment")]
+    public void ASuggestedNameCannotNameSomewhereElse(string name, string expected)
+        => Assert.Equal(expected,
+            new Attachment(name, "application/octet-stream", 1, new MimePart()).SafeName);
+
+    [Fact]
+    public void AnOrdinaryNameIsLeftAlone()
+        => Assert.Equal("agenda.pdf",
+            new Attachment("agenda.pdf", "application/pdf", 1, new MimePart()).SafeName);
 }

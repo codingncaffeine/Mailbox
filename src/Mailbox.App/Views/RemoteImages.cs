@@ -45,7 +45,15 @@ public sealed class RemoteImages
             AutomaticDecompression = DecompressionMethods.All,
         };
 
-        var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) };
+        // The cap is on the client as well as checked afterwards. A server that declares no
+        // length, or lies about it, would otherwise be buffered in full before the check that
+        // rejects it — and the reader chose to fetch from a host precisely because a stranger
+        // asked them to.
+        var client = new HttpClient(handler)
+        {
+            Timeout = TimeSpan.FromSeconds(10),
+            MaxResponseContentBufferSize = MaxBytes,
+        };
 
         // Says what it is. A user agent naming a browser would be a small lie told to every
         // tracking server the reader ever allows.

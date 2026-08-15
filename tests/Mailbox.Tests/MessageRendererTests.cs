@@ -156,6 +156,91 @@ public class HtmlSanitizerTests
         Assert.DoesNotContain("behavior", body, StringComparison.OrdinalIgnoreCase);
     }
 
+    // ---- The document's own structure -------------------------------------------------------
+
+    /// <summary>
+    /// Where real mail actually keeps its styling. Every other stylesheet test writes a bare
+    /// <c>&lt;style&gt;</c>, which is not how a message is written: a head that took its contents
+    /// with it dropped the sheet before the scrubber ever saw it, and every styled message
+    /// rendered unstyled while the tests stayed green.
+    /// </summary>
+    [Fact]
+    public void AStylesheetInsideTheHeadIsKept()
+    {
+        var body = Body(
+            "<html><head><meta charset=\"utf-8\"><title>Ignore me</title>"
+            + "<style>.lead{color:#336699}</style></head>"
+            + "<body><p class=\"lead\">x</p></body></html>");
+
+        Assert.Contains("#336699", body, StringComparison.Ordinal);
+        Assert.Contains("class=\"lead\"", body, StringComparison.Ordinal);
+    }
+
+    /// <summary>The head is transparent, not trusted: what is dropped inside one still is.</summary>
+    [Theory]
+    [InlineData("<title>Secret</title>", "Secret")]
+    [InlineData("<script>var secret = 1;</script>", "secret")]
+    [InlineData("<link rel=\"stylesheet\" href=\"https://evil.example/x.css\">", "evil.example")]
+    [InlineData("<base href=\"https://evil.example/\">", "evil.example")]
+    [InlineData("<meta http-equiv=\"refresh\" content=\"0;url=https://evil.example\">", "evil.example")]
+    public void WhatIsDroppedInAHeadIsStillDropped(string head, string forbidden)
+    {
+        var body = Body($"<html><head>{head}</head><body><p>Kept</p></body></html>");
+
+        Assert.DoesNotContain(forbidden, body, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Kept", body, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A resource named by a head stylesheet is counted like any other, so the tracker report
+    /// does not quietly under-report the sheet most senders put their images in.
+    /// </summary>
+    [Fact]
+    public void ARemoteResourceInAHeadStylesheetIsCountedToo()
+    {
+        var result = Render(
+            "<html><head><style>.x{background:url(https://cdn.example/bg.png)}</style></head>"
+            + "<body>x</body></html>");
+
+        Assert.Equal(["cdn.example"], result.Hosts);
+        Assert.DoesNotContain("cdn.example", result.Html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// An element that never has an end tag must not start a skip, because the end tag that
+    /// would finish it never arrives. One stray <c>&lt;meta&gt;</c> swallowed every remaining
+    /// byte of the message, and the reader saw a message that simply stopped. Writing them
+    /// self-closed happened to work, which is why no test caught it.
+    /// </summary>
+    [Theory]
+    [InlineData("<meta name=\"x\">")]
+    [InlineData("<link rel=\"stylesheet\" href=\"x\">")]
+    [InlineData("<base href=\"https://example.com/\">")]
+    [InlineData("<input type=\"text\">")]
+    [InlineData("<source src=\"x\">")]
+    [InlineData("<track src=\"x\">")]
+    [InlineData("<param name=\"x\">")]
+    [InlineData("<area shape=\"rect\">")]
+    [InlineData("<embed src=\"x.swf\">")]
+    public void AVoidElementDoesNotSwallowTheRestOfTheMessage(string element)
+    {
+        var body = Body($"<p>Before</p>{element}<p>After</p>");
+
+        Assert.Contains("Before", body, StringComparison.Ordinal);
+        Assert.Contains("After", body, StringComparison.Ordinal);
+    }
+
+    /// <summary>The wrapping document's own html, head and body are not nested inside it.</summary>
+    [Fact]
+    public void TheMessagesOwnDocumentElementsAreNotRepeated()
+    {
+        var body = Body("<html><head></head><body><p>x</p></body></html>");
+
+        Assert.DoesNotContain("<html", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("<head", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("<body", body, StringComparison.OrdinalIgnoreCase);
+    }
+
     // ---- Remote content -------------------------------------------------------------------
 
     [Fact]

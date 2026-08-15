@@ -15,9 +15,8 @@ namespace Mailbox.App.Views;
 /// </summary>
 /// <remarks>
 /// One chip per attachment, with what it is and how big. Clicking one saves it somewhere the
-/// reader chose and opens it with the desktop's own handler — rather than opening it from a
-/// temporary file nobody can find afterwards, which is how attachments get lost and how they
-/// get run by accident.
+/// reader chose — rather than opening it from a temporary file nobody can find afterwards,
+/// which is how attachments get lost and how they get run by accident.
 /// </remarks>
 public sealed class AttachmentStrip : Border
 {
@@ -92,9 +91,12 @@ public sealed class AttachmentStrip : Border
             Padding = new Thickness(9, 4),
             Margin = new Thickness(0, 0, 6, 0),
             BorderThickness = new Thickness(1),
-            [ToolTip.TipProperty] = attachment.FromTnef
-                ? $"{attachment.Name} — carried inside winmail.dat"
-                : attachment.Name,
+            [ToolTip.TipProperty] = attachment switch
+            {
+                { FromTnef: true } => $"{attachment.Name} — carried inside winmail.dat",
+                { IsMessage: true } => $"{attachment.Name} — a message, saved as .eml",
+                _ => attachment.Name,
+            },
         };
         Bind(button, BorderBrushProperty, "border.subtle.brush");
         Bind(button, BackgroundProperty, "surface.raised.brush");
@@ -104,12 +106,16 @@ public sealed class AttachmentStrip : Border
     }
 
     /// <summary>
-    /// Saves an attachment where the reader asks, and offers to open it afterwards.
+    /// Saves an attachment where the reader asks.
     /// </summary>
     /// <remarks>
-    /// Saving first, and asking, is deliberate. An attachment opened straight from a temporary
+    /// Saving rather than opening is deliberate. An attachment opened straight from a temporary
     /// file is one nobody chose to keep and nobody can find again, and a client that opens
     /// whatever a stranger sent without a step in between is doing the attacker's clicking.
+    /// <para>
+    /// The suggestion is the sanitized name, never the raw one: a file name arrives with the
+    /// message and is therefore text a stranger chose. See §19 on hostile input.
+    /// </para>
     /// </remarks>
     private async Task SaveAsync(Attachment attachment)
     {
@@ -118,7 +124,7 @@ public sealed class AttachmentStrip : Border
         var file = await top.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
             Title = "Save attachment",
-            SuggestedFileName = attachment.Name,
+            SuggestedFileName = attachment.SafeName,
         });
 
         if (file?.TryGetLocalPath() is not { } path) return;
