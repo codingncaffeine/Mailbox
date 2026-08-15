@@ -35,9 +35,15 @@ public sealed record PollProgress(string Account, int Done, int Total, string St
 /// already holds.
 /// </para>
 /// </remarks>
-public sealed class Pop3Receiver(MailRepository repository)
+public sealed class Pop3Receiver(MailRepository repository, Func<DateTimeOffset>? now = null)
 {
     private readonly MailRepository _repository = repository;
+
+    /// <summary>
+    /// The clock. Injectable because "remove from the server after N days" is arithmetic on
+    /// it, and a rule that deletes mail is not one to test against whatever today happens to be.
+    /// </summary>
+    private readonly Func<DateTimeOffset> _now = now ?? (() => DateTimeOffset.UtcNow);
 
     /// <summary>Lets a test supply a fake session. Null uses MailKit.</summary>
     public Func<IPop3Session>? SessionFactory { get; set; }
@@ -96,6 +102,7 @@ public sealed class Pop3Receiver(MailRepository repository)
         var downloaded = 0;
         var alreadyHad = 0;
         var toRemove = new List<int>();
+        var expired = Expired(inbox, account.Policy);
 
         for (var index = 0; index < uids.Count && downloaded < account.Policy.MaxPerPoll; index++)
         {
@@ -105,7 +112,7 @@ public sealed class Pop3Receiver(MailRepository repository)
             if (known.Contains(uid))
             {
                 alreadyHad++;
-                if (ShouldRemove(account.Policy)) toRemove.Add(index);
+                if (ShouldRemove(account.Policy) || expired.Contains(uid)) toRemove.Add(index);
                 continue;
             }
 
@@ -129,8 +136,29 @@ public sealed class Pop3Receiver(MailRepository repository)
         message.WriteTo(buffer);
         var raw = buffer.ToArray();
 
-        var summary = MessageMapper.ToSummary(message, uid, raw.Length, DateTimeOffset.UtcNow);
+        var summary = MessageMapper.ToSummary(message, uid, raw.Length, _now());
         _repository.AddMessage(inbox.Id, summary, raw);
+    }
+
+    /// <summary>
+    /// The UIDLs whose copies here are old enough that the user has asked for the server's to
+    /// go.
+    /// </summary>
+    /// <remarks>
+    /// Counted from when the message was <em>downloaded</em>, not from its own date. A message
+    /// written a year ago and collected this morning is one day old as far as this rule is
+    /// concerned; counting from the header would delete it off the server the moment it
+    /// arrived, which is the opposite of what "leave a copy for 14 days" means.
+    /// <para>
+    /// Only consulted while leave-on-server is set. Without it the mail is being removed as it
+    /// is downloaded anyway, and an age has nothing left to decide.
+    /// </para>
+    /// </remarks>
+    private HashSet<string> Expired(Folder inbox, Pop3Policy policy)
+    {
+        if (!policy.LeaveOnServer || policy.DeleteAfterDays is not { } days) return [];
+
+        return _repository.ServerUidsOlderThan(inbox.Id, _now().AddDays(-days));
     }
 
     /// <summary>

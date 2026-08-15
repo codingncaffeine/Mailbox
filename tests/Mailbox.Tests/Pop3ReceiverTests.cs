@@ -242,4 +242,57 @@ public class Pop3ReceiverTests
         Assert.True(result.Succeeded);
         Assert.Equal(0, result.Downloaded);
     }
+
+    /// <summary>
+    /// "Leave a copy, remove after 14 days" counts from the download, not from the message's own
+    /// date — otherwise collecting a year-old message would delete the server's copy on the
+    /// same poll that fetched it.
+    /// </summary>
+    [Fact]
+    public async Task MailIsRemovedFromTheServerOnceItsCopyHereIsOldEnough()
+    {
+        var (store, repo, inbox) = Fresh();
+        using var _ = store;
+        var server = new FakePop3().With("uid-1", "Old").With("uid-2", "Older");
+
+        var day = new DateTimeOffset(2026, 1, 1, 9, 0, 0, TimeSpan.Zero);
+        var policy = new Pop3Policy { LeaveOnServer = true, DeleteAfterDays = 14 };
+
+        // Collected, and left alone: nothing here is old yet.
+        var first = new Pop3Receiver(repo, () => day) { SessionFactory = () => server };
+        await first.PollAsync(Connection(policy), inbox, null, Ct);
+        Assert.Empty(server.Deleted);
+
+        // Thirteen days on, still inside the window.
+        var thirteen = new Pop3Receiver(repo, () => day.AddDays(13)) { SessionFactory = () => server };
+        await thirteen.PollAsync(Connection(policy), inbox, null, Ct);
+        Assert.Empty(server.Deleted);
+
+        var later = new Pop3Receiver(repo, () => day.AddDays(15)) { SessionFactory = () => server };
+        await later.PollAsync(Connection(policy), inbox, null, Ct);
+
+        Assert.Equal(["uid-1", "uid-2"], server.Deleted);
+
+        // The local copies stay. Removing the server's is the whole point of keeping ours.
+        Assert.Equal(2, repo.Messages(inbox.Id).Count);
+    }
+
+    [Fact]
+    public async Task WithNoAgeSetNothingIsEverRemoved()
+    {
+        var (store, repo, inbox) = Fresh();
+        using var _ = store;
+        var server = new FakePop3().With("uid-1");
+
+        var day = new DateTimeOffset(2026, 1, 1, 9, 0, 0, TimeSpan.Zero);
+        var policy = new Pop3Policy { LeaveOnServer = true };
+
+        await new Pop3Receiver(repo, () => day) { SessionFactory = () => server }
+            .PollAsync(Connection(policy), inbox, null, Ct);
+
+        await new Pop3Receiver(repo, () => day.AddYears(5)) { SessionFactory = () => server }
+            .PollAsync(Connection(policy), inbox, null, Ct);
+
+        Assert.Empty(server.Deleted);
+    }
 }
