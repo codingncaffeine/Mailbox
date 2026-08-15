@@ -400,6 +400,19 @@ public partial class MainWindow : Window
                     compose.PoseHeader("a.person@example.com", "b.person@example.com", "Subject line");
                 }
 
+                // Types into the To line and reports what the Auto-Complete List offered. A popup
+                // is a separate surface and never appears in a capture, so the list is proved by
+                // asking it rather than by photographing it.
+                if (Environment.GetEnvironmentVariable("MAILBOX_COMPOSE_TYPE_TO") is { Length: > 0 } typed)
+                {
+                    compose.Opened += (_, _) => Dispatcher.UIThread.Post(() =>
+                    {
+                        compose.PoseTyping(typed);
+                        var (open, offered) = compose.ToLineCompletion;
+                        Console.WriteLine($"Auto-complete on To for \"{typed}\": open={open}, offered={offered}");
+                    }, DispatcherPriority.Background);
+                }
+
                 // Presses Send on a posed message, so what the window actually builds can be
                 // read back out of the outbox and checked as MIME. Undo Send's hold keeps it
                 // there long enough. The only way to audit the Send button is to press it.

@@ -501,6 +501,99 @@ public sealed class MailRepository(MailStore store)
             ("$category", categoryId));
     }
 
+    // ---- Auto-Complete List -------------------------------------------------------------------
+
+    /// <summary>
+    /// Remembers who a message went to. Called from the send path with every recipient, so the
+    /// list is fed by what was actually addressed rather than by anything typed and abandoned.
+    /// </summary>
+    /// <remarks>
+    /// The address is the key and the name is the latest one used with it: a correspondent who
+    /// changes how they sign their name gets one entry that follows them, not two that compete.
+    /// A blank name never overwrites a real one — a reply typed as a bare address is not a
+    /// reason to forget what someone is called.
+    /// </remarks>
+    public void RecordRecipients(IEnumerable<(string Address, string? DisplayName)> recipients,
+        DateTimeOffset now)
+    {
+        _store.InTransaction(() =>
+        {
+            foreach (var (address, name) in recipients)
+            {
+                if (string.IsNullOrWhiteSpace(address) || !address.Contains('@')) continue;
+
+                _store.Execute(
+                    """
+                    INSERT INTO nickname_cache (address, display_name, weight, last_used_utc)
+                    VALUES ($address, $name, 1, $now)
+                    ON CONFLICT(address) DO UPDATE SET
+                        display_name = CASE WHEN length(excluded.display_name) > 0
+                                            THEN excluded.display_name ELSE display_name END,
+                        weight = weight + 1,
+                        last_used_utc = excluded.last_used_utc
+                    """,
+                    ("$address", address.Trim().ToLowerInvariant()),
+                    ("$name", (name ?? string.Empty).Trim()),
+                    ("$now", now.ToUnixTimeSeconds()));
+            }
+
+            return 0;
+        });
+    }
+
+    /// <summary>
+    /// Entries matching what has been typed so far — by the start of the address, of the name,
+    /// or of any word in the name — most used first, most recent breaking ties.
+    /// </summary>
+    /// <remarks>
+    /// Word starts matter because people type surnames: "smi" should find "Alex Smith". The
+    /// match is done in SQL against a lower-cased copy so a long list is still one indexed
+    /// statement rather than a scan through every row in managed code.
+    /// </remarks>
+    public IReadOnlyList<Nickname> SuggestRecipients(string typed, int limit = 8)
+    {
+        var prefix = typed.Trim().ToLowerInvariant();
+        if (prefix.Length == 0) return [];
+
+        return _store.Query(
+            """
+            SELECT address, display_name, weight, last_used_utc
+            FROM nickname_cache
+            WHERE address LIKE $prefix || '%' ESCAPE '\'
+               OR lower(display_name) LIKE $prefix || '%' ESCAPE '\'
+               OR lower(display_name) LIKE '% ' || $prefix || '%' ESCAPE '\'
+            ORDER BY weight DESC, last_used_utc DESC, address
+            LIMIT $limit
+            """,
+            r => new Nickname(
+                r.GetString(0),
+                r.GetString(1),
+                r.GetInt32(2),
+                DateTimeOffset.FromUnixTimeSeconds(r.GetInt64(3))),
+            ("$prefix", EscapeLike(prefix)),
+            ("$limit", limit));
+    }
+
+    /// <summary>Takes one entry out — the ✕ on a suggestion, for an address that was a mistake.</summary>
+    public void ForgetRecipient(string address) => _store.Execute(
+        "DELETE FROM nickname_cache WHERE address = $address",
+        ("$address", address.Trim().ToLowerInvariant()));
+
+    /// <summary>Empties the list. The Options page's button.</summary>
+    public int ClearRecipients() => _store.Execute("DELETE FROM nickname_cache");
+
+    /// <summary>How many entries the list holds, for the button's confirmation.</summary>
+    public long RecipientCount() => _store.ScalarLong("SELECT count(*) FROM nickname_cache");
+
+    /// <summary>
+    /// Makes typed text safe as a LIKE prefix: the two wildcards and the escape itself are
+    /// escaped, so a typed underscore matches an underscore rather than any character.
+    /// </summary>
+    internal static string EscapeLike(string text) => text
+        .Replace("\\", "\\\\")
+        .Replace("%", "\\%")
+        .Replace("_", "\\_");
+
     // ---- Outbox ---------------------------------------------------------------------------
 
     /// <summary>

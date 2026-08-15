@@ -228,6 +228,12 @@ public class SeedHarness
         var inbox = account.Mail.FolderWithRole(account.Account.Id, FolderRole.Inbox)!;
         var when = DateTimeOffset.UtcNow;
 
+        // Everyone the seeded mail is from has been written to, so the To line has names to
+        // offer — the Auto-Complete List is fed by sending, and a seed has sent nothing.
+        account.Mail.RecordRecipients(
+            messages.SelectMany(m => m.From.Mailboxes).Select(m => (m.Address, (string?)m.Name)),
+            when);
+
         foreach (var message in messages)
         {
             message.Date = when;

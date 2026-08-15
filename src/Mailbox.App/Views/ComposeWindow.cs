@@ -246,6 +246,19 @@ public sealed class ComposeWindow : Window
         UpdateStatus();
         UpdateTitle();
 
+        // The Auto-Complete List under each recipient line. The list is per account file and
+        // the window can send from any account, so what is offered is the union, weighted by
+        // use across the lot; forgetting an entry forgets it everywhere.
+        foreach (var field in new[] { _to, _cc, _bcc })
+        {
+            _completions.Add(RecipientAutocomplete.Attach(
+                field,
+                SuggestRecipients,
+                ForgetRecipient,
+                () => App.MailOptions.UseAutoCompleteList,
+                () => App.MailOptions.CommasSeparateRecipients));
+        }
+
         // The signature this account signs new mail with, if it has chosen one. After the tree
         // is built, because it goes into the document and the document is part of that tree.
         InsertDefaultSignature();
@@ -946,6 +959,76 @@ public sealed class ComposeWindow : Window
     private const double BodyGutter = 5;
 
     private static TextBox Field() => new() { MinWidth = 200 };
+
+    private readonly List<RecipientAutocomplete> _completions = [];
+
+    /// <summary>
+    /// The Auto-Complete List for what has been typed, merged across every account: one entry
+    /// per address, its weight the sum, its name the most-used account's.
+    /// </summary>
+    private IReadOnlyList<Nickname> SuggestRecipients(string typed)
+    {
+        if (_accounts is null) return [];
+
+        var merged = new Dictionary<string, Nickname>(StringComparer.OrdinalIgnoreCase);
+        foreach (var account in _accounts.All)
+        {
+            foreach (var entry in account.Mail.SuggestRecipients(typed))
+            {
+                merged[entry.Address] = merged.TryGetValue(entry.Address, out var seen)
+                    ? seen with
+                    {
+                        Weight = seen.Weight + entry.Weight,
+                        DisplayName = seen.DisplayName.Length > 0 ? seen.DisplayName : entry.DisplayName,
+                        LastUsed = entry.LastUsed > seen.LastUsed ? entry.LastUsed : seen.LastUsed,
+                    }
+                    : entry;
+            }
+        }
+
+        return
+        [
+            .. merged.Values
+                .OrderByDescending(e => e.Weight)
+                .ThenByDescending(e => e.LastUsed)
+                .ThenBy(e => e.Address, StringComparer.OrdinalIgnoreCase)
+                .Take(8),
+        ];
+    }
+
+    private void ForgetRecipient(string address)
+    {
+        if (_accounts is null) return;
+        foreach (var account in _accounts.All) account.Mail.ForgetRecipient(address);
+    }
+
+    /// <summary>
+    /// Feeds the list from a message that has just been queued: every recipient, under the
+    /// name it was addressed with. Here rather than in the sender because the list is about
+    /// what the writer chose to type, and the sender sees only the message.
+    /// </summary>
+    private static void RememberRecipients(OpenAccount account, MimeMessage message)
+    {
+        var recipients = message.To.Mailboxes
+            .Concat(message.Cc.Mailboxes)
+            .Concat(message.Bcc.Mailboxes)
+            .Select(m => (m.Address, (string?)m.Name));
+
+        account.Mail.RecordRecipients(recipients, DateTimeOffset.UtcNow);
+    }
+
+    /// <summary>Types into the To line as a person would, caret at the end, for the harness.</summary>
+    public void PoseTyping(string text)
+    {
+        _to.Focus();
+        _to.Text = text;
+        _to.CaretIndex = text.Length;
+        if (_completions.Count > 0) _completions[0].Refresh();
+    }
+
+    /// <summary>What the Auto-Complete List last offered on the To line, for the harness.</summary>
+    public (bool IsOpen, int Offered) ToLineCompletion =>
+        _completions.Count > 0 ? (_completions[0].IsOpen, _completions[0].Offered) : (false, 0);
 
     private static Control IconBlock(string icon, double size)
     {
@@ -2005,6 +2088,7 @@ public sealed class ComposeWindow : Window
         {
             var sender = new SmtpSender(account.Mail);
             var outboxId = sender.Queue(account.Account.Id, message);
+            RememberRecipients(account, message);
 
             // Delayed delivery is the reader's own choice about this message, so it wins over
             // the few seconds Undo Send holds everything for — asking to send on Thursday and

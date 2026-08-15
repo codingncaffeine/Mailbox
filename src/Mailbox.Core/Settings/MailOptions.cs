@@ -39,6 +39,7 @@ public sealed class MailOptions(SettingsStore settings)
     public const string CommasSeparateRecipientsKey = "mail.send.commas";
     public const string AutomaticNameCheckingKey = "mail.send.checknames";
     public const string CtrlEnterSendsKey = "mail.send.ctrlenter";
+    public const string UseAutoCompleteListKey = "mail.send.autocomplete";
     public const string RequestDeliveryReceiptKey = "mail.tracking.delivery";
     public const string RequestReadReceiptKey = "mail.tracking.read";
     public const string EmptyDeletedOnExitKey = "mail.exit.emptydeleted";
@@ -106,6 +107,12 @@ public sealed class MailOptions(SettingsStore settings)
     public bool AutomaticNameChecking => _settings.GetBool(AutomaticNameCheckingKey, true);
 
     public bool CtrlEnterSends => _settings.GetBool(CtrlEnterSendsKey, true);
+
+    /// <summary>
+    /// Whether the To, Cc and Bcc lines offer names from the Auto-Complete List as they are
+    /// typed. Off, the list is still fed — turning it back on has something to offer.
+    /// </summary>
+    public bool UseAutoCompleteList => _settings.GetBool(UseAutoCompleteListKey, true);
 
     public bool RequestDeliveryReceipt => _settings.GetBool(RequestDeliveryReceiptKey, false);
 

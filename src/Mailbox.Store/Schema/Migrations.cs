@@ -223,6 +223,22 @@ public static class Migrations
             checked_utc     INTEGER NOT NULL
         );
         """,
+
+        // ---- 9: the Auto-Complete List ------------------------------------------------------
+        //
+        // Every address a message has been sent to, weighted by how often and how recently, so
+        // the To line can offer it back as it is typed. Per account file like everything else
+        // — the compose window merges across accounts when it asks — and keyed on the address
+        // alone, because "which name did they use last time" is what the display name column
+        // is for, not a second row.
+        """
+        CREATE TABLE nickname_cache (
+            address        TEXT    NOT NULL PRIMARY KEY,
+            display_name   TEXT    NOT NULL DEFAULT '',
+            weight         INTEGER NOT NULL DEFAULT 0,
+            last_used_utc  INTEGER NOT NULL
+        );
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>
