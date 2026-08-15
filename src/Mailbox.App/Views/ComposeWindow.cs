@@ -228,13 +228,24 @@ public sealed class ComposeWindow : Window
         DockPanel.SetDock(header, Dock.Top);
         root.Children.Add(header);
 
-        var status = BuildStatusBar();
-        DockPanel.SetDock(status, Dock.Bottom);
-        root.Children.Add(status);
+        var info = BuildInfoBar();
+        DockPanel.SetDock(info, Dock.Top);
+        root.Children.Add(info);
 
+        // The body is inset 5px left and right, and the chrome shows through as a gutter —
+        // measured: the white starts at x=18 in a window whose content starts at 13, and ends
+        // at 1647 with five more before the frame. It runs to the bottom; there is no status
+        // bar in the reference, and the format the window is in is already in its title.
         var body = new Border { Child = _body, Padding = new Thickness(12, 8) };
         Bind(body, Border.BackgroundProperty, "compose.body.background.brush");
-        root.Children.Add(body);
+
+        var bodyHost = new Border
+        {
+            Child = body,
+            Padding = new Thickness(BodyGutter, 0, BodyGutter, 0),
+        };
+        Bind(bodyHost, Border.BackgroundProperty, "compose.header.background.brush");
+        root.Children.Add(bodyHost);
 
         layered.Children.Add(root);
 
@@ -392,7 +403,9 @@ public sealed class ComposeWindow : Window
         // has to make the header taller, and an auto row did not do that: Bcc appeared, the
         // header kept its old height, and Subject was painted over by the body below. A stack's
         // height is the sum of what is visible, recomputed every pass.
-        var rows = new StackPanel { Spacing = 2 };
+        // No spacing: each row already carries its own gap as a bottom margin, and adding
+        // both put the rows on a 42px pitch where the reference measures 40.
+        var rows = new StackPanel();
 
         _fromRow = AddressRow(rows, "From", _fromAddress, opensAddressBook: false, picksAccount: true);
         AddressRow(rows, "To", _to);
@@ -423,7 +436,7 @@ public sealed class ComposeWindow : Window
                 },
             },
             Width = SendWidth,
-            Height = RowHeight * 2 + RowGap,
+            Height = SendHeight,
             Margin = new Thickness(SendInset, 0, LabelInset, 0),
             VerticalAlignment = VerticalAlignment.Top,
             BorderThickness = new Thickness(1),
@@ -441,7 +454,7 @@ public sealed class ComposeWindow : Window
         var grid = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("Auto,*"),
-            Margin = new Thickness(0, 10, 14, 10),
+            Margin = new Thickness(0, HeaderTopInset, 14, HeaderTopInset),
         };
         Grid.SetColumn(send, 0);
         grid.Children.Add(send);
@@ -453,16 +466,22 @@ public sealed class ComposeWindow : Window
         return host;
     }
 
-    // Measured off the compose capture. The header's own background runs from x=13; Send is a
-    // filled button at x=34–93; the From/To/Cc buttons start at x=110; and the field rules begin
-    // at x=202. Rows sit 40px apart with 31px of button in each.
+    // Measured off the compose capture, all of it. Horizontally: the header's background runs
+    // from x=13, Send is a filled button at x=34–93, the From/To/Cc buttons start at x=110, and
+    // the field rules begin at x=202. Vertically: the header background starts at y=136 and the
+    // first button at y=161, so the block is inset 25; buttons are 31 tall on a 40 pitch; and
+    // the rule under a field sits at 197 — five below its button, not level with it, which is
+    // why the field is taller than the button beside it. Send runs 161–236.
     private const double SendInset = 21;
     private const double SendWidth = 58;
+    private const double SendHeight = 75;
     private const double LabelInset = 17;
     private const double LabelWidth = 80;
     private const double FieldInset = 12;
+    private const double HeaderTopInset = 25;
+    private const double RowPitch = 40;
     private const double RowHeight = 31;
-    private const double RowGap = 9;
+    private const double FieldHeight = 36;
 
     /// <summary>
     /// One address row — its label and its field as a single control, so the pair is shown and
@@ -472,11 +491,12 @@ public sealed class ComposeWindow : Window
         StackPanel rows, string label, Control field,
         bool opensAddressBook = true, bool picksAccount = false)
     {
+        // The row is the pitch; the button and the field are different heights within it, which
+        // is what puts the rule below the button rather than level with it.
         var row = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("Auto,*"),
-            Height = RowHeight,
-            Margin = new Thickness(0, 0, 0, RowGap),
+            Height = RowPitch,
         };
 
         Control caption;
@@ -505,6 +525,7 @@ public sealed class ComposeWindow : Window
                 },
                 Width = LabelWidth,
                 Height = RowHeight,
+                VerticalAlignment = VerticalAlignment.Top,
                 HorizontalContentAlignment = HorizontalAlignment.Center,
                 VerticalContentAlignment = VerticalAlignment.Center,
                 BorderThickness = new Thickness(1),
@@ -522,6 +543,7 @@ public sealed class ComposeWindow : Window
                 Content = label,
                 Width = LabelWidth,
                 Height = RowHeight,
+                VerticalAlignment = VerticalAlignment.Top,
                 HorizontalContentAlignment = HorizontalAlignment.Center,
                 VerticalContentAlignment = VerticalAlignment.Center,
                 BorderThickness = new Thickness(1),
@@ -539,8 +561,10 @@ public sealed class ComposeWindow : Window
             {
                 Text = label,
                 Width = LabelWidth,
-                VerticalAlignment = VerticalAlignment.Center,
+                Height = RowHeight,
+                VerticalAlignment = VerticalAlignment.Top,
                 TextAlignment = TextAlignment.Center,
+                Margin = new Thickness(0, 6, 0, 0),
             };
             Bind(text, TextBlock.ForegroundProperty, "text.secondary.brush");
             caption = text;
@@ -551,42 +575,68 @@ public sealed class ComposeWindow : Window
 
         // The fields carry no box. The reference draws a single rule under each one and nothing
         // else, so the address block reads as writing lines rather than as a form.
-        if (field is TextBlock plain) Bind(plain, TextBlock.ForegroundProperty, "text.primary.brush");
-
+        // The rule belongs to the row, not to whatever control sits in it. From shows an
+        // address as text rather than an input, and it is still underlined in the reference —
+        // hanging the rule off the TextBox left that one row without one.
         if (field is TextBox box)
         {
-            box.BorderThickness = new Thickness(0, 0, 0, 1);
+            box.BorderThickness = default;
             box.CornerRadius = default;
             box.Background = Brushes.Transparent;
-            Bind(box, TemplatedControl.BorderBrushProperty, "compose.field.rule.brush");
+            box.Padding = default;
             Bind(box, TemplatedControl.ForegroundProperty, "text.primary.brush");
         }
 
-        field.Margin = new Thickness(FieldInset, 0, 0, 0);
-        field.VerticalAlignment = VerticalAlignment.Stretch;
+        if (field is TextBlock plain) Bind(plain, TextBlock.ForegroundProperty, "text.primary.brush");
 
-        Grid.SetColumn(field, 1);
-        row.Children.Add(field);
+        var underlined = new Border
+        {
+            Child = field,
+            Height = FieldHeight,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(FieldInset, 0, 0, 0),
+            BorderThickness = new Thickness(0, 0, 0, 1),
+            Padding = new Thickness(0, 0, 0, 4),
+        };
+        Bind(underlined, Border.BorderBrushProperty, "compose.field.rule.brush");
+
+        Grid.SetColumn(underlined, 1);
+        row.Children.Add(underlined);
 
         rows.Children.Add(row);
         return row;
     }
 
-    private Control BuildStatusBar()
+    /// <summary>
+    /// The strip that carries a message, between the header and the body.
+    /// </summary>
+    /// <remarks>
+    /// Where the reference puts an InfoBar, and hidden until there is something to say — the
+    /// compose window has no status bar, so a permanent strip would be a band the reference
+    /// does not have. It carries two things: what a button that cannot act yet is waiting for,
+    /// and the state worth stating, which is importance and a delayed send.
+    /// </remarks>
+    private Control BuildInfoBar()
     {
-        Bind(_status, TextBlock.ForegroundProperty, "statusbar.foreground.brush");
-        Bind(_status, TextBlock.FontSizeProperty, "type.ui.size.small.value");
+        Bind(_status, TextBlock.ForegroundProperty, "reading.infobar.text.brush");
+        Bind(_status, TextBlock.FontSizeProperty, "type.ui.size.value");
         _status.VerticalAlignment = VerticalAlignment.Center;
+        _status.TextWrapping = TextWrapping.Wrap;
 
-        var host = new Border
+        _infoBar = new Border
         {
             Child = _status,
-            Height = 26,
-            Padding = new Thickness(12, 0),
+            Padding = new Thickness(BodyGutter + 12, 7),
+            IsVisible = false,
         };
-        Bind(host, Border.BackgroundProperty, "statusbar.background.brush");
-        return host;
+        Bind(_infoBar, Border.BackgroundProperty, "reading.infobar.background.brush");
+        return _infoBar;
     }
+
+    private Border _infoBar = null!;
+
+    /// <summary>The body's inset from the window edge, measured at 5px either side.</summary>
+    private const double BodyGutter = 5;
 
     private static TextBox Field() => new() { MinWidth = 200 };
 
@@ -777,18 +827,42 @@ public sealed class ComposeWindow : Window
         => (value ?? string.Empty)
             .Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
+    /// <summary>
+    /// Restates whatever is worth stating about the message, or hides the bar when nothing is.
+    /// </summary>
+    /// <remarks>
+    /// The format is not among them: the title bar already reads "Message (Plain Text)", which
+    /// is exactly where the reference says it.
+    /// </remarks>
     private void UpdateStatus()
     {
-        var bits = new List<string> { PlainTextNotice };
+        var bits = new List<string>();
 
-        if (_importance != MessageImportance.Normal) bits.Add($"{_importance} importance");
-        if (_attachments.Count > 0) bits.Add($"{_attachments.Count} attached");
-        if (_notBefore is { } when) bits.Add($"held until {when.LocalDateTime:g}");
+        if (_importance != MessageImportance.Normal)
+        {
+            bits.Add($"This message will be sent with {_importance} importance.");
+        }
 
-        _status.Text = string.Join("  ·  ", bits);
+        if (_notBefore is { } when)
+        {
+            bits.Add($"It will not be delivered before {when.LocalDateTime:g}.");
+        }
+
+        if (bits.Count == 0)
+        {
+            _status.Text = string.Empty;
+            _infoBar.IsVisible = false;
+            return;
+        }
+
+        Report(string.Join("  ", bits));
     }
 
-    private void Report(string message) => _status.Text = message;
+    private void Report(string message)
+    {
+        _status.Text = message;
+        _infoBar.IsVisible = !string.IsNullOrWhiteSpace(message);
+    }
 
     // ----------------------------------------------------------------------------------
     // Dialogs and pickers
