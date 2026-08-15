@@ -180,6 +180,18 @@ public static class TokenKeys
         public const string InfoBarWarningBackground = "reading.infobar.warning.background";
     }
 
+    /// <summary>
+    /// The compose window's own surfaces. Its body is a document rather than a pane: the
+    /// reference draws it white even in Dark Gray, where the reading pane is #D4D4D4.
+    /// </summary>
+    public static class Compose
+    {
+        public const string BodyBackground = "compose.body.background";
+        public const string BodyText = "compose.body.text";
+        public const string HeaderBackground = "compose.header.background";
+        public const string FieldRule = "compose.field.rule";
+    }
+
     public static class StatusBar
     {
         public const string Background = "statusbar.background";
@@ -237,6 +249,8 @@ public static class TokenKeys
         Ribbon.TabSelected, Ribbon.TabUnderline, Ribbon.TabText, Ribbon.TabTextSelected, Ribbon.GroupLabel,
         Ribbon.GroupSeparator, Ribbon.Height, Ribbon.TabStripHeight,
         Workspace.Inset,
+        Compose.BodyBackground, Compose.BodyText,
+        Compose.HeaderBackground, Compose.FieldRule,
         Nav.Background, Nav.ItemText, Nav.ItemHover, Nav.ItemSelected, Nav.UnreadCount, Nav.Width,
         List.Background, List.RowBackground, List.HeaderBackground, List.HeaderText,
         List.RowHeight, List.RowHeightCompact, List.RowHover, List.RowSelected,

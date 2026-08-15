@@ -333,6 +333,14 @@ public static class OfficeThemes
         t.Set(TokenKeys.List.GroupHeaderText, "{palette.neutral.white}");
         t.Set(TokenKeys.List.Separator, "{palette.neutral.quaternary}");
 
+        // Measured off the compose capture: the header is the same #666666 pane the message
+        // list sits in, and the body is white — a document, not a pane. This is the one place
+        // Dark Gray shows white, which is why it needs its own token rather than a surface.
+        t.Set(TokenKeys.Compose.BodyBackground, "{palette.neutral.white}");
+        t.Set(TokenKeys.Compose.BodyText, "{palette.neutral.primary}");
+        t.Set(TokenKeys.Compose.HeaderBackground, "{palette.content.pane}");
+        t.Set(TokenKeys.Compose.FieldRule, "{palette.neutral.tertiary}");
+
         t.Set(TokenKeys.Reading.Background, "{palette.content.row}");
         t.Set(TokenKeys.Reading.HeaderBackground, "{palette.content.row}");
 
@@ -455,6 +463,12 @@ public static class OfficeThemes
         t.Set(TokenKeys.List.GroupHeaderText, "{palette.brand.primary}");
         t.Set(TokenKeys.List.Separator, "{palette.neutral.light}");
 
+        // Black is the one theme where a white page would be wrong.
+        t.Set(TokenKeys.Compose.BodyBackground, "{palette.raised}");
+        t.Set(TokenKeys.Compose.BodyText, "{palette.neutral.primary}");
+        t.Set(TokenKeys.Compose.HeaderBackground, "{palette.sunken}");
+        t.Set(TokenKeys.Compose.FieldRule, "{palette.neutral.tertiary}");
+
         t.Set(TokenKeys.Reading.Background, "{palette.ground}");
         t.Set(TokenKeys.Reading.HeaderBackground, "{palette.raised}");
         t.Set(TokenKeys.Reading.InfoBarBackground, "{palette.raised}");
@@ -545,6 +559,13 @@ public static class OfficeThemes
         t.Set(TokenKeys.List.GroupHeaderBackground, "{palette.neutral.lighter}");
         t.Set(TokenKeys.List.GroupHeaderText, "{palette.brand.primary}");
         t.Set(TokenKeys.List.Separator, "{palette.neutral.light}");
+
+        // Compose: the body is a document page, not a pane, so it is white wherever the
+        // theme is light. Its header is the darker strip the address fields sit on.
+        t.Set(TokenKeys.Compose.BodyBackground, "{palette.neutral.white}");
+        t.Set(TokenKeys.Compose.BodyText, "{palette.neutral.primary}");
+        t.Set(TokenKeys.Compose.HeaderBackground, "{palette.neutral.lighter}");
+        t.Set(TokenKeys.Compose.FieldRule, "{palette.neutral.tertiary}");
 
         t.Set(TokenKeys.Reading.Background, "{palette.neutral.white}");
         t.Set(TokenKeys.Reading.HeaderBackground, "{palette.neutral.white}");
