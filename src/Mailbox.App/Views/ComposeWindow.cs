@@ -93,7 +93,15 @@ public sealed class ComposeWindow : Window
         Bind(_body, TemplatedControl.BackgroundProperty, "surface.ground.brush");
         Bind(_body, TemplatedControl.ForegroundProperty, "text.primary.brush");
 
-        _ribbon = new RibbonView(catalog, DefaultRibbonLayouts.Compose);
+        _ribbon = new RibbonView(catalog, DefaultRibbonLayouts.Compose)
+        {
+            CommandEnabled = IsUsable,
+        };
+
+        // The left of the Message tab is pale on an empty message and darkens as soon as there
+        // is something to format. That is enablement, and it has to track every keystroke.
+        _body.TextChanged += (_, _) => _ribbon.RefreshEnablement();
+
         _ribbon.CommandInvoked += (_, e) => Run(e.Command);
         _ribbon.BackstageRequested += (_, _) =>
             Report("The compose window's File page is Phase 6.");
@@ -104,8 +112,44 @@ public sealed class ComposeWindow : Window
         _to.AttachedToVisualTree += (_, _) => _to.Focus();
     }
 
+    /// <summary>
+    /// Commands that need something in the body before they mean anything — either because they
+    /// format text that is not there, or because they insert into a document that is empty.
+    /// </summary>
+    private static readonly HashSet<CommandId> InsertsIntoBody =
+    [
+        ComposeCommands.Table.Id, ComposeCommands.Pictures.Id, ComposeCommands.StockImages.Id,
+        ComposeCommands.OnlinePictures.Id, ComposeCommands.Shapes.Id, ComposeCommands.Icons.Id,
+        ComposeCommands.Models3D.Id, ComposeCommands.SmartArt.Id, ComposeCommands.Chart.Id,
+        ComposeCommands.Equation.Id, ComposeCommands.Symbol.Id, ComposeCommands.Link.Id,
+        ComposeCommands.Styles.Id, ComposeCommands.ChangeStyles.Id, ComposeCommands.PageColor.Id,
+    ];
+
+    /// <summary>
+    /// Whether a command is usable right now.
+    /// </summary>
+    /// <remarks>
+    /// Paste is the exception among the formatting commands: there is always somewhere to paste
+    /// to, even in an empty message. Everything else in that run needs text to act on.
+    /// </remarks>
+    private bool IsUsable(CommandId id)
+    {
+        if (id == ComposeCommands.Paste.Id) return true;
+        if (!_catalog.TryGet(id, out var command)) return true;
+        if (!command.NeutralIcon && !InsertsIntoBody.Contains(id)) return true;
+
+        return !string.IsNullOrEmpty(_body.Text);
+    }
+
     /// <summary>Selects a ribbon tab by id. Used by the fidelity harness, which cannot click.</summary>
     public void SelectTab(string tabId) => _ribbon.ActiveTabId = tabId;
+
+    /// <summary>Puts text in the body, so a capture can show the ribbon in its enabled state.</summary>
+    public void PoseBodyText(string text)
+    {
+        _body.Text = text;
+        _ribbon.RefreshEnablement();
+    }
 
     /// <summary>Poses the optional address fields, so a capture can show them.</summary>
     public void ShowOptionalFields()
@@ -136,7 +180,15 @@ public sealed class ComposeWindow : Window
         DockPanel.SetDock(title, Dock.Top);
         root.Children.Add(title);
 
-        var ribbonHost = new Border { Child = _ribbon, ZIndex = 2 };
+        // The reference's compose ribbon panel starts 8px in from the window's content edge.
+        // The shell's needs no such inset because the app rail provides it; this window has no
+        // rail, so without it the whole bar sits 8px left of where the capture puts it.
+        var ribbonHost = new Border
+        {
+            Child = _ribbon,
+            ZIndex = 2,
+            Padding = new Thickness(8, 0, 0, 0),
+        };
         DockPanel.SetDock(ribbonHost, Dock.Top);
         root.Children.Add(ribbonHost);
 

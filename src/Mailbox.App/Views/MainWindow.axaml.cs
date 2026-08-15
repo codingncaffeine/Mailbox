@@ -140,7 +140,15 @@ public partial class MainWindow : Window
             Opened += async (_, _) =>
             {
                 var compose = new ComposeWindow(App.Commands, App.Accounts);
+                WindowCapture.ApplyRequestedSize(compose);
                 compose.SelectTab(composeTab == "1" ? "message" : composeTab);
+
+                // The ribbon's left half is pale until the body has something in it, so the
+                // harness can photograph either state.
+                if (Environment.GetEnvironmentVariable("MAILBOX_COMPOSE_BODY") is { Length: > 0 })
+                {
+                    compose.PoseBodyText("The quick brown fox.");
+                }
 
                 // Posed before the window opens: a capture never gets a second layout pass,
                 // so anything toggled afterwards photographs at its old size.

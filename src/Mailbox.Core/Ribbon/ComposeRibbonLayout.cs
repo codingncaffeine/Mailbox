@@ -19,6 +19,25 @@ namespace Mailbox.Core.Ribbon;
 /// </remarks>
 internal static class ComposeRibbonLayout
 {
+    /// <summary>
+    /// The Font box, measured off the capture: x=128–234 on the Message row and x=124–230 on
+    /// Format Text, so 107px either way.
+    /// </summary>
+    private const double FontFieldWidth = 107;
+
+    /// <summary>The Font Size box beside it: x=251–301 and x=247–297, so 51px.</summary>
+    private const double FontSizeFieldWidth = 51;
+
+    /// <summary>
+    /// What the two boxes read. The reference shows whatever is under the caret — "12" on the
+    /// Message capture, "Aptos (Body)" on Format Text — so ours shows the body's default until
+    /// the editor in Phase 5 can report a selection. Calibri rather than Aptos, because §6
+    /// records that Aptos is the one common font with no metric-compatible substitute.
+    /// </summary>
+    private const string DefaultBodyFont = "Calibri";
+
+    private const string DefaultBodySize = "12";
+
     private static RibbonItem Sep => new()
     {
         Command = new CommandId("app.separator"),
@@ -42,13 +61,17 @@ internal static class ComposeRibbonLayout
 
         SimplifiedRows = new Dictionary<string, IReadOnlyList<RibbonItem>>
         {
+            // Cluster boundaries are the separator positions measured off the capture: x = 115,
+            // 819, 899, 1214, 1344, 1388, 1489. Only Attach File, Link, Signature, All Apps and
+            // Editor carry text; the formatting run is icon-only, which is what keeps it to a
+            // third of the bar.
             ["message"] =
             [
-                RibbonItem.Small(ComposeCommands.Paste.Id, RibbonItemKind.SplitButton),
+                RibbonItem.Glyph(ComposeCommands.Paste.Id, RibbonItemKind.SplitButton),
                 RibbonItem.Glyph(ComposeCommands.FormatPainter.Id),
                 Sep,
-                RibbonItem.Small(ComposeCommands.Font.Id, RibbonItemKind.TextBox),
-                RibbonItem.Small(ComposeCommands.FontSize.Id, RibbonItemKind.TextBox),
+                RibbonItem.Combo(ComposeCommands.Font.Id, FontFieldWidth, DefaultBodyFont),
+                RibbonItem.Combo(ComposeCommands.FontSize.Id, FontSizeFieldWidth, DefaultBodySize),
                 RibbonItem.Glyph(ComposeCommands.Bold.Id),
                 RibbonItem.Glyph(ComposeCommands.Italic.Id),
                 RibbonItem.Glyph(ComposeCommands.Underline.Id),
@@ -59,6 +82,8 @@ internal static class ComposeRibbonLayout
                 RibbonItem.Glyph(ComposeCommands.Align.Id, RibbonItemKind.DropDown),
                 RibbonItem.Glyph(ComposeCommands.DecreaseIndent.Id),
                 RibbonItem.Glyph(ComposeCommands.IncreaseIndent.Id),
+                RibbonItem.Overflow(),
+                RibbonItem.Launcher(ComposeCommands.FontDialog.Id),
                 Sep,
                 RibbonItem.Glyph(MailCommands.AddressBook.Id),
                 RibbonItem.Glyph(ComposeCommands.CheckNames.Id),
@@ -74,9 +99,13 @@ internal static class ComposeRibbonLayout
                 RibbonItem.Glyph(ComposeCommands.Dictate.Id),
                 Sep,
                 RibbonItem.Small(ViewCommands.Apps.Id),
+                Sep,
                 RibbonItem.Small(ComposeCommands.Editor.Id),
+                Sep,
             ],
 
+            // Separators measured at x = 243, 337, 1175, 1266. Every item on this tab is
+            // labelled, which is why it is the widest of the five.
             ["insert"] =
             [
                 RibbonItem.Small(ComposeCommands.AttachFile.Id, RibbonItemKind.SplitButton),
@@ -97,6 +126,7 @@ internal static class ComposeRibbonLayout
                 Sep,
                 RibbonItem.Small(ComposeCommands.Equation.Id, RibbonItemKind.SplitButton),
                 RibbonItem.Small(ComposeCommands.Symbol.Id, RibbonItemKind.DropDown),
+                Sep,
             ],
 
             ["options"] =
@@ -108,15 +138,19 @@ internal static class ComposeRibbonLayout
                 RibbonItem.Small(ComposeCommands.PageColor.Id, RibbonItemKind.DropDown),
                 Sep,
                 RibbonItem.Small(ComposeCommands.VotingButtons.Id, RibbonItemKind.DropDown),
+                RibbonItem.Launcher(ComposeCommands.Properties.Id),
+                Sep,
             ],
 
+            // Separators measured at x = 111, 761, 1119, 1367, 1454. The font and paragraph runs
+            // are icon-only; only Styles, Change Styles, Find and Zoom carry text.
             ["formattext"] =
             [
-                RibbonItem.Small(ComposeCommands.Paste.Id, RibbonItemKind.SplitButton),
+                RibbonItem.Glyph(ComposeCommands.Paste.Id, RibbonItemKind.SplitButton),
                 RibbonItem.Glyph(ComposeCommands.FormatPainter.Id),
                 Sep,
-                RibbonItem.Small(ComposeCommands.Font.Id, RibbonItemKind.TextBox),
-                RibbonItem.Small(ComposeCommands.FontSize.Id, RibbonItemKind.TextBox),
+                RibbonItem.Combo(ComposeCommands.Font.Id, FontFieldWidth, DefaultBodyFont),
+                RibbonItem.Combo(ComposeCommands.FontSize.Id, FontSizeFieldWidth, DefaultBodySize),
                 RibbonItem.Glyph(ComposeCommands.GrowFont.Id),
                 RibbonItem.Glyph(ComposeCommands.ShrinkFont.Id),
                 RibbonItem.Glyph(ComposeCommands.Bold.Id),
@@ -128,6 +162,7 @@ internal static class ComposeRibbonLayout
                 RibbonItem.Glyph(ComposeCommands.Highlight.Id, RibbonItemKind.SplitButton),
                 RibbonItem.Glyph(ComposeCommands.FontColor.Id, RibbonItemKind.SplitButton),
                 RibbonItem.Glyph(ComposeCommands.ClearFormatting.Id),
+                RibbonItem.Launcher(ComposeCommands.FontDialog.Id),
                 Sep,
                 RibbonItem.Glyph(ComposeCommands.Bullets.Id, RibbonItemKind.SplitButton),
                 RibbonItem.Glyph(ComposeCommands.Numbering.Id, RibbonItemKind.SplitButton),
@@ -136,14 +171,20 @@ internal static class ComposeRibbonLayout
                 RibbonItem.Glyph(ComposeCommands.IncreaseIndent.Id),
                 RibbonItem.Glyph(ComposeCommands.Align.Id, RibbonItemKind.DropDown),
                 RibbonItem.Glyph(ComposeCommands.LineSpacing.Id, RibbonItemKind.DropDown),
+                RibbonItem.Launcher(ComposeCommands.ParagraphDialog.Id),
                 Sep,
                 RibbonItem.Small(ComposeCommands.Styles.Id, RibbonItemKind.DropDown),
                 RibbonItem.Small(ComposeCommands.ChangeStyles.Id, RibbonItemKind.DropDown),
+                RibbonItem.Launcher(ComposeCommands.StylesDialog.Id),
                 Sep,
                 RibbonItem.Small(ComposeCommands.Find.Id, RibbonItemKind.SplitButton),
+                Sep,
                 RibbonItem.Small(ComposeCommands.Zoom.Id),
+                Sep,
             ],
 
+            // Separators measured at x = 512, 633, 767, 887 — each of Speech, Insights and
+            // Language is its own cluster of one, which is why the row has so many rules in it.
             ["review"] =
             [
                 RibbonItem.Small(ComposeCommands.Spelling.Id, RibbonItemKind.SplitButton),
@@ -152,10 +193,13 @@ internal static class ComposeRibbonLayout
                 RibbonItem.Small(ComposeCommands.WordCount.Id),
                 Sep,
                 RibbonItem.Small(ViewCommands.ReadAloud.Id),
+                Sep,
                 RibbonItem.Small(ComposeCommands.SmartLookup.Id),
+                Sep,
                 RibbonItem.Small(ComposeCommands.Language.Id, RibbonItemKind.DropDown),
                 Sep,
                 RibbonItem.Small(ComposeCommands.CheckAccessibility.Id),
+                Sep,
             ],
         },
 

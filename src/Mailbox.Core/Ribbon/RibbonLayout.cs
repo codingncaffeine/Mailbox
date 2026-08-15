@@ -56,6 +56,20 @@ public enum RibbonItemKind
     /// directly on the bar rather than behind a button.
     /// </summary>
     TextBox,
+
+    /// <summary>
+    /// The "…" that ends a cluster on the Simplified bar, opening the commands that cluster has
+    /// no room for. Distinct from the bar's own overflow at the far right: this one belongs to
+    /// one cluster, and the reference draws both on the same row.
+    /// </summary>
+    Overflow,
+
+    /// <summary>
+    /// The small corner arrow that opens a cluster's full dialog. The classic ribbon hangs one
+    /// off <see cref="RibbonGroup.DialogLauncher"/>; on the Simplified bar it is an item in the
+    /// row, because the row has no groups to hang it from.
+    /// </summary>
+    DialogLauncher,
 }
 
 /// <summary>One control placed in a ribbon group.</summary>
@@ -74,6 +88,28 @@ public sealed record RibbonItem
     /// <summary>Rendered greyed and unclickable, as Read Aloud is with nothing selected.</summary>
     public bool IsDisabled { get; init; }
 
+    /// <summary>
+    /// Fixed width, for the fields the reference sizes rather than letting them fit their
+    /// contents — the Font and Font Size boxes on the compose ribbon are 107px and 51px
+    /// whatever is in them.
+    /// </summary>
+    public double? Width { get; init; }
+
+    /// <summary>
+    /// What a field shows. Static until the editor in Phase 5 gives it a selection to report —
+    /// the reference's boxes read the caret, and an empty box beside a body full of text reads
+    /// as broken rather than as unfinished.
+    /// </summary>
+    public string Text { get; init; } = string.Empty;
+
+    /// <summary>
+    /// True for the items that stand for furniture rather than a command — the rule between
+    /// clusters and the cluster's own "…". Both carry a placeholder id so that the record's
+    /// required <see cref="Command"/> is satisfied, and neither is a command anyone placed.
+    /// </summary>
+    public bool IsSentinel =>
+        Kind is RibbonItemKind.Separator or RibbonItemKind.Overflow;
+
     public static RibbonItem Large(CommandId command, RibbonItemKind kind = RibbonItemKind.Button)
         => new() { Command = command, Size = RibbonItemSize.Large, Kind = kind };
 
@@ -88,6 +124,38 @@ public sealed record RibbonItem
             Size = RibbonItemSize.Small,
             Kind = kind,
             ShowLabel = false,
+        };
+
+    /// <summary>The "…" ending a cluster, opening what that cluster has no room for.</summary>
+    public static RibbonItem Overflow()
+        => new()
+        {
+            Command = new CommandId("app.overflow"),
+            Kind = RibbonItemKind.Overflow,
+            Size = RibbonItemSize.Small,
+            ShowLabel = false,
+        };
+
+    /// <summary>The corner arrow opening a cluster's dialog.</summary>
+    public static RibbonItem Launcher(CommandId opens)
+        => new()
+        {
+            Command = opens,
+            Kind = RibbonItemKind.DialogLauncher,
+            Size = RibbonItemSize.Small,
+            ShowLabel = false,
+        };
+
+    /// <summary>A fixed-width field on the bar, like the Font and Font Size boxes.</summary>
+    public static RibbonItem Combo(CommandId command, double width, string text = "")
+        => new()
+        {
+            Command = command,
+            Size = RibbonItemSize.Small,
+            Kind = RibbonItemKind.TextBox,
+            ShowLabel = false,
+            Width = width,
+            Text = text,
         };
 }
 
@@ -231,7 +299,7 @@ public sealed record RibbonLayout
             var placed = tab.Groups
                 .SelectMany(g => g.Items)
                 .Concat(SimplifiedRows.TryGetValue(tab.Id, out var row) ? row : [])
-                .Where(i => i.Kind != RibbonItemKind.Separator)
+                .Where(i => !i.IsSentinel)
                 .Select(i => i.Command)
                 .Distinct();
 
@@ -258,7 +326,7 @@ public sealed record RibbonLayout
     public IEnumerable<CommandId> PlacedCommands =>
         Tabs.SelectMany(t => t.Groups)
             .SelectMany(g => g.Items)
-            .Where(i => i.Kind != RibbonItemKind.Separator)
+            .Where(i => !i.IsSentinel)
             .Select(i => i.Command)
             .Concat(Tabs.SelectMany(t => t.Groups)
                 .Select(g => g.DialogLauncher)
