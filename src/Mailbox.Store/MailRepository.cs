@@ -588,6 +588,71 @@ public sealed class MailRepository(MailStore store)
         });
     }
 
+    /// <summary>Sets the importance the list's column shows. Local: the message's own header is not rewritten.</summary>
+    public int SetImportance(IReadOnlyCollection<long> messageIds, int importance)
+    {
+        if (messageIds.Count == 0) return 0;
+
+        return _store.Execute(
+            $"UPDATE messages SET importance = $importance WHERE id IN ({Ids(messageIds)})",
+            ("$importance", Math.Clamp(importance, 0, 2)));
+    }
+
+    /// <summary>
+    /// Copies messages into another folder: a new row over the same raw bytes, with the read and
+    /// flagged state of the original. On a synced folder the copy is appended to the server.
+    /// </summary>
+    public int CopyMessages(IReadOnlyCollection<long> messageIds, long toFolderId)
+    {
+        if (messageIds.Count == 0) return 0;
+
+        return _store.InTransaction(() =>
+        {
+            var copied = 0;
+            foreach (var id in messageIds)
+            {
+                var row = _store.Query(
+                    """
+                    SELECT blob_id, message_id, from_name, from_address, subject, preview, body_text, sent_utc,
+                           received_utc, size_bytes, is_read, is_flagged, has_attachment, importance, to_addresses, cc_addresses
+                    FROM messages WHERE id = $id
+                    """,
+                    r => new object?[]
+                    {
+                        r.IsDBNull(0) ? null : r.GetInt64(0), r.IsDBNull(1) ? null : r.GetString(1), r.GetString(2), r.GetString(3),
+                        r.GetString(4), r.GetString(5), r.GetString(6), r.IsDBNull(7) ? null : r.GetInt64(7),
+                        r.GetInt64(8), r.GetInt64(9), r.GetInt32(10), r.GetInt32(11), r.GetInt32(12), r.GetInt32(13),
+                        r.GetString(14), r.GetString(15),
+                    },
+                    ("$id", id)).FirstOrDefault();
+                if (row is null) continue;
+
+                // The blob is shared: two rows over one set of bytes. Deleting either row keeps
+                // the bytes for the holding area, and a purge takes them only when nothing else
+                // points at them — the foreign key refuses otherwise.
+                _store.Execute(
+                    """
+                    INSERT INTO messages
+                        (folder_id, blob_id, server_uid, message_id, thread_key, from_name, from_address, subject, preview,
+                         body_text, sent_utc, received_utc, size_bytes, is_read, is_flagged, has_attachment, importance,
+                         to_addresses, cc_addresses)
+                    VALUES ($folder, $blob, NULL, $mid, $thread, $fromName, $fromAddress, $subject, $preview,
+                            $body, $sent, $received, $size, $read, $flagged, $attachment, $importance, $to, $cc)
+                    """,
+                    ("$folder", toFolderId), ("$blob", row[0]), ("$mid", row[1]), ("$thread", ThreadKey((string)row[4]!)),
+                    ("$fromName", row[2]), ("$fromAddress", row[3]), ("$subject", row[4]), ("$preview", row[5]),
+                    ("$body", row[6]), ("$sent", row[7]), ("$received", row[8]), ("$size", row[9]), ("$read", row[10]),
+                    ("$flagged", row[11]), ("$attachment", row[12]), ("$importance", row[13]), ("$to", row[14]), ("$cc", row[15]));
+
+                var newId = _store.LastInsertId;
+                if (row[0] is not null && IsSyncedFolder(toFolderId)) JournalAppend(toFolderId, newId);
+                copied++;
+            }
+
+            return copied;
+        });
+    }
+
     /// <summary>
     /// Deletes many for good — as far as the folders are concerned. The rows go, and on IMAP the
     /// server is told; the raw bytes and the row's own columns are kept in the recoverable
@@ -618,12 +683,27 @@ public sealed class MailRepository(MailStore store)
 
         var removed = _store.Execute($"DELETE FROM messages WHERE id IN ({list})");
 
-        if (blobs.Count > 0)
-        {
-            _store.Execute($"DELETE FROM blobs WHERE id IN ({Ids(blobs)})");
-        }
+        if (blobs.Count > 0) DeleteOrphanBlobs(blobs);
 
         return removed;
+    }
+
+    /// <summary>
+    /// Deletes blobs nothing points at any more. A copied message shares its bytes with the
+    /// original, and the holding area holds them too, so a blob goes only when the last row
+    /// over it has.
+    /// </summary>
+    private void DeleteOrphanBlobs(IReadOnlyCollection<long> blobIds)
+    {
+        if (blobIds.Count == 0) return;
+
+        _store.Execute(
+            $"""
+             DELETE FROM blobs WHERE id IN ({Ids(blobIds)})
+               AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.blob_id = blobs.id)
+               AND NOT EXISTS (SELECT 1 FROM recoverable r WHERE r.blob_id = blobs.id)
+               AND NOT EXISTS (SELECT 1 FROM outbox o WHERE o.blob_id = blobs.id)
+             """);
     }
 
     // ---- Recover Deleted Items (§11) ------------------------------------------------------------
@@ -744,7 +824,7 @@ public sealed class MailRepository(MailStore store)
             var list = Ids(recoverableIds);
             var blobs = _store.Query($"SELECT blob_id FROM recoverable WHERE id IN ({list})", r => r.GetInt64(0));
             var removed = _store.Execute($"DELETE FROM recoverable WHERE id IN ({list})");
-            if (blobs.Count > 0) _store.Execute($"DELETE FROM blobs WHERE id IN ({Ids(blobs)})");
+            if (blobs.Count > 0) DeleteOrphanBlobs(blobs);
             return removed;
         });
     }

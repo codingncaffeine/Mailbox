@@ -32,6 +32,25 @@ public sealed class CommandCatalog
         foreach (var command in commands) Register(command);
     }
 
+    /// <summary>
+    /// Puts a command in under its id whether or not one is there — for a command whose label
+    /// or gesture the reader edits, like a Quick Step. A built-in is never replaced this way.
+    /// </summary>
+    public void Replace(MailboxCommand command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        _commands[command.Id] = command;
+        _frozen = null;
+    }
+
+    /// <summary>Takes a command out, for a Quick Step the reader deleted. A built-in stays.</summary>
+    public bool Unregister(CommandId id)
+    {
+        if (!_commands.Remove(id)) return false;
+        _frozen = null;
+        return true;
+    }
+
     /// <summary>Removes every command owned by a plugin. Used when a plugin is disabled.</summary>
     public int UnregisterPlugin(string pluginId)
     {

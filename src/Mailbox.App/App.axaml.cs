@@ -69,8 +69,38 @@ public partial class App : Application
     /// <summary>The user's ribbon edits, and the layout that comes of applying them.</summary>
     public static RibbonCustomization RibbonEdits { get; private set; } = null!;
 
-    /// <summary>The ribbon the shell renders: the shipped layout with any edits over it.</summary>
-    public static RibbonLayout MailRibbon() => RibbonEdits.Apply(DefaultRibbonLayouts.Mail);
+    /// <summary>The Quick Steps: the gallery's entries, and what each does.</summary>
+    public static QuickSteps QuickSteps { get; private set; } = null!;
+
+    /// <summary>
+    /// The ribbon the shell renders: the shipped layout with any edits over it, and the Quick
+    /// Steps gallery listing the steps as they stand.
+    /// </summary>
+    public static RibbonLayout MailRibbon()
+        => QuickStepsRibbon.Inject(RibbonEdits.Apply(DefaultRibbonLayouts.Mail), QuickSteps.All);
+
+    /// <summary>
+    /// Puts every Quick Step in the catalogue as a command — the shipped three already are, by
+    /// the ids the layout places; the reader's own join them — so the gallery, the QAT and the
+    /// shortcut editor see them like any command. Called at start and whenever the list changes.
+    /// </summary>
+    private static void RegisterQuickSteps()
+    {
+        foreach (var step in QuickSteps.All)
+        {
+            var command = step.ToCommand();
+            if (Commands.TryGet(command.Id, out var existing))
+            {
+                // A shipped id keeps its shipped command; a reader's step that was renamed is
+                // re-registered under the same id with its new label.
+                var shipped = ViewCommands.All.Any(c => c.Id == command.Id);
+                if (!shipped) Commands.Replace(command);
+                continue;
+            }
+
+            Commands.Register(command);
+        }
+    }
 
     /// <summary>Account order and which one is the default.</summary>
     public static IAccountOrder AccountOrder { get; private set; } = null!;
@@ -300,6 +330,9 @@ public partial class App : Application
         Commands.RegisterRange(ComposeCommands.All);
 
         RibbonEdits = new RibbonCustomization();
+        QuickSteps = new QuickSteps(Settings);
+        RegisterQuickSteps();
+        QuickSteps.Changed += (_, _) => RegisterQuickSteps();
         QuickAccess = new QuickAccessLayout(Settings, DefaultRibbonLayouts.Mail.QuickAccess);
         Groups = new SendReceiveGroups(Settings);
         Signatures = new Signatures(Settings);
