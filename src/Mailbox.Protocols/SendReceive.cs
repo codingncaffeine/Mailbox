@@ -55,7 +55,8 @@ public sealed record SendReceiveResult(IReadOnlyList<AccountRunResult> Accounts)
 /// </remarks>
 public sealed class SendReceiveService(
     Func<MailRepository, Pop3Receiver>? receiver = null,
-    Func<MailRepository, SmtpSender>? sender = null)
+    Func<MailRepository, SmtpSender>? sender = null,
+    Func<MailRepository, ImapSynchronizer>? synchronizer = null)
 {
     // Every account has its own store, so a receiver and a sender belong to a repository rather
     // than to the service. Factories rather than instances: the service is long-lived and the
@@ -65,6 +66,9 @@ public sealed class SendReceiveService(
 
     private readonly Func<MailRepository, SmtpSender> _sender =
         sender ?? (mail => new SmtpSender(mail));
+
+    private readonly Func<MailRepository, ImapSynchronizer> _synchronizer =
+        synchronizer ?? (mail => new ImapSynchronizer(mail));
 
     /// <summary>
     /// Nothing goes out and nothing is fetched while this is set, and queued mail is held
@@ -137,6 +141,17 @@ public sealed class SendReceiveService(
             error = SmtpSender.Classify(ex).Error;
         }
 
+        var progress = new Progress<PollProgress>(p => Progress?.Invoke(this, p));
+
+        // IMAP has folders and flags on the server; POP3 has neither, so it is the receiver that
+        // downloads the inbox and the store that keeps everything else. The store being
+        // authoritative (§4) is what lets these share one send path and one outbox.
+        if (account.Protocol == MailProtocol.Imap)
+        {
+            var sync = await _synchronizer(target.Mail).SyncAsync(account, progress, cancellation);
+            return new AccountRunResult(account.Address, sync.Downloaded, sent, error ?? sync.Error);
+        }
+
         var inbox = target.Mail.FolderWithRole(account.AccountId, FolderRole.Inbox);
         if (inbox is null)
         {
@@ -144,7 +159,6 @@ public sealed class SendReceiveService(
                 error ?? "This account has no Inbox.");
         }
 
-        var progress = new Progress<PollProgress>(p => Progress?.Invoke(this, p));
         var poll = await _receiver(target.Mail).PollAsync(account, inbox, progress, cancellation);
 
         return new AccountRunResult(account.Address, poll.Downloaded, sent, error ?? poll.Error);

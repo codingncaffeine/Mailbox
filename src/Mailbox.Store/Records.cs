@@ -50,7 +50,71 @@ public sealed record Folder(
     public int Unread { get; init; }
 
     public int Total { get; init; }
+
+    /// <summary>
+    /// The server folder this one stands for, as IMAP names it, or null for a folder that
+    /// exists only here — every folder of a POP3 account, and the Outbox of any.
+    /// </summary>
+    public string? ImapPath { get; init; }
+
+    /// <summary>True when the server folder is pulled as well as listed.</summary>
+    public bool Synced { get; init; } = true;
+
+    /// <summary>The server's UIDVALIDITY when this folder was last synced, or null before the first.</summary>
+    public long? UidValidity { get; init; }
+
+    /// <summary>The server's UIDNEXT as of the last sync.</summary>
+    public long? UidNext { get; init; }
+
+    /// <summary>The highest MODSEQ seen, for asking only what changed since.</summary>
+    public long? HighestModSeq { get; init; }
+
+    /// <summary>A folder that stands for one on the server.</summary>
+    public bool IsMapped => ImapPath is not null;
 }
+
+/// <summary>What one entry in the sync journal asks the server to do.</summary>
+public enum SyncOpKind
+{
+    /// <summary>Set or clear one flag on a message.</summary>
+    Flags,
+
+    /// <summary>Move a message from one server folder to another.</summary>
+    Move,
+
+    /// <summary>Remove a message from the server for good.</summary>
+    Delete,
+
+    /// <summary>Put a message that exists only here onto the server.</summary>
+    Append,
+}
+
+/// <summary>Which flag a <see cref="SyncOpKind.Flags"/> op sets or clears.</summary>
+public enum SyncFlag
+{
+    Seen,
+    Flagged,
+}
+
+/// <summary>
+/// One entry in the sync journal: a local change waiting to be played to the server.
+/// </summary>
+/// <param name="FolderId">The folder the message is in on the server when the op is played.</param>
+/// <param name="ServerUid">Its UID there; null for an append, which has none yet.</param>
+/// <param name="MessageId">The local row, or null once it has gone.</param>
+/// <param name="TargetFolderId">Where a move goes.</param>
+public sealed record SyncOp(
+    long Id,
+    SyncOpKind Kind,
+    long FolderId,
+    string? ServerUid,
+    long? MessageId,
+    long? TargetFolderId,
+    SyncFlag? Flag,
+    bool? Value,
+    DateTimeOffset Created,
+    int Attempts,
+    string? LastError);
 
 /// <summary>
 /// A message as the list needs it: enough to draw a row, without the body.

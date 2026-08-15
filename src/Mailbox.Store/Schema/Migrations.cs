@@ -239,6 +239,45 @@ public static class Migrations
             last_used_utc  INTEGER NOT NULL
         );
         """,
+
+        // ---- 10: IMAP -----------------------------------------------------------------------
+        //
+        // A folder learns which server folder it stands for and where its sync has got to. The
+        // store stays authoritative for state (§4): read, flagged, categories, where a message
+        // is — and IMAP becomes a two-way sync of the subset the server also keeps. So a local
+        // change to a synced folder is written to sync_ops as well as to the row, and the next
+        // send/receive plays the journal to the server before it pulls; offline, the journal is
+        // simply longer. Every op names the server folder and UID it acts on, because by the
+        // time it is played the local row may have moved, changed, or gone.
+        """
+        ALTER TABLE folders ADD COLUMN imap_path     TEXT;
+        ALTER TABLE folders ADD COLUMN uidvalidity   INTEGER;
+        ALTER TABLE folders ADD COLUMN uidnext       INTEGER;
+        ALTER TABLE folders ADD COLUMN highestmodseq INTEGER;
+        -- 0 for a server folder that is listed but never pulled: a mailbox's own "everything"
+        -- view holds a second copy of every message and would double the store.
+        ALTER TABLE folders ADD COLUMN synced        INTEGER NOT NULL DEFAULT 1;
+
+        CREATE TABLE sync_ops (
+            id                INTEGER PRIMARY KEY,
+            kind              TEXT    NOT NULL CHECK (kind IN ('flags', 'move', 'delete', 'append')),
+            -- The folder the message is in on the server when the op is played.
+            folder_id         INTEGER NOT NULL REFERENCES folders(id) ON DELETE CASCADE,
+            server_uid        TEXT,
+            -- The local row, for writing a new UID back after a move or an append. Null once
+            -- the row is gone, which a delete op does not mind.
+            message_id        INTEGER          REFERENCES messages(id) ON DELETE SET NULL,
+            target_folder_id  INTEGER          REFERENCES folders(id)  ON DELETE CASCADE,
+            flag              TEXT    CHECK (flag IN ('seen', 'flagged')),
+            value             INTEGER,
+            created_utc       INTEGER NOT NULL,
+            attempts          INTEGER NOT NULL DEFAULT 0,
+            last_error        TEXT
+        );
+
+        CREATE INDEX sync_ops_by_folder ON sync_ops (folder_id, server_uid);
+        CREATE INDEX sync_ops_by_message ON sync_ops (message_id);
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>
