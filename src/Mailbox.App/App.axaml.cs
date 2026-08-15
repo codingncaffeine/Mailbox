@@ -114,7 +114,13 @@ public partial class App : Application
         // resolution happens before the theme is composed, because typography tokens are
         // rewritten to families this machine can actually draw.
         BundledFonts.Register();
-        Settings = new SettingsStore();
+
+        // A capture run works on a throwaway copy of the settings. The harness poses states —
+        // hide the reading pane, collapse the nav, zoom — and several of those persist, which is
+        // right for a person and wrong for a photograph: a smoke test once turned the reading
+        // pane off in the owner's real settings and every capture for the next hour had no
+        // pane. The copy carries the theme and the account order in, and nothing back out.
+        Settings = WindowCapture.IsRequested ? SettingsStore.ScratchCopy() : new SettingsStore();
         Fonts = FontResolver.FromSystem();
         Themes = new ThemeService(Fonts);
         RestoreAppearance();

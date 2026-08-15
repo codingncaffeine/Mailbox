@@ -16,6 +16,7 @@ using Mailbox.Core.Commands;
 using Mailbox.Core.Ribbon;
 using Mailbox.Core.Settings;
 using Mailbox.Protocols;
+using Mailbox.Rendering;
 using Mailbox.Security;
 using Mailbox.Store;
 using Mailbox.Theming.Icons;
@@ -107,6 +108,17 @@ public partial class MainWindow : Window
 
         ApplyHarnessState(shell);
 
+        // The posed selection, once more, after the list has bound and had its say. Loaded runs
+        // before Background, which is where MAILBOX_RUN acts, so a run sees it.
+        if (_pendingSelection is { } posed)
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(() =>
+            {
+                shell.SelectedRow = posed;
+                shell.SelectedMessage = posed;
+            }, DispatcherPriority.Loaded);
+        }
+
         // Presses ribbon commands by id, after the window has opened and the posed folder and
         // selection are in place: MAILBOX_RUN=mail.delete,mail.archive. A menu cannot be
         // photographed but what it does can, and this is how the audit checks that a button
@@ -118,6 +130,11 @@ public partial class MainWindow : Window
                 foreach (var id in run.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                 {
                     Log.Info($"Harness: running {id}.");
+
+                    // A command that opens a window — reply, forward — is photographed through
+                    // that window rather than this one.
+                    if (id is "mail.reply" or "mail.reply.all" or "mail.forward") CaptureNextWindow();
+
                     RunCommand(new CommandId(id));
                     if (DataContext is ShellViewModel s) Log.Info($"Harness: status \u201c{s.StatusRight}\u201d");
                 }
@@ -175,6 +192,8 @@ public partial class MainWindow : Window
     private void CaptureNextWindow()
     {
         if (WindowCapture.RequestedPath is not { } path) return;
+
+        WindowCapture.AnotherWindowWillBeCaptured = true;
 
         _ = Dispatcher.UIThread.InvokeAsync(async () =>
         {
@@ -937,6 +956,9 @@ public partial class MainWindow : Window
     /// reachable by clicking, and a capture cannot click — so a control wired to state nobody
     /// photographs is a control nobody has actually checked.
     /// </summary>
+    /// <summary>What MAILBOX_SELECT asked for, re-asserted once the list has laid out.</summary>
+    private static ViewModels.MessageRow? _pendingSelection;
+
     private static void ApplyHarnessState(ShellViewModel shell)
     {
         // Which message the reading pane is showing. The bars above it only appear for certain
@@ -947,11 +969,18 @@ public partial class MainWindow : Window
             var match = shell.Messages.FirstOrDefault(
                 m => m.Subject.Contains(subject, StringComparison.OrdinalIgnoreCase));
 
-            // Through SelectedRow, which is what the list binds, so the list's own selection —
-            // which is what the commands over a selection read — follows. Setting only
-            // SelectedMessage showed the message in the pane and left the list with nothing
-            // selected, which is how MAILBOX_RUN=mail.delete deleted nothing.
-            if (match is not null) shell.SelectedRow = match;
+            // Both, and after the window has opened. SelectedMessage is what the pane shows and
+            // nothing binds it, so it survives being set here; SelectedRow is what the list binds,
+            // and the list pushes its own selection back as it lays out, so one set now is gone
+            // by the time anything reads it — the same trap MAILBOX_FOLDER hit. The commands over
+            // a selection read the list, so the row has to be selected there too, and it has to
+            // be selected after the layout that would have cleared it.
+            if (match is not null)
+            {
+                shell.SelectedMessage = match;
+                shell.SelectedRow = match;
+                _pendingSelection = match;
+            }
         }
 
         var wanted = Environment.GetEnvironmentVariable("MAILBOX_STATE");
@@ -1195,12 +1224,65 @@ public partial class MainWindow : Window
         if (id == ViewCommands.CancelAll.Id) { CancelTransfer(); return; }
         if (id == ViewCommands.SendReceiveGroups.Id) { ShowGroupsMenu(shell); return; }
 
+        if (id == MailCommands.Reply.Id) { Respond(shell, ReplyKind.Reply); return; }
+        if (id == MailCommands.ReplyAll.Id) { Respond(shell, ReplyKind.ReplyAll); return; }
+        if (id == MailCommands.Forward.Id) { Respond(shell, ReplyKind.Forward); return; }
+
         if (RunOverSelection(shell, id)) return;
         if (RunViewCommand(shell, id)) return;
 
         // Everything left is recorded in §20 with what it waits for; the status line names
         // the command so the plan can be checked against the window rather than the reverse.
         shell.StatusRight = $"{command.Label} — not wired yet ({command.Id})";
+    }
+
+    /// <summary>
+    /// Reply, Reply All and Forward: a compose window opened on the message in the pane.
+    /// </summary>
+    /// <remarks>
+    /// One method for the three, because they differ only in who is put in To and whether the
+    /// attachments come along — <see cref="Reply.Build"/> knows those rules and this does not
+    /// repeat them. What the reader has chosen about quoting comes from the Options page, and
+    /// the reader's own addresses come from every account, so a reply to all never copies them.
+    /// </remarks>
+    private void Respond(ShellViewModel shell, ReplyKind kind)
+    {
+        if (_openMessage is not { } original)
+        {
+            shell.StatusRight = "Select a message to reply to.";
+            return;
+        }
+
+        var styleIndex = kind == ReplyKind.Forward
+            ? App.MailOptions.ForwardStyleIndex
+            : App.MailOptions.ReplyStyleIndex;
+
+        var draft = Reply.Build(original, kind, new ReplyOptions
+        {
+            OwnAddresses = [.. App.Accounts.All.Select(a => a.Account.Address)],
+            Style = Enum.IsDefined((QuoteStyle)styleIndex) ? (QuoteStyle)styleIndex : QuoteStyle.Include,
+            Prefix = App.MailOptions.ReplyPrefix,
+            PlainText = App.MailOptions.ComposeFormat == ComposeFormat.PlainText,
+        });
+
+        var compose = new ComposeWindow(App.Commands, App.Accounts);
+
+        // From the account the message arrived in, which is what a reply means.
+        if (shell.CurrentAddress is { Length: > 0 } address) compose.SendFromAccount(address);
+
+        compose.Prefill(draft, kind);
+        compose.Queued += (_, e) => OnQueued(e);
+        compose.Closed += (_, _) => shell.Refresh();
+
+        // The harness presses Send on the reply too, so what a reply actually puts on the wire
+        // can be read back out of the outbox — the threading headers most of all.
+        if (Environment.GetEnvironmentVariable("MAILBOX_COMPOSE_QUEUE") is { Length: > 0 })
+        {
+            if (kind == ReplyKind.Forward) compose.PoseHeader("b.person@example.com", string.Empty, string.Empty);
+            compose.Opened += (_, _) => Dispatcher.UIThread.Post(() => compose.PressSend(), DispatcherPriority.Background);
+        }
+
+        compose.Show(this);
     }
 
     /// <summary>
@@ -1383,9 +1465,9 @@ public partial class MainWindow : Window
                 flyout.Items.Add(item);
             }
 
-            Command("Reply", MailCommands.Reply.Id, works: false, "Phase 6 — reply opens a prefilled message");
-            Command("Reply All", MailCommands.ReplyAll.Id, works: false, "Phase 6 — reply opens a prefilled message");
-            Command("Forward", MailCommands.Forward.Id, works: false, "Phase 6 — forward opens a prefilled message");
+            Command("Reply", MailCommands.Reply.Id);
+            Command("Reply All", MailCommands.ReplyAll.Id);
+            Command("Forward", MailCommands.Forward.Id);
             flyout.Items.Add(new Separator());
 
             var read = new MenuItem
