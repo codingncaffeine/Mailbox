@@ -52,6 +52,30 @@
         <Setter Property="Foreground" Value="{DynamicResource text.disabled.brush}" />
     </Style>
 
+    <!-- ============================ Ticks and radios =========================== -->
+
+    <!--
+        The control theme's box is transparent with a faint outline, which reads as a box only
+        while the surface behind it is light. Every tick in Mailbox is in a dialog, and a
+        dialog's ground is dark in two of the four themes — there the box vanished and left a
+        tick floating on its own.
+
+        The reference fills a checked box with the accent and draws a light tick in it. The
+        control theme paints its tick from HighlightBrush, which is the accent, so filling the
+        box that way would draw the tick in its own colour; a light box with an accent tick is
+        the same reading in every theme, and a control theme of our own is what it takes to do
+        it the other way round.
+    -->
+    <Style Selector="CheckBox">
+        <Setter Property="Background" Value="{DynamicResource dialog.surface.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource dialog.border.brush}" />
+    </Style>
+
+    <Style Selector="RadioButton">
+        <Setter Property="Background" Value="{DynamicResource dialog.surface.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource dialog.border.brush}" />
+    </Style>
+
     <!-- ============================== Text input ============================== -->
 
     <Style Selector="TextBox">

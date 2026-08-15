@@ -279,6 +279,8 @@ public class ThemeServiceTests
     [InlineData(TokenKeys.Rail.ItemText, TokenKeys.Rail.Background)]
     [InlineData(TokenKeys.List.UnreadText, TokenKeys.List.RowBackground)]
     [InlineData(TokenKeys.List.ReadText, TokenKeys.List.RowBackground)]
+    [InlineData(TokenKeys.Dialog.Foreground, TokenKeys.Dialog.Background)]
+    [InlineData(TokenKeys.Dialog.SurfaceText, TokenKeys.Dialog.Surface)]
     public void ForegroundTokensAreDistinctFromWhatSitsBehindThem(string ink, string ground)
     {
         foreach (var id in OfficeThemes.All)

@@ -54,7 +54,7 @@ public sealed class OptionsWindow : Window
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         CanResize = true;
 
-        Bind(this, BackgroundProperty, "surface.ground.brush");
+        Bind(this, BackgroundProperty, "dialog.background.brush");
 
         var root = new Grid
         {
@@ -69,7 +69,8 @@ public sealed class OptionsWindow : Window
             BorderThickness = new Thickness(1),
             Margin = new Thickness(0, 0, 12, 0),
         };
-        Bind(railBox, BorderBrushProperty, "border.subtle.brush");
+        Bind(railBox, BackgroundProperty, "dialog.surface.brush");
+        Bind(railBox, BorderBrushProperty, "dialog.border.brush");
         Grid.SetRow(railBox, 0);
         Grid.SetRowSpan(railBox, 2);
         Grid.SetColumn(railBox, 0);
@@ -130,7 +131,7 @@ public sealed class OptionsWindow : Window
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        Bind(text, TextBlock.ForegroundProperty, "text.primary.brush");
+        Bind(text, TextBlock.ForegroundProperty, "dialog.surface.text.brush");
 
         var button = new Button
         {
@@ -140,8 +141,8 @@ public sealed class OptionsWindow : Window
             BorderThickness = new Thickness(isDefault ? 2 : 1),
             HorizontalContentAlignment = HorizontalAlignment.Center,
         };
-        Bind(button, BorderBrushProperty, isDefault ? "accent.rest.brush" : "border.strong.brush");
-        Bind(button, BackgroundProperty, "surface.sunken.brush");
+        Bind(button, BorderBrushProperty, isDefault ? "accent.rest.brush" : "dialog.border.brush");
+        Bind(button, BackgroundProperty, "dialog.surface.brush");
         return button;
     }
 
@@ -159,7 +160,7 @@ public sealed class OptionsWindow : Window
     private Control RailRule()
     {
         var rule = new Border { Height = 1, Margin = new Thickness(6, 5) };
-        Bind(rule, BackgroundProperty, "border.subtle.brush");
+        Bind(rule, BackgroundProperty, "dialog.border.brush");
         return rule;
     }
 
@@ -173,7 +174,7 @@ public sealed class OptionsWindow : Window
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(10, 0),
         };
-        Bind(text, TextBlock.ForegroundProperty, "text.primary.brush");
+        Bind(text, TextBlock.ForegroundProperty, "dialog.surface.text.brush");
 
         var button = new Button
         {
@@ -189,8 +190,8 @@ public sealed class OptionsWindow : Window
         // the reference application outlines the selected page and lightens its fill.
         if (selected)
         {
-            Bind(button, BorderBrushProperty, "text.primary.brush");
-            Bind(button, BackgroundProperty, "state.hover.brush");
+            Bind(button, BorderBrushProperty, "dialog.surface.text.brush");
+            Bind(button, BackgroundProperty, "dialog.selection.brush");
         }
 
         button.Click += (_, _) =>
@@ -319,122 +320,10 @@ public sealed class OptionsWindow : Window
             Width = 200,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        Bind(text, TextBlock.ForegroundProperty, "text.primary.brush");
+        Bind(text, TextBlock.ForegroundProperty, "dialog.foreground.brush");
         row.Children.Add(text);
         row.Children.Add(control);
         return row;
-    }
-
-    // ------------------------------------------------------------------------------------
-    // Building blocks
-    // ------------------------------------------------------------------------------------
-
-    private Control PageHeader(string icon, string description)
-    {
-        var row = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 10,
-            Margin = new Thickness(0, 0, 0, 14),
-        };
-
-        var glyph = new TextBlock
-        {
-            Text = IconGlyphs.GetOrEmpty(icon, 24),
-            FontFamily = IconFont.Family,
-            FontSize = 20,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        Bind(glyph, TextBlock.ForegroundProperty, "accent.rest.brush");
-        row.Children.Add(glyph);
-
-        var text = new TextBlock { Text = description, VerticalAlignment = VerticalAlignment.Center };
-        Bind(text, TextBlock.ForegroundProperty, "text.primary.brush");
-        row.Children.Add(text);
-
-        return row;
-    }
-
-    /// <summary>Bold heading with a rule running out to the right edge.</summary>
-    private Control SectionHeading(string text)
-    {
-        var grid = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("Auto,*"),
-            Margin = new Thickness(0, 12, 0, 8),
-        };
-
-        var label = new TextBlock { Text = text, FontWeight = FontWeight.SemiBold };
-        Bind(label, TextBlock.ForegroundProperty, "text.primary.brush");
-        Grid.SetColumn(label, 0);
-        grid.Children.Add(label);
-
-        var rule = new Border
-        {
-            Height = 1,
-            Margin = new Thickness(10, 0, 0, 0),
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        Bind(rule, BackgroundProperty, "border.subtle.brush");
-        Grid.SetColumn(rule, 1);
-        grid.Children.Add(rule);
-
-        return grid;
-    }
-
-    private static Control Indent(Control content)
-    {
-        content.Margin = new Thickness(14, 3, 0, 3);
-        return content;
-    }
-
-    private Control CheckBoxRow(string label, bool isChecked)
-    {
-        var box = new CheckBox { IsChecked = isChecked, Content = label };
-        Bind(box, ForegroundProperty, "text.primary.brush");
-        return box;
-    }
-
-    private Control LabelledControl(string label, Control control)
-    {
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-
-        var text = new TextBlock
-        {
-            Text = label,
-            Width = 118,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        Bind(text, TextBlock.ForegroundProperty, "text.primary.brush");
-
-        row.Children.Add(text);
-        row.Children.Add(control);
-        return row;
-    }
-
-    private Control LabelledTextBox(string label, string value, double width)
-        => LabelledControl(label, new TextBox { Text = value, Width = width });
-
-    private Control LabelledCombo(
-        string label, IReadOnlyList<string> items, int selected = 0, Action<int>? onChanged = null)
-    {
-        var combo = new ComboBox
-        {
-            ItemsSource = items.ToList(),
-            SelectedIndex = selected,
-            MinWidth = 260,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-
-        if (onChanged is not null)
-        {
-            combo.SelectionChanged += (_, _) =>
-            {
-                if (combo.SelectedIndex >= 0) onChanged(combo.SelectedIndex);
-            };
-        }
-
-        return LabelledControl(label, combo);
     }
 
     private static void Bind(AvaloniaObject target, AvaloniaProperty property, string key)

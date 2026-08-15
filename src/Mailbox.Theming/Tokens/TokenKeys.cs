@@ -202,6 +202,36 @@ public static class TokenKeys
         public const string Slider = "statusbar.slider";
     }
 
+    /// <summary>
+    /// Dialog chrome: Options, Account Settings, and everything else that opens over the shell.
+    /// </summary>
+    /// <remarks>
+    /// A dialog is chrome, not content, and the two do not agree in every theme. Dark Gray is
+    /// the case that proves it: its content is light and its chrome is dark, so a dialog painted
+    /// from the content surface comes out inverted — light where the reference is dark, with the
+    /// list boxes on it losing the contrast that makes them read as boxes at all.
+    /// </remarks>
+    public static class Dialog
+    {
+        /// <summary>The dialog's own ground.</summary>
+        public const string Background = "dialog.background";
+
+        /// <summary>Labels, headings and notes standing directly on that ground.</summary>
+        public const string Foreground = "dialog.foreground";
+
+        /// <summary>The boxes on it: the page rail, list panes, buttons and fields.</summary>
+        public const string Surface = "dialog.surface";
+
+        /// <summary>Text inside those boxes, which is not the same ink as on the ground.</summary>
+        public const string SurfaceText = "dialog.surface.text";
+
+        /// <summary>The line around a box.</summary>
+        public const string Border = "dialog.border";
+
+        /// <summary>A selected row inside one.</summary>
+        public const string Selection = "dialog.selection";
+    }
+
     public static class Calendar
     {
         public const string Background = "calendar.background";
@@ -260,6 +290,8 @@ public static class TokenKeys
         Reading.Background, Reading.HeaderBackground, Reading.InfoBarBackground,
         Reading.InfoBarText, Reading.InfoBarWarningBackground,
         StatusBar.Background, StatusBar.Foreground, StatusBar.Height, StatusBar.Slider,
+        Dialog.Background, Dialog.Foreground, Dialog.Surface, Dialog.SurfaceText,
+        Dialog.Border, Dialog.Selection,
         Calendar.Background, Calendar.WorkingHoursFill, Calendar.NonWorkingFill,
         Calendar.GridLine, Calendar.CurrentTimeIndicator, Calendar.AllDayBandBackground,
         Typography.UiFamily, Typography.UiSize, Typography.UiSizeSmall, Typography.UiSizeLarge,
