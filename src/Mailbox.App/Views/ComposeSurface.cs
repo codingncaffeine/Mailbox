@@ -280,15 +280,17 @@ public sealed class ComposeSurface : UserControl
 
         // Autosave, on the Options page's interval. Zero is off. Only when something has
         // changed since the last save, so an idle surface does not rewrite its draft every few
-        // minutes for nothing. Stopped when the surface leaves the tree, so a closed window or a
-        // dismissed inline strip does not keep a timer alive.
+        // minutes for nothing.
         if (App.MailOptions.AutosaveMinutes is > 0 and var minutes)
         {
             _autosave = new DispatcherTimer { Interval = TimeSpan.FromMinutes(minutes) };
             _autosave.Tick += (_, _) => { if (_dirty && !_sent && HasContent()) SaveDraft(); };
-            _autosave.Start();
         }
 
+        // The timer runs while the surface is in the tree and stops when it leaves — so a closed
+        // window or a dismissed inline strip does not keep one alive, and a surface popped out of
+        // the reading pane into a window (where it briefly detaches and re-attaches) keeps saving.
+        AttachedToVisualTree += (_, _) => { if (!_sent) _autosave?.Start(); };
         DetachedFromVisualTree += (_, _) => _autosave?.Stop();
 
         _body.TextChanged += (_, _) => _dirty = true;

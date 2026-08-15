@@ -40,9 +40,19 @@ public sealed class ComposeWindow : Window
     public event EventHandler<QueuedMessageEventArgs>? Queued;
 
     public ComposeWindow(CommandCatalog catalog, AccountStores? accounts)
+        : this(catalog, new ComposeSurface(catalog, accounts))
+    {
+    }
+
+    /// <summary>
+    /// Adopts an existing surface into a window — for popping an inline reply out of the reading
+    /// pane. The surface is host-neutral and resolves its owner from the tree, so moving it here
+    /// keeps every bit of its state: the recipients, the body, the threading headers of a reply.
+    /// </summary>
+    internal ComposeWindow(CommandCatalog catalog, ComposeSurface surface)
     {
         _catalog = catalog;
-        _surface = new ComposeSurface(catalog, accounts);
+        _surface = surface;
 
         Title = _surface.Title;
         Width = 1000;

@@ -760,6 +760,8 @@
             <Border Grid.Column="5"
                     IsVisible="{Binding ReadingPaneVisible}"
                     Background="{DynamicResource reading.background.brush}">
+              <Grid>
+                <!-- The read view. Covered by the inline compose host when a reply is open. -->
                 <DockPanel>
                     <Border DockPanel.Dock="Top"
                             Background="{DynamicResource reading.header.background.brush}"
@@ -816,6 +818,12 @@
                          sanitizer found in the message. -->
                     <ContentControl Name="ReadingBody" />
                 </DockPanel>
+
+                <!-- Inline reply. Grows over the read view when Reply / Reply All / Forward is
+                     pressed and the Options page has not asked for a separate window. Filled from
+                     code with the compact chrome and the shared ComposeSurface. -->
+                <ContentControl Name="ReadingComposeHost" ZIndex="1" IsVisible="False" />
+              </Grid>
             </Border>
         </Grid>
         </Border>

@@ -151,8 +151,8 @@ public static class OptionsPages
 
             new OptionSection("Replies and forwards",
             [
-                new CheckRow("Open replies and forwards in a new window"),
-                new CheckRow("Close original message window when replying or forwarding"),
+                new CheckRow("Open replies and forwards in a new window") { Key = MailOptions.OpenRepliesInNewWindowKey },
+                new CheckRow("Close original message window when replying or forwarding") { Key = MailOptions.CloseOriginalOnReplyKey },
                 new TextRow("Preface comments with:", "you@example.com", 240, 200) { Key = MailOptions.PrefaceCommentsKey },
                 new ComboRow("When replying to a message:", ReplyStyles, 0, 300, 200) { Key = MailOptions.ReplyStyleKey },
                 new ComboRow("When forwarding a message:", ReplyStyles, 0, 300, 200) { Key = MailOptions.ForwardStyleKey },
