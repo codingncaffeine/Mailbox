@@ -1,5 +1,7 @@
 using Mailbox.Theming.Themes;
 
+using Mailbox.Core.Settings;
+
 namespace Mailbox.App.Options;
 
 /// <summary>
@@ -103,13 +105,15 @@ public static class OptionsPages
                 new ActionRow("source", "Change the editing settings for messages.", "Editor Options...",
                 [
                     new ComboRow("Compose messages in this format:",
-                        ["HTML", "Rich Text", "Plain Text"], 0, 130, 210),
-                    new CheckRow("Show text predictions while typing") { HasInfo = true },
+                        ["HTML", "Rich Text", "Plain Text"], 0, 130, 210) { Key = MailOptions.ComposeFormatKey },
+                    // Text prediction is an AI feature, which the plan rules out on its first
+                    // page. Greyed rather than removed: the row is where the reference puts it.
+                    new CheckRow("Show text predictions while typing") { HasInfo = true, IsDisabled = true },
                 ]),
                 new ActionRow("reader", string.Empty, "Spelling and Autocorrect...",
                 [
-                    new CheckRow("Always check spelling before sending"),
-                    new CheckRow("Ignore original message text in reply or forward", true),
+                    new CheckRow("Always check spelling before sending") { Key = MailOptions.CheckSpellingBeforeSendKey },
+                    new CheckRow("Ignore original message text in reply or forward", true) { Key = MailOptions.IgnoreOriginalSpellingKey },
                 ]),
                 new ActionRow("source", "Create or modify signatures for messages.", "Signatures..."),
                 new ActionRow("categorize",
@@ -149,20 +153,22 @@ public static class OptionsPages
             [
                 new CheckRow("Open replies and forwards in a new window"),
                 new CheckRow("Close original message window when replying or forwarding"),
-                new TextRow("Preface comments with:", "you@example.com", 240, 200),
-                new ComboRow("When replying to a message:", ReplyStyles, 0, 300, 200),
-                new ComboRow("When forwarding a message:", ReplyStyles, 0, 300, 200),
-                new TextRow("Preface each line in a plain-text message with:", ">", 60, 300),
+                new TextRow("Preface comments with:", "you@example.com", 240, 200) { Key = MailOptions.PrefaceCommentsKey },
+                new ComboRow("When replying to a message:", ReplyStyles, 0, 300, 200) { Key = MailOptions.ReplyStyleKey },
+                new ComboRow("When forwarding a message:", ReplyStyles, 0, 300, 200) { Key = MailOptions.ForwardStyleKey },
+                new TextRow("Preface each line in a plain-text message with:", ">", 60, 300) { Key = MailOptions.ReplyPrefixKey },
             ]),
 
             new OptionSection("Save messages",
             [
-                new SpinnerRow("Automatically save items that have not been sent after this many minutes:", 3),
+                new SpinnerRow("Automatically save items that have not been sent after this many minutes:", 3) { Key = MailOptions.AutosaveMinutesKey },
                 new ComboRow("Save to this folder:", ["Drafts", "Inbox", "Sent Items"], 0, 150, 200),
                 new CheckRow("When replying to a message that is not in the Inbox, save the reply in the same folder"),
                 new CheckRow("Save forwarded messages", true),
-                new CheckRow("Save copies of messages in the Sent Items folder", true),
-                new CheckRow("Use Unicode format", true),
+                new CheckRow("Save copies of messages in the Sent Items folder", true) { Key = MailOptions.SaveCopiesInSentKey },
+                // Everything is written UTF-8. There is no other format to choose, so the box
+                // is greyed rather than a choice that means nothing.
+                new CheckRow("Use Unicode format", true) { IsDisabled = true },
             ]),
 
             new OptionSection("Send messages",
@@ -170,22 +176,22 @@ public static class OptionsPages
                 // §12's Undo Send, beside delayed delivery because it is the same mechanism
                 // with a smaller number in it — the outbox holding a message back.
                 new SlotRow("undosend"),
-                new ComboRow("Default importance level:", ["Normal", "Low", "High"], 0, 150, 240),
+                new ComboRow("Default importance level:", ["Normal", "Low", "High"], 0, 150, 240) { Key = MailOptions.DefaultImportanceKey },
                 new ComboRow("Default sensitivity level:",
-                    ["Normal", "Personal", "Private", "Confidential"], 0, 150, 240),
+                    ["Normal", "Personal", "Private", "Confidential"], 0, 150, 240) { Key = MailOptions.DefaultSensitivityKey },
                 new CheckRow("Mark messages as expired after this many days:"),
-                new CheckRow("Always use the default account when composing new messages"),
-                new CheckRow("Commas can be used to separate multiple message recipients", true),
-                new CheckRow("Automatic name checking", true),
+                new CheckRow("Always use the default account when composing new messages") { Key = MailOptions.AlwaysUseDefaultAccountKey },
+                new CheckRow("Commas can be used to separate multiple message recipients", true) { Key = MailOptions.CommasSeparateRecipientsKey },
+                new CheckRow("Automatic name checking", true) { Key = MailOptions.AutomaticNameCheckingKey },
                 new CheckRow("Delete meeting request from Inbox when responding", true),
-                new CheckRow("CTRL+ENTER sends a message", true),
+                new CheckRow("CTRL+ENTER sends a message", true) { Key = MailOptions.CtrlEnterSendsKey },
                 new CheckRow("Use Auto-Complete List to suggest names when typing", true),
             ]),
 
             new OptionSection("Tracking",
             [
-                new CheckRow("Delivery receipt confirming the message was delivered to the recipient's email server"),
-                new CheckRow("Read receipt confirming the recipient viewed the message"),
+                new CheckRow("Delivery receipt confirming the message was delivered to the recipient's email server") { Key = MailOptions.RequestDeliveryReceiptKey },
+                new CheckRow("Read receipt confirming the recipient viewed the message") { Key = MailOptions.RequestReadReceiptKey },
                 new SubHeadingRow("For any message received that includes a read receipt request:"),
                 new RadioRow("readreceipt", "Always send a read receipt") { Indent = 1 },
                 new RadioRow("readreceipt", "Never send a read receipt") { Indent = 1 },
@@ -392,7 +398,7 @@ public static class OptionsPages
             new OptionSection("Start and exit",
             [
                 new ComboRow("Start Mailbox in this folder:", ["Inbox", "Calendar", "Tasks"], 0, 200, 240),
-                new CheckRow("Empty Deleted Items folders when exiting Mailbox"),
+                new CheckRow("Empty Deleted Items folders when exiting Mailbox") { Key = MailOptions.EmptyDeletedOnExitKey },
             ]),
 
             new OptionSection("AutoArchive",

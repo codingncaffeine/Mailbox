@@ -98,6 +98,103 @@ public class SmtpSenderTests
         Assert.Equal(OutboxState.Sent, repo.Outbox(id).Single().State);
     }
 
+    // ---- Sent Items -----------------------------------------------------------------------
+
+    /// <summary>
+    /// A message that went is filed in Sent Items, as the person who wrote it, already read.
+    /// This did not happen at all until session 4: the sender marked the row sent and stopped,
+    /// and Sent Items stayed empty for as long as anyone used the application.
+    /// </summary>
+    [Fact]
+    public async Task ASentMessageIsFiledInSentItems()
+    {
+        var (store, repo, id) = Fresh();
+        using var _ = store;
+        repo.CreateStandardFolders(id);
+        var sent = repo.FolderWithRole(id, FolderRole.Sent)!;
+
+        var sender = new SmtpSender(repo) { SessionFactory = () => new FakeSmtp() };
+        sender.Queue(id, Message("Filed"), Now);
+
+        await sender.DrainAsync(Connection(id), Now, Ct);
+
+        var filed = Assert.Single(repo.Messages(sent.Id));
+        Assert.Equal("Filed", filed.Subject);
+        Assert.True(filed.IsRead);
+        Assert.Equal("you@example.com", filed.FromAddress);
+    }
+
+    /// <summary>The bytes filed are the bytes that went — §4's rule, and the only version that matches the recipient's.</summary>
+    [Fact]
+    public async Task WhatIsFiledIsWhatWent()
+    {
+        var (store, repo, id) = Fresh();
+        using var _ = store;
+        repo.CreateStandardFolders(id);
+        var sent = repo.FolderWithRole(id, FolderRole.Sent)!;
+
+        var smtp = new FakeSmtp();
+        var sender = new SmtpSender(repo) { SessionFactory = () => smtp };
+        sender.Queue(id, Message("Same bytes"), Now);
+        await sender.DrainAsync(Connection(id), Now, Ct);
+
+        var filed = repo.LoadRaw(Assert.Single(repo.Messages(sent.Id)).Id)!;
+        using var ms = new MemoryStream(filed);
+        var reloaded = MimeMessage.Load(ms, Ct);
+
+        Assert.Equal(smtp.Sent.Single().MessageId, reloaded.MessageId);
+    }
+
+    /// <summary>Off is a real preference — the reference offers it — and off files nothing.</summary>
+    [Fact]
+    public async Task FilingCanBeTurnedOff()
+    {
+        var (store, repo, id) = Fresh();
+        using var _ = store;
+        repo.CreateStandardFolders(id);
+        var sent = repo.FolderWithRole(id, FolderRole.Sent)!;
+
+        var sender = new SmtpSender(repo) { SessionFactory = () => new FakeSmtp(), FileSentCopies = false };
+        sender.Queue(id, Message(), Now);
+        await sender.DrainAsync(Connection(id), Now, Ct);
+
+        Assert.Empty(repo.Messages(sent.Id));
+        Assert.Equal(OutboxState.Sent, repo.Outbox(id).Single().State);
+    }
+
+    /// <summary>A message that did not go is not filed as though it had.</summary>
+    [Fact]
+    public async Task ARejectedMessageIsNotFiled()
+    {
+        var (store, repo, id) = Fresh();
+        using var _ = store;
+        repo.CreateStandardFolders(id);
+        var sent = repo.FolderWithRole(id, FolderRole.Sent)!;
+
+        var smtp = new FakeSmtp();
+        smtp.Failures.Enqueue(new SmtpCommandException(
+            SmtpErrorCode.RecipientNotAccepted, SmtpStatusCode.MailboxUnavailable,
+            new MailboxAddress("Alice", "alice@example.com"), "No such user"));
+        var sender = new SmtpSender(repo) { SessionFactory = () => smtp };
+        sender.Queue(id, Message(), Now);
+        await sender.DrainAsync(Connection(id), Now, Ct);
+
+        Assert.Empty(repo.Messages(sent.Id));
+    }
+
+    /// <summary>An account with no Sent folder — a bare test store — sends fine and files nowhere.</summary>
+    [Fact]
+    public async Task NoSentFolderIsNotAnError()
+    {
+        var (store, repo, id) = Fresh();
+        using var _ = store;
+
+        var sender = new SmtpSender(repo) { SessionFactory = () => new FakeSmtp() };
+        sender.Queue(id, Message(), Now);
+
+        Assert.Equal(1, await sender.DrainAsync(Connection(id), Now, Ct));
+    }
+
     /// <summary>
     /// Draining twice must not send twice. A timer calls this, and a message delivered again
     /// every minute is worse than one not delivered at all.

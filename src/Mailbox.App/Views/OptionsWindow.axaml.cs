@@ -324,8 +324,19 @@ public sealed class OptionsWindow : Window
     /// Sub-dialogs opened from a page's buttons. Only the shapes exist so far; the ones with
     /// reference captures are next.
     /// </summary>
+    /// <summary>
+    /// The buttons that open a sub-dialog. Most still open nothing, and §20 says which and why;
+    /// this is where each one is wired as its dialog arrives.
+    /// </summary>
     private void OnAction(string buttonLabel)
     {
+        switch (buttonLabel)
+        {
+            case "Signatures...":
+                _ = SignatureEditor.EditAsync(
+                    this, App.Accounts.Default?.Account.Address, _ => { });
+                break;
+        }
     }
 
     // ------------------------------------------------------------------------------------

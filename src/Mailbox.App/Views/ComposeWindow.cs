@@ -7,6 +7,7 @@ using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using Mailbox.App.Theming;
 using Mailbox.Controls.Ribbon;
 using Mailbox.Editor;
@@ -58,9 +59,6 @@ public sealed class ComposeWindow : Window
     /// <summary>The document measures in device-independent pixels; mail talks in points.</summary>
     private const double PointsPerPixel = 0.75;
 
-    private const string PlainTextNotice =
-        "This message is being composed as HTML. Plain-text-only composing is Phase 6.";
-
     private readonly CommandCatalog _catalog;
     private readonly AccountStores? _accounts;
     private readonly RibbonView _ribbon;
@@ -103,6 +101,39 @@ public sealed class ComposeWindow : Window
     private bool _sent;
 
     /// <summary>
+    /// Whether this message goes out as plain text only.
+    /// </summary>
+    /// <remarks>
+    /// The body is the same document either way — the mode decides what Send writes, not what
+    /// the writer sees. Plain text sends the text half alone; HTML sends both. Starts from the
+    /// Options page and is switched per message from the Format Text tab, as the reference does.
+    /// </remarks>
+    private bool _plainText;
+
+    private TextBlock? _caption;
+
+    /// <summary>
+    /// The window's title, which is where the reference says what format a message is in.
+    /// </summary>
+    private void UpdateTitle()
+    {
+        var format = _plainText ? "Plain Text" : "HTML";
+        Title = string.IsNullOrWhiteSpace(_subject.Text)
+            ? $"Untitled - Message ({format})"
+            : $"{_subject.Text} - Message ({format})";
+        if (_caption is not null) _caption.Text = Title;
+    }
+
+    /// <summary>The Drafts row this window is editing, so saving again replaces it.</summary>
+    private long? _draftId;
+
+    /// <summary>Saves a message being written, on the interval the Options page sets.</summary>
+    private DispatcherTimer? _autosave;
+
+    /// <summary>Whether anything has changed since the last save, so autosave has a reason to.</summary>
+    private bool _dirty;
+
+    /// <summary>
     /// Loaded the first time spelling is asked for, not at startup.
     /// </summary>
     /// <remarks>
@@ -125,8 +156,6 @@ public sealed class ComposeWindow : Window
     /// <summary>Not a word anybody would suggest, so it cannot collide with one.</summary>
     private const string AddToDictionary = "\u0000add";
     private const string EditSignatures = "\u0000signatures";
-    private const string NewSignature = "\u0000new";
-    private const string DefaultSignature = "\u0000default";
 
     public ComposeWindow(CommandCatalog catalog, AccountStores? accounts)
     {
@@ -187,8 +216,39 @@ public sealed class ComposeWindow : Window
         _ribbon.CommandInvoked += (_, e) => Run(e.Command);
         _ribbon.BackstageRequested += (_, _) => ShowBackstage();
 
+        // What the Options page says a new message starts as: its importance, whether it asks
+        // for receipts, and its format. Read here rather than at Send, so what the status line
+        // shows while writing is what will go.
+        _importance = App.MailOptions.DefaultImportanceIndex switch
+        {
+            1 => MessageImportance.Low,
+            2 => MessageImportance.High,
+            _ => MessageImportance.Normal,
+        };
+        _wantsDeliveryReceipt = App.MailOptions.RequestDeliveryReceipt;
+        _wantsReadReceipt = App.MailOptions.RequestReadReceipt;
+        _plainText = App.MailOptions.ComposeFormat == ComposeFormat.PlainText;
+
         Content = BuildRoot();
         UpdateStatus();
+        UpdateTitle();
+
+        // The signature this account signs new mail with, if it has chosen one. After the tree
+        // is built, because it goes into the document and the document is part of that tree.
+        InsertDefaultSignature();
+
+        // Autosave, on the Options page's interval. Zero is off. Only when something has
+        // changed since the last save, so an idle window does not rewrite its draft every few
+        // minutes for nothing.
+        if (App.MailOptions.AutosaveMinutes is > 0 and var minutes)
+        {
+            _autosave = new DispatcherTimer { Interval = TimeSpan.FromMinutes(minutes) };
+            _autosave.Tick += (_, _) => { if (_dirty && !_sent && HasContent()) SaveDraft(); };
+            _autosave.Start();
+        }
+
+        _body.TextChanged += (_, _) => _dirty = true;
+        foreach (var field in new[] { _to, _cc, _bcc, _subject }) field.TextChanged += (_, _) => _dirty = true;
 
         _to.AttachedToVisualTree += (_, _) => _to.Focus();
     }
@@ -270,6 +330,20 @@ public sealed class ComposeWindow : Window
 
         UpdateStatus();
         _ribbon.RefreshEnablement();
+    }
+
+    /// <summary>
+    /// Opens a draft for more writing, so saving or sending it acts on that draft.
+    /// </summary>
+    /// <remarks>
+    /// Without this a draft was a message that could be looked at and never resumed — Save wrote
+    /// to Drafts and nothing read from it — which is not what a draft is.
+    /// </remarks>
+    public void EditDraft(long messageId, MimeMessage message)
+    {
+        Restore(message);
+        _draftId = messageId;
+        _dirty = false;
     }
 
     /// <summary>Selects a ribbon tab by id. Used by the fidelity harness, which cannot click.</summary>
@@ -508,13 +582,11 @@ public sealed class ComposeWindow : Window
         WindowFrame.Drags(this, host);
 
         // Keeps the caption text following the window title as the subject is typed.
+        _caption = caption;
         _subject.PropertyChanged += (_, e) =>
         {
             if (e.Property != TextBox.TextProperty) return;
-            Title = string.IsNullOrWhiteSpace(_subject.Text)
-                ? "Untitled - Message (HTML)"
-                : $"{_subject.Text} - Message (HTML)";
-            caption.Text = Title;
+            UpdateTitle();
         };
 
         return host;
@@ -893,6 +965,22 @@ public sealed class ComposeWindow : Window
         FontSize = 12,
     };
 
+    /// <summary>Starts the message from this account, for the shell to say which folder was open.</summary>
+    public void SendFromAccount(string address)
+    {
+        if (_accounts?.Find(address) is null) return;
+        _sendingAddress = address;
+        _fromAddress.Text = address;
+
+        // The signature is the account's, so a different account means a different one — or
+        // none. Only while nothing has been written, which is the only time this is called.
+        if (!_dirty)
+        {
+            InsertDefaultSignature();
+            _dirty = false;
+        }
+    }
+
     /// <summary>Sends from this account, and says so where it is being read from.</summary>
     private void SendFrom(string address)
     {
@@ -969,12 +1057,6 @@ public sealed class ComposeWindow : Window
         if (id == ComposeCommands.Zoom.Id) { StepZoom(); return true; }
         if (id == ComposeCommands.AttachFile.Id) { _ = AttachAsync(); return true; }
         if (id == ComposeCommands.CheckNames.Id) { CheckNames(); return true; }
-        if (id == ComposeCommands.FormatPlainText.Id)
-        {
-            Report(PlainTextNotice);
-            return true;
-        }
-
         if (id == ComposeCommands.Find.Id || id == ComposeCommands.Replace.Id)
         {
             _ = FindAsync(replace: id == ComposeCommands.Replace.Id);
@@ -1054,7 +1136,21 @@ public sealed class ComposeWindow : Window
 
         if (id == ComposeCommands.FormatHtml.Id)
         {
-            Report("This message is already being composed as HTML.");
+            _plainText = false;
+            UpdateTitle();
+            Report("This message will be sent as HTML.");
+            return true;
+        }
+
+        if (id == ComposeCommands.FormatPlainText.Id)
+        {
+            // The document keeps its formatting on screen; what changes is what leaves. Saying
+            // so matters, because a writer who bolded a word and sees it still bold would
+            // otherwise assume it is going out that way.
+            _plainText = true;
+            UpdateTitle();
+            Report("This message will be sent as plain text. Formatting stays on screen and "
+                + "is not sent.");
             return true;
         }
 
@@ -1124,6 +1220,16 @@ public sealed class ComposeWindow : Window
 
     private void CheckNames()
     {
+        var bad = BadAddresses();
+
+        Report(bad.Count == 0
+            ? "Every address parses. Resolving a bare name against contacts is Phase 12."
+            : "Could not read: " + string.Join("; ", bad));
+    }
+
+    /// <summary>Every recipient entry that is not an address, named by its field.</summary>
+    private List<string> BadAddresses()
+    {
         var bad = new List<string>();
 
         foreach (var (label, box) in new[] { ("To", _to), ("Cc", _cc), ("Bcc", _bcc) })
@@ -1134,14 +1240,18 @@ public sealed class ComposeWindow : Window
             }
         }
 
-        Report(bad.Count == 0
-            ? "Every address parses. Resolving a bare name against contacts is Phase 12."
-            : "Could not read: " + string.Join("; ", bad));
+        return bad;
     }
 
+    /// <summary>
+    /// The addresses in a field. Semicolons always separate; commas only when the Options page
+    /// says so, because a display name can carry one — "Person, A." — and a reader who has
+    /// turned commas off is a reader whose address book is written that way.
+    /// </summary>
     private static IEnumerable<string> Split(string? value)
         => (value ?? string.Empty)
-            .Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            .Split(App.MailOptions.CommasSeparateRecipients ? [',', ';'] : [';'],
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     /// <summary>
     /// Restates whatever is worth stating about the message, or hides the bar when nothing is.
@@ -1488,8 +1598,14 @@ public sealed class ComposeWindow : Window
     private void InsertDefaultSignature()
     {
         if (SendingAccount() is not { } account) return;
-        if (App.Signatures.ForNew(account.Account.Address) is not { } signature) return;
-        if (signature.IsEmpty) return;
+
+        if (App.Signatures.ForNew(account.Account.Address) is not { IsEmpty: false } signature)
+        {
+            // No signature for this account: an empty document, which also undoes the one
+            // that was put in for the account this window started from.
+            _body.Clear();
+            return;
+        }
 
         // Two blank lines above it, as every mail client does. LoadHtml rather than InsertHtml,
         // and the difference is where the caret ends up: InsertHtml leaves it after what it
@@ -1524,114 +1640,9 @@ public sealed class ComposeWindow : Window
         Report($"Inserted the {signature.Name} signature.");
     }
 
-    /// <summary>
-    /// Adding, changing and removing signatures.
-    /// </summary>
-    /// <remarks>
-    /// Here rather than on an Options page because this is where the reference puts the way in —
-    /// the Signature dropdown's last entry — and because a signature is written while looking at
-    /// a message rather than while looking at a settings tree.
-    /// </remarks>
-    private async Task EditSignaturesAsync()
-    {
-        var choices = App.Signatures.All
-            .Select(sig => new Choice(sig.Name, sig.Name, "edit or remove"))
-            .ToList();
-
-        choices.Insert(0, new Choice("New signature…", NewSignature, "write another one"));
-
-        if (App.Signatures.All.Count > 0 && SendingAccount() is { } account)
-        {
-            var current = App.Signatures.ForNew(account.Account.Address)?.Name ?? "none";
-
-            choices.Add(new Choice("Use on new messages…", DefaultSignature,
-                $"currently {current}, for {account.Account.Address}"));
-        }
-
-        if (await Chooser.AskAsync(this, "Signatures", "Signature:", choices) is not { } chosen)
-        {
-            return;
-        }
-
-        if (chosen == NewSignature) { await WriteSignatureAsync(null); return; }
-        if (chosen == DefaultSignature) { await ChooseDefaultSignatureAsync(); return; }
-
-        await WriteSignatureAsync(App.Signatures.Find(chosen));
-    }
-
-    /// <summary>
-    /// Writes one, as plain text.
-    /// </summary>
-    /// <remarks>
-    /// Text rather than a second editor, deliberately: a signature is a few lines and a name and
-    /// a phone number, and offering a full compose surface for it is more window than the job
-    /// needs. The lines become paragraphs on the way out, so it arrives as markup in the HTML
-    /// half and as itself in the text half.
-    /// </remarks>
-    private async Task WriteSignatureAsync(Signature? existing)
-    {
-        var name = await Prompt("Signature", "Name:", existing?.Name ?? string.Empty);
-        if (string.IsNullOrWhiteSpace(name)) return;
-
-        var body = await Prompt("Signature", $"What {name} says:", existing?.Text ?? string.Empty);
-
-        if (body is null) return;
-
-        if (body.Trim().Length == 0)
-        {
-            App.Signatures.Remove(name);
-            Report($"Removed the {name} signature.");
-            return;
-        }
-
-        App.Signatures.Save(new Signature
-        {
-            Name = name.Trim(),
-            Text = body,
-            Html = AsHtml(body),
-        });
-
-        Report($"Saved the {name} signature.");
-    }
-
-    /// <summary>
-    /// A signature's lines as the conservative markup outgoing mail wants.
-    /// </summary>
-    /// <remarks>
-    /// The same rules <see cref="EmailHtml"/> applies to the message itself: paragraphs rather
-    /// than line breaks in a div, nothing that a client from 2007 would not render, and every
-    /// character escaped because a signature is text somebody typed and may contain an ampersand.
-    /// </remarks>
-    private static string AsHtml(string text)
-    {
-        var lines = text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
-
-        return string.Concat(lines.Select(line =>
-        {
-            var escaped = line
-                .Replace("&", "&amp;", StringComparison.Ordinal)
-                .Replace("<", "&lt;", StringComparison.Ordinal)
-                .Replace(">", "&gt;", StringComparison.Ordinal);
-
-            return $"<p>{(escaped.Trim().Length == 0 ? "&nbsp;" : escaped)}</p>";
-        }));
-    }
-
-    private async Task ChooseDefaultSignatureAsync()
-    {
-        if (SendingAccount() is not { } account) return;
-
-        var choices = new List<Choice> { new("None", string.Empty, "no signature on a new message") };
-        choices.AddRange(App.Signatures.All.Select(s => new Choice(s.Name, s.Name)));
-
-        var chosen = await Chooser.AskAsync(
-            this, "Signatures", $"On new messages from {account.Account.Address}:", choices);
-
-        if (chosen is null) return;
-
-        App.Signatures.UseForNew(account.Account.Address, chosen.Length == 0 ? null : chosen);
-        Report(chosen.Length == 0 ? "No signature on new messages." : $"New messages sign {chosen}.");
-    }
+    /// <summary>The shared editor, over this window and its sending account.</summary>
+    private Task EditSignaturesAsync()
+        => SignatureEditor.EditAsync(this, SendingAccount()?.Account.Address, Report);
 
     /// <summary>
     /// Spelling, over the whole message.
@@ -1647,12 +1658,18 @@ public sealed class ComposeWindow : Window
     /// than one that quietly cannot check.
     /// </para>
     /// </remarks>
-    private async Task CheckSpellingAsync()
+    /// <param name="quietWhenClean">
+    /// Say nothing when there is nothing to say — for the pass Send runs, where a dialog
+    /// reporting no misspellings on the way out of every message would be a nag.
+    /// </param>
+    private async Task CheckSpellingAsync(bool quietWhenClean = false)
     {
         _spelling ??= await SpellCheck.LoadAsync(personalPath: PersonalDictionaryPath());
 
         if (!_spelling.IsAvailable)
         {
+            if (quietWhenClean) return;
+
             await Message("Spelling",
                 "No dictionary is installed, so spelling cannot be checked.\n\n"
                 + "Install a Hunspell dictionary — hunspell-en_gb, hunspell-en_us or the one for "
@@ -1665,6 +1682,8 @@ public sealed class ComposeWindow : Window
 
         if (found.Count == 0)
         {
+            if (quietWhenClean) return;
+
             await Message("Spelling",
                 $"The spelling check is complete. Nothing was found, against {_spelling.Language}.");
             return;
@@ -1889,6 +1908,18 @@ public sealed class ComposeWindow : Window
             return;
         }
 
+        // "Automatic name checking": an address that will not parse stops the send here, with
+        // the field named, rather than failing at the server with a message about a mailbox.
+        if (App.MailOptions.AutomaticNameChecking && BadAddresses() is { Count: > 0 } bad)
+        {
+            Report("Could not read: " + string.Join("; ", bad));
+            return;
+        }
+
+        // "Always check spelling before sending": the same pass the button runs, and then the
+        // send goes ahead — a spelling check is a chance to fix things, not a gate.
+        if (App.MailOptions.CheckSpellingBeforeSend) await CheckSpellingAsync(quietWhenClean: true);
+
         MimeMessage message;
         try
         {
@@ -1916,6 +1947,10 @@ public sealed class ComposeWindow : Window
             else if (undo is { } until) account.Mail.ScheduleOutbox(outboxId, until);
 
             _sent = true;
+            _autosave?.Stop();
+
+            // A draft that has been sent is no longer a draft.
+            if (_draftId is { } draft) account.Mail.DeleteMessage(draft);
 
             Report(_notBefore is { } held
                 ? $"Queued, held until {held.LocalDateTime:g}."
@@ -1984,6 +2019,12 @@ public sealed class ComposeWindow : Window
             message.Headers.Add("Return-Receipt-To", account.Account.Address);
         }
 
+        // The Options page's default sensitivity. Normal is the header's absence.
+        if (App.MailOptions.DefaultSensitivityHeader is { } sensitivity)
+        {
+            message.Headers.Add("Sensitivity", sensitivity);
+        }
+
         // Both halves, always. A recipient whose client shows plain text — or who has told it
         // to — gets a readable message rather than a page of markup, and the two are the same
         // message rather than two that can disagree, because both come off one document.
@@ -1999,8 +2040,9 @@ public sealed class ComposeWindow : Window
 
         // Ours, not the editor's: §6's wire/render split and the narrow set of elements mail
         // clients actually render. See Mailbox.Editor.EmailHtml for why that is the half worth
-        // keeping in-house.
-        builder.HtmlBody = EmailHtml.Serialize(_body.Document ?? new FlowDocument(), new EmailHtmlOptions
+        // keeping in-house. Unless this message is going as plain text, in which case the text
+        // half is the message and there is no other.
+        if (!_plainText) builder.HtmlBody = EmailHtml.Serialize(_body.Document ?? new FlowDocument(), new EmailHtmlOptions
         {
             BaseFontFamily = ComposeFontFamily,
             BaseFontPoints = ComposeFontPoints,
@@ -2055,9 +2097,16 @@ public sealed class ComposeWindow : Window
             message.WriteTo(buffer);
             var raw = buffer.ToArray();
 
-            var summary = MessageMapper.ToSummary(message, null, raw.Length, DateTimeOffset.UtcNow);
-            account.Mail.AddMessage(drafts.Id, summary, raw);
+            var summary = MessageMapper.ToSummary(message, null, raw.Length, DateTimeOffset.UtcNow)
+                with { IsRead = true };
 
+            // Replaces rather than adds. Saving twice used to leave two drafts, and autosave on
+            // top of that would have left one every few minutes; the row this window is editing
+            // is the one that goes, and the new one takes its place.
+            if (_draftId is { } previous) account.Mail.DeleteMessage(previous);
+            _draftId = account.Mail.AddMessage(drafts.Id, summary, raw);
+
+            _dirty = false;
             _sent = true;
             Report("Saved to Drafts.");
         }
@@ -2071,6 +2120,12 @@ public sealed class ComposeWindow : Window
     // Window behaviour
     // ----------------------------------------------------------------------------------
 
+    protected override void OnClosed(EventArgs e)
+    {
+        _autosave?.Stop();
+        base.OnClosed(e);
+    }
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
@@ -2080,7 +2135,9 @@ public sealed class ComposeWindow : Window
 
         switch (e.Key)
         {
-            case Key.Enter when control:
+            // The Options page's "CTRL+ENTER sends a message". Off is for the person who has
+            // sent one too many half-written messages that way, and it is a real setting.
+            case Key.Enter when control && App.MailOptions.CtrlEnterSends:
                 Run(ComposeCommands.Send.Id);
                 break;
 

@@ -20,14 +20,23 @@ public static class Prompt
 
     /// <summary>The text entered, or null if the dialog was dismissed.</summary>
     public static async Task<string?> AskAsync(
-        Window owner, string title, string label, string value = "")
+        Window owner, string title, string label, string value = "", bool multiline = false)
     {
         string? answer = null;
 
         var caption = new TextBlock { Text = label };
         Bind(caption, TextBlock.ForegroundProperty, "dialog.foreground.brush");
 
-        var input = new TextBox { Text = value, Width = 280 };
+        // Several lines for a signature or anything else worth a paragraph; one for a name.
+        var input = new TextBox
+        {
+            Text = value,
+            Width = multiline ? 360 : 280,
+            AcceptsReturn = multiline,
+            MinHeight = multiline ? 120 : double.NaN,
+            MaxHeight = multiline ? 240 : double.NaN,
+            TextWrapping = multiline ? Avalonia.Media.TextWrapping.Wrap : Avalonia.Media.TextWrapping.NoWrap,
+        };
 
         var window = new Window
         {

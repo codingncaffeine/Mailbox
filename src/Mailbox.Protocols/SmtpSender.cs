@@ -39,7 +39,43 @@ public sealed class SmtpSender(MailRepository repository)
     /// <summary>Lets a test supply a fake session. Null uses MailKit.</summary>
     public Func<ISmtpSession>? SessionFactory { get; set; }
 
+    /// <summary>
+    /// Whether a message that went is filed in Sent Items.
+    /// </summary>
+    /// <remarks>
+    /// On, as it is everywhere. It was not done at all until session 4: the sender marked the
+    /// outbox row sent and stopped, and Sent Items stayed empty for as long as anyone used the
+    /// application — the Options row that governs it was a checkbox over a feature that did not
+    /// exist. Off is for the person who genuinely does not want a copy, which is a real
+    /// preference and the reason the reference offers it.
+    /// </remarks>
+    public bool FileSentCopies { get; set; } = true;
+
     /// <summary>How long to wait before each retry. After the last, the item is failed.</summary>
+    /// <summary>
+    /// Puts a copy of what went into Sent Items, already read.
+    /// </summary>
+    /// <remarks>
+    /// The bytes as they went, verbatim, which is §4's rule for every message the store holds
+    /// and the only version that matches what the recipient has. Marked read because the person
+    /// wrote it. A failure here is logged and not raised: the message has been sent, and an
+    /// exception now would report a delivery that succeeded as one that did not.
+    /// </remarks>
+    private void FileInSent(long accountId, MimeMessage message, byte[] raw, DateTimeOffset now)
+    {
+        try
+        {
+            if (_repository.FolderWithRole(accountId, FolderRole.Sent) is not { } sentFolder) return;
+
+            var summary = MessageMapper.ToSummary(message, null, raw.Length, now) with { IsRead = true };
+            _repository.AddMessage(sentFolder.Id, summary, raw);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("A sent message could not be filed in Sent Items.", ex);
+        }
+    }
+
     internal static readonly TimeSpan[] Backoff =
     [
         TimeSpan.FromMinutes(1),
@@ -183,6 +219,7 @@ public sealed class SmtpSender(MailRepository repository)
             if (result.Sent)
             {
                 _repository.SetOutboxState(item.Id, OutboxState.Sent);
+                if (FileSentCopies) FileInSent(item.AccountId, message, raw, now);
                 sent++;
             }
             else if (result.WorthRetrying && item.Attempts + 1 < Backoff.Length)
