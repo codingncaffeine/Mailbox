@@ -454,15 +454,30 @@ public static class EmailHtml
         var trimmed = family.Trim();
         if (trimmed.Length == 0) return trimmed;
 
-        var names = new List<string> { trimmed };
-
+        // The Microsoft name, chosen by the writer or pasted in: name it, then what stands in
+        // for it, then the generic.
         if (FontSubstitution.Lookup(trimmed) is { } substitute)
         {
+            var names = new List<string> { trimmed };
             if (substitute.Substitute is { Length: > 0 } fallback) names.Add(fallback);
             names.Add(substitute.Generic);
+            return string.Join(", ", names.Select(Quote));
         }
 
-        return string.Join(", ", names.Select(Quote));
+        // The substitute itself, which is what a run carries when the writer chose a face from
+        // the picker: the editor has to be told the family this machine can actually draw, and
+        // for the bundled ones — Gelasio, Comic Relief — fontconfig knows no alias, so the run
+        // holds "Gelasio" rather than "Georgia". Written the other way round on the wire, or a
+        // Windows reader with Georgia installed would get Gelasio's fallback instead of Georgia.
+        // This is §6's split, done at the last possible moment.
+        if (FontSubstitution.Table.FirstOrDefault(e =>
+                string.Equals(e.Substitute, trimmed, StringComparison.OrdinalIgnoreCase))
+            is { } stoodInFor)
+        {
+            return string.Join(", ", new[] { stoodInFor.Original, trimmed, stoodInFor.Generic }.Select(Quote));
+        }
+
+        return Quote(trimmed);
     }
 
     /// <summary>A family name only needs quoting when it has a space in it.</summary>

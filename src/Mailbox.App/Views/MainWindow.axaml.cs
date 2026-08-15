@@ -363,6 +363,17 @@ public partial class MainWindow : Window
                     compose.PoseHeader("a.person@example.com", "b.person@example.com", "Subject line");
                 }
 
+                // Presses Send on a posed message, so what the window actually builds can be
+                // read back out of the outbox and checked as MIME. Undo Send's hold keeps it
+                // there long enough. The only way to audit the Send button is to press it.
+                if (Environment.GetEnvironmentVariable("MAILBOX_COMPOSE_QUEUE") is { Length: > 0 })
+                {
+                    compose.PoseHeader("a.person@example.com", string.Empty, "Harness: queued");
+                    compose.PoseRichBody();
+                    compose.Opened += (_, _) => Dispatcher.UIThread.Post(
+                        () => compose.PressSend(), DispatcherPriority.Background);
+                }
+
                 compose.Opened += async (_, _) =>
                 {
                     await Task.Delay(700);
