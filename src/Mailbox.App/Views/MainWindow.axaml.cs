@@ -903,8 +903,10 @@ public partial class MainWindow : Window
         account.Flyout = AccountFlyout.Build(
             shell.AccountAddress,
             shell.AccountInitial,
-            onViewAccount: () => shell.StatusRight = "View account — not wired yet",
-            onAddAccount: () => shell.StatusRight = "Add an account — not wired yet");
+            // Both go where the Backstage already goes. They were writing "not wired yet" at a
+            // point where the thing they needed had been built for two phases.
+            onViewAccount: ShowBackstage,
+            onAddAccount: () => _ = AddAccountAsync());
     }
 
     private void SetUpTitleBar()
