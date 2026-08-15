@@ -272,6 +272,24 @@ public partial class App : Application
         // pane off in the owner's real settings and every capture for the next hour had no
         // pane. The copy carries the theme and the account order in, and nothing back out.
         Settings = WindowCapture.IsRequested ? SettingsStore.ScratchCopy() : new SettingsStore();
+
+        // The harness poses settings on the scratch copy: MAILBOX_SETTING="key=value;key=value",
+        // with true/false and numbers typed as what they look like. Capture runs only — a real
+        // run's settings are the person's.
+        if (WindowCapture.IsRequested && Environment.GetEnvironmentVariable("MAILBOX_SETTING") is { Length: > 0 } posed)
+        {
+            foreach (var pair in posed.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                var eq = pair.IndexOf('=');
+                if (eq <= 0) continue;
+                var key = pair[..eq].Trim();
+                var value = pair[(eq + 1)..].Trim();
+                if (bool.TryParse(value, out var b)) Settings.Set(key, b);
+                else if (double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var d)) Settings.Set(key, d);
+                else Settings.Set(key, value);
+                Log.Info($"Harness: setting {key} = {value}.");
+            }
+        }
         Fonts = FontResolver.FromSystem();
         Themes = new ThemeService(Fonts);
         RestoreAppearance();
@@ -299,7 +317,7 @@ public partial class App : Application
         // What acts on a message as it arrives, in order: the junk filter, then the rules. Both
         // protocols run the same pipeline, so a rule means the same thing on POP3 and IMAP.
         Rules = new RulesHandler();
-        var arrival = new ArrivalPipeline(Junk, new FocusedInboxHandler(), Rules);
+        var arrival = new ArrivalPipeline(Junk, new IgnoreHandler(), new FocusedInboxHandler(), Rules);
 
         // Read at the moment a collector is made, which is per run — so the Options page's
         // choice applies to the next send/receive rather than the next launch. IMAP and POP3

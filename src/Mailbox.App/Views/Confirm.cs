@@ -26,8 +26,17 @@ public static class Confirm
 
     public static async Task<bool> AskAsync(Window owner, string title, string message,
         string confirmLabel, bool destructive = true)
+        => (await AskAsync(owner, title, message, confirmLabel, destructive, dontShowAgain: null)).Confirmed;
+
+    /// <summary>
+    /// The same question, with the reference's "Don't show this message again" beneath it when a
+    /// label is given. The caller remembers the answer; this only reports the tick.
+    /// </summary>
+    public static async Task<(bool Confirmed, bool DontShowAgain)> AskAsync(Window owner, string title, string message,
+        string confirmLabel, bool destructive, string? dontShowAgain)
     {
         var answer = false;
+        CheckBox? again = null;
 
         var text = new TextBlock
         {
@@ -57,22 +66,27 @@ public static class Confirm
         {
             Margin = new Thickness(22),
             Spacing = 18,
-            Children =
-            {
-                text,
-                new StackPanel
-                {
-                    Orientation = Orientation.Horizontal,
-                    Spacing = 8,
-                    HorizontalAlignment = HorizontalAlignment.Right,
-                    Children = { cancel, confirm },
-                },
-            },
+            Children = { text },
         };
+
+        if (dontShowAgain is { Length: > 0 })
+        {
+            again = new CheckBox { Content = dontShowAgain };
+            Bind(again, TemplatedControl.ForegroundProperty, "dialog.foreground.brush");
+            body.Children.Add(again);
+        }
+
+        body.Children.Add(new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Children = { cancel, confirm },
+        });
 
         DialogChrome.Apply(window, body);
 
         await window.ShowDialog(owner);
-        return answer;
+        return (answer, again?.IsChecked == true);
     }
 }

@@ -2118,6 +2118,11 @@ public partial class MainWindow : Window
         if (id == MailCommands.Delete.Id) { shell.Delete(rows, permanently: false); return true; }
         if (id == MailCommands.Archive.Id) { shell.MoveTo(rows, FolderRole.Archive); return true; }
         if (id == MailCommands.Junk.Id) { ShowJunkMenu(shell, rows); return true; }
+        if (id == MailCommands.Ignore.Id) { _ = IgnoreAsync(shell, rows); return true; }
+        if (id == MailCommands.CleanUp.Id) { ShowCleanUpMenu(shell, rows); return true; }
+        if (id == MailCommands.CleanUpConversation.Id) { shell.CleanUp(rows, wholeFolder: false, withSubfolders: false); return true; }
+        if (id == MailCommands.CleanUpFolder.Id) { shell.CleanUp(rows, wholeFolder: true, withSubfolders: false); return true; }
+        if (id == MailCommands.CleanUpFolderAndSubfolders.Id) { shell.CleanUp(rows, wholeFolder: true, withSubfolders: true); return true; }
         if (id == MailCommands.BlockSender.Id) { shell.BlockSenders(rows); return true; }
         if (id == MailCommands.NeverBlockSender.Id) { shell.NeverBlockSenders(rows, domain: false); return true; }
         if (id == MailCommands.NeverBlockDomain.Id) { shell.NeverBlockSenders(rows, domain: true); return true; }
@@ -2266,6 +2271,45 @@ public partial class MainWindow : Window
             wake.Click += (_, _) => shell.Unsnooze(rows);
             flyout.Items.Add(wake);
         }
+
+        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+    }
+
+    /// <summary>
+    /// Ignore Conversation, asking first the first time as the reference does — with the
+    /// "don't show this message again" that makes it the last time.
+    /// </summary>
+    private async Task IgnoreAsync(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
+    {
+        if (rows.Count == 0) { shell.StatusRight = "Select a message first."; return; }
+
+        if (!shell.IsIgnored(rows) && App.MailOptions.ConfirmIgnore)
+        {
+            var (go, dontAsk) = await Confirm.AskAsync(this, "Ignore Conversation",
+                "The selected conversation and all future messages will be moved to the Deleted Items folder.",
+                "Ignore Conversation", destructive: false, dontShowAgain: "Don't show this message again");
+            if (dontAsk) App.MailOptions.ConfirmIgnore = false;
+            if (!go) return;
+        }
+
+        shell.IgnoreConversation(rows);
+    }
+
+    /// <summary>Clean Up's menu: Conversation, Folder, Folder &amp; Subfolders.</summary>
+    private void ShowCleanUpMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
+    {
+        var flyout = new MenuFlyout();
+
+        void Entry(string header, bool enabled, Action run)
+        {
+            var item = new MenuItem { Header = header, IsEnabled = enabled };
+            item.Click += (_, _) => run();
+            flyout.Items.Add(item);
+        }
+
+        Entry(MailCommands.CleanUpConversation.Label, rows.Count > 0, () => RunCommand(MailCommands.CleanUpConversation.Id));
+        Entry(MailCommands.CleanUpFolder.Label, shell.CurrentFolder is not null, () => RunCommand(MailCommands.CleanUpFolder.Id));
+        Entry(MailCommands.CleanUpFolderAndSubfolders.Label, shell.CurrentFolder is not null, () => RunCommand(MailCommands.CleanUpFolderAndSubfolders.Id));
 
         flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
     }
@@ -2675,7 +2719,7 @@ public partial class MainWindow : Window
                     shell.ShowOther ? MailCommands.AlwaysMoveToFocused.Id : MailCommands.AlwaysMoveToOther.Id);
             }
 
-            Command("Ignore", MailCommands.Ignore.Id, works: false, "Phase 8 — Ignore Conversation");
+            Command(shell.IsIgnored(rows) ? "Stop Ignoring Conversation" : "Ignore", MailCommands.Ignore.Id);
             Command("Junk", MailCommands.Junk.Id);
             flyout.Items.Add(new Separator());
 

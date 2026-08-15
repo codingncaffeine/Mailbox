@@ -111,6 +111,41 @@ public static class MailCommands
         InDefaultLayout = false,
     };
 
+    /// <summary>The Clean Up drop-down's three entries, as commands: they can be run by keyboard, Quick Step and harness alike.</summary>
+    public static readonly MailboxCommand CleanUpConversation = new()
+    {
+        Id = new("mail.cleanup.conversation"),
+        Label = "Clean Up Conversation",
+        Description = "Move redundant messages in the selected conversation to Deleted Items.",
+        Icon = "cleanup",
+        Category = "Delete",
+        Scope = ModuleScope.Mail,
+        RequiresSelection = true,
+        InDefaultLayout = false,
+    };
+
+    public static readonly MailboxCommand CleanUpFolder = new()
+    {
+        Id = new("mail.cleanup.folder"),
+        Label = "Clean Up Folder",
+        Description = "Move redundant messages in every conversation of the current folder to Deleted Items.",
+        Icon = "cleanup",
+        Category = "Delete",
+        Scope = ModuleScope.Mail,
+        InDefaultLayout = false,
+    };
+
+    public static readonly MailboxCommand CleanUpFolderAndSubfolders = new()
+    {
+        Id = new("mail.cleanup.subfolders"),
+        Label = "Clean Up Folder & Subfolders",
+        Description = "Move redundant messages in every conversation of the current folder and its subfolders to Deleted Items.",
+        Icon = "cleanup",
+        Category = "Delete",
+        Scope = ModuleScope.Mail,
+        InDefaultLayout = false,
+    };
+
     public static readonly MailboxCommand NeverBlockGroup = new()
     {
         Id = new("mail.junk.neverblockgroup"),
@@ -550,6 +585,7 @@ public static class MailCommands
         NewEmail, NewItems,
         Ignore, CleanUp, Junk, Delete, Archive,
         BlockSender, NeverBlockSender, NeverBlockDomain, NeverBlockGroup, NotJunk, JunkOptions,
+        CleanUpConversation, CleanUpFolder, CleanUpFolderAndSubfolders,
         Reply, ReplyAll, Forward, Meeting, MoreRespond,
         MoveTo, Rules, QuickSteps,
         Unread, Categorize, FollowUp,

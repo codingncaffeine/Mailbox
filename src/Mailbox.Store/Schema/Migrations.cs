@@ -523,6 +523,20 @@ public static class Migrations
             added_utc  INTEGER NOT NULL
         );
         """,
+
+        // ---- 22: Ignore Conversation ----------------------------------------------------------
+        //
+        // A conversation the reader has ignored: what is in it goes to Deleted Items, and so does
+        // every message that arrives in it after — an arrival handler checks the thread key. Keyed
+        // on the same normalised subject the list threads by, so "ignore" and "conversation" mean
+        // the same thing here as on screen. Stop Ignoring deletes the row.
+        """
+        CREATE TABLE ignored_conversations (
+            thread_key  TEXT    NOT NULL PRIMARY KEY,
+            subject     TEXT    NOT NULL DEFAULT '',
+            added_utc   INTEGER NOT NULL
+        );
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>
