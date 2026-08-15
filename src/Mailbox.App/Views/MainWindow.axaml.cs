@@ -161,6 +161,18 @@ public partial class MainWindow : Window
             }, DispatcherPriority.Background);
         }
 
+        // Runs the reminder check now, as the minute timer would: MAILBOX_REMINDERS=check.
+        if (Environment.GetEnvironmentVariable("MAILBOX_REMINDERS") == "check")
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(() =>
+            {
+                if (DataContext is not ShellViewModel s) return;
+                CheckReminders(s);
+                Log.Info($"Harness: reminders window {( _reminders?.IsVisible == true ? "shown with " + _reminders.Current.Count : "not shown")}.");
+                if (_reminders?.IsVisible == true) CaptureNextWindow();
+            }, DispatcherPriority.Background);
+        }
+
         // Presses a Snooze preset on the posed selection: MAILBOX_SNOOZE=<0..3>, or `wake` to
         // run the timer's wake pass now. A menu cannot be pressed by a capture; what it does can
         // be read back out of the store.
@@ -426,6 +438,15 @@ public partial class MainWindow : Window
                 {
                     CaptureNextWindow();
                     await new NewSearchFolderDialog(DataContext is ShellViewModel s ? s.CurrentAccountForCategories() : null).ShowDialog(this);
+                };
+                break;
+
+            case "customflag":
+                Opened += async (_, _) =>
+                {
+                    if (DataContext is not ShellViewModel s || s.SelectedMessage is not { } row) return;
+                    CaptureNextWindow();
+                    await new CustomFlagDialog(s.SummaryOf(row), reminderOn: true).ShowDialog(this);
                 };
                 break;
 
@@ -2157,22 +2178,12 @@ public partial class MainWindow : Window
         Preset("No Date", null);
 
         var custom = new MenuItem { Header = "Custom…" };
-        custom.Click += async (_, _) =>
-        {
-            var entered = await Prompt.AskAsync(this, "Custom Follow Up", "Due (yyyy-MM-dd):");
-            if (entered is null) return;
-
-            if (DateTime.TryParse(entered, System.Globalization.CultureInfo.CurrentCulture,
-                    System.Globalization.DateTimeStyles.AssumeLocal, out var when))
-            {
-                shell.FlagForFollowUp(rows, new DateTimeOffset(when.Date.AddHours(17)));
-            }
-            else if (DataContext is ShellViewModel s)
-            {
-                s.StatusRight = $"Could not read “{entered}” as a date.";
-            }
-        };
+        custom.Click += async (_, _) => await CustomFlagAsync(shell, rows, reminderOn: false);
         flyout.Items.Add(custom);
+
+        var remind = new MenuItem { Header = "Add Reminder…" };
+        remind.Click += async (_, _) => await CustomFlagAsync(shell, rows, reminderOn: true);
+        flyout.Items.Add(remind);
 
         flyout.Items.Add(new Separator());
 
@@ -2239,6 +2250,86 @@ public partial class MainWindow : Window
         }
 
         flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+    }
+
+    /// <summary>The Custom flag dialog over the selection — from Custom… or Add Reminder….</summary>
+    private async Task CustomFlagAsync(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows, bool reminderOn)
+    {
+        if (rows.Count == 0) return;
+
+        var current = shell.SummaryOf(rows[0]);
+        var dialog = new CustomFlagDialog(current, reminderOn);
+        await dialog.ShowDialog(this);
+
+        if (dialog.Cleared) { shell.ClearFollowUpFlag(rows); return; }
+        if (dialog.Result is not { } flag) return;
+
+        shell.SetCustomFlag(rows, flag);
+    }
+
+    // ---- Reminders (§9) ------------------------------------------------------------------------
+
+    private RemindersWindow? _reminders;
+    private readonly HashSet<(string, long)> _announced = [];
+
+    /// <summary>
+    /// What the minute timer asks: has any flag's reminder time come? The Reminders window shows
+    /// what is due, a toast announces each item once, and the alarm sounds — each as the
+    /// Options page allows.
+    /// </summary>
+    private void CheckReminders(ShellViewModel shell)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var due = new List<DueReminder>();
+        foreach (var account in App.Accounts.All)
+        {
+            foreach (var message in account.Mail.DueReminders(now)) due.Add(new DueReminder(account, message));
+        }
+
+        // Announced once per item per time: a snoozed reminder that comes round again is a new
+        // announcement, and its key carries the time so it is.
+        var fresh = due.Where(d => _announced.Add((d.Account.Account.Address, d.Message.Id ^ (d.Message.Reminder?.ToUnixTimeSeconds() ?? 0)))).ToList();
+
+        if (due.Count == 0)
+        {
+            _reminders?.Show([]);
+            return;
+        }
+
+        if (App.MailOptions.ShowReminders)
+        {
+            _reminders ??= NewRemindersWindow(shell);
+            _reminders.Show(due);
+        }
+
+        if (fresh.Count == 0) return;
+
+        if (App.MailOptions.PlayReminderSound) Notifications.Sounds.PlayAlarm();
+
+        if (App.MailOptions.DisplayDesktopAlert)
+        {
+            foreach (var item in fresh)
+            {
+                _notifier.Notify(ToastFor(new NewMailToast(
+                    "Reminder: " + item.Subject, item.DueIn(DateTimeOffset.Now),
+                    item.Account.Account.Address, item.Message.Id)));
+            }
+        }
+    }
+
+    private RemindersWindow NewRemindersWindow(ShellViewModel shell)
+    {
+        var window = new RemindersWindow();
+        window.OpenRequested += (_, item) =>
+        {
+            BringForward();
+            RevealMessage(shell, item.Address, item.MessageId);
+        };
+        Closed += (_, _) =>
+        {
+            try { window.Close(); } catch (Exception) { /* already gone */ }
+        };
+        return window;
     }
 
     private void ShowCategorizeMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
@@ -2600,6 +2691,7 @@ public partial class MainWindow : Window
         timer.Tick += (_, _) =>
         {
             WakeSnoozed(shell);
+            CheckReminders(shell);
 
             if (_transferring || App.Transfer.WorkOffline) return;
 

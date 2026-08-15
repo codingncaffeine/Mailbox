@@ -493,4 +493,48 @@ public class MailRepositoryTests
         Assert.Equal(0, repo.Unsnooze([one], now));
         Assert.False(repo.GetMessage(one)!.IsRead);
     }
+
+    // ---- Reminders --------------------------------------------------------------------------
+
+    /// <summary>
+    /// The Custom flag carries what it says, its dates and a reminder; the reminder comes due,
+    /// is dismissed or snoozed, and goes with the flag when the flag is cleared or completed.
+    /// </summary>
+    [Fact]
+    public void ACustomFlagCarriesAReminderThatComesDueAndCanBeSnoozed()
+    {
+        var (store, repo, inbox) = Fresh();
+        using var _ = store;
+        var id = repo.AddMessage(inbox.Id, Sample("uid-1"))!.Value;
+        var now = new DateTimeOffset(2026, 8, 15, 12, 0, 0, TimeSpan.Zero);
+
+        repo.SetCustomFollowUp([id], "Call", now.AddDays(-1), now.AddDays(1), now.AddHours(1));
+        var flagged = repo.GetMessage(id)!;
+        Assert.True(flagged.IsFlagged);
+        Assert.Equal("Call", flagged.FollowUpType);
+        Assert.Equal(now.AddDays(-1), flagged.FollowUpStart);
+        Assert.Equal(now.AddDays(1), flagged.FollowUpDue);
+        Assert.Equal(now.AddHours(1), flagged.Reminder);
+
+        Assert.Empty(repo.DueReminders(now));
+        Assert.Equal([id], repo.DueReminders(now.AddHours(1)).Select(m => m.Id));
+
+        // Snoozed: not due until later. Dismissed: never again.
+        repo.SetReminder([id], now.AddHours(2));
+        Assert.Empty(repo.DueReminders(now.AddHours(1)));
+        Assert.Single(repo.DueReminders(now.AddHours(2)));
+
+        repo.SetReminder([id], null);
+        Assert.Empty(repo.DueReminders(now.AddDays(5)));
+
+        // Completing or clearing the flag takes the reminder with it.
+        repo.SetReminder([id], now);
+        repo.CompleteFollowUp([id]);
+        Assert.Empty(repo.DueReminders(now.AddDays(5)));
+
+        repo.SetCustomFollowUp([id], "Review", null, null, now);
+        repo.ClearFollowUp([id]);
+        Assert.Empty(repo.DueReminders(now.AddDays(5)));
+        Assert.Null(repo.GetMessage(id)!.FollowUpType);
+    }
 }

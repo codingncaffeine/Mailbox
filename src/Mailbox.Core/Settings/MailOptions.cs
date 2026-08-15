@@ -49,6 +49,9 @@ public sealed class MailOptions(SettingsStore settings)
     public const string JunkTrustContactsKey = "mail.junk.trustcontacts";
     public const string JunkSafeAutoAddKey = "mail.junk.autoaddrecipients";
     public const string RecoverDaysKey = "mail.recover.days";
+    public const string ShowRemindersKey = "reminders.show";
+    public const string ReminderSoundKey = "reminders.sound";
+    public const string RemindersOnTopKey = "reminders.ontop";
     public const string DesktopAlertKey = "mail.arrival.alert";
     public const string RequestDeliveryReceiptKey = "mail.tracking.delivery";
     public const string RequestReadReceiptKey = "mail.tracking.read";
@@ -202,6 +205,17 @@ public sealed class MailOptions(SettingsStore settings)
     /// the reference's servers keep them; 0 keeps nothing.
     /// </summary>
     public int RecoverDays => Math.Clamp((int)_settings.GetNumber(RecoverDaysKey, 30), 0, 365);
+
+    // ---- Reminders (Options › Advanced) ---------------------------------------------------
+
+    /// <summary>Whether the Reminders window opens when a flag's reminder time comes. On.</summary>
+    public bool ShowReminders => _settings.GetBool(ShowRemindersKey, true);
+
+    /// <summary>Whether a reminder plays the desktop's alarm sound. On.</summary>
+    public bool PlayReminderSound => _settings.GetBool(ReminderSoundKey, true);
+
+    /// <summary>Whether the Reminders window stays above other windows. On.</summary>
+    public bool RemindersOnTop => _settings.GetBool(RemindersOnTopKey, true);
 
     // ---- Leaving --------------------------------------------------------------------------
 

@@ -492,6 +492,21 @@ public static class Migrations
             created_utc   INTEGER NOT NULL
         );
         """,
+
+        // ---- 20: the rest of a follow-up flag ------------------------------------------------
+        //
+        // The Custom flag dialog's other three fields: what the flag says ("Follow up", "Call",
+        // "Review" and the rest), when it starts, and when to be reminded. The reminder is what
+        // the Reminders window and its toast fire on; dismissed is null, snoozed is later. Left
+        // null on every existing flag, which reads as "no reminder", which is what they had.
+        """
+        ALTER TABLE messages ADD COLUMN follow_up_type  TEXT;
+        ALTER TABLE messages ADD COLUMN follow_up_start INTEGER;
+        ALTER TABLE messages ADD COLUMN reminder_utc    INTEGER;
+
+        CREATE INDEX messages_by_reminder ON messages (reminder_utc)
+            WHERE reminder_utc IS NOT NULL;
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>

@@ -17,12 +17,16 @@ internal static class Sounds
 {
     private static bool _available = true;
 
-    public static void Play(string? file)
+    /// <summary>The desktop's alarm sound, for a reminder whose time has come.</summary>
+    public static void PlayAlarm() => Play(null, "alarm-clock-elapsed");
+
+    /// <summary>A file, or the desktop's own sound for an event id when there is none.</summary>
+    public static void Play(string? file, string eventId = "message-new-email")
     {
         if (!_available) return;
 
         var attempts = string.IsNullOrWhiteSpace(file)
-            ? new[] { ("canberra-gtk-play", new[] { "--id=message-new-email" }) }
+            ? new[] { ("canberra-gtk-play", new[] { "--id=" + eventId }) }
             : new[]
             {
                 ("canberra-gtk-play", new[] { "--file=" + file }),

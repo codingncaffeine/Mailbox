@@ -532,7 +532,31 @@ public sealed class MailRepository(MailStore store)
         });
     }
 
-    /// <summary>Marks a follow-up complete: the flag clears, and a check takes its place.</summary>
+    /// <summary>
+    /// The Custom flag dialog's whole flag at once: what it says, when it starts, when it is due,
+    /// and when to be reminded. Sets the flag as <see cref="SetFollowUp"/> does.
+    /// </summary>
+    public void SetCustomFollowUp(IReadOnlyCollection<long> messageIds, string? type,
+        DateTimeOffset? start, DateTimeOffset? due, DateTimeOffset? reminder)
+    {
+        if (messageIds.Count == 0) return;
+
+        _store.InTransaction(() =>
+        {
+            _store.Execute(
+                $"""
+                 UPDATE messages SET is_flagged = 1, follow_up_complete = 0, follow_up_type = $type,
+                     follow_up_start = $start, follow_up_due = $due, reminder_utc = $reminder
+                 WHERE id IN ({Ids(messageIds)})
+                 """,
+                ("$type", type), ("$start", start?.ToUnixTimeSeconds()),
+                ("$due", due?.ToUnixTimeSeconds()), ("$reminder", reminder?.ToUnixTimeSeconds()));
+            JournalFlag(messageIds, SyncFlag.Flagged, true);
+            return 0;
+        });
+    }
+
+    /// <summary>Marks a follow-up complete: the flag clears, and a check takes its place. The reminder goes with it.</summary>
     public void CompleteFollowUp(IReadOnlyCollection<long> messageIds)
     {
         if (messageIds.Count == 0) return;
@@ -540,13 +564,13 @@ public sealed class MailRepository(MailStore store)
         _store.InTransaction(() =>
         {
             _store.Execute(
-                $"UPDATE messages SET is_flagged = 0, follow_up_complete = 1 WHERE id IN ({Ids(messageIds)})");
+                $"UPDATE messages SET is_flagged = 0, follow_up_complete = 1, reminder_utc = NULL WHERE id IN ({Ids(messageIds)})");
             JournalFlag(messageIds, SyncFlag.Flagged, false);
             return 0;
         });
     }
 
-    /// <summary>Clears a follow-up entirely — no flag, no date, no completed mark.</summary>
+    /// <summary>Clears a follow-up entirely — no flag, no dates, no reminder, no completed mark.</summary>
     public void ClearFollowUp(IReadOnlyCollection<long> messageIds)
     {
         if (messageIds.Count == 0) return;
@@ -555,13 +579,34 @@ public sealed class MailRepository(MailStore store)
         {
             _store.Execute(
                 $"""
-                 UPDATE messages SET is_flagged = 0, follow_up_complete = 0, follow_up_due = NULL
+                 UPDATE messages SET is_flagged = 0, follow_up_complete = 0, follow_up_due = NULL,
+                     follow_up_type = NULL, follow_up_start = NULL, reminder_utc = NULL
                  WHERE id IN ({Ids(messageIds)})
                  """);
             JournalFlag(messageIds, SyncFlag.Flagged, false);
             return 0;
         });
     }
+
+    // ---- Reminders ---------------------------------------------------------------------------
+    //
+    // A flag may carry a time to be reminded at. The Reminders window lists what is due;
+    // Dismiss clears the time, Snooze pushes it on. Nothing here fires — the shell's timer asks.
+
+    /// <summary>Sets or clears (null) the reminder on flagged messages.</summary>
+    public void SetReminder(IReadOnlyCollection<long> messageIds, DateTimeOffset? when)
+    {
+        if (messageIds.Count == 0) return;
+
+        _store.Execute(
+            $"UPDATE messages SET reminder_utc = $when WHERE id IN ({Ids(messageIds)})",
+            ("$when", when?.ToUnixTimeSeconds()));
+    }
+
+    /// <summary>The flagged messages whose reminder time has come, soonest first.</summary>
+    public IReadOnlyList<MessageSummary> DueReminders(DateTimeOffset now) => _store.Query(
+        MessageSelect + " WHERE reminder_utc IS NOT NULL AND reminder_utc <= $now AND is_flagged = 1 ORDER BY reminder_utc",
+        ReadMessage, ("$now", now.ToUnixTimeSeconds()));
 
     /// <summary>
     /// Moves messages between folders. On a synced account the move is journalled for the
@@ -2132,6 +2177,9 @@ public sealed class MailRepository(MailStore store)
         SnoozedUntil = NullableLong(r, "snooze_until") is { } until
             ? DateTimeOffset.FromUnixTimeSeconds(until)
             : null,
+        FollowUpType = Nullable(r, "follow_up_type"),
+        FollowUpStart = NullableLong(r, "follow_up_start") is { } start ? DateTimeOffset.FromUnixTimeSeconds(start) : null,
+        Reminder = NullableLong(r, "reminder_utc") is { } remind ? DateTimeOffset.FromUnixTimeSeconds(remind) : null,
         Importance = r.GetInt32(r.GetOrdinal("importance")),
         To = Split(r.GetString(r.GetOrdinal("to_addresses"))),
         Cc = Split(r.GetString(r.GetOrdinal("cc_addresses"))),
