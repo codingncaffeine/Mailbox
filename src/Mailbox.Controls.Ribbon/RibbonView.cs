@@ -276,6 +276,36 @@ public sealed class RibbonView : ContentControl
             strip.Children.Add(BuildTabButton(tab));
         }
 
+        // "Tell me what you want to do" sits after the last tab on the compose window. The
+        // shell's captures show none, so it is a property of the layout rather than of the bar.
+        if (_layout.TellMe is { Length: > 0 } prompt)
+        {
+            var hint = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 7,
+                Margin = new Thickness(14, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+
+            var bulb = new TextBlock
+            {
+                Text = IconGlyphs.GetOrEmpty("lightbulb", 16),
+                FontFamily = IconFont.Family,
+                FontSize = 14,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            Bind(bulb, TextBlock.ForegroundProperty, "ribbon.tab.text.brush");
+            hint.Children.Add(bulb);
+
+            var label = new TextBlock { Text = prompt, VerticalAlignment = VerticalAlignment.Center };
+            Bind(label, TextBlock.ForegroundProperty, "ribbon.tab.text.brush");
+            Bind(label, TextBlock.FontSizeProperty, "type.ui.size.value");
+            hint.Children.Add(label);
+
+            strip.Children.Add(hint);
+        }
+
         var host = new Border { Height = RibbonMetrics.TabStripHeight, Child = strip };
         Bind(host, Border.BackgroundProperty, "ribbon.tabstrip.background.brush");
         return host;

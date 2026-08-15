@@ -258,6 +258,12 @@ public sealed record RibbonLayout
     public IReadOnlyDictionary<string, IReadOnlyList<RibbonItem>> SimplifiedRows { get; init; }
         = new Dictionary<string, IReadOnlyList<RibbonItem>>();
 
+    /// <summary>
+    /// The prompt sitting after the last tab — "Tell me what you want to do" on the compose
+    /// window. Null where the host has none, which is what the shell's captures show.
+    /// </summary>
+    public string? TellMe { get; init; }
+
     /// <summary>False when this is the shipped default rather than a user's edit.</summary>
     public bool IsUserModified { get; init; }
 
