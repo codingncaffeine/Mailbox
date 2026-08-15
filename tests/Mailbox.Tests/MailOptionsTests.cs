@@ -43,6 +43,9 @@ public class MailOptionsTests : IDisposable
         // separate-window behaviour is the switch-back, and closing the original is off.
         Assert.False(options.OpenRepliesInNewWindow);
         Assert.False(options.CloseOriginalOnReply);
+
+        // The junk filter defaults to Low — the reference's own default, a high bar.
+        Assert.Equal(1, options.JunkLevelIndex);
     }
 
     /// <summary>The combo persists an index in the reference's own order; this names it.</summary>

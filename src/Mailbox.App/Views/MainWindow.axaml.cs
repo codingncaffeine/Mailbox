@@ -170,6 +170,20 @@ public partial class MainWindow : Window
                 DispatcherPriority.Loaded);
         }
 
+        // Opens a compose window from a mailto: link and photographs it, so the parser-to-window
+        // path can be checked. The real cold-start path is gated off during a capture, which is
+        // why the harness has its own way in.
+        if (Environment.GetEnvironmentVariable("MAILBOX_MAILTO") is { Length: > 0 } mailto)
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(
+                () =>
+                {
+                    CaptureNextWindow();
+                    ComposeFromCommandLine([mailto]);
+                },
+                DispatcherPriority.Background);
+        }
+
         // Runs the search box, so a capture can show the results. MAILBOX_SEARCH_SCOPE picks the
         // scope (this/current/all) first, since a search re-runs when the scope changes.
         if (Environment.GetEnvironmentVariable("MAILBOX_SEARCH") is { Length: > 0 } query)
@@ -576,7 +590,7 @@ public partial class MainWindow : Window
     /// Opens a new message in its own window, as the reference does — not modally, because
     /// writing one message must not stop you reading another.
     /// </summary>
-    private void NewMessage()
+    private void NewMessage(Mailbox.Core.Compose.MailtoLink? mailto = null)
     {
         var compose = new ComposeWindow(App.Commands, App.Accounts);
 
@@ -590,6 +604,10 @@ public partial class MainWindow : Window
             compose.SendFromAccount(address);
         }
 
+        // Filled from a mailto: link when the desktop handed us one — Mailbox as the system mail
+        // client. Left blank for New Email.
+        if (mailto is { } link) compose.ComposeFromMailto(link);
+
         compose.Closed += (_, _) =>
         {
             if (DataContext is ShellViewModel shell) shell.Refresh();
@@ -600,6 +618,33 @@ public partial class MainWindow : Window
         compose.Queued += (_, e) => OnQueued(e);
 
         compose.Show(this);
+    }
+
+    /// <summary>
+    /// Acts on the command line the desktop launched Mailbox with: a <c>mailto:</c> URI or
+    /// <c>--compose</c> opens a compose window, filled from the link where there is one.
+    /// </summary>
+    /// <remarks>
+    /// Cold start: Mailbox was not already running, so the desktop starts it with the URI. When
+    /// it <em>is</em> running, single-instance activation hands the URI to the live process
+    /// instead — that path calls <see cref="ComposeFromCommandLine"/> too.
+    /// </remarks>
+    public void ComposeFromCommandLine(IReadOnlyList<string> args)
+    {
+        foreach (var arg in args)
+        {
+            if (Mailbox.Core.Compose.MailtoLink.Parse(arg) is { } link)
+            {
+                NewMessage(link);
+                return;
+            }
+
+            if (string.Equals(arg, "--compose", StringComparison.Ordinal))
+            {
+                NewMessage();
+                return;
+            }
+        }
     }
 
     /// <summary>

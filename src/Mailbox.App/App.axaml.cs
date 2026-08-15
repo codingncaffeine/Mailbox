@@ -197,6 +197,14 @@ public partial class App : Application
             // and got another is recorded as what it is.
             Log.Info(WindowingBackend.Describe(window));
 
+            // A mailto: link or --compose on the command line opens a compose window once the
+            // shell is up — Mailbox acting as the system mail client on a cold start. The harness
+            // sets its own environment and passes no such args, so a capture run is unaffected.
+            if (desktop.Args is { Length: > 0 } args && !WindowCapture.IsRequested)
+            {
+                window.Opened += (_, _) => window.ComposeFromCommandLine(args);
+            }
+
             // The Options page's "Empty Deleted Items folders when exiting". Off by default, as
             // the reference has it, because with POP3 this store may hold the only copy.
             desktop.ShutdownRequested += (_, _) =>
