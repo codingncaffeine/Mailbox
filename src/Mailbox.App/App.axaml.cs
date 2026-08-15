@@ -1,7 +1,10 @@
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Threading;
 using Avalonia.Markup.Xaml;
 using Mailbox.App.Theming;
+using Mailbox.App.ViewModels;
 using Mailbox.App.Views;
 using Mailbox.Core.Commands;
 using Mailbox.Core.Ribbon;
@@ -57,6 +60,9 @@ public partial class App : Application
     /// <summary>The junk filter (§7.8), reading its level live from the Options page.</summary>
     public static JunkService Junk { get; private set; } = null!;
 
+    /// <summary>The single-instance guard, or null during a capture run. Set by <c>Program.Main</c>.</summary>
+    public static Mailbox.Core.SingleInstance? Instance { get; set; }
+
     /// <summary>The user's ribbon edits, and the layout that comes of applying them.</summary>
     public static RibbonCustomization RibbonEdits { get; private set; } = null!;
 
@@ -89,6 +95,75 @@ public partial class App : Application
     public const string DensitySetting = "appearance.density";
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
+
+    private TrayIcon? _tray;
+
+    /// <summary>
+    /// The notification-area icon (§10): a menu to open the window, write a message, check mail
+    /// or quit, and a tooltip that carries the unread count. Left-click brings the window
+    /// forward. Held in a field so it outlives this method and is not collected.
+    /// </summary>
+    private void InstallTrayIcon(MainWindow window, IClassicDesktopStyleApplicationLifetime desktop)
+    {
+        try
+        {
+            void Show()
+            {
+                window.Show();
+                window.Activate();
+            }
+
+            var open = new NativeMenuItem("Open Mailbox");
+            open.Click += (_, _) => Show();
+
+            var compose = new NativeMenuItem("New Email");
+            compose.Click += (_, _) => { Show(); window.ComposeFromCommandLine(["--compose"]); };
+
+            var quit = new NativeMenuItem("Quit");
+            quit.Click += (_, _) => desktop.Shutdown();
+
+            var menu = new NativeMenu();
+            menu.Add(open);
+            menu.Add(compose);
+            menu.Add(new NativeMenuItemSeparator());
+            menu.Add(quit);
+
+            _tray = new TrayIcon
+            {
+                Icon = new WindowIcon(Avalonia.Platform.AssetLoader.Open(
+                    new Uri("avares://mailbox/Assets/Icons/mailbox-32.png"))),
+                ToolTipText = "Mailbox",
+                IsVisible = true,
+                Menu = menu,
+            };
+
+            // Left-click brings the window forward, as a tray icon is expected to.
+            _tray.Clicked += (_, _) => Show();
+
+            // The tooltip carries the unread count as it changes, since the icon itself cannot
+            // easily draw a badge across every tray implementation.
+            if (window.DataContext is ShellViewModel shell)
+            {
+                void Refresh() => _tray.ToolTipText = shell.TotalUnread > 0
+                    ? $"Mailbox — {shell.TotalUnread} unread"
+                    : "Mailbox";
+
+                shell.PropertyChanged += (_, e) =>
+                {
+                    if (e.PropertyName == nameof(ShellViewModel.TotalUnread)) Refresh();
+                };
+                Refresh();
+            }
+
+            desktop.ShutdownRequested += (_, _) => _tray.IsVisible = false;
+        }
+        catch (Exception ex)
+        {
+            // A session with no notification-area host: the window still runs, it just has no
+            // tray icon. Not worth failing the launch over.
+            Log.Warn($"The tray icon could not be created ({ex.Message}).");
+        }
+    }
 
     /// <summary>
     /// Applies the stored theme and density. The environment variables still win, because the
@@ -204,6 +279,22 @@ public partial class App : Application
             {
                 window.Opened += (_, _) => window.ComposeFromCommandLine(args);
             }
+
+            // Become the primary instance and act on a later launch's command line — a mailto:
+            // click while Mailbox is open opens onto the running application, and brings it
+            // forward. Wired after the window exists so a handoff never reaches a half-built one.
+            Instance?.Listen(commandLine => Dispatcher.UIThread.Post(() =>
+            {
+                window.Activate();
+                window.ComposeFromCommandLine(commandLine);
+            }));
+
+            desktop.ShutdownRequested += (_, _) => Instance?.Dispose();
+
+            // A tray icon with a menu, as §10 asks for. Not during a capture run — the harness
+            // starts many instances, and a tray icon per capture would clutter the session's
+            // notification area and outlive the process that made it.
+            if (!WindowCapture.IsRequested) InstallTrayIcon(window, desktop);
 
             // The Options page's "Empty Deleted Items folders when exiting". Off by default, as
             // the reference has it, because with POP3 this store may hold the only copy.
