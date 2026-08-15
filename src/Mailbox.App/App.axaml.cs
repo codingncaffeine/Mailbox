@@ -51,6 +51,9 @@ public partial class App : Application
     /// <summary>How long a sent message waits before it can actually go (§12).</summary>
     public static UndoSend UndoSend { get; private set; } = null!;
 
+    /// <summary>The Mail page's settings, typed, for the code that acts on them.</summary>
+    public static MailOptions MailOptions { get; private set; } = null!;
+
     /// <summary>The user's ribbon edits, and the layout that comes of applying them.</summary>
     public static RibbonCustomization RibbonEdits { get; private set; } = null!;
 
@@ -124,14 +127,18 @@ public partial class App : Application
             AccountOrder);
 
         Secrets = Credentials.Best();
+        MailOptions = new MailOptions(Settings);
 
         // Signature checking happens as mail is collected, never as it is drawn. The receiver
         // gets the verifier; nothing else does.
         Resolver = new DnsResolver();
         var signatures = Resolver.CanResolve ? new DkimVerification(Resolver) : null;
 
+        // Read at the moment a sender is made, which is per run — so the Options page's choice
+        // applies to the next send/receive rather than the next launch.
         Transfer = new SendReceiveService(
-            mail => new Pop3Receiver(mail) { Authentication = signatures });
+            mail => new Pop3Receiver(mail) { Authentication = signatures },
+            mail => new SmtpSender(mail) { FileSentCopies = MailOptions.SaveCopiesInSent });
 
         Commands = new CommandCatalog();
         Commands.RegisterRange(MailCommands.All);
@@ -163,6 +170,25 @@ public partial class App : Application
         {
             var window = new MainWindow();
             desktop.MainWindow = window;
+
+            // The Options page's "Empty Deleted Items folders when exiting". Off by default, as
+            // the reference has it, because with POP3 this store may hold the only copy.
+            desktop.ShutdownRequested += (_, _) =>
+            {
+                if (!MailOptions.EmptyDeletedItemsOnExit) return;
+
+                try
+                {
+                    var deleted = BackstageActions.EmptyDeletedItems();
+                    if (deleted > 0) Log.Info($"Emptied Deleted Items on exit: {deleted} message(s).");
+                }
+                catch (Exception ex)
+                {
+                    // Exit goes ahead regardless. A failure to tidy up is not a reason to
+                    // refuse to close.
+                    Log.Warn("Could not empty Deleted Items on exit.", ex);
+                }
+            };
 
             // Fidelity harness: pose the window at an exact width, then render once and exit
             // when MAILBOX_CAPTURE is set.

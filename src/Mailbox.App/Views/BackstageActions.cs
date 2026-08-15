@@ -125,15 +125,36 @@ internal static class BackstageActions
 
         if (!confirmed) return;
 
-        foreach (var (open, folder) in folders)
+        var deleted = EmptyDeletedItems();
+
+        host.Refresh();
+        host.Report($"{deleted:N0} item{(deleted == 1 ? "" : "s")} deleted.");
+    }
+
+    /// <summary>
+    /// Empties Deleted Items across every account, without asking.
+    /// </summary>
+    /// <returns>How many went.</returns>
+    /// <remarks>
+    /// The unconfirmed half, for the Options page's "Empty Deleted Items folders when exiting":
+    /// at exit there is nobody to ask, and the person answered when they ticked the box. From the
+    /// Backstage the confirmation above wraps this.
+    /// </remarks>
+    public static int EmptyDeletedItems()
+    {
+        var deleted = 0;
+
+        foreach (var open in App.Accounts.All)
         {
-            foreach (var message in open.Mail.Messages(folder!.Id, int.MaxValue))
+            if (open.Mail.FolderWithRole(open.Account.Id, FolderRole.Deleted) is not { } folder) continue;
+
+            foreach (var message in open.Mail.Messages(folder.Id, int.MaxValue))
             {
                 open.Mail.DeleteMessage(message.Id);
+                deleted++;
             }
         }
 
-        host.Refresh();
-        host.Report($"{total:N0} item{(total == 1 ? "" : "s")} deleted.");
+        return deleted;
     }
 }

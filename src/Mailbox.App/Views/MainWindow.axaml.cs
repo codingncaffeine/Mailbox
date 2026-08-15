@@ -475,6 +475,16 @@ public partial class MainWindow : Window
     {
         var compose = new ComposeWindow(App.Commands, App.Accounts);
 
+        // "Always use the default account when composing new messages" is off by default, and
+        // off means what the reference means: a message written while looking at the work
+        // account's inbox comes from the work account.
+        if (!App.MailOptions.AlwaysUseDefaultAccount
+            && DataContext is ShellViewModel current
+            && current.CurrentAddress is { Length: > 0 } address)
+        {
+            compose.SendFromAccount(address);
+        }
+
         compose.Closed += (_, _) =>
         {
             if (DataContext is ShellViewModel shell) shell.Refresh();
@@ -691,6 +701,18 @@ public partial class MainWindow : Window
         if (_openMessage is not { } message)
         {
             shell.StatusRight = "There is no message to open.";
+            return;
+        }
+
+        // A draft opens to be written, not read. Save and Send act on the row it came from,
+        // so it does not multiply, and sending it takes it out of Drafts.
+        if (shell.CurrentFolderRole == FolderRole.Drafts && shell.SelectedMessage is { } draft)
+        {
+            var compose = new ComposeWindow(App.Commands, App.Accounts);
+            compose.EditDraft(draft.Id, message);
+            compose.Queued += (_, e) => _undoSend.Offer(e, Withdraw);
+            compose.Closed += (_, _) => shell.Refresh();
+            compose.Show(this);
             return;
         }
 
