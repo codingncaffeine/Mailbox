@@ -35,9 +35,9 @@ internal static class Program
     /// Called by the Avalonia designer and by <see cref="Main"/>.
     /// </summary>
     /// <remarks>
-    /// X11 is the default rather than Wayland. Avalonia 12.1's native Wayland backend has
-    /// graduated from private preview but is still opt-in and experimental, so it sits behind
-    /// <c>MAILBOX_WAYLAND=1</c> until it settles. XWayland covers the gap meanwhile.
+    /// Platform detection selects X11. The native Wayland backend replaces it only when
+    /// <c>MAILBOX_WAYLAND=1</c> asks for it — see <see cref="WindowingBackend"/> for why X11
+    /// stays the default and why the flag is strict.
     /// </remarks>
     public static AppBuilder BuildAvaloniaApp()
     {
@@ -46,6 +46,6 @@ internal static class Program
             .WithInterFont()
             .LogToTrace();
 
-        return builder;
+        return WindowingBackend.Apply(builder);
     }
 }

@@ -177,6 +177,10 @@ public partial class App : Application
             var window = new MainWindow();
             desktop.MainWindow = window;
 
+            // Read off the window rather than the request, so a run that asked for one backend
+            // and got another is recorded as what it is.
+            Log.Info(WindowingBackend.Describe(window));
+
             // The Options page's "Empty Deleted Items folders when exiting". Off by default, as
             // the reference has it, because with POP3 this store may hold the only copy.
             desktop.ShutdownRequested += (_, _) =>
