@@ -100,24 +100,19 @@ public partial class App : Application
 
     /// <summary>
     /// The notification-area icon (§10): a menu to open the window, write a message, check mail
-    /// or quit, and a tooltip that carries the unread count. Left-click brings the window
-    /// forward. Held in a field so it outlives this method and is not collected.
+    /// or quit, the unread count drawn on the icon and carried in the tooltip. Left-click brings
+    /// the window forward. Held in a field so it outlives this method and is not collected.
     /// </summary>
-    private void InstallTrayIcon(MainWindow window, IClassicDesktopStyleApplicationLifetime desktop)
+    /// <returns>True when the icon is up — the precondition for starting minimised to it.</returns>
+    private bool InstallTrayIcon(MainWindow window, IClassicDesktopStyleApplicationLifetime desktop)
     {
         try
         {
-            void Show()
-            {
-                window.Show();
-                window.Activate();
-            }
-
             var open = new NativeMenuItem("Open Mailbox");
-            open.Click += (_, _) => Show();
+            open.Click += (_, _) => window.BringForward();
 
             var compose = new NativeMenuItem("New Email");
-            compose.Click += (_, _) => { Show(); window.ComposeFromCommandLine(["--compose"]); };
+            compose.Click += (_, _) => { window.BringForward(); window.ComposeFromCommandLine(["--compose"]); };
 
             var quit = new NativeMenuItem("Quit");
             quit.Click += (_, _) => desktop.Shutdown();
@@ -128,25 +123,38 @@ public partial class App : Application
             menu.Add(new NativeMenuItemSeparator());
             menu.Add(quit);
 
+            var icon = new Avalonia.Media.Imaging.Bitmap(Avalonia.Platform.AssetLoader.Open(
+                new Uri("avares://mailbox/Assets/Icons/mailbox-32.png")));
+
             _tray = new TrayIcon
             {
-                Icon = new WindowIcon(Avalonia.Platform.AssetLoader.Open(
-                    new Uri("avares://mailbox/Assets/Icons/mailbox-32.png"))),
+                Icon = new WindowIcon(icon),
                 ToolTipText = "Mailbox",
                 IsVisible = true,
                 Menu = menu,
             };
 
             // Left-click brings the window forward, as a tray icon is expected to.
-            _tray.Clicked += (_, _) => Show();
+            _tray.Clicked += (_, _) => window.BringForward();
 
-            // The tooltip carries the unread count as it changes, since the icon itself cannot
-            // easily draw a badge across every tray implementation.
+            // The count is drawn onto the icon as it changes, and the tooltip says it in words.
             if (window.DataContext is ShellViewModel shell)
             {
-                void Refresh() => _tray.ToolTipText = shell.TotalUnread > 0
-                    ? $"Mailbox — {shell.TotalUnread} unread"
-                    : "Mailbox";
+                void Refresh()
+                {
+                    var unread = shell.TotalUnread;
+                    _tray.ToolTipText = unread > 0 ? $"Mailbox — {unread} unread" : "Mailbox";
+
+                    try
+                    {
+                        _tray.Icon = Notifications.TrayBadge.For(icon, unread);
+                    }
+                    catch (Exception ex)
+                    {
+                        // The plain icon is still up; a badge that will not draw is not worth more.
+                        Log.Warn("The tray badge could not be drawn.", ex);
+                    }
+                }
 
                 shell.PropertyChanged += (_, e) =>
                 {
@@ -156,12 +164,37 @@ public partial class App : Application
             }
 
             desktop.ShutdownRequested += (_, _) => _tray.IsVisible = false;
+            return true;
         }
         catch (Exception ex)
         {
             // A session with no notification-area host: the window still runs, it just has no
             // tray icon. Not worth failing the launch over.
             Log.Warn($"The tray icon could not be created ({ex.Message}).");
+            return false;
+        }
+    }
+
+    /// <summary>Harness only: the badged tray icon as a PNG, at four times its size so it can be looked at.</summary>
+    private static void WriteBadgeSample(string request)
+    {
+        var colon = request.IndexOf(':');
+        if (colon <= 0 || !int.TryParse(request[..colon], out var count)) return;
+        var path = request[(colon + 1)..];
+
+        try
+        {
+            using var stream = Avalonia.Platform.AssetLoader.Open(new Uri("avares://mailbox/Assets/Icons/mailbox-32.png"));
+            var icon = new Avalonia.Media.Imaging.Bitmap(stream);
+
+            // The same drawing the tray icon is built from, saved where it can be looked at.
+            var sample = Notifications.TrayBadge.Render(icon, count);
+            sample.Save(path, new Avalonia.Media.Imaging.PngBitmapEncoderOptions());
+            Log.Info($"Harness: tray badge for {count} written to {path}.");
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Harness: the tray badge sample could not be written.", ex);
         }
     }
 
@@ -266,7 +299,43 @@ public partial class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var window = new MainWindow();
-            desktop.MainWindow = window;
+
+            // A tray icon with a menu, as §10 asks for. Not during a capture run — the harness
+            // starts many instances, and a tray icon per capture would clutter the session's
+            // notification area and outlive the process that made it.
+            var trayUp = !WindowCapture.IsRequested && InstallTrayIcon(window, desktop);
+
+            // The badge cannot be photographed on a tray, so the harness writes it to a file:
+            // MAILBOX_TRAY_BADGE=<count>:<path.png> renders the icon wearing that count.
+            if (Environment.GetEnvironmentVariable("MAILBOX_TRAY_BADGE") is { Length: > 0 } badge)
+            {
+                WriteBadgeSample(badge);
+            }
+
+            // `--minimized` — the autostart entry's switch — starts into the tray with no window,
+            // when there is a tray to start into. The window is created and wired exactly as
+            // usual and simply not shown; the lifetime adopts it as the main window the first
+            // time it is, so closing it then quits as it always has. Until then only Quit ends
+            // the process, since there is no window whose closing could.
+            var startHidden = trayUp
+                && desktop.Args is { } startArgs
+                && startArgs.Contains(Mailbox.Core.Platform.Autostart.MinimizedSwitch, StringComparer.Ordinal);
+
+            if (startHidden)
+            {
+                desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+                window.Opened += (_, _) =>
+                {
+                    if (desktop.MainWindow is not null) return;
+                    desktop.MainWindow = window;
+                    desktop.ShutdownMode = ShutdownMode.OnMainWindowClose;
+                };
+                Log.Info("Started minimised to the notification area.");
+            }
+            else
+            {
+                desktop.MainWindow = window;
+            }
 
             // Read off the window rather than the request, so a run that asked for one backend
             // and got another is recorded as what it is.
@@ -275,7 +344,7 @@ public partial class App : Application
             // A mailto: link or --compose on the command line opens a compose window once the
             // shell is up — Mailbox acting as the system mail client on a cold start. The harness
             // sets its own environment and passes no such args, so a capture run is unaffected.
-            if (desktop.Args is { Length: > 0 } args && !WindowCapture.IsRequested)
+            if (desktop.Args is { Length: > 0 } args && !WindowCapture.IsRequested && !startHidden)
             {
                 window.Opened += (_, _) => window.ComposeFromCommandLine(args);
             }
@@ -283,18 +352,17 @@ public partial class App : Application
             // Become the primary instance and act on a later launch's command line — a mailto:
             // click while Mailbox is open opens onto the running application, and brings it
             // forward. Wired after the window exists so a handoff never reaches a half-built one.
+            // A second launch that only asked to start minimised — the autostart entry firing
+            // while Mailbox already runs — asks for nothing visible, and gets nothing.
             Instance?.Listen(commandLine => Dispatcher.UIThread.Post(() =>
             {
-                window.Activate();
+                if (commandLine.All(a => a == Mailbox.Core.Platform.Autostart.MinimizedSwitch)) return;
+
+                window.BringForward();
                 window.ComposeFromCommandLine(commandLine);
             }));
 
             desktop.ShutdownRequested += (_, _) => Instance?.Dispose();
-
-            // A tray icon with a menu, as §10 asks for. Not during a capture run — the harness
-            // starts many instances, and a tray icon per capture would clutter the session's
-            // notification area and outlive the process that made it.
-            if (!WindowCapture.IsRequested) InstallTrayIcon(window, desktop);
 
             // The Options page's "Empty Deleted Items folders when exiting". Off by default, as
             // the reference has it, because with POP3 this store may hold the only copy.

@@ -302,6 +302,16 @@ public sealed class ComposeWindow : Window
             await BackstageActions.RunAsync(host, action);
         backstage.CloseRequested += (_, _) => CloseBackstage();
 
+        // Exit from a message window quits the application, as the reference does. Every window
+        // is asked to close on the way, so a message with unsaved content still gets its prompt
+        // and can hold the exit up.
+        backstage.ExitRequested += (_, _) =>
+        {
+            CloseBackstage();
+            (Avalonia.Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.Shutdown();
+        };
+
         _backstage.Content = backstage;
         _backstage.IsVisible = true;
     }

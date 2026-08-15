@@ -72,6 +72,9 @@ public sealed class BackstageView : Border
 
     public event EventHandler? CloseRequested;
 
+    /// <summary>Raised by Exit. The host quits the application, as the reference's Exit does.</summary>
+    public event EventHandler? ExitRequested;
+
     /// <summary>Raised by the Options page entry. The shell opens the dialog.</summary>
     public event EventHandler? OptionsRequested;
 
@@ -191,7 +194,7 @@ public sealed class BackstageView : Border
 
         button.Click += (_, _) =>
         {
-            if (id == "exit") { CloseRequested?.Invoke(this, EventArgs.Empty); return; }
+            if (id == "exit") { ExitRequested?.Invoke(this, EventArgs.Empty); return; }
             if (id == "options") { OptionsRequested?.Invoke(this, EventArgs.Empty); return; }
             _selected = id;
             BuildRail();

@@ -108,6 +108,9 @@ public partial class MainWindow : Window
         WireSchedule(shell);
         DataContext = shell;
 
+        // The toasts stay with the notification server; what goes is the watch on their buttons.
+        Closed += (_, _) => _notifier.Dispose();
+
         ApplyHarnessState(shell);
 
         // The posed selection, once more, after the list has bound and had its say. Loaded runs
@@ -146,6 +149,17 @@ public partial class MainWindow : Window
                     if (DataContext is ShellViewModel s) Log.Info($"Harness: status \u201c{s.StatusRight}\u201d");
                 }
             }, DispatcherPriority.Background);
+        }
+
+        // Raises the new-mail toast for a message already in the store, as if it had just
+        // arrived, and optionally presses one of its buttons: MAILBOX_NOTIFY=<subject part>
+        // or MAILBOX_NOTIFY=<subject part>:reply|delete|read|default. The toast itself goes
+        // through notify-send for real (the log says so); the button is pressed directly,
+        // because a capture cannot click a notification — and what the button did is read back
+        // out of the store, which is the whole point.
+        if (Environment.GetEnvironmentVariable("MAILBOX_NOTIFY") is { Length: > 0 } notify)
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(() => PoseNotification(notify), DispatcherPriority.Background);
         }
 
         // Which folder is open. Set after the window opens rather than with the rest of the
@@ -575,6 +589,10 @@ public partial class MainWindow : Window
         backstage.ActionRequested += async (_, action) => await BackstageActionAsync(action);
         backstage.CloseRequested += (_, _) => CloseBackstage();
 
+        // Exit quits, as the reference's does. Closing this window is how the application ends —
+        // the lifetime is tied to it — and it runs the on-exit work the Options page asks for.
+        backstage.ExitRequested += (_, _) => Close();
+
         host.Content = backstage;
         host.IsVisible = true;
     }
@@ -642,6 +660,21 @@ public partial class MainWindow : Window
             if (string.Equals(arg, "--compose", StringComparison.Ordinal))
             {
                 NewMessage();
+                return;
+            }
+
+            // The desktop entry's other two actions. Their modules are Part IV, and a launcher
+            // entry that opened nothing at all would read as broken, so each brings the window
+            // forward and says what it waits on — as the rail buttons for the same modules do.
+            if (string.Equals(arg, "--new-appointment", StringComparison.Ordinal))
+            {
+                if (DataContext is ShellViewModel s) s.StatusRight = "Appointments arrive with Phase 11.";
+                return;
+            }
+
+            if (string.Equals(arg, "--new-contact", StringComparison.Ordinal))
+            {
+                if (DataContext is ShellViewModel s) s.StatusRight = "Contacts arrive with Phase 12.";
                 return;
             }
 
@@ -788,7 +821,156 @@ public partial class MainWindow : Window
     }
 
     private readonly UndoSendToast _undoSend = new();
-    private readonly Notifications.INotifier _notifier = new Notifications.DesktopNotifier();
+    private readonly Notifications.DesktopNotifier _notifier = new();
+
+    /// <summary>What a new-mail toast says about one message, read back from its account's store.</summary>
+    private static ArrivedMessage? DescribeArrival(string address, long id)
+    {
+        if (App.Accounts.Find(address)?.Mail.GetMessage(id) is not { } summary) return null;
+        return new ArrivedMessage(summary.DisplayFrom, summary.Subject, summary.Preview);
+    }
+
+    /// <summary>
+    /// The desktop notification for a toast: a click opens the message; a toast about one message
+    /// also carries Reply, Delete and Mark Read (§10). Answers arrive on a background thread and
+    /// are posted to the UI thread here, so the notifier never touches a window.
+    /// </summary>
+    private Notifications.Notification ToastFor(NewMailToast toast)
+    {
+        var actions = new List<Notifications.NotificationAction>
+        {
+            new(Notifications.NotificationAction.Default, "Open"),
+        };
+
+        if (toast.IsSingle)
+        {
+            actions.Add(new("reply", "Reply"));
+            actions.Add(new("delete", "Delete"));
+            actions.Add(new("read", "Mark Read"));
+        }
+
+        return new Notifications.Notification(toast.Summary, toast.Body)
+        {
+            Actions = actions,
+            // A toast with buttons stays in the server's history, where the buttons still work
+            // after the popup has gone; a bare count is worth a glance and not a log.
+            Transient = !toast.IsSingle,
+            Activated = action => Dispatcher.UIThread.Post(() => OnToastActivated(toast, action)),
+        };
+    }
+
+    /// <summary>Harness only: the toast for a stored message, and one of its buttons.</summary>
+    private void PoseNotification(string request)
+    {
+        if (DataContext is not ShellViewModel shell || shell.CurrentAddress is not { } address) return;
+
+        var colon = request.LastIndexOf(':');
+        var subject = colon > 0 ? request[..colon] : request;
+        var action = colon > 0 ? request[(colon + 1)..].Trim().ToLowerInvariant() : null;
+
+        var row = shell.Messages.FirstOrDefault(
+            m => m.Subject.Contains(subject, StringComparison.OrdinalIgnoreCase));
+        if (row is null)
+        {
+            Log.Info($"Harness: no message matching '{subject}' to notify about.");
+            return;
+        }
+
+        var result = new SendReceiveResult(
+            [new AccountRunResult(address, 1, 0) { Arrived = [row.Id] }]);
+
+        foreach (var toast in NewMailNotice.Toasts(result, DescribeArrival))
+        {
+            Log.Info($"Harness: toast “{toast.Summary}” / “{toast.Body.Replace('\n', '|')}” for #{toast.MessageId}.");
+            _notifier.Notify(ToastFor(toast));
+
+            if (action is { Length: > 0 })
+            {
+                Log.Info($"Harness: pressing {action} on the toast.");
+                OnToastActivated(toast, action == "default" ? Notifications.NotificationAction.Default : action);
+            }
+        }
+    }
+
+    /// <summary>Acts on the button pressed on a new-mail toast.</summary>
+    private void OnToastActivated(NewMailToast toast, string action)
+    {
+        if (DataContext is not ShellViewModel shell) return;
+
+        Log.Info($"Notification action: {action} for {toast.Address}#{toast.MessageId?.ToString() ?? "-"}.");
+
+        switch (action)
+        {
+            case Notifications.NotificationAction.Default:
+                BringForward();
+                if (toast.MessageId is { } shown) RevealMessage(shell, toast.Address, shown);
+                break;
+
+            case "reply":
+                BringForward();
+                if (toast.MessageId is { } id && RevealMessage(shell, toast.Address, id))
+                {
+                    Respond(shell, ReplyKind.Reply);
+                }
+                break;
+
+            case "delete":
+                if (toast.MessageId is { } gone && App.Accounts.Find(toast.Address) is { } account
+                    && account.Mail.FolderWithRole(account.Account.Id, FolderRole.Deleted) is { } deleted)
+                {
+                    account.Mail.MoveMessages([gone], deleted.Id);
+                    shell.Refresh();
+                    shell.StatusRight = "1 message moved to Deleted Items.";
+                }
+                break;
+
+            case "read":
+                if (toast.MessageId is { } read && App.Accounts.Find(toast.Address) is { } owner)
+                {
+                    owner.Mail.SetRead([read], true);
+                    shell.Refresh();
+                }
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Shows the window and brings it to the front — from the tray, a notification, or a second
+    /// launch handing over. Show as well as Activate, because a window started minimised to the
+    /// tray has never been shown at all.
+    /// </summary>
+    public void BringForward()
+    {
+        Show();
+        if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+        Activate();
+    }
+
+    /// <summary>
+    /// Selects a message by account and id — its folder first, then the row — and scrolls the
+    /// list to it. False when it is not there to select.
+    /// </summary>
+    /// <remarks>
+    /// The list pushes its own selection back as it lays out over the rows the reveal replaced,
+    /// the same trap the harness's posed selection hit — so the row is asserted again at
+    /// <see cref="DispatcherPriority.Background"/>, below the layout pass that clears it. Loaded
+    /// is not low enough from here: it runs before that layout when the reveal itself was
+    /// posted, and the re-assertion finds nothing changed yet and changes nothing.
+    /// </remarks>
+    private bool RevealMessage(ShellViewModel shell, string address, long id)
+    {
+        if (shell.RevealMessage(address, id) is not { } row) return false;
+
+        var list = this.FindControl<ListBox>("MessageList");
+        Dispatcher.UIThread.Post(() =>
+        {
+            shell.SelectedRow = row;
+            shell.SelectedMessage = row;
+            list?.ScrollIntoView(row);
+        }, DispatcherPriority.Background);
+
+        return true;
+    }
 
     private ReadingPaneBody? _reading;
     private readonly AttachmentStrip _attachments = new();
@@ -2106,13 +2288,17 @@ public partial class MainWindow : Window
             shell.StatusRight = result.Summary();
             shell.Refresh();
 
-            // The Options page's "Display a Desktop Alert": a toast when a run brought new mail,
-            // saying how many and — with more than one account — from where. Nothing pops when
-            // nothing arrived, which is most polls.
-            if (App.MailOptions.DisplayDesktopAlert
-                && NewMailNotice.For(result) is { } notice)
+            // The Options page's "Display a Desktop Alert": a toast when a run brought new mail.
+            // One per message while there are few, naming the sender and subject with Reply,
+            // Delete and Mark Read on it, as the reference's alert offers; past that, one toast
+            // with the count and — with more than one account — where. Nothing pops when nothing
+            // arrived, which is most polls.
+            if (App.MailOptions.DisplayDesktopAlert)
             {
-                _notifier.Notify(notice.Summary, notice.Body);
+                foreach (var toast in NewMailNotice.Toasts(result, DescribeArrival))
+                {
+                    _notifier.Notify(ToastFor(toast));
+                }
             }
         }
         catch (OperationCanceledException)

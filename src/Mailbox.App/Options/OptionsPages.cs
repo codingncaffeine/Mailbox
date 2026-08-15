@@ -399,6 +399,9 @@ public static class OptionsPages
             new OptionSection("Start and exit",
             [
                 new ComboRow("Start Mailbox in this folder:", ["Inbox", "Calendar", "Tasks"], 0, 200, 240),
+                // Live: two rows over the XDG autostart entry, the Linux-native form of the
+                // reference's run-at-login (§10). Written as they go, like every other row.
+                new SlotRow("autostart"),
                 new CheckRow("Empty Deleted Items folders when exiting Mailbox") { Key = MailOptions.EmptyDeletedOnExitKey },
             ]),
 
