@@ -1601,6 +1601,11 @@ public partial class MainWindow : Window
                 case "no-reading": shell.HideReadingPane.Execute(null); break;
                 case "zoom-in": shell.ZoomIn.Execute(null); break;
                 case "zoom-out": shell.ZoomOut.Execute(null); break;
+                case "attachments": shell.Filter = ShellViewModel.ListFilter.HasAttachments; break;
+                case "flagged": shell.Filter = ShellViewModel.ListFilter.Flagged; break;
+                case "important": shell.Filter = ShellViewModel.ListFilter.Important; break;
+                case "categorized": shell.Filter = ShellViewModel.ListFilter.Categorized; break;
+                case "thisweek": shell.Filter = ShellViewModel.ListFilter.ThisWeek; break;
                 case "focused": shell.FocusedInboxOn = true; break;
                 case "other": shell.FocusedInboxOn = true; shell.ShowOther = true; break;
                 default: Log.Warn($"Unknown MAILBOX_STATE: {state}"); break;
@@ -2586,26 +2591,31 @@ public partial class MainWindow : Window
         flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
     }
 
-    /// <summary>Filter Email: the one filter the list has, and the rest named for what they wait on.</summary>
+    /// <summary>Filter Email: the reference's filters, one at a time, and Snoozed beside them.</summary>
     private void ShowFilterMenu(ShellViewModel shell)
     {
         var flyout = new MenuFlyout();
 
-        var unread = new MenuItem { Header = "Unread", Icon = shell.UnreadOnly ? Tick() : null };
-        unread.Click += (_, _) => shell.UnreadOnly = !shell.UnreadOnly;
-        flyout.Items.Add(unread);
+        void Entry(string label, ShellViewModel.ListFilter filter)
+        {
+            var item = new MenuItem { Header = label, Icon = shell.Filter == filter ? Tick() : null };
+            item.Click += (_, _) => shell.Filter = shell.Filter == filter ? ShellViewModel.ListFilter.None : filter;
+            flyout.Items.Add(item);
+        }
+
+        Entry("Unread", ShellViewModel.ListFilter.Unread);
+        Entry("Has Attachments", ShellViewModel.ListFilter.HasAttachments);
+        Entry("Flagged", ShellViewModel.ListFilter.Flagged);
+        Entry("Important", ShellViewModel.ListFilter.Important);
+        Entry("Categorized", ShellViewModel.ListFilter.Categorized);
+        Entry("This Week", ShellViewModel.ListFilter.ThisWeek);
+
+        flyout.Items.Add(new Separator());
 
         // Snoozed mail is nowhere until it comes back; this is where to see what is waiting.
         var snoozed = new MenuItem { Header = "Snoozed", Icon = shell.ShowSnoozed ? Tick() : null };
         snoozed.Click += (_, _) => shell.ShowSnoozed = !shell.ShowSnoozed;
         flyout.Items.Add(snoozed);
-
-        foreach (var label in new[] { "Has Attachments", "Flagged", "Important", "Categorized", "This Week" })
-        {
-            var item = new MenuItem { Header = label, IsEnabled = false };
-            ToolTip.SetTip(item, "Phase 8 — the search refiners.");
-            flyout.Items.Add(item);
-        }
 
         flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
     }

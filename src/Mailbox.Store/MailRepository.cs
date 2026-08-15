@@ -1251,31 +1251,85 @@ public sealed class MailRepository(MailStore store)
 
     /// <summary>Search. Ranked by BM25, which FTS5 provides without asking.</summary>
     public IReadOnlyList<MessageSummary> Search(string term, long? folderId = null, int limit = 200)
-    {
-        if (string.IsNullOrWhiteSpace(term)) return [];
-
-        var scope = folderId is null ? string.Empty : " AND m.folder_id = $folder";
-        return _store.Query(
-            $"""
-             SELECT m.* FROM messages m
-             JOIN messages_fts ON messages_fts.rowid = m.id
-             WHERE messages_fts MATCH $term{scope}
-             ORDER BY bm25(messages_fts), m.received_utc DESC
-             LIMIT $limit
-             """,
-            ReadMessage,
-            ("$term", Sanitise(term)), ("$folder", folderId), ("$limit", limit));
-    }
+        => Search(Mailbox.Core.Search.SearchQuery.Parse(term), folderId, limit);
 
     /// <summary>
-    /// Makes user input safe to hand to FTS5. Quoting each word turns everything into a literal
-    /// term, so a stray quote or bracket is searched for rather than treated as syntax and
-    /// throwing at the user.
+    /// Search, with the reference's keywords: the words go to the full-text index — a
+    /// <c>from:</c>, <c>subject:</c> or <c>body:</c> word to that column of it — and the rest
+    /// become predicates on the row. A query with no words at all is a plain scan of the row's
+    /// columns, newest first.
     /// </summary>
-    internal static string Sanitise(string term) => string.Join(
-        ' ',
-        term.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
-            .Select(word => '"' + word.Replace("\"", "\"\"") + '"'));
+    public IReadOnlyList<MessageSummary> Search(Mailbox.Core.Search.SearchQuery query, long? folderId = null, int limit = 200)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        if (query.IsEmpty) return [];
+
+        var where = new List<string>();
+        var parameters = new List<(string, object?)> { ("$limit", limit) };
+        if (folderId is { } folder)
+        {
+            where.Add("m.folder_id = $folder");
+            parameters.Add(("$folder", folder));
+        }
+
+        // The full-text half. FTS5's column filter — subject:word — is what from:, subject: and
+        // body: turn into; the from column pair is (from_name OR from_address).
+        var match = new List<string>();
+        match.AddRange(query.Words.Select(Quote1));
+        match.AddRange(query.Subject.Select(w => "subject:" + Quote1(w)));
+        match.AddRange(query.Body.Select(w => "body:" + Quote1(w)));
+        match.AddRange(query.From.Select(w => "{from_name from_address}:" + Quote1(w)));
+
+        var sql = match.Count > 0
+            ? "SELECT m.* FROM messages m JOIN messages_fts ON messages_fts.rowid = m.id WHERE messages_fts MATCH $term"
+            : "SELECT m.* FROM messages m WHERE 1";
+        // Explicit ANDs: FTS5 accepts an implicit AND between plain terms but not before a
+        // column-set clause, and a search for "budget from:alice" writes exactly that.
+        if (match.Count > 0) parameters.Add(("$term", string.Join(" AND ", match)));
+
+        // The rest, on the row.
+        var n = 0;
+        string P(object? value) { var name = "$p" + n++; parameters.Add((name, value)); return name; }
+
+        foreach (var w in query.To) where.Add($"m.to_addresses LIKE '%' || {P(w.ToLowerInvariant())} || '%'");
+        foreach (var w in query.Cc) where.Add($"m.cc_addresses LIKE '%' || {P(w.ToLowerInvariant())} || '%'");
+        foreach (var c in query.Categories)
+        {
+            where.Add($"EXISTS (SELECT 1 FROM message_categories mc JOIN categories c ON c.id = mc.category_id WHERE mc.message_id = m.id AND lower(c.name) = {P(c.ToLowerInvariant())})");
+        }
+
+        if (query.HasAttachment is { } attachment) where.Add($"m.has_attachment = {(attachment ? 1 : 0)}");
+        if (query.IsRead is { } read) where.Add($"m.is_read = {(read ? 1 : 0)}");
+        if (query.IsFlagged is { } flagged) where.Add($"m.is_flagged = {(flagged ? 1 : 0)}");
+        if (query.Importance is { } importance) where.Add($"m.importance = {importance}");
+        if (query.Size is { } size)
+        {
+            where.Add(size.Bound switch
+            {
+                Mailbox.Core.Search.Bound.After => $"m.size_bytes > {P(size.Bytes)}",
+                Mailbox.Core.Search.Bound.Before => $"m.size_bytes < {P(size.Bytes)}",
+                _ => $"m.size_bytes BETWEEN {P(size.Bytes * 9 / 10)} AND {P(size.Bytes * 11 / 10)}",
+            });
+        }
+        if (query.Received is { } received)
+        {
+            if (received.After is { } a) where.Add($"m.received_utc >= {P(a.ToUnixTimeSeconds())}");
+            if (received.Before is { } b) where.Add($"m.received_utc < {P(b.ToUnixTimeSeconds())}");
+        }
+        if (query.Sent is { } sent)
+        {
+            if (sent.After is { } a) where.Add($"m.sent_utc >= {P(a.ToUnixTimeSeconds())}");
+            if (sent.Before is { } b) where.Add($"m.sent_utc < {P(b.ToUnixTimeSeconds())}");
+        }
+
+        var clause = where.Count == 0 ? string.Empty : " AND " + string.Join(" AND ", where);
+        var order = match.Count > 0 ? "ORDER BY bm25(messages_fts), m.received_utc DESC" : "ORDER BY m.received_utc DESC";
+
+        return _store.Query($"{sql}{clause} {order} LIMIT $limit", ReadMessage, [.. parameters]);
+    }
+
+    /// <summary>One word or phrase as an FTS5 literal: quoted, so a stray quote or bracket is text.</summary>
+    private static string Quote1(string word) => '"' + word.Replace("\"", "\"\"") + '"';
 
     // ---- The junk lists -----------------------------------------------------------------------
     //
