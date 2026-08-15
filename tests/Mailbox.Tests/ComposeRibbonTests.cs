@@ -220,8 +220,8 @@ public class ComposeRibbonTests
     [Fact]
     public void TheWorkingCountIsWhatSomebodyLastDecidedItWas()
     {
-        Assert.Equal(48, ComposeAvailability.WorkingCount);
-        Assert.Equal(47, ComposeAvailability.BlockedCount);
+        Assert.Equal(49, ComposeAvailability.WorkingCount);
+        Assert.Equal(46, ComposeAvailability.BlockedCount);
         Assert.Equal(95, ComposeAvailability.All.Count);
     }
 
