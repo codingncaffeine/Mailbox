@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    What a message claims about itself and whether it holds up: DKIM, SPF and DMARC results,
+    lookalike sender domains, display-name spoofing. Reads headers; talks to nothing.
+  -->
+
+  <ItemGroup>
+    <PackageReference Include="MimeKit" Version="$(MailKitVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Mailbox.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mailbox.Core\Mailbox.Core.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Turning a received message into something safe to render: an allowlist sanitizer, the
+    cid: resolver, resource inlining and the tracker accounting that falls out of the same
+    walk. No UI and no network — what comes out of here is a document with nothing left in
+    it to fetch. See §11.
+  -->
+
+  <ItemGroup>
+    <!-- MimeKit for the MIME tree and its HTML tokenizer, which exists for exactly this. -->
+    <PackageReference Include="MimeKit" Version="$(MailKitVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Mailbox.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mailbox.Core\Mailbox.Core.csproj" />
+  </ItemGroup>
+
+</Project>

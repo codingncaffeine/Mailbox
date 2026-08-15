@@ -17,6 +17,8 @@
     <ProjectReference Include="..\..\src\Mailbox.Theming\Mailbox.Theming.csproj" />
     <ProjectReference Include="..\..\src\Mailbox.Store\Mailbox.Store.csproj" />
     <ProjectReference Include="..\..\src\Mailbox.Protocols\Mailbox.Protocols.csproj" />
+    <ProjectReference Include="..\..\src\Mailbox.Rendering\Mailbox.Rendering.csproj" />
+    <ProjectReference Include="..\..\src\Mailbox.Security\Mailbox.Security.csproj" />
   </ItemGroup>
 
 </Project>
