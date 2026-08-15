@@ -720,120 +720,20 @@ public partial class MainWindow : Window
     /// Everything the Backstage's Account Information page can ask for. One place, so a new
     /// entry in either menu is a case here rather than another handler wired somewhere else.
     /// </summary>
-    private async Task BackstageActionAsync(string action)
-    {
-        if (DataContext is not ShellViewModel shell) return;
-
-        switch (action)
-        {
-            case "account.settings":
-            {
-                var dialog = new AccountSettingsDialog();
-                await dialog.ShowDialog(this);
-                if (dialog.Changed) { CloseBackstage(); shell.Refresh(); }
-                break;
-            }
-
-            case "account.password":
-                if (RequireAccount(shell) is { } forPassword)
-                {
-                    await new UpdatePasswordDialog(forPassword).ShowDialog(this);
-                }
-
-                break;
-
-            case "account.server":
-                if (RequireAccount(shell) is { } forServer)
-                {
-                    var dialog = new ServerSettingsDialog(forServer);
-                    await dialog.ShowDialog(this);
-                    if (dialog.Saved) { CloseBackstage(); shell.Refresh(); }
-                }
-
-                break;
-
-            case "tools.emptydeleted":
-                await EmptyDeletedItemsAsync(shell);
-                break;
-
-            case "tools.cleanup":
-                await new MailboxCleanupDialog().ShowDialog(this);
-                shell.Refresh();
-                break;
-
-            case "rules":
-                await new RulesAndAlertsDialog().ShowDialog(this);
-                break;
-        }
-    }
-
     /// <summary>
-    /// The account these dialogs act on. The default one, or nothing when none exists — in
-    /// which case saying so beats opening a dialog with no account behind it.
+    /// The Backstage acts on whichever window opened it. BackstageActions holds the behaviour;
+    /// this supplies the three things only this window knows.
     /// </summary>
-    private Account? RequireAccount(ShellViewModel shell)
-    {
-        var account = App.Accounts.Default?.Account;
-        if (account is null) shell.StatusRight = "No account is set up yet. File, Add Account.";
-        return account;
-    }
+    private BackstageHost BackstageContext() => new(
+        this,
+        message => { if (DataContext is ShellViewModel s) s.StatusRight = message; },
+        () => { if (DataContext is ShellViewModel s) s.Refresh(); },
+        CloseBackstage);
 
-    /// <summary>
-    /// Empties Deleted Items across every account. Confirmed, and the wording says how many
-    /// go, because with POP3 this store may hold the only copy.
-    /// </summary>
-    private async Task EmptyDeletedItemsAsync(ShellViewModel shell)
-    {
-        var folders = App.Accounts.All
-            .Select(a => (Open: a, Folder: a.Mail.FolderWithRole(a.Account.Id, FolderRole.Deleted)))
-            .Where(x => x.Folder is not null)
-            .ToList();
+    private Task BackstageActionAsync(string action)
+        => BackstageActions.RunAsync(BackstageContext(), action);
 
-        var total = folders.Sum(x => x.Folder!.Total);
-        if (total == 0)
-        {
-            shell.StatusRight = "Deleted Items is already empty.";
-            return;
-        }
-
-        var confirmed = await Confirm.AskAsync(
-            this,
-            "Empty Deleted Items",
-            $"Permanently delete {total:N0} item{(total == 1 ? "" : "s")} from Deleted Items?\n\n"
-            + "This cannot be undone, and where mail was removed from the server this is the "
-            + "only copy.",
-            "Delete");
-
-        if (!confirmed) return;
-
-        foreach (var (open, folder) in folders)
-        {
-            foreach (var message in open.Mail.Messages(folder!.Id, int.MaxValue))
-            {
-                open.Mail.DeleteMessage(message.Id);
-            }
-        }
-
-        shell.Refresh();
-        shell.StatusRight = $"{total:N0} item{(total == 1 ? "" : "s")} deleted.";
-    }
-
-    /// <summary>
-    /// Opens the account wizard, and reloads once it closes so the new account's folders
-    /// appear without a restart.
-    /// </summary>
-    private async Task AddAccountAsync()
-    {
-        var wizard = new AccountWizard();
-        await wizard.ShowDialog(this);
-
-        if (wizard.Created is null) return;
-        if (DataContext is not ShellViewModel shell) return;
-
-        CloseBackstage();
-        shell.Refresh();
-        shell.StatusRight = $"{wizard.Created.Address} added. Press F9 to check for mail.";
-    }
+    private Task AddAccountAsync() => BackstageActions.AddAccountAsync(BackstageContext());
 
     /// <summary>
     /// Alt on its own opens the KeyTip traversal; Alt as a modifier does not.
