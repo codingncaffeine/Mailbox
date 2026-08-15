@@ -34,11 +34,11 @@ public static partial class MessageRenderer
         {
             var sanitizer = new HtmlSanitizer(resources, options);
             var body = sanitizer.Sanitize(html);
-            return new RenderedMessage(Document(body, options.Style), sanitizer.Blocked, WasHtml: true);
+            return new RenderedMessage(Document(body, options), sanitizer.Blocked, WasHtml: true);
         }
 
         var text = message.TextBody ?? string.Empty;
-        return new RenderedMessage(Document(FromPlainText(text), options.Style), [], WasHtml: false);
+        return new RenderedMessage(Document(FromPlainText(text), options), [], WasHtml: false);
     }
 
     /// <summary>
@@ -57,7 +57,7 @@ public static partial class MessageRenderer
         var sanitizer = new HtmlSanitizer(resources, options);
         var body = sanitizer.Sanitize(html ?? string.Empty);
 
-        return new RenderedMessage(Document(body, options.Style), sanitizer.Blocked, WasHtml: true);
+        return new RenderedMessage(Document(body, options), sanitizer.Blocked, WasHtml: true);
     }
 
     /// <summary>
@@ -81,6 +81,25 @@ public static partial class MessageRenderer
         });
 
         return $"<div class=\"plain\">{linked}</div>";
+    }
+
+    /// <summary>The Memo header, as a definition list the print stylesheet lays out.</summary>
+    private static string PrintBlock(PrintHeader? header)
+    {
+        if (header is null) return string.Empty;
+
+        var rows = new StringBuilder("<dl class=\"memo\">");
+        rows.Append(CultureInfo.InvariantCulture, $"<dt>From:</dt><dd>{Escape(header.From)}</dd>");
+        rows.Append(CultureInfo.InvariantCulture, $"<dt>Sent:</dt><dd>{Escape(header.Sent)}</dd>");
+        rows.Append(CultureInfo.InvariantCulture, $"<dt>To:</dt><dd>{Escape(header.To)}</dd>");
+
+        if (header.Cc is { Length: > 0 } cc)
+        {
+            rows.Append(CultureInfo.InvariantCulture, $"<dt>Cc:</dt><dd>{Escape(cc)}</dd>");
+        }
+
+        rows.Append(CultureInfo.InvariantCulture, $"<dt>Subject:</dt><dd>{Escape(header.Subject)}</dd>");
+        return rows.Append("</dl>").ToString();
     }
 
     private static string Escape(string text)
@@ -115,8 +134,9 @@ public static partial class MessageRenderer
     /// allowed only from the <c>data:</c> URIs we produced, and a form has nowhere to post to.
     /// </para>
     /// </remarks>
-    private static string Document(string body, RenderStyle style)
+    private static string Document(string body, RenderOptions options)
     {
+        var style = options.Style;
         var size = style.FontSize.ToString("0.##", CultureInfo.InvariantCulture);
 
         // Double-dollar so a CSS brace is a brace and the interpolations are the doubled ones.
@@ -136,7 +156,18 @@ public static partial class MessageRenderer
             blockquote{margin:0 0 0 8px;padding-left:10px;border-left:2px solid {{style.Quote}};
             color:{{style.Quote}};}
             .plain{white-space:pre-wrap;font-family:{{style.FontFamily}};}
-            </style></head><body>{{body}}</body></html>
+
+            /* The reference's Memo style: who sent it, when, and to whom, above the message.
+               Only on paper — on screen the pane's own header says all of this already. */
+            .memo{display:none;}
+            @media print{
+              html,body{background:#FFFFFF;color:#000000;}
+              a{color:#000000;}
+              .memo{display:block;border-bottom:1px solid #000000;margin:0 0 12px;padding:0 0 8px;}
+              .memo dt{float:left;width:70px;clear:left;font-weight:bold;}
+              .memo dd{margin:0 0 2px 70px;}
+            }
+            </style></head><body>{{PrintBlock(options.PrintHeader)}}{{body}}</body></html>
             """;
     }
 }

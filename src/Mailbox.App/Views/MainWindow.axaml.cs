@@ -471,6 +471,15 @@ public partial class MainWindow : Window
         }
     }
 
+    private async Task PrintToPdfAsync(ShellViewModel shell)
+    {
+        if (_reading is null) return;
+
+        shell.StatusRight = await _reading.PrintToPdfAsync()
+            ? "Saved as PDF."
+            : "This message could not be written to PDF.";
+    }
+
     /// <summary>Opens the selected message in a window of its own, as a double-click does.</summary>
     private void OpenMessageWindow(ShellViewModel shell)
     {
@@ -871,6 +880,7 @@ public partial class MainWindow : Window
         if (id == MailCommands.TrackerReport.Id) { _ = _reading?.ShowTrackerReportAsync(); return; }
         if (id == MailCommands.AuthenticationDetails.Id) { _ = _reading?.ShowAuthenticationAsync(); return; }
         if (id == MailCommands.Print.Id) { PrintMessage(shell); return; }
+        if (id == MailCommands.PrintToPdf.Id) { _ = PrintToPdfAsync(shell); return; }
         if (id == ViewCommands.CancelAll.Id) { CancelTransfer(); return; }
 
         shell.StatusRight = $"{command.Label} — not wired yet ({command.Id})";

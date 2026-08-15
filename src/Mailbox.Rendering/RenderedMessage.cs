@@ -39,10 +39,26 @@ public sealed record RenderStyle(
         new("#FFFFFF", "#000000", "#0000EE", "#767676", "serif", 14);
 }
 
+/// <summary>
+/// The block the reference's Memo style prints above a message.
+/// </summary>
+/// <remarks>
+/// Part of the document rather than of the pane, and hidden until the page is printed. The
+/// header on screen is Avalonia chrome and the engine cannot see it, so printing from the pane
+/// would otherwise produce a page of body text with nothing saying who sent it.
+/// </remarks>
+public sealed record PrintHeader(string From, string Sent, string To, string Subject)
+{
+    public string? Cc { get; init; }
+}
+
 /// <summary>What the caller can vary about a render.</summary>
 public sealed record RenderOptions
 {
     public RenderStyle Style { get; init; } = RenderStyle.Plain;
+
+    /// <summary>What a printed copy shows above the message, or null for no print header.</summary>
+    public PrintHeader? PrintHeader { get; init; }
 
     /// <summary>
     /// Data URIs for remote resources the caller has already fetched, keyed by the URL as it
