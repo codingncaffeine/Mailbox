@@ -114,6 +114,9 @@ public sealed class ComposeWindow : Window
     /// <summary>Opens a draft for more writing.</summary>
     public void EditDraft(long messageId, MimeMessage message) => _surface.EditDraft(messageId, message);
 
+    /// <summary>Fills a new message from a mailto: link — Mailbox as the system mail client.</summary>
+    public void ComposeFromMailto(Mailbox.Core.Compose.MailtoLink link) => _surface.FillFromMailto(link);
+
     /// <summary>Starts the message from this account.</summary>
     public void SendFromAccount(string address) => _surface.SendFromAccount(address);
 

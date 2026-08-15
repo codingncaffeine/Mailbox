@@ -527,6 +527,38 @@ public sealed class ComposeSurface : UserControl
         _fromRow.IsVisible = true;
     }
 
+    /// <summary>
+    /// Fills a new message from a <c>mailto:</c> link — the desktop asking Mailbox, as the system
+    /// mail client, to write to someone.
+    /// </summary>
+    public void FillFromMailto(Mailbox.Core.Compose.MailtoLink link)
+    {
+        ArgumentNullException.ThrowIfNull(link);
+
+        _to.Text = string.Join("; ", link.To);
+        _cc.Text = string.Join("; ", link.Cc);
+        _bcc.Text = string.Join("; ", link.Bcc);
+        _subject.Text = link.Subject;
+
+        // Show Bcc only when the link set one — otherwise the row stays hidden, as on a new message.
+        if (link.Bcc.Count > 0) _bccRow.IsVisible = true;
+
+        if (link.Body.Length > 0)
+        {
+            _body.Clear();
+            _body.InsertText(link.Body);
+        }
+
+        UpdateTitle();
+        UpdateStatus();
+        RaiseEnablementChanged();
+
+        // Focus the first empty field: the body when there is a recipient and a subject already,
+        // else the To line — the same rule a reply uses.
+        if (link.To.Count > 0) _body.AttachedToVisualTree += (_, _) => _body.Focus();
+        else _to.AttachedToVisualTree += (_, _) => _to.Focus();
+    }
+
     /// <summary>Fills the header, so a capture can be measured against the reference.</summary>
     public void PoseHeader(string to, string cc, string subject)
     {
