@@ -822,7 +822,22 @@ public partial class MainWindow : Window
             var module = tab.Module;
             tab.Activate = new RelayCommand(() =>
             {
-                if (module == MailboxModule.Calendar) TogglePeek();
+                // Mail is where this is; Calendar has its peek. The rest are whole modules in
+                // Part IV, and a button that says so is better than one that does nothing.
+                switch (module)
+                {
+                    case MailboxModule.Mail: break;
+                    case MailboxModule.Calendar: TogglePeek(); break;
+                    default:
+                        shell.StatusRight = module switch
+                        {
+                            MailboxModule.People => "People arrives with Phase 12.",
+                            MailboxModule.Tasks or MailboxModule.Notes or MailboxModule.Journal
+                                => $"{module} arrives with Phase 13.",
+                            _ => $"{module} is Phase 14, with the rest of the shell.",
+                        };
+                        break;
+                }
             });
         }
     }
