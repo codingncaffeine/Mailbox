@@ -101,6 +101,19 @@ public sealed class ComposeWindow : Window
     private string? _replyTo;
     private bool _sent;
 
+    /// <summary>
+    /// Loaded the first time spelling is asked for, not at startup.
+    /// </summary>
+    /// <remarks>
+    /// A dictionary is a few megabytes of word list and parsing one is felt. Most messages are
+    /// sent without the button ever being pressed, so paying for it on every compose window
+    /// would be paying for it almost always in vain.
+    /// </remarks>
+    private SpellCheck? _spelling;
+
+    /// <summary>Not a word anybody would suggest, so it cannot collide with one.</summary>
+    private const string AddToDictionary = "\u0000add";
+
     public ComposeWindow(CommandCatalog catalog, AccountStores? accounts)
     {
         _catalog = catalog;
@@ -955,6 +968,12 @@ public sealed class ComposeWindow : Window
     /// <summary>The Insert tab, for the things the document model can actually hold.</summary>
     private bool HandleInsert(CommandId id)
     {
+        if (id == ComposeCommands.Spelling.Id || id == ComposeCommands.Editor.Id)
+        {
+            _ = CheckSpellingAsync();
+            return true;
+        }
+
         if (id == ComposeCommands.Table.Id) { _ = InsertTableAsync(); return true; }
         if (id == ComposeCommands.Pictures.Id) { _ = InsertPictureAsync(); return true; }
 
@@ -1315,6 +1334,94 @@ public sealed class ComposeWindow : Window
         });
 
         _body.Focus();
+    }
+
+    /// <summary>
+    /// Spelling, over the whole message.
+    /// </summary>
+    /// <remarks>
+    /// A pass rather than squiggles as you type, which is what §7.3 asks for and what the editor
+    /// cannot do: underlining a word as it is typed needs the editor to draw on its own text run,
+    /// and it exposes nothing for that. This is the reference's F7 — walk what is not in the
+    /// dictionary, offer what is, and let a word be kept.
+    /// <para>
+    /// The dictionary is the desktop's own, and there may be none. Saying so once is the whole
+    /// of the handling that needs: a mail client that nags about a missing word list is worse
+    /// than one that quietly cannot check.
+    /// </para>
+    /// </remarks>
+    private async Task CheckSpellingAsync()
+    {
+        _spelling ??= await SpellCheck.LoadAsync(personalPath: PersonalDictionaryPath());
+
+        if (!_spelling.IsAvailable)
+        {
+            await Message("Spelling",
+                "No dictionary is installed, so spelling cannot be checked.\n\n"
+                + "Install a Hunspell dictionary — hunspell-en_gb, hunspell-en_us or the one for "
+                + "your language — and it will be found next time.");
+            return;
+        }
+
+        var text = _body.GetPlainText();
+        var found = _spelling.Check(text);
+
+        if (found.Count == 0)
+        {
+            await Message("Spelling",
+                $"The spelling check is complete. Nothing was found, against {_spelling.Language}.");
+            return;
+        }
+
+        // One word at a time, in order, as the reference does — and stopping the moment the
+        // reader dismisses, because a dialog per word is a thing to be able to get out of.
+        var corrected = 0;
+
+        foreach (var word in found.DistinctBy(w => w.Word, StringComparer.Ordinal))
+        {
+            var choices = new List<Choice> { new("Ignore", string.Empty, "leave it as written") };
+
+            choices.AddRange(_spelling.Suggest(word.Word)
+                .Select(s => new Choice(s, s, "replace every one in this message")));
+
+            choices.Add(new Choice("Add to dictionary", AddToDictionary,
+                "keep it, and stop asking about it"));
+
+            var answer = await Chooser.AskAsync(
+                this, "Spelling", $"Not in the dictionary: {word.Word}", choices);
+
+            if (answer is null) break;
+
+            if (answer == AddToDictionary)
+            {
+                _spelling.Add(word.Word);
+                continue;
+            }
+
+            if (answer.Length == 0) continue;
+
+            corrected += _body.ReplaceAll(word.Word, answer, matchCase: true);
+        }
+
+        _body.Focus();
+
+        Report(corrected == 0
+            ? "The spelling check is complete."
+            : $"The spelling check is complete. {corrected} replaced.");
+    }
+
+    /// <summary>Beside the mail, not in the system dictionary, which is not ours to edit.</summary>
+    private static string PersonalDictionaryPath()
+    {
+        var data = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
+
+        if (string.IsNullOrWhiteSpace(data))
+        {
+            data = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "share");
+        }
+
+        return Path.Combine(data, "mailbox", "personal.dic");
     }
 
     private async Task InsertTableAsync()

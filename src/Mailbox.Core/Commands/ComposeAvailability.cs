@@ -170,8 +170,8 @@ public static class ComposeAvailability
             "and doing it without one sending audio off the machine is the open question."),
         new(ViewCommands.Apps.Id, ComposeCommandState.Blocked,
             "Phase 15 — the plugin host. There are no add-ins to list."),
-        new(ComposeCommands.Editor.Id, ComposeCommandState.Blocked,
-            "Phase 5's remaining piece — Hunspell against the editor's document."),
+        new(ComposeCommands.Editor.Id, ComposeCommandState.Working,
+            "Runs the spelling check over the message."),
         new(ViewCommands.ImmersiveReader.Id, ComposeCommandState.Blocked, I18n),
 
         // ---- Insert -------------------------------------------------------------------
@@ -224,8 +224,10 @@ public static class ComposeAvailability
             "Sets the Reply-To header."),
 
         // ---- Review -------------------------------------------------------------------
-        new(ComposeCommands.Spelling.Id, ComposeCommandState.Blocked,
-            "Phase 5's remaining piece — Hunspell against the editor's document."),
+        new(ComposeCommands.Spelling.Id, ComposeCommandState.Working,
+            "Checks the message against the desktop's own Hunspell dictionaries, offers "
+            + "corrections, and can be taught a word. Squiggles as you type need the editor to "
+            + "draw on its own text run, which it does not offer."),
         new(ComposeCommands.Thesaurus.Id, ComposeCommandState.Blocked,
             "Not planned. No free thesaurus with usable licensing has been chosen."),
         new(ComposeCommands.WordCount.Id, ComposeCommandState.Working,
