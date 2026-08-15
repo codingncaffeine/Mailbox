@@ -408,6 +408,19 @@ public static class Migrations
             added_utc  INTEGER NOT NULL
         );
         """,
+
+        // ---- 16: snooze ---------------------------------------------------------------------
+        //
+        // §12's Snooze: a snoozed message leaves the list until the time set here, then comes
+        // back to the top of its folder as unread. Local only — the server never hears of it —
+        // and a column rather than a folder, so the message stays where it is and its flags,
+        // categories and threading go on meaning what they meant.
+        """
+        ALTER TABLE messages ADD COLUMN snooze_until INTEGER;
+
+        CREATE INDEX messages_by_snooze ON messages (snooze_until)
+            WHERE snooze_until IS NOT NULL;
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>

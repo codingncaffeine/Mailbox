@@ -370,4 +370,66 @@ public class MailRepositoryTests
         Assert.Single(repo.Search("reconciliation"));
         Assert.Empty(repo.Search("aardvark"));
     }
+
+    // ---- Snooze (§12) -----------------------------------------------------------------------
+
+    /// <summary>
+    /// A snoozed message leaves the list, is counted out of the folder, is listed among the
+    /// snoozed, and comes back when its time comes — unread and at the top.
+    /// </summary>
+    [Fact]
+    public void ASnoozedMessageLeavesTheListAndComesBackUnreadAtTheTop()
+    {
+        var (store, repo, inbox) = Fresh();
+        using var _ = store;
+
+        var older = repo.AddMessage(inbox.Id, Sample("uid-1", "Older", read: true))!.Value;
+        var newer = repo.AddMessage(inbox.Id, Sample("uid-2", "Newer") with { Received = DateTimeOffset.UnixEpoch.AddHours(1) })!.Value;
+        var later = DateTimeOffset.UtcNow.AddHours(4);
+
+        repo.Snooze([older], later);
+
+        Assert.Equal([newer], repo.Messages(inbox.Id).Select(m => m.Id));
+        Assert.Equal(1, repo.GetFolder(inbox.Id)!.Total);
+        Assert.Equal(1, repo.GetFolder(inbox.Id)!.Unread);
+        Assert.Equal(later.ToUnixTimeSeconds(), repo.Snoozed(inbox.Id).Single().SnoozedUntil!.Value.ToUnixTimeSeconds());
+
+        // Not yet due: nothing wakes.
+        Assert.Empty(repo.WakeSnoozed(DateTimeOffset.UtcNow));
+        Assert.Single(repo.Messages(inbox.Id));
+
+        // Due: it comes back unread and newest, at the moment it woke.
+        var wake = later.AddMinutes(1);
+        Assert.Equal([(inbox.Id, older)], repo.WakeSnoozed(wake));
+
+        var back = repo.GetMessage(older)!;
+        Assert.Null(back.SnoozedUntil);
+        Assert.False(back.IsRead);
+        Assert.Equal(wake.ToUnixTimeSeconds(), back.Received.ToUnixTimeSeconds());
+        Assert.Equal([older, newer], repo.Messages(inbox.Id).Select(m => m.Id));
+        Assert.Empty(repo.Snoozed(inbox.Id));
+    }
+
+    [Fact]
+    public void UnsnoozeBringsAMessageBackNowAndLeavesOthersAlone()
+    {
+        var (store, repo, inbox) = Fresh();
+        using var _ = store;
+
+        var one = repo.AddMessage(inbox.Id, Sample("uid-1", "One", read: true))!.Value;
+        var two = repo.AddMessage(inbox.Id, Sample("uid-2", "Two", read: true))!.Value;
+        repo.Snooze([one, two], DateTimeOffset.UtcNow.AddDays(1));
+        Assert.Empty(repo.Messages(inbox.Id));
+
+        var now = DateTimeOffset.UtcNow;
+        Assert.Equal(1, repo.Unsnooze([one], now));
+
+        Assert.Equal([one], repo.Messages(inbox.Id).Select(m => m.Id));
+        Assert.False(repo.GetMessage(one)!.IsRead);
+        Assert.Equal([two], repo.Snoozed(inbox.Id).Select(m => m.Id));
+
+        // Unsnoozing something that is not snoozed changes nothing about it.
+        Assert.Equal(0, repo.Unsnooze([one], now));
+        Assert.False(repo.GetMessage(one)!.IsRead);
+    }
 }
