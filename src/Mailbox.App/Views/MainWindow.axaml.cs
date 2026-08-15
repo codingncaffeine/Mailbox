@@ -644,6 +644,54 @@ public partial class MainWindow : Window
                 NewMessage();
                 return;
             }
+
+            if (LooksLikeMailFile(arg))
+            {
+                OpenMessageFile(arg);
+                return;
+            }
+        }
+    }
+
+    /// <summary>An <c>.eml</c> file, or a path the desktop handed us as one. The MIME-file side of §10.</summary>
+    private static bool LooksLikeMailFile(string arg)
+    {
+        var path = arg.StartsWith("file://", StringComparison.OrdinalIgnoreCase) && Uri.TryCreate(arg, UriKind.Absolute, out var uri)
+            ? uri.LocalPath
+            : arg;
+
+        return File.Exists(path)
+            && Path.GetExtension(path).ToLowerInvariant() is ".eml" or ".mbox";
+    }
+
+    /// <summary>
+    /// Opens a message file in its own window — a <c>.eml</c> double-clicked in the file manager,
+    /// or handed over on the command line. Read through the same pane a stored message is, so a
+    /// file from a stranger gets the same sanitizer and the same blocked-images bar.
+    /// </summary>
+    private void OpenMessageFile(string arg)
+    {
+        var path = arg.StartsWith("file://", StringComparison.OrdinalIgnoreCase) && Uri.TryCreate(arg, UriKind.Absolute, out var uri)
+            ? uri.LocalPath
+            : arg;
+
+        try
+        {
+            var raw = File.ReadAllBytes(path);
+            using var stream = new MemoryStream(raw);
+            var message = MimeKit.MimeMessage.Load(stream);
+
+            // No store behind a loose file, so the pane renders from the file rather than looking
+            // up MIME by id — `mail` returns null, which is what tells it to.
+            new MessageWindow(App.Themes, () => null, message, raw).Show(this);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Could not open the message file {path}.", ex);
+            if (DataContext is ShellViewModel shell)
+            {
+                shell.StatusRight = $"Could not open {Path.GetFileName(path)}.";
+            }
         }
     }
 
