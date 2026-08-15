@@ -5,8 +5,18 @@ namespace Mailbox.Tests;
 
 public class HtmlSanitizerTests
 {
+    /// <summary>
+    /// Just the sanitized body. The document around it carries a content policy and a charset
+    /// of its own, and an assertion about what a message may contain must not be able to trip
+    /// over the frame the message was put in.
+    /// </summary>
     private static string Body(string html)
-        => MessageRenderer.RenderHtml(html).Html;
+    {
+        var document = MessageRenderer.RenderHtml(html).Html;
+        var start = document.IndexOf("<body>", StringComparison.Ordinal) + "<body>".Length;
+        var end = document.LastIndexOf("</body>", StringComparison.Ordinal);
+        return document[start..end];
+    }
 
     private static RenderedMessage Render(string html)
         => MessageRenderer.RenderHtml(html);
@@ -302,9 +312,20 @@ public class HtmlSanitizerTests
         Assert.Contains("font-size:15px", html, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Belt and braces over the sanitizer: nothing that could act on a policy should have
+    /// survived it, so these exist to be wrong twice before anything leaks.
+    /// </summary>
     [Fact]
-    public void TheDocumentAsksForNoReferrer()
-        => Assert.Contains("content=\"no-referrer\"", Body("<p>x</p>"), StringComparison.Ordinal);
+    public void TheDocumentDeniesEveryFetchOfItsOwn()
+    {
+        var document = MessageRenderer.RenderHtml("<p>x</p>").Html;
+
+        Assert.Contains("content=\"no-referrer\"", document, StringComparison.Ordinal);
+        Assert.Contains("default-src 'none'", document, StringComparison.Ordinal);
+        Assert.Contains("img-src data:", document, StringComparison.Ordinal);
+        Assert.Contains("base-uri 'none'", document, StringComparison.Ordinal);
+    }
 
     // ---- Helpers -----------------------------------------------------------------------------
 
