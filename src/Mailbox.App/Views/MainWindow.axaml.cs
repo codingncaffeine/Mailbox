@@ -325,6 +325,11 @@ public partial class MainWindow : Window
 
             if (dialog is not null)
             {
+                // A SizeToContent dialog beside an off-screen owner has measured against no
+                // screen and is a pixel high; sized from its content, it needs a moment for the
+                // windowing system to confirm the new size before the picture is taken.
+                if (dialog.ClientSize.Height <= 1 && WindowCapture.SizeFromContent(dialog)) await Task.Delay(400);
+
                 WindowCapture.Capture(dialog, path, WindowCapture.Scale);
                 Console.WriteLine($"Captured {path}");
             }
@@ -2833,6 +2838,9 @@ public partial class MainWindow : Window
             _ = SendReceiveAsync(shell);
         });
 
+        // A capture run poses accounts; none of them has a server to watch.
+        if (WindowCapture.IsRequested) return;
+
         Opened += (_, _) =>
         {
             foreach (var target in AccountConnections()
@@ -2972,6 +2980,10 @@ public partial class MainWindow : Window
             }
 
             ShowRuleAlerts();
+
+            // An account whose server-side rules could not be put on the server gets another try
+            // now that the server has answered a poll.
+            _ = SieveSync.RepublishStaleAsync();
         }
         catch (OperationCanceledException)
         {

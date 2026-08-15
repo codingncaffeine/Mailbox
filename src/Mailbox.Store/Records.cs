@@ -245,3 +245,10 @@ public sealed record OutboxItem(
     DateTimeOffset Queued,
     DateTimeOffset? NextTry,
     string? LastError);
+
+/// <summary>What the mail server runs for the account: the Sieve script Mailbox last put there.</summary>
+/// <param name="Script">The script as published.</param>
+/// <param name="Include">The script that was active before Mailbox's, included first — or null.</param>
+/// <param name="Published">When it was put there.</param>
+/// <param name="Stale">True when the rules or folder names have changed since, or a publish failed.</param>
+public sealed record SieveState(string Script, string? Include, DateTimeOffset Published, bool Stale);

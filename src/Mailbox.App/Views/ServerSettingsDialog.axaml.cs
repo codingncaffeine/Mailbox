@@ -49,6 +49,11 @@ public sealed class ServerSettingsDialog : Window
         Width = 160,
     };
 
+    // Server-side rules reach the server by ManageSieve: the incoming host unless the account
+    // says otherwise, and port 4190 by convention.
+    private readonly TextBox _sieveHost = new() { Width = 260, PlaceholderText = "same as the incoming server" };
+    private readonly TextBox _sievePort = new() { Width = 80 };
+
     private bool IsImap => _account.Protocol == MailProtocol.Imap;
 
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap, MaxWidth = 420 };
@@ -111,6 +116,8 @@ public sealed class ServerSettingsDialog : Window
         _deleteAfter.IsChecked = settings.DeleteAfterDays is not null;
         if (settings.DeleteAfterDays is { } days) _deleteDays.Value = days;
         _offlineMonths.SelectedIndex = OfflineIndex(settings.OfflineMonths);
+        _sieveHost.Text = settings.SieveHost;
+        _sievePort.Text = settings.SievePort.ToString();
 
         // Removing from the server only means anything while a copy is being left there.
         _leaveOnServer.IsCheckedChanged += (_, _) => UpdatePolicyEnabled();
@@ -196,6 +203,9 @@ public sealed class ServerSettingsDialog : Window
                 {
                     Section("Offline"),
                     Field("Mail to keep offline", _offlineMonths, labelWidth: 140),
+                    Section("Rules on the server"),
+                    Field("Rules server", _sieveHost, "Port", _sievePort),
+                    Note("Rules marked \"run on the mail server\" in the Rules Wizard are put here by ManageSieve."),
                 },
             };
         }
@@ -256,6 +266,13 @@ public sealed class ServerSettingsDialog : Window
         return row;
     }
 
+    private TextBlock Note(string text)
+    {
+        var block = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, MaxWidth = 500, HorizontalAlignment = HorizontalAlignment.Left };
+        Bind(block, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
+        return block;
+    }
+
     private TextBlock Caption(string text, double width)
     {
         var block = new TextBlock
@@ -292,6 +309,8 @@ public sealed class ServerSettingsDialog : Window
                 ? (int)(_deleteDays.Value ?? 14)
                 : null,
             OfflineMonths = OfflineChoices[Math.Clamp(_offlineMonths.SelectedIndex, 0, OfflineChoices.Length - 1)],
+            SieveHost = (_sieveHost.Text ?? string.Empty).Trim(),
+            SievePort = Port(_sievePort.Text, 4190),
         };
 
         settings.Save(App.Settings, _account.Address);

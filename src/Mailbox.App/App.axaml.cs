@@ -273,12 +273,12 @@ public partial class App : Application
         // pane. The copy carries the theme and the account order in, and nothing back out.
         Settings = WindowCapture.IsRequested ? SettingsStore.ScratchCopy() : new SettingsStore();
 
-        // The harness poses settings on the scratch copy: MAILBOX_SETTING="key=value;key=value",
+        // The harness poses settings on the scratch copy: MAILBOX_SETTING="key=value|key=value",
         // with true/false and numbers typed as what they look like. Capture runs only — a real
         // run's settings are the person's.
         if (WindowCapture.IsRequested && Environment.GetEnvironmentVariable("MAILBOX_SETTING") is { Length: > 0 } posed)
         {
-            foreach (var pair in posed.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            foreach (var pair in posed.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             {
                 var eq = pair.IndexOf('=');
                 if (eq <= 0) continue;
@@ -301,7 +301,9 @@ public partial class App : Application
             Environment.GetEnvironmentVariable("MAILBOX_STORE") ?? AccountStores.DefaultDirectory(),
             AccountOrder);
 
-        Secrets = Credentials.Best();
+        // A capture run keeps its passwords in memory: it poses accounts that do not exist, and
+        // the keyring may be locked on a headless desktop, where asking it would wait forever.
+        Secrets = WindowCapture.IsRequested ? new InMemoryCredentialStore() : Credentials.Best();
         MailOptions = new MailOptions(Settings);
 
         // Signature checking happens as mail is collected, never as it is drawn. The receiver

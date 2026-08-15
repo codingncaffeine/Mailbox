@@ -537,6 +537,26 @@ public static class Migrations
             added_utc   INTEGER NOT NULL
         );
         """,
+
+        // ---- 23: server-side rules -----------------------------------------------------------
+        //
+        // A rule marked server_side is compiled to Sieve and put on the server by ManageSieve;
+        // it runs there, and RulesHandler leaves it alone here while the server has the current
+        // script. sieve_state is one row: the script last put on the server, when, the script
+        // that was active before it (included first so it keeps running), and whether the
+        // server is behind — set when rules or folder names change or a publish fails, cleared
+        // by the next successful publish. While it is behind, the server-side rules run here
+        // as well, so nothing is lost for a publish that could not happen.
+        """
+        ALTER TABLE rules ADD COLUMN server_side INTEGER NOT NULL DEFAULT 0;
+        CREATE TABLE sieve_state (
+            id             INTEGER PRIMARY KEY CHECK (id = 1),
+            script         TEXT    NOT NULL,
+            include        TEXT,
+            published_utc  INTEGER NOT NULL,
+            stale          INTEGER NOT NULL DEFAULT 0
+        );
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>

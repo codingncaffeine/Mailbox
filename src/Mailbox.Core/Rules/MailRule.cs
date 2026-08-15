@@ -178,6 +178,13 @@ public sealed record MailRule
     /// <summary>The order rules run in, lowest first. What Move Up and Move Down change.</summary>
     public int Ordinal { get; init; }
 
+    /// <summary>
+    /// Whether the rule runs on the server — compiled to Sieve and put there by ManageSieve —
+    /// rather than here as mail arrives. Only a rule that <see cref="SieveCompiler"/> can express
+    /// is ever marked so; the wizard's checkbox says why when it cannot be.
+    /// </summary>
+    public bool ServerSide { get; init; }
+
     public IReadOnlyList<RuleCondition> Conditions { get; init; } = [];
 
     public IReadOnlyList<RuleAction> Actions { get; init; } = [];
@@ -201,7 +208,7 @@ public sealed record MailRule
         new Definition(Conditions, Actions, Exceptions), Json);
 
     /// <summary>Reads a definition back. A document that will not parse yields an empty rule, which matches nothing.</summary>
-    public static MailRule FromDefinition(long id, string name, bool enabled, int ordinal, string json)
+    public static MailRule FromDefinition(long id, string name, bool enabled, int ordinal, string json, bool serverSide = false)
     {
         Definition? definition = null;
         try
@@ -219,6 +226,7 @@ public sealed record MailRule
             Name = name,
             Enabled = enabled,
             Ordinal = ordinal,
+            ServerSide = serverSide,
             Conditions = definition?.Conditions ?? [],
             Actions = definition?.Actions ?? [],
             Exceptions = definition?.Exceptions ?? [],
