@@ -63,7 +63,7 @@ public sealed class OptionsPageRenderer
             Text = "Captured from the reference; not transcribed yet.",
             Margin = new Thickness(0, 8, 0, 0),
         };
-        Bind(text, TextBlock.ForegroundProperty, "text.secondary.brush");
+        Bind(text, TextBlock.ForegroundProperty, "dialog.foreground.brush");
         return text;
     }
 
@@ -113,7 +113,7 @@ public sealed class OptionsPageRenderer
         }
 
         Bind(box, Avalonia.Controls.Primitives.TemplatedControl.ForegroundProperty,
-            row.IsDisabled ? "text.disabled.brush" : "text.primary.brush");
+            row.IsDisabled ? "text.disabled.brush" : "dialog.foreground.brush");
         return row.HasInfo ? WithInfo(box) : box;
     }
 
@@ -135,7 +135,7 @@ public sealed class OptionsPageRenderer
             if (button.IsChecked == true) _settings.Set(key, row.Label);
         };
         Bind(button, Avalonia.Controls.Primitives.TemplatedControl.ForegroundProperty,
-            "text.primary.brush");
+            "dialog.foreground.brush");
         return row.HasInfo ? WithInfo(button) : button;
     }
 
@@ -201,7 +201,7 @@ public sealed class OptionsPageRenderer
     private Control Note(NoteRow row)
     {
         var text = new TextBlock { Text = row.Text, TextWrapping = TextWrapping.Wrap };
-        Bind(text, TextBlock.ForegroundProperty, "text.primary.brush");
+        Bind(text, TextBlock.ForegroundProperty, "dialog.foreground.brush");
         return text;
     }
 
@@ -212,7 +212,7 @@ public sealed class OptionsPageRenderer
             Text = row.Text,
             Margin = new Thickness(0, 4, 0, 2),
         };
-        Bind(text, TextBlock.ForegroundProperty, "text.primary.brush");
+        Bind(text, TextBlock.ForegroundProperty, "dialog.foreground.brush");
         return text;
     }
 
@@ -249,7 +249,7 @@ public sealed class OptionsPageRenderer
 
         var middle = new StackPanel { Spacing = 3 };
         var description = new TextBlock { Text = row.Description, TextWrapping = TextWrapping.Wrap };
-        Bind(description, TextBlock.ForegroundProperty, "text.primary.brush");
+        Bind(description, TextBlock.ForegroundProperty, "dialog.foreground.brush");
         middle.Children.Add(description);
 
         foreach (var child in row.Children ?? [])
@@ -295,7 +295,7 @@ public sealed class OptionsPageRenderer
                 TextWrapping = TextWrapping.Wrap,
                 VerticalAlignment = VerticalAlignment.Center,
             };
-            Bind(text, TextBlock.ForegroundProperty, "text.primary.brush");
+            Bind(text, TextBlock.ForegroundProperty, "dialog.foreground.brush");
             row.Children.Add(text);
         }
 
@@ -333,7 +333,10 @@ public sealed class OptionsPageRenderer
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        Bind(text, TextBlock.ForegroundProperty, "text.primary.brush");
+
+        // The label sits on the button, not on the dialog, and those are different colours
+        // wherever the two disagree — which in Dark Gray is white ink on a light grey button.
+        Bind(text, TextBlock.ForegroundProperty, "dialog.surface.text.brush");
 
         var button = new Button
         {
@@ -345,9 +348,9 @@ public sealed class OptionsPageRenderer
             HorizontalContentAlignment = HorizontalAlignment.Center,
         };
         Bind(button, Avalonia.Controls.Primitives.TemplatedControl.BorderBrushProperty,
-            "border.strong.brush");
+            "dialog.border.brush");
         Bind(button, Avalonia.Controls.Primitives.TemplatedControl.BackgroundProperty,
-            "surface.sunken.brush");
+            "dialog.surface.brush");
         return button;
     }
 
@@ -371,7 +374,7 @@ public sealed class OptionsPageRenderer
         row.Children.Add(glyph);
 
         var text = new TextBlock { Text = description, VerticalAlignment = VerticalAlignment.Center };
-        Bind(text, TextBlock.ForegroundProperty, "text.primary.brush");
+        Bind(text, TextBlock.ForegroundProperty, "dialog.foreground.brush");
         row.Children.Add(text);
 
         return row;
@@ -386,7 +389,7 @@ public sealed class OptionsPageRenderer
         };
 
         var label = new TextBlock { Text = text, FontWeight = FontWeight.SemiBold };
-        Bind(label, TextBlock.ForegroundProperty, "text.primary.brush");
+        Bind(label, TextBlock.ForegroundProperty, "dialog.foreground.brush");
         Grid.SetColumn(label, 0);
         grid.Children.Add(label);
 
@@ -396,7 +399,7 @@ public sealed class OptionsPageRenderer
             Margin = new Thickness(10, 0, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
         };
-        Bind(rule, Border.BackgroundProperty, "border.subtle.brush");
+        Bind(rule, Border.BackgroundProperty, "dialog.border.brush");
         Grid.SetColumn(rule, 1);
         grid.Children.Add(rule);
 

@@ -320,6 +320,16 @@ public static class OfficeThemes
         t.Set(TokenKeys.Nav.ItemSelected, "{palette.chrome.navselected}");
         t.Set(TokenKeys.Nav.UnreadCount, "#8FC3F0");
 
+        // Measured off the Options capture: the dialog is chrome, so it is dark here while the
+        // content around it is light — #525252 ground, #BDBDBD boxes, a #808080 line round
+        // them, and #CCCCCC under a selected row.
+        t.Set(TokenKeys.Dialog.Background, "{palette.chrome.statusbar}");
+        t.Set(TokenKeys.Dialog.Foreground, "{palette.neutral.white}");
+        t.Set(TokenKeys.Dialog.Surface, "{palette.chrome.ribbon}");
+        t.Set(TokenKeys.Dialog.SurfaceText, "{palette.neutral.primary}");
+        t.Set(TokenKeys.Dialog.Border, "#808080");
+        t.Set(TokenKeys.Dialog.Selection, "#CCCCCC");
+
         t.Set(TokenKeys.List.Background, "{palette.content.pane}");
         t.Set(TokenKeys.List.RowBackground, "{palette.content.row}");
         t.Set(TokenKeys.List.HeaderBackground, "{palette.content.pane}");
@@ -482,6 +492,15 @@ public static class OfficeThemes
         t.Set(TokenKeys.StatusBar.Slider, "#B2B2B2");
         t.Set(TokenKeys.StatusBar.Foreground, "{palette.neutral.secondary}");
 
+        // Boxes sit a shade below the ground here, rather than above it as they do on a light
+        // theme — a lighter box on this ground would read as a highlight.
+        t.Set(TokenKeys.Dialog.Background, "{palette.raised}");
+        t.Set(TokenKeys.Dialog.Foreground, "{palette.neutral.primary}");
+        t.Set(TokenKeys.Dialog.Surface, "{palette.ground}");
+        t.Set(TokenKeys.Dialog.SurfaceText, "{palette.neutral.primary}");
+        t.Set(TokenKeys.Dialog.Border, "{palette.neutral.quaternary}");
+        t.Set(TokenKeys.Dialog.Selection, "{palette.brand.light}");
+
         t.Set(TokenKeys.Calendar.Background, "{palette.ground}");
         t.Set(TokenKeys.Calendar.WorkingHoursFill, "{palette.raised}");
         t.Set(TokenKeys.Calendar.NonWorkingFill, "{palette.sunken}");
@@ -575,6 +594,16 @@ public static class OfficeThemes
         t.Set(TokenKeys.Reading.InfoBarBackground, "{palette.neutral.lighter}");
         t.Set(TokenKeys.Reading.InfoBarText, "{palette.neutral.primary}");
         t.Set(TokenKeys.Reading.InfoBarWarningBackground, "#FFF4CE");
+
+        // A dialog on a light theme is white with bordered boxes on it, so its surface and its
+        // ground are the same colour and only the border separates them. Dark Gray overrides
+        // all six, because there the two are a long way apart.
+        t.Set(TokenKeys.Dialog.Background, "{palette.neutral.white}");
+        t.Set(TokenKeys.Dialog.Foreground, "{palette.neutral.primary}");
+        t.Set(TokenKeys.Dialog.Surface, "{palette.neutral.white}");
+        t.Set(TokenKeys.Dialog.SurfaceText, "{palette.neutral.primary}");
+        t.Set(TokenKeys.Dialog.Border, "{palette.neutral.tertiary}");
+        t.Set(TokenKeys.Dialog.Selection, "{palette.brand.light}");
 
         t.Set(TokenKeys.StatusBar.Background, "{palette.brand.primary}");
         t.Set(TokenKeys.StatusBar.Foreground, "{palette.neutral.white}");
