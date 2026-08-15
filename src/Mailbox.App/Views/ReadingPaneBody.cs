@@ -170,11 +170,23 @@ public sealed class ReadingPaneBody : UserControl
         }
     }
 
-    /// <summary>What the engine reports itself as, for the log.</summary>
+    /// <summary>
+    /// What the engine reports itself as, for the log.
+    /// </summary>
+    /// <remarks>
+    /// The embedding scenario is the part worth recording. A pane embedded as a native child
+    /// window has the airspace problem — Avalonia's own menus and flyouts cannot draw over it,
+    /// which is disqualifying in a mail client where popups overlap the reading pane constantly.
+    /// An offscreen renderer composites into the visual tree and does not. §2 chose this backend
+    /// on that basis, and this is where the claim can be checked on a real machine.
+    /// </remarks>
     private string Describe()
-        => _web?.AdapterInfo is { } info
-            ? $"{info.Type} ({info.Engine} {info.Version})"
-            : "unknown";
+    {
+        if (_web?.AdapterInfo is not { } info) return "unknown";
+
+        var scenarios = WebViewAdapterInfo.GetAdapterInfo(info.Type)?.SupportedScenarios;
+        return $"{info.Type} ({info.Engine} {info.Version}), embedding: {scenarios}";
+    }
 
     /// <summary>
     /// Configures the engine before it starts.
