@@ -28,13 +28,16 @@ public static class Prompt
         Bind(caption, TextBlock.ForegroundProperty, "dialog.foreground.brush");
 
         // Several lines for a signature or anything else worth a paragraph; one for a name.
+        // The unconstrained values are 0 and infinity: NaN is a valid Width or Height (it means
+        // "auto") but not a valid MinHeight or MaxHeight, and setting it throws before the
+        // window exists — so a single-line prompt would never open.
         var input = new TextBox
         {
             Text = value,
             Width = multiline ? 360 : 280,
             AcceptsReturn = multiline,
-            MinHeight = multiline ? 120 : double.NaN,
-            MaxHeight = multiline ? 240 : double.NaN,
+            MinHeight = multiline ? 120 : 0,
+            MaxHeight = multiline ? 240 : double.PositiveInfinity,
             TextWrapping = multiline ? Avalonia.Media.TextWrapping.Wrap : Avalonia.Media.TextWrapping.NoWrap,
         };
 
