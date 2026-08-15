@@ -308,4 +308,22 @@ public class MailRepositoryTests
         Assert.Empty(repo.Search("biscuits"));
         Assert.Empty(repo.Search("quarterly", archive.Id));
     }
+
+    /// <summary>A word only in the body, in no subject or sender, is found — schema 11 indexes it.</summary>
+    [Fact]
+    public void SearchReachesTheBody()
+    {
+        var (store, repo, inbox) = Fresh();
+        using var _ = store;
+
+        repo.AddMessage(inbox.Id, Sample("uid-1", subject: "Lunch") with
+        {
+            BodyText = "The reconciliation variance on line 14 is the one to talk through.",
+        });
+
+        // Not in the subject, not the sender — only the body.
+        Assert.Single(repo.Search("variance"));
+        Assert.Single(repo.Search("reconciliation"));
+        Assert.Empty(repo.Search("aardvark"));
+    }
 }

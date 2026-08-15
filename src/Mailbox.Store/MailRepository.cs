@@ -189,11 +189,11 @@ public sealed class MailRepository(MailStore store)
                 """
                 INSERT OR IGNORE INTO messages
                     (folder_id, blob_id, server_uid, message_id, in_reply_to, thread_key,
-                     from_name, from_address, subject, preview, sent_utc, received_utc,
+                     from_name, from_address, subject, preview, body_text, sent_utc, received_utc,
                      size_bytes, is_read, is_flagged, has_attachment)
                 VALUES
                     ($folder, $blob, $uid, $messageId, NULL, $thread,
-                     $fromName, $fromAddress, $subject, $preview, $sent, $received,
+                     $fromName, $fromAddress, $subject, $preview, $bodyText, $sent, $received,
                      $size, $read, $flagged, $attachment)
                 """,
                 ("$folder", folderId),
@@ -205,6 +205,7 @@ public sealed class MailRepository(MailStore store)
                 ("$fromAddress", message.FromAddress),
                 ("$subject", message.Subject),
                 ("$preview", message.Preview),
+                ("$bodyText", message.BodyText),
                 ("$sent", message.Sent?.ToUnixTimeSeconds()),
                 ("$received", message.Received.ToUnixTimeSeconds()),
                 ("$size", message.SizeBytes),
