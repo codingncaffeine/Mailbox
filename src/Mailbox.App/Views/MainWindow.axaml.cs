@@ -132,6 +132,34 @@ public partial class MainWindow : Window
                 break;
         }
 
+        // The compose window is its own window, so the harness captures that rather than the
+        // shell. The value is which of its tabs to open on.
+        if (Environment.GetEnvironmentVariable("MAILBOX_COMPOSE")?.Trim().ToLowerInvariant()
+            is { Length: > 0 } composeTab)
+        {
+            Opened += async (_, _) =>
+            {
+                var compose = new ComposeWindow(App.Commands, App.Accounts);
+                compose.SelectTab(composeTab == "1" ? "message" : composeTab);
+
+                // Posed before the window opens: a capture never gets a second layout pass,
+                // so anything toggled afterwards photographs at its old size.
+                compose.ShowOptionalFields();
+
+                compose.Opened += async (_, _) =>
+                {
+                    await Task.Delay(700);
+                    if (WindowCapture.RequestedPath is { } path)
+                    {
+                        WindowCapture.Capture(compose, path, WindowCapture.Scale);
+                        Console.WriteLine($"Captured {path}");
+                    }
+                    Environment.Exit(0);
+                };
+                await compose.ShowDialog(this);
+            };
+        }
+
         // A collapsed ribbon only unrolls on a tab click, which a capture cannot make.
         if (string.Equals(
                 Environment.GetEnvironmentVariable("MAILBOX_RIBBON"),
@@ -184,6 +212,20 @@ public partial class MainWindow : Window
         var host = this.FindControl<ContentControl>("BackstageHost")!;
         host.IsVisible = false;
         host.Content = null;
+    }
+
+    /// <summary>
+    /// Opens a new message in its own window, as the reference does — not modally, because
+    /// writing one message must not stop you reading another.
+    /// </summary>
+    private void NewMessage()
+    {
+        var compose = new ComposeWindow(App.Commands, App.Accounts);
+        compose.Closed += (_, _) =>
+        {
+            if (DataContext is ShellViewModel shell) shell.Refresh();
+        };
+        compose.Show(this);
     }
 
     /// <summary>Opens the Options dialog modally over the shell, optionally on a given page.</summary>
@@ -617,6 +659,7 @@ public partial class MainWindow : Window
 
         if (id == MailCommands.SendReceiveAll.Id) { _ = SendReceiveAsync(shell); return; }
         if (id == MailCommands.WorkOffline.Id) { ToggleWorkOffline(shell); return; }
+        if (id == MailCommands.NewEmail.Id) { NewMessage(); return; }
 
         shell.StatusRight = $"{command.Label} — not wired yet ({command.Id})";
     }
