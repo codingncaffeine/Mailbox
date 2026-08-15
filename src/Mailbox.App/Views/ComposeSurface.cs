@@ -1,0 +1,2264 @@
+using System.Globalization;
+using System.Text;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
+using Avalonia.Input;
+using Avalonia.Layout;
+using Avalonia.Markup.Xaml.MarkupExtensions;
+using Avalonia.Media;
+using Avalonia.Platform.Storage;
+using Avalonia.Threading;
+using Mailbox.App.Theming;
+using Mailbox.Controls.Ribbon;
+using Mailbox.Editor;
+using Mailbox.Rendering;
+using Mailbox.Core.Commands;
+using Mailbox.Core.Diagnostics;
+using Mailbox.Core.Ribbon;
+using Mailbox.Core.Settings;
+using Mailbox.Protocols;
+using Mailbox.Store;
+using Mailbox.Theming.Fonts;
+using Mailbox.Theming.Icons;
+using MimeKit;
+using MimeKit.Utils;
+using AvaloniaRichEditor.Controls;
+using AvaloniaRichEditor.Documents;
+
+namespace Mailbox.App.Views;
+
+/// <summary>
+/// The message-composition surface: address fields, Send, the body editor, and everything the
+/// compose ribbon acts on — with no chrome of its own.
+/// </summary>
+/// <remarks>
+/// Host-neutral on purpose. <see cref="ComposeWindow"/> wraps it in a window with a title bar
+/// and its own ribbon; the reading pane embeds the same control as an inline reply strip with
+/// the shell's ribbon driving it. Everything a host differs on is an event or a resolved
+/// <see cref="Owner"/> rather than a hard-coded window: a command comes in through
+/// <see cref="Invoke"/>, enablement goes out through <see cref="EnablementChanged"/>, and
+/// closing is a request the host answers.
+/// <para>
+/// The body is a real document. §7.3's survey found a GPL-3-compatible editor that carries the
+/// document model that section planned to build, so what is in-house is the serializer — and
+/// that is the half mail fidelity rests on. Send writes both an HTML body, through
+/// <see cref="EmailHtml"/>, and the plain text alternative, off the same document so the two
+/// cannot disagree.
+/// <para>
+/// The editor rather than its packaged view: the view brings a toolbar and a status bar of its
+/// own, and a host already has a ribbon. What each ribbon button does today is recorded once in
+/// <see cref="ComposeAvailability"/> and read from there, so a button still waiting on something
+/// says what, rather than "not wired yet".
+/// </para>
+/// </remarks>
+public sealed class ComposeSurface : UserControl
+{
+    /// <summary>
+    /// The window this surface is hosted in, for the modal dialogs and the file picker that
+    /// need an owner. Resolved from the visual tree, so it is the compose window when the
+    /// surface is that window's content and the main window when it is an inline reply strip.
+    /// </summary>
+    private Window? Owner => TopLevel.GetTopLevel(this) as Window;
+
+    /// <summary>The host window, for a modal dialog that must have an owner. Throws if detached — a
+    /// picker is only ever reached through a command, and a command means the surface is live.</summary>
+    private Window Host => Owner ?? throw new InvalidOperationException("The compose surface is not hosted in a window.");
+    /// <summary>
+    /// What new mail is written in. The reference's own default, and the one name §6 cares most
+    /// about getting onto the wire correctly.
+    /// </summary>
+    private const string ComposeFontFamily = "Calibri";
+
+    private const double ComposeFontPoints = 11;
+
+    /// <summary>The document measures in device-independent pixels; mail talks in points.</summary>
+    private const double PointsPerPixel = 0.75;
+
+    private readonly CommandCatalog _catalog;
+    private readonly AccountStores? _accounts;
+
+    private readonly TextBox _to = Field();
+    private readonly TextBox _cc = Field();
+    private readonly TextBox _bcc = Field();
+    private readonly TextBox _subject = Field();
+    private readonly RichEditor _body;
+    /// <summary>
+    /// The sending account, shown as plain text beside the From button.
+    /// </summary>
+    /// <remarks>
+    /// Not a combo. The reference puts a <c>From ⌄</c> button in the label column and the
+    /// address as text in the field column, which is why a full-width picker looked wrong: the
+    /// choosing happens in the button's menu, and the field only reports.
+    /// </remarks>
+    private readonly TextBlock _fromAddress = new()
+    {
+        VerticalAlignment = VerticalAlignment.Center,
+    };
+
+    private string? _sendingAddress;
+    private readonly TextBlock _status = new();
+    private readonly TextBlock _attachmentStrip = new() { TextWrapping = TextWrapping.Wrap };
+
+    // Each address row is one control, so showing or hiding it is one visibility change on one
+    // thing rather than two halves that have to agree.
+    private Control _bccRow = null!;
+    private Control _fromRow = null!;
+    private Border _attachmentRow = null!;
+
+    private readonly List<IStorageFile> _attachments = [];
+
+    /// <summary>
+    /// Attachments that came from a message rather than a file: a forward's, or an attached
+    /// original. Already MIME, so they go into the message as they are.
+    /// </summary>
+    private readonly List<CarriedPart> _carried = [];
+
+    /// <summary>The threading headers a reply carries, so the recipient's client can join it up.</summary>
+    private string? _inReplyTo;
+    private IReadOnlyList<string> _references = [];
+
+    private MessageImportance _importance = MessageImportance.Normal;
+    private bool _wantsReadReceipt;
+    private bool _wantsDeliveryReceipt;
+    private DateTimeOffset? _notBefore;
+    private string? _replyTo;
+    private bool _sent;
+
+    /// <summary>
+    /// Whether this message goes out as plain text only.
+    /// </summary>
+    /// <remarks>
+    /// The body is the same document either way — the mode decides what Send writes, not what
+    /// the writer sees. Plain text sends the text half alone; HTML sends both. Starts from the
+    /// Options page and is switched per message from the Format Text tab, as the reference does.
+    /// </remarks>
+    private bool _plainText;
+
+    /// <summary>
+    /// The title the host shows, which is where the reference says what format a message is in.
+    /// The window puts it in its caption; an inline strip ignores it.
+    /// </summary>
+    public string Title { get; private set; } = "Untitled - Message (HTML)";
+
+    /// <summary>Raised when <see cref="Title"/> changes — the subject typed, or the format switched.</summary>
+    public event EventHandler? TitleChanged;
+
+    private void UpdateTitle()
+    {
+        var format = _plainText ? "Plain Text" : "HTML";
+        Title = string.IsNullOrWhiteSpace(_subject.Text)
+            ? $"Untitled - Message ({format})"
+            : $"{_subject.Text} - Message ({format})";
+        TitleChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>The Drafts row this window is editing, so saving again replaces it.</summary>
+    private long? _draftId;
+
+    /// <summary>Saves a message being written, on the interval the Options page sets.</summary>
+    private DispatcherTimer? _autosave;
+
+    /// <summary>Whether anything has changed since the last save, so autosave has a reason to.</summary>
+    private bool _dirty;
+
+    /// <summary>
+    /// Loaded the first time spelling is asked for, not at startup.
+    /// </summary>
+    /// <remarks>
+    /// A dictionary is a few megabytes of word list and parsing one is felt. Most messages are
+    /// sent without the button ever being pressed, so paying for it on every compose window
+    /// would be paying for it almost always in vain.
+    /// </remarks>
+    private SpellCheck? _spelling;
+
+    /// <summary>
+    /// Raised when a message went to the outbox and is meant to go as soon as it can — under
+    /// Undo Send's hold if that is on, at once if it is not.
+    /// </summary>
+    /// <remarks>
+    /// An event rather than the surface putting up its own toast, because the surface asks to be
+    /// closed the instant it fires — a message offering to undo something has to outlive the
+    /// thing that did it, so the shell owns it.
+    /// </remarks>
+    public event EventHandler<QueuedMessageEventArgs>? Queued;
+
+    /// <summary>
+    /// Raised when the surface is done and asks its host to dismiss it — the message sent or
+    /// discarded. The window closes; an inline strip collapses. The host decides whether an
+    /// unsaved message is worth a prompt first, because the host knows what dismissing means.
+    /// </summary>
+    public event EventHandler? CloseRequested;
+
+    /// <summary>Raised when a command's enabled state may have changed, so a host ribbon can refresh.</summary>
+    public event EventHandler? EnablementChanged;
+
+    /// <summary>True once the message has been sent or saved, so a host need not prompt to keep it.</summary>
+    public bool IsSent => _sent;
+
+    private void RequestClose() => CloseRequested?.Invoke(this, EventArgs.Empty);
+
+    private void RaiseEnablementChanged() => EnablementChanged?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>Not a word anybody would suggest, so it cannot collide with one.</summary>
+    private const string AddToDictionary = "\u0000add";
+    private const string EditSignatures = "\u0000signatures";
+
+    public ComposeSurface(CommandCatalog catalog, AccountStores? accounts)
+    {
+        _catalog = catalog;
+        _accounts = accounts;
+
+        FontFamily = (FontFamily)(Application.Current!.FindResource("ui.fontfamily") ?? FontFamily.Default);
+
+        // The editor itself rather than its own view: that wrapper brings a toolbar and a
+        // status bar of its own, and a host already has a ribbon. Two bars disagreeing about the
+        // same document is the mistake the compose window made once already with its caption
+        // buttons.
+        _body = new RichEditor
+        {
+            DefaultFontFamily = new FontFamily(App.Fonts.Resolve(ComposeFontFamily).Rendered),
+            DefaultFontSize = ComposeFontPoints / PointsPerPixel,
+            AllowRemoteImagesOnPaste = false,
+            AllowLocalFileImages = false,
+            AutoLinkOnType = true,
+        };
+
+        // The body is a document page, not a pane — white even in Dark Gray, where the reading
+        // pane is not. The page is painted by the border around it; these are the marks drawn
+        // on top of it, which have to come from tokens like everything else.
+        Bind(_body, RichEditor.SelectionBrushProperty, "state.selected.brush");
+        Bind(_body, RichEditor.CaretBrushProperty, "compose.body.text.brush");
+
+        // A fresh editor has no document until something makes one, and until then InsertText,
+        // InsertHtml and a keystroke are all silent no-ops. Clear() is what makes one — a single
+        // empty paragraph with the caret in it — and it is called here so that Insert Symbol, a
+        // link, a signature or the automatic one all work before anything has been typed. Found
+        // by asking the editor rather than the window: the harness poses text through a path
+        // that happened to call Clear() first, so every capture looked fine.
+        _body.Clear();
+
+        // The left of the Message tab is pale on an empty message and darkens as soon as there
+        // is something to format. That is enablement, and it has to track every keystroke; the
+        // host's ribbon listens to EnablementChanged.
+        _body.TextChanged += (_, _) => RaiseEnablementChanged();
+
+        // What the Options page says a new message starts as: its importance, whether it asks
+        // for receipts, and its format. Read here rather than at Send, so what the status line
+        // shows while writing is what will go.
+        _importance = App.MailOptions.DefaultImportanceIndex switch
+        {
+            1 => MessageImportance.Low,
+            2 => MessageImportance.High,
+            _ => MessageImportance.Normal,
+        };
+        _wantsDeliveryReceipt = App.MailOptions.RequestDeliveryReceipt;
+        _wantsReadReceipt = App.MailOptions.RequestReadReceipt;
+        _plainText = App.MailOptions.ComposeFormat == ComposeFormat.PlainText;
+
+        Content = BuildSurface();
+        Focusable = true;
+        UpdateStatus();
+        UpdateTitle();
+
+        // The Auto-Complete List under each recipient line. The list is per account file and
+        // the window can send from any account, so what is offered is the union, weighted by
+        // use across the lot; forgetting an entry forgets it everywhere.
+        foreach (var field in new[] { _to, _cc, _bcc })
+        {
+            _completions.Add(RecipientAutocomplete.Attach(
+                field,
+                SuggestRecipients,
+                ForgetRecipient,
+                () => App.MailOptions.UseAutoCompleteList,
+                () => App.MailOptions.CommasSeparateRecipients));
+        }
+
+        // The signature this account signs new mail with, if it has chosen one. After the tree
+        // is built, because it goes into the document and the document is part of that tree.
+        InsertDefaultSignature();
+
+        // Autosave, on the Options page's interval. Zero is off. Only when something has
+        // changed since the last save, so an idle surface does not rewrite its draft every few
+        // minutes for nothing. Stopped when the surface leaves the tree, so a closed window or a
+        // dismissed inline strip does not keep a timer alive.
+        if (App.MailOptions.AutosaveMinutes is > 0 and var minutes)
+        {
+            _autosave = new DispatcherTimer { Interval = TimeSpan.FromMinutes(minutes) };
+            _autosave.Tick += (_, _) => { if (_dirty && !_sent && HasContent()) SaveDraft(); };
+            _autosave.Start();
+        }
+
+        DetachedFromVisualTree += (_, _) => _autosave?.Stop();
+
+        _body.TextChanged += (_, _) => _dirty = true;
+        foreach (var field in new[] { _to, _cc, _bcc, _subject }) field.TextChanged += (_, _) => _dirty = true;
+
+        _to.AttachedToVisualTree += (_, _) => _to.Focus();
+    }
+
+    /// <summary>
+    /// The surface's own keys, so Ctrl+Enter, Ctrl+S and Escape work whether it is a window's
+    /// content or an inline strip — the compose window used to override the Window's OnKeyDown,
+    /// which an embedded control has no equivalent of.
+    /// </summary>
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.Handled) return;
+
+        var control = e.KeyModifiers.HasFlag(KeyModifiers.Control);
+
+        switch (e.Key)
+        {
+            // The Options page's "CTRL+ENTER sends a message". Off is for the person who has
+            // sent one too many half-written messages that way, and it is a real setting.
+            case Key.Enter when control && App.MailOptions.CtrlEnterSends:
+                Invoke(ComposeCommands.Send.Id);
+                break;
+
+            case Key.S when control:
+                Invoke(ComposeCommands.SaveDraft.Id);
+                break;
+
+            case Key.Escape:
+                RequestClose();
+                break;
+
+            default:
+                return;
+        }
+
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Commands that need something in the body before they mean anything — either because they
+    /// format text that is not there, or because they insert into a document that is empty.
+    /// </summary>
+    private static readonly HashSet<CommandId> InsertsIntoBody =
+    [
+        ComposeCommands.Table.Id, ComposeCommands.Pictures.Id, ComposeCommands.StockImages.Id,
+        ComposeCommands.OnlinePictures.Id, ComposeCommands.Shapes.Id, ComposeCommands.Icons.Id,
+        ComposeCommands.Models3D.Id, ComposeCommands.SmartArt.Id, ComposeCommands.Chart.Id,
+        ComposeCommands.Equation.Id, ComposeCommands.Symbol.Id, ComposeCommands.Link.Id,
+        ComposeCommands.Styles.Id, ComposeCommands.ChangeStyles.Id, ComposeCommands.PageColor.Id,
+    ];
+
+    /// <summary>
+    /// Whether a command is usable right now.
+    /// </summary>
+    /// <remarks>
+    /// Paste is the exception among the formatting commands: there is always somewhere to paste
+    /// to, even in an empty message. Everything else in that run needs text to act on.
+    /// </remarks>
+    public bool IsCommandEnabled(CommandId id)
+    {
+        if (id == ComposeCommands.Paste.Id) return true;
+        if (!_catalog.TryGet(id, out var command)) return true;
+        if (!command.NeutralIcon && !InsertsIntoBody.Contains(id)) return true;
+
+        return !string.IsNullOrEmpty(_body.GetPlainText());
+    }
+
+    /// <summary>
+    /// Fills the window from a message, for one that has been pulled back out of the outbox.
+    /// </summary>
+    /// <remarks>
+    /// Undo Send (§12). What comes back is the message as it was queued, so the reader gets
+    /// their words rather than a blank window and an apology — which is the whole point of
+    /// pressing Undo rather than letting it go and writing a correction.
+    /// </remarks>
+    public void Restore(MimeMessage message)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+
+        _to.Text = string.Join("; ", message.To.Mailboxes.Select(m => m.Address));
+        _cc.Text = string.Join("; ", message.Cc.Mailboxes.Select(m => m.Address));
+        _bcc.Text = string.Join("; ", message.Bcc.Mailboxes.Select(m => m.Address));
+        _subject.Text = message.Subject ?? string.Empty;
+
+        if (message.From.Mailboxes.FirstOrDefault()?.Address is { Length: > 0 } from)
+        {
+            SendFrom(from);
+        }
+
+        // The document as it was written. The HTML half where there is one, because that is
+        // what carried the formatting; the text half otherwise. Through the renderer rather
+        // than straight into the editor: an image the writer put in went out as a related part
+        // and a cid: reference, and the editor cannot resolve cid: — it drops the picture. The
+        // renderer already turns cid: into data: for the reading pane, and this is our own
+        // conservative markup, so what it lets through is everything that was there.
+        _body.Clear();
+
+        if (message.HtmlBody is { Length: > 0 })
+        {
+            _body.LoadHtml(Mailbox.Rendering.MessageRenderer.Render(message).Html);
+        }
+        else
+        {
+            _body.InsertText(message.TextBody ?? string.Empty);
+        }
+
+        _importance = message.Importance switch
+        {
+            MessageImportance.High => MessageImportance.High,
+            MessageImportance.Low => MessageImportance.Low,
+            _ => MessageImportance.Normal,
+        };
+
+        UpdateStatus();
+        RaiseEnablementChanged();
+    }
+
+    /// <summary>
+    /// Opens on a reply or a forward: recipients, subject, threading headers, the reply
+    /// signature, and the original quoted below the caret.
+    /// </summary>
+    /// <remarks>
+    /// The caret goes at the top and the quote below, which is the reference's arrangement and
+    /// the one every recipient reading top-down expects. LoadHtml rather than InsertHtml, for
+    /// the same reason the automatic signature uses it: it is what leaves the caret at the top.
+    /// </remarks>
+    public void Prefill(ReplyDraft draft, ReplyKind kind)
+    {
+        ArgumentNullException.ThrowIfNull(draft);
+
+        _to.Text = string.Join("; ", draft.To);
+        _cc.Text = string.Join("; ", draft.Cc);
+        _subject.Text = draft.Subject;
+        _inReplyTo = draft.InReplyTo;
+        _references = draft.References;
+
+        _carried.AddRange(draft.Attachments);
+        if (_carried.Count > 0)
+        {
+            _attachmentStrip.Text = "Attached: " + string.Join(", ", _carried.Select(c => c.Name));
+            _attachmentRow.IsVisible = true;
+        }
+
+        // The signature for a reply, if the account has one, then the quote — with two blank
+        // lines above the lot for the answer to go in.
+        var signature = SendingAccount() is { } account
+            ? App.Signatures.ForReply(account.Account.Address)
+            : null;
+
+        var html = new StringBuilder("<p>&nbsp;</p><p>&nbsp;</p>");
+        if (signature is { IsEmpty: false }) html.Append(signature.Html);
+
+        if (_plainText || draft.QuotedHtml.Length == 0)
+        {
+            html.Append(SignatureEditor.AsHtml(draft.QuotedText));
+        }
+        else
+        {
+            html.Append(draft.QuotedHtml);
+        }
+
+        _body.LoadHtml(html.ToString());
+        _dirty = false;
+
+        UpdateTitle();
+        UpdateStatus();
+        RaiseEnablementChanged();
+
+        // A forward wants a recipient; a reply has one already and wants the words. Focus
+        // follows, which is what stops the first keystroke going into the wrong box. Keyed on
+        // attachment to the tree rather than a window's Opened, so it works inline too.
+        if (kind == ReplyKind.Forward) _to.AttachedToVisualTree += (_, _) => _to.Focus();
+        else _body.AttachedToVisualTree += (_, _) => _body.Focus();
+    }
+
+    /// <summary>
+    /// Opens a draft for more writing, so saving or sending it acts on that draft.
+    /// </summary>
+    /// <remarks>
+    /// Without this a draft was a message that could be looked at and never resumed — Save wrote
+    /// to Drafts and nothing read from it — which is not what a draft is.
+    /// </remarks>
+    public void EditDraft(long messageId, MimeMessage message)
+    {
+        Restore(message);
+        _draftId = messageId;
+        _dirty = false;
+    }
+
+    /// <summary>Puts text in the body, so a capture can show the ribbon in its enabled state.</summary>
+    public void PoseBodyText(string text)
+    {
+        _body.Clear();
+        _body.InsertText(text);
+        RaiseEnablementChanged();
+    }
+
+    /// <summary>
+    /// A body with one of everything the serializer handles, for the harness to send.
+    /// </summary>
+    /// <remarks>
+    /// The picture is a real 1×1 PNG rather than a header, because the editor drops what it
+    /// cannot decode — which is right, and which made an earlier probe look like a bug in the
+    /// path rather than in the fixture.
+    /// </remarks>
+    public void PoseRichBody()
+    {
+        _body.Clear();
+        _body.InsertHtml(
+            "<p>Plain, then <b>bold</b>, then <i>italic</i>, then a "
+            + "<a href=\"https://example.com/\">link</a>.</p>"
+            + "<ul><li>One</li><li>Two</li></ul>"
+            + "<p><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"
+            + "AAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==\" width=\"10\" height=\"10\" /></p>"
+            + "<p>After the picture.</p>");
+        RaiseEnablementChanged();
+    }
+
+    /// <summary>Presses Send, for the harness.</summary>
+    public void PressSend() => Invoke(ComposeCommands.Send.Id);
+
+    /// <summary>Poses the optional address fields, so a capture can show them.</summary>
+    public void ShowOptionalFields()
+    {
+        // Set rather than toggled. Bcc is the only row that is off to begin with — From is
+        // shown, as the reference shows it — and a toggle turned that one back off the moment
+        // the default changed, which photographs as a From button that does not exist.
+        _bccRow.IsVisible = true;
+        _fromRow.IsVisible = true;
+    }
+
+    /// <summary>Fills the header, so a capture can be measured against the reference.</summary>
+    public void PoseHeader(string to, string cc, string subject)
+    {
+        _to.Text = to;
+        _cc.Text = cc;
+        if (subject.Length > 0 && !subject.Contains(" - Message (", StringComparison.Ordinal)) _subject.Text = subject;
+    }
+
+    // ----------------------------------------------------------------------------------
+    // Composition
+    // ----------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Title bar, ribbon and address header stacked from the top, status bar pinned to the
+    /// bottom, and the body taking what is left.
+    /// </summary>
+    /// <remarks>
+    /// A DockPanel rather than a Grid of auto rows, deliberately. Showing Bcc or From after the
+    /// first layout pass did not grow an auto row — the field appeared and Subject was clipped
+    /// off the bottom — and invalidating the grid and its border did not fix it. Docking sizes
+    /// each band to its content every pass, so a field that appears simply makes the band taller.
+    /// </remarks>
+    private Control BuildSurface()
+    {
+        var root = new DockPanel { LastChildFill = true };
+
+        var header = BuildHeader();
+        DockPanel.SetDock(header, Dock.Top);
+        root.Children.Add(header);
+
+        var info = BuildInfoBar();
+        DockPanel.SetDock(info, Dock.Top);
+        root.Children.Add(info);
+
+        // The body is inset 5px left and right, and the chrome shows through as a gutter —
+        // measured: the white starts at x=18 in a window whose content starts at 13, and ends
+        // at 1647 with five more before the frame. It runs to the bottom; there is no status
+        // bar in the reference, and the format the window is in is already in its title.
+        var body = new Border { Child = _body, Padding = new Thickness(12, 8) };
+        Bind(body, Border.BackgroundProperty, "compose.body.background.brush");
+
+        var bodyHost = new Border
+        {
+            Child = body,
+            Padding = new Thickness(BodyGutter, 0, BodyGutter, 0),
+        };
+        Bind(bodyHost, Border.BackgroundProperty, "compose.header.background.brush");
+        root.Children.Add(bodyHost);
+
+        // The title follows the subject as it is typed, so the host's caption stays current.
+        _subject.PropertyChanged += (_, e) =>
+        {
+            if (e.Property != TextBox.TextProperty) return;
+            UpdateTitle();
+        };
+
+        return root;
+    }
+
+    /// <summary>
+    /// Send beside the address fields, as the reference has it: the button that finishes the
+    /// job is not on the ribbon, because it is not a formatting choice.
+    /// </summary>
+    private Control BuildHeader()
+    {
+        // A stack, not a grid of auto rows. A row becoming visible after the first layout pass
+        // has to make the header taller, and an auto row did not do that: Bcc appeared, the
+        // header kept its old height, and Subject was painted over by the body below. A stack's
+        // height is the sum of what is visible, recomputed every pass.
+        // No spacing: each row already carries its own gap as a bottom margin, and adding
+        // both put the rows on a 42px pitch where the reference measures 40.
+        // Known gap, measured rather than assumed: the rules land on a fractional origin
+        // inherited from the chrome above, so a 1px hairline antialiases across two rows on
+        // some of them where the reference's are crisp. UseLayoutRounding here does not fix it
+        // — the same thing the zoom slider's track found — and the real answer is ZoomSlider's:
+        // translate to the TopLevel and correct by the fractional part. Not done yet.
+        var rows = new StackPanel();
+
+        _fromRow = AddressRow(rows, "From", _fromAddress, opensAddressBook: false, picksAccount: true);
+        AddressRow(rows, "To", _to);
+        AddressRow(rows, "Cc", _cc);
+        _bccRow = AddressRow(rows, "Bcc", _bcc);
+        AddressRow(rows, "Subject", _subject, opensAddressBook: false);
+
+        _attachmentStrip.Text = string.Empty;
+        // Sits in the header, so it takes the header's ink like everything else there.
+        Bind(_attachmentStrip, TextBlock.ForegroundProperty, "compose.header.label.brush");
+        _attachmentRow = new Border
+        {
+            Child = _attachmentStrip,
+            Padding = new Thickness(76, 6, 0, 0),
+            IsVisible = false,
+        };
+        rows.Children.Add(_attachmentRow);
+
+        var send = new Button
+        {
+            Content = new StackPanel
+            {
+                Orientation = Orientation.Vertical,
+                Spacing = 2,
+                Children =
+                {
+                    IconBlock("send", 22),
+                    new TextBlock { Text = "Send", HorizontalAlignment = HorizontalAlignment.Center },
+                },
+            },
+            Width = SendWidth,
+            Height = SendHeight,
+            Margin = new Thickness(SendInset, 0, LabelInset, 0),
+            VerticalAlignment = VerticalAlignment.Top,
+            BorderThickness = new Thickness(1),
+        };
+        Bind(send, TemplatedControl.BackgroundProperty, "surface.raised.brush");
+        Bind(send, TemplatedControl.BorderBrushProperty, "border.strong.brush");
+        ToolTip.SetTip(send, "Send this message  (Ctrl+Enter)");
+        send.Click += (_, _) => Invoke(ComposeCommands.Send.Id);
+
+        // Bcc is off until asked for, which is what the Options tab's toggle is for.
+        //
+        // From is not. The reference shows it on a new message — its own capture has From above
+        // To with the sending address beside it — and hiding it was wrong twice over: a message
+        // goes out from exactly one account, and with the row hidden there was nothing on screen
+        // saying which, and no way to change it without knowing to go and turn a toggle on first.
+        _bccRow.IsVisible = false;
+        PopulateAccounts();
+
+        var grid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("Auto,*"),
+            Margin = new Thickness(0, HeaderTopInset, 14, HeaderTopInset),
+        };
+        Grid.SetColumn(send, 0);
+        grid.Children.Add(send);
+        Grid.SetColumn(rows, 1);
+        grid.Children.Add(rows);
+
+        var host = new Border { Child = grid };
+        Bind(host, Border.BackgroundProperty, "compose.header.background.brush");
+        return host;
+    }
+
+    // Measured off the compose capture, all of it. Horizontally: the header's background runs
+    // from x=13, Send is a filled button at x=34–93, the From/To/Cc buttons start at x=110, and
+    // the field rules begin at x=202. Vertically: the header background starts at y=136 and the
+    // first button at y=161, so the block is inset 25; buttons are 31 tall on a 40 pitch; and
+    // the rule under a field sits at 197 — five below its button, not level with it, which is
+    // why the field is taller than the button beside it. Send runs 161–236.
+    private const double SendInset = 21;
+    private const double SendWidth = 58;
+    private const double SendHeight = 75;
+    private const double LabelInset = 17;
+    private const double LabelWidth = 80;
+    private const double FieldInset = 12;
+    private const double HeaderTopInset = 25;
+    private const double RowPitch = 40;
+    private const double RowHeight = 31;
+    private const double FieldHeight = 36;
+
+    /// <summary>
+    /// One address row — its label and its field as a single control, so the pair is shown and
+    /// hidden together and cannot get out of step.
+    /// </summary>
+    private Control AddressRow(
+        StackPanel rows, string label, Control field,
+        bool opensAddressBook = true, bool picksAccount = false)
+    {
+        // The row is the pitch, and everything in it is centred in that pitch: the button, the
+        // label and the field's own text. Measured off the reference, where a row spans 40px
+        // and the address it carries sits dead centre of it — ours had the text 7px high, which
+        // reads as the writing floating above its line rather than sitting on it.
+        var row = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("Auto,*"),
+            Height = RowPitch,
+        };
+
+        Control caption;
+        if (picksAccount)
+        {
+            // From carries a chevron and opens the account list, rather than acting on the
+            // address book like the recipient rows.
+            var button = new Button
+            {
+                Content = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 6,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Children =
+                    {
+                        new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center },
+                        new TextBlock
+                        {
+                            Text = IconGlyphs.GetOrEmpty("chevron-down", 16),
+                            FontFamily = IconFont.Family,
+                            FontSize = 9,
+                            VerticalAlignment = VerticalAlignment.Center,
+                        },
+                    },
+                },
+                Width = LabelWidth,
+                Height = RowHeight,
+                VerticalAlignment = VerticalAlignment.Center,
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                VerticalContentAlignment = VerticalAlignment.Center,
+                BorderThickness = new Thickness(1),
+                Flyout = AccountMenu(),
+            };
+            Bind(button, TemplatedControl.BackgroundProperty, "surface.raised.brush");
+            Bind(button, TemplatedControl.BorderBrushProperty, "border.strong.brush");
+            ToolTip.SetTip(button, "Send this message from a different account");
+            caption = button;
+        }
+        else if (opensAddressBook)
+        {
+            var button = new Button
+            {
+                Content = label,
+                Width = LabelWidth,
+                Height = RowHeight,
+                VerticalAlignment = VerticalAlignment.Center,
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                VerticalContentAlignment = VerticalAlignment.Center,
+                BorderThickness = new Thickness(1),
+            };
+            Bind(button, TemplatedControl.BackgroundProperty, "surface.raised.brush");
+            Bind(button, TemplatedControl.BorderBrushProperty, "border.strong.brush");
+            ToolTip.SetTip(button, $"Choose {label} recipients from the address book");
+            button.Click += (_, _) => Invoke(MailCommands.AddressBook.Id);
+            caption = button;
+        }
+        else
+        {
+            // Subject is a plain label rather than a button: it opens nothing.
+            var text = new TextBlock
+            {
+                Text = label,
+                Width = LabelWidth,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextAlignment = TextAlignment.Center,
+            };
+            Bind(text, TextBlock.ForegroundProperty, "compose.header.label.brush");
+            caption = text;
+        }
+
+        Grid.SetColumn(caption, 0);
+        row.Children.Add(caption);
+
+        // The fields carry no box. The reference draws a single rule under each one and nothing
+        // else, so the address block reads as writing lines rather than as a form.
+        // The rule belongs to the row, not to whatever control sits in it. From shows an
+        // address as text rather than an input, and it is still underlined in the reference —
+        // hanging the rule off the TextBox left that one row without one.
+        if (field is TextBox box)
+        {
+            box.BorderThickness = default;
+            box.CornerRadius = default;
+            box.Background = Brushes.Transparent;
+            box.Padding = default;
+            box.VerticalContentAlignment = VerticalAlignment.Center;
+            Bind(box, TemplatedControl.ForegroundProperty, "compose.header.text.brush");
+        }
+
+        if (field is TextBlock plain)
+        {
+            plain.VerticalAlignment = VerticalAlignment.Center;
+            Bind(plain, TextBlock.ForegroundProperty, "compose.header.text.brush");
+        }
+
+        // Fills the row rather than sitting 36px of it, so the rule is the row's own bottom edge
+        // and the text centres against the same 40px the button does. The reference leaves 14px
+        // between the bottom of an address and the rule under it; centring in the full pitch is
+        // what produces that, and it goes on producing it at another type size.
+        var underlined = new Border
+        {
+            Child = field,
+            Margin = new Thickness(FieldInset, 0, 0, 0),
+            BorderThickness = new Thickness(0, 0, 0, 1),
+        };
+        Bind(underlined, Border.BorderBrushProperty, "compose.field.rule.brush");
+
+        Grid.SetColumn(underlined, 1);
+        row.Children.Add(underlined);
+
+        rows.Children.Add(row);
+        return row;
+    }
+
+    /// <summary>
+    /// The strip that carries a message, between the header and the body.
+    /// </summary>
+    /// <remarks>
+    /// Where the reference puts an InfoBar, and hidden until there is something to say — the
+    /// compose window has no status bar, so a permanent strip would be a band the reference
+    /// does not have. It carries two things: what a button that cannot act yet is waiting for,
+    /// and the state worth stating, which is importance and a delayed send.
+    /// </remarks>
+    private Control BuildInfoBar()
+    {
+        Bind(_status, TextBlock.ForegroundProperty, "reading.infobar.text.brush");
+        Bind(_status, TextBlock.FontSizeProperty, "type.ui.size.value");
+        _status.VerticalAlignment = VerticalAlignment.Center;
+        _status.TextWrapping = TextWrapping.Wrap;
+
+        _infoBar = new Border
+        {
+            Child = _status,
+            Padding = new Thickness(BodyGutter + 12, 7),
+            IsVisible = false,
+        };
+        Bind(_infoBar, Border.BackgroundProperty, "reading.infobar.background.brush");
+        return _infoBar;
+    }
+
+    private Border _infoBar = null!;
+
+    /// <summary>The body's inset from the window edge, measured at 5px either side.</summary>
+    private const double BodyGutter = 5;
+
+    private static TextBox Field() => new() { MinWidth = 200 };
+
+    private readonly List<RecipientAutocomplete> _completions = [];
+
+    /// <summary>
+    /// The Auto-Complete List for what has been typed, merged across every account: one entry
+    /// per address, its weight the sum, its name the most-used account's.
+    /// </summary>
+    private IReadOnlyList<Nickname> SuggestRecipients(string typed)
+    {
+        if (_accounts is null) return [];
+
+        var merged = new Dictionary<string, Nickname>(StringComparer.OrdinalIgnoreCase);
+        foreach (var account in _accounts.All)
+        {
+            foreach (var entry in account.Mail.SuggestRecipients(typed))
+            {
+                merged[entry.Address] = merged.TryGetValue(entry.Address, out var seen)
+                    ? seen with
+                    {
+                        Weight = seen.Weight + entry.Weight,
+                        DisplayName = seen.DisplayName.Length > 0 ? seen.DisplayName : entry.DisplayName,
+                        LastUsed = entry.LastUsed > seen.LastUsed ? entry.LastUsed : seen.LastUsed,
+                    }
+                    : entry;
+            }
+        }
+
+        return
+        [
+            .. merged.Values
+                .OrderByDescending(e => e.Weight)
+                .ThenByDescending(e => e.LastUsed)
+                .ThenBy(e => e.Address, StringComparer.OrdinalIgnoreCase)
+                .Take(8),
+        ];
+    }
+
+    private void ForgetRecipient(string address)
+    {
+        if (_accounts is null) return;
+        foreach (var account in _accounts.All) account.Mail.ForgetRecipient(address);
+    }
+
+    /// <summary>
+    /// Feeds the list from a message that has just been queued: every recipient, under the
+    /// name it was addressed with. Here rather than in the sender because the list is about
+    /// what the writer chose to type, and the sender sees only the message.
+    /// </summary>
+    private static void RememberRecipients(OpenAccount account, MimeMessage message)
+    {
+        var recipients = message.To.Mailboxes
+            .Concat(message.Cc.Mailboxes)
+            .Concat(message.Bcc.Mailboxes)
+            .Select(m => (m.Address, (string?)m.Name));
+
+        account.Mail.RecordRecipients(recipients, DateTimeOffset.UtcNow);
+    }
+
+    /// <summary>Types into the To line as a person would, caret at the end, for the harness.</summary>
+    public void PoseTyping(string text)
+    {
+        _to.Focus();
+        _to.Text = text;
+        _to.CaretIndex = text.Length;
+        if (_completions.Count > 0) _completions[0].Refresh();
+    }
+
+    /// <summary>What the Auto-Complete List last offered on the To line, for the harness.</summary>
+    public (bool IsOpen, int Offered) ToLineCompletion =>
+        _completions.Count > 0 ? (_completions[0].IsOpen, _completions[0].Offered) : (false, 0);
+
+    private static Control IconBlock(string icon, double size)
+    {
+        var glyph = new TextBlock
+        {
+            Text = IconGlyphs.GetOrEmpty(icon, 24),
+            FontFamily = IconFont.Family,
+            FontSize = size,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        glyph[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("accent.rest.brush");
+        return glyph;
+    }
+
+    private void PopulateAccounts()
+    {
+        _sendingAddress = _accounts?.Default?.Account.Address;
+        _fromAddress.Text = _sendingAddress ?? string.Empty;
+    }
+
+    /// <summary>
+    /// The From button's menu: one entry per account, ticked for the one being sent from.
+    /// </summary>
+    /// <remarks>
+    /// Filled when it opens rather than when the window is built. An account added while a
+    /// message is being written — from the wizard, which this window can reach through the
+    /// Backstage — would otherwise be missing from a list captured before it existed, and the
+    /// only way to see it would be to close the message and start again.
+    /// <para>
+    /// The tick is the point of the menu as much as the choosing is. A message goes out from
+    /// exactly one account and which one is not otherwise visible from here, so a list that
+    /// offers four addresses and marks none of them leaves the reader counting on the field
+    /// beside the button to be telling the truth.
+    /// </para>
+    /// </remarks>
+    private MenuFlyout AccountMenu()
+    {
+        var flyout = new MenuFlyout();
+        flyout.Opening += (_, _) => flyout.ItemsSource = AccountMenuItems();
+        return flyout;
+    }
+
+    private List<MenuItem> AccountMenuItems()
+    {
+        var accounts = _accounts?.All ?? [];
+
+        if (accounts.Count == 0)
+        {
+            return [new MenuItem { Header = "No account is set up yet", IsEnabled = false }];
+        }
+
+        return [.. accounts.Select(account =>
+        {
+            var address = account.Account.Address;
+            var name = account.Account.DisplayName;
+
+            var item = new MenuItem
+            {
+                // The name and the address, because two accounts at one provider are told apart
+                // by the name and two names at one address by nothing at all.
+                Header = string.IsNullOrWhiteSpace(name) || string.Equals(name, address, StringComparison.OrdinalIgnoreCase)
+                    ? address
+                    : $"{name}  ({address})",
+                Icon = string.Equals(address, _sendingAddress, StringComparison.OrdinalIgnoreCase)
+                    ? Tick()
+                    : null,
+            };
+
+            item.Click += (_, _) => SendFrom(address);
+            return item;
+        })];
+    }
+
+    /// <summary>The same tick the Quick Access flyout draws, from the same glyph.</summary>
+    private static Control Tick() => new TextBlock
+    {
+        Text = IconGlyphs.GetOrEmpty("mark-complete", 16),
+        FontFamily = IconFont.Family,
+        FontSize = 12,
+    };
+
+    /// <summary>Starts the message from this account, for the shell to say which folder was open.</summary>
+    public void SendFromAccount(string address)
+    {
+        if (_accounts?.Find(address) is null) return;
+        _sendingAddress = address;
+        _fromAddress.Text = address;
+
+        // The signature is the account's, so a different account means a different one — or
+        // none. Only while nothing has been written, which is the only time this is called.
+        if (!_dirty)
+        {
+            InsertDefaultSignature();
+            _dirty = false;
+        }
+    }
+
+    /// <summary>Sends from this account, and says so where it is being read from.</summary>
+    private void SendFrom(string address)
+    {
+        _sendingAddress = address;
+        _fromAddress.Text = address;
+
+        Report($"This message will be sent from {address}.");
+    }
+
+    // ----------------------------------------------------------------------------------
+    // Commands
+    // ----------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Runs a compose command. The one entry point a host's ribbon (or the Send button) routes
+    /// through, so the same command from a window's ribbon, the shell's ribbon or a keystroke
+    /// arrives at one place.
+    /// </summary>
+    public void Invoke(CommandId id)
+    {
+        if (!_catalog.TryGet(id, out var command))
+        {
+            Report($"No command with id '{id}'.");
+            return;
+        }
+
+        // Everything that works is handled here. Everything else falls through to the status
+        // line, which says what it is waiting for rather than that it is not wired.
+        if (Handle(id)) return;
+
+        var status = ComposeAvailability.For(id);
+        Report(status is null
+            ? $"{command.Label} — no recorded status. That is a bug in ComposeAvailability."
+            : $"{command.Label} — {status.Note}");
+    }
+
+    private bool Handle(CommandId id)
+    {
+        if (id == ComposeCommands.Send.Id) { _ = SendAsync(); return true; }
+        if (id == ComposeCommands.SaveDraft.Id) { SaveDraft(); return true; }
+        if (id == ComposeCommands.Discard.Id) { RequestClose(); return true; }
+
+        // Paste goes through the editor, which reads the clipboard's HTML flavour and keeps
+        // the formatting. Cut, Copy and Select All are the editor's own key handling and it
+        // exposes no method for them, so the buttons say where they are rather than pretending.
+        if (id == ComposeCommands.Paste.Id) { _ = _body.PasteFromClipboardAsync(); return true; }
+
+        if (id == ComposeCommands.Cut.Id || id == ComposeCommands.Copy.Id
+            || id == ComposeCommands.SelectAll.Id)
+        {
+            _body.Focus();
+            Report("Cut, Copy and Select All are on Ctrl+X, Ctrl+C and Ctrl+A.");
+            return true;
+        }
+
+        if (id == ComposeCommands.ShowBcc.Id) { Toggle(_bccRow); return true; }
+        if (id == ComposeCommands.ShowFrom.Id) { Toggle(_fromRow); return true; }
+
+        if (id == ComposeCommands.HighImportance.Id) { SetImportance(MessageImportance.High); return true; }
+        if (id == ComposeCommands.LowImportance.Id) { SetImportance(MessageImportance.Low); return true; }
+
+        if (id == ComposeCommands.DeliveryReceipt.Id)
+        {
+            _wantsDeliveryReceipt = !_wantsDeliveryReceipt;
+            Report($"Delivery receipt {(_wantsDeliveryReceipt ? "requested" : "not requested")}.");
+            return true;
+        }
+
+        if (id == ComposeCommands.ReadReceipt.Id)
+        {
+            _wantsReadReceipt = !_wantsReadReceipt;
+            Report($"Read receipt {(_wantsReadReceipt ? "requested" : "not requested")}.");
+            return true;
+        }
+
+        if (id == ComposeCommands.WordCount.Id) { _ = ShowWordCountAsync(); return true; }
+        if (id == ComposeCommands.Zoom.Id) { StepZoom(); return true; }
+        if (id == ComposeCommands.AttachFile.Id) { _ = AttachAsync(); return true; }
+        if (id == ComposeCommands.CheckNames.Id) { CheckNames(); return true; }
+        if (id == ComposeCommands.Find.Id || id == ComposeCommands.Replace.Id)
+        {
+            _ = FindAsync(replace: id == ComposeCommands.Replace.Id);
+            return true;
+        }
+
+        if (HandleFormatting(id)) return true;
+        if (HandleInsert(id)) return true;
+
+        if (id == ComposeCommands.Symbol.Id) { _ = InsertSymbolAsync(); return true; }
+        if (id == ComposeCommands.Link.Id) { _ = InsertLinkAsync(); return true; }
+        if (id == ComposeCommands.DelayDelivery.Id) { _ = DelayAsync(); return true; }
+        if (id == ComposeCommands.DirectRepliesTo.Id) { _ = DirectRepliesAsync(); return true; }
+
+        return false;
+    }
+
+    /// <summary>
+    /// The Format Text tab, and the formatting half of Message.
+    /// </summary>
+    /// <remarks>
+    /// Every one of these acts on the selection, which is the editor's business rather than
+    /// this window's — so each is one call. What is not here is what the editor does not do:
+    /// sub- and superscript, clearing formatting, paragraph marks, borders, shading and sort.
+    /// Those stay recorded as blocked in <see cref="ComposeAvailability"/> with what they want,
+    /// rather than being faked.
+    /// <para>
+    /// The choosers are the compromise. A ribbon control reports which command was pressed and
+    /// never a value with it, so a font, a size, a colour or an alignment has to be asked for
+    /// before the command can act. The reference uses live-previewing galleries; replacing these
+    /// with those is ribbon work, and it is written down in the plan rather than pretended away.
+    /// </para>
+    /// </remarks>
+    private bool HandleFormatting(CommandId id)
+    {
+        if (id == MailCommands.Undo.Id) { _body.Undo(); _body.Focus(); return true; }
+        if (id == ViewCommands.Redo.Id) { _body.Redo(); _body.Focus(); return true; }
+
+        if (id == ComposeCommands.Bold.Id) return Format(_body.ToggleBold);
+        if (id == ComposeCommands.Italic.Id) return Format(_body.ToggleItalic);
+        if (id == ComposeCommands.Underline.Id) return Format(_body.ToggleUnderline);
+        if (id == ComposeCommands.Strikethrough.Id) return Format(_body.ToggleStrikethrough);
+
+        if (id == ComposeCommands.GrowFont.Id) return Format(_body.IncreaseFontSize);
+        if (id == ComposeCommands.ShrinkFont.Id) return Format(_body.DecreaseFontSize);
+
+        if (id == ComposeCommands.Bullets.Id) return Format(_body.ToggleBullet);
+        if (id == ComposeCommands.Numbering.Id) return Format(_body.ToggleNumbering);
+
+        if (id == ComposeCommands.IncreaseIndent.Id) return Format(() => _body.Indent(24));
+        if (id == ComposeCommands.DecreaseIndent.Id) return Format(() => _body.Indent(-24));
+
+        if (id == ComposeCommands.FormatPainter.Id)
+        {
+            if (_body.IsFormatPainterActive)
+            {
+                _body.CancelFormatPainter();
+                Report("Format painter off.");
+            }
+            else
+            {
+                _body.StartFormatPainter();
+                Report("Format painter on — select the text to paint.");
+            }
+
+            _body.Focus();
+            return true;
+        }
+
+        if (id == ComposeCommands.Font.Id) { _ = ChooseFontAsync(); return true; }
+        if (id == ComposeCommands.FontSize.Id) { _ = ChooseFontSizeAsync(); return true; }
+        if (id == ComposeCommands.FontColor.Id) { _ = ChooseColourAsync(highlight: false); return true; }
+        if (id == ComposeCommands.Highlight.Id) { _ = ChooseColourAsync(highlight: true); return true; }
+        if (id == ComposeCommands.Align.Id) { _ = ChooseAlignmentAsync(); return true; }
+        if (id == ComposeCommands.LineSpacing.Id) { _ = ChooseLineSpacingAsync(); return true; }
+        if (id == ComposeCommands.MultilevelList.Id) { _ = ChooseListStyleAsync(); return true; }
+
+        if (id == ComposeCommands.FormatHtml.Id)
+        {
+            _plainText = false;
+            UpdateTitle();
+            Report("This message will be sent as HTML.");
+            return true;
+        }
+
+        if (id == ComposeCommands.FormatPlainText.Id)
+        {
+            // The document keeps its formatting on screen; what changes is what leaves. Saying
+            // so matters, because a writer who bolded a word and sees it still bold would
+            // otherwise assume it is going out that way.
+            _plainText = true;
+            UpdateTitle();
+            Report("This message will be sent as plain text. Formatting stays on screen and "
+                + "is not sent.");
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>The Insert tab, for the things the document model can actually hold.</summary>
+    private bool HandleInsert(CommandId id)
+    {
+        if (id == ComposeCommands.Signature.Id) { _ = ChooseSignatureAsync(); return true; }
+
+        if (id == ComposeCommands.Spelling.Id || id == ComposeCommands.Editor.Id)
+        {
+            _ = CheckSpellingAsync();
+            return true;
+        }
+
+        if (id == ComposeCommands.Table.Id) { _ = InsertTableAsync(); return true; }
+        if (id == ComposeCommands.Pictures.Id) { _ = InsertPictureAsync(); return true; }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Applies something to the selection and puts the caret back where it was.
+    /// </summary>
+    /// <remarks>
+    /// The focus is the point. Pressing a ribbon button moves focus to the button, and a second
+    /// press with the caret no longer in the document formats nothing — which reads as the
+    /// button having stopped working.
+    /// </remarks>
+    private bool Format(Action apply)
+    {
+        apply();
+        _body.Focus();
+        RaiseEnablementChanged();
+        return true;
+    }
+
+    /// <summary>
+    /// Shows or hides an address row, and settles the layout before returning.
+    /// </summary>
+    /// <remarks>
+    /// The forced pass is load-bearing. Making a row visible invalidates measure, but the band
+    /// it sits in keeps its old height until a layout pass runs — and the header is docked, so
+    /// the body below simply paints over whatever overflows. Bcc appeared and Subject vanished
+    /// underneath it.
+    /// </remarks>
+    private void Toggle(Control row)
+    {
+        row.IsVisible = !row.IsVisible;
+        UpdateLayout();
+    }
+
+    private void SetImportance(MessageImportance wanted)
+    {
+        _importance = _importance == wanted ? MessageImportance.Normal : wanted;
+        UpdateStatus();
+    }
+
+    private void StepZoom()
+    {
+        var next = _body.DefaultFontSize + 2;
+        _body.DefaultFontSize = next > 28 ? 12 : next;
+        Report($"Zoom {_body.DefaultFontSize * PointsPerPixel:0}pt.");
+    }
+
+    private void CheckNames()
+    {
+        var bad = BadAddresses();
+
+        Report(bad.Count == 0
+            ? "Every address parses. Resolving a bare name against contacts is Phase 12."
+            : "Could not read: " + string.Join("; ", bad));
+    }
+
+    /// <summary>Every recipient entry that is not an address, named by its field.</summary>
+    private List<string> BadAddresses()
+    {
+        var bad = new List<string>();
+
+        foreach (var (label, box) in new[] { ("To", _to), ("Cc", _cc), ("Bcc", _bcc) })
+        {
+            foreach (var entry in Split(box.Text))
+            {
+                if (!MailboxAddress.TryParse(entry, out _)) bad.Add($"{label}: {entry}");
+            }
+        }
+
+        return bad;
+    }
+
+    /// <summary>
+    /// The addresses in a field. Semicolons always separate; commas only when the Options page
+    /// says so, because a display name can carry one — "Person, A." — and a reader who has
+    /// turned commas off is a reader whose address book is written that way.
+    /// </summary>
+    private static IEnumerable<string> Split(string? value)
+        => (value ?? string.Empty)
+            .Split(App.MailOptions.CommasSeparateRecipients ? [',', ';'] : [';'],
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    /// <summary>
+    /// Restates whatever is worth stating about the message, or hides the bar when nothing is.
+    /// </summary>
+    /// <remarks>
+    /// The format is not among them: the title bar already reads "Message (HTML)", which is
+    /// exactly where the reference says it.
+    /// </remarks>
+    private void UpdateStatus()
+    {
+        var bits = new List<string>();
+
+        if (_importance != MessageImportance.Normal)
+        {
+            bits.Add($"This message will be sent with {_importance} importance.");
+        }
+
+        if (_notBefore is { } when)
+        {
+            bits.Add($"It will not be delivered before {when.LocalDateTime:g}.");
+        }
+
+        if (bits.Count == 0)
+        {
+            _status.Text = string.Empty;
+            _infoBar.IsVisible = false;
+            return;
+        }
+
+        Report(string.Join("  ", bits));
+    }
+
+    private void Report(string message)
+    {
+        _status.Text = message;
+        _infoBar.IsVisible = !string.IsNullOrWhiteSpace(message);
+    }
+
+    // ----------------------------------------------------------------------------------
+    // Dialogs and pickers
+    // ----------------------------------------------------------------------------------
+
+    private async Task AttachAsync()
+    {
+        if (Owner is not { StorageProvider: { } storage }) return;
+
+        var picked = await storage.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Attach files",
+            AllowMultiple = true,
+        });
+
+        if (picked.Count == 0) return;
+
+        _attachments.AddRange(picked);
+        _attachmentStrip.Text = "Attached: " +
+            string.Join(", ", _attachments.Select(f => f.Name));
+        _attachmentRow.IsVisible = true;
+        UpdateStatus();
+    }
+
+    private async Task ShowWordCountAsync()
+    {
+        var text = _body.GetPlainText();
+        var words = text.Split(
+            [' ', '\t', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries).Length;
+        var paragraphs = text.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length;
+
+        await Message("Word Count",
+            $"Words: {words}\n" +
+            $"Characters (with spaces): {text.Length}\n" +
+            $"Characters (no spaces): {text.Count(c => !char.IsWhiteSpace(c))}\n" +
+            $"Paragraphs: {paragraphs}");
+    }
+
+    private async Task FindAsync(bool replace)
+    {
+        var needle = await Prompt(replace ? "Replace" : "Find", "Find what:");
+        if (string.IsNullOrEmpty(needle)) return;
+
+        // The editor's own, which searches the document rather than a flattened copy of it —
+        // so a match spanning two differently-formatted runs is still a match, and replacing
+        // one keeps the formatting around it.
+        if (!replace)
+        {
+            _body.Focus();
+
+            Report(_body.FindNext(needle, matchCase: false)
+                ? $"Found '{needle}'."
+                : $"'{needle}' is not in the message.");
+
+            return;
+        }
+
+        var with = await Prompt("Replace", "Replace with:") ?? string.Empty;
+        var replaced = _body.ReplaceAll(needle, with, matchCase: false);
+
+        Report(replaced == 0
+            ? $"'{needle}' is not in the message."
+            : $"Replaced {replaced}.");
+    }
+
+    /// <summary>
+    /// The font picker, which §6 says lists the Microsoft names.
+    /// </summary>
+    /// <remarks>
+    /// Because that is what people expect to choose, and because it is what goes on the wire:
+    /// a message composed in Calibri names Calibri first, so a Windows reader gets the real
+    /// font. What is rendered here is the metric-compatible substitute, and the entry says so —
+    /// a reader choosing a face is entitled to know whether their recipient will see it and
+    /// whether the layout will hold.
+    /// </remarks>
+    private async Task ChooseFontAsync()
+    {
+        // FontResolver already builds this list, in the reference's own order and carrying
+        // each entry's resolution — it exists for this picker.
+        var choices = App.Fonts.PickerFamilies()
+            .Where(f => !string.Equals(f.Requested, "Segoe UI", StringComparison.Ordinal))
+            .Select(f => new Choice(f.Requested, f.Requested, Describe(f)))
+            .ToList();
+
+        if (await Chooser.AskAsync(Host, "Font", "Font:", choices, CaretFont()) is not { } family)
+        {
+            return;
+        }
+
+        _body.SetFontFamily(App.Fonts.Resolve(family).Rendered);
+        _body.Focus();
+        Report($"Font {family}.");
+    }
+
+    /// <summary>What choosing this face actually gets the reader, and their recipient.</summary>
+    private static string Describe(FontResolution font) => font switch
+    {
+        { IsSubstituted: false } => "installed here, and named in the message",
+
+        { Quality: SubstitutionQuality.MetricCompatible } =>
+            $"shown in {font.Rendered}, which lays out identically",
+
+        { MayReflow: true } =>
+            $"shown in {font.Rendered} — similar, but the message will reflow",
+
+        _ => "not installed here; a recipient who has it will see it correctly",
+    };
+
+    /// <summary>
+    /// The face at the caret as the writer knows it, so the picker opens on it.
+    /// </summary>
+    /// <remarks>
+    /// The run holds the family this machine draws — Liberation Serif, Gelasio — because that
+    /// is what the editor needs. The picker lists the Microsoft names, so the substitute is
+    /// mapped back to what it stands in for. Same split the serializer does on the wire.
+    /// </remarks>
+    private string? CaretFont()
+    {
+        var rendered = _body.GetCaretFormat().FontFamily;
+        if (string.IsNullOrEmpty(rendered)) return null;
+
+        return FontSubstitution.Table
+                   .FirstOrDefault(e => string.Equals(e.Substitute, rendered, StringComparison.OrdinalIgnoreCase))
+                   ?.Original
+               ?? rendered;
+    }
+
+    private async Task ChooseFontSizeAsync()
+    {
+        // The reference's own list.
+        var sizes = new[] { 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36, 48, 72 };
+
+        var choices = sizes
+            .Select(p => new Choice(p.ToString(CultureInfo.InvariantCulture),
+                                    p.ToString(CultureInfo.InvariantCulture)))
+            .ToList();
+
+        var caret = _body.GetCaretFormat().FontSize;
+        var current = ((caret > 0 ? caret * PointsPerPixel : ComposeFontPoints))
+            .ToString("0", CultureInfo.InvariantCulture);
+
+        if (await Chooser.AskAsync(Host, "Font Size", "Size, in points:", choices, current)
+            is not { } chosen)
+        {
+            return;
+        }
+
+        if (double.TryParse(chosen, CultureInfo.InvariantCulture, out var points))
+        {
+            _body.SetFontSize(points / PointsPerPixel);
+            _body.Focus();
+            Report($"Size {points:0}pt.");
+        }
+    }
+
+    /// <summary>
+    /// Colour, from the theme rather than from a wheel.
+    /// </summary>
+    /// <remarks>
+    /// These are the values that go into the message, so they are the one place in the
+    /// application where a literal colour is right: a recipient's client knows nothing about
+    /// this theme, and a colour resolved from one would change meaning between them. The
+    /// automatic entry writes nothing at all and lets the reader's own client decide.
+    /// </remarks>
+    private async Task ChooseColourAsync(bool highlight)
+    {
+        var colours = highlight
+            ? new[]
+            {
+                new Choice("None", "none"),
+                new Choice("Yellow", "#FFFF00"), new Choice("Bright green", "#00FF00"),
+                new Choice("Turquoise", "#00FFFF"), new Choice("Pink", "#FF00FF"),
+                new Choice("Blue", "#0000FF"), new Choice("Red", "#FF0000"),
+                new Choice("Grey", "#C0C0C0"),
+            }
+            : new[]
+            {
+                new Choice("Automatic", "none", "the reader's own text colour"),
+                new Choice("Black", "#000000"), new Choice("Dark red", "#C00000"),
+                new Choice("Red", "#FF0000"), new Choice("Orange", "#FFC000"),
+                new Choice("Green", "#008000"), new Choice("Blue", "#0070C0"),
+                new Choice("Dark blue", "#002060"), new Choice("Purple", "#7030A0"),
+                new Choice("Grey", "#808080"),
+            };
+
+        var title = highlight ? "Text Highlight Colour" : "Font Colour";
+
+        if (await Chooser.AskAsync(Host, title, "Colour:", colours) is not { } value) return;
+
+        var brush = string.Equals(value, "none", StringComparison.Ordinal)
+            ? null
+            : new SolidColorBrush(Color.Parse(value));
+
+        if (highlight) _body.SetHighlight(brush!);
+        else _body.SetForeground(brush!);
+
+        _body.Focus();
+        Report(title + " set.");
+    }
+
+    private async Task ChooseAlignmentAsync()
+    {
+        var choices = new[]
+        {
+            new Choice("Left", "left"), new Choice("Centre", "center"),
+            new Choice("Right", "right"), new Choice("Justified", "justify"),
+        };
+
+        if (await Chooser.AskAsync(Host, "Align", "Alignment:", choices) is not { } value) return;
+
+        _body.SetTextAlignment(value switch
+        {
+            "center" => TextAlignment.Center,
+            "right" => TextAlignment.Right,
+            "justify" => TextAlignment.Justify,
+            _ => TextAlignment.Left,
+        });
+
+        _body.Focus();
+    }
+
+    private async Task ChooseLineSpacingAsync()
+    {
+        var choices = new[]
+        {
+            new Choice("Single", "1.0"), new Choice("1.15", "1.15"),
+            new Choice("1.5 lines", "1.5"), new Choice("Double", "2.0"),
+        };
+
+        if (await Chooser.AskAsync(Host, "Line Spacing", "Spacing:", choices) is not { } value)
+        {
+            return;
+        }
+
+        if (double.TryParse(value, CultureInfo.InvariantCulture, out var multiplier))
+        {
+            _body.SetLineSpacing(multiplier);
+            _body.Focus();
+        }
+    }
+
+    private async Task ChooseListStyleAsync()
+    {
+        var choices = new[]
+        {
+            new Choice("Bullet — disc", "disc"), new Choice("Bullet — circle", "circle"),
+            new Choice("Bullet — square", "square"), new Choice("Bullet — dash", "dash"),
+            new Choice("Numbered — 1.", "decimal"), new Choice("Numbered — 1)", "decimalparen"),
+            new Choice("Lettered — a.", "loweralpha"), new Choice("Lettered — A.", "upperalpha"),
+            new Choice("Roman — i.", "lowerroman"),
+        };
+
+        if (await Chooser.AskAsync(Host, "List Style", "Marker:", choices) is not { } value)
+        {
+            return;
+        }
+
+        _body.SetListStyle(value switch
+        {
+            "circle" => ListMarkerStyle.Circle,
+            "square" => ListMarkerStyle.Square,
+            "dash" => ListMarkerStyle.Dash,
+            "decimal" => ListMarkerStyle.Decimal,
+            "decimalparen" => ListMarkerStyle.DecimalParen,
+            "loweralpha" => ListMarkerStyle.LowerAlpha,
+            "upperalpha" => ListMarkerStyle.UpperAlpha,
+            "lowerroman" => ListMarkerStyle.LowerRoman,
+            _ => ListMarkerStyle.Disc,
+        });
+
+        _body.Focus();
+    }
+
+    /// <summary>
+    /// The Signature dropdown: pick one to insert, or go and edit them.
+    /// </summary>
+    /// <remarks>
+    /// Inserted at the caret rather than appended, because that is where the reference puts it
+    /// and because a reply wants it above the quoted half rather than below it.
+    /// </remarks>
+    private async Task ChooseSignatureAsync()
+    {
+        var signatures = App.Signatures.All;
+
+        var choices = signatures
+            .Select(sig => new Choice(sig.Name, sig.Name, First(sig)))
+            .ToList();
+
+        choices.Add(new Choice("Signatures…", EditSignatures, "add, change or remove one"));
+
+        if (await Chooser.AskAsync(Host, "Signature", "Insert:", choices) is not { } chosen) return;
+
+        if (chosen == EditSignatures)
+        {
+            await EditSignaturesAsync();
+            return;
+        }
+
+        if (App.Signatures.Find(chosen) is { } signature) Insert(signature);
+    }
+
+    /// <summary>
+    /// Signs a new message, where the account has said to.
+    /// </summary>
+    /// <remarks>
+    /// Nothing happens unless somebody chose one — a client that puts a block of text on the
+    /// first message you ever write is one you have to go and find a setting to stop.
+    /// </remarks>
+    private void InsertDefaultSignature()
+    {
+        if (SendingAccount() is not { } account) return;
+
+        if (App.Signatures.ForNew(account.Account.Address) is not { IsEmpty: false } signature)
+        {
+            // No signature for this account: an empty document, which also undoes the one
+            // that was put in for the account this window started from.
+            _body.Clear();
+            return;
+        }
+
+        // Two blank lines above it, as every mail client does. LoadHtml rather than InsertHtml,
+        // and the difference is where the caret ends up: InsertHtml leaves it after what it
+        // inserted, so the writer would type below their own signature. LoadHtml starts a fresh
+        // document with the caret at the top, which is where the reply goes.
+        _body.LoadHtml("<p>&nbsp;</p><p>&nbsp;</p>" + signature.Html);
+    }
+
+    /// <summary>The first line of a signature, so the list says which one it is.</summary>
+    private static string First(Signature signature)
+    {
+        var text = signature.Text is { Length: > 0 } t ? t : signature.Html;
+
+        var line = text.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim()
+                   ?? string.Empty;
+
+        return line.Length > 60 ? line[..60] + "…" : line;
+    }
+
+    /// <summary>Puts a signature into the document, and remembers it went in.</summary>
+    private void Insert(Signature signature)
+    {
+        if (signature.IsEmpty) return;
+
+        // The markup where there is any, so a formatted signature stays formatted. The text is
+        // what the plain half of the message will carry, and the serializer produces that from
+        // the document — so inserting the HTML is enough for both.
+        if (signature.Html is { Length: > 0 } html) _body.InsertHtml(html);
+        else _body.InsertText(signature.Text);
+
+        _body.Focus();
+        Report($"Inserted the {signature.Name} signature.");
+    }
+
+    /// <summary>The shared editor, over this window and its sending account.</summary>
+    private Task EditSignaturesAsync()
+        => SignatureEditor.EditAsync(Host, SendingAccount()?.Account.Address, Report);
+
+    /// <summary>
+    /// Spelling, over the whole message.
+    /// </summary>
+    /// <remarks>
+    /// A pass rather than squiggles as you type, which is what §7.3 asks for and what the editor
+    /// cannot do: underlining a word as it is typed needs the editor to draw on its own text run,
+    /// and it exposes nothing for that. This is the reference's F7 — walk what is not in the
+    /// dictionary, offer what is, and let a word be kept.
+    /// <para>
+    /// The dictionary is the desktop's own, and there may be none. Saying so once is the whole
+    /// of the handling that needs: a mail client that nags about a missing word list is worse
+    /// than one that quietly cannot check.
+    /// </para>
+    /// </remarks>
+    /// <param name="quietWhenClean">
+    /// Say nothing when there is nothing to say — for the pass Send runs, where a dialog
+    /// reporting no misspellings on the way out of every message would be a nag.
+    /// </param>
+    private async Task CheckSpellingAsync(bool quietWhenClean = false)
+    {
+        _spelling ??= await SpellCheck.LoadAsync(personalPath: PersonalDictionaryPath());
+
+        if (!_spelling.IsAvailable)
+        {
+            if (quietWhenClean) return;
+
+            await Message("Spelling",
+                "No dictionary is installed, so spelling cannot be checked.\n\n"
+                + "Install a Hunspell dictionary — hunspell-en_gb, hunspell-en_us or the one for "
+                + "your language — and it will be found next time.");
+            return;
+        }
+
+        var text = _body.GetPlainText();
+        var found = _spelling.Check(text);
+
+        if (found.Count == 0)
+        {
+            if (quietWhenClean) return;
+
+            await Message("Spelling",
+                $"The spelling check is complete. Nothing was found, against {_spelling.Language}.");
+            return;
+        }
+
+        // One word at a time, in order, as the reference does — and stopping the moment the
+        // reader dismisses, because a dialog per word is a thing to be able to get out of.
+        var corrected = 0;
+
+        foreach (var word in found.DistinctBy(w => w.Word, StringComparer.Ordinal))
+        {
+            var choices = new List<Choice> { new("Ignore", string.Empty, "leave it as written") };
+
+            choices.AddRange(_spelling.Suggest(word.Word)
+                .Select(s => new Choice(s, s, "replace every one in this message")));
+
+            choices.Add(new Choice("Add to dictionary", AddToDictionary,
+                "keep it, and stop asking about it"));
+
+            var answer = await Chooser.AskAsync(
+                Host, "Spelling", $"Not in the dictionary: {word.Word}", choices);
+
+            if (answer is null) break;
+
+            if (answer == AddToDictionary)
+            {
+                _spelling.Add(word.Word);
+                continue;
+            }
+
+            if (answer.Length == 0) continue;
+
+            corrected += _body.ReplaceAll(word.Word, answer, matchCase: true);
+        }
+
+        _body.Focus();
+
+        Report(corrected == 0
+            ? "The spelling check is complete."
+            : $"The spelling check is complete. {corrected} replaced.");
+    }
+
+    /// <summary>Beside the mail, not in the system dictionary, which is not ours to edit.</summary>
+    private static string PersonalDictionaryPath()
+    {
+        var data = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
+
+        if (string.IsNullOrWhiteSpace(data))
+        {
+            data = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "share");
+        }
+
+        return Path.Combine(data, "mailbox", "personal.dic");
+    }
+
+    private async Task InsertTableAsync()
+    {
+        var size = await Prompt("Table", "Rows and columns, as 3x4:");
+        if (string.IsNullOrWhiteSpace(size)) return;
+
+        var parts = size.Split(['x', 'X', '*', ',', ' '], StringSplitOptions.RemoveEmptyEntries);
+
+        if (parts.Length != 2
+            || !int.TryParse(parts[0], out var rows)
+            || !int.TryParse(parts[1], out var columns))
+        {
+            Report("A table size reads as rows by columns, like 3x4.");
+            return;
+        }
+
+        // A bound, because the number came from a text box and a table of ten thousand cells is
+        // a hang rather than a table.
+        if (rows is < 1 or > 50 || columns is < 1 or > 20)
+        {
+            Report("A table can be up to 50 rows by 20 columns.");
+            return;
+        }
+
+        _body.InsertTable(rows, columns);
+        _body.Focus();
+        Report($"Inserted a {rows}x{columns} table.");
+    }
+
+    /// <summary>
+    /// A picture from a file, which is the only source the sender's own machine offers.
+    /// </summary>
+    /// <remarks>
+    /// It becomes a related part and a <c>cid:</c> reference when the message is built — the
+    /// serializer asks for that — so the recipient gets the image with the mail rather than a
+    /// request back to somewhere.
+    /// </remarks>
+    private async Task InsertPictureAsync()
+    {
+        if (Owner is not { StorageProvider: { } storage }) return;
+
+        var files = await storage.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Insert Picture",
+            AllowMultiple = false,
+            FileTypeFilter = [FilePickerFileTypes.ImageAll],
+        });
+
+        if (files.FirstOrDefault() is not { } file) return;
+
+        try
+        {
+            await using var stream = await file.OpenReadAsync();
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+
+            _body.InsertImageBytes(buffer.ToArray());
+            _body.Focus();
+            Report($"Inserted {file.Name}.");
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Could not insert a picture.", ex);
+            Report("That picture could not be read.");
+        }
+    }
+
+    private async Task InsertSymbolAsync()
+    {
+        var symbol = await Prompt("Symbol", "Character to insert:");
+        if (string.IsNullOrEmpty(symbol)) return;
+
+        Insert(symbol);
+    }
+
+    private async Task InsertLinkAsync()
+    {
+        var address = await Prompt("Link", "Address:");
+        if (string.IsNullOrWhiteSpace(address)) return;
+
+        // A real one, now that there is a document to put it in.
+        var escaped = address.Trim()
+            .Replace("&", "&amp;", StringComparison.Ordinal)
+            .Replace("<", "&lt;", StringComparison.Ordinal)
+            .Replace(">", "&gt;", StringComparison.Ordinal)
+            .Replace("\"", "&quot;", StringComparison.Ordinal);
+
+        _body.InsertHtml($"<a href=\"{escaped}\">{escaped}</a>");
+        _body.Focus();
+    }
+
+    private void Insert(string text)
+    {
+        _body.InsertText(text);
+        _body.Focus();
+    }
+
+    private async Task DelayAsync()
+    {
+        var entered = await Prompt("Delay Delivery",
+            "Do not deliver before (yyyy-MM-dd HH:mm), or blank to clear:");
+
+        if (entered is null) return;
+
+        if (string.IsNullOrWhiteSpace(entered))
+        {
+            _notBefore = null;
+            UpdateStatus();
+            return;
+        }
+
+        if (!DateTime.TryParse(entered, CultureInfo.CurrentCulture,
+                DateTimeStyles.AssumeLocal, out var when))
+        {
+            Report($"Could not read '{entered}' as a date and time.");
+            return;
+        }
+
+        _notBefore = new DateTimeOffset(when);
+        UpdateStatus();
+    }
+
+    private async Task DirectRepliesAsync()
+    {
+        var entered = await Prompt("Direct Replies To", "Send replies to:");
+        if (entered is null) return;
+
+        if (string.IsNullOrWhiteSpace(entered))
+        {
+            _replyTo = null;
+            Report("Replies go to the sending account.");
+            return;
+        }
+
+        if (!MailboxAddress.TryParse(entered, out _))
+        {
+            Report($"Could not read '{entered}' as an address.");
+            return;
+        }
+
+        _replyTo = entered;
+        Report($"Replies will go to {entered}.");
+    }
+
+    // ----------------------------------------------------------------------------------
+    // Send and save
+    // ----------------------------------------------------------------------------------
+
+    private OpenAccount? SendingAccount()
+    {
+        if (_accounts is null) return null;
+
+        return _sendingAddress is null
+            ? _accounts.Default
+            : _accounts.Find(_sendingAddress) ?? _accounts.Default;
+    }
+
+    private async Task SendAsync()
+    {
+        if (SendingAccount() is not { } account)
+        {
+            Report("No account is set up yet. Add one under File in the main window.");
+            return;
+        }
+
+        if (Split(_to.Text).Concat(Split(_cc.Text)).Concat(Split(_bcc.Text)).Any() is false)
+        {
+            Report("Add at least one recipient.");
+            return;
+        }
+
+        // "Automatic name checking": an address that will not parse stops the send here, with
+        // the field named, rather than failing at the server with a message about a mailbox.
+        if (App.MailOptions.AutomaticNameChecking && BadAddresses() is { Count: > 0 } bad)
+        {
+            Report("Could not read: " + string.Join("; ", bad));
+            return;
+        }
+
+        // "Always check spelling before sending": the same pass the button runs, and then the
+        // send goes ahead — a spelling check is a chance to fix things, not a gate.
+        if (App.MailOptions.CheckSpellingBeforeSend) await CheckSpellingAsync(quietWhenClean: true);
+
+        MimeMessage message;
+        try
+        {
+            message = await BuildMessageAsync(account);
+        }
+        catch (Exception ex)
+        {
+            Report($"Could not build the message: {ex.Message}");
+            return;
+        }
+
+        try
+        {
+            var sender = new SmtpSender(account.Mail);
+            var outboxId = sender.Queue(account.Account.Id, message);
+            RememberRecipients(account, message);
+
+            // Delayed delivery is the reader's own choice about this message, so it wins over
+            // the few seconds Undo Send holds everything for — asking to send on Thursday and
+            // getting a five-second grace period instead would be the wrong way round.
+            var undo = _notBefore is null
+                ? App.UndoSend.HoldUntil(DateTimeOffset.UtcNow)
+                : null;
+
+            if (_notBefore is { } when) account.Mail.ScheduleOutbox(outboxId, when);
+            else if (undo is { } until) account.Mail.ScheduleOutbox(outboxId, until);
+
+            _sent = true;
+            _autosave?.Stop();
+
+            // A draft that has been sent is no longer a draft.
+            if (_draftId is { } draft) account.Mail.DeleteMessage(draft);
+
+            Report(_notBefore is { } held
+                ? $"Queued, held until {held.LocalDateTime:g}."
+                : App.MailOptions.SendImmediately
+                    ? "Sending."
+                    : "Queued in the Outbox. It goes out on the next send/receive.");
+
+            // The window is about to close, so whoever opened it is who offers the way back —
+            // and who sends it when the hold is up. Not raised for a message the writer asked to
+            // hold until a chosen time: that one goes on the schedule, as asked, and offering
+            // to undo Thursday's message today would be odd.
+            if (_notBefore is null)
+            {
+                Queued?.Invoke(this, new QueuedMessageEventArgs(
+                    account.Account.Address, outboxId, undo ?? DateTimeOffset.UtcNow,
+                    message.Subject ?? string.Empty));
+            }
+
+            RequestClose();
+        }
+        catch (Exception ex)
+        {
+            Report($"Could not queue the message: {ex.Message}");
+        }
+    }
+
+    private async Task<MimeMessage> BuildMessageAsync(OpenAccount account)
+    {
+        var address = account.Account.Address;
+        var domain = address.Contains('@', StringComparison.Ordinal)
+            ? address[(address.LastIndexOf('@') + 1)..]
+            : "localhost";
+
+        var message = new MimeMessage
+        {
+            // Under the sender's own domain, as every client does. Left alone, MimeKit stamps
+            // the machine's hostname into it — and into every cid: below — which is a name a
+            // recipient has no business learning from a message header. §19.
+            MessageId = MimeUtils.GenerateMessageId(domain),
+        };
+
+        // A display name only when there is one. The seed, and an account added with nothing
+        // but an address, hold the address in that slot too — and "you@example.com"
+        // <you@example.com> is what a mail client writes when nobody was looking.
+        var name = account.Account.DisplayName;
+        message.From.Add(string.IsNullOrWhiteSpace(name) || string.Equals(name, address, StringComparison.OrdinalIgnoreCase)
+            ? new MailboxAddress(string.Empty, address)
+            : new MailboxAddress(name, address));
+
+        foreach (var entry in Split(_to.Text)) message.To.Add(MailboxAddress.Parse(entry));
+        foreach (var entry in Split(_cc.Text)) message.Cc.Add(MailboxAddress.Parse(entry));
+        foreach (var entry in Split(_bcc.Text)) message.Bcc.Add(MailboxAddress.Parse(entry));
+
+        if (_replyTo is { } reply) message.ReplyTo.Add(MailboxAddress.Parse(reply));
+
+        message.Subject = _subject.Text ?? string.Empty;
+        message.Importance = _importance;
+        message.Priority = _importance switch
+        {
+            MessageImportance.High => MessagePriority.Urgent,
+            MessageImportance.Low => MessagePriority.NonUrgent,
+            _ => MessagePriority.Normal,
+        };
+
+        if (_wantsReadReceipt)
+        {
+            message.Headers.Add("Disposition-Notification-To", account.Account.Address);
+        }
+
+        if (_wantsDeliveryReceipt)
+        {
+            message.Headers.Add("Return-Receipt-To", account.Account.Address);
+        }
+
+        // The Options page's default sensitivity. Normal is the header's absence.
+        if (App.MailOptions.DefaultSensitivityHeader is { } sensitivity)
+        {
+            message.Headers.Add("Sensitivity", sensitivity);
+        }
+
+        // What lets the recipient's client put a reply under the message it answers.
+        if (_inReplyTo is { Length: > 0 } inReplyTo)
+        {
+            message.InReplyTo = inReplyTo;
+            foreach (var reference in _references) message.References.Add(reference);
+        }
+
+        // Both halves, always. A recipient whose client shows plain text — or who has told it
+        // to — gets a readable message rather than a page of markup, and the two are the same
+        // message rather than two that can disagree, because both come off one document.
+        //
+        // U+FFFC is what the editor puts in its plain text where a picture is. It is a
+        // placeholder for a rendering system, not a character for a person, and a text-only
+        // reader would see it as a box. The picture is simply absent from the text half, which
+        // is what every other client does.
+        var builder = new BodyBuilder
+        {
+            TextBody = _body.GetPlainText().Replace("\uFFFC", string.Empty, StringComparison.Ordinal),
+        };
+
+        // Ours, not the editor's: §6's wire/render split and the narrow set of elements mail
+        // clients actually render. See Mailbox.Editor.EmailHtml for why that is the half worth
+        // keeping in-house. Unless this message is going as plain text, in which case the text
+        // half is the message and there is no other.
+        if (!_plainText) builder.HtmlBody = EmailHtml.Serialize(_body.Document ?? new FlowDocument(), new EmailHtmlOptions
+        {
+            BaseFontFamily = ComposeFontFamily,
+            BaseFontPoints = ComposeFontPoints,
+
+            // An image the writer put in the body becomes a related part and a cid: reference,
+            // which is how mail carries one. Several large clients drop a data: image outright.
+            RegisterImage = (bytes, type) =>
+            {
+                var extension = type.Split('/').ElementAtOrDefault(1) ?? "png";
+                var part = builder.LinkedResources.Add(
+                    $"image-{builder.LinkedResources.Count + 1}.{extension}", bytes);
+
+                part.ContentId = MimeUtils.GenerateMessageId(domain);
+                return $"cid:{part.ContentId}";
+            },
+        });
+
+        foreach (var file in _attachments)
+        {
+            await using var stream = await file.OpenReadAsync();
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+            builder.Attachments.Add(file.Name, buffer.ToArray());
+        }
+
+        // A forward's attachments, or an attached original — already MIME, carried as they are
+        // rather than decoded and re-encoded, which would be a lossy trip for no reason.
+        foreach (var carried in _carried) builder.Attachments.Add(carried.Entity);
+
+        message.Body = builder.ToMessageBody();
+        return message;
+    }
+
+    /// <summary>Saves the message to Drafts, replacing the row it is editing. Public so a host can save on close.</summary>
+    public void SaveDraft()
+    {
+        if (SendingAccount() is not { } account)
+        {
+            Report("No account is set up yet, so there is no Drafts folder to save into.");
+            return;
+        }
+
+        try
+        {
+            var drafts = account.Mail.Folders(account.Account.Id)
+                .FirstOrDefault(f => f.Role == FolderRole.Drafts);
+
+            if (drafts is null)
+            {
+                Report("This account has no Drafts folder.");
+                return;
+            }
+
+            var message = BuildMessageAsync(account).GetAwaiter().GetResult();
+
+            using var buffer = new MemoryStream();
+            message.WriteTo(buffer);
+            var raw = buffer.ToArray();
+
+            var summary = MessageMapper.ToSummary(message, null, raw.Length, DateTimeOffset.UtcNow)
+                with { IsRead = true };
+
+            // Replaces rather than adds. Saving twice used to leave two drafts, and autosave on
+            // top of that would have left one every few minutes; the row this window is editing
+            // is the one that goes, and the new one takes its place.
+            if (_draftId is { } previous) account.Mail.DeleteMessage(previous);
+            _draftId = account.Mail.AddMessage(drafts.Id, summary, raw);
+
+            _dirty = false;
+            _sent = true;
+            Report("Saved to Drafts.");
+        }
+        catch (Exception ex)
+        {
+            Report($"Could not save the draft: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// True when there is anything worth keeping — a recipient, a subject, a body, an
+    /// attachment. The host asks this before dismissing, to decide whether to offer a save.
+    /// </summary>
+    public bool HasContent()
+        => !string.IsNullOrWhiteSpace(_to.Text)
+           || !string.IsNullOrWhiteSpace(_cc.Text)
+           || !string.IsNullOrWhiteSpace(_bcc.Text)
+           || !string.IsNullOrWhiteSpace(_subject.Text)
+           || !string.IsNullOrWhiteSpace(_body.GetPlainText())
+           || _attachments.Count > 0;
+
+    // ----------------------------------------------------------------------------------
+    // Small dialogs
+    // ----------------------------------------------------------------------------------
+
+    private async Task Message(string title, string body)
+    {
+        var dialog = SmallDialog(title, new TextBlock { Text = body, TextWrapping = TextWrapping.Wrap },
+            out var panel);
+
+        var ok = new Button { Content = "OK", HorizontalAlignment = HorizontalAlignment.Right };
+        ok.Click += (_, _) => dialog.Close();
+        panel.Children.Add(ok);
+
+        await dialog.ShowDialog(Host);
+    }
+
+    private async Task<string?> Prompt(string title, string label, string value = "")
+    {
+        var input = new TextBox
+        {
+            MinWidth = 320,
+            Text = value,
+
+            // A signature is several lines, and so is anything else worth offering a starting
+            // value for. One that cannot hold a second line would be a box for a name only.
+            AcceptsReturn = true,
+            MaxHeight = 220,
+        };
+        var content = new StackPanel
+        {
+            Spacing = 8,
+            Children = { new TextBlock { Text = label }, input },
+        };
+
+        var dialog = SmallDialog(title, content, out var panel);
+        string? answer = null;
+
+        var ok = new Button { Content = "OK" };
+        ok.Click += (_, _) => { answer = input.Text ?? string.Empty; dialog.Close(); };
+
+        var cancel = new Button { Content = "Cancel" };
+        cancel.Click += (_, _) => dialog.Close();
+
+        panel.Children.Add(new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Children = { ok, cancel },
+        });
+
+        input.AttachedToVisualTree += (_, _) => input.Focus();
+        await dialog.ShowDialog(Host);
+        return answer;
+    }
+
+    private static Window SmallDialog(string title, Control content, out StackPanel panel)
+    {
+        panel = new StackPanel { Spacing = 12, Margin = new Thickness(16) };
+        panel.Children.Add(content);
+
+        var dialog = new Window
+        {
+            Title = title,
+            SizeToContent = SizeToContent.WidthAndHeight,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            CanResize = false,
+            Content = panel,
+        };
+        Bind(dialog, BackgroundProperty, "surface.ground.brush");
+        return dialog;
+    }
+
+    private static void Bind(AvaloniaObject target, AvaloniaProperty property, string key)
+        => target[!property] = new DynamicResourceExtension(key);
+}
