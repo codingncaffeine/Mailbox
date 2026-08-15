@@ -39,6 +39,16 @@ public interface ISmtpSession : IDisposable
 {
     bool IsConnected { get; }
 
+    /// <summary>
+    /// The authentication mechanisms the server advertised on connecting, before anything has
+    /// been sent to it.
+    /// </summary>
+    /// <remarks>
+    /// Empty means the server offers none — which is a real configuration, not a fault, and is
+    /// the one an Outlook.com account with SMTP AUTH switched off is in.
+    /// </remarks>
+    IReadOnlySet<string> AuthenticationMechanisms { get; }
+
     Task ConnectAsync(ServerSettings server, CancellationToken cancellation);
 
     Task AuthenticateAsync(ServerSettings server, CancellationToken cancellation);
@@ -84,6 +94,8 @@ public sealed class MailKitSmtpSession : ISmtpSession
     private readonly SmtpClient _client = new();
 
     public bool IsConnected => _client.IsConnected;
+
+    public IReadOnlySet<string> AuthenticationMechanisms => _client.AuthenticationMechanisms;
 
     public Task ConnectAsync(ServerSettings server, CancellationToken cancellation)
         => _client.ConnectAsync(server.Host, server.Port, server.Security, cancellation);
