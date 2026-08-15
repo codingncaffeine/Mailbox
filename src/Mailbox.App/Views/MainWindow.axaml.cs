@@ -14,6 +14,7 @@ using Mailbox.Core.Diagnostics;
 using Mailbox.Core;
 using Mailbox.Core.Commands;
 using Mailbox.Core.Ribbon;
+using Mailbox.Core.Settings;
 using Mailbox.Protocols;
 using Mailbox.Store;
 
@@ -98,6 +99,7 @@ public partial class MainWindow : Window
         WireArrangeMenu(shell);
         WireListInteraction(shell);
         WireReadingPane(shell);
+        WireSchedule(shell);
         DataContext = shell;
 
         ApplyHarnessState(shell);
@@ -247,6 +249,14 @@ public partial class MainWindow : Window
 
                     CaptureNextWindow();
                     OpenMessageWindow(shell);
+                };
+                break;
+
+            case "groups":
+                Opened += async (_, _) =>
+                {
+                    CaptureNextWindow();
+                    await new SendReceiveGroupsDialog(App.Groups, AccountAddresses()).ShowDialog(this);
                 };
                 break;
 
@@ -882,9 +892,98 @@ public partial class MainWindow : Window
         if (id == MailCommands.Print.Id) { PrintMessage(shell); return; }
         if (id == MailCommands.PrintToPdf.Id) { _ = PrintToPdfAsync(shell); return; }
         if (id == ViewCommands.CancelAll.Id) { CancelTransfer(); return; }
+        if (id == ViewCommands.SendReceiveGroups.Id) { ShowGroupsMenu(shell); return; }
 
         shell.StatusRight = $"{command.Label} — not wired yet ({command.Id})";
     }
+
+    private readonly Dictionary<string, DateTimeOffset> _lastRun = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Runs the groups that asked to be checked on a timer.
+    /// </summary>
+    /// <remarks>
+    /// A minute is the resolution: the shortest schedule anyone sets is measured in minutes, and
+    /// a timer that wakes more often than the thing it is waiting for is a laptop battery spent
+    /// on nothing.
+    /// <para>
+    /// A group whose turn comes while a run is in flight waits for the next tick rather than
+    /// queueing. Two send/receives at once would open two sessions to the same server, and the
+    /// second would find nothing the first had not already taken.
+    /// </para>
+    /// </remarks>
+    private void WireSchedule(ShellViewModel shell)
+    {
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
+
+        timer.Tick += (_, _) =>
+        {
+            if (_transferring || App.Transfer.WorkOffline) return;
+
+            var now = DateTimeOffset.UtcNow;
+
+            foreach (var group in App.Groups.All.Where(g => g.ScheduleEnabled))
+            {
+                var due = !_lastRun.TryGetValue(group.Name, out var last)
+                          || now - last >= TimeSpan.FromMinutes(group.ScheduleMinutes);
+
+                if (!due) continue;
+
+                _lastRun[group.Name] = now;
+                _ = SendReceiveAsync(shell, group);
+                return;
+            }
+        };
+
+        // Started rather than run: a client that polls the instant it opens is one that
+        // reconnects on every restart, which is a way to get an account rate-limited.
+        Opened += (_, _) => timer.Start();
+        Closed += (_, _) => timer.Stop();
+    }
+
+    /// <summary>
+    /// The Send/Receive Groups menu: each defined group, then the dialog that defines them.
+    /// </summary>
+    /// <remarks>
+    /// Built when it is asked for rather than once, because it lists what the dialog behind it
+    /// can change. A menu cached at startup would go stale the first time a group is renamed.
+    /// </remarks>
+    private void ShowGroupsMenu(ShellViewModel shell)
+    {
+        var flyout = new MenuFlyout();
+
+        foreach (var group in App.Groups.All)
+        {
+            var item = new MenuItem { Header = group.Name };
+            var chosen = group;
+            item.Click += (_, _) => _ = SendReceiveAsync(shell, chosen);
+            flyout.Items.Add(item);
+        }
+
+        flyout.Items.Add(new Separator());
+
+        var define = new MenuItem { Header = "Define Send/Receive Groups…" };
+        define.Click += async (_, _) =>
+        {
+            await new SendReceiveGroupsDialog(App.Groups, AccountAddresses()).ShowDialog(this);
+        };
+        flyout.Items.Add(define);
+
+        // Dropped from the ribbon control that raised it where there is one, and from the
+        // window otherwise — a menu with nothing to hang off still has to appear somewhere.
+        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+    }
+
+    /// <summary>
+    /// Every account, for the groups dialog.
+    /// </summary>
+    /// <remarks>
+    /// Not the transfer targets: those are accounts with server settings, and an account still
+    /// being set up belongs in a group as much as a working one. Excluding it would make the
+    /// dialog say there are no accounts on a machine that plainly has one.
+    /// </remarks>
+    private static IReadOnlyList<string> AccountAddresses()
+        => [.. App.Accounts.All.Select(a => a.Account.Address)];
 
     /// <summary>
     /// Show Progress, from the Send/Receive tab. Reopens the dialog for the run in flight, or
@@ -907,14 +1006,20 @@ public partial class MainWindow : Window
     /// Send/Receive All Folders. Runs off the UI thread and reports through the status bar and
     /// the progress dialog, which is also where it is cancelled from.
     /// </summary>
-    private async Task SendReceiveAsync(ShellViewModel shell)
+    /// <param name="group">
+    /// Which group to run, or null for Send/Receive All Folders — every group that asked to be
+    /// included, which is what the reference means by F9.
+    /// </param>
+    private async Task SendReceiveAsync(ShellViewModel shell, SendReceiveGroup? group = null)
     {
         if (_transferring) return;
 
-        var accounts = AccountConnections();
+        var accounts = InGroup(AccountConnections(), group);
         if (accounts.Count == 0)
         {
-            shell.StatusRight = "No account is set up yet. File, Add Account.";
+            shell.StatusRight = group is null
+                ? "No account is set up yet. File, Add Account."
+                : $"No account in \u201c{group.Name}\u201d is set up.";
             return;
         }
 
@@ -967,6 +1072,25 @@ public partial class MainWindow : Window
             _cancellation.Dispose();
             _cancellation = null;
         }
+    }
+
+    /// <summary>
+    /// Narrows a run to a group, or to whatever Send/Receive All covers.
+    /// </summary>
+    /// <remarks>
+    /// The filter is here rather than in the service: which accounts a run covers is a
+    /// preference, and the service's job is to run whatever it is handed.
+    /// </remarks>
+    private static List<TransferTarget> InGroup(
+        List<TransferTarget> accounts, SendReceiveGroup? group)
+    {
+        var addresses = accounts.Select(a => a.Connection.Address).ToList();
+
+        var wanted = group is null
+            ? App.Groups.AccountsForSendReceiveAll(addresses)
+            : App.Groups.AccountsIn(group, addresses);
+
+        return [.. accounts.Where(a => wanted.Contains(a.Connection.Address, StringComparer.OrdinalIgnoreCase))];
     }
 
     private bool _transferring;
