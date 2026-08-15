@@ -42,6 +42,8 @@ public sealed class MailOptions(SettingsStore settings)
     public const string RequestDeliveryReceiptKey = "mail.tracking.delivery";
     public const string RequestReadReceiptKey = "mail.tracking.read";
     public const string EmptyDeletedOnExitKey = "mail.exit.emptydeleted";
+    public const string SendImmediatelyKey = "mail.send.immediately";
+    public const string ScheduleMinutesKey = "mail.sendreceive.minutes";
     public const string ReplyStyleKey = "mail.reply.style";
     public const string ForwardStyleKey = "mail.forward.style";
     public const string ReplyPrefixKey = "mail.reply.prefix";
@@ -108,6 +110,12 @@ public sealed class MailOptions(SettingsStore settings)
     public bool RequestDeliveryReceipt => _settings.GetBool(RequestDeliveryReceiptKey, false);
 
     public bool RequestReadReceipt => _settings.GetBool(RequestReadReceiptKey, false);
+
+    /// <summary>
+    /// Whether a message goes as soon as it can, rather than on the next send/receive. On, as
+    /// everywhere: a message that sits in the outbox until F9 is a message people think went.
+    /// </summary>
+    public bool SendImmediately => _settings.GetBool(SendImmediatelyKey, true);
 
     // ---- Leaving --------------------------------------------------------------------------
 
