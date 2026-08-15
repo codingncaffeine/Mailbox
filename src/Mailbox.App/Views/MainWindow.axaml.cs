@@ -179,7 +179,23 @@ public partial class MainWindow : Window
                         ? $"No folder matching '{wanted}' in: {string.Join(", ", s.Folders.Select(f => f.Name))}"
                         : $"Harness: opening the {match.Name} folder.");
 
-                    if (match is not null) s.SelectedFolder = match;
+                    if (match is null) return;
+                    s.SelectedFolder = match;
+
+                    // The posed selection again, now in the posed folder: MAILBOX_SELECT ran in
+                    // the constructor against the first folder's rows, and the message it names
+                    // may be in this one. Asserted below the layout that re-selects on its own.
+                    if (Environment.GetEnvironmentVariable("MAILBOX_SELECT") is { Length: > 0 } subject
+                        && s.Messages.FirstOrDefault(m => m.Subject.Contains(subject, StringComparison.OrdinalIgnoreCase))
+                            is { } row)
+                    {
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            s.SelectedRow = row;
+                            s.SelectedMessage = row;
+                            Log.Info($"Harness: selected “{row.Subject}” in {match.Name}.");
+                        }, DispatcherPriority.Loaded);
+                    }
                 },
                 DispatcherPriority.Loaded);
         }
@@ -393,6 +409,23 @@ public partial class MainWindow : Window
                 {
                     CaptureNextWindow();
                     await new RulesAndAlertsDialog().ShowDialog(this);
+                };
+                break;
+
+            // Junk Email Options, on the current account's lists. MAILBOX_JUNK_TAB picks a tab.
+            case "junk":
+                Opened += async (_, _) =>
+                {
+                    if (DataContext is not ShellViewModel shell
+                        || shell.CurrentAccountForCategories() is not { } account) return;
+
+                    CaptureNextWindow();
+                    var dialog = new JunkOptionsDialog(account.Mail, App.MailOptions);
+                    if (int.TryParse(Environment.GetEnvironmentVariable("MAILBOX_JUNK_TAB"), out var tab))
+                    {
+                        dialog.Opened += (_, _) => dialog.SelectTab(tab);
+                    }
+                    await dialog.ShowDialog(this);
                 };
                 break;
 
@@ -1040,7 +1073,8 @@ public partial class MainWindow : Window
         _openRaw = raw;
 
         _attachments.Show(message);
-        _reading.Show(message, shell.SelectedMessage?.Body ?? string.Empty, Verified(shell));
+        _reading.Show(message, shell.SelectedMessage?.Body ?? string.Empty, Verified(shell),
+            suspectedJunk: shell.CurrentFolderRole == FolderRole.Junk);
         _ = _reading.ApplySenderPolicyAsync();
     }
 
@@ -1819,7 +1853,13 @@ public partial class MainWindow : Window
 
         if (id == MailCommands.Delete.Id) { shell.Delete(rows, permanently: false); return true; }
         if (id == MailCommands.Archive.Id) { shell.MoveTo(rows, FolderRole.Archive); return true; }
-        if (id == MailCommands.Junk.Id) { shell.MarkJunk(rows); return true; }
+        if (id == MailCommands.Junk.Id) { ShowJunkMenu(shell, rows); return true; }
+        if (id == MailCommands.BlockSender.Id) { shell.BlockSenders(rows); return true; }
+        if (id == MailCommands.NeverBlockSender.Id) { shell.NeverBlockSenders(rows, domain: false); return true; }
+        if (id == MailCommands.NeverBlockDomain.Id) { shell.NeverBlockSenders(rows, domain: true); return true; }
+        if (id == MailCommands.NeverBlockGroup.Id) { shell.NeverBlockRecipients(rows); return true; }
+        if (id == MailCommands.NotJunk.Id) { shell.MarkJunk(rows); return true; }
+        if (id == MailCommands.JunkOptions.Id) { ShowJunkOptions(shell); return true; }
 
         // The reference's Unread/Read button toggles: unread if the selection is all read, read
         // otherwise. Same for the flag.
@@ -1961,6 +2001,63 @@ public partial class MainWindow : Window
         flyout.Items.Add(all);
 
         flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+    }
+
+    /// <summary>
+    /// The Junk menu, in the reference's order: Block Sender, Never Block Sender, Never Block
+    /// Sender's Domain, Never Block this Group or Mailing List, Not Junk, and the options dialog.
+    /// </summary>
+    /// <remarks>
+    /// Each list entry acts on the selection's senders and then does what the list implies —
+    /// blocking a sender also files their message as junk and trains the filter on it; clearing
+    /// one also brings the message back if it was in Junk. Not Junk is the reference's own
+    /// button, greyed unless the selection is in the Junk folder.
+    /// </remarks>
+    private void ShowJunkMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
+    {
+        var flyout = new MenuFlyout();
+        var inJunk = shell.CurrentFolderRole == FolderRole.Junk;
+
+        // Every entry runs its command through the dispatcher, so the menu, the catalogue and
+        // the harness all reach one handler.
+        void Entry(MailboxCommand command, string? header = null, bool enabled = true, string? tip = null)
+        {
+            var item = new MenuItem { Header = header ?? command.Label, IsEnabled = enabled && rows.Count > 0 };
+            ToolTip.SetTip(item, tip ?? command.Description);
+            item.Click += (_, _) => RunCommand(command.Id);
+            flyout.Items.Add(item);
+        }
+
+        var domains = shell.SenderDomains(rows);
+
+        Entry(MailCommands.BlockSender, enabled: !inJunk);
+        Entry(MailCommands.NeverBlockSender);
+        Entry(MailCommands.NeverBlockDomain,
+            header: domains.Count == 1 ? $"Never Block Sender's Domain (@{domains[0]})" : null,
+            enabled: domains.Count > 0);
+        Entry(MailCommands.NeverBlockGroup);
+        flyout.Items.Add(new Separator());
+        Entry(MailCommands.NotJunk, enabled: inJunk,
+            tip: inJunk ? null : "Only for messages in the Junk Email folder");
+        flyout.Items.Add(new Separator());
+
+        var options = new MenuItem { Header = "Junk Email Options…" };
+        options.Click += (_, _) => RunCommand(MailCommands.JunkOptions.Id);
+        flyout.Items.Add(options);
+
+        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+    }
+
+    /// <summary>Junk Email Options, on the current account's lists.</summary>
+    private void ShowJunkOptions(ShellViewModel shell)
+    {
+        if (shell.CurrentAccountForCategories() is not { } account)
+        {
+            shell.StatusRight = "No account is set up yet. File, Add Account.";
+            return;
+        }
+
+        _ = new JunkOptionsDialog(account.Mail, App.MailOptions).ShowDialog(this);
     }
 
     /// <summary>The Move menu: every folder of the account the selection is in.</summary>

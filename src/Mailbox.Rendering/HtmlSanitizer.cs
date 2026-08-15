@@ -234,6 +234,10 @@ internal sealed class HtmlSanitizer(ResourceMap resources, RenderOptions options
             if (!string.Equals(element, "a", StringComparison.OrdinalIgnoreCase)) return;
             if (!UrlSafety.IsSafeLink(value)) return;
 
+            // A message in Junk keeps its link text and loses the destination: the anchor is
+            // written without an href, which every engine draws as plain text.
+            if (options.DisableLinks) return;
+
             Write("href", value);
 
             // Opened outside the pane, which the navigation policy enforces; the attributes

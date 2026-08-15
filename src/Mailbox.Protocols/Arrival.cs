@@ -6,8 +6,60 @@ using Mailbox.Store;
 namespace Mailbox.Protocols;
 
 /// <summary>
-/// What happens to a message the moment it arrives, whichever protocol brought it.
+/// What happens to a message the moment it has been filed, whichever protocol brought it.
 /// </summary>
+/// <remarks>
+/// The junk filter and the rules both act here: the receiver stores the message where the
+/// server had it, then hands it over, and the handler may move it, delete it, flag it or leave
+/// it be. One hook for both protocols, so a rule behaves the same for POP3 and IMAP — on an IMAP
+/// account the move it makes is journalled to the server like any other, which is why the
+/// message is stored first rather than filed straight into its destination.
+/// <para>
+/// Synchronous on purpose: everything a handler does is a store operation, and the receivers
+/// are already off the UI thread.
+/// </para>
+/// </remarks>
+public interface IArrivalHandler
+{
+    /// <summary>
+    /// Acts on a message that has just been stored in <paramref name="folder"/>.
+    /// </summary>
+    /// <returns>The id of the folder the message is in afterwards, or null when it was deleted.</returns>
+    long? Handle(MailRepository mail, Folder folder, long messageId, MimeMessage message);
+}
+
+/// <summary>Runs several handlers in order, each seeing where the last one left the message.</summary>
+public sealed class ArrivalPipeline(params IArrivalHandler[] handlers) : IArrivalHandler
+{
+    private readonly IReadOnlyList<IArrivalHandler> _handlers = handlers;
+
+    public long? Handle(MailRepository mail, Folder folder, long messageId, MimeMessage message)
+    {
+        var current = folder;
+        foreach (var handler in _handlers)
+        {
+            long? next;
+            try
+            {
+                next = handler.Handle(mail, current, messageId, message);
+            }
+            catch (Exception ex)
+            {
+                // A handler that throws must not cost the message: it is stored already, and the
+                // worst outcome is that it stays where it was.
+                Log.Warn($"An arrival handler failed on message {messageId}; leaving it where it is.", ex);
+                continue;
+            }
+
+            if (next is null) return null;
+            if (next != current.Id) current = mail.GetFolder(next.Value) ?? current;
+        }
+
+        return current.Id;
+    }
+}
+
+/// <summary>What happens to a message the moment it arrives, whichever protocol brought it.</summary>
 /// <remarks>
 /// Signature verification lives here rather than in the reading pane because verifying resolves
 /// a name the sender chose, and §19 does not allow a lookup on the path that draws a message.
@@ -48,6 +100,30 @@ internal static class Arrival
         catch (Exception ex)
         {
             Log.Warn("Could not check a message's signature as it arrived.", ex);
+        }
+    }
+
+    /// <summary>
+    /// Hands a stored message to the handler, or leaves it where it is when there is none.
+    /// </summary>
+    /// <returns>The folder the message ended up in, or null when a handler deleted it.</returns>
+    public static long? Handle(
+        IArrivalHandler? handler,
+        MailRepository repository,
+        Folder folder,
+        long messageId,
+        MimeMessage message)
+    {
+        if (handler is null) return folder.Id;
+
+        try
+        {
+            return handler.Handle(repository, folder, messageId, message);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"The arrival handler failed on message {messageId}; leaving it where it is.", ex);
+            return folder.Id;
         }
     }
 }

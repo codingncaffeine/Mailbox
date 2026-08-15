@@ -90,6 +90,17 @@ public sealed record RenderOptions
     /// sanitizer does still happens — that is the point of coming through here.
     /// </remarks>
     public bool Fragment { get; init; }
+
+    /// <summary>
+    /// Leave every link inert: the anchor keeps its text and loses its destination.
+    /// </summary>
+    /// <remarks>
+    /// For a message in the Junk folder, when the Junk Options dialog asks for it. The one
+    /// thing junk wants is a click, and a link that goes nowhere is the cheapest way to make
+    /// sure it does not get one — the text stays, so the reader can still see where it
+    /// pointed and decide the message was filed wrongly.
+    /// </remarks>
+    public bool DisableLinks { get; init; }
 }
 
 /// <summary>A message turned into a document with nothing left in it to fetch.</summary>

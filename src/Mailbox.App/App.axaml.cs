@@ -251,24 +251,31 @@ public partial class App : Application
         Resolver = new DnsResolver();
         var signatures = Resolver.CanResolve ? new DkimVerification(Resolver) : null;
 
-        // The junk filter, at the level the Options page currently holds. Read live so a change
-        // applies to the next message; §7.8's corpus is per account, so the classifier is handed
-        // the arriving message's own store.
-        Junk = new JunkService(() => JunkService.LevelFrom(MailOptions.JunkLevelIndex));
+        // The junk filter, at the level the Junk Options dialog currently holds. Read live so a
+        // change applies to the next message; §7.8's corpus is per account, so the classifier is
+        // handed the arriving message's own store.
+        Junk = new JunkService(MailOptions);
+
+        // What acts on a message as it arrives, in order: the junk filter, then the rules. Both
+        // protocols run the same pipeline, so a rule means the same thing on POP3 and IMAP.
+        var arrival = new ArrivalPipeline(Junk);
 
         // Read at the moment a collector is made, which is per run — so the Options page's
         // choice applies to the next send/receive rather than the next launch. IMAP and POP3
         // check the same signatures the same way, on arrival; the service picks the collector
-        // from the account's protocol. The junk filter files an arriving message straight into
-        // Junk when it judges it so, rather than delivering it and moving it.
+        // from the account's protocol.
         Transfer = new SendReceiveService(
             mail => new Pop3Receiver(mail)
             {
                 Authentication = signatures,
-                IsJunk = message => Junk.IsJunk(mail, message),
+                OnArrival = arrival,
             },
             mail => new SmtpSender(mail) { FileSentCopies = MailOptions.SaveCopiesInSent },
-            mail => new ImapSynchronizer(mail) { Authentication = signatures });
+            mail => new ImapSynchronizer(mail)
+            {
+                Authentication = signatures,
+                OnArrival = arrival,
+            });
 
         Commands = new CommandCatalog();
         Commands.RegisterRange(MailCommands.All);

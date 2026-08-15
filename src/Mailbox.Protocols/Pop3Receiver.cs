@@ -117,12 +117,15 @@ public sealed class Pop3Receiver(MailRepository repository, Func<DateTimeOffset>
         CancellationToken cancellation)
     {
         var count = client.Count;
-        if (count == 0) return new PollResult(0, 0, 0);
 
         // One UIDL call for the whole mailbox rather than one per message: on a mailbox of any
-        // size the round trips cost more than the download.
-        var uids = await client.GetUidsAsync(cancellation);
-        var known = _repository.ServerUidsInAccount(inbox.AccountId);
+        // size the round trips cost more than the download. What is known is what has been
+        // collected before — the seen list, plus whatever is held in case the list is short of a
+        // message from before it existed — not what is still held: a message deleted here for
+        // good, with the server told to leave its copy, must not come back as new.
+        var uids = count == 0 ? [] : await client.GetUidsAsync(cancellation);
+        var known = _repository.SeenUidls();
+        known.UnionWith(_repository.ServerUidsInAccount(inbox.AccountId));
 
         var downloaded = 0;
         var alreadyHad = 0;
@@ -153,16 +156,24 @@ public sealed class Pop3Receiver(MailRepository repository, Func<DateTimeOffset>
         }
 
         var removed = await RemoveAsync(client, toRemove, cancellation);
+
+        // The seen list tracks the mailbox, not its history: what the server no longer lists,
+        // and what this poll just took off it, is forgotten.
+        var listed = uids.ToHashSet(StringComparer.Ordinal);
+        foreach (var index in toRemove) listed.Remove(uids[index]);
+        _repository.PruneSeenUidls(listed);
+
         return new PollResult(downloaded, alreadyHad, removed) { Arrived = arrived };
     }
 
     /// <summary>
-    /// Whether an arriving message is junk, or null to file everything in the inbox. The
-    /// application supplies the classifier; a test that does not care gets no filtering.
+    /// What acts on a message once it is stored — the junk filter, the rules — or null to file
+    /// everything in the inbox and leave it there. The application supplies one; a test that
+    /// does not care gets no filtering.
     /// </summary>
-    public Func<MimeMessage, bool>? IsJunk { get; set; }
+    public IArrivalHandler? OnArrival { get; set; }
 
-    /// <returns>The new row's id if the message landed in the inbox itself; null otherwise.</returns>
+    /// <returns>The new row's id if the message ended up in the inbox itself; null otherwise.</returns>
     private async Task<long?> StoreAsync(
         Folder inbox, MimeMessage message, string uid, CancellationToken cancellation)
     {
@@ -170,23 +181,25 @@ public sealed class Pop3Receiver(MailRepository repository, Func<DateTimeOffset>
         message.WriteTo(buffer);
         var raw = buffer.ToArray();
 
-        // Filed straight into Junk when the filter says so, rather than delivered to the inbox
-        // and moved a moment later — the reader never sees it arrive where it does not belong.
-        // Read is left false either way: junk is unread, and the count on the Junk folder is how
-        // the reader learns the filter caught something.
-        var target = IsJunk?.Invoke(message) == true
-            ? _repository.FolderWithRole(inbox.AccountId, FolderRole.Junk) ?? inbox
-            : inbox;
-
         var summary = MessageMapper.ToSummary(message, uid, raw.Length, _now());
-        var id = _repository.AddMessage(target.Id, summary, raw);
 
-        if (id is { } messageId)
+        // Seen from the moment it is collected, whatever the handler does with it next.
+        var id = _repository.Store.InTransaction<long?>(() =>
         {
-            await Arrival.RecordSignatureAsync(_repository, Authentication, messageId, message, _now(), cancellation);
-        }
+            _repository.RecordSeenUidl(uid, _now());
+            return _repository.AddMessage(inbox.Id, summary, raw);
+        });
 
-        return target.Id == inbox.Id ? id : null;
+        if (id is not { } messageId) return null;
+
+        // Read is left false whatever the handler decides: junk is unread, and the count on the
+        // Junk folder is how the reader learns the filter caught something.
+        var endedIn = Arrival.Handle(OnArrival, _repository, inbox, messageId, message);
+        if (endedIn is null) return null;
+
+        await Arrival.RecordSignatureAsync(_repository, Authentication, messageId, message, _now(), cancellation);
+
+        return endedIn == inbox.Id ? messageId : null;
     }
 
     /// <summary>

@@ -1,25 +1,32 @@
+using Mailbox.Core.Settings;
 using Mailbox.Junk;
+using Mailbox.Protocols;
 using Mailbox.Store;
 using MimeKit;
 
 namespace Mailbox.App;
 
 /// <summary>
-/// The junk filter, wired to the application: the level from the Options page, the lists and the
-/// corpus from each account's store.
+/// The junk filter, wired to the application: the level and the switches from the Junk Options
+/// dialog, the lists and the corpus from each account's store.
 /// </summary>
 /// <remarks>
 /// One place tokenizes a message and asks the filter, so a message judged on arrival is judged
 /// the same way as one the reader marks by hand, and the corpus a Mark as Junk trains is the one
-/// the filter reads. The level is read live, so changing it on the Options page applies to the
-/// next message rather than the next launch. Nothing here leaves the machine (§7.8).
+/// the filter reads. The level is read live, so changing it in the dialog applies to the next
+/// message rather than the next launch. Nothing here leaves the machine (§7.8).
+/// <para>
+/// It is an <see cref="IArrivalHandler"/>: the receiver stores a message in the Inbox and hands
+/// it over, and this moves it to Junk — or deletes it, if the dialog says so — when the filter
+/// judges it junk. On an IMAP account that move is journalled to the server like any other.
+/// </para>
 /// </remarks>
-public sealed class JunkService(Func<FilterLevel> level)
+public sealed class JunkService(MailOptions options) : IArrivalHandler
 {
     private readonly JunkFilter _filter = new();
-    private readonly Func<FilterLevel> _level = level;
+    private readonly MailOptions _options = options;
 
-    /// <summary>Turns the Options page's 0..3 into a level.</summary>
+    /// <summary>Turns the dialog's 0..3 into a level.</summary>
     public static FilterLevel LevelFrom(int index) => index switch
     {
         0 => FilterLevel.Off,
@@ -28,22 +35,65 @@ public sealed class JunkService(Func<FilterLevel> level)
         _ => FilterLevel.Low,
     };
 
+    /// <summary>The level in force, from the dialog.</summary>
+    public FilterLevel Level => LevelFrom(_options.JunkLevelIndex);
+
     /// <summary>
     /// Whether an arriving message should be filed as junk, judged against the account's corpus
-    /// and lists at the current level. The receiver files it into Junk rather than the inbox
-    /// when this is true.
+    /// and lists at the current level.
     /// </summary>
-    public bool IsJunk(MailRepository mail, MimeMessage message)
+    /// <remarks>
+    /// The lists first, and they are final, in this order: a blocked top-level domain or a
+    /// blocked encoding junks it before anything else is looked at; a safe sender or a safe
+    /// recipient — a list the reader belongs to — clears it; a blocked sender junks it; and only
+    /// then does the level ask the classifier.
+    /// </remarks>
+    public JunkDecision Judge(MailRepository mail, MimeMessage message)
     {
         var from = From(message);
-        var decision = _filter.Judge(
-            _level(),
+
+        if (from.Length > 0 && mail.IsBlockedTld(from))
+        {
+            return new JunkDecision(true, JunkReason.BlockedSender, 1);
+        }
+
+        if (Charsets(message).Any(mail.IsBlockedEncoding))
+        {
+            return new JunkDecision(true, JunkReason.BlockedSender, 1);
+        }
+
+        var recipients = message.To.Mailboxes.Concat(message.Cc.Mailboxes).Select(m => m.Address).ToList();
+        var isSafe = (from.Length > 0 && mail.IsSafeSender(from)) || mail.IsSafeRecipient(recipients);
+
+        return _filter.Judge(
+            Level,
             Tokens(message),
             new JunkCorpus(mail),
-            isSafe: from.Length > 0 && mail.IsSafeSender(from),
+            isSafe: isSafe,
             isBlocked: from.Length > 0 && mail.IsBlockedSender(from));
+    }
 
-        return decision.IsJunk;
+    /// <summary>Whether an arriving message should be filed as junk.</summary>
+    public bool IsJunk(MailRepository mail, MimeMessage message) => Judge(mail, message).IsJunk;
+
+    /// <inheritdoc />
+    public long? Handle(MailRepository mail, Folder folder, long messageId, MimeMessage message)
+    {
+        // Only mail arriving in the Inbox is judged. Mail a rule has already filed elsewhere, or
+        // that the server delivered to another folder, is left where it is.
+        if (folder.Role != FolderRole.Inbox) return folder.Id;
+        if (!IsJunk(mail, message)) return folder.Id;
+
+        if (_options.DeleteSuspectedJunk)
+        {
+            mail.DeleteMessages([messageId]);
+            return null;
+        }
+
+        if (mail.FolderWithRole(folder.AccountId, FolderRole.Junk) is not { } junk) return folder.Id;
+
+        mail.MoveMessages([messageId], junk.Id);
+        return junk.Id;
     }
 
     /// <summary>
@@ -59,6 +109,16 @@ public sealed class JunkService(Func<FilterLevel> level)
         message.Subject ?? string.Empty,
         message.TextBody ?? message.HtmlBody ?? string.Empty);
 
-    private static string From(MimeMessage message)
-        => message.From.Mailboxes.FirstOrDefault()?.Address ?? string.Empty;
+    /// <summary>The sender's address, lower-cased, or empty when there is none.</summary>
+    public static string From(MimeMessage message)
+        => message.From.Mailboxes.FirstOrDefault()?.Address?.Trim().ToLowerInvariant() ?? string.Empty;
+
+    /// <summary>The character sets the message's text is written in, for the blocked-encodings list.</summary>
+    private static IEnumerable<string> Charsets(MimeMessage message)
+    {
+        foreach (var part in message.BodyParts.OfType<TextPart>())
+        {
+            if (part.ContentType.Charset is { Length: > 0 } charset) yield return charset;
+        }
+    }
 }

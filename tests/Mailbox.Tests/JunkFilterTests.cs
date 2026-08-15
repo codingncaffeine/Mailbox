@@ -278,4 +278,70 @@ public class JunkFilterTests
         repo.RemoveBlockedSender("spammer@bad.example");
         Assert.False(repo.IsBlockedSender("spammer@bad.example"));
     }
+
+    [Fact]
+    public void AListEntryMayBeAWholeDomain()
+    {
+        using var store = MailStore.Transient();
+        var repo = new MailRepository(store);
+        var now = DateTimeOffset.UnixEpoch;
+
+        // "Never Block Sender's Domain" writes the domain in the @ form; everyone there matches.
+        repo.AddSafeSender("@Trusted.Example", now);
+        Assert.True(repo.IsSafeSender("anyone@trusted.example"));
+        Assert.True(repo.IsSafeSender("Someone.Else@TRUSTED.example"));
+        Assert.False(repo.IsSafeSender("anyone@other.example"));
+        Assert.Equal("@trusted.example", Assert.Single(repo.SafeSenders()));
+
+        repo.AddBlockedSender("@bad.example", now);
+        Assert.True(repo.IsBlockedSender("spammer@bad.example"));
+        Assert.False(repo.IsBlockedSender("spammer@good.example"));
+    }
+
+    [Fact]
+    public void SafeRecipientsMatchAnyAddressAMessageWasSentTo()
+    {
+        using var store = MailStore.Transient();
+        var repo = new MailRepository(store);
+
+        repo.AddSafeRecipient("list@example.org", DateTimeOffset.UnixEpoch);
+        Assert.True(repo.IsSafeRecipient(["you@example.com", "List@Example.org"]));
+        Assert.False(repo.IsSafeRecipient(["you@example.com"]));
+        Assert.False(repo.IsSafeRecipient([]));
+    }
+
+    [Fact]
+    public void BlockedTopLevelDomainsAndEncodingsAreWholeListsReplacedAtOnce()
+    {
+        using var store = MailStore.Transient();
+        var repo = new MailRepository(store);
+        var now = DateTimeOffset.UnixEpoch;
+
+        repo.SetBlockedTlds(["ru", ".CN", "ru"], now);
+        Assert.Equal(["cn", "ru"], repo.BlockedTlds());
+        Assert.True(repo.IsBlockedTld("anyone@mail.example.ru"));
+        Assert.False(repo.IsBlockedTld("anyone@example.run"));
+        Assert.False(repo.IsBlockedTld("no-domain"));
+
+        repo.SetBlockedTlds([], now);
+        Assert.Empty(repo.BlockedTlds());
+        Assert.False(repo.IsBlockedTld("anyone@mail.example.ru"));
+
+        repo.SetBlockedEncodings(["KOI8-R"], now);
+        Assert.True(repo.IsBlockedEncoding("koi8-r"));
+        Assert.False(repo.IsBlockedEncoding("utf-8"));
+        Assert.False(repo.IsBlockedEncoding(null));
+    }
+
+    [Fact]
+    public void TheInternationalListsAreWellFormed()
+    {
+        // Two-letter codes, no duplicates, and every encoding is a name .NET can look up or a
+        // mail-only alias.
+        Assert.All(JunkLists.TopLevelDomains, t => Assert.Equal(2, t.Code.Length));
+        Assert.Equal(JunkLists.TopLevelDomains.Count, JunkLists.TopLevelDomains.Select(t => t.Code).Distinct().Count());
+        Assert.Equal(JunkLists.Encodings.Count, JunkLists.Encodings.Select(e => e.Charset).Distinct().Count());
+        Assert.Contains(JunkLists.TopLevelDomains, t => t.Code == "uk");
+        Assert.Contains(JunkLists.Encodings, e => e.Charset == "utf-8");
+    }
 }

@@ -3,6 +3,7 @@ using MailStore = Mailbox.Store.MailStore;
 using Mailbox.Protocols;
 using Mailbox.Store;
 using MessageSummary = Mailbox.Store.MessageSummary;
+using MimeKit;
 
 namespace Mailbox.Tests;
 
@@ -37,6 +38,82 @@ public class ImapSyncTests
 
     private static ImapSynchronizer Sync(MailRepository repo, FakeImap server)
         => new(repo, () => Now) { SessionFactory = () => server };
+
+    // ---- Arrival ---------------------------------------------------------------------------
+
+    /// <summary>Moves a message whose subject matches to Junk; the shape the junk filter has.</summary>
+    private sealed class SubjectJunk(string subject) : IArrivalHandler
+    {
+        public long? Handle(MailRepository mail, Folder folder, long messageId, MimeMessage message)
+        {
+            if (message.Subject != subject) return folder.Id;
+            var junk = mail.FolderWithRole(folder.AccountId, FolderRole.Junk)!;
+            mail.MoveMessages([messageId], junk.Id);
+            return junk.Id;
+        }
+    }
+
+    /// <summary>
+    /// A message the arrival handler moves to Junk is stored where the server had it and then
+    /// moved, so the move is journalled and played to the server on the next sync — the same
+    /// path a drag into Junk takes. Only what stayed in the Inbox is an arrival.
+    /// </summary>
+    [Fact]
+    public async Task ArrivingJunkIsMovedToJunkAndTheMoveReachesTheServer()
+    {
+        var (store, repo, accountId) = Imap();
+        using var _ = store;
+
+        var server = new FakeImap();
+        server.Folder("Junk", FolderRole.Junk);
+        server.Deliver("INBOX", "Cheap pills");
+        server.Deliver("INBOX", "Re: lunch");
+
+        var handler = new SubjectJunk("Cheap pills");
+        var sync = Sync(repo, server);
+        sync.OnArrival = handler;
+        var first = await sync.SyncAsync(Connection(), null, Ct);
+
+        var inbox = repo.FolderWithRole(accountId, FolderRole.Inbox)!;
+        var junk = repo.FolderWithRole(accountId, FolderRole.Junk)!;
+        Assert.Equal(2, first.Downloaded);
+        Assert.Equal("Re: lunch", Assert.Single(repo.Messages(inbox.Id)).Subject);
+        Assert.Equal("Cheap pills", Assert.Single(repo.Messages(junk.Id)).Subject);
+        Assert.Equal([repo.Messages(inbox.Id)[0].Id], first.Arrived);
+
+        // The move is waiting for the server, and the next sync plays it: the server's Junk
+        // folder has the message and its INBOX does not.
+        Assert.Contains(repo.PendingOps(), o => o.Kind == SyncOpKind.Move);
+        var again = Sync(repo, server);
+        again.OnArrival = handler;
+        await again.SyncAsync(Connection(), null, Ct);
+
+        Assert.Empty(repo.PendingOps());
+        Assert.Equal("Re: lunch", Assert.Single(server.Contents("INBOX")).Message.Subject);
+        Assert.Equal("Cheap pills", Assert.Single(server.Contents("Junk")).Message.Subject);
+        Assert.Single(repo.Messages(junk.Id));
+    }
+
+    /// <summary>Mail pulled into any folder but the Inbox is the server catching up, not an arrival.</summary>
+    [Fact]
+    public async Task OnlyInboxMailIsHandedToTheArrivalHandler()
+    {
+        var (store, repo, accountId) = Imap();
+        using var _ = store;
+
+        var server = new FakeImap();
+        server.Folder("Junk", FolderRole.Junk);
+        server.Deliver("Sent", "Cheap pills");
+
+        var sync = Sync(repo, server);
+        sync.OnArrival = new SubjectJunk("Cheap pills");
+        var result = await sync.SyncAsync(Connection(), null, Ct);
+
+        var sent = repo.FolderWithRole(accountId, FolderRole.Sent)!;
+        Assert.Equal("Cheap pills", Assert.Single(repo.Messages(sent.Id)).Subject);
+        Assert.Empty(result.Arrived);
+        Assert.Empty(repo.PendingOps());
+    }
 
     // ---- Pulling --------------------------------------------------------------------------
 
