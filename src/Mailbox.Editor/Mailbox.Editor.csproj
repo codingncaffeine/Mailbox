@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The compose surface, and the serializer that decides what leaves the machine.
+
+    §7.3 planned this as the largest of the nine in-house components. The survey it opens
+    with found a GPL-3-compatible editor that runs here and carries the document model that
+    section describes building, so what is in-house is the half that actually decides mail
+    fidelity: the HTML that goes on the wire, and §6's rule that outgoing mail names the
+    Microsoft font first. The editor's own serializer is not shipped.
+  -->
+
+  <ItemGroup>
+    <!--
+      MIT, verified against the artifact rather than the announcement: the nuspec declares the
+      expression, its only dependencies are Avalonia and HtmlAgilityPack (both MIT), there is
+      no P/Invoke, and the IL carries no licence-key or watermark path. Declares Avalonia
+      12.0.1 and runs against 12.1.
+    -->
+    <PackageReference Include="AvaloniaRichEditor" Version="1.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Mailbox.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mailbox.Core\Mailbox.Core.csproj" />
+    <!-- For the substitution table, which is what the wire/render split is written against. -->
+    <ProjectReference Include="..\Mailbox.Theming\Mailbox.Theming.csproj" />
+  </ItemGroup>
+
+</Project>
