@@ -48,6 +48,7 @@ public sealed class MailOptions(SettingsStore settings)
     public const string JunkWarnDomainsKey = "mail.junk.warndomains";
     public const string JunkTrustContactsKey = "mail.junk.trustcontacts";
     public const string JunkSafeAutoAddKey = "mail.junk.autoaddrecipients";
+    public const string RecoverDaysKey = "mail.recover.days";
     public const string DesktopAlertKey = "mail.arrival.alert";
     public const string RequestDeliveryReceiptKey = "mail.tracking.delivery";
     public const string RequestReadReceiptKey = "mail.tracking.read";
@@ -195,6 +196,12 @@ public sealed class MailOptions(SettingsStore settings)
     /// everywhere: a message that sits in the outbox until F9 is a message people think went.
     /// </summary>
     public bool SendImmediately => _settings.GetBool(SendImmediatelyKey, true);
+
+    /// <summary>
+    /// How long a permanently deleted message can still be recovered, in days (§11). Thirty, as
+    /// the reference's servers keep them; 0 keeps nothing.
+    /// </summary>
+    public int RecoverDays => Math.Clamp((int)_settings.GetNumber(RecoverDaysKey, 30), 0, 365);
 
     // ---- Leaving --------------------------------------------------------------------------
 

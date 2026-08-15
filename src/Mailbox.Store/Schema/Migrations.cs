@@ -438,6 +438,38 @@ public static class Migrations
             created_utc   INTEGER NOT NULL
         );
         """,
+
+        // ---- 18: Recover Deleted Items -----------------------------------------------------
+        //
+        // §11's holding area. A message deleted for good here — Deleted Items emptied,
+        // Shift+Delete, a rule — keeps its raw bytes and enough of its row to be listed, for a
+        // retention window, and can be put back where it was. The messages row itself goes, so
+        // nothing else sees it; the blob stays, so restoring is a re-file rather than a hope.
+        // Local deletes only: mail that vanished on the server was deleted somewhere else, and
+        // is not this store's to keep.
+        """
+        CREATE TABLE recoverable (
+            id                    INTEGER PRIMARY KEY,
+            blob_id               INTEGER NOT NULL REFERENCES blobs(id),
+            original_folder_id    INTEGER,
+            original_folder_name  TEXT    NOT NULL DEFAULT '',
+            message_id            TEXT,
+            from_name             TEXT    NOT NULL DEFAULT '',
+            from_address          TEXT    NOT NULL DEFAULT '',
+            subject               TEXT    NOT NULL DEFAULT '',
+            preview               TEXT    NOT NULL DEFAULT '',
+            body_text             TEXT    NOT NULL DEFAULT '',
+            sent_utc              INTEGER,
+            received_utc          INTEGER NOT NULL,
+            size_bytes            INTEGER NOT NULL DEFAULT 0,
+            is_read               INTEGER NOT NULL DEFAULT 0,
+            is_flagged            INTEGER NOT NULL DEFAULT 0,
+            has_attachment        INTEGER NOT NULL DEFAULT 0,
+            deleted_utc           INTEGER NOT NULL
+        );
+
+        CREATE INDEX recoverable_by_deleted ON recoverable (deleted_utc);
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>

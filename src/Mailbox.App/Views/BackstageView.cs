@@ -420,6 +420,8 @@ public sealed class BackstageView : Border
                 "See what is taking up room and clear it.", "tools.cleanup"),
             MenuEntry("delete", "Empty Deleted Items Folder",
                 "Permanently delete everything in Deleted Items.", "tools.emptydeleted"),
+            MenuEntry("undo", "Recover Deleted Items…",
+                "Bring back mail that was permanently deleted recently.", "tools.recover"),
         },
     };
 

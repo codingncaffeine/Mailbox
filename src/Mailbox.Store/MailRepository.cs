@@ -586,8 +586,10 @@ public sealed class MailRepository(MailStore store)
     }
 
     /// <summary>
-    /// Deletes many, and the raw copies behind them. Messages go before blobs: while a message
-    /// exists it references its blob, and removing the blob first fails the foreign key.
+    /// Deletes many for good — as far as the folders are concerned. The rows go, and on IMAP the
+    /// server is told; the raw bytes and the row's own columns are kept in the recoverable
+    /// holding area (§11) for the retention window, so Recover Deleted Items can put a message
+    /// back where it was.
     /// </summary>
     public int DeleteMessages(IReadOnlyCollection<long> messageIds)
     {
@@ -596,17 +598,20 @@ public sealed class MailRepository(MailStore store)
         return _store.InTransaction(() =>
         {
             foreach (var id in messageIds) JournalDelete(id);
-            return DeleteRows(messageIds);
+            KeepRecoverable(messageIds, DateTimeOffset.UtcNow);
+            return DeleteRows(messageIds, keepBlobs: true);
         });
     }
 
     /// <summary>The rows and their blobs, no journal. What every delete ends in.</summary>
-    private int DeleteRows(IReadOnlyCollection<long> messageIds)
+    private int DeleteRows(IReadOnlyCollection<long> messageIds, bool keepBlobs = false)
     {
         var list = Ids(messageIds);
-        var blobs = _store.Query(
-            $"SELECT blob_id FROM messages WHERE id IN ({list}) AND blob_id IS NOT NULL",
-            r => r.GetInt64(0));
+        var blobs = keepBlobs
+            ? []
+            : _store.Query(
+                $"SELECT blob_id FROM messages WHERE id IN ({list}) AND blob_id IS NOT NULL",
+                r => r.GetInt64(0));
 
         var removed = _store.Execute($"DELETE FROM messages WHERE id IN ({list})");
 
@@ -616,6 +621,138 @@ public sealed class MailRepository(MailStore store)
         }
 
         return removed;
+    }
+
+    // ---- Recover Deleted Items (§11) ------------------------------------------------------------
+
+    /// <summary>Copies what a row says about itself into the holding area, blob and all.</summary>
+    private void KeepRecoverable(IReadOnlyCollection<long> messageIds, DateTimeOffset now) => _store.Execute(
+        $"""
+         INSERT INTO recoverable
+             (blob_id, original_folder_id, original_folder_name, message_id, from_name, from_address,
+              subject, preview, body_text, sent_utc, received_utc, size_bytes, is_read, is_flagged,
+              has_attachment, deleted_utc)
+         SELECT m.blob_id, m.folder_id, f.name, m.message_id, m.from_name, m.from_address,
+                m.subject, m.preview, m.body_text, m.sent_utc, m.received_utc, m.size_bytes, m.is_read,
+                m.is_flagged, m.has_attachment, $now
+         FROM messages m JOIN folders f ON f.id = m.folder_id
+         WHERE m.id IN ({Ids(messageIds)}) AND m.blob_id IS NOT NULL
+         """,
+        ("$now", now.ToUnixTimeSeconds()));
+
+    /// <summary>What can still be recovered, most recently deleted first.</summary>
+    public IReadOnlyList<RecoverableMessage> Recoverable() => _store.Query(
+        """
+        SELECT id, original_folder_id, original_folder_name, from_name, from_address, subject,
+               received_utc, deleted_utc, size_bytes
+        FROM recoverable ORDER BY deleted_utc DESC, id DESC
+        """,
+        r => new RecoverableMessage(
+            r.GetInt64(0),
+            r.IsDBNull(1) ? null : r.GetInt64(1),
+            r.GetString(2),
+            r.GetString(3),
+            r.GetString(4),
+            r.GetString(5),
+            DateTimeOffset.FromUnixTimeSeconds(r.GetInt64(6)),
+            DateTimeOffset.FromUnixTimeSeconds(r.GetInt64(7)),
+            r.GetInt64(8)));
+
+    public long RecoverableCount() => _store.ScalarLong("SELECT count(*) FROM recoverable");
+
+    /// <summary>
+    /// Puts recoverable messages back: into the folder they came from, or the one named
+    /// <paramref name="fallbackFolderId"/> when that folder has gone. Returns how many came back.
+    /// </summary>
+    /// <remarks>
+    /// A re-file rather than an undelete: the row is written afresh from the kept columns and
+    /// the kept blob, with no server id, so on IMAP it is appended to the server like a message
+    /// made here. It comes back with the read and flagged state it had.
+    /// </remarks>
+    public int Restore(IReadOnlyCollection<long> recoverableIds, long fallbackFolderId)
+    {
+        if (recoverableIds.Count == 0) return 0;
+
+        return _store.InTransaction(() =>
+        {
+            var restored = 0;
+            foreach (var id in recoverableIds)
+            {
+                var row = _store.Query(
+                    """
+                    SELECT blob_id, original_folder_id, message_id, from_name, from_address, subject, preview,
+                           body_text, sent_utc, received_utc, size_bytes, is_read, is_flagged, has_attachment
+                    FROM recoverable WHERE id = $id
+                    """,
+                    r => new
+                    {
+                        BlobId = r.GetInt64(0),
+                        FolderId = r.IsDBNull(1) ? (long?)null : r.GetInt64(1),
+                        MessageId = r.IsDBNull(2) ? null : r.GetString(2),
+                        FromName = r.GetString(3),
+                        FromAddress = r.GetString(4),
+                        Subject = r.GetString(5),
+                        Preview = r.GetString(6),
+                        Body = r.GetString(7),
+                        Sent = r.IsDBNull(8) ? (long?)null : r.GetInt64(8),
+                        Received = r.GetInt64(9),
+                        Size = r.GetInt64(10),
+                        Read = r.GetInt32(11) != 0,
+                        Flagged = r.GetInt32(12) != 0,
+                        Attachment = r.GetInt32(13) != 0,
+                    },
+                    ("$id", id)).FirstOrDefault();
+                if (row is null) continue;
+
+                var target = row.FolderId is { } original && GetFolder(original) is not null ? original : fallbackFolderId;
+
+                _store.Execute(
+                    """
+                    INSERT INTO messages
+                        (folder_id, blob_id, server_uid, message_id, thread_key, from_name, from_address, subject,
+                         preview, body_text, sent_utc, received_utc, size_bytes, is_read, is_flagged, has_attachment)
+                    VALUES ($folder, $blob, NULL, $mid, $thread, $fromName, $fromAddress, $subject,
+                            $preview, $body, $sent, $received, $size, $read, $flagged, $attachment)
+                    """,
+                    ("$folder", target), ("$blob", row.BlobId), ("$mid", row.MessageId),
+                    ("$thread", ThreadKey(row.Subject)), ("$fromName", row.FromName), ("$fromAddress", row.FromAddress),
+                    ("$subject", row.Subject), ("$preview", row.Preview), ("$body", row.Body), ("$sent", row.Sent),
+                    ("$received", row.Received), ("$size", row.Size), ("$read", row.Read ? 1 : 0),
+                    ("$flagged", row.Flagged ? 1 : 0), ("$attachment", row.Attachment ? 1 : 0));
+
+                var messageId = _store.LastInsertId;
+                if (IsSyncedFolder(target)) JournalAppend(target, messageId);
+
+                _store.Execute("DELETE FROM recoverable WHERE id = $id", ("$id", id));
+                restored++;
+            }
+
+            return restored;
+        });
+    }
+
+    /// <summary>Removes recoverable messages for good, blobs and all — Purge Selected Items.</summary>
+    public int Purge(IReadOnlyCollection<long> recoverableIds)
+    {
+        if (recoverableIds.Count == 0) return 0;
+
+        return _store.InTransaction(() =>
+        {
+            var list = Ids(recoverableIds);
+            var blobs = _store.Query($"SELECT blob_id FROM recoverable WHERE id IN ({list})", r => r.GetInt64(0));
+            var removed = _store.Execute($"DELETE FROM recoverable WHERE id IN ({list})");
+            if (blobs.Count > 0) _store.Execute($"DELETE FROM blobs WHERE id IN ({Ids(blobs)})");
+            return removed;
+        });
+    }
+
+    /// <summary>The retention window: everything deleted before <paramref name="cutoff"/> goes for good.</summary>
+    public int PurgeRecoverableOlderThan(DateTimeOffset cutoff)
+    {
+        var due = _store.Query(
+            "SELECT id FROM recoverable WHERE deleted_utc < $cutoff", r => r.GetInt64(0),
+            ("$cutoff", cutoff.ToUnixTimeSeconds()));
+        return Purge(due);
     }
 
     /// <summary>
