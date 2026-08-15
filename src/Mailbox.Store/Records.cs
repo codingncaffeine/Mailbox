@@ -169,6 +169,24 @@ public sealed record MessageSummary(
 /// </remarks>
 public sealed record MessageAuthentication(string Dkim, string? SigningDomain, DateTimeOffset Checked);
 
+/// <summary>
+/// A message in the Recover Deleted Items holding area (§11): what is left of its row, enough to
+/// list it and put it back.
+/// </summary>
+public sealed record RecoverableMessage(
+    long Id,
+    long? OriginalFolderId,
+    string OriginalFolderName,
+    string FromName,
+    string FromAddress,
+    string Subject,
+    DateTimeOffset Received,
+    DateTimeOffset Deleted,
+    long SizeBytes)
+{
+    public string DisplayFrom => FromName.Length > 0 ? FromName : FromAddress;
+}
+
 /// <summary>A named colour a message can carry.</summary>
 public sealed record Category(long Id, string Name, string ColourToken, string? Shortcut, int Ordinal);
 

@@ -404,6 +404,14 @@ public partial class MainWindow : Window
                 };
                 break;
 
+            case "recover":
+                Opened += async (_, _) =>
+                {
+                    CaptureNextWindow();
+                    await new RecoverDeletedItemsDialog(DataContext is ShellViewModel s ? s.CurrentAddress : null).ShowDialog(this);
+                };
+                break;
+
             case "categories":
                 Opened += async (_, _) =>
                 {
@@ -1244,6 +1252,12 @@ public partial class MainWindow : Window
         new PrintPreviewWindow(App.Themes, shell.SelectedFolderName, rows).Show(this);
     }
 
+    private async Task ShowRecoverDeletedAsync(ShellViewModel shell)
+    {
+        await new RecoverDeletedItemsDialog(shell.CurrentAddress).ShowDialog(this);
+        shell.Refresh();
+    }
+
     /// <summary>Opens the selected message in a window of its own, as a double-click does.</summary>
     private void OpenMessageWindow(ShellViewModel shell)
     {
@@ -1699,6 +1713,7 @@ public partial class MainWindow : Window
         if (id == MailCommands.Print.Id) { PrintMessage(shell); return; }
         if (id == MailCommands.PrintToPdf.Id) { _ = PrintToPdfAsync(shell); return; }
         if (id == MailCommands.PrintList.Id) { PrintList(shell); return; }
+        if (id == MailCommands.RecoverDeleted.Id) { _ = ShowRecoverDeletedAsync(shell); return; }
         if (id == ViewCommands.CancelAll.Id) { CancelTransfer(); return; }
         if (id == ViewCommands.SendReceiveGroups.Id) { ShowGroupsMenu(shell); return; }
 

@@ -442,6 +442,7 @@ public static class OptionsPages
 
             new OptionSection("Other",
             [
+                new SpinnerRow("Keep permanently deleted items recoverable for this many days:", 30, 0, 365, 380) { Key = MailOptions.RecoverDaysKey },
                 new CheckRow("Prompt for confirmation before permanently deleting items", true),
                 new CheckRow("Show paste options when content is pasted", true),
                 new CheckRow("Use animations when expanding conversations and groups", true),

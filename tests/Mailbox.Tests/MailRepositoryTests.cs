@@ -89,8 +89,13 @@ public class MailRepositoryTests
         Assert.True(store.ScalarLong("SELECT length(bytes) FROM blobs") < raw.Length);
     }
 
+    /// <summary>
+    /// A deleted message's raw bytes outlive its row — in the Recover Deleted Items holding area
+    /// (§11) — and go for good when the holding area is purged. The blob is never orphaned:
+    /// exactly one thing points at it at any moment.
+    /// </summary>
     [Fact]
-    public void DeletingAMessageTakesItsBlob()
+    public void DeletingAMessageKeepsItsBlobUntilPurged()
     {
         var (store, repo, inbox) = Fresh();
         using var _ = store;
@@ -98,7 +103,12 @@ public class MailRepositoryTests
 
         repo.DeleteMessage(id);
 
+        Assert.Equal(1, store.ScalarLong("SELECT count(*) FROM blobs"));
+        Assert.Equal(1, repo.RecoverableCount());
+
+        repo.Purge([.. repo.Recoverable().Select(r => r.Id)]);
         Assert.Equal(0, store.ScalarLong("SELECT count(*) FROM blobs"));
+        Assert.Empty(store.CheckIntegrity());
     }
 
     [Fact]
@@ -235,9 +245,12 @@ public class MailRepositoryTests
         Assert.Equal(8, repo.Messages(archive.Id).Count);
     }
 
-    /// <summary>Bulk delete must take the raw copies too, or the store grows without bound.</summary>
+    /// <summary>
+    /// Bulk delete must take the raw copies with it once the retention window closes, or the
+    /// store grows without bound.
+    /// </summary>
     [Fact]
-    public void DeletingManyTakesTheirBlobs()
+    public void DeletingManyKeepsTheirBlobsOnlyForTheRetentionWindow()
     {
         var (store, repo, inbox) = Fresh();
         using var _ = store;
@@ -250,6 +263,11 @@ public class MailRepositoryTests
         repo.DeleteMessages(ids);
 
         Assert.Empty(repo.Messages(inbox.Id));
+        Assert.Equal(6, repo.RecoverableCount());
+
+        // Not yet old enough: nothing purged. Past the window: everything, blobs included.
+        Assert.Equal(0, repo.PurgeRecoverableOlderThan(DateTimeOffset.UtcNow.AddDays(-1)));
+        Assert.Equal(6, repo.PurgeRecoverableOlderThan(DateTimeOffset.UtcNow.AddMinutes(1)));
         Assert.Equal(0, store.ScalarLong("SELECT count(*) FROM blobs"));
         Assert.Empty(store.CheckIntegrity());
     }
@@ -263,10 +281,53 @@ public class MailRepositoryTests
         var drop = repo.AddMessage(inbox.Id, Sample("drop"), [4, 5, 6])!.Value;
 
         repo.DeleteMessages([drop]);
+        repo.Purge([.. repo.Recoverable().Select(r => r.Id)]);
 
         Assert.Single(repo.Messages(inbox.Id));
         Assert.Equal(1, store.ScalarLong("SELECT count(*) FROM blobs"));
         Assert.NotNull(repo.LoadRaw(keep));
+    }
+
+    /// <summary>
+    /// Recover Deleted Items: a message deleted for good comes back where it was, with the state
+    /// it had, and to Deleted Items when its folder has gone.
+    /// </summary>
+    [Fact]
+    public void ADeletedMessageCanBeRestoredToWhereItWas()
+    {
+        var (store, repo, inbox) = Fresh();
+        using var _ = store;
+        var projects = repo.AddFolder(inbox.AccountId, "Projects");
+        var deleted = repo.FolderWithRole(inbox.AccountId, FolderRole.Deleted)!;
+
+        var inProjects = repo.AddMessage(projects.Id, Sample("uid-1", "Plan", read: true), [1, 2, 3])!.Value;
+        repo.SetFlagged([inProjects], true);
+        var inInbox = repo.AddMessage(inbox.Id, Sample("uid-2", "Hello"), [4, 5, 6])!.Value;
+
+        repo.DeleteMessages([inProjects, inInbox]);
+        Assert.Empty(repo.Messages(projects.Id));
+
+        var held = repo.Recoverable();
+        Assert.Equal(2, held.Count);
+        Assert.Contains(held, h => h.Subject == "Plan" && h.OriginalFolderName == "Projects");
+
+        // Restore the Projects one: back where it was, read and flagged as it was, bytes intact.
+        var plan = held.Single(h => h.Subject == "Plan");
+        Assert.Equal(1, repo.Restore([plan.Id], deleted.Id));
+        var back = Assert.Single(repo.Messages(projects.Id));
+        Assert.Equal("Plan", back.Subject);
+        Assert.True(back.IsRead);
+        Assert.True(back.IsFlagged);
+        Assert.Equal([1, 2, 3], repo.LoadRaw(back.Id));
+        Assert.Single(repo.Recoverable());
+
+        // Its folder gone: the other comes back to the fallback.
+        repo.RemoveFolder(inbox.Id);
+        var hello = repo.Recoverable().Single();
+        Assert.Equal(1, repo.Restore([hello.Id], deleted.Id));
+        Assert.Equal("Hello", Assert.Single(repo.Messages(deleted.Id)).Subject);
+        Assert.Empty(repo.Recoverable());
+        Assert.Empty(store.CheckIntegrity());
     }
 
     [Fact]

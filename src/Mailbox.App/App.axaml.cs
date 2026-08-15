@@ -281,6 +281,19 @@ public partial class App : Application
                 OnArrival = arrival,
             });
 
+        // The retention window on Recover Deleted Items (§11): what was deleted longer ago than
+        // the Options page keeps goes for good, once per launch, before anything shows.
+        try
+        {
+            var cutoff = DateTimeOffset.UtcNow.AddDays(-MailOptions.RecoverDays);
+            var purged = Accounts.All.Sum(a => a.Mail.PurgeRecoverableOlderThan(cutoff));
+            if (purged > 0) Log.Info($"Purged {purged} recoverable message(s) older than {MailOptions.RecoverDays} days.");
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Could not purge the recoverable holding area.", ex);
+        }
+
         Commands = new CommandCatalog();
         Commands.RegisterRange(MailCommands.All);
         Commands.RegisterRange(ViewCommands.All);

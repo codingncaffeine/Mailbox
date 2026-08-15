@@ -457,6 +457,21 @@ public static class MailCommands
         Scope = ModuleScope.Mail,
     };
 
+    /// <summary>
+    /// The reference has it on the Folder tab, which the current build's ribbon does not ship;
+    /// here it is under File › Tools and in the catalogue.
+    /// </summary>
+    public static readonly MailboxCommand RecoverDeleted = new()
+    {
+        Id = new("mail.recoverdeleted"),
+        Label = "Recover Deleted Items",
+        Description = "Bring back mail that was permanently deleted recently.",
+        Icon = "undo",
+        Category = "Delete",
+        Scope = ModuleScope.Mail,
+        InDefaultLayout = false,
+    };
+
     public static readonly MailboxCommand AuthenticationDetails = new()
     {
         Id = new("mail.authresults"),
@@ -480,5 +495,6 @@ public static class MailCommands
         Search, AddressBook, FilterEmail,
         SendReceiveAll, WorkOffline, Undo,
         Snooze, ViewSource, TrackerReport, AuthenticationDetails, Print, PrintToPdf, PrintList,
+        RecoverDeleted,
     ];
 }

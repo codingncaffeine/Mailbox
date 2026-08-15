@@ -62,6 +62,11 @@ internal static class BackstageActions
                 host.Refresh();
                 break;
 
+            case "tools.recover":
+                await new RecoverDeletedItemsDialog().ShowDialog(host.Owner);
+                host.Refresh();
+                break;
+
             case "rules":
                 await new RulesAndAlertsDialog().ShowDialog(host.Owner);
                 host.Refresh();
