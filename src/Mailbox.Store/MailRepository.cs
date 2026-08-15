@@ -1319,6 +1319,68 @@ public sealed class MailRepository(MailStore store)
             ("$category", categoryId));
     }
 
+    // ---- Rules --------------------------------------------------------------------------------
+    //
+    // The Rules and Alerts wizard's rules, in the order they run. The definition is Core's JSON
+    // document; the store keeps the name, the switch and the order beside it so the dialog's
+    // list can be drawn without parsing every rule.
+
+    /// <summary>Every rule, in running order.</summary>
+    public IReadOnlyList<Mailbox.Core.Rules.MailRule> Rules() => _store.Query(
+        "SELECT id, name, enabled, ordinal, definition FROM rules ORDER BY ordinal, id",
+        r => Mailbox.Core.Rules.MailRule.FromDefinition(
+            r.GetInt64(0), r.GetString(1), r.GetInt32(2) != 0, r.GetInt32(3), r.GetString(4)));
+
+    /// <summary>Adds a rule at the end of the order and returns it with its id.</summary>
+    public Mailbox.Core.Rules.MailRule AddRule(Mailbox.Core.Rules.MailRule rule, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+
+        _store.Execute(
+            """
+            INSERT INTO rules (name, enabled, ordinal, definition, created_utc)
+            VALUES ($name, $enabled, (SELECT count(*) FROM rules), $definition, $now)
+            """,
+            ("$name", rule.Name), ("$enabled", rule.Enabled ? 1 : 0),
+            ("$definition", rule.DefinitionJson()), ("$now", now.ToUnixTimeSeconds()));
+
+        return rule with { Id = _store.LastInsertId, Ordinal = (int)_store.ScalarLong("SELECT count(*) - 1 FROM rules") };
+    }
+
+    /// <summary>Replaces a rule's name, switch and definition. Its place in the order is kept.</summary>
+    public void UpdateRule(Mailbox.Core.Rules.MailRule rule)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+
+        _store.Execute(
+            "UPDATE rules SET name = $name, enabled = $enabled, definition = $definition WHERE id = $id",
+            ("$name", rule.Name), ("$enabled", rule.Enabled ? 1 : 0),
+            ("$definition", rule.DefinitionJson()), ("$id", rule.Id));
+    }
+
+    public void SetRuleEnabled(long id, bool enabled) => _store.Execute(
+        "UPDATE rules SET enabled = $enabled WHERE id = $id", ("$enabled", enabled ? 1 : 0), ("$id", id));
+
+    public void DeleteRule(long id) => _store.Execute("DELETE FROM rules WHERE id = $id", ("$id", id));
+
+    /// <summary>Puts the rules in this order — Move Up and Move Down, written back whole.</summary>
+    public void OrderRules(IReadOnlyList<long> ids)
+    {
+        _store.InTransaction(() =>
+        {
+            for (var i = 0; i < ids.Count; i++)
+            {
+                _store.Execute("UPDATE rules SET ordinal = $ordinal WHERE id = $id", ("$ordinal", i), ("$id", ids[i]));
+            }
+
+            return 0;
+        });
+    }
+
+    /// <summary>The store's own address, for the "my name" conditions.</summary>
+    public string? OwnAddress() => _store.Query(
+        "SELECT address FROM accounts ORDER BY id LIMIT 1", r => r.GetString(0)).FirstOrDefault();
+
     // ---- Auto-Complete List -------------------------------------------------------------------
 
     /// <summary>

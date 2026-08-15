@@ -60,6 +60,9 @@ public partial class App : Application
     /// <summary>The junk filter (§7.8), reading its level live from the Options page.</summary>
     public static JunkService Junk { get; private set; } = null!;
 
+    /// <summary>The Rules and Alerts wizard's rules, run on arrival and by Run Rules Now.</summary>
+    public static RulesHandler Rules { get; private set; } = null!;
+
     /// <summary>The single-instance guard, or null during a capture run. Set by <c>Program.Main</c>.</summary>
     public static Mailbox.Core.SingleInstance? Instance { get; set; }
 
@@ -258,7 +261,8 @@ public partial class App : Application
 
         // What acts on a message as it arrives, in order: the junk filter, then the rules. Both
         // protocols run the same pipeline, so a rule means the same thing on POP3 and IMAP.
-        var arrival = new ArrivalPipeline(Junk);
+        Rules = new RulesHandler();
+        var arrival = new ArrivalPipeline(Junk, Rules);
 
         // Read at the moment a collector is made, which is per run — so the Options page's
         // choice applies to the next send/receive rather than the next launch. IMAP and POP3

@@ -421,6 +421,23 @@ public static class Migrations
         CREATE INDEX messages_by_snooze ON messages (snooze_until)
             WHERE snooze_until IS NOT NULL;
         """,
+
+        // ---- 17: rules -----------------------------------------------------------------------
+        //
+        // The Rules and Alerts wizard's rules, per account like everything in this file — the
+        // reference keeps rules per account too. The conditions, actions and exceptions are one
+        // JSON document (Mailbox.Core.Rules writes and reads it), because they are a tree the
+        // wizard edits whole and nothing queries by. Ordinal is the order they run in.
+        """
+        CREATE TABLE rules (
+            id            INTEGER PRIMARY KEY,
+            name          TEXT    NOT NULL,
+            enabled       INTEGER NOT NULL DEFAULT 1,
+            ordinal       INTEGER NOT NULL DEFAULT 0,
+            definition    TEXT    NOT NULL,
+            created_utc   INTEGER NOT NULL
+        );
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>

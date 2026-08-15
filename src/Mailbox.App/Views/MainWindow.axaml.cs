@@ -16,6 +16,7 @@ using Mailbox.Core.Diagnostics;
 using Mailbox.Core;
 using Mailbox.Core.Commands;
 using Mailbox.Core.Ribbon;
+using Mailbox.Core.Rules;
 using Mailbox.Core.Settings;
 using Mailbox.Protocols;
 using Mailbox.Rendering;
@@ -434,7 +435,38 @@ public partial class MainWindow : Window
                 Opened += async (_, _) =>
                 {
                     CaptureNextWindow();
-                    await new RulesAndAlertsDialog().ShowDialog(this);
+                    await new RulesAndAlertsDialog(DataContext is ShellViewModel s ? s.CurrentAddress : null).ShowDialog(this);
+                };
+                break;
+
+            // The Rules Wizard on a new rule (MAILBOX_WIZARD_STEP picks the page), the Create
+            // Rule dialog on the selected message, and Run Rules Now.
+            case "rulewizard":
+                Opened += async (_, _) =>
+                {
+                    if (DataContext is not ShellViewModel s || s.CurrentAccountForCategories() is not { } account) return;
+                    CaptureNextWindow();
+                    var wizard = new RuleWizard(account.Mail, account.Account.Id);
+                    await wizard.ShowDialog(this);
+                };
+                break;
+
+            case "createrule":
+                Opened += async (_, _) =>
+                {
+                    if (DataContext is not ShellViewModel s || s.CurrentAccountForCategories() is not { } account
+                        || _openMessage is not { } message) return;
+                    CaptureNextWindow();
+                    await new CreateRuleDialog(account.Mail, account.Account.Id, message).ShowDialog(this);
+                };
+                break;
+
+            case "runrules":
+                Opened += async (_, _) =>
+                {
+                    if (DataContext is not ShellViewModel s || s.CurrentAccountForCategories() is not { } account) return;
+                    CaptureNextWindow();
+                    await new RunRulesNowDialog(account).ShowDialog(this);
                 };
                 break;
 
@@ -881,6 +913,39 @@ public partial class MainWindow : Window
 
     private readonly UndoSendToast _undoSend = new();
     private readonly Notifications.DesktopNotifier _notifier = new();
+
+    /// <summary>
+    /// What the rules asked to be shown or played during the run: a New Item Alert as a toast
+    /// with the rule's words and the message behind it, a Desktop Alert as the ordinary new-mail
+    /// toast, a sound through the desktop's own player.
+    /// </summary>
+    private void ShowRuleAlerts()
+    {
+        while (App.Rules.Alerts.TryDequeue(out var alert))
+        {
+            switch (alert.Kind)
+            {
+                case Mailbox.Core.Rules.RuleActionKind.DisplayAlert:
+                case Mailbox.Core.Rules.RuleActionKind.DesktopAlert:
+                {
+                    var described = DescribeArrival(alert.Address, alert.MessageId);
+                    var summary = alert.Kind == Mailbox.Core.Rules.RuleActionKind.DisplayAlert && alert.Text.Length > 0
+                        ? alert.Text
+                        : described?.From ?? alert.Address;
+                    var body = described is null
+                        ? alert.RuleName
+                        : (described.Subject.Length > 0 ? described.Subject : "(no subject)");
+
+                    _notifier.Notify(ToastFor(new NewMailToast(summary, body, alert.Address, alert.MessageId)));
+                    break;
+                }
+
+                case Mailbox.Core.Rules.RuleActionKind.PlaySound:
+                    Notifications.Sounds.Play(alert.Text);
+                    break;
+            }
+        }
+    }
 
     /// <summary>What a new-mail toast says about one message, read back from its account's store.</summary>
     private static ArrivedMessage? DescribeArrival(string address, long id)
@@ -1895,7 +1960,7 @@ public partial class MainWindow : Window
         if (id == MailCommands.Categorize.Id) { ShowCategorizeMenu(shell, rows); return true; }
         if (id == MailCommands.Snooze.Id) { ShowSnoozeMenu(shell, rows); return true; }
         if (id == MailCommands.MoveTo.Id || id == ViewCommands.MoveToQuick.Id) { ShowMoveMenu(shell, rows); return true; }
-        if (id == MailCommands.Rules.Id) { _ = new RulesAndAlertsDialog().ShowDialog(this); return true; }
+        if (id == MailCommands.Rules.Id) { ShowRulesMenu(shell, rows); return true; }
         if (id == MailCommands.NewItems.Id) { ShowNewItemsMenu(); return true; }
         if (id == MailCommands.FilterEmail.Id) { ShowFilterMenu(shell); return true; }
 
@@ -2139,6 +2204,91 @@ public partial class MainWindow : Window
         }
 
         _ = new JunkOptionsDialog(account.Mail, App.MailOptions).ShowDialog(this);
+    }
+
+    /// <summary>
+    /// The Rules menu, in the reference's order: Always Move Messages From the selection's
+    /// sender, Always Move Messages To its recipient, Create Rule from the message, and Manage
+    /// Rules &amp; Alerts.
+    /// </summary>
+    private void ShowRulesMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
+    {
+        var flyout = new MenuFlyout();
+        var account = shell.CurrentAccountForCategories();
+        var message = rows.Count == 1 ? _openMessage : null;
+        var from = message?.From.Mailboxes.FirstOrDefault();
+        var to = message?.To.Mailboxes.FirstOrDefault(m => !App.Accounts.All.Any(a => string.Equals(a.Account.Address, m.Address, StringComparison.OrdinalIgnoreCase)))
+                 ?? message?.To.Mailboxes.FirstOrDefault();
+
+        void Entry(string header, bool enabled, Func<Task> run)
+        {
+            var item = new MenuItem { Header = header, IsEnabled = enabled };
+            item.Click += async (_, _) => await run();
+            flyout.Items.Add(item);
+        }
+
+        var fromName = from is null ? null : (from.Name is { Length: > 0 } ? from.Name : from.Address);
+        var toName = to is null ? null : (to.Name is { Length: > 0 } ? to.Name : to.Address);
+
+        Entry(fromName is null ? "Always Move Messages From: …" : $"Always Move Messages From: {fromName}",
+            from is not null && account is not null,
+            () => AlwaysMoveAsync(shell, account!, new RuleCondition(RuleConditionKind.From) { Values = [from!.Address] }, fromName!));
+
+        Entry(toName is null ? "Always Move Messages To: …" : $"Always Move Messages To: {toName}",
+            to is not null && account is not null,
+            () => AlwaysMoveAsync(shell, account!, new RuleCondition(RuleConditionKind.SentTo) { Values = [to!.Address] }, toName!));
+
+        flyout.Items.Add(new Separator());
+
+        Entry("Create Rule…", message is not null && account is not null, async () =>
+        {
+            var dialog = new CreateRuleDialog(account!.Mail, account.Account.Id, message!);
+            await dialog.ShowDialog(this);
+            if (dialog.Result is { } rule && dialog.RunNow) RunRuleOnCurrentFolder(shell, account, rule);
+        });
+
+        Entry("Manage Rules & Alerts…", true, async () =>
+        {
+            await new RulesAndAlertsDialog(shell.CurrentAddress).ShowDialog(this);
+            shell.Refresh();
+        });
+
+        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+    }
+
+    /// <summary>
+    /// Always Move Messages From/To: a folder is chosen, a rule is written that moves matching
+    /// mail there, and it runs on the folder at once — the reference's three steps in one.
+    /// </summary>
+    private async Task AlwaysMoveAsync(ShellViewModel shell, OpenAccount account, RuleCondition condition, string who)
+    {
+        var folder = await RuleValues.FolderAsync(this, account.Mail, account.Account.Id, null);
+        if (folder is null) return;
+
+        var rule = account.Mail.AddRule(new MailRule
+        {
+            Name = who,
+            Conditions = [condition],
+            Actions =
+            [
+                new RuleAction(RuleActionKind.MoveToFolder) { FolderId = folder.Id, FolderName = folder.Name },
+                new RuleAction(RuleActionKind.StopProcessing),
+            ],
+        }, DateTimeOffset.UtcNow);
+
+        RunRuleOnCurrentFolder(shell, account, rule);
+    }
+
+    private void RunRuleOnCurrentFolder(ShellViewModel shell, OpenAccount account, MailRule rule)
+    {
+        var folder = shell.CurrentFolder ?? account.Mail.FolderWithRole(account.Account.Id, FolderRole.Inbox);
+        if (folder is null) return;
+
+        var count = App.Rules.RunNow(account.Mail, folder, [rule]);
+        shell.Refresh();
+        shell.StatusRight = count == 0
+            ? $"Rule “{rule.Name}” created; nothing in {folder.Name} matched it."
+            : $"Rule “{rule.Name}” created and applied to {count} message{(count == 1 ? "" : "s")}.";
     }
 
     /// <summary>The Move menu: every folder of the account the selection is in.</summary>
@@ -2507,6 +2657,8 @@ public partial class MainWindow : Window
                     _notifier.Notify(ToastFor(toast));
                 }
             }
+
+            ShowRuleAlerts();
         }
         catch (OperationCanceledException)
         {
