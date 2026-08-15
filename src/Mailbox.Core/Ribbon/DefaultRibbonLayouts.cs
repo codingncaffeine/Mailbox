@@ -177,6 +177,7 @@ public static class DefaultRibbonLayouts
                     {
                         Id = "new",
                         Label = "New",
+                        KeyTip = "ZN",
                         CollapsePriority = 7,
                         Items =
                         [
@@ -189,6 +190,7 @@ public static class DefaultRibbonLayouts
                     {
                         Id = "delete",
                         Label = "Delete",
+                        KeyTip = "ZD",
                         CollapsePriority = 4,
                         // The stack is icon-only; only Delete and Archive carry labels.
                         Items =
@@ -205,6 +207,7 @@ public static class DefaultRibbonLayouts
                     {
                         Id = "respond",
                         Label = "Respond",
+                        KeyTip = "ZR",
                         CollapsePriority = 1,
                         Items =
                         [
@@ -223,6 +226,7 @@ public static class DefaultRibbonLayouts
                     {
                         Id = "quicksteps",
                         Label = "Quick Steps",
+                        KeyTip = "ZQ",
                         CollapsePriority = 6,
                         IsGallery = true,
                         DialogLauncher = MailCommands.QuickSteps.Id,
@@ -240,6 +244,7 @@ public static class DefaultRibbonLayouts
                     {
                         Id = "move",
                         Label = "Move",
+                        KeyTip = "ZM",
                         CollapsePriority = 5,
                         Items =
                         [
@@ -252,6 +257,7 @@ public static class DefaultRibbonLayouts
                     {
                         Id = "tags",
                         Label = "Tags",
+                        KeyTip = "ZT",
                         CollapsePriority = 3,
                         DialogLauncher = MailCommands.FollowUp.Id,
                         Items =
@@ -266,6 +272,7 @@ public static class DefaultRibbonLayouts
                     {
                         Id = "find",
                         Label = "Find",
+                        KeyTip = "ZF",
                         CollapsePriority = 2,
                         Items =
                         [
@@ -280,6 +287,7 @@ public static class DefaultRibbonLayouts
                     {
                         Id = "speech",
                         Label = "Speech",
+                        KeyTip = "ZS",
                         CollapsePriority = 10,
                         Items =
                         [
@@ -296,6 +304,7 @@ public static class DefaultRibbonLayouts
                     {
                         Id = "apps",
                         Label = "Apps",
+                        KeyTip = "ZA",
                         CollapsePriority = 9,
                         Items = [RibbonItem.Large(ViewCommands.Apps.Id)],
                     },
@@ -304,6 +313,7 @@ public static class DefaultRibbonLayouts
                     {
                         Id = "sendreceivegroup",
                         Label = "Send/Receive",
+                        KeyTip = "ZY",
                         CollapsePriority = 8,
                         Items = [RibbonItem.Large(MailCommands.SendReceiveAll.Id)],
                     },
@@ -321,6 +331,7 @@ public static class DefaultRibbonLayouts
                     {
                         Id = "sendreceive",
                         Label = "Send & Receive",
+                        KeyTip = "ZE",
                         CollapsePriority = 1,
                         Items = [RibbonItem.Large(MailCommands.SendReceiveAll.Id)],
                     },
@@ -328,6 +339,7 @@ public static class DefaultRibbonLayouts
                     {
                         Id = "preferences",
                         Label = "Preferences",
+                        KeyTip = "ZP",
                         CollapsePriority = 2,
                         Items = [RibbonItem.Large(MailCommands.WorkOffline.Id)],
                     },

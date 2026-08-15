@@ -91,6 +91,16 @@ public sealed class KeyTipSession
 
     public bool IsActive { get; private set; }
 
+    /// <summary>
+    /// How deep the traversal is: 1 for the tabs, 2 for a tab's commands, 3 inside a collapsed
+    /// group. Exposed for the harness, which cannot photograph a popup and so has to be able to
+    /// ask where it got to.
+    /// </summary>
+    public int Depth => _ancestors.Count + 1;
+
+    /// <summary>How many badges are on screen at this level.</summary>
+    public int BadgeCount => _shown.Count;
+
     /// <summary>Raised whenever the session opens or closes, so a host can mark its state.</summary>
     public event EventHandler? ActiveChanged;
 

@@ -241,6 +241,21 @@ public sealed record RibbonGroup
     /// ordering of <c>Scale</c> declarations in the published ribbon framework spec.
     /// </summary>
     public int CollapsePriority { get; init; }
+
+    /// <summary>
+    /// The KeyTip for the group's own button once it has collapsed to one.
+    /// </summary>
+    /// <remarks>
+    /// Only reachable while the group is collapsed: an expanded group is not a control, and its
+    /// commands carry their own tips. This is what gives Alt a third level — the tab, then the
+    /// group, then the command inside it — and without it a narrow window silently drops every
+    /// command in a collapsed group out of the keyboard entirely.
+    /// <para>
+    /// Two characters beginning with Z, which is the convention the reference uses for exactly
+    /// this and keeps them clear of the single letters the commands have taken.
+    /// </para>
+    /// </remarks>
+    public string? KeyTip { get; init; }
 }
 
 /// <summary>
@@ -425,18 +440,64 @@ public sealed record RibbonLayout
                 .Select(i => i.Command)
                 .Distinct();
 
-            var duplicates = placed
+            // A collapsed group's own badge shares a level with the commands still on the bar,
+            // so its tip has to be unambiguous against theirs — the two are not separate
+            // levels, whatever the third level below it is.
+            var claims = placed
                 .Select(id => catalog.TryGet(id, out var c) ? c : null)
                 .Where(c => c?.KeyTip is not null)
-                .GroupBy(c => c!.KeyTip!, StringComparer.OrdinalIgnoreCase)
+                .Select(c => (Tip: c!.KeyTip!, Owner: c.Id.Value))
+                .Concat(tab.Groups
+                    .Where(g => g.KeyTip is not null)
+                    .Select(g => (Tip: g.KeyTip!, Owner: $"group '{g.Id}'")));
+
+            var all = claims.ToList();
+
+            var duplicates = all
+                .GroupBy(c => c.Tip, StringComparer.OrdinalIgnoreCase)
                 .Where(g => g.Count() > 1);
 
             conflicts.AddRange(duplicates.Select(g =>
                 $"{Module}/{tab.Id}: KeyTip '{g.Key}' claimed by " +
-                string.Join(", ", g.Select(c => c!.Id))));
+                string.Join(", ", g.Select(c => c.Owner))));
+
+            conflicts.AddRange(Blocked(all).Select(x =>
+                $"{Module}/{tab.Id}: KeyTip '{x.Shorter.Tip}' ({x.Shorter.Owner}) fires before " +
+                $"'{x.Longer.Tip}' ({x.Longer.Owner}) can be typed"));
         }
 
         return conflicts;
+    }
+
+    /// <summary>
+    /// Pairs where one tip is a strict prefix of another, and so makes it unreachable.
+    /// </summary>
+    /// <remarks>
+    /// Traversal activates on an exact match, because waiting to see whether another character
+    /// is coming would make every single-letter tip feel stuck. That is the right behaviour and
+    /// it has a consequence: a tip that is a prefix of a longer one fires first, every time, and
+    /// the longer one can never be typed at all.
+    /// <para>
+    /// This is not theoretical. Eight commands on the Home tab were unreachable this way —
+    /// <c>R</c> for Reply took <c>RM</c>, <c>RD</c> and <c>RU</c> with it — and every one of
+    /// them still drew a badge, which is what made it invisible.
+    /// </para>
+    /// </remarks>
+    private static IEnumerable<(( string Tip, string Owner) Shorter, (string Tip, string Owner) Longer)>
+        Blocked(IReadOnlyList<(string Tip, string Owner)> claims)
+    {
+        foreach (var shorter in claims)
+        {
+            foreach (var longer in claims)
+            {
+                if (longer.Tip.Length <= shorter.Tip.Length) continue;
+
+                if (longer.Tip.StartsWith(shorter.Tip, StringComparison.OrdinalIgnoreCase))
+                {
+                    yield return (shorter, longer);
+                }
+            }
+        }
     }
 
     /// <summary>Every command the layout places, for the "already on the ribbon" check.</summary>

@@ -32,7 +32,7 @@ public static class MailCommands
         Description = "Create a new item of any type.",
         Icon = "new-items",
         Category = "New",
-        KeyTip = "NI",
+        KeyTip = "I",
     };
 
     // ---- Delete ----------------------------------------------------------------------
@@ -145,7 +145,7 @@ public static class MailCommands
         Icon = "meeting",
         Category = "Respond",
         Scope = ModuleScope.Mail,
-        KeyTip = "RM",
+        KeyTip = "H",
         DefaultGesture = "Ctrl+Alt+R",
         RequiresSingleSelection = true,
     };
@@ -158,7 +158,7 @@ public static class MailCommands
         Icon = "more",
         Category = "Respond",
         Scope = ModuleScope.Mail,
-        KeyTip = "RD",
+        KeyTip = "V",
         RequiresSelection = true,
     };
 
@@ -183,7 +183,7 @@ public static class MailCommands
         Icon = "rules",
         Category = "Move",
         Scope = ModuleScope.Mail,
-        KeyTip = "RU",
+        KeyTip = "E",
     };
 
     public static readonly MailboxCommand QuickSteps = new()
@@ -253,7 +253,7 @@ public static class MailCommands
         Description = "Open the address book to look up a contact.",
         Icon = "address-book",
         Category = "Find",
-        KeyTip = "AB",
+        KeyTip = "B",
         DefaultGesture = "Ctrl+Shift+B",
     };
 
@@ -276,7 +276,7 @@ public static class MailCommands
         Description = "Check every account for new mail and send anything waiting in the Outbox.",
         Icon = "send-receive",
         Category = "Send & Receive",
-        KeyTip = "AA",
+        KeyTip = "O",
         DefaultGesture = "F9",
     };
 

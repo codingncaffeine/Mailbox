@@ -137,6 +137,86 @@ public class CommandCatalogTests
         { "compose", DefaultRibbonLayouts.Compose },
     };
 
+    /// <summary>
+    /// A collapsed group's badge appears beside the commands still on the bar, so the two share
+    /// a level and a group tip has to be unambiguous against a command's.
+    /// </summary>
+    [Fact]
+    public void AGroupCannotTakeATipACommandInTheSameTabAlreadyHas()
+    {
+        var layout = new RibbonLayout
+        {
+            Module = MailboxModule.Mail,
+            Tabs =
+            [
+                new RibbonTab
+                {
+                    Id = "home",
+                    Label = "Home",
+                    Groups =
+                    [
+                        new RibbonGroup
+                        {
+                            Id = "respond",
+                            Label = "Respond",
+
+                            // Reply's own tip.
+                            KeyTip = "R",
+                            Items = [RibbonItem.Large(MailCommands.Reply.Id)],
+                        },
+                    ],
+                },
+            ],
+        };
+
+        var conflict = Assert.Single(layout.FindKeyTipConflicts(Everything()));
+
+        Assert.Contains("'R'", conflict, StringComparison.Ordinal);
+        Assert.Contains("group 'respond'", conflict, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TwoGroupsInATabCannotShareATip()
+    {
+        var layout = new RibbonLayout
+        {
+            Module = MailboxModule.Mail,
+            Tabs =
+            [
+                new RibbonTab
+                {
+                    Id = "home",
+                    Label = "Home",
+                    Groups =
+                    [
+                        new RibbonGroup { Id = "a", Label = "A", KeyTip = "ZZ", Items = [] },
+                        new RibbonGroup { Id = "b", Label = "B", KeyTip = "ZZ", Items = [] },
+                    ],
+                },
+            ],
+        };
+
+        Assert.Single(layout.FindKeyTipConflicts(Everything()));
+    }
+
+    /// <summary>
+    /// Every group that can collapse needs one, or its commands leave the keyboard as soon as
+    /// the window is narrow enough to fold it away.
+    /// </summary>
+    [Fact]
+    public void EveryClassicGroupCanBeReachedFromTheKeyboard()
+    {
+        var missing = DefaultRibbonLayouts.Mail.Tabs
+            .SelectMany(t => t.Groups.Select(g => (Tab: t.Id, Group: g)))
+            .Where(x => x.Group.KeyTip is null)
+            .Select(x => $"{x.Tab}/{x.Group.Id}")
+            .ToList();
+
+        Assert.True(missing.Count == 0,
+            "Groups with no KeyTip vanish from Alt traversal once they collapse: "
+            + string.Join(", ", missing));
+    }
+
     [Fact]
     public void ModuleScopingFiltersCorrectly()
     {
