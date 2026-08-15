@@ -48,7 +48,7 @@ public sealed class UpdatePasswordDialog : Window
         cancel.Click += (_, _) => Close();
 
         var heading = new TextBlock { Text = _account.Address, FontWeight = FontWeight.SemiBold };
-        Bind(heading, TextBlock.ForegroundProperty, "text.primary.brush");
+        Bind(heading, TextBlock.ForegroundProperty, "dialog.foreground.brush");
 
         var where = new TextBlock
         {
@@ -57,10 +57,10 @@ public sealed class UpdatePasswordDialog : Window
             Margin = new Thickness(0, 2, 0, 14),
             MaxWidth = 380,
         };
-        Bind(where, TextBlock.ForegroundProperty, "text.secondary.brush");
-        Bind(_status, TextBlock.ForegroundProperty, "text.secondary.brush");
+        Bind(where, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
+        Bind(_status, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
 
-        Content = new StackPanel
+        var body = new StackPanel
         {
             Margin = new Thickness(20),
             Children =
@@ -85,6 +85,8 @@ public sealed class UpdatePasswordDialog : Window
             },
         };
 
+        DialogChrome.Apply(this, body);
+
         Bind(this, BackgroundProperty, "surface.ground.brush");
     }
 
@@ -96,7 +98,7 @@ public sealed class UpdatePasswordDialog : Window
             Width = 80,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        Bind(block, TextBlock.ForegroundProperty, "text.primary.brush");
+        Bind(block, TextBlock.ForegroundProperty, "dialog.foreground.brush");
         return block;
     }
 

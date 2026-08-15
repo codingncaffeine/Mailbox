@@ -375,6 +375,16 @@
         <Setter Property="Foreground" Value="{DynamicResource titlebar.foreground.brush}" />
     </Style>
 
+    <!-- A dialog's caption stands on the dialog's ground, which is the opposite end of the
+         ramp from the title bar's in two of the four themes. -->
+    <Style Selector="Button.caption.on-dialog">
+        <Setter Property="Foreground" Value="{DynamicResource dialog.foreground.brush}" />
+    </Style>
+
+    <Style Selector="Button.caption-close.on-dialog">
+        <Setter Property="Foreground" Value="{DynamicResource dialog.foreground.brush}" />
+    </Style>
+
     <Style Selector="Button.caption:pointerover">
         <Setter Property="Background" Value="#22FFFFFF" />
     </Style>
@@ -394,6 +404,50 @@
 
     <Style Selector="Button.caption-close:pressed">
         <Setter Property="Background" Value="#F1707A" />
+    </Style>
+
+    <!-- ============================= Dialog contents =========================== -->
+
+    <!--
+        Everything inside a dialog takes the dialog's colours by default, rather than each
+        dialog naming them control by control. The same reasoning as repointing the control
+        theme's palette: a surface nobody has thought about yet still comes out right.
+
+        Anything that sets its own is unaffected, because a local value beats a style setter —
+        which is what lets the Options pages keep their explicit bindings and the destructive
+        button in a confirmation stay red.
+    -->
+    <Style Selector="Border.dialogroot TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource dialog.foreground.brush}" />
+    </Style>
+
+    <!--
+        The caption buttons are inside a dialog too, and are not that kind of button; nor is
+        anything classed "plain", which is how a control that is a button only mechanically —
+        a fold arrow in a tree — opts out of being drawn as one.
+    -->
+    <Style Selector="Border.dialogroot Button:not(.caption):not(.caption-close):not(.plain)">
+        <Setter Property="Background" Value="{DynamicResource dialog.surface.brush}" />
+        <Setter Property="Foreground" Value="{DynamicResource dialog.surface.text.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource dialog.border.brush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="MinWidth" Value="74" />
+        <Setter Property="Padding" Value="12,4" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+    </Style>
+
+    <!-- A list in a dialog is a box on the ground, as the reference draws it. Lists elsewhere
+         are transparent because they sit on a pane of their own. -->
+    <Style Selector="Border.dialogroot ListBox">
+        <Setter Property="Background" Value="{DynamicResource dialog.surface.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource dialog.border.brush}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
+    <!-- Ink inside that box is the box's, not the ground's — declared after the rule above so
+         it wins for the rows, which build their own text rather than getting a presenter's. -->
+    <Style Selector="Border.dialogroot ListBox TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource dialog.surface.text.brush}" />
     </Style>
 
     <!-- Unread messages are blue in the reference application, not merely bold. -->

@@ -86,7 +86,12 @@ internal static class WindowFrame
     /// corner shows through as a wedge — the same failure the workspace's own corners had.
     /// The background belongs here rather than on the window, which is transparent.
     /// </remarks>
-    internal static Control Rounded(Control content)
+    /// <param name="background">
+    /// Which token fills the shape. The shell's chrome by default; a dialog passes its own,
+    /// because the two are opposite ends of the ramp in half the themes.
+    /// </param>
+    internal static Control Rounded(
+        Control content, string background = "ribbon.tabstrip.background.brush")
     {
         ArgumentNullException.ThrowIfNull(content);
 
@@ -96,8 +101,7 @@ internal static class WindowFrame
             ClipToBounds = true,
             Child = content,
         };
-        border[!Border.BackgroundProperty] =
-            new DynamicResourceExtension("ribbon.tabstrip.background.brush");
+        border[!Border.BackgroundProperty] = new DynamicResourceExtension(background);
 
         return border;
     }

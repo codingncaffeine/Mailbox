@@ -259,6 +259,7 @@ public sealed class RibbonEditorView : CustomizationEditor
             Padding = default,
             Background = null,
             BorderThickness = default,
+            Classes = { "plain" },
         };
 
         button.Click += (_, _) =>

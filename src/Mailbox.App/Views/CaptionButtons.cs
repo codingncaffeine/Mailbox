@@ -26,11 +26,19 @@ public sealed class CaptionButtons : StackPanel
 {
     private const double ButtonWidth = 48;
     private const double ButtonHeight = 44;
+
+    /// <summary>
+    /// A dialog's caption is shorter and carries only the close button, as the reference's
+    /// dialogs do — there is nothing useful about minimizing a modal.
+    /// </summary>
+    private const double DialogButtonWidth = 46;
+    private const double DialogButtonHeight = 33;
+
     private const double GlyphBox = 10;
     private const double StrokeWidth = 1;
 
     private readonly Window _window;
-    private readonly Button _maximize;
+    private readonly Button? _maximize;
 
     /// <summary>
     /// Forces a caption button into its hover state so the fidelity harness can photograph it.
@@ -47,24 +55,31 @@ public sealed class CaptionButtons : StackPanel
         }
     }
 
-    public CaptionButtons(Window window)
+    /// <param name="dialog">
+    /// True for a dialog: a shorter caption with a close button only, painted from the dialog
+    /// tokens rather than the title bar's.
+    /// </param>
+    public CaptionButtons(Window window, bool dialog = false)
     {
         _window = window;
         Orientation = Orientation.Horizontal;
         VerticalAlignment = VerticalAlignment.Top;
 
-        Children.Add(Build(MinimizeGlyph(), "Minimize", isClose: false,
-            () => _window.WindowState = WindowState.Minimized));
-
-        _maximize = Build(MaximizeGlyph(), "Maximize", isClose: false, ToggleMaximize);
-        Children.Add(_maximize);
-
-        Children.Add(Build(CloseGlyph(), "Close", isClose: true, () => _window.Close()));
-
-        _window.PropertyChanged += (_, e) =>
+        if (!dialog)
         {
-            if (e.Property == Window.WindowStateProperty) SyncMaximizeGlyph();
-        };
+            Children.Add(Build(MinimizeGlyph(), "Minimize", isClose: false, dialog,
+                () => _window.WindowState = WindowState.Minimized));
+
+            _maximize = Build(MaximizeGlyph(), "Maximize", isClose: false, dialog, ToggleMaximize);
+            Children.Add(_maximize);
+
+            _window.PropertyChanged += (_, e) =>
+            {
+                if (e.Property == Window.WindowStateProperty) SyncMaximizeGlyph();
+            };
+        }
+
+        Children.Add(Build(CloseGlyph(), "Close", isClose: true, dialog, () => _window.Close()));
     }
 
     private void ToggleMaximize()
@@ -74,18 +89,21 @@ public sealed class CaptionButtons : StackPanel
 
     private void SyncMaximizeGlyph()
     {
+        if (_maximize is null) return;
+
         var maximized = _window.WindowState == WindowState.Maximized;
         _maximize.Content = maximized ? RestoreGlyph() : MaximizeGlyph();
         ToolTip.SetTip(_maximize, maximized ? "Restore Down" : "Maximize");
     }
 
-    private static Button Build(Control glyph, string tip, bool isClose, Action onClick)
+    private static Button Build(
+        Control glyph, string tip, bool isClose, bool dialog, Action onClick)
     {
         var button = new Button
         {
             Content = glyph,
-            Width = ButtonWidth,
-            Height = ButtonHeight,
+            Width = dialog ? DialogButtonWidth : ButtonWidth,
+            Height = dialog ? DialogButtonHeight : ButtonHeight,
             Padding = default,
             BorderThickness = default,
             CornerRadius = default,
@@ -93,6 +111,10 @@ public sealed class CaptionButtons : StackPanel
             VerticalContentAlignment = VerticalAlignment.Center,
             Classes = { isClose ? "caption-close" : "caption" },
         };
+
+        // A dialog's caption sits on the dialog's ground, not the title bar's, and in two of
+        // the four themes those are opposite ends of the ramp.
+        if (dialog) button.Classes.Add("on-dialog");
 
         ToolTip.SetTip(button, tip);
         button.Click += (_, _) => onClick();

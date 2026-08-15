@@ -36,9 +36,9 @@ public sealed class MailboxCleanupDialog : Window
             Text = "Mailbox size",
             FontWeight = FontWeight.SemiBold,
         };
-        Bind(heading, TextBlock.ForegroundProperty, "text.primary.brush");
+        Bind(heading, TextBlock.ForegroundProperty, "dialog.foreground.brush");
 
-        Content = new StackPanel
+        var body = new StackPanel
         {
             Margin = new Thickness(20),
             Children =
@@ -55,6 +55,8 @@ public sealed class MailboxCleanupDialog : Window
                 },
             },
         };
+
+        DialogChrome.Apply(this, body);
 
         Bind(this, BackgroundProperty, "surface.ground.brush");
         Populate();
@@ -105,10 +107,10 @@ public sealed class MailboxCleanupDialog : Window
             Width = 300,
             FontWeight = emphasise ? FontWeight.SemiBold : FontWeight.Normal,
         };
-        Bind(name, TextBlock.ForegroundProperty, "text.primary.brush");
+        Bind(name, TextBlock.ForegroundProperty, "dialog.foreground.brush");
 
         var amount = new TextBlock { Text = value };
-        Bind(amount, TextBlock.ForegroundProperty, "text.secondary.brush");
+        Bind(amount, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
 
         return new StackPanel
         {

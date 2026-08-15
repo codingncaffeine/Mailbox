@@ -74,10 +74,10 @@ public sealed class AccountWizard : Window
         _password.TextChanged += (_, _) => UpdateAddButton();
         _protocol.SelectionChanged += (_, _) => AddressChanged();
 
-        Bind(_guidance, TextBlock.ForegroundProperty, "text.secondary.brush");
-        Bind(_status, TextBlock.ForegroundProperty, "text.secondary.brush");
+        Bind(_guidance, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
+        Bind(_status, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
 
-        Content = Layout(cancel);
+        DialogChrome.Apply(this, Layout(cancel));
         Bind(this, BackgroundProperty, "surface.ground.brush");
     }
 
@@ -89,7 +89,7 @@ public sealed class AccountWizard : Window
             FontSize = 20,
             Margin = new Thickness(0, 0, 0, 4),
         };
-        Bind(heading, TextBlock.ForegroundProperty, "text.primary.brush");
+        Bind(heading, TextBlock.ForegroundProperty, "dialog.foreground.brush");
 
         var subheading = new TextBlock
         {
@@ -97,7 +97,7 @@ public sealed class AccountWizard : Window
             Margin = new Thickness(0, 0, 0, 18),
             TextWrapping = TextWrapping.Wrap,
         };
-        Bind(subheading, TextBlock.ForegroundProperty, "text.secondary.brush");
+        Bind(subheading, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
 
         var buttons = new StackPanel
         {
@@ -163,7 +163,7 @@ public sealed class AccountWizard : Window
             Width = width,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        Bind(block, TextBlock.ForegroundProperty, "text.primary.brush");
+        Bind(block, TextBlock.ForegroundProperty, "dialog.foreground.brush");
         return block;
     }
 
