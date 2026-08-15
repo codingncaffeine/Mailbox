@@ -237,6 +237,22 @@ public partial class MainWindow : Window
                     await new RulesAndAlertsDialog().ShowDialog(this);
                 };
                 break;
+
+            // A run posed mid-flight, since a real one on a scratch store finishes faster than
+            // a capture can be taken. The addresses are invented, as all sample data is.
+            case "progress":
+                Opened += (_, _) =>
+                {
+                    var tasks = new SendReceiveTasks(["you@example.com", "other@example.com"]);
+                    tasks.Report(new PollProgress("you@example.com", 0, 0, "Sending"));
+                    tasks.Report(new PollProgress("you@example.com", 0, 0, "Connecting"));
+                    tasks.Report(new PollProgress("you@example.com", 3, 8, "Downloading"));
+                    tasks.Report(new PollProgress("other@example.com", 0, 0, "Sending"));
+
+                    CaptureNextWindow();
+                    new SendReceiveProgressDialog(tasks, App.Settings, () => { }).Show(this);
+                };
+                break;
         }
     }
 
@@ -707,14 +723,32 @@ public partial class MainWindow : Window
         if (id == MailCommands.SendReceiveAll.Id) { _ = SendReceiveAsync(shell); return; }
         if (id == MailCommands.WorkOffline.Id) { ToggleWorkOffline(shell); return; }
         if (id == MailCommands.NewEmail.Id) { NewMessage(); return; }
+        if (id == ViewCommands.ShowProgress.Id) { ShowProgressDialog(shell); return; }
+        if (id == ViewCommands.CancelAll.Id) { CancelTransfer(); return; }
 
         shell.StatusRight = $"{command.Label} — not wired yet ({command.Id})";
     }
 
     /// <summary>
-    /// Send/Receive All Folders. Runs off the UI thread and reports through the status bar;
-    /// the button is not disabled because a second press should be able to cancel, which is
-    /// what Phase 8's progress dialog will add.
+    /// Show Progress, from the Send/Receive tab. Reopens the dialog for the run in flight, or
+    /// says there is nothing to show rather than opening an empty one.
+    /// </summary>
+    private void ShowProgressDialog(ShellViewModel shell)
+    {
+        if (_tasks is null)
+        {
+            shell.StatusRight = "Nothing is being sent or received.";
+            return;
+        }
+
+        // The checkbox turns the dialog off for a run that opens it by itself, not for a user
+        // who has just asked for it.
+        ShowProgressDialog(force: true);
+    }
+
+    /// <summary>
+    /// Send/Receive All Folders. Runs off the UI thread and reports through the status bar and
+    /// the progress dialog, which is also where it is cancelled from.
     /// </summary>
     private async Task SendReceiveAsync(ShellViewModel shell)
     {
@@ -728,32 +762,91 @@ public partial class MainWindow : Window
         }
 
         _transferring = true;
-        void OnProgress(object? _, PollProgress p) =>
-            Dispatcher.UIThread.Post(() => shell.StatusRight = $"{p.Stage} {p.Account}…");
+
+        _tasks = new SendReceiveTasks(accounts.Select(a => a.Connection.Address));
+        _cancellation = new CancellationTokenSource();
+        ShowProgressDialog();
+
+        void OnProgress(object? _, PollProgress p) => Dispatcher.UIThread.Post(() =>
+        {
+            shell.StatusRight = $"{p.Stage} {p.Account}…";
+            _tasks?.Report(p);
+            _progress?.Refresh();
+        });
 
         App.Transfer.Progress += OnProgress;
 
         try
         {
             var result = await Task.Run(() =>
-                App.Transfer.RunAsync(accounts, DateTimeOffset.UtcNow));
+                App.Transfer.RunAsync(accounts, DateTimeOffset.UtcNow, _cancellation.Token));
 
+            _tasks.Finish(result);
             shell.StatusRight = result.Summary();
             shell.Refresh();
+        }
+        catch (OperationCanceledException)
+        {
+            _tasks.Finish(new SendReceiveResult([]));
+            shell.StatusRight = "Send/receive cancelled.";
         }
         catch (Exception ex)
         {
             Log.Crash("send/receive", ex);
+            _tasks.Finish(new SendReceiveResult([]));
             shell.StatusRight = "Send/receive could not finish. See the log.";
         }
         finally
         {
             App.Transfer.Progress -= OnProgress;
             _transferring = false;
+
+            _progress?.Refresh();
+
+            // A run that worked has nothing left to say, so the dialog goes when it does. One
+            // that did not is the reason the dialog has an Errors tab, and stays.
+            if (_tasks.Errors.Count == 0) CloseProgressDialog();
+
+            _cancellation.Dispose();
+            _cancellation = null;
         }
     }
 
     private bool _transferring;
+    private SendReceiveTasks? _tasks;
+    private SendReceiveProgressDialog? _progress;
+    private CancellationTokenSource? _cancellation;
+
+    /// <summary>
+    /// Opens the progress dialog for the run in flight, unless the user has turned it off.
+    /// </summary>
+    /// <remarks>
+    /// Shown rather than shown modally: a send/receive that blocks the window until it finishes
+    /// is a mail client that stops being a mail client every time it checks for mail.
+    /// </remarks>
+    private void ShowProgressDialog(bool force = false)
+    {
+        if (_tasks is null) return;
+        if (!force && App.Settings.GetBool(SendReceiveProgressDialog.HideSetting)) return;
+        if (_progress is not null) return;
+
+        _progress = new SendReceiveProgressDialog(_tasks, App.Settings, CancelTransfer);
+        _progress.Closed += (_, _) => _progress = null;
+        _progress.Show(this);
+    }
+
+    private void CloseProgressDialog()
+    {
+        _progress?.Close();
+        _progress = null;
+    }
+
+    /// <summary>Cancel All, from the progress dialog or the Send/Receive tab.</summary>
+    private void CancelTransfer()
+    {
+        _cancellation?.Cancel();
+        if (DataContext is ShellViewModel shell) shell.StatusRight = "Cancelling…";
+    }
 
     /// <summary>
     /// Everything the Backstage's Account Information page can ask for. One place, so a new
