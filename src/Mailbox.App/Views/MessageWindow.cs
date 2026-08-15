@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Mailbox.Security;
 using Mailbox.Store;
 using Mailbox.Theming;
 using MimeKit;
@@ -24,7 +25,8 @@ public sealed class MessageWindow : Window
     private readonly AttachmentStrip _attachments = new();
 
     public MessageWindow(
-        ThemeService themes, Func<MailRepository?> mail, MimeMessage message, byte[]? raw)
+        ThemeService themes, Func<MailRepository?> mail, MimeMessage message, byte[]? raw,
+        DkimResult? verified = null)
     {
         ArgumentNullException.ThrowIfNull(message);
 
@@ -50,7 +52,7 @@ public sealed class MessageWindow : Window
         DialogChrome.Apply(this, root);
 
         _attachments.Show(message);
-        _body.Show(message, message.TextBody ?? string.Empty);
+        _body.Show(message, message.TextBody ?? string.Empty, verified);
         _ = _body.ApplySenderPolicyAsync();
     }
 

@@ -16,6 +16,7 @@ using Mailbox.Core.Commands;
 using Mailbox.Core.Ribbon;
 using Mailbox.Core.Settings;
 using Mailbox.Protocols;
+using Mailbox.Security;
 using Mailbox.Store;
 
 namespace Mailbox.App.Views;
@@ -511,8 +512,28 @@ public partial class MainWindow : Window
         _openRaw = raw;
 
         _attachments.Show(message);
-        _reading.Show(message, shell.SelectedMessage?.Body ?? string.Empty);
+        _reading.Show(message, shell.SelectedMessage?.Body ?? string.Empty, Verified(shell));
         _ = _reading.ApplySenderPolicyAsync();
+    }
+
+    /// <summary>
+    /// What was recorded about the selected message's signature when it arrived.
+    /// </summary>
+    /// <remarks>
+    /// Read, never checked. Verifying resolves a name the sender chose, and §19 does not allow
+    /// a lookup on the path that draws a message — so what the pane shows is what the poll
+    /// found, and a message that was never checked says so rather than being checked now.
+    /// </remarks>
+    private static DkimResult? Verified(ShellViewModel shell)
+    {
+        if (shell.SelectedMessage is not { } selected) return null;
+        if (shell.CurrentMail?.Authentication(selected.Id) is not { } stored) return null;
+
+        return new DkimResult(
+            Enum.TryParse<AuthVerdict>(stored.Dkim, ignoreCase: true, out var verdict)
+                ? verdict
+                : AuthVerdict.None,
+            stored.SigningDomain);
     }
 
     /// <summary>
@@ -579,7 +600,8 @@ public partial class MainWindow : Window
             return;
         }
 
-        new MessageWindow(App.Themes, () => shell.CurrentMail, message, _openRaw).Show(this);
+        new MessageWindow(App.Themes, () => shell.CurrentMail, message, _openRaw, Verified(shell))
+            .Show(this);
     }
 
     /// <summary>Opens the Options dialog modally over the shell, optionally on a given page.</summary>

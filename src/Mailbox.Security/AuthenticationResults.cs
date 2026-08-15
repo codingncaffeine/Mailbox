@@ -25,15 +25,19 @@ public enum AuthVerdict
 /// The results a receiving server recorded, read out of <c>Authentication-Results</c>.
 /// </summary>
 /// <remarks>
-/// Reading the header rather than verifying locally, for now. DKIM verification needs the
-/// signing domain's public key from DNS, and a reading pane that resolves a name chosen by the
-/// sender is a reading pane that talks to the network on the sender's behalf — which is the one
-/// thing §11 exists to prevent. Doing it properly means a resolver that is ours, on our
-/// schedule, and that is Phase 8 work.
+/// What the receiving server said, which is all three checks — SPF and DMARC can only be done by
+/// whoever took delivery, because both are about the connection the message arrived on and that
+/// connection is gone by the time we have the message.
 /// <para>
 /// The header is only as good as the server that wrote it, so only the topmost one is read: it
 /// was added by the last hop, which for a POP3 account is the provider we authenticated to.
 /// Anything below it was written by a machine the sender may control.
+/// </para>
+/// <para>
+/// DKIM is the one check that does not need the connection, so it is also done here, against the
+/// bytes in the store — see <see cref="DkimVerification"/>. That result is carried separately
+/// rather than folded in, because "we checked this ourselves" and "a server told us" are
+/// different kinds of evidence and the reader is shown which is which.
 /// </para>
 /// </remarks>
 public sealed partial record AuthenticationResults(

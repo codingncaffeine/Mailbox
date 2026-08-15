@@ -203,6 +203,26 @@ public static class Migrations
             added_utc  INTEGER NOT NULL
         );
         """,
+
+        // ---- 8: what checking a message's own signature came to -----------------------------
+        //
+        // Its own table rather than columns on the message, because it is learned after the
+        // message is stored and may never be learned at all: verifying reads a key from DNS, and
+        // §19 forbids doing that to draw a message. So it happens once, when the mail arrives
+        // and the network is already in hand, and what the reading pane shows comes from here.
+        //
+        // A row's absence is meaningful — it says this message has never been checked, which is
+        // a different thing from a check that failed, and the reader is told the difference.
+        """
+        CREATE TABLE message_authentication (
+            message_id      INTEGER NOT NULL PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+            -- The verdict as AuthVerdict spells it: none, pass, fail, softfail, neutral, error.
+            dkim            TEXT    NOT NULL,
+            -- The d= tag of the signature that passed, which is who the pass is evidence about.
+            signing_domain  TEXT,
+            checked_utc     INTEGER NOT NULL
+        );
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>

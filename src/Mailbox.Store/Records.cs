@@ -79,6 +79,17 @@ public sealed record MessageSummary(
     public string DisplayFrom => FromName.Length > 0 ? FromName : FromAddress;
 }
 
+/// <summary>
+/// What checking a message's own signatures came to, and when.
+/// </summary>
+/// <remarks>
+/// The verdict is spelled as <c>Mailbox.Security</c>'s <c>AuthVerdict</c> spells it, in lower
+/// case. The store does not reference that project — a store that knows about verdicts is a
+/// store that has to change when one is added — so it keeps the word and lets the caller read
+/// it back into the enum.
+/// </remarks>
+public sealed record MessageAuthentication(string Dkim, string? SigningDomain, DateTimeOffset Checked);
+
 /// <summary>A named colour a message can carry.</summary>
 public sealed record Category(long Id, string Name, string ColourToken, string? Shortcut, int Ordinal);
 

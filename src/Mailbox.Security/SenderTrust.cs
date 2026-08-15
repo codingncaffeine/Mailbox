@@ -30,6 +30,15 @@ public sealed record SenderTrust(
     AuthenticationResults Authentication,
     IReadOnlyList<TrustWarning> Warnings)
 {
+    /// <summary>
+    /// What checking the signature here came to, when that has been done.
+    /// </summary>
+    /// <remarks>
+    /// Null for every message received before the check existed, or received with no resolver
+    /// to hand. Null means <em>not checked</em>, which is not a result and is never shown as one.
+    /// </remarks>
+    public DkimResult? Verified { get; init; }
+
     public TrustLevel Level => Warnings.Count == 0
         ? TrustLevel.Quiet
         : Warnings.Max(w => w.Level);
@@ -47,7 +56,15 @@ public sealed record SenderTrust(
     /// they have exchanged mail with; see <see cref="LookalikeDomains"/> for why a list of
     /// famous brands is the wrong input.
     /// </param>
-    public static SenderTrust Evaluate(MimeMessage message, IEnumerable<string>? familiarDomains = null)
+    /// <param name="verified">
+    /// What checking the signature here came to, or null for a message that has not been
+    /// checked. Never resolved from inside this method: the lookup happens when mail is
+    /// received, and this is called to draw a message. See §19.
+    /// </param>
+    public static SenderTrust Evaluate(
+        MimeMessage message,
+        IEnumerable<string>? familiarDomains = null,
+        DkimResult? verified = null)
     {
         ArgumentNullException.ThrowIfNull(message);
 
@@ -56,6 +73,10 @@ public sealed record SenderTrust(
 
         var from = message.From.Mailboxes.FirstOrDefault();
         var domain = DomainOf(from?.Address);
+
+        // A signature checked here outranks the same claim read out of a header, because the
+        // header was written by a server and this was checked against the bytes in the store.
+        var signedHere = verified?.Verdict == AuthVerdict.Pass;
 
         if (results.Failed)
         {
@@ -66,13 +87,28 @@ public sealed record SenderTrust(
                 + "message did not come from one. Treat any request in it as unverified."));
         }
         else if (results.Spf is AuthVerdict.Fail or AuthVerdict.SoftFail
-                 && results.Dkim is not AuthVerdict.Pass)
+                 && results.Dkim is not AuthVerdict.Pass && !signedHere)
         {
             warnings.Add(new TrustWarning(
                 TrustLevel.Caution,
                 "This message was not sent from an address the domain recognises.",
                 "That is normal for mail forwarded from another address or sent through a "
                 + "mailing list, and is worth knowing about otherwise."));
+        }
+
+        // Checked here and it did not verify. Caution rather than alarm on purpose: a mailing
+        // list that appends a footer breaks the signature of every message it passes on, and
+        // that is the commonest cause by a wide margin. It is still worth saying, because the
+        // other cause is that the message is not what it says it is.
+        if (verified?.Verdict == AuthVerdict.Fail)
+        {
+            warnings.Add(new TrustWarning(
+                TrustLevel.Caution,
+                "The copy of this message here does not match the signature it carries.",
+                $"{verified.SigningDomain ?? "The signing domain"} signed this message, and the "
+                + "copy that arrived does not match that signature. A mailing list or forwarder "
+                + "that adds a footer does this to every message it passes on. So does a message "
+                + "that has been altered."));
         }
 
         if (SpoofedDisplayName(from) is { } spoofed)
@@ -104,7 +140,7 @@ public sealed record SenderTrust(
             }
         }
 
-        return new SenderTrust(results, warnings);
+        return new SenderTrust(results, warnings) { Verified = verified };
     }
 
     /// <summary>

@@ -382,6 +382,50 @@ public sealed class MailRepository(MailStore store)
         """,
         r => r.GetString(0));
 
+    // ---- Message authentication ---------------------------------------------------------------
+
+    /// <summary>
+    /// Records what verifying a message's own DKIM signatures came to.
+    /// </summary>
+    /// <remarks>
+    /// Written once, by whatever received the message, because verifying needs a key from DNS
+    /// and §19 does not allow that on the path that draws a message. Re-checking later would
+    /// also be checking against a key that may since have rotated, and reporting a rotation as
+    /// a forgery is worse than not checking twice.
+    /// </remarks>
+    public void RecordAuthentication(
+        long messageId, string dkim, string? signingDomain, DateTimeOffset now) => _store.Execute(
+        """
+        INSERT INTO message_authentication (message_id, dkim, signing_domain, checked_utc)
+        VALUES ($id, $dkim, $domain, $now)
+        ON CONFLICT(message_id) DO UPDATE SET
+            dkim = excluded.dkim,
+            signing_domain = excluded.signing_domain,
+            checked_utc = excluded.checked_utc
+        """,
+        ("$id", messageId),
+        ("$dkim", dkim),
+        ("$domain", (object?)signingDomain ?? DBNull.Value),
+        ("$now", now.ToUnixTimeSeconds()));
+
+    /// <summary>
+    /// What was recorded for a message, or null if it has never been checked.
+    /// </summary>
+    /// <remarks>
+    /// Null is the answer for every message received before local verification existed, and for
+    /// every message received offline. The pane says so rather than implying a result.
+    /// </remarks>
+    public MessageAuthentication? Authentication(long messageId) => _store.Query(
+        """
+        SELECT dkim, signing_domain, checked_utc
+        FROM message_authentication WHERE message_id = $id
+        """,
+        r => new MessageAuthentication(
+            r.GetString(0),
+            Nullable(r, "signing_domain"),
+            DateTimeOffset.FromUnixTimeSeconds(r.GetInt64(2))),
+        ("$id", messageId)).FirstOrDefault();
+
     // ---- Categories -------------------------------------------------------------------------
 
     public IReadOnlyList<Category> Categories() => _store.Query(

@@ -2,6 +2,7 @@ using MailKit;
 using MailKit.Net.Pop3;
 using MimeKit;
 using Mailbox.Core.Diagnostics;
+using Mailbox.Security;
 using Mailbox.Store;
 
 namespace Mailbox.Protocols;
@@ -47,6 +48,22 @@ public sealed class Pop3Receiver(MailRepository repository, Func<DateTimeOffset>
 
     /// <summary>Lets a test supply a fake session. Null uses MailKit.</summary>
     public Func<IPop3Session>? SessionFactory { get; set; }
+
+    /// <summary>
+    /// Checks each message's own DKIM signatures as it arrives, or null to check nothing.
+    /// </summary>
+    /// <remarks>
+    /// Here rather than in the reading pane because verifying resolves a name the sender chose,
+    /// and §19 does not allow a lookup on the path that draws a message. A poll is already
+    /// network work on a background thread, and it is also the only moment the signing key is
+    /// certain to still be published — a key checked months later may have rotated, and
+    /// reporting a rotation as a forgery would be worse than not checking at all.
+    /// <para>
+    /// Null by default so that nothing acquires a resolver by accident. The application supplies
+    /// one; every test that does not care about signatures gets no lookups and no network.
+    /// </para>
+    /// </remarks>
+    public DkimVerification? Authentication { get; set; }
 
     public async Task<PollResult> PollAsync(
         AccountConnection account,
@@ -120,7 +137,7 @@ public sealed class Pop3Receiver(MailRepository repository, Func<DateTimeOffset>
                 account.Address, downloaded + 1, uids.Count - known.Count, "Receiving"));
 
             var message = await client.GetMessageAsync(index, cancellation);
-            Store(inbox, message, uid);
+            await StoreAsync(inbox, message, uid, cancellation);
             downloaded++;
 
             if (!account.Policy.LeaveOnServer) toRemove.Add(index);
@@ -130,14 +147,38 @@ public sealed class Pop3Receiver(MailRepository repository, Func<DateTimeOffset>
         return new PollResult(downloaded, alreadyHad, removed);
     }
 
-    private void Store(Folder inbox, MimeMessage message, string uid)
+    private async Task StoreAsync(
+        Folder inbox, MimeMessage message, string uid, CancellationToken cancellation)
     {
         using var buffer = new MemoryStream();
         message.WriteTo(buffer);
         var raw = buffer.ToArray();
 
         var summary = MessageMapper.ToSummary(message, uid, raw.Length, _now());
-        _repository.AddMessage(inbox.Id, summary, raw);
+        var id = _repository.AddMessage(inbox.Id, summary, raw);
+
+        if (id is not { } messageId || Authentication is null) return;
+
+        // A signature that cannot be checked must not stop the mail being collected. The
+        // message is already stored by this point, so the worst this can cost is a message
+        // with no recorded verdict — which reads as "not checked", which is the truth.
+        try
+        {
+            var result = await Authentication.VerifyAsync(message, cancellation);
+            if (result.Verdict is AuthVerdict.None) return;
+
+            _repository.RecordAuthentication(
+                messageId, result.Verdict.ToString().ToLowerInvariant(),
+                result.SigningDomain, _now());
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Could not check a message's signature as it arrived.", ex);
+        }
     }
 
     /// <summary>
