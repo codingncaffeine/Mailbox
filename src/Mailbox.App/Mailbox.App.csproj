@@ -13,6 +13,10 @@
     <PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />
     <PackageReference Include="Avalonia.Controls.WebView" Version="12.0.1" />
     <PackageReference Include="Avalonia.Desktop" Version="$(AvaloniaVersion)" />
+    <!-- The native Wayland backend is not part of Avalonia.Desktop's platform detection; it is
+         its own package (MIT, over the MIT NWayland bindings) and is opted into at startup by
+         MAILBOX_WAYLAND=1. X11 through XWayland stays the default until it settles. -->
+    <PackageReference Include="Avalonia.Wayland" Version="$(AvaloniaVersion)" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="$(AvaloniaVersion)" />
     <!-- Structural only. Simple provides bare control templates so ListBox, ComboBox and
          GridSplitter have something to render; it contributes no colour, because every

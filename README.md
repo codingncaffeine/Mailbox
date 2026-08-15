@@ -72,6 +72,7 @@ Useful while the interface is still being built.
 | `MAILBOX_TEXT_MODE` | `subpixel`, `antialias`, `alias` | Glyph rasterization |
 | `MAILBOX_TEXT_HINTING` | `none`, `light`, `strong` | Hinting strength |
 | `MAILBOX_CAPTURE` | a `.png` path | Render the window once and exit |
+| `MAILBOX_WAYLAND` | `1` | Run on the native Wayland backend instead of X11 (through XWayland on a Wayland session). Experimental; the log says which backend came up |
 | `MAILBOX_LOG_LEVEL` | `debug`, `info`, `warning`, `error` | Log verbosity |
 
 Logs are written to `$XDG_STATE_HOME/mailbox/logs`, five runs kept.
