@@ -138,11 +138,17 @@ public sealed record RibbonItem
             ShowLabel = false,
         };
 
+    /// <summary>
+    /// The id every rule carries, on the ribbon and on the Quick Access Toolbar alike. It
+    /// stands for furniture rather than a command, so nothing registers it in the catalogue.
+    /// </summary>
+    public static CommandId SeparatorId { get; } = new("app.separator");
+
     /// <summary>The vertical rule between two clusters on the Simplified bar.</summary>
     public static RibbonItem Rule()
         => new()
         {
-            Command = new CommandId("app.separator"),
+            Command = SeparatorId,
             Kind = RibbonItemKind.Separator,
             Size = RibbonItemSize.Small,
             ShowLabel = false,

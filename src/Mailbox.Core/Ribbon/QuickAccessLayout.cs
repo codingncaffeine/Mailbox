@@ -123,6 +123,45 @@ public sealed class QuickAccessLayout
         if (_commands.Remove(id)) Save();
     }
 
+    /// <summary>
+    /// Appends a rule. Unlike a command, several may sit on one toolbar, so this does not go
+    /// through <see cref="Add"/> and its "already placed" check.
+    /// </summary>
+    public void AddSeparator()
+    {
+        _commands.Add(RibbonItem.SeparatorId);
+        Save();
+    }
+
+    /// <summary>
+    /// Removes whatever is at <paramref name="index"/>.
+    /// </summary>
+    /// <remarks>
+    /// By position rather than by id, because rules repeat: removing the third one by id would
+    /// take the first.
+    /// </remarks>
+    public bool RemoveAt(int index)
+    {
+        if (index < 0 || index >= _commands.Count) return false;
+
+        _commands.RemoveAt(index);
+        Save();
+        return true;
+    }
+
+    /// <summary>Moves whatever is at <paramref name="index"/> by <paramref name="delta"/>.</summary>
+    public bool MoveAt(int index, int delta)
+    {
+        var to = index + delta;
+        if (index < 0 || index >= _commands.Count || to < 0 || to >= _commands.Count) return false;
+
+        var moved = _commands[index];
+        _commands.RemoveAt(index);
+        _commands.Insert(to, moved);
+        Save();
+        return true;
+    }
+
     /// <summary>Moves a command by <paramref name="delta"/> places, clamped to the ends.</summary>
     public bool Move(CommandId id, int delta)
     {

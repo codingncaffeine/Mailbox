@@ -4,6 +4,7 @@ using Avalonia.Markup.Xaml;
 using Mailbox.App.Theming;
 using Mailbox.App.Views;
 using Mailbox.Core.Commands;
+using Mailbox.Core.Ribbon;
 using Mailbox.Core.Settings;
 using Mailbox.Protocols;
 using Mailbox.Store;
@@ -29,6 +30,21 @@ public partial class App : Application
 
     /// <summary>Every account, each with its own store file.</summary>
     public static AccountStores Accounts { get; private set; } = null!;
+
+    /// <summary>
+    /// The Quick Access Toolbar's commands, placement and visibility.
+    /// </summary>
+    /// <remarks>
+    /// One instance, because two surfaces edit it — the chevron flyout on the toolbar and the
+    /// Options page — and a second copy would let them disagree about what is on the bar.
+    /// </remarks>
+    public static QuickAccessLayout QuickAccess { get; private set; } = null!;
+
+    /// <summary>The user's ribbon edits, and the layout that comes of applying them.</summary>
+    public static RibbonCustomization RibbonEdits { get; private set; } = null!;
+
+    /// <summary>The ribbon the shell renders: the shipped layout with any edits over it.</summary>
+    public static RibbonLayout MailRibbon() => RibbonEdits.Apply(DefaultRibbonLayouts.Mail);
 
     /// <summary>Account order and which one is the default.</summary>
     public static IAccountOrder AccountOrder { get; private set; } = null!;
@@ -91,6 +107,9 @@ public partial class App : Application
         Commands.RegisterRange(MailCommands.All);
         Commands.RegisterRange(ViewCommands.All);
         Commands.RegisterRange(ComposeCommands.All);
+
+        RibbonEdits = new RibbonCustomization();
+        QuickAccess = new QuickAccessLayout(Settings, DefaultRibbonLayouts.Mail.QuickAccess);
 
         _ = new ThemeResourceBridge(Resources, Themes);
 
