@@ -354,6 +354,11 @@ public static class OfficeThemes
         // Measured off the compose capture rather than borrowed from the ramp: the rules under
         // the address fields read 161,159,157, where neutral.tertiary is a flatter #8A8A8A.
         t.Set(TokenKeys.Compose.FieldRule, "#A19F9D");
+        // Measured off the reference: #F0F0F0 on the header, and the Subject label at the
+        // same lightness — this theme's neutral.primary is content ink and would be
+        // near-black on near-black here.
+        t.Set(TokenKeys.Compose.HeaderText, "#F0F0F0");
+        t.Set(TokenKeys.Compose.HeaderLabel, "#EDEBE9");
 
         t.Set(TokenKeys.Reading.Background, "{palette.content.row}");
         t.Set(TokenKeys.Reading.HeaderBackground, "{palette.content.row}");
@@ -482,6 +487,8 @@ public static class OfficeThemes
         t.Set(TokenKeys.Compose.BodyText, "{palette.neutral.primary}");
         t.Set(TokenKeys.Compose.HeaderBackground, "{palette.sunken}");
         t.Set(TokenKeys.Compose.FieldRule, "{palette.neutral.tertiary}");
+        t.Set(TokenKeys.Compose.HeaderText, "{palette.neutral.primary}");
+        t.Set(TokenKeys.Compose.HeaderLabel, "{palette.neutral.secondary}");
 
         t.Set(TokenKeys.Reading.Background, "{palette.ground}");
         t.Set(TokenKeys.Reading.HeaderBackground, "{palette.raised}");
@@ -590,6 +597,8 @@ public static class OfficeThemes
         t.Set(TokenKeys.Compose.BodyText, "{palette.neutral.primary}");
         t.Set(TokenKeys.Compose.HeaderBackground, "{palette.neutral.lighter}");
         t.Set(TokenKeys.Compose.FieldRule, "{palette.neutral.tertiary}");
+        t.Set(TokenKeys.Compose.HeaderText, "{palette.neutral.primary}");
+        t.Set(TokenKeys.Compose.HeaderLabel, "{palette.neutral.secondary}");
 
         t.Set(TokenKeys.Reading.Background, "{palette.neutral.white}");
         t.Set(TokenKeys.Reading.HeaderBackground, "{palette.neutral.white}");

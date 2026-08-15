@@ -209,8 +209,19 @@ public sealed class ComposeWindow : Window
     /// <summary>Poses the optional address fields, so a capture can show them.</summary>
     public void ShowOptionalFields()
     {
-        Toggle(_bccRow);
-        Toggle(_fromRow);
+        // Set rather than toggled. Bcc is the only row that is off to begin with — From is
+        // shown, as the reference shows it — and a toggle turned that one back off the moment
+        // the default changed, which photographs as a From button that does not exist.
+        _bccRow.IsVisible = true;
+        _fromRow.IsVisible = true;
+    }
+
+    /// <summary>Fills the header, so a capture can be measured against the reference.</summary>
+    public void PoseHeader(string to, string cc, string subject)
+    {
+        _to.Text = to;
+        _cc.Text = cc;
+        _subject.Text = subject;
     }
 
     // ----------------------------------------------------------------------------------
@@ -432,6 +443,11 @@ public sealed class ComposeWindow : Window
         // height is the sum of what is visible, recomputed every pass.
         // No spacing: each row already carries its own gap as a bottom margin, and adding
         // both put the rows on a 42px pitch where the reference measures 40.
+        // Known gap, measured rather than assumed: the rules land on a fractional origin
+        // inherited from the chrome above, so a 1px hairline antialiases across two rows on
+        // some of them where the reference's are crisp. UseLayoutRounding here does not fix it
+        // — the same thing the zoom slider's track found — and the real answer is ZoomSlider's:
+        // translate to the TopLevel and correct by the fractional part. Not done yet.
         var rows = new StackPanel();
 
         _fromRow = AddressRow(rows, "From", _fromAddress, opensAddressBook: false, picksAccount: true);
@@ -441,7 +457,8 @@ public sealed class ComposeWindow : Window
         AddressRow(rows, "Subject", _subject, opensAddressBook: false);
 
         _attachmentStrip.Text = string.Empty;
-        Bind(_attachmentStrip, TextBlock.ForegroundProperty, "text.secondary.brush");
+        // Sits in the header, so it takes the header's ink like everything else there.
+        Bind(_attachmentStrip, TextBlock.ForegroundProperty, "compose.header.label.brush");
         _attachmentRow = new Border
         {
             Child = _attachmentStrip,
@@ -473,9 +490,13 @@ public sealed class ComposeWindow : Window
         ToolTip.SetTip(send, "Send this message  (Ctrl+Enter)");
         send.Click += (_, _) => Run(ComposeCommands.Send.Id);
 
-        // Bcc and From are off until asked for, which is what the Options tab's two toggles do.
+        // Bcc is off until asked for, which is what the Options tab's toggle is for.
+        //
+        // From is not. The reference shows it on a new message — its own capture has From above
+        // To with the sending address beside it — and hiding it was wrong twice over: a message
+        // goes out from exactly one account, and with the row hidden there was nothing on screen
+        // saying which, and no way to change it without knowing to go and turn a toggle on first.
         _bccRow.IsVisible = false;
-        _fromRow.IsVisible = false;
         PopulateAccounts();
 
         var grid = new Grid
@@ -518,8 +539,10 @@ public sealed class ComposeWindow : Window
         StackPanel rows, string label, Control field,
         bool opensAddressBook = true, bool picksAccount = false)
     {
-        // The row is the pitch; the button and the field are different heights within it, which
-        // is what puts the rule below the button rather than level with it.
+        // The row is the pitch, and everything in it is centred in that pitch: the button, the
+        // label and the field's own text. Measured off the reference, where a row spans 40px
+        // and the address it carries sits dead centre of it — ours had the text 7px high, which
+        // reads as the writing floating above its line rather than sitting on it.
         var row = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("Auto,*"),
@@ -552,7 +575,7 @@ public sealed class ComposeWindow : Window
                 },
                 Width = LabelWidth,
                 Height = RowHeight,
-                VerticalAlignment = VerticalAlignment.Top,
+                VerticalAlignment = VerticalAlignment.Center,
                 HorizontalContentAlignment = HorizontalAlignment.Center,
                 VerticalContentAlignment = VerticalAlignment.Center,
                 BorderThickness = new Thickness(1),
@@ -570,7 +593,7 @@ public sealed class ComposeWindow : Window
                 Content = label,
                 Width = LabelWidth,
                 Height = RowHeight,
-                VerticalAlignment = VerticalAlignment.Top,
+                VerticalAlignment = VerticalAlignment.Center,
                 HorizontalContentAlignment = HorizontalAlignment.Center,
                 VerticalContentAlignment = VerticalAlignment.Center,
                 BorderThickness = new Thickness(1),
@@ -588,12 +611,10 @@ public sealed class ComposeWindow : Window
             {
                 Text = label,
                 Width = LabelWidth,
-                Height = RowHeight,
-                VerticalAlignment = VerticalAlignment.Top,
+                VerticalAlignment = VerticalAlignment.Center,
                 TextAlignment = TextAlignment.Center,
-                Margin = new Thickness(0, 6, 0, 0),
             };
-            Bind(text, TextBlock.ForegroundProperty, "text.secondary.brush");
+            Bind(text, TextBlock.ForegroundProperty, "compose.header.label.brush");
             caption = text;
         }
 
@@ -611,19 +632,25 @@ public sealed class ComposeWindow : Window
             box.CornerRadius = default;
             box.Background = Brushes.Transparent;
             box.Padding = default;
-            Bind(box, TemplatedControl.ForegroundProperty, "text.primary.brush");
+            box.VerticalContentAlignment = VerticalAlignment.Center;
+            Bind(box, TemplatedControl.ForegroundProperty, "compose.header.text.brush");
         }
 
-        if (field is TextBlock plain) Bind(plain, TextBlock.ForegroundProperty, "text.primary.brush");
+        if (field is TextBlock plain)
+        {
+            plain.VerticalAlignment = VerticalAlignment.Center;
+            Bind(plain, TextBlock.ForegroundProperty, "compose.header.text.brush");
+        }
 
+        // Fills the row rather than sitting 36px of it, so the rule is the row's own bottom edge
+        // and the text centres against the same 40px the button does. The reference leaves 14px
+        // between the bottom of an address and the rule under it; centring in the full pitch is
+        // what produces that, and it goes on producing it at another type size.
         var underlined = new Border
         {
             Child = field,
-            Height = FieldHeight,
-            VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(FieldInset, 0, 0, 0),
             BorderThickness = new Thickness(0, 0, 0, 1),
-            Padding = new Thickness(0, 0, 0, 4),
         };
         Bind(underlined, Border.BorderBrushProperty, "compose.field.rule.brush");
 
@@ -694,36 +721,74 @@ public sealed class ComposeWindow : Window
         _fromAddress.Text = _sendingAddress ?? string.Empty;
     }
 
-    /// <summary>The From button's menu: one entry per account, ticked for the sending one.</summary>
+    /// <summary>
+    /// The From button's menu: one entry per account, ticked for the one being sent from.
+    /// </summary>
+    /// <remarks>
+    /// Filled when it opens rather than when the window is built. An account added while a
+    /// message is being written — from the wizard, which this window can reach through the
+    /// Backstage — would otherwise be missing from a list captured before it existed, and the
+    /// only way to see it would be to close the message and start again.
+    /// <para>
+    /// The tick is the point of the menu as much as the choosing is. A message goes out from
+    /// exactly one account and which one is not otherwise visible from here, so a list that
+    /// offers four addresses and marks none of them leaves the reader counting on the field
+    /// beside the button to be telling the truth.
+    /// </para>
+    /// </remarks>
     private MenuFlyout AccountMenu()
     {
         var flyout = new MenuFlyout();
+        flyout.Opening += (_, _) => flyout.ItemsSource = AccountMenuItems();
+        return flyout;
+    }
+
+    private List<MenuItem> AccountMenuItems()
+    {
         var accounts = _accounts?.All ?? [];
 
         if (accounts.Count == 0)
         {
-            flyout.ItemsSource = new[]
-            {
-                new MenuItem { Header = "No account is set up yet", IsEnabled = false },
-            };
-            return flyout;
+            return [new MenuItem { Header = "No account is set up yet", IsEnabled = false }];
         }
 
-        flyout.ItemsSource = accounts
-            .Select(account =>
-            {
-                var address = account.Account.Address;
-                var item = new MenuItem { Header = address };
-                item.Click += (_, _) =>
-                {
-                    _sendingAddress = address;
-                    _fromAddress.Text = address;
-                };
-                return item;
-            })
-            .ToList();
+        return [.. accounts.Select(account =>
+        {
+            var address = account.Account.Address;
+            var name = account.Account.DisplayName;
 
-        return flyout;
+            var item = new MenuItem
+            {
+                // The name and the address, because two accounts at one provider are told apart
+                // by the name and two names at one address by nothing at all.
+                Header = string.IsNullOrWhiteSpace(name) || string.Equals(name, address, StringComparison.OrdinalIgnoreCase)
+                    ? address
+                    : $"{name}  ({address})",
+                Icon = string.Equals(address, _sendingAddress, StringComparison.OrdinalIgnoreCase)
+                    ? Tick()
+                    : null,
+            };
+
+            item.Click += (_, _) => SendFrom(address);
+            return item;
+        })];
+    }
+
+    /// <summary>The same tick the Quick Access flyout draws, from the same glyph.</summary>
+    private static Control Tick() => new TextBlock
+    {
+        Text = IconGlyphs.GetOrEmpty("mark-complete", 16),
+        FontFamily = IconFont.Family,
+        FontSize = 12,
+    };
+
+    /// <summary>Sends from this account, and says so where it is being read from.</summary>
+    private void SendFrom(string address)
+    {
+        _sendingAddress = address;
+        _fromAddress.Text = address;
+
+        Report($"This message will be sent from {address}.");
     }
 
     // ----------------------------------------------------------------------------------

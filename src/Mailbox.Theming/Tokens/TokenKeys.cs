@@ -189,6 +189,20 @@ public static class TokenKeys
         public const string BodyBackground = "compose.body.background";
         public const string BodyText = "compose.body.text";
         public const string HeaderBackground = "compose.header.background";
+
+        /// <summary>
+        /// The ink on that header, and on the labels beside it.
+        /// </summary>
+        /// <remarks>
+        /// Its own pair rather than <c>text.primary</c> and <c>text.secondary</c>, for the same
+        /// reason a dialog has its own six: <b>the compose header is chrome, not content</b>, and
+        /// in Dark Gray those disagree — content is light and chrome is dark, so content ink on
+        /// this header is near-black on near-black. It was, and only in the one theme the owner
+        /// actually runs, which is how it survived. Measured off the reference.
+        /// </remarks>
+        public const string HeaderText = "compose.header.text";
+
+        public const string HeaderLabel = "compose.header.label";
         public const string FieldRule = "compose.field.rule";
     }
 
