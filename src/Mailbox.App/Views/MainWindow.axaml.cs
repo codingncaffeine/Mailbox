@@ -282,6 +282,16 @@ public partial class MainWindow : Window
                 };
                 break;
 
+            case "printlist":
+                Opened += (_, _) =>
+                {
+                    if (DataContext is not ShellViewModel shell) return;
+
+                    CaptureNextWindow();
+                    PrintList(shell);
+                };
+                break;
+
             case "source":
                 Opened += (_, _) =>
                 {
@@ -538,6 +548,26 @@ public partial class MainWindow : Window
         shell.StatusRight = await _reading.PrintToPdfAsync()
             ? "Saved as PDF."
             : "This message could not be written to PDF.";
+    }
+
+    /// <summary>
+    /// The Table print style: the folder as a list.
+    /// </summary>
+    /// <remarks>
+    /// Rendered into a window of its own rather than into the reading pane, which is showing a
+    /// message the reader has not asked to lose. The window is the same engine and the same
+    /// stylesheet, so the paper matches.
+    /// </remarks>
+    private void PrintList(ShellViewModel shell)
+    {
+        var rows = shell.PrintableRows();
+        if (rows.Count == 0)
+        {
+            shell.StatusRight = "There is nothing in this folder to print.";
+            return;
+        }
+
+        new PrintPreviewWindow(App.Themes, shell.SelectedFolderName, rows).Show(this);
     }
 
     /// <summary>Opens the selected message in a window of its own, as a double-click does.</summary>
@@ -941,6 +971,7 @@ public partial class MainWindow : Window
         if (id == MailCommands.AuthenticationDetails.Id) { _ = _reading?.ShowAuthenticationAsync(); return; }
         if (id == MailCommands.Print.Id) { PrintMessage(shell); return; }
         if (id == MailCommands.PrintToPdf.Id) { _ = PrintToPdfAsync(shell); return; }
+        if (id == MailCommands.PrintList.Id) { PrintList(shell); return; }
         if (id == ViewCommands.CancelAll.Id) { CancelTransfer(); return; }
         if (id == ViewCommands.SendReceiveGroups.Id) { ShowGroupsMenu(shell); return; }
 

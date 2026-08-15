@@ -370,6 +370,19 @@ public static class MailCommands
         InDefaultLayout = false,
     };
 
+    /// <summary>
+    /// The reference's other print style: the folder as a list rather than one message.
+    /// </summary>
+    public static readonly MailboxCommand PrintList = new()
+    {
+        Id = new("mail.print.list"),
+        Label = "Print List",
+        Description = "Print the messages in this folder as a list.",
+        Icon = "print",
+        Category = "Actions",
+        Scope = ModuleScope.Mail,
+    };
+
     public static readonly MailboxCommand AuthenticationDetails = new()
     {
         Id = new("mail.authresults"),
@@ -391,6 +404,6 @@ public static class MailCommands
         Unread, Categorize, FollowUp,
         Search, AddressBook, FilterEmail,
         SendReceiveAll, WorkOffline, Undo,
-        Snooze, ViewSource, TrackerReport, AuthenticationDetails, Print, PrintToPdf,
+        Snooze, ViewSource, TrackerReport, AuthenticationDetails, Print, PrintToPdf, PrintList,
     ];
 }

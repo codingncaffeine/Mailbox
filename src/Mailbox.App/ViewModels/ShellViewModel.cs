@@ -604,6 +604,36 @@ public sealed class ShellViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// The list as it stands, for printing it.
+    /// </summary>
+    /// <remarks>
+    /// Taken from the rows on screen rather than from the folder, so a printed list matches
+    /// what was arranged, filtered and grouped. Printing the folder instead would produce a
+    /// different list from the one the reader was looking at when they asked.
+    /// </remarks>
+    public IReadOnlyList<Mailbox.Rendering.TableRow> PrintableRows() =>
+    [
+        .. VisibleRows.Select(row => row switch
+        {
+            MessageRow message => new Mailbox.Rendering.TableRow(
+                message.From,
+                message.Subject,
+                message.ReceivedLabel,
+                Size(message.SizeBytes)) { IsUnread = message.IsUnread },
+
+            _ => Mailbox.Rendering.TableRow.Group(row.ToString() ?? string.Empty),
+        }),
+    ];
+
+    private static string Size(long bytes) => bytes switch
+    {
+        <= 0 => string.Empty,
+        < 1024 => $"{bytes} B",
+        < 1024 * 1024 => $"{bytes / 1024.0:0.#} KB",
+        _ => $"{bytes / (1024.0 * 1024):0.#} MB",
+    };
+
     /// <summary>Loads a folder's mail into the list. Called when the selection changes.</summary>
     private void LoadMessages(FolderNode? folder)
     {
