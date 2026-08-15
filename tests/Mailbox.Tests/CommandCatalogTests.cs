@@ -1,5 +1,6 @@
 using Mailbox.Core.Accounts;
 using Mailbox.Core.Commands;
+using Mailbox.Theming.Icons;
 using Mailbox.Core.Ribbon;
 
 namespace Mailbox.Tests;
@@ -277,6 +278,26 @@ public class CommandCatalogTests
             Assert.EndsWith(".", command.Description, StringComparison.Ordinal);
         }
     }
+
+    /// <summary>
+    /// An icon name that is not in the glyph map draws nothing at all.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="IconGlyphs.GetOrEmpty"/> is forgiving by design — a missing glyph must not
+    /// take a window down — and the cost of that is a button rendering as blank space with no
+    /// complaint anywhere. It has happened: a dismiss button asked for "close", which is called
+    /// "dismiss" in the map, and photographed as an empty square nobody could see was a button.
+    /// <para>
+    /// The names live in the generated map, so this also fails if the generator is re-run without
+    /// a name something still asks for — which is the version of this that would be hardest to
+    /// spot by eye.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void EveryCommandsIconIsAGlyphThatExists()
+        => Assert.All(Loaded().All, command => Assert.False(
+            string.IsNullOrEmpty(IconGlyphs.GetOrEmpty(command.Icon, 16)),
+            $"{command.Id} asks for the '{command.Icon}' icon, which is not in the glyph map."));
 
     [Fact]
     public void KeyTipsFollowTheRibbonFrameworkRules()

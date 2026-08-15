@@ -347,6 +347,66 @@ public sealed class OptionsWindow : Window
         {
             density.Content = LabelledLive("Density:", DensityCombo());
         }
+
+        if (renderer.Slots.TryGetValue("undosend", out var undo))
+        {
+            undo.Content = UndoSendRow();
+        }
+    }
+
+    /// <summary>
+    /// Undo Send's two settings, on one row: whether, and for how long.
+    /// </summary>
+    /// <remarks>
+    /// One row rather than two, because the number means nothing without the checkbox and the
+    /// checkbox is not worth a line of its own. Writing as it goes, like every other page here.
+    /// </remarks>
+    private Control UndoSendRow()
+    {
+        var seconds = new NumericUpDown
+        {
+            Minimum = 1,
+            Maximum = UndoSend.MaximumSeconds,
+            Increment = 1,
+            FormatString = "0",
+            Value = App.UndoSend.Seconds,
+            Width = 90,
+            VerticalAlignment = VerticalAlignment.Center,
+            IsEnabled = App.UndoSend.IsEnabled,
+        };
+
+        var enabled = new CheckBox
+        {
+            Content = "Let a sent message be taken back for",
+            IsChecked = App.UndoSend.IsEnabled,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        enabled.IsCheckedChanged += (_, _) =>
+        {
+            App.UndoSend.IsEnabled = enabled.IsChecked == true;
+            seconds.IsEnabled = enabled.IsChecked == true;
+        };
+
+        seconds.ValueChanged += (_, _) =>
+        {
+            if (seconds.Value is { } value) App.UndoSend.Seconds = (int)value;
+        };
+
+        var after = new TextBlock
+        {
+            Text = "seconds",
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(8, 0, 0, 0),
+        };
+        Bind(after, TextBlock.ForegroundProperty, "dialog.foreground.brush");
+
+        return new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            Children = { enabled, seconds, after },
+        };
     }
 
     private ComboBox ThemeCombo()

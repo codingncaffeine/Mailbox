@@ -833,6 +833,13 @@
         <Canvas Grid.Row="2" Grid.Column="1" Name="PeekLayer" IsHitTestVisible="True" />
 
         <!-- ============================ Status bar =========================== -->
+        <!--
+            Undo Send's toast (§12). Over the workspace rather than in a row of its own: it is
+            there for a few seconds and must not make the panes shorter while it is.
+        -->
+        <ContentControl Name="UndoSendHost" Grid.Row="2" Grid.Column="1"
+                        HorizontalAlignment="Right" VerticalAlignment="Bottom" />
+
         <Border Grid.Row="3" Grid.ColumnSpan="2"
                 Background="{DynamicResource statusbar.background.brush}"
                 Height="{DynamicResource statusbar.height.value}">

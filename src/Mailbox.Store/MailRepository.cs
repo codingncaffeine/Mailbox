@@ -566,6 +566,41 @@ public sealed class MailRepository(MailStore store)
         "UPDATE outbox SET state = 'queued', next_try_utc = NULL WHERE account_id = $a AND state = 'held'",
         ("$a", accountId));
 
+    /// <summary>
+    /// Takes a message back out of the outbox, if it is still waiting to go.
+    /// </summary>
+    /// <returns>The message as it was queued, or null if it is too late.</returns>
+    /// <remarks>
+    /// Undo Send (§12). The whole thing turns on the word <em>if</em>: the row is only removed
+    /// when it is still queued and its hold has not expired, and the check and the delete happen
+    /// in one transaction — so a send that started a moment ago wins, and the caller is told the
+    /// message has gone rather than being handed bytes that are already on their way.
+    /// <para>
+    /// The blob is left behind. It is content-addressed and the sender may hold a reference to
+    /// it, and an orphan costs a few kilobytes where a premature delete costs the message.
+    /// </para>
+    /// </remarks>
+    public byte[]? WithdrawOutbox(long id, DateTimeOffset now) => _store.InTransaction(() =>
+    {
+        var blobId = _store.Query(
+            """
+            SELECT blob_id FROM outbox
+            WHERE id = $id
+              AND state = 'queued'
+              AND next_try_utc IS NOT NULL
+              AND next_try_utc > $now
+            """,
+            r => r.GetInt64(0),
+            ("$id", id), ("$now", now.ToUnixTimeSeconds())).FirstOrDefault();
+
+        if (blobId == 0) return null;
+
+        var raw = LoadBlob(blobId);
+        _store.Execute("DELETE FROM outbox WHERE id = $id", ("$id", id));
+
+        return raw;
+    });
+
     private static OutboxItem ReadOutbox(SqliteDataReader r) => new(
         r.GetInt64(r.GetOrdinal("id")),
         r.GetInt64(r.GetOrdinal("account_id")),
