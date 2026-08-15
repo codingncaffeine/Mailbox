@@ -367,19 +367,25 @@ public partial class MainWindow : Window
             {
                 _keyTips.Begin(FirstLevelKeyTips());
 
-                if (keyTips is "tabs" or "1") return;
+                if (keyTips is not ("tabs" or "1"))
+                {
+                    // Slash-separated, so a third level can be reached: `home/zd` picks the Home
+                    // tab and then the collapsed Delete group. The levels below the first are
+                    // built after a layout pass, so each descent is posted rather than typed
+                    // straight through.
+                    var steps = keyTips.Split('/', StringSplitOptions.RemoveEmptyEntries);
 
-                // Slash-separated, so a third level can be reached: `home/zd` picks the Home
-                // tab and then the collapsed Delete group. The levels below the first are
-                // built after a layout pass, so each descent is posted rather than typed
-                // straight through.
-                var steps = keyTips.Split('/', StringSplitOptions.RemoveEmptyEntries);
+                    if (_ribbon.Layout.FindTab(steps[0])?.KeyTip is { } tip)
+                    {
+                        foreach (var character in tip) _keyTips.HandleKey(KeyFor(character));
+                        foreach (var step in steps.Skip(1)) Descend(step);
+                    }
+                }
 
-                if (_ribbon.Layout.FindTab(steps[0])?.KeyTip is not { } tip) return;
-                foreach (var character in tip) _keyTips.HandleKey(KeyFor(character));
-
-                foreach (var step in steps.Skip(1)) Descend(step);
-
+                // Always reported, including for `tabs`. A capture cannot photograph a KeyTip
+                // level that lives in a popup, so this line is the only way to see where the
+                // traversal got to — and a level that reports nothing at all reads as a level
+                // that is not there.
                 Dispatcher.UIThread.Post(
                     () => Log.Info($"KeyTips: level {_keyTips.Depth}, {_keyTips.BadgeCount} badges"),
                     DispatcherPriority.Background);
