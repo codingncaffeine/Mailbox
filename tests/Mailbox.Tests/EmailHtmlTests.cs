@@ -223,6 +223,23 @@ public class EmailHtmlTests
         Assert.Contains("'Times New Roman'", body, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The picker hands the editor the family this machine can draw — Liberation Serif, or the
+    /// bundled Gelasio — because that is what the editor needs to render it. On the wire that
+    /// has to turn back into the name the writer chose, or a Windows reader who has Times New
+    /// Roman gets Liberation Serif's fallback instead. The split, done at the last moment.
+    /// </summary>
+    [Theory]
+    [InlineData("Liberation Serif", "font-family:'Times New Roman', 'Liberation Serif', serif")]
+    [InlineData("Carlito", "font-family:Calibri, Carlito, sans-serif")]
+    [InlineData("Gelasio", "font-family:Georgia, Gelasio, serif")]
+    public void ASubstituteOnARunGoesOutAsTheFontItStandsInFor(string rendered, string expected)
+    {
+        var body = Body(Para(new Run { Text = "x", FontFamily = rendered }));
+
+        Assert.Contains(expected, body, StringComparison.Ordinal);
+    }
+
     /// <summary>A font nothing substitutes still goes out under its own name.</summary>
     [Fact]
     public void AFontWithNoSubstituteIsNamedAnyway()

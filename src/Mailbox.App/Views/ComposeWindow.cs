@@ -167,6 +167,14 @@ public sealed class ComposeWindow : Window
         Bind(_body, RichEditor.SelectionBrushProperty, "state.selected.brush");
         Bind(_body, RichEditor.CaretBrushProperty, "compose.body.text.brush");
 
+        // A fresh editor has no document until something makes one, and until then InsertText,
+        // InsertHtml and a keystroke are all silent no-ops. Clear() is what makes one — a single
+        // empty paragraph with the caret in it — and it is called here so that Insert Symbol, a
+        // link, a signature or the automatic one all work before anything has been typed. Found
+        // by asking the editor rather than the window: the harness poses text through a path
+        // that happened to call Clear() first, so every capture looked fine.
+        _body.Clear();
+
         _ribbon = new RibbonView(catalog, DefaultRibbonLayouts.Compose)
         {
             CommandEnabled = IsUsable,
@@ -237,11 +245,21 @@ public sealed class ComposeWindow : Window
         }
 
         // The document as it was written. The HTML half where there is one, because that is
-        // what carried the formatting; the text half otherwise.
+        // what carried the formatting; the text half otherwise. Through the renderer rather
+        // than straight into the editor: an image the writer put in went out as a related part
+        // and a cid: reference, and the editor cannot resolve cid: — it drops the picture. The
+        // renderer already turns cid: into data: for the reading pane, and this is our own
+        // conservative markup, so what it lets through is everything that was there.
         _body.Clear();
 
-        if (message.HtmlBody is { Length: > 0 } html) _body.LoadHtml(html);
-        else _body.InsertText(message.TextBody ?? string.Empty);
+        if (message.HtmlBody is { Length: > 0 })
+        {
+            _body.LoadHtml(Mailbox.Rendering.MessageRenderer.Render(message).Html);
+        }
+        else
+        {
+            _body.InsertText(message.TextBody ?? string.Empty);
+        }
 
         _importance = message.Importance switch
         {
@@ -274,6 +292,30 @@ public sealed class ComposeWindow : Window
         _body.InsertText(text);
         _ribbon.RefreshEnablement();
     }
+
+    /// <summary>
+    /// A body with one of everything the serializer handles, for the harness to send.
+    /// </summary>
+    /// <remarks>
+    /// The picture is a real 1×1 PNG rather than a header, because the editor drops what it
+    /// cannot decode — which is right, and which made an earlier probe look like a bug in the
+    /// path rather than in the fixture.
+    /// </remarks>
+    public void PoseRichBody()
+    {
+        _body.Clear();
+        _body.InsertHtml(
+            "<p>Plain, then <b>bold</b>, then <i>italic</i>, then a "
+            + "<a href=\"https://example.com/\">link</a>.</p>"
+            + "<ul><li>One</li><li>Two</li></ul>"
+            + "<p><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"
+            + "AAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==\" width=\"10\" height=\"10\" /></p>"
+            + "<p>After the picture.</p>");
+        _ribbon.RefreshEnablement();
+    }
+
+    /// <summary>Presses Send, for the harness.</summary>
+    public void PressSend() => Run(ComposeCommands.Send.Id);
 
     /// <summary>Poses the optional address fields, so a capture can show them.</summary>
     public void ShowOptionalFields()
@@ -1243,8 +1285,24 @@ public sealed class ComposeWindow : Window
         _ => "not installed here; a recipient who has it will see it correctly",
     };
 
-    /// <summary>The face at the caret, so the picker opens on it.</summary>
-    private string? CaretFont() => _body.GetCaretFormat().FontFamily;
+    /// <summary>
+    /// The face at the caret as the writer knows it, so the picker opens on it.
+    /// </summary>
+    /// <remarks>
+    /// The run holds the family this machine draws — Liberation Serif, Gelasio — because that
+    /// is what the editor needs. The picker lists the Microsoft names, so the substitute is
+    /// mapped back to what it stands in for. Same split the serializer does on the wire.
+    /// </remarks>
+    private string? CaretFont()
+    {
+        var rendered = _body.GetCaretFormat().FontFamily;
+        if (string.IsNullOrEmpty(rendered)) return null;
+
+        return FontSubstitution.Table
+                   .FirstOrDefault(e => string.Equals(e.Substitute, rendered, StringComparison.OrdinalIgnoreCase))
+                   ?.Original
+               ?? rendered;
+    }
 
     private async Task ChooseFontSizeAsync()
     {
@@ -1433,9 +1491,11 @@ public sealed class ComposeWindow : Window
         if (App.Signatures.ForNew(account.Account.Address) is not { } signature) return;
         if (signature.IsEmpty) return;
 
-        // Two blank lines above it, as every mail client does: the writer types where the caret
-        // is and the signature stays below.
-        _body.InsertHtml("<p>&nbsp;</p><p>&nbsp;</p>" + signature.Html);
+        // Two blank lines above it, as every mail client does. LoadHtml rather than InsertHtml,
+        // and the difference is where the caret ends up: InsertHtml leaves it after what it
+        // inserted, so the writer would type below their own signature. LoadHtml starts a fresh
+        // document with the caret at the top, which is where the reply goes.
+        _body.LoadHtml("<p>&nbsp;</p><p>&nbsp;</p>" + signature.Html);
     }
 
     /// <summary>The first line of a signature, so the list says which one it is.</summary>
@@ -1878,8 +1938,26 @@ public sealed class ComposeWindow : Window
 
     private async Task<MimeMessage> BuildMessageAsync(OpenAccount account)
     {
-        var message = new MimeMessage();
-        message.From.Add(new MailboxAddress(account.Account.DisplayName, account.Account.Address));
+        var address = account.Account.Address;
+        var domain = address.Contains('@', StringComparison.Ordinal)
+            ? address[(address.LastIndexOf('@') + 1)..]
+            : "localhost";
+
+        var message = new MimeMessage
+        {
+            // Under the sender's own domain, as every client does. Left alone, MimeKit stamps
+            // the machine's hostname into it — and into every cid: below — which is a name a
+            // recipient has no business learning from a message header. §19.
+            MessageId = MimeUtils.GenerateMessageId(domain),
+        };
+
+        // A display name only when there is one. The seed, and an account added with nothing
+        // but an address, hold the address in that slot too — and "you@example.com"
+        // <you@example.com> is what a mail client writes when nobody was looking.
+        var name = account.Account.DisplayName;
+        message.From.Add(string.IsNullOrWhiteSpace(name) || string.Equals(name, address, StringComparison.OrdinalIgnoreCase)
+            ? new MailboxAddress(string.Empty, address)
+            : new MailboxAddress(name, address));
 
         foreach (var entry in Split(_to.Text)) message.To.Add(MailboxAddress.Parse(entry));
         foreach (var entry in Split(_cc.Text)) message.Cc.Add(MailboxAddress.Parse(entry));
@@ -1909,7 +1987,15 @@ public sealed class ComposeWindow : Window
         // Both halves, always. A recipient whose client shows plain text — or who has told it
         // to — gets a readable message rather than a page of markup, and the two are the same
         // message rather than two that can disagree, because both come off one document.
-        var builder = new BodyBuilder { TextBody = _body.GetPlainText() };
+        //
+        // U+FFFC is what the editor puts in its plain text where a picture is. It is a
+        // placeholder for a rendering system, not a character for a person, and a text-only
+        // reader would see it as a box. The picture is simply absent from the text half, which
+        // is what every other client does.
+        var builder = new BodyBuilder
+        {
+            TextBody = _body.GetPlainText().Replace("\uFFFC", string.Empty, StringComparison.Ordinal),
+        };
 
         // Ours, not the editor's: §6's wire/render split and the narrow set of elements mail
         // clients actually render. See Mailbox.Editor.EmailHtml for why that is the half worth
@@ -1927,7 +2013,7 @@ public sealed class ComposeWindow : Window
                 var part = builder.LinkedResources.Add(
                     $"image-{builder.LinkedResources.Count + 1}.{extension}", bytes);
 
-                part.ContentId = MimeUtils.GenerateMessageId();
+                part.ContentId = MimeUtils.GenerateMessageId(domain);
                 return $"cid:{part.ContentId}";
             },
         });
