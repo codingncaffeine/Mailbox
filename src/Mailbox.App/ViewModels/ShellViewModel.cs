@@ -232,6 +232,9 @@ public sealed class MessageRow(
 
     public bool IsSnoozed => SnoozedUntil is not null;
 
+    /// <summary>0 low, 1 normal, 2 high — the message's own importance, for the "!" column and Filter Email.</summary>
+    public int Importance { get; init; } = 1;
+
     /// <summary>How the row writes its date: a time today, a weekday this week, else the date.</summary>
     public string ReceivedLabel => ShellViewModel.Received(Received);
 
@@ -819,6 +822,7 @@ public sealed class ShellViewModel : ObservableObject
                 FollowUpComplete = summary.FollowUpComplete,
                 FollowUpDue = summary.FollowUpDue,
                 SnoozedUntil = summary.SnoozedUntil,
+                Importance = summary.Importance,
                 ThreadKey = Store.Lists.Arrangements.NormalisedSubject(summary.Subject),
                 FolderId = summary.FolderId,
             });
@@ -1020,6 +1024,7 @@ public sealed class ShellViewModel : ObservableObject
                     IsFlagged = summary.IsFlagged,
                     FollowUpComplete = summary.FollowUpComplete,
                     FollowUpDue = summary.FollowUpDue,
+                    Importance = summary.Importance,
                     ThreadKey = Store.Lists.Arrangements.NormalisedSubject(summary.Subject),
                     FolderId = summary.FolderId,
                     FolderLabel = label,
@@ -1072,6 +1077,7 @@ public sealed class ShellViewModel : ObservableObject
                 FollowUpComplete = summary.FollowUpComplete,
                 FollowUpDue = summary.FollowUpDue,
                 SnoozedUntil = summary.SnoozedUntil,
+                Importance = summary.Importance,
                 ThreadKey = Store.Lists.Arrangements.NormalisedSubject(summary.Subject),
                 FolderId = summary.FolderId,
                 FolderLabel = names.GetValueOrDefault(summary.FolderId, string.Empty),
@@ -1306,18 +1312,56 @@ public sealed class ShellViewModel : ObservableObject
             : $"{Describe(rows.Count)} moved to {where}.";
     }
 
-    /// <summary>All, or only what has not been read.</summary>
-    public bool UnreadOnly
+    /// <summary>The Filter Email menu's filters, one at a time, as the reference applies them.</summary>
+    public enum ListFilter
+    {
+        None,
+        Unread,
+        HasAttachments,
+        Flagged,
+        Important,
+        Categorized,
+        ThisWeek,
+    }
+
+    /// <summary>Which filter the list is under. The header's Unread pivot is the same state.</summary>
+    public ListFilter Filter
     {
         get;
         set
         {
             if (!Set(ref field, value)) return;
             Rebuild();
+            Raise(nameof(UnreadOnly));
             Raise(nameof(AllFilterWeight));
             Raise(nameof(UnreadFilterWeight));
             RaisePivot();
         }
+    }
+
+    /// <summary>All, or only what has not been read — the header's pivot, and the Unread filter.</summary>
+    public bool UnreadOnly
+    {
+        get => Filter == ListFilter.Unread;
+        set => Filter = value ? ListFilter.Unread : (Filter == ListFilter.Unread ? ListFilter.None : Filter);
+    }
+
+    /// <summary>Whether a row passes the filter in force.</summary>
+    private bool Passes(MessageRow row) => Filter switch
+    {
+        ListFilter.Unread => row.IsUnread,
+        ListFilter.HasAttachments => row.HasAttachment,
+        ListFilter.Flagged => row.IsFlagged,
+        ListFilter.Important => row.Importance == 2,
+        ListFilter.Categorized => row.HasCategories,
+        ListFilter.ThisWeek => row.Received.ToLocalTime() >= StartOfThisWeek(),
+        _ => true,
+    };
+
+    private static DateTimeOffset StartOfThisWeek()
+    {
+        var today = DateTimeOffset.Now.Date;
+        return new DateTimeOffset(today.AddDays(-(int)today.DayOfWeek));
     }
 
     public FontWeight AllFilterWeight => UnreadOnly ? FontWeight.Normal : FontWeight.SemiBold;
@@ -1453,7 +1497,7 @@ public sealed class ShellViewModel : ObservableObject
     {
         var built = new List<object>();
 
-        var rows = UnreadOnly ? Messages.Where(m => m.IsUnread) : Messages;
+        var rows = Filter == ListFilter.None ? Messages : Messages.Where(Passes);
         var groups = Store.Lists.Arrangements.Group(rows, Arrangement, SortDescending);
 
         foreach (var group in groups)
