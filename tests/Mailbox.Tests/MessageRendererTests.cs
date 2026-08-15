@@ -410,3 +410,77 @@ public class PrintStyleTests
     public void NoHeaderMeansNoBlock()
         => Assert.DoesNotContain("class=\"memo\"", Document(null), StringComparison.Ordinal);
 }
+
+public class TablePrintTests
+{
+    private static readonly TableRow[] Rows =
+    [
+        TableRow.Group("Today (2)"),
+        new("Alice Chen", "Re: Q3 numbers", "17:08", "4.1 KB") { IsUnread = true },
+        new("Build Notifications", "build passed", "16:04", "1.1 KB"),
+    ];
+
+    private static string Render() => TablePrint.Render(
+        "Inbox", Rows, RenderStyle.Plain, new DateTimeOffset(2026, 8, 15, 9, 0, 0, TimeSpan.Zero));
+
+    [Fact]
+    public void EveryRowIsPrinted()
+    {
+        var html = Render();
+
+        Assert.Contains("Alice Chen", html, StringComparison.Ordinal);
+        Assert.Contains("Re: Q3 numbers", html, StringComparison.Ordinal);
+        Assert.Contains("Build Notifications", html, StringComparison.Ordinal);
+        Assert.Contains("4.1 KB", html, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A printed list in a different order or grouping from the one on screen is a different
+    /// list, so the arrangement's own headers are printed as headers.
+    /// </summary>
+    [Fact]
+    public void GroupHeadersSurviveAsHeaders()
+    {
+        var html = Render();
+
+        Assert.Contains("Today (2)", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"group\"", html, StringComparison.Ordinal);
+        Assert.Contains("colspan=\"4\"", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheFolderAndTheTimeArePrintedOnIt()
+    {
+        var html = Render();
+
+        Assert.Contains("Inbox", html, StringComparison.Ordinal);
+        Assert.Contains("2026", html, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The list goes through the same sanitizer a message does. A subject is text a stranger
+    /// wrote, and printing is not a reason to stop treating it that way.
+    /// </summary>
+    [Fact]
+    public void ASubjectIsStillUntrustedText()
+    {
+        var html = TablePrint.Render(
+            "Inbox",
+            [new("<script>alert(1)</script>", "<b>bold</b>", "now", "1 KB")],
+            RenderStyle.Plain,
+            DateTimeOffset.UnixEpoch);
+
+        Assert.DoesNotContain("<script>", html, StringComparison.Ordinal);
+        Assert.Contains("&lt;script&gt;", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<b>bold</b>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnEmptyListStillPrintsItsHeadings()
+    {
+        var html = TablePrint.Render("Archive", [], RenderStyle.Plain, DateTimeOffset.UnixEpoch);
+
+        Assert.Contains("Archive", html, StringComparison.Ordinal);
+        Assert.Contains("Subject", html, StringComparison.Ordinal);
+    }
+}
