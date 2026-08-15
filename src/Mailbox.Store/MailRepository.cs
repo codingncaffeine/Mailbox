@@ -991,6 +991,38 @@ public sealed class MailRepository(MailStore store)
             Nullable(r, "shortcut"),
             r.GetInt32(r.GetOrdinal("ordinal"))));
 
+    /// <summary>Creates a category. The name is unique, so a duplicate is refused by the index.</summary>
+    public Category AddCategory(string name, string colourToken, string? shortcut = null)
+    {
+        _store.Execute(
+            """
+            INSERT INTO categories (name, colour_token, shortcut, ordinal)
+            VALUES ($name, $colour, $shortcut, (SELECT count(*) FROM categories))
+            """,
+            ("$name", name), ("$colour", colourToken), ("$shortcut", shortcut));
+
+        return _store.Query("SELECT * FROM categories WHERE id = $id",
+            r => new Category(r.GetInt64(0), r.GetString(1), r.GetString(2), Nullable(r, "shortcut"), r.GetInt32(4)),
+            ("$id", _store.LastInsertId)).First();
+    }
+
+    public void RenameCategory(long id, string name) => _store.Execute(
+        "UPDATE categories SET name = $name WHERE id = $id", ("$name", name), ("$id", id));
+
+    public void RecolourCategory(long id, string colourToken) => _store.Execute(
+        "UPDATE categories SET colour_token = $colour WHERE id = $id", ("$colour", colourToken), ("$id", id));
+
+    /// <summary>Sets or clears a category's keyboard shortcut. Null clears it.</summary>
+    public void SetCategoryShortcut(long id, string? shortcut) => _store.Execute(
+        "UPDATE categories SET shortcut = $shortcut WHERE id = $id", ("$shortcut", shortcut), ("$id", id));
+
+    /// <summary>
+    /// Removes a category. Its assignments go with it — the message_categories rows cascade on
+    /// the foreign key — so a message keeps its other categories and simply loses this one.
+    /// </summary>
+    public void DeleteCategory(long id) => _store.Execute(
+        "DELETE FROM categories WHERE id = $id", ("$id", id));
+
     /// <summary>
     /// Categories for a set of messages, keyed by message. One query rather than one per row:
     /// the list asks for a page at a time and a query per row would undo the page.

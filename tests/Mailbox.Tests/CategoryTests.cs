@@ -144,4 +144,46 @@ public class CategoryTests
         Assert.Equal(0, store.ScalarLong("SELECT count(*) FROM message_categories"));
         Assert.Empty(store.CheckIntegrity());
     }
+
+    [Fact]
+    public void CategoriesCanBeCreatedRenamedRecolouredAndShortcut()
+    {
+        var (store, repo, _) = Fresh();
+        using var _2 = store;
+
+        var made = repo.AddCategory("Follow up", "category.blue", "Ctrl+F2");
+        Assert.Equal("Follow up", made.Name);
+        Assert.Equal("category.blue", made.ColourToken);
+        Assert.Equal("Ctrl+F2", made.Shortcut);
+
+        repo.RenameCategory(made.Id, "Waiting on");
+        repo.RecolourCategory(made.Id, "category.orange");
+        repo.SetCategoryShortcut(made.Id, null);
+
+        var reread = repo.Categories().Single(c => c.Id == made.Id);
+        Assert.Equal("Waiting on", reread.Name);
+        Assert.Equal("category.orange", reread.ColourToken);
+        Assert.Null(reread.Shortcut);
+    }
+
+    [Fact]
+    public void DeletingACategoryTakesItsAssignmentsButLeavesTheMessage()
+    {
+        var (store, repo, inbox) = Fresh();
+        using var _ = store;
+        var message = Add(repo, inbox, "uid-1");
+
+        var red = repo.Categories()[0];
+        var blue = repo.AddCategory("Mine", "category.blue");
+        repo.Assign([message], red.Id);
+        repo.Assign([message], blue.Id);
+
+        repo.DeleteCategory(blue.Id);
+
+        // The message keeps its other category and is itself untouched.
+        var left = repo.CategoriesFor([message])[message];
+        Assert.Equal(red.Id, Assert.Single(left).Id);
+        Assert.NotNull(repo.GetMessage(message));
+        Assert.Empty(store.CheckIntegrity());
+    }
 }
