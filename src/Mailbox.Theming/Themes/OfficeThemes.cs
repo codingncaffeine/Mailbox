@@ -339,7 +339,10 @@ public static class OfficeThemes
         t.Set(TokenKeys.Compose.BodyBackground, "{palette.neutral.white}");
         t.Set(TokenKeys.Compose.BodyText, "{palette.neutral.primary}");
         t.Set(TokenKeys.Compose.HeaderBackground, "{palette.content.pane}");
-        t.Set(TokenKeys.Compose.FieldRule, "{palette.neutral.tertiary}");
+
+        // Measured off the compose capture rather than borrowed from the ramp: the rules under
+        // the address fields read 161,159,157, where neutral.tertiary is a flatter #8A8A8A.
+        t.Set(TokenKeys.Compose.FieldRule, "#A19F9D");
 
         t.Set(TokenKeys.Reading.Background, "{palette.content.row}");
         t.Set(TokenKeys.Reading.HeaderBackground, "{palette.content.row}");
