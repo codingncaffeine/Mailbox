@@ -166,7 +166,11 @@
                                      BorderThickness="0"
                                      Background="Transparent"
                                      Foreground="{DynamicResource titlebar.search.text.brush}"
-                                     FontSize="{DynamicResource type.ui.size.value}" />
+                                     FontSize="{DynamicResource type.ui.size.value}">
+                                <TextBox.KeyBindings>
+                                    <KeyBinding Gesture="Escape" Command="{Binding ClearSearchCommand}" />
+                                </TextBox.KeyBindings>
+                            </TextBox>
                         </Panel>
                     </Grid>
                 </Border>
@@ -449,6 +453,36 @@
                     Width="{DynamicResource list.width.value}"
                     Background="{DynamicResource list.background.brush}">
                 <DockPanel>
+                    <!-- Search results header: how many, the scope, and the way out. Shown only
+                         while searching, in place of the message list's ordinary top matter. -->
+                    <Border DockPanel.Dock="Top"
+                            IsVisible="{Binding IsSearching}"
+                            Background="{DynamicResource list.header.background.brush}"
+                            Padding="10,6"
+                            BorderThickness="0,0,0,1"
+                            BorderBrush="{DynamicResource border.subtle.brush}">
+                        <Grid ColumnDefinitions="*,Auto,Auto">
+                            <TextBlock Grid.Column="0"
+                                       Text="{Binding SearchResultSummary}"
+                                       VerticalAlignment="Center"
+                                       Classes="small"
+                                       Foreground="{DynamicResource list.header.text.brush}" />
+                            <ComboBox Grid.Column="1"
+                                      ItemsSource="{Binding ScopeOptions}"
+                                      SelectedIndex="{Binding ScopeIndex}"
+                                      MinHeight="26"
+                                      Margin="0,0,6,0"
+                                      FontSize="{DynamicResource type.ui.size.small.value}"
+                                      ToolTip.Tip="Where to search" />
+                            <Button Grid.Column="2"
+                                    Classes="flat"
+                                    Command="{Binding ClearSearchCommand}"
+                                    Content="&#x2715;"
+                                    ToolTip.Tip="Clear the search (Esc)"
+                                    Foreground="{DynamicResource list.header.text.brush}" />
+                        </Grid>
+                    </Border>
+
                     <!-- Search sits above the message list, where the reference application puts it.
                          Modern moves it into the header instead. -->
                     <Border DockPanel.Dock="Top"
@@ -728,11 +762,18 @@
                                         </StackPanel>
 
                                         <TextBlock Grid.Row="1" Grid.Column="0"
-                                                   Grid.ColumnSpan="5"
+                                                   Grid.ColumnSpan="4"
                                                    Text="{Binding Preview}"
                                                    Classes="small secondary"
                                                    TextTrimming="CharacterEllipsis"
                                                    MaxLines="1" />
+                                        <!-- Which folder a cross-folder search found this in. -->
+                                        <TextBlock Grid.Row="1" Grid.Column="4"
+                                                   Text="{Binding FolderLabel}"
+                                                   IsVisible="{Binding HasFolderLabel}"
+                                                   Classes="small secondary"
+                                                   HorizontalAlignment="Right"
+                                                   TextTrimming="CharacterEllipsis" />
                                     </Grid>
                                 </Grid>
                             </DataTemplate>

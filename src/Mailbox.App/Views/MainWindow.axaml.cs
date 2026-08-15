@@ -170,6 +170,27 @@ public partial class MainWindow : Window
                 DispatcherPriority.Loaded);
         }
 
+        // Runs the search box, so a capture can show the results. MAILBOX_SEARCH_SCOPE picks the
+        // scope (this/current/all) first, since a search re-runs when the scope changes.
+        if (Environment.GetEnvironmentVariable("MAILBOX_SEARCH") is { Length: > 0 } query)
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(
+                () =>
+                {
+                    if (DataContext is not ShellViewModel s) return;
+
+                    s.ScopeIndex = Environment.GetEnvironmentVariable("MAILBOX_SEARCH_SCOPE") switch
+                    {
+                        "this" => 0,
+                        "all" => 2,
+                        _ => 1,
+                    };
+                    s.SearchText = query;
+                    Log.Info($"Harness: searched “{query}” — {s.SearchResultSummary}.");
+                },
+                DispatcherPriority.Loaded);
+        }
+
         // Lets the fidelity harness capture the peek states, which a screenshot otherwise
         // cannot reach because they need a click.
         WireHarnessPeek();
