@@ -507,6 +507,22 @@ public static class Migrations
         CREATE INDEX messages_by_reminder ON messages (reminder_utc)
             WHERE reminder_utc IS NOT NULL;
         """,
+
+        // ---- 21: Focused Inbox -----------------------------------------------------------------
+        //
+        // §12's Focused Inbox: each message is Focused or Other, decided locally as it arrives
+        // and changeable by hand; a sender the reader has said "always" about is remembered so
+        // the next message from them goes where the reader put the last. Existing rows are
+        // Focused, which is what an Inbox with the feature off already was.
+        """
+        ALTER TABLE messages ADD COLUMN is_focused INTEGER NOT NULL DEFAULT 1;
+
+        CREATE TABLE focus_overrides (
+            address    TEXT    NOT NULL PRIMARY KEY,
+            focused    INTEGER NOT NULL,
+            added_utc  INTEGER NOT NULL
+        );
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>

@@ -472,6 +472,55 @@ public static class MailCommands
         InDefaultLayout = false,
     };
 
+    // Focused Inbox's four: on the row's menu when the view is on, and in the catalogue always.
+    public static readonly MailboxCommand MoveToOther = new()
+    {
+        Id = new("mail.focus.other"),
+        Label = "Move to Other",
+        Description = "Move the selected messages to the Other side of the Focused Inbox.",
+        Icon = "move",
+        Category = "Move",
+        Scope = ModuleScope.Mail,
+        RequiresSelection = true,
+        InDefaultLayout = false,
+    };
+
+    public static readonly MailboxCommand MoveToFocused = new()
+    {
+        Id = new("mail.focus.focused"),
+        Label = "Move to Focused",
+        Description = "Move the selected messages to the Focused side of the Inbox.",
+        Icon = "move",
+        Category = "Move",
+        Scope = ModuleScope.Mail,
+        RequiresSelection = true,
+        InDefaultLayout = false,
+    };
+
+    public static readonly MailboxCommand AlwaysMoveToOther = new()
+    {
+        Id = new("mail.focus.other.always"),
+        Label = "Always Move to Other",
+        Description = "Move the selected messages to Other, and every future message from their senders.",
+        Icon = "move",
+        Category = "Move",
+        Scope = ModuleScope.Mail,
+        RequiresSelection = true,
+        InDefaultLayout = false,
+    };
+
+    public static readonly MailboxCommand AlwaysMoveToFocused = new()
+    {
+        Id = new("mail.focus.focused.always"),
+        Label = "Always Move to Focused",
+        Description = "Move the selected messages to Focused, and every future message from their senders.",
+        Icon = "move",
+        Category = "Move",
+        Scope = ModuleScope.Mail,
+        RequiresSelection = true,
+        InDefaultLayout = false,
+    };
+
     /// <summary>The reference's Folder tab has it; here it is on the folder pane's menu and in the catalogue.</summary>
     public static readonly MailboxCommand NewSearchFolder = new()
     {
@@ -508,5 +557,6 @@ public static class MailCommands
         SendReceiveAll, WorkOffline, Undo,
         Snooze, ViewSource, TrackerReport, AuthenticationDetails, Print, PrintToPdf, PrintList,
         RecoverDeleted, NewSearchFolder,
+        MoveToOther, MoveToFocused, AlwaysMoveToOther, AlwaysMoveToFocused,
     ];
 }

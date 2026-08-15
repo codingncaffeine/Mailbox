@@ -790,10 +790,12 @@ public sealed class ShellViewModel : ObservableObject
         }
 
         // The folder's awake mail, or — Filter Email › Snoozed — only what is snoozed, each row
-        // saying when it comes back where the preview would be.
+        // saying when it comes back where the preview would be. With Focused Inbox on, the Inbox
+        // lists one half at a time.
+        var half = FocusedInboxOn && where.Role == FolderRole.Inbox ? (bool?)!ShowOther : null;
         var summaries = ShowSnoozed
             ? where.Account.Mail.Snoozed(where.FolderId)
-            : where.Account.Mail.Messages(where.FolderId);
+            : where.Account.Mail.Messages(where.FolderId, half);
 
         foreach (var summary in summaries)
         {
@@ -1190,6 +1192,7 @@ public sealed class ShellViewModel : ObservableObject
             Raise(nameof(SearchPlaceholder));
             Raise(nameof(WindowTitle));
             Raise(nameof(StatusLeft));
+            RaisePivot();
         }
     }
 
@@ -1227,6 +1230,82 @@ public sealed class ShellViewModel : ObservableObject
     // Filtering, sorting and grouping run over the in-memory sample for now. They are view
     // state either way: Phase 2 swaps the source collection, not any of this.
 
+    // ---- Focused Inbox (§12) ------------------------------------------------------------------
+    // When the view is on and the Inbox is open, the All / Unread pivot becomes Focused / Other:
+    // the Inbox lists one half at a time. Elsewhere the pivot is what it always was.
+
+    /// <summary>Whether Focused Inbox is switched on, from the settings.</summary>
+    public bool FocusedInboxOn
+    {
+        get => App.MailOptions.ShowFocusedInbox;
+        set
+        {
+            if (App.MailOptions.ShowFocusedInbox == value) return;
+            App.MailOptions.ShowFocusedInbox = value;
+            RaisePivot();
+            LoadMessages(_selectedFolder);
+        }
+    }
+
+    /// <summary>Whether the pivot on show is Focused / Other rather than All / Unread.</summary>
+    public bool ShowFocusedPivot => FocusedInboxOn && CurrentFolderRole == FolderRole.Inbox;
+
+    /// <summary>Which half of the Inbox is on show while the Focused pivot is up: Other, or Focused.</summary>
+    public bool ShowOther
+    {
+        get;
+        set
+        {
+            if (!Set(ref field, value)) return;
+            RaisePivot();
+            LoadMessages(_selectedFolder);
+        }
+    }
+
+    public string PivotLeftLabel => ShowFocusedPivot ? "Focused" : "All";
+    public string PivotRightLabel => ShowFocusedPivot ? "Other" : "Unread";
+    public FontWeight PivotLeftWeight => ShowFocusedPivot ? (ShowOther ? FontWeight.Normal : FontWeight.SemiBold) : AllFilterWeight;
+    public FontWeight PivotRightWeight => ShowFocusedPivot ? (ShowOther ? FontWeight.SemiBold : FontWeight.Normal) : UnreadFilterWeight;
+
+    /// <summary>The pivot's left and right halves — All / Focused, Unread / Other — as commands.</summary>
+    public RelayCommand PivotLeft => field ??= new RelayCommand(() =>
+    {
+        if (ShowFocusedPivot) ShowOther = false; else UnreadOnly = false;
+    });
+
+    public RelayCommand PivotRight => field ??= new RelayCommand(() =>
+    {
+        if (ShowFocusedPivot) ShowOther = true; else UnreadOnly = true;
+    });
+
+    private void RaisePivot()
+    {
+        Raise(nameof(ShowFocusedPivot));
+        Raise(nameof(PivotLeftLabel));
+        Raise(nameof(PivotRightLabel));
+        Raise(nameof(PivotLeftWeight));
+        Raise(nameof(PivotRightWeight));
+    }
+
+    /// <summary>Move to Other / Move to Focused over the rows, with "always" remembering their senders.</summary>
+    public void SetFocused(IReadOnlyList<MessageRow> rows, bool focused, bool always)
+    {
+        if (rows.Count == 0 || Mail(rows) is not { } mail) return;
+
+        mail.SetFocused([.. rows.Select(r => r.Id)], focused);
+
+        var senders = always ? Senders(rows) : [];
+        foreach (var sender in senders) mail.SetFocusOverride(sender, focused, DateTimeOffset.UtcNow);
+
+        ReloadCurrentView();
+        RefreshCounts();
+
+        var where = focused ? "Focused" : "Other";
+        StatusRight = always && senders.Count > 0
+            ? $"{Describe(rows.Count)} moved to {where}; mail from {(senders.Count == 1 ? senders[0] : $"{senders.Count} senders")} will always go there."
+            : $"{Describe(rows.Count)} moved to {where}.";
+    }
+
     /// <summary>All, or only what has not been read.</summary>
     public bool UnreadOnly
     {
@@ -1237,6 +1316,7 @@ public sealed class ShellViewModel : ObservableObject
             Rebuild();
             Raise(nameof(AllFilterWeight));
             Raise(nameof(UnreadFilterWeight));
+            RaisePivot();
         }
     }
 

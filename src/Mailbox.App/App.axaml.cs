@@ -292,7 +292,7 @@ public partial class App : Application
         // What acts on a message as it arrives, in order: the junk filter, then the rules. Both
         // protocols run the same pipeline, so a rule means the same thing on POP3 and IMAP.
         Rules = new RulesHandler();
-        var arrival = new ArrivalPipeline(Junk, Rules);
+        var arrival = new ArrivalPipeline(Junk, new FocusedInboxHandler(), Rules);
 
         // Read at the moment a collector is made, which is per run — so the Options page's
         // choice applies to the next send/receive rather than the next launch. IMAP and POP3

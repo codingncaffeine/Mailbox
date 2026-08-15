@@ -407,9 +407,80 @@ public sealed class MailRepository(MailStore store)
     /// A folder's messages, newest first — the ones on show. A snoozed message is not among
     /// them until its time comes; <see cref="Snoozed"/> lists those.
     /// </summary>
-    public IReadOnlyList<MessageSummary> Messages(long folderId, int limit = 500) => _store.Query(
-        MessageSelect + " WHERE folder_id = $folder" + Awake + " ORDER BY received_utc DESC LIMIT $limit",
-        ReadMessage, ("$folder", folderId), ("$limit", limit));
+    public IReadOnlyList<MessageSummary> Messages(long folderId, int limit = 500) => Messages(folderId, null, limit);
+
+    /// <summary>
+    /// A folder's messages, or — with <paramref name="focused"/> set — only its Focused or its
+    /// Other half, which is what the Inbox lists when Focused Inbox is on.
+    /// </summary>
+    public IReadOnlyList<MessageSummary> Messages(long folderId, bool? focused, int limit = 500)
+    {
+        var half = focused switch { true => " AND is_focused = 1", false => " AND is_focused = 0", null => string.Empty };
+        return _store.Query(
+            MessageSelect + " WHERE folder_id = $folder" + half + Awake + " ORDER BY received_utc DESC LIMIT $limit",
+            ReadMessage, ("$folder", folderId), ("$limit", limit));
+    }
+
+    // ---- Focused Inbox (§12) --------------------------------------------------------------------
+
+    /// <summary>Puts messages in Focused or Other.</summary>
+    public int SetFocused(IReadOnlyCollection<long> messageIds, bool focused)
+    {
+        if (messageIds.Count == 0) return 0;
+
+        return _store.Execute(
+            $"UPDATE messages SET is_focused = $focused WHERE id IN ({Ids(messageIds)})",
+            ("$focused", focused ? 1 : 0));
+    }
+
+    /// <summary>
+    /// "Always move to Other/Focused": remembers the sender, and moves what is already in the
+    /// Inbox from them. Returns how many existing messages moved.
+    /// </summary>
+    public int SetFocusOverride(string address, bool focused, DateTimeOffset now)
+    {
+        var key = address.Trim().ToLowerInvariant();
+        if (key.Length == 0) return 0;
+
+        return _store.InTransaction(() =>
+        {
+            _store.Execute(
+                """
+                INSERT INTO focus_overrides (address, focused, added_utc) VALUES ($address, $focused, $now)
+                ON CONFLICT(address) DO UPDATE SET focused = excluded.focused, added_utc = excluded.added_utc
+                """,
+                ("$address", key), ("$focused", focused ? 1 : 0), ("$now", now.ToUnixTimeSeconds()));
+
+            return _store.Execute(
+                """
+                UPDATE messages SET is_focused = $focused
+                WHERE lower(from_address) = $address AND is_focused <> $focused
+                  AND folder_id IN (SELECT id FROM folders WHERE role = 'inbox')
+                """,
+                ("$focused", focused ? 1 : 0), ("$address", key));
+        });
+    }
+
+    /// <summary>What the reader has said about a sender: true Focused, false Other, null nothing.</summary>
+    public bool? FocusOverride(string address)
+    {
+        if (string.IsNullOrWhiteSpace(address)) return null;
+
+        return _store.Query(
+            "SELECT focused FROM focus_overrides WHERE address = $address",
+            r => r.GetInt32(0) != 0, ("$address", address.Trim().ToLowerInvariant()))
+            .Select(f => (bool?)f).FirstOrDefault();
+    }
+
+    /// <summary>Whether the reader has ever written to this address — the Auto-Complete List knows.</summary>
+    public bool HasWrittenTo(string address)
+    {
+        if (string.IsNullOrWhiteSpace(address)) return false;
+
+        return _store.ScalarLong(
+            "SELECT count(*) FROM nickname_cache WHERE address = $address",
+            ("$address", address.Trim().ToLowerInvariant())) > 0;
+    }
 
     /// <summary>The clause that keeps a snoozed message out of a list, on the store's own clock.</summary>
     private const string Awake = " AND (snooze_until IS NULL OR snooze_until <= strftime('%s','now'))";
@@ -2181,6 +2252,7 @@ public sealed class MailRepository(MailStore store)
         FollowUpStart = NullableLong(r, "follow_up_start") is { } start ? DateTimeOffset.FromUnixTimeSeconds(start) : null,
         Reminder = NullableLong(r, "reminder_utc") is { } remind ? DateTimeOffset.FromUnixTimeSeconds(remind) : null,
         Importance = r.GetInt32(r.GetOrdinal("importance")),
+        IsFocused = r.GetInt32(r.GetOrdinal("is_focused")) != 0,
         To = Split(r.GetString(r.GetOrdinal("to_addresses"))),
         Cc = Split(r.GetString(r.GetOrdinal("cc_addresses"))),
     };

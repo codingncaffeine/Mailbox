@@ -131,6 +131,21 @@ public static class ViewCommands
         RequiresSingleSelection = true,
     };
 
+    /// <summary>
+    /// The reference's View tab has it in a Focused Inbox group; the Simplified bar keeps it
+    /// behind the "…", which is where this is too — off the default row, in the overflow.
+    /// </summary>
+    public static readonly MailboxCommand ShowFocusedInbox = new()
+    {
+        Id = new("view.focusedinbox"),
+        Label = "Show Focused Inbox",
+        Description = "Split the Inbox into Focused and Other, sorted as mail arrives.",
+        Icon = "focus-time",
+        Category = "Focused Inbox",
+        Scope = ModuleScope.Mail,
+        InDefaultLayout = false,
+    };
+
     // ---- Shell -------------------------------------------------------------------------
     public static readonly MailboxCommand Redo = new()
     {
@@ -221,7 +236,7 @@ public static class ViewCommands
     [
         SendAll, UpdateFolder, SendReceiveGroups, ShowProgress, CancelAll,
         ChangeView, ViewSettings, ArrangeBy, ReverseSort, TighterSpacing, LayoutMenu,
-        ImmersiveReader,
+        ImmersiveReader, ShowFocusedInbox,
         Redo, Apps, SearchPeople, ReadAloud,
         MoveToQuick, ToManager, TeamEmail,
     ];

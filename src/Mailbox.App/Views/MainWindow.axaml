@@ -502,18 +502,20 @@
                             Background="{DynamicResource list.header.background.brush}"
                             Padding="10,5">
                         <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
+                            <!-- All / Unread, or Focused / Other when Focused Inbox is on and
+                                 the Inbox is open: the same two buttons, relabelled. -->
                             <Button Grid.Column="0"
                                     Classes="flat"
-                                    Command="{Binding ShowAll}"
-                                    Content="All"
-                                    FontWeight="{Binding AllFilterWeight}"
+                                    Command="{Binding PivotLeft}"
+                                    Content="{Binding PivotLeftLabel}"
+                                    FontWeight="{Binding PivotLeftWeight}"
                                     Foreground="{DynamicResource list.header.text.brush}" />
                             <Button Grid.Column="1"
                                     Classes="flat"
                                     Margin="13,0,0,0"
-                                    Command="{Binding ShowUnread}"
-                                    Content="Unread"
-                                    FontWeight="{Binding UnreadFilterWeight}"
+                                    Command="{Binding PivotRight}"
+                                    Content="{Binding PivotRightLabel}"
+                                    FontWeight="{Binding PivotRightWeight}"
                                     Foreground="{DynamicResource list.header.text.brush}" />
                             <Button Grid.Column="3"
                                     Name="ArrangeButton"
