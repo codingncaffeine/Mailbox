@@ -64,6 +64,7 @@ internal static class BackstageActions
 
             case "rules":
                 await new RulesAndAlertsDialog().ShowDialog(host.Owner);
+                host.Refresh();
                 break;
         }
     }

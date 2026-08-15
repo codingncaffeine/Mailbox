@@ -1532,6 +1532,12 @@ public sealed class ShellViewModel : ObservableObject
     /// <summary>The address of the account whose folder is on screen, for a new message to come from.</summary>
     public string? CurrentAddress => CurrentAccount?.Account.Address;
 
+    /// <summary>The folder on screen, from the store, or null while the sample is showing.</summary>
+    public Folder? CurrentFolder =>
+        SelectedFolder is { } folder && _folderIds.TryGetValue(folder, out var where)
+            ? where.Account.Mail.GetFolder(where.FolderId)
+            : null;
+
     /// <summary>What kind of folder is on screen, so a draft can be opened as one.</summary>
     public FolderRole CurrentFolderRole =>
         SelectedFolder is { } folder && _folderIds.TryGetValue(folder, out var where)
