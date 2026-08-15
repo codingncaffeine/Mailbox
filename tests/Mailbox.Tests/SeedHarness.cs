@@ -56,9 +56,10 @@ public class SeedHarness
                 "Confirmed — Carlito is metric-compatible with Calibri, so the layout holds "
                 + "either way."),
 
-            Plain("Sam Reyes", "sam@example.net", "Draft agenda attached",
+            WithAttachment("Sam Reyes", "sam@example.net", "Draft agenda attached",
                 "Rough cut for Monday. Shout if there's anything you want added before I send "
-                + "it round."));
+                + "it round.",
+                "agenda.pdf", "application/pdf", 38_000));
     }
 
     // ---- The messages ----------------------------------------------------------------------
@@ -67,6 +68,27 @@ public class SeedHarness
     {
         var message = Envelope(name, address, subject);
         message.Body = new TextPart("plain") { Text = body };
+        return message;
+    }
+
+    private static MimeMessage WithAttachment(
+        string name, string address, string subject, string body,
+        string fileName, string type, int size)
+    {
+        var message = Envelope(name, address, subject);
+
+        message.Body = new Multipart("mixed")
+        {
+            new TextPart("plain") { Text = body },
+            new MimePart(ContentType.Parse(type))
+            {
+                FileName = fileName,
+                Content = new MimeContent(new MemoryStream(new byte[size])),
+                ContentDisposition = new ContentDisposition(ContentDisposition.Attachment),
+                ContentTransferEncoding = ContentEncoding.Base64,
+            },
+        };
+
         return message;
     }
 

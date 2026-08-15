@@ -239,6 +239,27 @@ public partial class MainWindow : Window
                 };
                 break;
 
+            // A message in its own window, which otherwise takes a double-click to reach.
+            case "message":
+                Opened += (_, _) =>
+                {
+                    if (DataContext is not ShellViewModel shell) return;
+
+                    CaptureNextWindow();
+                    OpenMessageWindow(shell);
+                };
+                break;
+
+            case "source":
+                Opened += (_, _) =>
+                {
+                    if (DataContext is not ShellViewModel shell) return;
+
+                    CaptureNextWindow();
+                    ShowMessageSource(shell);
+                };
+                break;
+
             // A run posed mid-flight, since a real one on a scratch store finishes faster than
             // a capture can be taken. The addresses are invented, as all sample data is.
             case "progress":
@@ -353,6 +374,11 @@ public partial class MainWindow : Window
     }
 
     private ReadingPaneBody? _reading;
+    private readonly AttachmentStrip _attachments = new();
+
+    /// <summary>The selected message as it arrived, kept for the source view and its own window.</summary>
+    private MimeKit.MimeMessage? _openMessage;
+    private byte[]? _openRaw;
 
     /// <summary>
     /// Puts the reading pane's body in place and keeps it on the selected message.
@@ -370,6 +396,7 @@ public partial class MainWindow : Window
         };
 
         this.FindControl<ContentControl>("ReadingBody")!.Content = _reading;
+        this.FindControl<ContentControl>("ReadingAttachments")!.Content = _attachments;
 
         shell.PropertyChanged += (_, e) =>
         {
@@ -410,8 +437,50 @@ public partial class MainWindow : Window
             }
         }
 
+        _openMessage = message;
+        _openRaw = raw;
+
+        _attachments.Show(message);
         _reading.Show(message, shell.SelectedMessage?.Body ?? string.Empty);
         _ = _reading.ApplySenderPolicyAsync();
+    }
+
+    /// <summary>
+    /// View Source, which is one of the additions the shipped ribbon does not place.
+    /// </summary>
+    private void ShowMessageSource(ShellViewModel shell)
+    {
+        if (_openRaw is not { Length: > 0 } raw)
+        {
+            shell.StatusRight = "There is no message to show the source of.";
+            return;
+        }
+
+        new MessageSourceWindow(shell.SelectedMessage?.Subject ?? string.Empty, raw).Show(this);
+    }
+
+    /// <summary>
+    /// Printing goes through the engine, which is the only thing that knows how the message is
+    /// laid out. There is nothing to print from the text fallback.
+    /// </summary>
+    private void PrintMessage(ShellViewModel shell)
+    {
+        if (_reading?.Print() != true)
+        {
+            shell.StatusRight = "This message cannot be printed: no web engine is available.";
+        }
+    }
+
+    /// <summary>Opens the selected message in a window of its own, as a double-click does.</summary>
+    private void OpenMessageWindow(ShellViewModel shell)
+    {
+        if (_openMessage is not { } message)
+        {
+            shell.StatusRight = "There is no message to open.";
+            return;
+        }
+
+        new MessageWindow(App.Themes, () => shell.CurrentMail, message, _openRaw).Show(this);
     }
 
     /// <summary>Opens the Options dialog modally over the shell, optionally on a given page.</summary>
@@ -798,6 +867,10 @@ public partial class MainWindow : Window
         if (id == MailCommands.WorkOffline.Id) { ToggleWorkOffline(shell); return; }
         if (id == MailCommands.NewEmail.Id) { NewMessage(); return; }
         if (id == ViewCommands.ShowProgress.Id) { ShowProgressDialog(shell); return; }
+        if (id == MailCommands.ViewSource.Id) { ShowMessageSource(shell); return; }
+        if (id == MailCommands.TrackerReport.Id) { _ = _reading?.ShowTrackerReportAsync(); return; }
+        if (id == MailCommands.AuthenticationDetails.Id) { _ = _reading?.ShowAuthenticationAsync(); return; }
+        if (id == MailCommands.Print.Id) { PrintMessage(shell); return; }
         if (id == ViewCommands.CancelAll.Id) { CancelTransfer(); return; }
 
         shell.StatusRight = $"{command.Label} — not wired yet ({command.Id})";
@@ -1117,6 +1190,14 @@ public partial class MainWindow : Window
                 case "read": shell.SetRead([row], row.IsUnread); break;
             }
         }, RoutingStrategies.Tunnel);
+
+        // Double-click opens the message in its own window, as the reference does. The click
+        // that selects the row has already run, so the window shows what is on screen.
+        list.DoubleTapped += (_, e) =>
+        {
+            if (e.Source is Button) return;
+            OpenMessageWindow(shell);
+        };
 
         // Dragging out of the list. Begun from the press, which is what the platform needs;
         // Avalonia holds it until the pointer actually moves, so a plain click still selects.

@@ -430,6 +430,63 @@ public sealed class ReadingPaneBody : UserControl
         }
     }
 
+    /// <summary>
+    /// The tracker report, from the ribbon rather than from the bar.
+    /// </summary>
+    /// <remarks>
+    /// The same detail either way. A reader who has put the command on their ribbon should not
+    /// have to find the bar to reach what it says, and a message with nothing blocked should
+    /// say so rather than opening an empty list.
+    /// </remarks>
+    public async Task ShowTrackerReportAsync()
+    {
+        if (_rendered is not { HasRemoteContent: true } rendered)
+        {
+            await ExplainAsync("Blocked content", "This message asked for nothing from the network.");
+            return;
+        }
+
+        await ExplainAsync(
+            "Blocked content",
+            "This message tried to load content from:\n\n"
+            + string.Join("\n", rendered.Hosts.Select(h => "  • " + h)));
+    }
+
+    /// <summary>What the sending domain's own checks said, from the ribbon.</summary>
+    public async Task ShowAuthenticationAsync()
+    {
+        if (_message is null) return;
+
+        var trust = SenderTrust.Evaluate(_message, _mail()?.FamiliarDomains() ?? []);
+        var results = trust.Authentication;
+
+        var detail = results.WasChecked
+            ? $"DKIM: {results.Dkim}\nSPF: {results.Spf}\nDMARC: {results.Dmarc}"
+              + (results.SigningDomain is { Length: > 0 } d ? $"\nSigned by: {d}" : string.Empty)
+            : "The server that delivered this message recorded no authentication results, "
+              + "which is ordinary for mail sent directly rather than through a provider.";
+
+        if (trust.Warnings.Count > 0)
+        {
+            detail += "\n\n" + string.Join("\n\n",
+                trust.Warnings.Select(w => $"{w.Headline}\n{w.Detail}"));
+        }
+
+        await ExplainAsync("Message authentication", detail);
+    }
+
+    /// <summary>
+    /// Prints through the engine, which is the only thing that knows how the message is laid
+    /// out. Nothing to do when the message is rendering as text.
+    /// </summary>
+    public bool Print()
+    {
+        if (_web is null) return false;
+
+        _web.ShowPrintUI();
+        return true;
+    }
+
     private async Task ExplainAsync(string title, string detail)
     {
         if (TopLevel.GetTopLevel(this) is Window window)
