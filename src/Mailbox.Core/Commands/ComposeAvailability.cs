@@ -150,8 +150,9 @@ public static class ComposeAvailability
             "Picks files and attaches them to the sent message."),
         new(ComposeCommands.AttachItem.Id, ComposeCommandState.Blocked,
             "Phase 4 — attaching another stored message needs the message picker."),
-        new(ComposeCommands.Signature.Id, ComposeCommandState.Blocked,
-            "Phase 6 — signatures, which have no settings surface yet."),
+        new(ComposeCommands.Signature.Id, ComposeCommandState.Working,
+            "Inserts a signature at the caret, and is where they are written and removed. An "
+            + "account can sign new messages automatically; none does unless asked to."),
         new(ComposeCommands.Link.Id, ComposeCommandState.Working, "Inserts a real hyperlink."),
 
         // ---- Tags ---------------------------------------------------------------------

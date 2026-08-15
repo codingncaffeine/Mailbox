@@ -13,6 +13,7 @@ using Mailbox.Editor;
 using Mailbox.Core.Commands;
 using Mailbox.Core.Diagnostics;
 using Mailbox.Core.Ribbon;
+using Mailbox.Core.Settings;
 using Mailbox.Protocols;
 using Mailbox.Store;
 using Mailbox.Theming.Fonts;
@@ -113,6 +114,9 @@ public sealed class ComposeWindow : Window
 
     /// <summary>Not a word anybody would suggest, so it cannot collide with one.</summary>
     private const string AddToDictionary = "\u0000add";
+    private const string EditSignatures = "\u0000signatures";
+    private const string NewSignature = "\u0000new";
+    private const string DefaultSignature = "\u0000default";
 
     public ComposeWindow(CommandCatalog catalog, AccountStores? accounts)
     {
@@ -968,6 +972,8 @@ public sealed class ComposeWindow : Window
     /// <summary>The Insert tab, for the things the document model can actually hold.</summary>
     private bool HandleInsert(CommandId id)
     {
+        if (id == ComposeCommands.Signature.Id) { _ = ChooseSignatureAsync(); return true; }
+
         if (id == ComposeCommands.Spelling.Id || id == ComposeCommands.Editor.Id)
         {
             _ = CheckSpellingAsync();
@@ -1334,6 +1340,187 @@ public sealed class ComposeWindow : Window
         });
 
         _body.Focus();
+    }
+
+    /// <summary>
+    /// The Signature dropdown: pick one to insert, or go and edit them.
+    /// </summary>
+    /// <remarks>
+    /// Inserted at the caret rather than appended, because that is where the reference puts it
+    /// and because a reply wants it above the quoted half rather than below it.
+    /// </remarks>
+    private async Task ChooseSignatureAsync()
+    {
+        var signatures = App.Signatures.All;
+
+        var choices = signatures
+            .Select(sig => new Choice(sig.Name, sig.Name, First(sig)))
+            .ToList();
+
+        choices.Add(new Choice("Signatures…", EditSignatures, "add, change or remove one"));
+
+        if (await Chooser.AskAsync(this, "Signature", "Insert:", choices) is not { } chosen) return;
+
+        if (chosen == EditSignatures)
+        {
+            await EditSignaturesAsync();
+            return;
+        }
+
+        if (App.Signatures.Find(chosen) is { } signature) Insert(signature);
+    }
+
+    /// <summary>
+    /// Signs a new message, where the account has said to.
+    /// </summary>
+    /// <remarks>
+    /// Nothing happens unless somebody chose one — a client that puts a block of text on the
+    /// first message you ever write is one you have to go and find a setting to stop.
+    /// </remarks>
+    private void InsertDefaultSignature()
+    {
+        if (SendingAccount() is not { } account) return;
+        if (App.Signatures.ForNew(account.Account.Address) is not { } signature) return;
+        if (signature.IsEmpty) return;
+
+        // Two blank lines above it, as every mail client does: the writer types where the caret
+        // is and the signature stays below.
+        _body.InsertHtml("<p>&nbsp;</p><p>&nbsp;</p>" + signature.Html);
+    }
+
+    /// <summary>The first line of a signature, so the list says which one it is.</summary>
+    private static string First(Signature signature)
+    {
+        var text = signature.Text is { Length: > 0 } t ? t : signature.Html;
+
+        var line = text.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim()
+                   ?? string.Empty;
+
+        return line.Length > 60 ? line[..60] + "…" : line;
+    }
+
+    /// <summary>Puts a signature into the document, and remembers it went in.</summary>
+    private void Insert(Signature signature)
+    {
+        if (signature.IsEmpty) return;
+
+        // The markup where there is any, so a formatted signature stays formatted. The text is
+        // what the plain half of the message will carry, and the serializer produces that from
+        // the document — so inserting the HTML is enough for both.
+        if (signature.Html is { Length: > 0 } html) _body.InsertHtml(html);
+        else _body.InsertText(signature.Text);
+
+        _body.Focus();
+        Report($"Inserted the {signature.Name} signature.");
+    }
+
+    /// <summary>
+    /// Adding, changing and removing signatures.
+    /// </summary>
+    /// <remarks>
+    /// Here rather than on an Options page because this is where the reference puts the way in —
+    /// the Signature dropdown's last entry — and because a signature is written while looking at
+    /// a message rather than while looking at a settings tree.
+    /// </remarks>
+    private async Task EditSignaturesAsync()
+    {
+        var choices = App.Signatures.All
+            .Select(sig => new Choice(sig.Name, sig.Name, "edit or remove"))
+            .ToList();
+
+        choices.Insert(0, new Choice("New signature…", NewSignature, "write another one"));
+
+        if (App.Signatures.All.Count > 0 && SendingAccount() is { } account)
+        {
+            var current = App.Signatures.ForNew(account.Account.Address)?.Name ?? "none";
+
+            choices.Add(new Choice("Use on new messages…", DefaultSignature,
+                $"currently {current}, for {account.Account.Address}"));
+        }
+
+        if (await Chooser.AskAsync(this, "Signatures", "Signature:", choices) is not { } chosen)
+        {
+            return;
+        }
+
+        if (chosen == NewSignature) { await WriteSignatureAsync(null); return; }
+        if (chosen == DefaultSignature) { await ChooseDefaultSignatureAsync(); return; }
+
+        await WriteSignatureAsync(App.Signatures.Find(chosen));
+    }
+
+    /// <summary>
+    /// Writes one, as plain text.
+    /// </summary>
+    /// <remarks>
+    /// Text rather than a second editor, deliberately: a signature is a few lines and a name and
+    /// a phone number, and offering a full compose surface for it is more window than the job
+    /// needs. The lines become paragraphs on the way out, so it arrives as markup in the HTML
+    /// half and as itself in the text half.
+    /// </remarks>
+    private async Task WriteSignatureAsync(Signature? existing)
+    {
+        var name = await Prompt("Signature", "Name:", existing?.Name ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(name)) return;
+
+        var body = await Prompt("Signature", $"What {name} says:", existing?.Text ?? string.Empty);
+
+        if (body is null) return;
+
+        if (body.Trim().Length == 0)
+        {
+            App.Signatures.Remove(name);
+            Report($"Removed the {name} signature.");
+            return;
+        }
+
+        App.Signatures.Save(new Signature
+        {
+            Name = name.Trim(),
+            Text = body,
+            Html = AsHtml(body),
+        });
+
+        Report($"Saved the {name} signature.");
+    }
+
+    /// <summary>
+    /// A signature's lines as the conservative markup outgoing mail wants.
+    /// </summary>
+    /// <remarks>
+    /// The same rules <see cref="EmailHtml"/> applies to the message itself: paragraphs rather
+    /// than line breaks in a div, nothing that a client from 2007 would not render, and every
+    /// character escaped because a signature is text somebody typed and may contain an ampersand.
+    /// </remarks>
+    private static string AsHtml(string text)
+    {
+        var lines = text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+
+        return string.Concat(lines.Select(line =>
+        {
+            var escaped = line
+                .Replace("&", "&amp;", StringComparison.Ordinal)
+                .Replace("<", "&lt;", StringComparison.Ordinal)
+                .Replace(">", "&gt;", StringComparison.Ordinal);
+
+            return $"<p>{(escaped.Trim().Length == 0 ? "&nbsp;" : escaped)}</p>";
+        }));
+    }
+
+    private async Task ChooseDefaultSignatureAsync()
+    {
+        if (SendingAccount() is not { } account) return;
+
+        var choices = new List<Choice> { new("None", string.Empty, "no signature on a new message") };
+        choices.AddRange(App.Signatures.All.Select(s => new Choice(s.Name, s.Name)));
+
+        var chosen = await Chooser.AskAsync(
+            this, "Signatures", $"On new messages from {account.Account.Address}:", choices);
+
+        if (chosen is null) return;
+
+        App.Signatures.UseForNew(account.Account.Address, chosen.Length == 0 ? null : chosen);
+        Report(chosen.Length == 0 ? "No signature on new messages." : $"New messages sign {chosen}.");
     }
 
     /// <summary>
@@ -1802,9 +1989,18 @@ public sealed class ComposeWindow : Window
         await dialog.ShowDialog(this);
     }
 
-    private async Task<string?> Prompt(string title, string label)
+    private async Task<string?> Prompt(string title, string label, string value = "")
     {
-        var input = new TextBox { MinWidth = 320 };
+        var input = new TextBox
+        {
+            MinWidth = 320,
+            Text = value,
+
+            // A signature is several lines, and so is anything else worth offering a starting
+            // value for. One that cannot hold a second line would be a box for a name only.
+            AcceptsReturn = true,
+            MaxHeight = 220,
+        };
         var content = new StackPanel
         {
             Spacing = 8,
