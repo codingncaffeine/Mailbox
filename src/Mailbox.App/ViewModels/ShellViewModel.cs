@@ -1050,6 +1050,85 @@ public sealed class ShellViewModel : ObservableObject
         StatusRight = $"{Describe(rows.Count)} marked {(read ? "read" : "unread")}.";
     }
 
+    /// <summary>
+    /// The folders a selection could be moved to: those of its own account, the one it is in
+    /// left out.
+    /// </summary>
+    /// <remarks>
+    /// Its own account only. Each account is its own store, and a move across stores is a copy
+    /// and a delete over two files rather than a move — real, and Phase 8's, and not something
+    /// to offer as a menu entry that quietly does something else.
+    /// </remarks>
+    public IReadOnlyList<FolderNode> FoldersOfSelection(IReadOnlyList<MessageRow> rows)
+    {
+        if (rows.Count == 0 || CurrentAccount is not { } account) return [];
+
+        var here = SelectedFolder;
+
+        return
+        [
+            .. _folderIds
+                .Where(kv => ReferenceEquals(kv.Value.Account, account) && !ReferenceEquals(kv.Key, here))
+                .Where(kv => kv.Value.Role != FolderRole.Outbox)
+                .Select(kv => kv.Key),
+        ];
+    }
+
+    /// <summary>The categories this account defines, for the Categorize menu.</summary>
+    public IReadOnlyList<Category> Categories() => CurrentMail?.Categories() ?? [];
+
+    /// <summary>Whether every one of these rows carries the category, for the menu's tick.</summary>
+    public bool AllHave(IReadOnlyList<MessageRow> rows, Category category)
+    {
+        if (rows.Count == 0 || CurrentMail is not { } mail) return false;
+
+        var assigned = mail.CategoriesFor([.. rows.Select(r => r.Id)]);
+        return rows.All(r => assigned.TryGetValue(r.Id, out var list) && list.Any(c => c.Id == category.Id));
+    }
+
+    /// <summary>
+    /// Puts a category on the rows, or takes it off them all if every one already has it.
+    /// </summary>
+    /// <remarks>
+    /// The reference's Categorize menu is a toggle per category, and this is that: the same
+    /// click that colours a message uncolours it. The strip on each row follows at once, from
+    /// the store rather than by guessing, so what is shown is what was written.
+    /// </remarks>
+    public void ToggleCategory(IReadOnlyList<MessageRow> rows, Category category)
+    {
+        if (rows.Count == 0 || Mail(rows) is not { } mail) return;
+
+        var ids = rows.Select(r => r.Id).ToList();
+        var remove = AllHave(rows, category);
+
+        if (remove) mail.Unassign(ids, category.Id);
+        else mail.Assign(ids, category.Id);
+
+        var assigned = mail.CategoriesFor(ids);
+        foreach (var row in rows)
+        {
+            row.CategoryTokens = assigned.TryGetValue(row.Id, out var list)
+                ? [.. list.Select(c => c.ColourToken)]
+                : [];
+        }
+
+        StatusRight = remove
+            ? $"{category.Name} removed from {Describe(rows.Count)}."
+            : $"{Describe(rows.Count)} categorised {category.Name}.";
+    }
+
+    /// <summary>Takes every category off the rows.</summary>
+    public void ClearCategories(IReadOnlyList<MessageRow> rows)
+    {
+        if (rows.Count == 0 || Mail(rows) is not { } mail) return;
+
+        var ids = rows.Select(r => r.Id).ToList();
+        foreach (var category in mail.Categories()) mail.Unassign(ids, category.Id);
+        foreach (var row in rows) row.CategoryTokens = [];
+
+        StatusRight = $"Categories cleared on {Describe(rows.Count)}.";
+    }
+
     public void SetFlagged(IReadOnlyList<MessageRow> rows, bool flagged)
     {
         if (rows.Count == 0) return;

@@ -18,6 +18,7 @@ using Mailbox.Core.Settings;
 using Mailbox.Protocols;
 using Mailbox.Security;
 using Mailbox.Store;
+using Mailbox.Theming.Icons;
 
 namespace Mailbox.App.Views;
 
@@ -105,6 +106,23 @@ public partial class MainWindow : Window
         DataContext = shell;
 
         ApplyHarnessState(shell);
+
+        // Presses ribbon commands by id, after the window has opened and the posed folder and
+        // selection are in place: MAILBOX_RUN=mail.delete,mail.archive. A menu cannot be
+        // photographed but what it does can, and this is how the audit checks that a button
+        // does what §20 says rather than what its handler's name suggests.
+        if (Environment.GetEnvironmentVariable("MAILBOX_RUN") is { Length: > 0 } run)
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(() =>
+            {
+                foreach (var id in run.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    Log.Info($"Harness: running {id}.");
+                    RunCommand(new CommandId(id));
+                    if (DataContext is ShellViewModel s) Log.Info($"Harness: status \u201c{s.StatusRight}\u201d");
+                }
+            }, DispatcherPriority.Background);
+        }
 
         // Which folder is open. Set after the window opens rather than with the rest of the
         // posed state: the folder pane's list pushes its own selection back as it binds, so a
@@ -914,7 +932,11 @@ public partial class MainWindow : Window
             var match = shell.Messages.FirstOrDefault(
                 m => m.Subject.Contains(subject, StringComparison.OrdinalIgnoreCase));
 
-            if (match is not null) shell.SelectedMessage = match;
+            // Through SelectedRow, which is what the list binds, so the list's own selection —
+            // which is what the commands over a selection read — follows. Setting only
+            // SelectedMessage showed the message in the pane and left the list with nothing
+            // selected, which is how MAILBOX_RUN=mail.delete deleted nothing.
+            if (match is not null) shell.SelectedRow = match;
         }
 
         var wanted = Environment.GetEnvironmentVariable("MAILBOX_STATE");
@@ -1158,8 +1180,239 @@ public partial class MainWindow : Window
         if (id == ViewCommands.CancelAll.Id) { CancelTransfer(); return; }
         if (id == ViewCommands.SendReceiveGroups.Id) { ShowGroupsMenu(shell); return; }
 
+        if (RunOverSelection(shell, id)) return;
+        if (RunViewCommand(shell, id)) return;
+
+        // Everything left is recorded in §20 with what it waits for; the status line names
+        // the command so the plan can be checked against the window rather than the reverse.
         shell.StatusRight = $"{command.Label} — not wired yet ({command.Id})";
     }
+
+    /// <summary>
+    /// The Home tab's commands over the selected messages.
+    /// </summary>
+    /// <remarks>
+    /// The shell has had every one of these operations since Phase 3 — the Delete key, the
+    /// hover actions and the shortcuts all call them — and the ribbon buttons for the same
+    /// things reported "not wired" until session 4's audit pressed them. They call the same
+    /// operations now, so a thing done from the ribbon, the keyboard, a hover or the row's
+    /// menu is one thing done four ways.
+    /// </remarks>
+    private bool RunOverSelection(ShellViewModel shell, CommandId id)
+    {
+        var rows = SelectedRows();
+
+        if (id == MailCommands.Delete.Id) { shell.Delete(rows, permanently: false); return true; }
+        if (id == MailCommands.Archive.Id) { shell.MoveTo(rows, FolderRole.Archive); return true; }
+        if (id == MailCommands.Junk.Id) { shell.MoveTo(rows, FolderRole.Junk); return true; }
+
+        // The reference's Unread/Read button toggles: unread if the selection is all read, read
+        // otherwise. Same for the flag.
+        if (id == MailCommands.Unread.Id) { shell.SetRead(rows, read: rows.Any(r => r.IsUnread)); return true; }
+        if (id == MailCommands.FollowUp.Id) { shell.SetFlagged(rows, flagged: rows.Any(r => !r.IsFlagged)); return true; }
+
+        if (id == MailCommands.Categorize.Id) { ShowCategorizeMenu(shell, rows); return true; }
+        if (id == MailCommands.MoveTo.Id || id == ViewCommands.MoveToQuick.Id) { ShowMoveMenu(shell, rows); return true; }
+        if (id == MailCommands.Rules.Id) { _ = new RulesAndAlertsDialog().ShowDialog(this); return true; }
+        if (id == MailCommands.NewItems.Id) { ShowNewItemsMenu(); return true; }
+        if (id == MailCommands.FilterEmail.Id) { ShowFilterMenu(shell); return true; }
+
+        return false;
+    }
+
+    /// <summary>The View tab's toggles that have state behind them.</summary>
+    private static bool RunViewCommand(ShellViewModel shell, CommandId id)
+    {
+        if (id == ViewCommands.ReverseSort.Id) { shell.SortDescending = !shell.SortDescending; return true; }
+        if (id == ViewCommands.TighterSpacing.Id) { shell.CompactRows = !shell.CompactRows; return true; }
+
+        return false;
+    }
+
+    /// <summary>The Categorize menu: the account's six, ticked where the whole selection has one.</summary>
+    private void ShowCategorizeMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
+    {
+        var flyout = new MenuFlyout();
+        var categories = shell.Categories();
+
+        if (categories.Count == 0 || rows.Count == 0)
+        {
+            flyout.Items.Add(new MenuItem
+            {
+                Header = rows.Count == 0 ? "Select a message first" : "No categories are defined",
+                IsEnabled = false,
+            });
+        }
+
+        foreach (var category in categories)
+        {
+            var item = new MenuItem
+            {
+                Header = category.Name,
+                Icon = CategorySwatch(category.ColourToken),
+            };
+
+            if (shell.AllHave(rows, category)) item.Icon = Tick();
+
+            var chosen = category;
+            item.Click += (_, _) => shell.ToggleCategory(rows, chosen);
+            flyout.Items.Add(item);
+        }
+
+        if (categories.Count > 0 && rows.Count > 0)
+        {
+            flyout.Items.Add(new Separator());
+            var clear = new MenuItem { Header = "Clear All Categories" };
+            clear.Click += (_, _) => shell.ClearCategories(rows);
+            flyout.Items.Add(clear);
+        }
+
+        // Creating, renaming and recolouring one is Phase 8, and the entry says so rather than
+        // being missing — it is where the reference puts the way in.
+        flyout.Items.Add(new Separator());
+        var all = new MenuItem { Header = "All Categories…", IsEnabled = false };
+        ToolTip.SetTip(all, "Managing categories is Phase 8.");
+        flyout.Items.Add(all);
+
+        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+    }
+
+    /// <summary>The Move menu: every folder of the account the selection is in.</summary>
+    private void ShowMoveMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
+    {
+        var flyout = new MenuFlyout();
+
+        if (rows.Count == 0)
+        {
+            flyout.Items.Add(new MenuItem { Header = "Select a message first", IsEnabled = false });
+        }
+        else
+        {
+            foreach (var folder in shell.FoldersOfSelection(rows))
+            {
+                var item = new MenuItem { Header = folder.Name };
+                var target = folder;
+                item.Click += (_, _) => shell.MoveToFolder([.. rows.Select(r => r.Id)], target);
+                flyout.Items.Add(item);
+            }
+        }
+
+        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+    }
+
+    /// <summary>New Items: a new message today, and the other kinds when their modules exist.</summary>
+    private void ShowNewItemsMenu()
+    {
+        var flyout = new MenuFlyout();
+
+        var mail = new MenuItem { Header = "Email Message" };
+        mail.Click += (_, _) => NewMessage();
+        flyout.Items.Add(mail);
+        flyout.Items.Add(new Separator());
+
+        foreach (var (label, phase) in new[]
+                 {
+                     ("Appointment", "Phase 11"), ("Meeting", "Phase 11"),
+                     ("Contact", "Phase 12"), ("Task", "Phase 13"), ("Note", "Phase 13"),
+                 })
+        {
+            var item = new MenuItem { Header = label, IsEnabled = false };
+            ToolTip.SetTip(item, $"{label}s arrive with {phase}.");
+            flyout.Items.Add(item);
+        }
+
+        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+    }
+
+    /// <summary>Filter Email: the one filter the list has, and the rest named for what they wait on.</summary>
+    private void ShowFilterMenu(ShellViewModel shell)
+    {
+        var flyout = new MenuFlyout();
+
+        var unread = new MenuItem { Header = "Unread", Icon = shell.UnreadOnly ? Tick() : null };
+        unread.Click += (_, _) => shell.UnreadOnly = !shell.UnreadOnly;
+        flyout.Items.Add(unread);
+
+        foreach (var label in new[] { "Has Attachments", "Flagged", "Important", "Categorized", "This Week" })
+        {
+            var item = new MenuItem { Header = label, IsEnabled = false };
+            ToolTip.SetTip(item, "Phase 8 — the search refiners.");
+            flyout.Items.Add(item);
+        }
+
+        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+    }
+
+    /// <summary>
+    /// The message row's right-click menu, in the reference's order.
+    /// </summary>
+    /// <remarks>
+    /// Built when it opens rather than once: the ticks and the folder list change with the
+    /// selection. Anything on it that has no command behind it yet is greyed with the phase in
+    /// its tooltip, which is what the ribbon does for the same commands.
+    /// </remarks>
+    private MenuFlyout RowMenu(ShellViewModel shell)
+    {
+        var flyout = new MenuFlyout();
+
+        flyout.Opening += (_, _) =>
+        {
+            flyout.Items.Clear();
+            var rows = SelectedRows();
+
+            void Command(string label, CommandId id, bool works = true, string? waitsOn = null)
+            {
+                var item = new MenuItem { Header = label, IsEnabled = works && rows.Count > 0 };
+                if (!works && waitsOn is not null) ToolTip.SetTip(item, waitsOn);
+                item.Click += (_, _) => RunCommand(id);
+                flyout.Items.Add(item);
+            }
+
+            Command("Reply", MailCommands.Reply.Id, works: false, "Phase 6 — reply opens a prefilled message");
+            Command("Reply All", MailCommands.ReplyAll.Id, works: false, "Phase 6 — reply opens a prefilled message");
+            Command("Forward", MailCommands.Forward.Id, works: false, "Phase 6 — forward opens a prefilled message");
+            flyout.Items.Add(new Separator());
+
+            var read = new MenuItem
+            {
+                Header = rows.Any(r => r.IsUnread) ? "Mark as Read" : "Mark as Unread",
+                IsEnabled = rows.Count > 0,
+            };
+            read.Click += (_, _) => RunCommand(MailCommands.Unread.Id);
+            flyout.Items.Add(read);
+
+            Command("Categorize…", MailCommands.Categorize.Id);
+            Command(rows.Any(r => !r.IsFlagged) ? "Follow Up" : "Clear Flag", MailCommands.FollowUp.Id);
+            flyout.Items.Add(new Separator());
+
+            Command("Rules…", MailCommands.Rules.Id);
+            Command("Move…", MailCommands.MoveTo.Id);
+            Command("Ignore", MailCommands.Ignore.Id, works: false, "Phase 8 — Ignore Conversation");
+            Command("Junk", MailCommands.Junk.Id);
+            flyout.Items.Add(new Separator());
+
+            Command("Delete", MailCommands.Delete.Id);
+            Command("Archive", MailCommands.Archive.Id);
+        };
+
+        return flyout;
+    }
+
+    /// <summary>A category's colour, as a small square, from its token.</summary>
+    private static Control CategorySwatch(string token)
+    {
+        var swatch = new Border { Width = 12, Height = 12, CornerRadius = new CornerRadius(2) };
+        swatch[!Border.BackgroundProperty] =
+            new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(token + ".brush");
+        return swatch;
+    }
+
+    private static Control Tick() => new TextBlock
+    {
+        Text = IconGlyphs.GetOrEmpty("mark-complete", 16),
+        FontFamily = IconFont.Family,
+        FontSize = 12,
+    };
 
     private readonly Dictionary<string, DateTimeOffset> _lastRun = new(StringComparer.OrdinalIgnoreCase);
 
@@ -1596,6 +1849,27 @@ public partial class MainWindow : Window
             if (e.Source is Button) return;
             OpenMessageWindow(shell);
         };
+
+        // Right-click: the reference's menu over a message, in its order, over the selection.
+        // Every entry runs the same command the ribbon button does, so a thing done from here
+        // is the thing done from there. Entries whose command is not built yet say what they
+        // wait for, the way the ribbon's do.
+        list.ContextFlyout = RowMenu(shell);
+
+        // A right-click on a row that is not selected selects it first, as the reference does,
+        // so the menu acts on what is under the pointer rather than on whatever was selected
+        // before. A right-click inside the selection leaves the selection alone.
+        list.AddHandler(PointerPressedEvent, (object? _, PointerPressedEventArgs e) =>
+        {
+            if (!e.GetCurrentPoint(list).Properties.IsRightButtonPressed) return;
+            if ((e.Source as Control)?.DataContext is not ViewModels.MessageRow pressed) return;
+
+            if (!SelectedRows().Contains(pressed))
+            {
+                list.SelectedItems?.Clear();
+                list.SelectedItem = pressed;
+            }
+        }, RoutingStrategies.Tunnel);
 
         // Dragging out of the list. Begun from the press, which is what the platform needs;
         // Avalonia holds it until the pointer actually moves, so a plain click still selects.
