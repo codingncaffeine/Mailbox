@@ -28,6 +28,21 @@ public static class WindowCapture
     /// <summary>How long to let layout, fonts and the first render settle before capturing.</summary>
     private static readonly TimeSpan SettleDelay = TimeSpan.FromMilliseconds(900);
 
+    /// <summary>
+    /// Where a window being photographed is put: far enough off any desktop to not be seen.
+    /// </summary>
+    /// <remarks>
+    /// A capture still has to open a real window — the renderer walks a live visual tree, and
+    /// nothing is laid out until a top level exists. What it does not have to do is appear.
+    /// Sweeping a dozen themes used to flash a dozen windows across whatever the owner was
+    /// working on, which is distracting enough to stop people running the harness.
+    /// <para>
+    /// Off-screen rather than transparent: opacity is applied while rendering, so a window
+    /// hidden that way photographs as nothing at all.
+    /// </para>
+    /// </remarks>
+    private static readonly PixelPoint OffScreen = new(-32000, -32000);
+
     public static string? RequestedPath => Environment.GetEnvironmentVariable(PathVariable);
 
     public static bool IsRequested => !string.IsNullOrWhiteSpace(RequestedPath);
@@ -89,6 +104,8 @@ public static class WindowCapture
     {
         if (RequestedPath is not { } path) return;
 
+        HideWhileCapturing(window);
+
         window.Opened += async (_, _) =>
         {
             try
@@ -106,6 +123,28 @@ public static class WindowCapture
                 shutdown();
             }
         };
+    }
+
+    /// <summary>
+    /// Puts a window somewhere it will not be seen, for a run that only wants a picture of it.
+    /// </summary>
+    /// <remarks>
+    /// Called for every window the harness photographs, including the dialogs it opens on the
+    /// way. Nothing here changes what is rendered — the position is where the compositor puts
+    /// the surface, and the bitmap comes from the visual tree either way.
+    /// </remarks>
+    public static void HideWhileCapturing(Window window)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        if (!IsRequested) return;
+
+        window.WindowStartupLocation = WindowStartupLocation.Manual;
+        window.ShowInTaskbar = false;
+        window.Position = OffScreen;
+
+        // Set again once it exists: a window manager may place it where it likes on mapping,
+        // and the position asked for before that is a request rather than a fact.
+        window.Opened += (_, _) => window.Position = OffScreen;
     }
 
     public static void Capture(Window window, string path, double scale = 1.0)
