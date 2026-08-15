@@ -421,6 +421,40 @@ public sealed class MailRepository(MailStore store)
             ReadMessage, ("$folder", folderId), ("$limit", limit));
     }
 
+    // ---- Ignore Conversation --------------------------------------------------------------------
+
+    /// <summary>The thread key the list groups by, for a subject — the store's own rule, exposed.</summary>
+    public static string ThreadKeyOf(string subject) => ThreadKey(subject ?? string.Empty);
+
+    /// <summary>Whether a conversation is ignored, by its thread key.</summary>
+    public bool IsIgnored(string threadKey) => _store.ScalarLong(
+        "SELECT count(*) FROM ignored_conversations WHERE thread_key = $key", ("$key", threadKey)) > 0;
+
+    /// <summary>Starts ignoring a conversation. Its messages are moved by the caller.</summary>
+    public void Ignore(string threadKey, string subject, DateTimeOffset now) => _store.Execute(
+        """
+        INSERT INTO ignored_conversations (thread_key, subject, added_utc) VALUES ($key, $subject, $now)
+        ON CONFLICT(thread_key) DO NOTHING
+        """,
+        ("$key", threadKey), ("$subject", subject), ("$now", now.ToUnixTimeSeconds()));
+
+    /// <summary>Stop Ignoring: the conversation arrives in the Inbox again from now on.</summary>
+    public void Unignore(string threadKey) => _store.Execute(
+        "DELETE FROM ignored_conversations WHERE thread_key = $key", ("$key", threadKey));
+
+    /// <summary>The messages of a conversation across the account's folders, oldest first — the Outbox aside.</summary>
+    public IReadOnlyList<MessageSummary> MessagesInThread(string threadKey, bool includeDeleted = false)
+    {
+        var excluded = includeDeleted ? "'outbox'" : "'outbox', 'deleted'";
+        return _store.Query(
+            $"""
+             SELECT m.* FROM messages m JOIN folders f ON f.id = m.folder_id
+             WHERE m.thread_key = $key AND f.role NOT IN ({excluded})
+             ORDER BY m.received_utc, m.id
+             """,
+            ReadMessage, ("$key", threadKey));
+    }
+
     // ---- Focused Inbox (§12) --------------------------------------------------------------------
 
     /// <summary>Puts messages in Focused or Other.</summary>

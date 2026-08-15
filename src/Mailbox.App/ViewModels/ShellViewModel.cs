@@ -1236,6 +1236,132 @@ public sealed class ShellViewModel : ObservableObject
     // Filtering, sorting and grouping run over the in-memory sample for now. They are view
     // state either way: Phase 2 swaps the source collection, not any of this.
 
+    // ---- Ignore and Clean Up ---------------------------------------------------------------------
+
+    /// <summary>Whether every selected row's conversation is already ignored — the button then reads Stop Ignoring.</summary>
+    public bool IsIgnored(IReadOnlyList<MessageRow> rows)
+        => rows.Count > 0 && Mail(rows) is { } mail && rows.All(r => mail.IsIgnored(StoreKey(r)));
+
+    /// <summary>
+    /// The store's thread key for a row. The row's own <see cref="MessageRow.ThreadKey"/> keeps
+    /// the subject's case for the conversation view; the store folds it, and the ignore list is
+    /// the store's.
+    /// </summary>
+    private static string StoreKey(MessageRow row) => MailRepository.ThreadKeyOf(row.Subject);
+
+    /// <summary>
+    /// Ignore Conversation: the selection's conversations go to Deleted Items — every message of
+    /// each, in every folder — and stay ignored, so what arrives in them later goes there too.
+    /// Stop Ignoring brings the conversation back to the Inbox and forgets it.
+    /// </summary>
+    public void IgnoreConversation(IReadOnlyList<MessageRow> rows)
+    {
+        if (rows.Count == 0 || Mail(rows) is not { } mail || CurrentAccount is not { } account) return;
+
+        var deleted = mail.FolderWithRole(account.Account.Id, FolderRole.Deleted);
+        var inbox = mail.FolderWithRole(account.Account.Id, FolderRole.Inbox);
+        if (deleted is null || inbox is null) return;
+
+        var keys = rows.Select(StoreKey).Where(k => k.Length > 0).Distinct().ToList();
+        var stopping = keys.All(mail.IsIgnored);
+        var moved = 0;
+
+        foreach (var key in keys)
+        {
+            if (stopping)
+            {
+                mail.Unignore(key);
+                var back = mail.MessagesInThread(key, includeDeleted: true)
+                    .Where(m => m.FolderId == deleted.Id).Select(m => m.Id).ToList();
+                if (back.Count > 0) moved += mail.MoveMessages(back, inbox.Id);
+            }
+            else
+            {
+                mail.Ignore(key, rows.First(r => StoreKey(r) == key).Subject, DateTimeOffset.UtcNow);
+                var away = mail.MessagesInThread(key).Select(m => m.Id).ToList();
+                if (away.Count > 0) moved += mail.MoveMessages(away, deleted.Id);
+            }
+        }
+
+        ReloadCurrentView();
+        RefreshCounts();
+        StatusRight = stopping
+            ? $"No longer ignoring {(keys.Count == 1 ? "the conversation" : $"{keys.Count} conversations")}; {Describe(moved)} back in the Inbox."
+            : $"{(keys.Count == 1 ? "Conversation" : $"{keys.Count} conversations")} ignored; {Describe(moved)} moved to Deleted Items.";
+    }
+
+    /// <summary>
+    /// Clean Up: the redundant messages of the selection's conversations, of the folder, or of the
+    /// folder and its subfolders, go to Deleted Items. Returns how many went.
+    /// </summary>
+    public int CleanUp(IReadOnlyList<MessageRow> rows, bool wholeFolder, bool withSubfolders)
+    {
+        if (CurrentAccount is not { } account || CurrentMail is not { } mail) return 0;
+        if (mail.FolderWithRole(account.Account.Id, FolderRole.Deleted) is not { } deleted) return 0;
+
+        var policy = App.MailOptions.CleanUpPolicy;
+        var folders = new List<long>();
+        if (wholeFolder && CurrentFolder is { } folder)
+        {
+            folders.Add(folder.Id);
+            if (withSubfolders)
+            {
+                var all = mail.Folders(account.Account.Id);
+                var frontier = new Queue<long>([folder.Id]);
+                while (frontier.TryDequeue(out var parent))
+                {
+                    foreach (var child in all.Where(f => f.ParentId == parent))
+                    {
+                        folders.Add(child.Id);
+                        frontier.Enqueue(child.Id);
+                    }
+                }
+            }
+        }
+
+        var keys = wholeFolder
+            ? folders.SelectMany(f => mail.Messages(f, int.MaxValue)).Select(m => MailRepository.ThreadKeyOf(m.Subject)).Where(k => k.Length > 0).Distinct().ToList()
+            : rows.Select(StoreKey).Where(k => k.Length > 0).Distinct().ToList();
+
+        var doomed = new List<long>();
+        foreach (var key in keys)
+        {
+            var thread = mail.MessagesInThread(key);
+            if (thread.Count < 2) continue;
+
+            var categorized = mail.CategoriesFor([.. thread.Select(m => m.Id)]);
+            var candidates = thread.Select(m => new Mailbox.Core.Conversations.CleanUpCandidate(m.Id, m.Received, TextOf(mail, m))
+            {
+                IsUnread = !m.IsRead,
+                IsCategorized = categorized.ContainsKey(m.Id),
+                IsFlagged = m.IsFlagged,
+                IsSigned = mail.Authentication(m.Id) is not null,
+            }).ToList();
+
+            doomed.AddRange(Mailbox.Core.Conversations.CleanUp.Redundant(candidates, policy));
+        }
+
+        if (doomed.Count > 0) mail.MoveMessages(doomed, deleted.Id);
+        ReloadCurrentView();
+        RefreshCounts();
+        StatusRight = doomed.Count == 0
+            ? "No redundant messages were found."
+            : $"{Describe(doomed.Count)} moved to Deleted Items by Clean Up.";
+        return doomed.Count;
+    }
+
+    /// <summary>A message's plain text for the containment check: the raw message parsed, or the preview.</summary>
+    private static string TextOf(MailRepository mail, MessageSummary summary)
+    {
+        if (summary.BodyText.Length > 0) return summary.BodyText;
+        if (mail.LoadRaw(summary.Id) is { } raw && Parse(raw) is { } message)
+        {
+            return message.TextBody ?? message.HtmlBody ?? summary.Preview;
+        }
+
+        return summary.Preview;
+    }
+
     // ---- Focused Inbox (§12) ------------------------------------------------------------------
     // When the view is on and the Inbox is open, the All / Unread pivot becomes Focused / Other:
     // the Inbox lists one half at a time. Elsewhere the pivot is what it always was.

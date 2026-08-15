@@ -53,6 +53,12 @@ public sealed class MailOptions(SettingsStore settings)
     public const string ReminderSoundKey = "reminders.sound";
     public const string RemindersOnTopKey = "reminders.ontop";
     public const string FocusedInboxKey = "view.focusedinbox";
+    public const string CleanUpKeepUnreadKey = "mail.cleanup.keepunread";
+    public const string CleanUpKeepCategorizedKey = "mail.cleanup.keepcategorized";
+    public const string CleanUpKeepFlaggedKey = "mail.cleanup.keepflagged";
+    public const string CleanUpKeepSignedKey = "mail.cleanup.keepsigned";
+    public const string CleanUpKeepModifiedKey = "mail.cleanup.keepmodified";
+    public const string IgnoreConfirmKey = "mail.ignore.confirm";
     public const string DesktopAlertKey = "mail.arrival.alert";
     public const string RequestDeliveryReceiptKey = "mail.tracking.delivery";
     public const string RequestReadReceiptKey = "mail.tracking.read";
@@ -212,6 +218,23 @@ public sealed class MailOptions(SettingsStore settings)
     {
         get => _settings.GetBool(FocusedInboxKey, false);
         set => _settings.Set(FocusedInboxKey, value);
+    }
+
+    /// <summary>The Options page's Conversation Clean Up switches, as the clean-up reads them.</summary>
+    public Mailbox.Core.Conversations.CleanUpPolicy CleanUpPolicy => new()
+    {
+        KeepUnread = _settings.GetBool(CleanUpKeepUnreadKey, false),
+        KeepCategorized = _settings.GetBool(CleanUpKeepCategorizedKey, true),
+        KeepFlagged = _settings.GetBool(CleanUpKeepFlaggedKey, true),
+        KeepSigned = _settings.GetBool(CleanUpKeepSignedKey, true),
+        KeepIfModified = _settings.GetBool(CleanUpKeepModifiedKey, true),
+    };
+
+    /// <summary>Whether Ignore Conversation asks first. On until the reader ticks "don't show again".</summary>
+    public bool ConfirmIgnore
+    {
+        get => _settings.GetBool(IgnoreConfirmKey, true);
+        set => _settings.Set(IgnoreConfirmKey, value);
     }
 
     // ---- Reminders (Options › Advanced) ---------------------------------------------------
