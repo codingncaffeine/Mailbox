@@ -58,7 +58,13 @@ public sealed class AccountWizard : Window
         ExtendClientAreaToDecorationsHint = false;
 
         _add = new Button { Content = "Add Account", IsEnabled = false, IsDefault = true };
-        _add.Click += async (_, _) => await AddAsync();
+        _add.Click += async (_, _) =>
+        {
+            // Once the account exists the button's job changes: pressing it again would add a
+            // second copy of the same account.
+            if (Created is not null) { Close(); return; }
+            await AddAsync();
+        };
 
         var cancel = new Button { Content = "Cancel", IsCancel = true };
         cancel.Click += (_, _) => Close();
@@ -226,6 +232,13 @@ public sealed class AccountWizard : Window
             };
             settings.Save(App.Settings, address);
 
+            // Asked before the account is saved, and only reported: an account whose sending is
+            // switched off is still worth having for receiving, so this explains rather than
+            // refuses. Without it the first send fails as "authentication failed" and sends the
+            // user to check a password that was never wrong.
+            var probe = await new ServerProbe().CheckSendingAsync(
+                new ServerSettings(settings.OutgoingHost, settings.OutgoingPort));
+
             var saved = await App.Secrets.SaveAsync(address, Credentials.Incoming, password);
             if (!saved)
             {
@@ -234,9 +247,25 @@ public sealed class AccountWizard : Window
                     $"{App.Secrets.Description}.";
             }
 
+            if (!probe.IsClear)
+            {
+                Log.Info($"Sending check for {address}: {probe.Explanation}");
+                _status.Text = probe.Explanation;
+            }
+
             Log.Info($"Account added: {address} ({protocol}) at {opened.Path}.");
             Created = account;
-            Close();
+
+            // Kept open when there is something to say. Closing over the explanation would put
+            // the account in exactly the state the check exists to warn about, silently.
+            if (probe.IsClear)
+            {
+                Close();
+                return;
+            }
+
+            _add.Content = "Close";
+            _add.IsEnabled = true;
         }
         catch (Exception ex)
         {

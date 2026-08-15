@@ -10,10 +10,22 @@ internal sealed class FakeSmtp : ISmtpSession
     public List<MimeMessage> Sent { get; } = [];
     public Queue<Exception> Failures { get; } = new();
     public bool IsConnected { get; private set; }
+
+    /// <summary>What the server says it offers. Empty is a real configuration, not a fault.</summary>
+    public HashSet<string> Advertises { get; init; } = ["PLAIN", "LOGIN"];
+
+    IReadOnlySet<string> ISmtpSession.AuthenticationMechanisms => Advertises;
     public bool Authenticated { get; private set; }
+
+    /// <summary>How many times a credential was offered. The probe must offer none.</summary>
+    public int Authentications { get; private set; }
+
+    /// <summary>Thrown instead of connecting, for the unreachable case.</summary>
+    public Exception? FailOnConnect { get; init; }
 
     public Task ConnectAsync(ServerSettings s, CancellationToken c)
     {
+        if (FailOnConnect is { } ex) throw ex;
         IsConnected = true;
         return Task.CompletedTask;
     }
@@ -21,6 +33,7 @@ internal sealed class FakeSmtp : ISmtpSession
     public Task AuthenticateAsync(ServerSettings s, CancellationToken c)
     {
         Authenticated = true;
+        Authentications++;
         return Task.CompletedTask;
     }
 
