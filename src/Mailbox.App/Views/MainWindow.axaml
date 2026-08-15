@@ -808,14 +808,10 @@
                         </Grid>
                     </Border>
 
-                    <!-- Phase 4 replaces this with the WebView reading pane, the
-                         mailbox:// scheme handler and remote-image blocking. -->
-                    <ScrollViewer Padding="20,16">
-                        <TextBlock Text="{Binding SelectedMessage.Body}"
-                                   TextWrapping="Wrap"
-                                   FontFamily="{DynamicResource content.fontfamily}"
-                                   FontSize="{Binding ReadingFontSize}" />
-                    </ScrollViewer>
+                    <!-- The message itself, filled with a ReadingPaneBody: the InfoBars and
+                         the web engine. Not markup, because what it holds depends on what the
+                         sanitizer found in the message. -->
+                    <ContentControl Name="ReadingBody" />
                 </DockPanel>
             </Border>
         </Grid>

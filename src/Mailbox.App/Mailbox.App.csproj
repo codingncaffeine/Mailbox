@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Controls.WebView" Version="12.0.1" />
     <PackageReference Include="Avalonia.Desktop" Version="$(AvaloniaVersion)" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="$(AvaloniaVersion)" />
     <!-- Structural only. Simple provides bare control templates so ListBox, ComboBox and
@@ -33,6 +34,8 @@
     <ProjectReference Include="..\Mailbox.Controls.Ribbon\Mailbox.Controls.Ribbon.csproj" />
     <ProjectReference Include="..\Mailbox.Store\Mailbox.Store.csproj" />
     <ProjectReference Include="..\Mailbox.Protocols\Mailbox.Protocols.csproj" />
+    <ProjectReference Include="..\Mailbox.Rendering\Mailbox.Rendering.csproj" />
+    <ProjectReference Include="..\Mailbox.Security\Mailbox.Security.csproj" />
   </ItemGroup>
 
 </Project>

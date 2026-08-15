@@ -97,6 +97,7 @@ public partial class MainWindow : Window
         WireAccountButton(shell);
         WireArrangeMenu(shell);
         WireListInteraction(shell);
+        WireReadingPane(shell);
         DataContext = shell;
 
         ApplyHarnessState(shell);
@@ -351,6 +352,68 @@ public partial class MainWindow : Window
         compose.Show(this);
     }
 
+    private ReadingPaneBody? _reading;
+
+    /// <summary>
+    /// Puts the reading pane's body in place and keeps it on the selected message.
+    /// </summary>
+    /// <remarks>
+    /// The message is parsed from what was received rather than from the row: the row carries a
+    /// preview for the list, and a reading pane that rendered the preview would be showing a
+    /// summary of the message instead of the message.
+    /// </remarks>
+    private void WireReadingPane(ShellViewModel shell)
+    {
+        _reading = new ReadingPaneBody(App.Themes, () => shell.CurrentMail)
+        {
+            MessageFontSize = shell.ReadingFontSize,
+        };
+
+        this.FindControl<ContentControl>("ReadingBody")!.Content = _reading;
+
+        shell.PropertyChanged += (_, e) =>
+        {
+            switch (e.PropertyName)
+            {
+                case nameof(ShellViewModel.SelectedMessage):
+                    ShowSelectedMessage(shell);
+                    break;
+
+                case nameof(ShellViewModel.ReadingFontSize):
+                    _reading.MessageFontSize = shell.ReadingFontSize;
+                    break;
+            }
+        };
+
+        ShowSelectedMessage(shell);
+    }
+
+    private void ShowSelectedMessage(ShellViewModel shell)
+    {
+        if (_reading is null) return;
+
+        var raw = shell.SelectedRaw;
+        MimeKit.MimeMessage? message = null;
+
+        if (raw is { Length: > 0 })
+        {
+            try
+            {
+                using var stream = new MemoryStream(raw);
+                message = MimeKit.MimeMessage.Load(stream);
+            }
+            catch (Exception ex)
+            {
+                // A message that will not parse is one the store holds and we cannot read. Say
+                // so where it can be seen rather than showing an empty pane.
+                Log.Warn("A message could not be parsed; showing its text.", ex);
+            }
+        }
+
+        _reading.Show(message, shell.SelectedMessage?.Body ?? string.Empty);
+        _ = _reading.ApplySenderPolicyAsync();
+    }
+
     /// <summary>Opens the Options dialog modally over the shell, optionally on a given page.</summary>
     /// <remarks>
     /// The two customization pages edit the ribbon and the toolbar as they go, so the shell
@@ -494,6 +557,17 @@ public partial class MainWindow : Window
     /// </summary>
     private static void ApplyHarnessState(ShellViewModel shell)
     {
+        // Which message the reading pane is showing. The bars above it only appear for certain
+        // mail — one with a tracking pixel, one pretending to be someone else — and a capture
+        // cannot click a row to find one.
+        if (Environment.GetEnvironmentVariable("MAILBOX_SELECT") is { Length: > 0 } subject)
+        {
+            var match = shell.Messages.FirstOrDefault(
+                m => m.Subject.Contains(subject, StringComparison.OrdinalIgnoreCase));
+
+            if (match is not null) shell.SelectedMessage = match;
+        }
+
         var wanted = Environment.GetEnvironmentVariable("MAILBOX_STATE");
         if (string.IsNullOrWhiteSpace(wanted)) return;
 

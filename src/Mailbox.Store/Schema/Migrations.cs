@@ -190,6 +190,19 @@ public static class Migrations
             ('Blue Category',   'category.blue',   4),
             ('Purple Category', 'category.purple', 5);
         """,
+
+        // ---- 7: senders whose images may load ----------------------------------------------
+        //
+        // Remote images are blocked for everyone by default, and this is the exception list.
+        // Kept per account, like everything else in this file: "always allow images from this
+        // sender" is a decision about one mailbox, and the same address may be a newsletter in
+        // one and a stranger in another. §7.8's junk filter reads the same table.
+        """
+        CREATE TABLE safe_senders (
+            address    TEXT    NOT NULL PRIMARY KEY,
+            added_utc  INTEGER NOT NULL
+        );
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>
