@@ -1152,8 +1152,7 @@ public sealed class RibbonView : ContentControl
         return "more";
     }
 
-    private static string GroupLabel(RibbonGroup group)
-        => group.Label.Replace("&amp;", "&", StringComparison.Ordinal);
+    private static string GroupLabel(RibbonGroup group) => group.Label;
 
     /// <summary>
     /// Lays a group's items out the way Office does: large buttons sit side by side, and runs

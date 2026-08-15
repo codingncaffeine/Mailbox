@@ -138,6 +138,16 @@ public sealed record RibbonItem
             ShowLabel = false,
         };
 
+    /// <summary>The vertical rule between two clusters on the Simplified bar.</summary>
+    public static RibbonItem Rule()
+        => new()
+        {
+            Command = new CommandId("app.separator"),
+            Kind = RibbonItemKind.Separator,
+            Size = RibbonItemSize.Small,
+            ShowLabel = false,
+        };
+
     /// <summary>The "…" ending a cluster, opening what that cluster has no room for.</summary>
     public static RibbonItem Overflow()
         => new()
@@ -227,6 +237,49 @@ public sealed record RibbonGroup
     public int CollapsePriority { get; init; }
 }
 
+/// <summary>
+/// The Simplified bar for one tab: the clusters the rules divide it into, named.
+/// </summary>
+/// <remarks>
+/// The bar renders as a flat run of items, so it was first transcribed as one — but the rules in
+/// it are group boundaries rather than decoration, and Customize Ribbon shows them as a tree of
+/// named groups. Naming them here makes the editor's tree fall out of the layout document, and
+/// makes the row something a user can rearrange a group at a time.
+/// <para>
+/// The Simplified groups are not the classic ones renamed: the reference merges Delete and Move
+/// into "Move &amp; Delete" here, and drops several groups entirely.
+/// </para>
+/// </remarks>
+public sealed record SimplifiedBar
+{
+    public required IReadOnlyList<RibbonGroup> Groups { get; init; }
+
+    /// <summary>
+    /// A rule closing the row, before the overflow "…".
+    /// </summary>
+    /// <remarks>
+    /// Measured on all three captured tabs: Home's rules fall at x = 191, 341, 457, 596, 831,
+    /// 1049, 1093 and 1289 — eight rules for eight clusters, so the last one closes the run
+    /// rather than dividing it. Send/Receive and View do the same at 1019 and 977.
+    /// </remarks>
+    public bool TrailingRule { get; init; } = true;
+
+    /// <summary>The row as the renderer wants it: items, with a rule between clusters.</summary>
+    public IReadOnlyList<RibbonItem> Flatten()
+    {
+        var row = new List<RibbonItem>();
+
+        foreach (var group in Groups)
+        {
+            if (row.Count > 0) row.Add(RibbonItem.Rule());
+            row.AddRange(group.Items);
+        }
+
+        if (TrailingRule && row.Count > 0) row.Add(RibbonItem.Rule());
+        return row;
+    }
+}
+
 /// <summary>A ribbon tab. Every module supplies its own set.</summary>
 public sealed record RibbonTab
 {
@@ -280,17 +333,40 @@ public sealed record RibbonLayout
     public IReadOnlyList<CommandId> QuickAccess { get; init; } = [];
 
     /// <summary>
+    /// The Simplified bar per tab, keyed by tab id: named clusters rather than a flat run.
+    /// </summary>
+    /// <remarks>
+    /// Held separately from <see cref="RibbonTab.Groups"/> because Simplified is not a
+    /// rendering of the classic groups — the reference application curates a different, shorter command set for
+    /// it, groups it differently, and reorders to put the common actions first.
+    /// </remarks>
+    public IReadOnlyDictionary<string, SimplifiedBar> Simplified { get; init; }
+        = new Dictionary<string, SimplifiedBar>();
+
+    /// <summary>
     /// The single-row Simplified command set per tab, keyed by tab id. Separators are
     /// <see cref="RibbonItemKind.Separator"/> entries, and anything past what fits moves into
     /// the overflow menu rather than wrapping.
     /// </summary>
     /// <remarks>
-    /// Held separately from <see cref="RibbonTab.Groups"/> because Simplified is not a
-    /// rendering of the classic groups — the reference application curates a different, shorter command set for
-    /// it, drops the group labels entirely, and reorders to put the common actions first.
+    /// Derived from <see cref="Simplified"/> where a tab declares clusters, so the names and the
+    /// row cannot disagree; a host that has no use for the tree — the compose window — authors
+    /// its rows here directly instead. Computed rather than cached: a customized layout is a
+    /// <c>with</c> copy of this one, and a cached row would survive the copy as the old ribbon.
     /// </remarks>
-    public IReadOnlyDictionary<string, IReadOnlyList<RibbonItem>> SimplifiedRows { get; init; }
-        = new Dictionary<string, IReadOnlyList<RibbonItem>>();
+    public IReadOnlyDictionary<string, IReadOnlyList<RibbonItem>> SimplifiedRows
+    {
+        get
+        {
+            if (Simplified.Count == 0) return field;
+
+            var rows = new Dictionary<string, IReadOnlyList<RibbonItem>>(field);
+            foreach (var (tab, bar) in Simplified) rows[tab] = bar.Flatten();
+            return rows;
+        }
+
+        init;
+    } = new Dictionary<string, IReadOnlyList<RibbonItem>>();
 
     /// <summary>
     /// The prompt sitting after the last tab — "Tell me what you want to do" on the compose
@@ -362,6 +438,11 @@ public sealed record RibbonLayout
     /// A group's dialog launcher counts. It is a real control with a real command behind it —
     /// the little arrow in the group's corner — so leaving it out reported placed commands as
     /// unplaced, which would have offered them again in Customize Ribbon.
+    /// <para>
+    /// So does the Simplified bar, which is the ribbon a first run actually shows: the View tab
+    /// has no classic groups at all, and reading only those reported every command on it as
+    /// unplaced.
+    /// </para>
     /// </remarks>
     public IEnumerable<CommandId> PlacedCommands =>
         Tabs.SelectMany(t => t.Groups)
@@ -372,6 +453,10 @@ public sealed record RibbonLayout
                 .Select(g => g.DialogLauncher)
                 .Where(id => id is not null)
                 .Select(id => id!.Value))
+            .Concat(SimplifiedRows.Values
+                .SelectMany(row => row)
+                .Where(i => !i.IsSentinel)
+                .Select(i => i.Command))
             .Concat(QuickAccess)
             .Distinct();
 }
