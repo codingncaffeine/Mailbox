@@ -100,6 +100,7 @@ public partial class MainWindow : Window
         WireArrangeMenu(shell);
         WireListInteraction(shell);
         WireReadingPane(shell);
+        this.FindControl<ContentControl>("UndoSendHost")!.Content = _undoSend;
         WireSchedule(shell);
         DataContext = shell;
 
@@ -180,6 +181,17 @@ public partial class MainWindow : Window
         switch (Environment.GetEnvironmentVariable("MAILBOX_PEEK")?.ToLowerInvariant())
         {
             case "calendar": Opened += (_, _) => TogglePeek(); break;
+
+            // Undo Send's toast is there for a few seconds after a send, which a capture cannot
+            // make happen. Posed against a fixed clock so the countdown reads the same every run
+            // — a photograph of a number that changes is not a measurement.
+            case "undosend":
+                Opened += (_, _) => _undoSend.Offer(
+                    new QueuedMessageEventArgs(
+                        "you@example.com", 0, DateTimeOffset.UtcNow.AddSeconds(5),
+                        "Re: Thursday"),
+                    _ => { });
+                break;
             case "docked": Opened += (_, _) => DockPeek(); break;
             case "backstage": Opened += (_, _) => ShowBackstage(); break;
 
@@ -451,12 +463,69 @@ public partial class MainWindow : Window
     private void NewMessage()
     {
         var compose = new ComposeWindow(App.Commands, App.Accounts);
+
         compose.Closed += (_, _) =>
         {
             if (DataContext is ShellViewModel shell) shell.Refresh();
         };
+
+        // §12's Undo Send. The window closes the moment it queues, so the offer to take it back
+        // belongs here — and it is the shell that still exists to show it.
+        compose.Queued += (_, e) => _undoSend.Offer(e, Withdraw);
+
         compose.Show(this);
     }
+
+    /// <summary>
+    /// Pulls a message back out of the outbox, if it is still there.
+    /// </summary>
+    /// <remarks>
+    /// The store decides, not the toast: the withdrawal only succeeds while the item is queued
+    /// and its hold has not expired, both checked in one transaction. So a send that started a
+    /// moment ago wins and the reader is told the truth rather than being shown a compose window
+    /// for a message already on its way.
+    /// <para>
+    /// It comes back as a window rather than as a draft, because the reason anybody presses Undo
+    /// is that they want to change something.
+    /// </para>
+    /// </remarks>
+    private void Withdraw(QueuedMessageEventArgs queued)
+    {
+        if (DataContext is not ShellViewModel shell) return;
+
+        var account = App.Accounts.Find(queued.Address);
+
+        if (account?.Mail.WithdrawOutbox(queued.OutboxId, DateTimeOffset.UtcNow)
+            is not { Length: > 0 } raw)
+        {
+            shell.StatusRight = "That message has already gone.";
+            return;
+        }
+
+        shell.Refresh();
+        shell.StatusRight = "Message pulled back out of the Outbox.";
+
+        try
+        {
+            using var stream = new MemoryStream(raw);
+            var message = MimeKit.MimeMessage.Load(stream);
+
+            var compose = new ComposeWindow(App.Commands, App.Accounts);
+            compose.Restore(message);
+            compose.Queued += (_, e) => _undoSend.Offer(e, Withdraw);
+            compose.Closed += (_, _) => shell.Refresh();
+            compose.Show(this);
+        }
+        catch (Exception ex)
+        {
+            // The message is out of the outbox and will not be sent, which is the half that
+            // mattered. Failing to reopen it is worth a line rather than a dialog.
+            Log.Warn("A withdrawn message could not be reopened.", ex);
+            shell.StatusRight = "Message pulled back, but it could not be reopened.";
+        }
+    }
+
+    private readonly UndoSendToast _undoSend = new();
 
     private ReadingPaneBody? _reading;
     private readonly AttachmentStrip _attachments = new();

@@ -167,6 +167,9 @@ public static class OptionsPages
 
             new OptionSection("Send messages",
             [
+                // §12's Undo Send, beside delayed delivery because it is the same mechanism
+                // with a smaller number in it — the outbox holding a message back.
+                new SlotRow("undosend"),
                 new ComboRow("Default importance level:", ["Normal", "Low", "High"], 0, 150, 240),
                 new ComboRow("Default sensitivity level:",
                     ["Normal", "Personal", "Private", "Confidential"], 0, 150, 240),

@@ -48,6 +48,9 @@ public partial class App : Application
     /// <summary>The signatures, and which account uses which.</summary>
     public static Signatures Signatures { get; private set; } = null!;
 
+    /// <summary>How long a sent message waits before it can actually go (§12).</summary>
+    public static UndoSend UndoSend { get; private set; } = null!;
+
     /// <summary>The user's ribbon edits, and the layout that comes of applying them.</summary>
     public static RibbonCustomization RibbonEdits { get; private set; } = null!;
 
@@ -139,6 +142,7 @@ public partial class App : Application
         QuickAccess = new QuickAccessLayout(Settings, DefaultRibbonLayouts.Mail.QuickAccess);
         Groups = new SendReceiveGroups(Settings);
         Signatures = new Signatures(Settings);
+        UndoSend = new UndoSend(Settings);
 
         _ = new ThemeResourceBridge(Resources, Themes);
 

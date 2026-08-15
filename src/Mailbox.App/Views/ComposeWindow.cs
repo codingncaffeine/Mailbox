@@ -112,6 +112,16 @@ public sealed class ComposeWindow : Window
     /// </remarks>
     private SpellCheck? _spelling;
 
+    /// <summary>
+    /// Raised when a message went to the outbox under a hold that can still be undone.
+    /// </summary>
+    /// <remarks>
+    /// An event rather than the window putting up its own toast, because the window closes the
+    /// instant it fires — a message offering to undo something has to outlive the thing that
+    /// did it, so the shell owns it.
+    /// </remarks>
+    public event EventHandler<QueuedMessageEventArgs>? Queued;
+
     /// <summary>Not a word anybody would suggest, so it cannot collide with one.</summary>
     private const string AddToDictionary = "\u0000add";
     private const string EditSignatures = "\u0000signatures";
@@ -202,6 +212,46 @@ public sealed class ComposeWindow : Window
         if (!command.NeutralIcon && !InsertsIntoBody.Contains(id)) return true;
 
         return !string.IsNullOrEmpty(_body.GetPlainText());
+    }
+
+    /// <summary>
+    /// Fills the window from a message, for one that has been pulled back out of the outbox.
+    /// </summary>
+    /// <remarks>
+    /// Undo Send (§12). What comes back is the message as it was queued, so the reader gets
+    /// their words rather than a blank window and an apology — which is the whole point of
+    /// pressing Undo rather than letting it go and writing a correction.
+    /// </remarks>
+    public void Restore(MimeMessage message)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+
+        _to.Text = string.Join("; ", message.To.Mailboxes.Select(m => m.Address));
+        _cc.Text = string.Join("; ", message.Cc.Mailboxes.Select(m => m.Address));
+        _bcc.Text = string.Join("; ", message.Bcc.Mailboxes.Select(m => m.Address));
+        _subject.Text = message.Subject ?? string.Empty;
+
+        if (message.From.Mailboxes.FirstOrDefault()?.Address is { Length: > 0 } from)
+        {
+            SendFrom(from);
+        }
+
+        // The document as it was written. The HTML half where there is one, because that is
+        // what carried the formatting; the text half otherwise.
+        _body.Clear();
+
+        if (message.HtmlBody is { Length: > 0 } html) _body.LoadHtml(html);
+        else _body.InsertText(message.TextBody ?? string.Empty);
+
+        _importance = message.Importance switch
+        {
+            MessageImportance.High => MessageImportance.High,
+            MessageImportance.Low => MessageImportance.Low,
+            _ => MessageImportance.Normal,
+        };
+
+        UpdateStatus();
+        _ribbon.RefreshEnablement();
     }
 
     /// <summary>Selects a ribbon tab by id. Used by the fidelity harness, which cannot click.</summary>
@@ -1795,12 +1845,28 @@ public sealed class ComposeWindow : Window
             var sender = new SmtpSender(account.Mail);
             var outboxId = sender.Queue(account.Account.Id, message);
 
+            // Delayed delivery is the reader's own choice about this message, so it wins over
+            // the few seconds Undo Send holds everything for — asking to send on Thursday and
+            // getting a five-second grace period instead would be the wrong way round.
+            var undo = _notBefore is null
+                ? App.UndoSend.HoldUntil(DateTimeOffset.UtcNow)
+                : null;
+
             if (_notBefore is { } when) account.Mail.ScheduleOutbox(outboxId, when);
+            else if (undo is { } until) account.Mail.ScheduleOutbox(outboxId, until);
 
             _sent = true;
+
             Report(_notBefore is { } held
                 ? $"Queued, held until {held.LocalDateTime:g}."
                 : "Queued in the Outbox. It goes out on the next send/receive.");
+
+            // The window is about to close, so whoever opened it is who offers the way back.
+            if (undo is { } expires)
+            {
+                Queued?.Invoke(this, new QueuedMessageEventArgs(
+                    account.Account.Address, outboxId, expires, message.Subject ?? string.Empty));
+            }
 
             Close();
         }
