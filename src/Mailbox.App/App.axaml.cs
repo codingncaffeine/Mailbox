@@ -91,10 +91,17 @@ public partial class App : Application
             var command = step.ToCommand();
             if (Commands.TryGet(command.Id, out var existing))
             {
-                // A shipped id keeps its shipped command; a reader's step that was renamed is
-                // re-registered under the same id with its new label.
-                var shipped = ViewCommands.All.Any(c => c.Id == command.Id);
-                if (!shipped) Commands.Replace(command);
+                // A step already in the catalogue takes its current name, icon and shortcut —
+                // "Move to: ?" reads "Move to: Projects" once it is set up, as the reference's
+                // does — and keeps whatever the shipped command carried that a step does not
+                // know about, its KeyTip above all.
+                Commands.Replace(existing with
+                {
+                    Label = command.Label,
+                    Description = command.Description,
+                    Icon = command.Icon,
+                    DefaultGesture = command.DefaultGesture ?? existing.DefaultGesture,
+                });
                 continue;
             }
 
