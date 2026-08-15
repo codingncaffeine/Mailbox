@@ -62,6 +62,51 @@ public class SeedHarness
                 "agenda.pdf", "application/pdf", 38_000),
 
             Forwarded());
+
+        SeedImap(stores, "imap@example.org");
+    }
+
+    /// <summary>
+    /// An IMAP account, so the folder pane shows the nesting and the "IMAP/SMTP" type a POP3
+    /// account does not have. Its mail is filed with server UIDs, and a mapped sub-folder sits
+    /// under its parent to exercise the tree indent.
+    /// </summary>
+    private static void SeedImap(AccountStores stores, string address)
+    {
+        var account = stores.Add(address, address, MailProtocol.Imap);
+        var accountId = account.Account.Id;
+
+        // Map the role folders to server paths, as a first sync would, and nest one folder.
+        var inbox = account.Mail.FolderWithRole(accountId, FolderRole.Inbox)!;
+        account.Mail.MapFolder(inbox.Id, "INBOX", "Inbox", null);
+        var projects = account.Mail.AddFolder(accountId, "Projects", FolderRole.None, null, "Projects");
+        account.Mail.AddFolder(accountId, "Mailbox", FolderRole.None, projects.Id, "Projects/Mailbox");
+
+        var when = DateTimeOffset.UtcNow;
+        var messages = new[]
+        {
+            Plain("Dana Okafor", "dana@example.org", "Server-side folders",
+                "The whole tree syncs now — try dragging this into Projects and watch it move "
+                + "on the server."),
+            Plain("CI", "ci@example.org", "IDLE is live",
+                "New mail turns up without waiting for the timer."),
+        };
+
+        var uid = 1;
+        foreach (var message in messages)
+        {
+            message.Date = when;
+            using var buffer = new MemoryStream();
+            message.WriteTo(buffer);
+            var raw = buffer.ToArray();
+            var summary = Mailbox.Protocols.MessageMapper.ToSummary(
+                message, uid.ToString(), raw.Length, when);
+            account.Mail.AddMessage(inbox.Id, summary, raw);
+            uid++;
+            when = when.AddMinutes(-25);
+        }
+
+        account.Mail.SetFolderSyncState(inbox.Id, 1, uid, null);
     }
 
     // ---- The messages ----------------------------------------------------------------------

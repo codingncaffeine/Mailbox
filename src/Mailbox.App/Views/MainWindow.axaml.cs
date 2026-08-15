@@ -305,6 +305,22 @@ public partial class MainWindow : Window
                 };
                 break;
 
+            // The Server Settings dialog for a chosen account, so its protocol-specific half —
+            // POP3's leave-on-server, IMAP's "Mail to keep offline" — can be photographed.
+            // MAILBOX_SERVER names the account by address; the default account otherwise.
+            case "server":
+                Opened += async (_, _) =>
+                {
+                    var address = Environment.GetEnvironmentVariable("MAILBOX_SERVER");
+                    var account = (address is { Length: > 0 } ? App.Accounts.Find(address) : App.Accounts.Default)
+                        ?.Account;
+                    if (account is null) return;
+
+                    CaptureNextWindow();
+                    await new ServerSettingsDialog(account).ShowDialog(this);
+                };
+                break;
+
             case "rules":
                 Opened += async (_, _) =>
                 {
@@ -1566,6 +1582,44 @@ public partial class MainWindow : Window
         // reconnects on every restart, which is a way to get an account rate-limited.
         Opened += (_, _) => timer.Start();
         Closed += (_, _) => timer.Stop();
+
+        WireIdleWatchers(shell);
+    }
+
+    private readonly List<ImapIdleWatcher> _watchers = [];
+
+    /// <summary>
+    /// Puts every IMAP account under IDLE, so the server announces new mail rather than waiting
+    /// for the poll timer. A change runs the same send/receive a manual one does, on the UI
+    /// thread and only when nothing is already in flight — the watcher does the waiting, the
+    /// shell does the syncing, so there is one path through the store.
+    /// </summary>
+    private void WireIdleWatchers(ShellViewModel shell)
+    {
+        void OnChange(object? _, string address) => Dispatcher.UIThread.Post(() =>
+        {
+            if (_transferring || App.Transfer.WorkOffline) return;
+            shell.StatusRight = $"New mail on {address}…";
+            _ = SendReceiveAsync(shell);
+        });
+
+        Opened += (_, _) =>
+        {
+            foreach (var target in AccountConnections()
+                         .Where(t => t.Connection.Protocol == MailProtocol.Imap))
+            {
+                var watcher = new ImapIdleWatcher(target.Connection);
+                watcher.ChangeDetected += OnChange;
+                watcher.Start();
+                _watchers.Add(watcher);
+            }
+        };
+
+        Closed += (_, _) =>
+        {
+            foreach (var watcher in _watchers) watcher.Dispose();
+            _watchers.Clear();
+        };
     }
 
     /// <summary>

@@ -522,9 +522,20 @@ public sealed class ShellViewModel : ObservableObject
         {
             Folders.Add(new FolderNode(account.Account.Address, 0, 0, bold: true));
 
-            foreach (var folder in account.Mail.Folders(account.Account.Id))
+            // IMAP folders nest, so the pane does too: a child sits one step in from its
+            // parent. The account is depth 0, so a top-level folder is depth 1 as before, and
+            // an ordinary POP3 account — every folder parentless — is unchanged.
+            var folders = account.Mail.Folders(account.Account.Id);
+            var depths = new Dictionary<long, int>();
+
+            foreach (var folder in OrderedForTree(folders))
             {
-                var node = new FolderNode(folder.Name, 1, folder.Unread);
+                var depth = folder.ParentId is { } parent && depths.TryGetValue(parent, out var parentDepth)
+                    ? parentDepth + 1
+                    : 1;
+                depths[folder.Id] = depth;
+
+                var node = new FolderNode(folder.Name, depth, folder.Unread);
                 _folderIds[node] = (account, folder.Id, folder.Role);
                 Folders.Add(node);
             }
@@ -532,6 +543,37 @@ public sealed class ShellViewModel : ObservableObject
 
         SelectedFolder = Folders.FirstOrDefault(f => _folderIds.ContainsKey(f));
         return true;
+    }
+
+    /// <summary>
+    /// Folders in tree order: each parent immediately before its children, so a single indent
+    /// depth reads correctly down a flat list. A folder whose parent is missing is treated as a
+    /// root, which is what a POP3 account's flat set already is.
+    /// </summary>
+    private static IEnumerable<Folder> OrderedForTree(IReadOnlyList<Folder> folders)
+    {
+        var byParent = folders.Where(f => f.ParentId is not null)
+            .GroupBy(f => f.ParentId!.Value)
+            .ToDictionary(g => g.Key, g => g.OrderBy(f => f.Ordinal).ThenBy(f => f.Id).ToList());
+        var ids = folders.Select(f => f.Id).ToHashSet();
+
+        IEnumerable<Folder> Descend(long parent)
+        {
+            if (!byParent.TryGetValue(parent, out var children)) yield break;
+            foreach (var child in children)
+            {
+                yield return child;
+                foreach (var descendant in Descend(child.Id)) yield return descendant;
+            }
+        }
+
+        // Roots are the parentless folders and any whose parent is not in this set.
+        foreach (var folder in folders.Where(f => f.ParentId is null || !ids.Contains(f.ParentId.Value))
+                     .OrderBy(f => f.Ordinal).ThenBy(f => f.Id))
+        {
+            yield return folder;
+            foreach (var descendant in Descend(folder.Id)) yield return descendant;
+        }
     }
 
     /// <summary>

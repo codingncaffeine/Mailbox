@@ -38,7 +38,8 @@ internal sealed class FakeImap : IImapSession
     private ServerFolder? _open;
 
     public bool IsConnected { get; private set; }
-    public ImapFeatures Features { get; set; } = ImapFeatures.CondStore | ImapFeatures.Move | ImapFeatures.UidPlus;
+    public ImapFeatures Features { get; set; } =
+        ImapFeatures.CondStore | ImapFeatures.Move | ImapFeatures.UidPlus | ImapFeatures.Idle;
     public bool ReturnMoveMap { get; set; } = true;
     public event EventHandler? FolderChanged;
 
@@ -171,9 +172,30 @@ internal sealed class FakeImap : IImapSession
         return Task.FromResult<long?>(server.Uid);
     }
 
-    public Task IdleAsync(CancellationToken done, CancellationToken c) => Task.CompletedTask;
+    private volatile TaskCompletionSource? _idle;
 
-    public void Raise() => FolderChanged?.Invoke(this, EventArgs.Empty);
+    /// <summary>True while a caller is blocked in <see cref="IdleAsync"/>.</summary>
+    public bool IsIdling => _idle is { Task.IsCompleted: false };
+
+    /// <summary>
+    /// Holds until the renewal token fires or <see cref="Raise"/> announces a change, like a
+    /// real IDLE that blocks on the connection rather than returning at once.
+    /// </summary>
+    public Task IdleAsync(CancellationToken done, CancellationToken c)
+    {
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _idle = gate;
+        done.Register(() => gate.TrySetResult());
+        c.Register(() => gate.TrySetCanceled(c));
+        return gate.Task;
+    }
+
+    /// <summary>Announces a change to whatever is idling, as the server breaking IDLE would.</summary>
+    public void Raise()
+    {
+        FolderChanged?.Invoke(this, EventArgs.Empty);
+        _idle?.TrySetResult();
+    }
 
     public void Dispose() { }
 }

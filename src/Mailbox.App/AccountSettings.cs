@@ -29,6 +29,12 @@ public sealed record AccountSettings(
     public int? DeleteAfterDays { get; init; }
 
     /// <summary>
+    /// Months of an IMAP mailbox to keep offline, from the reference's "Mail to keep offline"
+    /// slider; 0 keeps everything. Ignored for POP3, which downloads what the server hands it.
+    /// </summary>
+    public int OfflineMonths { get; init; } = 12;
+
+    /// <summary>
     /// Settings key off the address, not the row id. A row id belongs to one store file, and
     /// the point of a file per account is that it can be restored or copied — after which the
     /// id may differ but the address does not.
@@ -57,6 +63,7 @@ public sealed record AccountSettings(
             DeleteAfterDays = settings.Has(Key(accountKey, "deleteafterdays"))
                 ? (int)settings.GetNumber(Key(accountKey, "deleteafterdays"))
                 : null,
+            OfflineMonths = (int)settings.GetNumber(Key(accountKey, "offlinemonths"), 12),
         };
     }
 
@@ -73,6 +80,7 @@ public sealed record AccountSettings(
         settings.Set(Key(accountKey, "outgoing.user"), OutgoingUser);
         settings.Set(Key(accountKey, "leaveonserver"), LeaveOnServer);
         if (DeleteAfterDays is { } days) settings.Set(Key(accountKey, "deleteafterdays"), days);
+        settings.Set(Key(accountKey, "offlinemonths"), OfflineMonths);
     }
 
     /// <summary>
@@ -96,11 +104,15 @@ public sealed record AccountSettings(
             new ServerSettings(OutgoingHost, OutgoingPort, OutgoingSecurity,
                 OutgoingUser, outgoingPassword))
         {
+            // The account's own protocol decides which collector runs. Everything else is
+            // shared: one send path, one outbox, one store.
+            Protocol = account.Protocol,
             Policy = new Pop3Policy
             {
                 LeaveOnServer = LeaveOnServer,
                 DeleteAfterDays = DeleteAfterDays,
             },
+            Sync = new ImapPolicy { OfflineMonths = OfflineMonths },
         };
     }
 

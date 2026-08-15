@@ -140,11 +140,14 @@ public partial class App : Application
         Resolver = new DnsResolver();
         var signatures = Resolver.CanResolve ? new DkimVerification(Resolver) : null;
 
-        // Read at the moment a sender is made, which is per run — so the Options page's choice
-        // applies to the next send/receive rather than the next launch.
+        // Read at the moment a collector is made, which is per run — so the Options page's
+        // choice applies to the next send/receive rather than the next launch. IMAP and POP3
+        // check the same signatures the same way, on arrival; the service picks the collector
+        // from the account's protocol.
         Transfer = new SendReceiveService(
             mail => new Pop3Receiver(mail) { Authentication = signatures },
-            mail => new SmtpSender(mail) { FileSentCopies = MailOptions.SaveCopiesInSent });
+            mail => new SmtpSender(mail) { FileSentCopies = MailOptions.SaveCopiesInSent },
+            mail => new ImapSynchronizer(mail) { Authentication = signatures });
 
         Commands = new CommandCatalog();
         Commands.RegisterRange(MailCommands.All);
