@@ -104,6 +104,28 @@ public partial class MainWindow : Window
 
         ApplyHarnessState(shell);
 
+        // Which folder is open. Set after the window opens rather than with the rest of the
+        // posed state: the folder pane's list pushes its own selection back as it binds, so a
+        // folder chosen in the constructor is overwritten the moment it lays out.
+        if (Environment.GetEnvironmentVariable("MAILBOX_FOLDER") is { Length: > 0 } wanted)
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(
+                () =>
+                {
+                    if (DataContext is not ShellViewModel s) return;
+
+                    var match = s.Folders.FirstOrDefault(
+                        f => f.Name.Contains(wanted, StringComparison.OrdinalIgnoreCase));
+
+                    Log.Info(match is null
+                        ? $"No folder matching '{wanted}' in: {string.Join(", ", s.Folders.Select(f => f.Name))}"
+                        : $"Harness: opening the {match.Name} folder.");
+
+                    if (match is not null) s.SelectedFolder = match;
+                },
+                DispatcherPriority.Loaded);
+        }
+
         // Lets the fidelity harness capture the peek states, which a screenshot otherwise
         // cannot reach because they need a click.
         WireHarnessPeek();

@@ -163,11 +163,36 @@ public class SeedHarness
         return message;
     }
 
+    /// <summary>
+    /// Mail waiting to go out, including one the server refused for good. The Outbox view is
+    /// the only place a permanent failure is visible, so it cannot be looked at without one.
+    /// </summary>
+    private static void SeedOutbox(OpenAccount account)
+    {
+        var sender = new Mailbox.Protocols.SmtpSender(account.Mail);
+        var now = DateTimeOffset.UtcNow;
+
+        var waiting = Envelope("You", "you@example.com", "Re: Thursday");
+        waiting.To.Clear();
+        waiting.To.Add(new MailboxAddress("Alice Chen", "alice@example.com"));
+        waiting.Body = new TextPart("plain") { Text = "Works for me." };
+        sender.Queue(account.Account.Id, waiting, now);
+
+        var refused = Envelope("You", "you@example.com", "Expenses, March");
+        refused.To.Clear();
+        refused.To.Add(new MailboxAddress("Accounts", "accounts@example.invalid"));
+        refused.Body = new TextPart("plain") { Text = "Attached." };
+
+        var id = sender.Queue(account.Account.Id, refused, now.AddMinutes(-90));
+        account.Mail.FailOutbox(id, "The recipient's address was rejected: no such mailbox.");
+    }
+
     // ---- Writing them out ---------------------------------------------------------------------
 
     private static void Seed(AccountStores stores, string address, params MimeMessage[] messages)
     {
         var account = stores.Add(address, address, MailProtocol.Pop3);
+        SeedOutbox(account);
         var inbox = account.Mail.FolderWithRole(account.Account.Id, FolderRole.Inbox)!;
         var when = DateTimeOffset.UtcNow;
 
