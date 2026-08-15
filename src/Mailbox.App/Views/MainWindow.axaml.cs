@@ -39,7 +39,9 @@ public partial class MainWindow : Window
         WindowFrame.Apply(this);
         SetUpTitleBar();
 
-        var layout = DefaultRibbonLayouts.Mail;
+        // The shipped layout with the user's edits over it, which for a first run is the
+        // shipped layout unchanged.
+        var layout = App.MailRibbon();
         var layoutMode = ShellLayoutModes.Resolve();
 
         _ribbon = new RibbonView(App.Commands, layout)
@@ -64,7 +66,7 @@ public partial class MainWindow : Window
         Log.Info($"UI font: {App.Fonts.Resolve("Segoe UI").Rendered}");
         Log.Info($"Body font: {App.Fonts.Resolve("Calibri").Rendered}");
 
-        var quickAccess = new QuickAccessLayout(App.Settings, layout.QuickAccess);
+        var quickAccess = App.QuickAccess;
 
         // The toolbar's two placements and its hidden state need a click to reach, so the
         // harness poses them instead — without persisting, or every capture would leave the
@@ -119,7 +121,10 @@ public partial class MainWindow : Window
             case "options":
                 Opened += async (_, _) =>
                 {
-                    var dialog = new OptionsWindow(App.Themes);
+                    // Which page, for the harness. Every page but General needs a click to
+                    // reach, and the two customization editors are the ones worth photographing.
+                    var dialog = new OptionsWindow(
+                        App.Themes, Environment.GetEnvironmentVariable("MAILBOX_OPTIONS_PAGE"));
                     dialog.Opened += async (_, _) =>
                     {
                         await Task.Delay(700);
@@ -240,8 +245,28 @@ public partial class MainWindow : Window
     }
 
     /// <summary>Opens the Options dialog modally over the shell, optionally on a given page.</summary>
+    /// <remarks>
+    /// The two customization pages edit the ribbon and the toolbar as they go, so the shell
+    /// takes both back on the way out rather than waiting for OK. The reference applies them on
+    /// OK; every other page in this dialog has always written as it went, and a Cancel that
+    /// undid two of the thirteen would be the confusing half of both behaviours.
+    /// </remarks>
     private async Task ShowOptions(string? page = null)
-        => await new OptionsWindow(App.Themes, page).ShowDialog<bool>(this);
+    {
+        var dialog = new OptionsWindow(App.Themes, page);
+        await dialog.ShowDialog<bool>(this);
+
+        if (!dialog.CustomizationChanged) return;
+
+        _ribbon.Layout = App.MailRibbon();
+
+        if (DataContext is ShellViewModel shell)
+        {
+            shell.RebuildQuickAccess();
+            WireToolbarCommands(shell);
+            _ribbon.IsQuickAccessVisible = App.QuickAccess.IsVisible;
+        }
+    }
 
     // ------------------------------------------------------------------------------------
     // Calendar peek and dock

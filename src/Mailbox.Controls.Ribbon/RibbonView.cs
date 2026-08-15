@@ -67,6 +67,32 @@ public sealed class RibbonView : ContentControl
     }
 
     /// <summary>
+    /// The document being rendered. Setting it redraws the ribbon.
+    /// </summary>
+    /// <remarks>
+    /// This is the whole of how a customization reaches the screen: the editor produces a
+    /// layout and hands it over, and the ribbon never learns what an edit is. A tab that has
+    /// gone — unticked in the editor — takes the selection with it, so the first tab that is
+    /// still there becomes the active one rather than leaving the strip pointing at nothing.
+    /// </remarks>
+    public RibbonLayout Layout
+    {
+        get => _layout;
+        set
+        {
+            _layout = value;
+
+            if (value.FindTab(_activeTabId) is null)
+            {
+                _activeTabId = value.Tabs
+                    .FirstOrDefault(t => !t.IsBackstage && !t.IsContextual)?.Id ?? string.Empty;
+            }
+
+            Rebuild();
+        }
+    }
+
+    /// <summary>
     /// Drops the Ribbon Display Options menu open so the fidelity harness can photograph it.
     /// A menu that no capture ever opens is a menu whose colours go unchecked — which is how
     /// the light themes shipped with dark-on-dark items, legible only while hovered.
@@ -200,20 +226,6 @@ public sealed class RibbonView : ContentControl
             RibbonDisplayMode.Classic => RibbonDisplayMode.Collapsed,
             _ => RibbonDisplayMode.Simplified,
         };
-
-    public RibbonLayout Layout
-    {
-        get => _layout;
-        set
-        {
-            _layout = value;
-            if (_layout.FindTab(_activeTabId) is null)
-            {
-                _activeTabId = _layout.Tabs.Count > 0 ? _layout.Tabs[0].Id : string.Empty;
-            }
-            Rebuild();
-        }
-    }
 
     public string ActiveTabId
     {

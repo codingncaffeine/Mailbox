@@ -158,4 +158,61 @@ public class QuickAccessLayoutTests
         => Assert.All(
             DefaultRibbonLayouts.Mail.QuickAccess,
             id => Assert.Contains(id, DefaultRibbonLayouts.QuickAccessCandidates));
+
+    /// <summary>
+    /// A rule is furniture rather than a command, so unlike a command it may appear more than
+    /// once — a toolbar of three clusters needs two of them.
+    /// </summary>
+    [Fact]
+    public void RulesMayRepeatWhereCommandsMayNot()
+    {
+        var layout = Fresh();
+        layout.AddSeparator();
+        layout.AddSeparator();
+
+        Assert.Equal(
+            [SendReceive, Undo, RibbonItem.SeparatorId, RibbonItem.SeparatorId],
+            layout.Commands);
+    }
+
+    /// <summary>
+    /// Which is why the editor works by position: removing the second rule by id would take
+    /// the first.
+    /// </summary>
+    [Fact]
+    public void RemovingByPositionTakesTheOneMeant()
+    {
+        var layout = Fresh();
+        layout.AddSeparator();
+        layout.Add(NewEmail);
+        layout.AddSeparator();
+
+        Assert.True(layout.RemoveAt(4));
+
+        Assert.Equal([SendReceive, Undo, RibbonItem.SeparatorId, NewEmail], layout.Commands);
+    }
+
+    [Fact]
+    public void MovingByPositionWalksAnEntryAlong()
+    {
+        var layout = Fresh();
+        layout.Add(NewEmail);
+
+        Assert.True(layout.MoveAt(2, -2));
+        Assert.Equal([NewEmail, SendReceive, Undo], layout.Commands);
+
+        Assert.False(layout.MoveAt(0, -1));
+        Assert.False(layout.MoveAt(2, 1));
+    }
+
+    [Fact]
+    public void RulesSurviveBeingStoredAndReadBack()
+    {
+        var settings = SettingsStore.Transient();
+
+        var layout = Fresh(settings);
+        layout.AddSeparator();
+
+        Assert.Equal(layout.Commands, Fresh(settings).Commands);
+    }
 }

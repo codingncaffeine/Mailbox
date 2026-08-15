@@ -4,6 +4,7 @@ using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Mailbox.App.Options;
+using Mailbox.Core.Ribbon;
 using Mailbox.Core.Settings;
 using Mailbox.Theming;
 using Mailbox.Theming.Icons;
@@ -209,8 +210,14 @@ public sealed class OptionsWindow : Window
         {
             try
             {
-                var renderer = new OptionsPageRenderer(App.Settings);
-                _ = renderer.Render(page);
+                // Through the same path a click takes, so the two editor pages are audited as
+                // editors rather than as the empty descriptions they carry.
+                if (BuildEditor(page) is null)
+                {
+                    var renderer = new OptionsPageRenderer(App.Settings);
+                    _ = renderer.Render(page);
+                }
+
                 Console.WriteLine($"OK    {page.Id}");
             }
             catch (Exception ex)
@@ -221,9 +228,23 @@ public sealed class OptionsWindow : Window
         Environment.Exit(0);
     }
 
+    /// <summary>
+    /// True when the ribbon or the toolbar was edited while the dialog was open, so the shell
+    /// knows to take them back.
+    /// </summary>
+    public bool CustomizationChanged { get; private set; }
+
     private void ShowPage(string id)
     {
         if (OptionsPages.Find(id) is not { } page) return;
+
+        // The two customization pages are editors rather than lists of settings, so they build
+        // themselves instead of being rendered from a description.
+        if (BuildEditor(page) is { } editor)
+        {
+            _page.Content = editor;
+            return;
+        }
 
         var renderer = new OptionsPageRenderer(App.Settings);
         renderer.ActionInvoked += (_, label) => OnAction(label);
@@ -232,6 +253,73 @@ public sealed class OptionsWindow : Window
 
         FillLiveSlots(renderer);
         _page.Content = new ScrollViewer { Content = content };
+    }
+
+    private Control? BuildEditor(OptionsPage page)
+    {
+        CustomizationEditor? editor = page.Id switch
+        {
+            "ribbon" => new RibbonEditorView(
+                App.Commands, App.RibbonEdits, DefaultRibbonLayouts.Mail),
+
+            "qat" => new QuickAccessEditorView(
+                App.Commands, App.QuickAccess, App.RibbonEdits, DefaultRibbonLayouts.Mail),
+
+            _ => null,
+        };
+
+        if (editor is null) return null;
+
+        editor.Edited += (_, _) => CustomizationChanged = true;
+
+        // The editor fills what is left under the heading. Its two panes scroll inside
+        // themselves, so the page must not scroll as well or the buttons between them walk off
+        // the bottom of a tall ribbon.
+        var grid = new Grid
+        {
+            RowDefinitions = new RowDefinitions("Auto,*"),
+            Margin = new Thickness(0, 0, 10, 0),
+        };
+
+        var heading = PageHeading(page);
+        Grid.SetRow(heading, 0);
+        grid.Children.Add(heading);
+
+        Grid.SetRow(editor, 1);
+        grid.Children.Add(editor);
+
+        return grid;
+    }
+
+    /// <summary>The icon and one-line description every page opens with.</summary>
+    private Control PageHeading(OptionsPage page)
+    {
+        var row = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 10,
+            Margin = new Thickness(0, 0, 0, 10),
+        };
+
+        var glyph = new TextBlock
+        {
+            Text = IconGlyphs.GetOrEmpty(page.Icon, 24),
+            FontFamily = IconFont.Family,
+            FontSize = 20,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Bind(glyph, TextBlock.ForegroundProperty, "accent.rest.brush");
+        row.Children.Add(glyph);
+
+        var text = new TextBlock
+        {
+            Text = page.Description,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Bind(text, TextBlock.ForegroundProperty, "dialog.foreground.brush");
+        row.Children.Add(text);
+
+        return row;
     }
 
     /// <summary>

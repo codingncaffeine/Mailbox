@@ -71,6 +71,22 @@ public sealed class ModuleTab(MailboxModule module, string icon, bool isActive)
 /// <summary>One command on the Quick Access Toolbar in the title bar.</summary>
 public sealed class QuickAccessButton(MailboxCommand command)
 {
+    /// <summary>
+    /// A rule rather than a command. The toolbar is the one bar a user can put one on, and it
+    /// carries the same sentinel id the ribbon's own rules do.
+    /// </summary>
+    public static QuickAccessButton Separator { get; } = new(new MailboxCommand
+    {
+        Id = RibbonItem.SeparatorId,
+        Label = string.Empty,
+        Description = string.Empty,
+        Icon = string.Empty,
+        Category = string.Empty,
+    })
+    { IsSeparator = true };
+
+    public bool IsSeparator { get; private init; }
+
     public string Label { get; } = command.Label;
     public string Glyph { get; } = IconGlyphs.GetOrEmpty(command.Icon, 16);
     public FontFamily IconFamily { get; } = IconFont.Family;
@@ -267,9 +283,7 @@ public sealed class ShellViewModel : ObservableObject
             OfficeThemes.All.Select(OfficeThemes.DisplayName));
 
         QuickAccess = new ObservableCollection<QuickAccessButton>(
-            (quickAccess?.Commands ?? layout.QuickAccess)
-                .Where(id => catalog.TryGet(id, out _))
-                .Select(id => new QuickAccessButton(catalog.Get(id))));
+            ToolbarButtons(catalog, quickAccess?.Commands ?? layout.QuickAccess));
 
         ReadingPaneActions = new ObservableCollection<QuickAccessButton>(
             new[] { MailCommands.Reply.Id, MailCommands.ReplyAll.Id, MailCommands.Forward.Id }
@@ -403,12 +417,27 @@ public sealed class ShellViewModel : ObservableObject
         if (QuickAccessCustomization is not { } customization) return;
 
         QuickAccess.Clear();
-        foreach (var id in customization.Commands)
+        foreach (var button in ToolbarButtons(_catalog, customization.Commands))
         {
-            if (_catalog.TryGet(id, out var command)) QuickAccess.Add(new QuickAccessButton(command));
+            QuickAccess.Add(button);
         }
 
         RaiseQuickAccessPlacement();
+    }
+
+    /// <summary>
+    /// Turns stored ids into buttons, keeping the rules and dropping what the catalogue does
+    /// not know — a hand-edited settings file is allowed to name a command that no longer
+    /// exists, and that costs one button rather than the toolbar.
+    /// </summary>
+    private static IEnumerable<QuickAccessButton> ToolbarButtons(
+        CommandCatalog catalog, IEnumerable<CommandId> ids)
+    {
+        foreach (var id in ids)
+        {
+            if (id == RibbonItem.SeparatorId) yield return QuickAccessButton.Separator;
+            else if (catalog.TryGet(id, out var command)) yield return new QuickAccessButton(command);
+        }
     }
 
     public void RaiseQuickAccessPlacement()
