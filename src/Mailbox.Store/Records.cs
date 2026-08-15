@@ -169,6 +169,9 @@ public sealed record MessageSummary(
     /// <summary>0 low, 1 normal, 2 high — the message's own Importance/X-Priority, for the list's column and the searches.</summary>
     public int Importance { get; init; } = 1;
 
+    /// <summary>Focused Inbox (§12): true for Focused, false for Other. Meaningful in the Inbox only.</summary>
+    public bool IsFocused { get; init; } = true;
+
     /// <summary>The To addresses, lower-cased, for the searches that ask who a message went to.</summary>
     public IReadOnlyList<string> To { get; init; } = [];
 

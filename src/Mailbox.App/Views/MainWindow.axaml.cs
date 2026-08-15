@@ -1586,9 +1586,32 @@ public partial class MainWindow : Window
 
     private static void ApplyHarnessState(ShellViewModel shell)
     {
-        // Which message the reading pane is showing. The bars above it only appear for certain
-        // mail — one with a tracking pixel, one pretending to be someone else — and a capture
-        // cannot click a row to find one.
+        var wanted = Environment.GetEnvironmentVariable("MAILBOX_STATE") ?? string.Empty;
+
+        foreach (var state in wanted.ToLowerInvariant().Split(',', StringSplitOptions.RemoveEmptyEntries))
+        {
+            switch (state.Trim())
+            {
+                case "unread": shell.ShowUnread.Execute(null); break;
+                case "sort-from": shell.SortBy("From"); break;
+                case "sort-subject": shell.SortBy("Subject"); break;
+                case "sort-asc": shell.ToggleSort.Execute(null); break;
+                case "group-collapsed": shell.ToggleGroupCollapsed("Today"); break;
+                case "nav-collapsed": shell.ToggleNav.Execute(null); break;
+                case "no-reading": shell.HideReadingPane.Execute(null); break;
+                case "zoom-in": shell.ZoomIn.Execute(null); break;
+                case "zoom-out": shell.ZoomOut.Execute(null); break;
+                case "focused": shell.FocusedInboxOn = true; break;
+                case "other": shell.FocusedInboxOn = true; shell.ShowOther = true; break;
+                default: Log.Warn($"Unknown MAILBOX_STATE: {state}"); break;
+            }
+        }
+
+        // The posed selection, after the posed state: a state that changes what the list shows
+        // — Focused / Other, unread only — replaces the rows, and a row chosen before that would
+        // be one the list no longer holds. Which message the reading pane is showing: the bars
+        // above it only appear for certain mail — one with a tracking pixel, one pretending to
+        // be someone else — and a capture cannot click a row to find one.
         if (Environment.GetEnvironmentVariable("MAILBOX_SELECT") is { Length: > 0 } subject)
         {
             var match = shell.Messages.FirstOrDefault(
@@ -1605,26 +1628,6 @@ public partial class MainWindow : Window
                 shell.SelectedMessage = match;
                 shell.SelectedRow = match;
                 _pendingSelection = match;
-            }
-        }
-
-        var wanted = Environment.GetEnvironmentVariable("MAILBOX_STATE");
-        if (string.IsNullOrWhiteSpace(wanted)) return;
-
-        foreach (var state in wanted.ToLowerInvariant().Split(',', StringSplitOptions.RemoveEmptyEntries))
-        {
-            switch (state.Trim())
-            {
-                case "unread": shell.ShowUnread.Execute(null); break;
-                case "sort-from": shell.SortBy("From"); break;
-                case "sort-subject": shell.SortBy("Subject"); break;
-                case "sort-asc": shell.ToggleSort.Execute(null); break;
-                case "group-collapsed": shell.ToggleGroupCollapsed("Today"); break;
-                case "nav-collapsed": shell.ToggleNav.Execute(null); break;
-                case "no-reading": shell.HideReadingPane.Execute(null); break;
-                case "zoom-in": shell.ZoomIn.Execute(null); break;
-                case "zoom-out": shell.ZoomOut.Execute(null); break;
-                default: Log.Warn($"Unknown MAILBOX_STATE: {state}"); break;
             }
         }
     }
@@ -2124,6 +2127,10 @@ public partial class MainWindow : Window
 
         if (id == MailCommands.Categorize.Id) { ShowCategorizeMenu(shell, rows); return true; }
         if (id == MailCommands.Snooze.Id) { ShowSnoozeMenu(shell, rows); return true; }
+        if (id == MailCommands.MoveToOther.Id) { shell.SetFocused(rows, focused: false, always: false); return true; }
+        if (id == MailCommands.MoveToFocused.Id) { shell.SetFocused(rows, focused: true, always: false); return true; }
+        if (id == MailCommands.AlwaysMoveToOther.Id) { shell.SetFocused(rows, focused: false, always: true); return true; }
+        if (id == MailCommands.AlwaysMoveToFocused.Id) { shell.SetFocused(rows, focused: true, always: true); return true; }
         if (id == MailCommands.MoveTo.Id) { ShowMoveMenu(shell, rows); return true; }
         if (id == MailCommands.Rules.Id) { ShowRulesMenu(shell, rows); return true; }
         if (id == MailCommands.NewItems.Id) { ShowNewItemsMenu(); return true; }
@@ -2137,6 +2144,12 @@ public partial class MainWindow : Window
     {
         if (id == ViewCommands.ReverseSort.Id) { shell.SortDescending = !shell.SortDescending; return true; }
         if (id == ViewCommands.TighterSpacing.Id) { shell.CompactRows = !shell.CompactRows; return true; }
+        if (id == ViewCommands.ShowFocusedInbox.Id)
+        {
+            shell.FocusedInboxOn = !shell.FocusedInboxOn;
+            shell.StatusRight = shell.FocusedInboxOn ? "Focused Inbox is on." : "Focused Inbox is off.";
+            return true;
+        }
 
         return false;
     }
@@ -2642,6 +2655,16 @@ public partial class MainWindow : Window
 
             Command("Rules…", MailCommands.Rules.Id);
             Command("Move…", MailCommands.MoveTo.Id);
+
+            // With Focused Inbox on, the reference offers the other half and its "always".
+            if (shell.ShowFocusedPivot)
+            {
+                Command(shell.ShowOther ? "Move to Focused" : "Move to Other",
+                    shell.ShowOther ? MailCommands.MoveToFocused.Id : MailCommands.MoveToOther.Id);
+                Command(shell.ShowOther ? "Always Move to Focused" : "Always Move to Other",
+                    shell.ShowOther ? MailCommands.AlwaysMoveToFocused.Id : MailCommands.AlwaysMoveToOther.Id);
+            }
+
             Command("Ignore", MailCommands.Ignore.Id, works: false, "Phase 8 — Ignore Conversation");
             Command("Junk", MailCommands.Junk.Id);
             flyout.Items.Add(new Separator());

@@ -52,6 +52,7 @@ public sealed class MailOptions(SettingsStore settings)
     public const string ShowRemindersKey = "reminders.show";
     public const string ReminderSoundKey = "reminders.sound";
     public const string RemindersOnTopKey = "reminders.ontop";
+    public const string FocusedInboxKey = "view.focusedinbox";
     public const string DesktopAlertKey = "mail.arrival.alert";
     public const string RequestDeliveryReceiptKey = "mail.tracking.delivery";
     public const string RequestReadReceiptKey = "mail.tracking.read";
@@ -205,6 +206,13 @@ public sealed class MailOptions(SettingsStore settings)
     /// the reference's servers keep them; 0 keeps nothing.
     /// </summary>
     public int RecoverDays => Math.Clamp((int)_settings.GetNumber(RecoverDaysKey, 30), 0, 365);
+
+    /// <summary>Focused Inbox (§12): whether the Inbox is split into Focused and Other. Off until asked.</summary>
+    public bool ShowFocusedInbox
+    {
+        get => _settings.GetBool(FocusedInboxKey, false);
+        set => _settings.Set(FocusedInboxKey, value);
+    }
 
     // ---- Reminders (Options › Advanced) ---------------------------------------------------
 
