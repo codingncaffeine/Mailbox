@@ -149,7 +149,7 @@ public static class ViewCommands
         Description = "Open the apps list — Folders, Notes, Shortcuts and anything installed.",
         Icon = "apps",
         Category = "Add-ins",
-        KeyTip = "AP",
+        KeyTip = "T",
     };
 
     /// <summary>
@@ -164,7 +164,7 @@ public static class ViewCommands
         Icon = "read-aloud",
         Category = "Speech",
         Scope = ModuleScope.Mail,
-        KeyTip = "RA",
+        KeyTip = "C",
         RequiresSingleSelection = true,
     };
 
@@ -179,6 +179,7 @@ public static class ViewCommands
         Description = "Move the selected message to the folder you last chose.",
         Icon = "move",
         Category = "Quick Steps",
+        KeyTip = "MQ",
         Scope = ModuleScope.Mail,
         RequiresSelection = true,
     };
@@ -190,6 +191,7 @@ public static class ViewCommands
         Description = "Forward the selected message to your manager.",
         Icon = "forward",
         Category = "Quick Steps",
+        KeyTip = "MG",
         Scope = ModuleScope.Mail,
         RequiresSelection = true,
     };
@@ -201,6 +203,7 @@ public static class ViewCommands
         Description = "Start a message to your team.",
         Icon = "mail",
         Category = "Quick Steps",
+        KeyTip = "MT",
         Scope = ModuleScope.Mail,
     };
 

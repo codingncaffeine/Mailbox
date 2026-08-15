@@ -335,12 +335,40 @@ public partial class MainWindow : Window
                 _keyTips.Begin(FirstLevelKeyTips());
 
                 if (keyTips is "tabs" or "1") return;
-                if (_ribbon.Layout.FindTab(keyTips)?.KeyTip is not { } tip) return;
 
+                // Slash-separated, so a third level can be reached: `home/zd` picks the Home
+                // tab and then the collapsed Delete group. The levels below the first are
+                // built after a layout pass, so each descent is posted rather than typed
+                // straight through.
+                var steps = keyTips.Split('/', StringSplitOptions.RemoveEmptyEntries);
+
+                if (_ribbon.Layout.FindTab(steps[0])?.KeyTip is not { } tip) return;
                 foreach (var character in tip) _keyTips.HandleKey(KeyFor(character));
+
+                foreach (var step in steps.Skip(1)) Descend(step);
+
+                Dispatcher.UIThread.Post(
+                    () => Log.Info($"KeyTips: level {_keyTips.Depth}, {_keyTips.BadgeCount} badges"),
+                    DispatcherPriority.Background);
             };
         }
     }
+
+    /// <summary>
+    /// Types one KeyTip after the level above it has been built. Harness only.
+    /// </summary>
+    /// <remarks>
+    /// Each descent rebuilds something — a tab, or a group's flyout — and the badges for the
+    /// level below cannot be placed until that has been laid out. Posting keeps the steps in
+    /// the same order the dispatcher will run them in.
+    /// </remarks>
+    private void Descend(string tip)
+        => Dispatcher.UIThread.Post(
+            () =>
+            {
+                foreach (var character in tip) _keyTips.HandleKey(KeyFor(character));
+            },
+            DispatcherPriority.Loaded);
 
     /// <summary>Types a KeyTip character into the traversal. Harness only.</summary>
     private static Avalonia.Input.Key KeyFor(char character)

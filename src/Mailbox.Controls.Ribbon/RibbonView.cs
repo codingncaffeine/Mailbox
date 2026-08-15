@@ -51,6 +51,10 @@ public sealed class RibbonView : ContentControl
     private readonly List<(RibbonTab Tab, Control Control)> _tabControls = [];
     private readonly Dictionary<CommandId, List<Control>> _itemControls = [];
 
+    // Groups that have degraded to a popup button, and the button they degraded to. Their
+    // commands have no control on the bar, so this is the only thing Alt can adorn for them.
+    private readonly List<(RibbonGroup Group, Button Button)> _collapsedGroups = [];
+
     private RibbonLayout _layout;
     private string _activeTabId;
     private Button? _displayOptions;
@@ -246,6 +250,7 @@ public sealed class RibbonView : ContentControl
     {
         _tabControls.Clear();
         _itemControls.Clear();
+        _collapsedGroups.Clear();
 
         var root = new Grid
         {
@@ -461,6 +466,71 @@ public sealed class RibbonView : ContentControl
         {
             if (!_catalog.TryGet(id, out var command) || command.KeyTip is null) continue;
             if (controls.Find(c => c.IsEffectivelyVisible) is not { } control) continue;
+
+            targets.Add(new KeyTipTarget
+            {
+                Tip = command.KeyTip,
+                Target = control,
+                Activate = () => CommandInvoked?.Invoke(this, new RibbonCommandEventArgs(id)),
+            });
+        }
+
+        targets.AddRange(CollapsedGroupKeyTips());
+        return targets;
+    }
+
+    /// <summary>
+    /// The third level: a collapsed group's own badge, and its commands behind it.
+    /// </summary>
+    /// <remarks>
+    /// A group that has degraded to a popup button draws none of its commands, so they
+    /// contribute no control for a badge to adorn and drop out of the traversal — which is a
+    /// narrow window quietly taking commands off the keyboard, and the one thing Alt traversal
+    /// exists to prevent.
+    /// <para>
+    /// The group's button gets the badge instead. Activating it opens the flyout, and the
+    /// commands inside become the next level, adorned where they are actually drawn: the popup
+    /// is a separate surface with an adorner layer of its own, so the badges follow the controls
+    /// into it without any of this knowing that is where they went.
+    /// </para>
+    /// </remarks>
+    private IEnumerable<KeyTipTarget> CollapsedGroupKeyTips()
+    {
+        foreach (var (group, button) in _collapsedGroups)
+        {
+            if (group.KeyTip is not { Length: > 0 } tip) continue;
+            if (!button.IsEffectivelyVisible) continue;
+
+            var owner = group;
+            var opener = button;
+
+            yield return new KeyTipTarget
+            {
+                Tip = tip,
+                Target = button,
+                Activate = () => opener.Flyout?.ShowAt(opener),
+
+                // Read after the flyout has opened, so the controls it built are on screen and
+                // have bounds. Which is also why this is deferred rather than a list: the
+                // group's items do not exist until the popup is opened.
+                Children = () => GroupKeyTips(owner),
+            };
+        }
+    }
+
+    /// <summary>The commands of one group, wherever their controls have ended up.</summary>
+    private IReadOnlyList<KeyTipTarget> GroupKeyTips(RibbonGroup group)
+    {
+        var targets = new List<KeyTipTarget>();
+
+        foreach (var item in group.Items)
+        {
+            if (item.IsSentinel) continue;
+            if (!_catalog.TryGet(item.Command, out var command) || command.KeyTip is null) continue;
+            if (!_itemControls.TryGetValue(item.Command, out var controls)) continue;
+            if (controls.Find(c => c.IsEffectivelyVisible) is not { } control) continue;
+
+            var id = item.Command;
 
             targets.Add(new KeyTipTarget
             {
@@ -1115,6 +1185,9 @@ public sealed class RibbonView : ContentControl
         var flyout = new Flyout { Placement = PlacementMode.BottomEdgeAlignedLeft };
         flyout.Opening += (_, _) => flyout.Content ??= BuildCollapsedGroupContent(group);
         button.Flyout = flyout;
+
+        // Remembered so Alt can reach what the group is now hiding.
+        _collapsedGroups.Add((group, button));
 
         return button;
     }

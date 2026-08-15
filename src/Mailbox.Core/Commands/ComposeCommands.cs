@@ -310,7 +310,7 @@ public static class ComposeCommands
         NeutralIcon = true,
         Category = "Paragraph",
         Scope = ModuleScope.Mail,
-        KeyTip = "UL",
+        KeyTip = "J",
     };
 
     public static readonly MailboxCommand Numbering = new()
@@ -758,7 +758,7 @@ public static class ComposeCommands
         Icon = "3d-models",
         Category = "Illustrations",
         Scope = ModuleScope.Mail,
-        KeyTip = "M3",
+        KeyTip = "D",
     };
 
     public static readonly MailboxCommand SmartArt = new()
@@ -1027,7 +1027,7 @@ public static class ComposeCommands
         Icon = "smart-lookup",
         Category = "Insights",
         Scope = ModuleScope.Mail,
-        KeyTip = "SM",
+        KeyTip = "K",
     };
 
     public static readonly MailboxCommand Language = new()
