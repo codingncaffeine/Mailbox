@@ -333,6 +333,17 @@ public partial class MainWindow : Window
                 };
                 break;
 
+            case "categories":
+                Opened += async (_, _) =>
+                {
+                    if (DataContext is not ShellViewModel shell
+                        || shell.CurrentAccountForCategories() is not { } account) return;
+
+                    CaptureNextWindow();
+                    await new ColorCategoriesDialog(account.Mail, account.Account.Id).ShowDialog(this);
+                };
+                break;
+
             // The Server Settings dialog for a chosen account, so its protocol-specific half —
             // POP3's leave-on-server, IMAP's "Mail to keep offline" — can be photographed.
             // MAILBOX_SERVER names the account by address; the default account otherwise.
@@ -1595,11 +1606,16 @@ public partial class MainWindow : Window
             flyout.Items.Add(clear);
         }
 
-        // Creating, renaming and recolouring one is Phase 8, and the entry says so rather than
-        // being missing — it is where the reference puts the way in.
+        // Create, rename, recolour, shortcut and delete — the reference puts the way in here.
         flyout.Items.Add(new Separator());
-        var all = new MenuItem { Header = "All Categories…", IsEnabled = false };
-        ToolTip.SetTip(all, "Managing categories is Phase 8.");
+        var all = new MenuItem { Header = "All Categories…" };
+        all.Click += (_, _) =>
+        {
+            if (shell.CurrentAccountForCategories() is { } account)
+            {
+                _ = new ColorCategoriesDialog(account.Mail, account.Account.Id).ShowDialog(this);
+            }
+        };
         flyout.Items.Add(all);
 
         flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);

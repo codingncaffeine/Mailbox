@@ -1469,6 +1469,9 @@ public sealed class ShellViewModel : ObservableObject
             ? where.Account
             : _accounts?.All.FirstOrDefault();
 
+    /// <summary>The account whose categories a management dialog should edit — the current one.</summary>
+    public OpenAccount? CurrentAccountForCategories() => CurrentAccount;
+
     /// <summary>
     /// Mark as Junk, or Not Junk when the selection is already in the Junk folder.
     /// </summary>
