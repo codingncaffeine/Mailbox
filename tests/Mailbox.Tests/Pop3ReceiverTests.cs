@@ -1,4 +1,6 @@
 using Mailbox.Protocols;
+using Mailbox.Security;
+using Mailbox.Security.Dns;
 using Mailbox.Store;
 using MimeKit;
 
@@ -80,6 +82,97 @@ public class Pop3ReceiverTests
 
     private static Pop3Receiver Receiver(MailRepository repo, FakePop3 server)
         => new(repo) { SessionFactory = () => server };
+
+    // ---- Signatures, checked as the mail arrives -------------------------------------------
+
+    /// <summary>
+    /// A poll is where a signature gets checked, because checking resolves a name the sender
+    /// chose and §19 does not allow a lookup on the path that draws a message. These fix that
+    /// arrangement in place: the receiver records a verdict, and a receiver given no verifier
+    /// asks nothing of anyone.
+    /// </summary>
+    [Fact]
+    public async Task APollRecordsWhatTheSignatureCameTo()
+    {
+        var (store, repo, inbox) = Fresh();
+        using var _ = store;
+
+        var server = new FakePop3().With("uid-1", "Signed");
+        var receiver = Receiver(repo, server);
+        receiver.Authentication = new DkimVerification(new StubLookup());
+
+        await receiver.PollAsync(Connection(), inbox, null, Ct);
+
+        // The seeded message carries no signature, so there is nothing to record — and that is
+        // the point: a message nobody could check has no row rather than a verdict of "none".
+        var message = Assert.Single(repo.Messages(inbox.Id));
+        Assert.Null(repo.Authentication(message.Id));
+    }
+
+    [Fact]
+    public async Task AReceiverWithNoVerifierResolvesNothing()
+    {
+        var (store, repo, inbox) = Fresh();
+        using var _ = store;
+
+        var lookup = new StubLookup();
+        var server = new FakePop3().With("uid-1");
+
+        // Authentication left null, which is the default and what every other test here uses.
+        await Receiver(repo, server).PollAsync(Connection(), inbox, null, Ct);
+
+        Assert.Equal(0, lookup.Lookups);
+        Assert.Null(repo.Authentication(Assert.Single(repo.Messages(inbox.Id)).Id));
+    }
+
+    /// <summary>A verdict written by a poll is what the reading pane reads back.</summary>
+    [Fact]
+    public void ARecordedVerdictSurvivesAndReadsBack()
+    {
+        var (store, repo, inbox) = Fresh();
+        using var _ = store;
+
+        var id = repo.AddMessage(inbox.Id, Summary(inbox.Id), [1, 2, 3])!.Value;
+
+        repo.RecordAuthentication(id, "pass", "example.com", DateTimeOffset.UnixEpoch);
+        var stored = repo.Authentication(id);
+
+        Assert.NotNull(stored);
+        Assert.Equal("pass", stored.Dkim);
+        Assert.Equal("example.com", stored.SigningDomain);
+    }
+
+    /// <summary>Re-checking replaces rather than duplicating: one message, one verdict.</summary>
+    [Fact]
+    public void RecordingTwiceReplaces()
+    {
+        var (store, repo, inbox) = Fresh();
+        using var _ = store;
+
+        var id = repo.AddMessage(inbox.Id, Summary(inbox.Id), [1])!.Value;
+
+        repo.RecordAuthentication(id, "error", null, DateTimeOffset.UnixEpoch);
+        repo.RecordAuthentication(id, "pass", "example.com", DateTimeOffset.UnixEpoch);
+
+        Assert.Equal("pass", repo.Authentication(id)!.Dkim);
+    }
+
+    private static MessageSummary Summary(long folderId) => new(
+        0, folderId, "uid-x", "x@example.com", "A. Person", "a@example.com",
+        "Subject", "Preview", DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch,
+        3, false, false, false);
+
+    /// <summary>A lookup that counts what it was asked and answers nothing.</summary>
+    private sealed class StubLookup : ITxtLookup
+    {
+        public int Lookups { get; private set; }
+
+        public Task<DnsAnswer> TxtAsync(string name, CancellationToken cancellation = default)
+        {
+            Lookups++;
+            return Task.FromResult(DnsAnswer.Empty);
+        }
+    }
 
     [Fact]
     public async Task DownloadsWhatIsThereAndFilesIt()

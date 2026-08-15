@@ -7,6 +7,8 @@ using Mailbox.Core.Commands;
 using Mailbox.Core.Ribbon;
 using Mailbox.Core.Settings;
 using Mailbox.Protocols;
+using Mailbox.Security;
+using Mailbox.Security.Dns;
 using Mailbox.Store;
 using Mailbox.Theming.Themes;
 using Mailbox.Core.Diagnostics;
@@ -54,6 +56,18 @@ public partial class App : Application
 
     /// <summary>Polling, sending, and the orchestration over both, across every account.</summary>
     public static SendReceiveService Transfer { get; private set; } = null!;
+
+    /// <summary>
+    /// The resolver signature checking uses, and the only thing in the application that asks
+    /// DNS anything.
+    /// </summary>
+    /// <remarks>
+    /// Held here so it is plainly one object with one owner. It is handed to the receiver and to
+    /// nothing else — in particular not to anything the reading pane can reach, because §19's
+    /// "no key discovery to display a message" is a property of the code rather than a rule
+    /// somebody remembers.
+    /// </remarks>
+    public static DnsResolver Resolver { get; private set; } = null!;
 
     /// <summary>Where passwords are kept. Never a file of our own.</summary>
     public static ICredentialStore Secrets { get; private set; } = null!;
@@ -104,7 +118,14 @@ public partial class App : Application
             AccountOrder);
 
         Secrets = Credentials.Best();
-        Transfer = new SendReceiveService();
+
+        // Signature checking happens as mail is collected, never as it is drawn. The receiver
+        // gets the verifier; nothing else does.
+        Resolver = new DnsResolver();
+        var signatures = Resolver.CanResolve ? new DkimVerification(Resolver) : null;
+
+        Transfer = new SendReceiveService(
+            mail => new Pop3Receiver(mail) { Authentication = signatures });
 
         Commands = new CommandCatalog();
         Commands.RegisterRange(MailCommands.All);
@@ -121,6 +142,9 @@ public partial class App : Application
         Log.Info($"UI font {Fonts.Resolve("Segoe UI").Rendered}, " +
                  $"content font {Fonts.Resolve("Calibri").Rendered}");
         Log.Info($"{Commands.Count} commands registered");
+        Log.Info(Resolver.CanResolve
+            ? $"Signatures are checked as mail arrives, using {Resolver.Servers.Count} nameserver(s)."
+            : "No nameserver is configured, so signatures cannot be checked here.");
 
         if (Fonts.MissingExpectedSubstitutes() is { Count: > 0 } missing)
         {

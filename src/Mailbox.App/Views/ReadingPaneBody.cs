@@ -46,6 +46,7 @@ public sealed class ReadingPaneBody : UserControl
 
     private NativeWebView? _web;
     private MimeMessage? _message;
+    private DkimResult? _verified;
     private string _fallbackText = string.Empty;
     private RenderedMessage? _rendered;
     private RemoteImagePolicy _policy = RemoteImagePolicy.Block;
@@ -94,10 +95,17 @@ public sealed class ReadingPaneBody : UserControl
     /// behind a sample row, and inventing some would be a worse lie than rendering its text.
     /// </param>
     /// <param name="fallbackText">What to show when there is no message to parse.</param>
-    public void Show(MimeMessage? message, string fallbackText)
+    /// <param name="verified">
+    /// What checking this message's signature came to when it arrived, read from the store, or
+    /// null for a message that was never checked. Passed in rather than looked up: verifying
+    /// resolves a name the sender chose, and §19 does not allow that on the path that draws a
+    /// message. Nothing here ever asks the network anything.
+    /// </param>
+    public void Show(MimeMessage? message, string fallbackText, DkimResult? verified = null)
     {
         _message = message;
         _fallbackText = fallbackText;
+        _verified = verified;
 
         // A decision belongs to the message it was made about. Carrying "show images" from one
         // message to the next would allow a sender the reader never agreed to.
@@ -121,7 +129,7 @@ public sealed class ReadingPaneBody : UserControl
             return;
         }
 
-        var trust = SenderTrust.Evaluate(_message, _mail()?.FamiliarDomains() ?? []);
+        var trust = SenderTrust.Evaluate(_message, _mail()?.FamiliarDomains() ?? [], _verified);
         if (trust.Warnings.Count > 0) _bars.Children.Add(TrustBar(trust));
 
         var options = new RenderOptions
@@ -491,14 +499,26 @@ public sealed class ReadingPaneBody : UserControl
     {
         if (_message is null) return;
 
-        var trust = SenderTrust.Evaluate(_message, _mail()?.FamiliarDomains() ?? []);
+        var trust = SenderTrust.Evaluate(_message, _mail()?.FamiliarDomains() ?? [], _verified);
         var results = trust.Authentication;
 
-        var detail = results.WasChecked
-            ? $"DKIM: {results.Dkim}\nSPF: {results.Spf}\nDMARC: {results.Dmarc}"
-              + (results.SigningDomain is { Length: > 0 } d ? $"\nSigned by: {d}" : string.Empty)
+        // Two kinds of evidence, and which is which is the useful part. The signature was
+        // checked here, against the bytes in the store. Everything else is a server's word.
+        var detail = trust.Verified is { WasChecked: true } local
+            ? "Checked here, against the message as it was received:\n"
+              + $"  Signature (DKIM): {Says(local.Verdict)}"
+              + (local.SigningDomain is { Length: > 0 } signer ? $"\n  Signed by: {signer}" : string.Empty)
+            : "This message's signature has not been checked here. That is the case for mail "
+              + "received before the check existed, mail that carries no signature, and mail "
+              + "collected with no resolver to hand.";
+
+        detail += "\n\n" + (results.WasChecked
+            ? "Reported by the server that delivered it:\n"
+              + $"  DKIM: {Says(results.Dkim)}\n  SPF: {Says(results.Spf)}\n"
+              + $"  DMARC: {Says(results.Dmarc)}"
+              + (results.SigningDomain is { Length: > 0 } d ? $"\n  Signed by: {d}" : string.Empty)
             : "The server that delivered this message recorded no authentication results, "
-              + "which is ordinary for mail sent directly rather than through a provider.";
+              + "which is ordinary for mail sent directly rather than through a provider.");
 
         if (trust.Warnings.Count > 0)
         {
@@ -508,6 +528,17 @@ public sealed class ReadingPaneBody : UserControl
 
         await ExplainAsync("Message authentication", detail);
     }
+
+    /// <summary>A verdict in words rather than in the vocabulary of a specification.</summary>
+    private static string Says(AuthVerdict verdict) => verdict switch
+    {
+        AuthVerdict.Pass => "passed",
+        AuthVerdict.Fail => "failed",
+        AuthVerdict.SoftFail => "failed, but the domain does not insist",
+        AuthVerdict.Neutral => "neither passed nor failed",
+        AuthVerdict.Error => "could not be checked",
+        _ => "not checked",
+    };
 
     /// <summary>
     /// Prints through the engine, which is the only thing that knows how the message is laid
