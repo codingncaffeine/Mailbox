@@ -35,6 +35,52 @@ public static class RibbonMetrics
     public const double SimplifiedButtonHeight = 30;
     public const double SimplifiedIconSize = 18;
 
+    /// <summary>
+    /// Em size for a Simplified-bar glyph. Measured: the reference's icons carry 17 rows of ink,
+    /// and deriving the size from the 18px box gave 10. The box is left alone so the 36px button
+    /// pitch holds; only the glyph inside it grows.
+    /// </summary>
+    public const double SimplifiedIconFontSize = 20;
+
+    /// <summary>
+    /// Padding either side of an icon-only button on the Simplified bar. Measured: Bold, Italic
+    /// and Underline sit at x=327, 363 and 399 on the compose ribbon, a pitch of 36 around an
+    /// 18px glyph.
+    /// </summary>
+    public const double SimplifiedGlyphPadding = 9;
+
+    /// <summary>
+    /// Where the first control starts, measured in from the panel's left edge: the panel begins
+    /// at x=12 and Paste's glyph at x=31, which with the padding above puts the inset at 13.
+    /// </summary>
+    public const double SimplifiedRowInset = 13;
+
+    /// <summary>
+    /// Padding either side of a field on the bar. The reference's rule sits at x=115 and the
+    /// Font box starts at 128.
+    /// </summary>
+    public const double FieldPadding = 6;
+
+    /// <summary>
+    /// A field on the Simplified bar. Measured off the compose ribbon: the Font box runs
+    /// x=128–234 and the Font Size box x=251–301, both 28px tall in a 48px row.
+    /// </summary>
+    public const double FieldHeight = 28;
+    public const double FieldWidth = 107;
+    public const double FontSizeFieldWidth = 51;
+
+    /// <summary>
+    /// The vertical rule between clusters on the Simplified bar, measured off the compose
+    /// ribbon: 1px wide and 32px tall, which is taller than the 30px buttons it divides.
+    /// </summary>
+    public const double InlineSeparatorHeight = 32;
+
+    /// <summary>
+    /// Clearance either side of that rule. The reference's Message row puts Format Painter's
+    /// glyph at x=86–100, the rule at 115 and the Font box at 128.
+    /// </summary>
+    public const double InlineSeparatorMargin = 6;
+
     /// <summary>Height of the expanded ribbon body, excluding the tab strip.</summary>
     public const double BodyHeight = 92;
 

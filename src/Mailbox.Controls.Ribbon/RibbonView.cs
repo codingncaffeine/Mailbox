@@ -445,18 +445,37 @@ public sealed class RibbonView : ContentControl
             VerticalAlignment = VerticalAlignment.Center,
         };
 
-        foreach (var item in items)
+        // Walked cluster by cluster rather than item by item, because a cluster's "…" lists what
+        // that cluster leaves out and so has to know which cluster it ends.
+        var cluster = new List<RibbonItem>();
+        var start = 0;
+
+        for (var i = 0; i <= items.Count; i++)
         {
-            if (item.Kind == RibbonItemKind.Separator)
+            if (i < items.Count && items[i].Kind != RibbonItemKind.Separator)
             {
-                strip.Children.Add(BuildInlineSeparator());
+                cluster.Add(items[i]);
                 continue;
             }
 
-            if (_catalog.TryGet(item.Command, out var command))
+            foreach (var item in items.Skip(start).Take(i - start))
             {
-                strip.Children.Add(BuildSimplifiedButton(command, item));
+                if (item.Kind == RibbonItemKind.Overflow)
+                {
+                    strip.Children.Add(BuildClusterOverflow(tab, cluster));
+                    continue;
+                }
+
+                if (_catalog.TryGet(item.Command, out var command))
+                {
+                    strip.Children.Add(BuildSimplifiedButton(command, item));
+                }
             }
+
+            if (i < items.Count) strip.Children.Add(BuildInlineSeparator());
+
+            cluster = [];
+            start = i + 1;
         }
 
         // Overflow, then the chevron that switches Simplified / Classic / Collapsed.
@@ -495,7 +514,7 @@ public sealed class RibbonView : ContentControl
         var host = new Border
         {
             Height = RibbonMetrics.SimplifiedHeight,
-            Padding = new Thickness(6, 0),
+            Padding = new Thickness(RibbonMetrics.SimplifiedRowInset, 0),
             Child = grid,
             CornerRadius = new CornerRadius(RibbonMetrics.BodyCornerRadius),
             BoxShadow = BoxShadows.Parse("0 1 3 0 #94000000"),
@@ -505,8 +524,143 @@ public sealed class RibbonView : ContentControl
         return host;
     }
 
+    /// <summary>
+    /// Decides whether a command is currently usable. Set by the host.
+    /// </summary>
+    /// <remarks>
+    /// The reference greys most of the formatting run until there is something to format — an
+    /// empty message shows a pale left half of the bar, and it darkens as soon as you type. That
+    /// is enablement, not a colour choice, and reading it as a colour is how a ribbon ends up
+    /// looking right in a screenshot and wrong in use.
+    /// </remarks>
+    public Func<CommandId, bool>? CommandEnabled
+    {
+        get;
+        set
+        {
+            field = value;
+            RefreshEnablement();
+        }
+    }
+
+    /// <summary>
+    /// Re-evaluates every drawn control against <see cref="CommandEnabled"/>.
+    /// </summary>
+    /// <remarks>
+    /// Walks the controls rather than rebuilding: this runs on every keystroke in the compose
+    /// body, and rebuilding the ribbon that often would be absurd.
+    /// </remarks>
+    public void RefreshEnablement()
+    {
+        if (CommandEnabled is not { } enabled) return;
+
+        foreach (var (id, controls) in _itemControls)
+        {
+            var usable = enabled(id);
+            foreach (var control in controls) control.IsEnabled = usable;
+        }
+    }
+
+    /// <summary>The corner arrow that opens a cluster's dialog, drawn low as the reference does.</summary>
+    private Control BuildSimplifiedLauncher(MailboxCommand command)
+    {
+        var glyph = new TextBlock
+        {
+            Text = "⇲",
+            FontSize = 11,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            Margin = new Thickness(0, 0, 0, 2),
+        };
+        Bind(glyph, TextBlock.ForegroundProperty, "text.secondary.brush");
+
+        var button = new Button
+        {
+            Content = glyph,
+            Padding = new Thickness(2, 0),
+            Height = RibbonMetrics.SimplifiedHeight - 12,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            VerticalContentAlignment = VerticalAlignment.Bottom,
+            BorderThickness = default,
+            Background = Brushes.Transparent,
+        };
+        ToolTip.SetTip(button, command.Label);
+        button.Click += (_, _) =>
+            CommandInvoked?.Invoke(this, new RibbonCommandEventArgs(command.Id));
+
+        Record(command.Id, button);
+        return button;
+    }
+
+    /// <summary>The "…" ending a cluster, listing what that cluster has no room for.</summary>
+    private Control BuildClusterOverflow(RibbonTab tab, IReadOnlyList<RibbonItem> cluster)
+    {
+        var button = BuildGlyphButton("more", "More commands", 14, () => { });
+        button.Padding = new Thickness(RibbonMetrics.SimplifiedGlyphPadding, 0);
+        button.Flyout = BuildClusterOverflowMenu(tab, cluster);
+        return button;
+    }
+
+    /// <summary>
+    /// What a cluster leaves out: the commands its classic groups place that its Simplified run
+    /// does not.
+    /// </summary>
+    private MenuFlyout BuildClusterOverflowMenu(RibbonTab tab, IReadOnlyList<RibbonItem> cluster)
+    {
+        var shown = cluster
+            .Where(i => i.Kind is not (RibbonItemKind.Separator or RibbonItemKind.Overflow
+                or RibbonItemKind.DialogLauncher))
+            .Select(i => i.Command)
+            .ToHashSet();
+
+        var hidden = tab.Groups
+            .SelectMany(g => g.Items)
+            .Where(i => i.Kind != RibbonItemKind.Separator && !shown.Contains(i.Command))
+            .Select(i => i.Command)
+            .Distinct()
+            .Where(id => _catalog.TryGet(id, out _))
+            .ToList();
+
+        var flyout = new MenuFlyout { Placement = PlacementMode.BottomEdgeAlignedLeft };
+
+        if (hidden.Count == 0)
+        {
+            flyout.ItemsSource = new[]
+            {
+                new MenuItem { Header = "Nothing further in this group", IsEnabled = false },
+            };
+            return flyout;
+        }
+
+        flyout.ItemsSource = hidden
+            .Select(id => _catalog.Get(id))
+            .Select(command =>
+            {
+                var entry = new MenuItem { Header = command.Label };
+                entry.Click += (_, _) =>
+                    CommandInvoked?.Invoke(this, new RibbonCommandEventArgs(command.Id));
+                return entry;
+            })
+            .ToList();
+
+        return flyout;
+    }
+
+    /// <summary>One command can have several controls; Alt traversal takes whichever is shown.</summary>
+    private void Record(CommandId id, Control control)
+    {
+        if (!_itemControls.TryGetValue(id, out var built))
+        {
+            built = [];
+            _itemControls[id] = built;
+        }
+        built.Add(control);
+    }
+
     private Control BuildSimplifiedButton(MailboxCommand command, RibbonItem item)
     {
+        if (item.Kind == RibbonItemKind.TextBox) return BuildSimplifiedField(command, item);
+        if (item.Kind == RibbonItemKind.DialogLauncher) return BuildSimplifiedLauncher(command);
+
         var row = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -514,16 +668,24 @@ public sealed class RibbonView : ContentControl
             VerticalAlignment = VerticalAlignment.Center,
         };
 
-        row.Children.Add(BuildIcon(command.Icon, RibbonMetrics.SimplifiedIconSize, 20));
+        row.Children.Add(BuildIcon(
+            command.Icon, RibbonMetrics.SimplifiedIconSize, 20, command.NeutralIcon,
+            RibbonMetrics.SimplifiedIconFontSize));
 
-        var label = new TextBlock
+        // Icon-only is the reference's default for a formatting run — Bold, Italic, Underline
+        // and the indent and list buttons carry no text at all, and labelling them turns one
+        // cluster into half the bar. Honouring ShowLabel is what makes those rows fit.
+        if (item.ShowLabel)
         {
-            Text = command.Label,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        Bind(label, TextBlock.ForegroundProperty, "text.primary.brush");
-        Bind(label, TextBlock.FontSizeProperty, "type.ui.size.value");
-        row.Children.Add(label);
+            var label = new TextBlock
+            {
+                Text = command.Label,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            Bind(label, TextBlock.ForegroundProperty, "text.primary.brush");
+            Bind(label, TextBlock.FontSizeProperty, "type.ui.size.value");
+            row.Children.Add(label);
+        }
 
         if (item.Kind is RibbonItemKind.DropDown or RibbonItemKind.SplitButton)
         {
@@ -539,8 +701,66 @@ public sealed class RibbonView : ContentControl
             row.Children.Add(chevron);
         }
 
-        return WrapAsButton(row, command, new Thickness(8, 0),
+        return WrapAsButton(row, command,
+            new Thickness(item.ShowLabel ? 8 : RibbonMetrics.SimplifiedGlyphPadding, 0),
             0, RibbonMetrics.SimplifiedButtonHeight);
+    }
+
+    /// <summary>
+    /// A fixed-width field on the bar — the Font and Font Size boxes.
+    /// </summary>
+    /// <remarks>
+    /// Drawn rather than templated from a <c>ComboBox</c>, for the same reason the zoom slider
+    /// is: the reference's is a plain bordered box of an exact width with a small chevron, and a
+    /// stock combo brings its own padding and minimum size that cannot be measured back down.
+    /// It becomes a real picker when the editor in Phase 5 gives it something to pick.
+    /// </remarks>
+    private Control BuildSimplifiedField(MailboxCommand command, RibbonItem item)
+    {
+        var text = new TextBlock
+        {
+            Text = item.Text,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(6, 0, 0, 0),
+        };
+        Bind(text, TextBlock.ForegroundProperty, "text.primary.brush");
+        Bind(text, TextBlock.FontSizeProperty, "type.ui.size.value");
+
+        var chevron = new TextBlock
+        {
+            Text = IconGlyphs.GetOrEmpty("chevron-down", 16),
+            FontFamily = IconFont.Family,
+            FontSize = 8,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 0, 6, 0),
+        };
+        Bind(chevron, TextBlock.ForegroundProperty, "text.secondary.brush");
+
+        var box = new Border
+        {
+            Width = item.Width ?? RibbonMetrics.FieldWidth,
+            Height = RibbonMetrics.FieldHeight,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(2),
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = new Panel { Children = { text, chevron } },
+        };
+        Bind(box, Border.BorderBrushProperty, "border.strong.brush");
+        Bind(box, Border.BackgroundProperty, "surface.raised.brush");
+
+        var button = new Button
+        {
+            Content = box,
+            Padding = new Thickness(RibbonMetrics.FieldPadding, 0),
+            BorderThickness = default,
+            Background = Brushes.Transparent,
+        };
+        ToolTip.SetTip(button, command.Label);
+        button.Click += (_, _) => CommandInvoked?.Invoke(this, new RibbonCommandEventArgs(command.Id));
+
+        Record(command.Id, button);
+        return button;
     }
 
     /// <summary>
@@ -662,10 +882,15 @@ public sealed class RibbonView : ContentControl
 
     private Control BuildInlineSeparator()
     {
+        // Height is set rather than derived from a margin. The rule sits in a strip only as tall
+        // as its buttons — 30px — so insetting from that gave a 16px rule where the reference
+        // has 32, and it is taller than the buttons it divides.
         var rule = new Border
         {
             Width = 1,
-            Margin = new Thickness(5, 7),
+            Height = RibbonMetrics.InlineSeparatorHeight,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(RibbonMetrics.InlineSeparatorMargin, 0),
         };
         Bind(rule, Border.BackgroundProperty, "ribbon.group.separator.brush");
         return rule;
@@ -1064,7 +1289,8 @@ public sealed class RibbonView : ContentControl
             Spacing = 2,
         };
 
-        stack.Children.Add(BuildIcon(command.Icon, RibbonMetrics.LargeIconSize, 24));
+        stack.Children.Add(BuildIcon(
+            command.Icon, RibbonMetrics.LargeIconSize, 24, command.NeutralIcon));
 
         var label = new TextBlock
         {
@@ -1105,16 +1331,23 @@ public sealed class RibbonView : ContentControl
             VerticalAlignment = VerticalAlignment.Center,
         };
 
-        row.Children.Add(BuildIcon(command.Icon, RibbonMetrics.SmallIconSize, 16));
+        row.Children.Add(BuildIcon(
+            command.Icon, RibbonMetrics.SmallIconSize, 16, command.NeutralIcon));
 
-        var label = new TextBlock
+        // The reference's icon-only stacks — Ignore, Clean Up and Junk in the Delete group — are
+        // icon-only because ShowLabel says so. Drawing the label anyway made every such stack
+        // three times wider than the capture.
+        if (item.ShowLabel)
         {
-            Text = command.Label,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        Bind(label, TextBlock.ForegroundProperty, "text.primary.brush");
-        Bind(label, TextBlock.FontSizeProperty, "type.ui.size.small.value");
-        row.Children.Add(label);
+            var label = new TextBlock
+            {
+                Text = command.Label,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            Bind(label, TextBlock.ForegroundProperty, "text.primary.brush");
+            Bind(label, TextBlock.FontSizeProperty, "type.ui.size.small.value");
+            row.Children.Add(label);
+        }
 
         if (item.Kind is RibbonItemKind.DropDown or RibbonItemKind.SplitButton)
         {
@@ -1132,18 +1365,28 @@ public sealed class RibbonView : ContentControl
             RibbonMetrics.SmallButtonMinWidth, RibbonMetrics.SmallButtonHeight);
     }
 
-    private Control BuildIcon(string iconName, double boxSize, int artworkSize)
+    /// <param name="fontSize">
+    /// The em size to draw at. Defaults to a fraction of the box, but the Simplified bar sets it
+    /// explicitly: its glyphs are measured at 17px of ink in the reference and the derived size
+    /// produced 10, which made every icon on the bar look like a thumbnail of itself. The box
+    /// stays at its measured width so the button pitch does not move; the glyph is allowed to
+    /// fill it.
+    /// </param>
+    private Control BuildIcon(
+        string iconName, double boxSize, int artworkSize, bool neutral = false,
+        double? fontSize = null)
     {
         var glyph = new TextBlock
         {
             Text = IconGlyphs.GetOrEmpty(iconName, artworkSize),
             FontFamily = IconFont.Family,
-            FontSize = boxSize * 0.72,
+            FontSize = fontSize ?? boxSize * 0.72,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
             TextAlignment = TextAlignment.Center,
         };
-        Bind(glyph, TextBlock.ForegroundProperty, "accent.rest.brush");
+        Bind(glyph, TextBlock.ForegroundProperty,
+            neutral ? "text.primary.brush" : "accent.rest.brush");
 
         return new Border
         {
@@ -1189,12 +1432,9 @@ public sealed class RibbonView : ContentControl
 
         // One command can have several controls — a group is built at all three collapse
         // variants — so this is a list, and Alt traversal takes whichever is on screen.
-        if (!_itemControls.TryGetValue(command.Id, out var built))
-        {
-            built = [];
-            _itemControls[command.Id] = built;
-        }
-        built.Add(button);
+        Record(command.Id, button);
+
+        if (CommandEnabled is { } enabled) button.IsEnabled = enabled(command.Id);
 
         return button;
     }

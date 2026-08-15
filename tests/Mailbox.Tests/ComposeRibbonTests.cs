@@ -12,7 +12,7 @@ public class ComposeRibbonTests
     private static IEnumerable<CommandId> PlacedAnywhere =>
         Compose.PlacedCommands
             .Concat(Compose.SimplifiedRows.SelectMany(r => r.Value)
-                .Where(i => i.Kind != RibbonItemKind.Separator)
+                .Where(i => !i.IsSentinel)
                 .Select(i => i.Command))
             .Distinct();
 
@@ -70,7 +70,7 @@ public class ComposeRibbonTests
 
     private static string[] Row(string tab) =>
         Compose.SimplifiedRows[tab]
-            .Where(i => i.Kind != RibbonItemKind.Separator)
+            .Where(i => !i.IsSentinel)
             .Select(i => i.Command.Value)
             .ToArray();
 
@@ -122,7 +122,7 @@ public class ComposeRibbonTests
     public void OptionsRowMatchesTheCapture()
         => Assert.Equal(
             ["options.themes", "options.colors", "options.fonts", "options.effects",
-             "options.pagecolor", "options.voting"],
+             "options.pagecolor", "options.voting", "compose.properties"],
             Row("options"));
 
     [Fact]

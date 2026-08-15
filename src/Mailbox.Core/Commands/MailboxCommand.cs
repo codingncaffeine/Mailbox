@@ -21,6 +21,18 @@ public sealed record MailboxCommand
     /// <summary>Icon key resolved against the active theme's icon set. Not a file path.</summary>
     public required string Icon { get; init; }
 
+    /// <summary>
+    /// Draws the icon in the text colour rather than the accent.
+    /// </summary>
+    /// <remarks>
+    /// Office's icons are polychrome artwork; ours come from a monochrome icon font, so tone is
+    /// the only part of that we can reproduce. The distinction is real and visible: the
+    /// reference draws Bold, Italic, Underline and the rest of the formatting run in near-black,
+    /// and reserves colour for the commands that act on a message. A ribbon with every glyph in
+    /// the accent reads as a different application.
+    /// </remarks>
+    public bool NeutralIcon { get; init; }
+
     public ModuleScope Scope { get; init; } = ModuleScope.Any;
 
     /// <summary>
