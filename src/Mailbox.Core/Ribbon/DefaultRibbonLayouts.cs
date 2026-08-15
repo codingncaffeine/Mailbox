@@ -18,6 +18,17 @@ namespace Mailbox.Core.Ribbon;
 public static class DefaultRibbonLayouts
 {
     /// <summary>
+    /// The compose window's ribbon — its own host with its own tab collection.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="Mail"/> rather than another tab on it: the reference opens a
+    /// message in its own window with File, Message, Insert, Options, Format Text, Review and
+    /// Help, and none of the main window's tabs. Transcription notes are on
+    /// <see cref="ComposeRibbonLayout"/>.
+    /// </remarks>
+    public static RibbonLayout Compose { get; } = ComposeRibbonLayout.Build();
+
+    /// <summary>
     /// What the Quick Access Toolbar's customize flyout offers, ticked when placed.
     /// </summary>
     /// <remarks>

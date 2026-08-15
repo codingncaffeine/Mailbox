@@ -113,6 +113,12 @@ public static class WindowCapture
         ArgumentNullException.ThrowIfNull(window);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
+        // Anything posed after the window opened has invalidated measure but may not have been
+        // through a layout pass yet, and the renderer will happily photograph the stale
+        // arrangement — a field made visible shows up while the panel holding it is still its
+        // old height, so whatever was below is clipped away.
+        window.UpdateLayout();
+
         var size = window.ClientSize;
         if (size.Width <= 0 || size.Height <= 0)
         {

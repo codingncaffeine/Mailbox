@@ -106,25 +106,4 @@ public sealed class CommandCatalog
         return 0;
     }
 
-    /// <summary>
-    /// Fails when two commands in the same scope claim the same KeyTip. Called by a test —
-    /// KeyTip collisions are invisible until someone presses Alt.
-    /// </summary>
-    public IReadOnlyList<string> FindKeyTipConflicts()
-    {
-        var conflicts = new List<string>();
-
-        foreach (var module in Enum.GetValues<MailboxModule>())
-        {
-            var groups = ForModule(module)
-                .Where(c => c.KeyTip is not null && c.InDefaultLayout)
-                .GroupBy(c => c.KeyTip!, StringComparer.OrdinalIgnoreCase)
-                .Where(g => g.Count() > 1);
-
-            conflicts.AddRange(groups.Select(g =>
-                $"{module}: KeyTip '{g.Key}' claimed by {string.Join(", ", g.Select(c => c.Id))}"));
-        }
-
-        return conflicts;
-    }
 }

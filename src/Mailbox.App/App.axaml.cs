@@ -90,6 +90,7 @@ public partial class App : Application
         Commands = new CommandCatalog();
         Commands.RegisterRange(MailCommands.All);
         Commands.RegisterRange(ViewCommands.All);
+        Commands.RegisterRange(ComposeCommands.All);
 
         _ = new ThemeResourceBridge(Resources, Themes);
 

@@ -196,12 +196,74 @@ public sealed record RibbonLayout
     public RibbonTab? FindTab(string id)
         => Tabs.FirstOrDefault(t => string.Equals(t.Id, id, StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>
+    /// Reports every place two things claim the same KeyTip: two tabs in the strip, or two
+    /// commands within one tab.
+    /// </summary>
+    /// <remarks>
+    /// A tab is the right unit, not a module. Alt traversal shows one tab's commands at a time,
+    /// so two tabs may reuse a letter freely — the reference does — and only a clash inside a
+    /// single tab makes a letter ambiguous. Scoping this per module instead would forbid the
+    /// reuse the reference relies on, and would also make a compose window's commands collide
+    /// with the main window's for no reason: they are never on screen together.
+    /// <para>
+    /// Called by a test, because a KeyTip collision is invisible until someone presses Alt.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<string> FindKeyTipConflicts(CommandCatalog catalog)
+    {
+        ArgumentNullException.ThrowIfNull(catalog);
+
+        var conflicts = new List<string>();
+
+        var duplicateTabs = Tabs
+            .Where(t => t.KeyTip is not null)
+            .GroupBy(t => t.KeyTip!, StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() > 1);
+
+        conflicts.AddRange(duplicateTabs.Select(g =>
+            $"{Module}: tab KeyTip '{g.Key}' claimed by {string.Join(", ", g.Select(t => t.Id))}"));
+
+        foreach (var tab in Tabs)
+        {
+            // Both renderings of a tab are traversed the same way, so a letter has to be
+            // unambiguous across whichever of them is on screen.
+            var placed = tab.Groups
+                .SelectMany(g => g.Items)
+                .Concat(SimplifiedRows.TryGetValue(tab.Id, out var row) ? row : [])
+                .Where(i => i.Kind != RibbonItemKind.Separator)
+                .Select(i => i.Command)
+                .Distinct();
+
+            var duplicates = placed
+                .Select(id => catalog.TryGet(id, out var c) ? c : null)
+                .Where(c => c?.KeyTip is not null)
+                .GroupBy(c => c!.KeyTip!, StringComparer.OrdinalIgnoreCase)
+                .Where(g => g.Count() > 1);
+
+            conflicts.AddRange(duplicates.Select(g =>
+                $"{Module}/{tab.Id}: KeyTip '{g.Key}' claimed by " +
+                string.Join(", ", g.Select(c => c!.Id))));
+        }
+
+        return conflicts;
+    }
+
     /// <summary>Every command the layout places, for the "already on the ribbon" check.</summary>
+    /// <remarks>
+    /// A group's dialog launcher counts. It is a real control with a real command behind it —
+    /// the little arrow in the group's corner — so leaving it out reported placed commands as
+    /// unplaced, which would have offered them again in Customize Ribbon.
+    /// </remarks>
     public IEnumerable<CommandId> PlacedCommands =>
         Tabs.SelectMany(t => t.Groups)
             .SelectMany(g => g.Items)
             .Where(i => i.Kind != RibbonItemKind.Separator)
             .Select(i => i.Command)
+            .Concat(Tabs.SelectMany(t => t.Groups)
+                .Select(g => g.DialogLauncher)
+                .Where(id => id is not null)
+                .Select(id => id!.Value))
             .Concat(QuickAccess)
             .Distinct();
 }

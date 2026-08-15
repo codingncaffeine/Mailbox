@@ -412,6 +412,18 @@ public sealed class MailRepository(MailStore store)
         """,
         ("$next", nextTry.ToUnixTimeSeconds()), ("$error", reason), ("$id", id));
 
+    /// <summary>
+    /// Holds an item back until a chosen time. Delayed delivery, not a retry.
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="DeferOutbox"/> because that one counts an attempt and records a
+    /// reason, both of which are failure bookkeeping. A message the user asked to send later has
+    /// not failed at anything, and must not burn its retry budget waiting.
+    /// </remarks>
+    public void ScheduleOutbox(long id, DateTimeOffset notBefore) => _store.Execute(
+        "UPDATE outbox SET state = 'queued', next_try_utc = $next WHERE id = $id",
+        ("$next", notBefore.ToUnixTimeSeconds()), ("$id", id));
+
     /// <summary>Gives up on an item, keeping why so the user can be told.</summary>
     public void FailOutbox(long id, string reason) => _store.Execute(
         """

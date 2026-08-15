@@ -1,5 +1,6 @@
 using Mailbox.Core.Accounts;
 using Mailbox.Core.Commands;
+using Mailbox.Core.Ribbon;
 
 namespace Mailbox.Tests;
 
@@ -42,6 +43,16 @@ public class CommandCatalogTests
     {
         var catalog = new CommandCatalog();
         catalog.RegisterRange(MailCommands.All);
+        return catalog;
+    }
+
+    /// <summary>Every set the application registers, which is what a layout resolves against.</summary>
+    internal static CommandCatalog Everything()
+    {
+        var catalog = new CommandCatalog();
+        catalog.RegisterRange(MailCommands.All);
+        catalog.RegisterRange(ViewCommands.All);
+        catalog.RegisterRange(ComposeCommands.All);
         return catalog;
     }
 
@@ -107,13 +118,24 @@ public class CommandCatalogTests
     public void SearchIsEmptyForBlankTerms()
         => Assert.Empty(Loaded().Search("   "));
 
-    /// <summary>KeyTip collisions are invisible until someone presses Alt.</summary>
-    [Fact]
-    public void NoKeyTipConflictsWithinAModule()
+    /// <summary>
+    /// KeyTip collisions are invisible until someone presses Alt, and a tab is the unit that
+    /// matters: traversal shows one tab's commands at a time, so two tabs may reuse a letter
+    /// and only a clash inside one tab makes it ambiguous.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Layouts))]
+    public void NoKeyTipConflictsWithinATab(string name, RibbonLayout layout)
     {
-        var conflicts = Loaded().FindKeyTipConflicts();
-        Assert.True(conflicts.Count == 0, string.Join("\n", conflicts));
+        var conflicts = layout.FindKeyTipConflicts(Everything());
+        Assert.True(conflicts.Count == 0, $"{name}:\n{string.Join("\n", conflicts)}");
     }
+
+    public static TheoryData<string, RibbonLayout> Layouts => new()
+    {
+        { "mail", DefaultRibbonLayouts.Mail },
+        { "compose", DefaultRibbonLayouts.Compose },
+    };
 
     [Fact]
     public void ModuleScopingFiltersCorrectly()
