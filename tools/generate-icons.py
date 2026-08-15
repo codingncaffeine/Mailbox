@@ -178,6 +178,7 @@ WANTED = {
     "accessibility": "accessibility_checkmark",
     "dictate": "mic",
     "immersive": "reading_mode_mobile",
+    "lightbulb": "lightbulb",
 }
 
 SIZES = (16, 20, 24, 32)

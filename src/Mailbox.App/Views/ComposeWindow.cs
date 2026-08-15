@@ -47,7 +47,20 @@ public sealed class ComposeWindow : Window
     private readonly TextBox _bcc = Field();
     private readonly TextBox _subject = Field();
     private readonly TextBox _body;
-    private readonly ComboBox _from = new() { MinWidth = 260 };
+    /// <summary>
+    /// The sending account, shown as plain text beside the From button.
+    /// </summary>
+    /// <remarks>
+    /// Not a combo. The reference puts a <c>From ⌄</c> button in the label column and the
+    /// address as text in the field column, which is why a full-width picker looked wrong: the
+    /// choosing happens in the button's menu, and the field only reports.
+    /// </remarks>
+    private readonly TextBlock _fromAddress = new()
+    {
+        VerticalAlignment = VerticalAlignment.Center,
+    };
+
+    private string? _sendingAddress;
     private readonly TextBlock _status = new();
     private readonly TextBlock _attachmentStrip = new() { TextWrapping = TextWrapping.Wrap };
 
@@ -333,7 +346,7 @@ public sealed class ComposeWindow : Window
         // height is the sum of what is visible, recomputed every pass.
         var rows = new StackPanel { Spacing = 2 };
 
-        _fromRow = AddressRow(rows, "From", _from);
+        _fromRow = AddressRow(rows, "From", _fromAddress, opensAddressBook: false, picksAccount: true);
         AddressRow(rows, "To", _to);
         AddressRow(rows, "Cc", _cc);
         _bccRow = AddressRow(rows, "Bcc", _bcc);
@@ -408,7 +421,8 @@ public sealed class ComposeWindow : Window
     /// hidden together and cannot get out of step.
     /// </summary>
     private Control AddressRow(
-        StackPanel rows, string label, Control field, bool opensAddressBook = true)
+        StackPanel rows, string label, Control field,
+        bool opensAddressBook = true, bool picksAccount = false)
     {
         var row = new Grid
         {
@@ -418,7 +432,42 @@ public sealed class ComposeWindow : Window
         };
 
         Control caption;
-        if (opensAddressBook)
+        if (picksAccount)
+        {
+            // From carries a chevron and opens the account list, rather than acting on the
+            // address book like the recipient rows.
+            var button = new Button
+            {
+                Content = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 6,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Children =
+                    {
+                        new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center },
+                        new TextBlock
+                        {
+                            Text = IconGlyphs.GetOrEmpty("chevron-down", 16),
+                            FontFamily = IconFont.Family,
+                            FontSize = 9,
+                            VerticalAlignment = VerticalAlignment.Center,
+                        },
+                    },
+                },
+                Width = LabelWidth,
+                Height = RowHeight,
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                VerticalContentAlignment = VerticalAlignment.Center,
+                BorderThickness = new Thickness(1),
+                Flyout = AccountMenu(),
+            };
+            Bind(button, TemplatedControl.BackgroundProperty, "surface.raised.brush");
+            Bind(button, TemplatedControl.BorderBrushProperty, "border.strong.brush");
+            ToolTip.SetTip(button, "Send this message from a different account");
+            caption = button;
+        }
+        else if (opensAddressBook)
         {
             var button = new Button
             {
@@ -454,6 +503,8 @@ public sealed class ComposeWindow : Window
 
         // The fields carry no box. The reference draws a single rule under each one and nothing
         // else, so the address block reads as writing lines rather than as a form.
+        if (field is TextBlock plain) Bind(plain, TextBlock.ForegroundProperty, "text.primary.brush");
+
         if (field is TextBox box)
         {
             box.BorderThickness = new Thickness(0, 0, 0, 1);
@@ -514,9 +565,40 @@ public sealed class ComposeWindow : Window
 
     private void PopulateAccounts()
     {
-        var addresses = _accounts?.All.Select(a => a.Account.Address).ToList() ?? [];
-        _from.ItemsSource = addresses;
-        if (addresses.Count > 0) _from.SelectedIndex = 0;
+        _sendingAddress = _accounts?.Default?.Account.Address;
+        _fromAddress.Text = _sendingAddress ?? string.Empty;
+    }
+
+    /// <summary>The From button's menu: one entry per account, ticked for the sending one.</summary>
+    private MenuFlyout AccountMenu()
+    {
+        var flyout = new MenuFlyout();
+        var accounts = _accounts?.All ?? [];
+
+        if (accounts.Count == 0)
+        {
+            flyout.ItemsSource = new[]
+            {
+                new MenuItem { Header = "No account is set up yet", IsEnabled = false },
+            };
+            return flyout;
+        }
+
+        flyout.ItemsSource = accounts
+            .Select(account =>
+            {
+                var address = account.Account.Address;
+                var item = new MenuItem { Header = address };
+                item.Click += (_, _) =>
+                {
+                    _sendingAddress = address;
+                    _fromAddress.Text = address;
+                };
+                return item;
+            })
+            .ToList();
+
+        return flyout;
     }
 
     // ----------------------------------------------------------------------------------
@@ -804,8 +886,9 @@ public sealed class ComposeWindow : Window
     {
         if (_accounts is null) return null;
 
-        var chosen = _from.SelectedItem as string;
-        return chosen is null ? _accounts.Default : _accounts.Find(chosen) ?? _accounts.Default;
+        return _sendingAddress is null
+            ? _accounts.Default
+            : _accounts.Find(_sendingAddress) ?? _accounts.Default;
     }
 
     private async Task SendAsync()

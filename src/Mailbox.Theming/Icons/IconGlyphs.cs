@@ -94,6 +94,7 @@ public static class IconGlyphs
         ["junk"] = new() { [16] = "\uF705", [20] = "\uF62D", [24] = "\uF62E", [32] = "\U000F01F5" },
         ["language"] = new() { [16] = "\uF4F2", [20] = "\uF4F3", [24] = "\uF4F4" },
         ["layout"] = new() { [16] = "\uE8AF", [20] = "\uE8B0", [24] = "\uE8B1", [32] = "\uEFF6" },
+        ["lightbulb"] = new() { [16] = "\uF4D5", [20] = "\uF4D6", [24] = "\uF4D7", [32] = "\uF07D" },
         ["line-spacing"] = new() { [16] = "\U000F0BDC", [20] = "\uF7F6", [24] = "\uF7F7", [32] = "\U000F0BDD" },
         ["link"] = new() { [16] = "\uF4E3", [20] = "\uF4E4", [24] = "\uF4E5", [32] = "\uE771" },
         ["mail"] = new() { [16] = "\uE7A1", [20] = "\uF506", [24] = "\uF507", [32] = "\U000F01F3" },

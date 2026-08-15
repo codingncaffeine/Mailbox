@@ -8,7 +8,14 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <InvariantGlobalization>false</InvariantGlobalization>
-    <NuGetAudit>false</NuGetAudit>
+    <!--
+      On, and auditing transitive packages too. A mail client is the wrong place to be quiet
+      about a known-vulnerable dependency, and with TreatWarningsAsErrors this is a build gate
+      rather than a note nobody reads. See §19.
+    -->
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>low</NuGetAuditLevel>
   </PropertyGroup>
 
   <PropertyGroup>

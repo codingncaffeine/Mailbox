@@ -48,6 +48,7 @@ internal static class ComposeRibbonLayout
     internal static RibbonLayout Build() => new()
     {
         Module = MailboxModule.Mail,
+        TellMe = "Tell me what you want to do",
 
         // The reference's compose QAT: Save, Undo, Redo, then the item navigators.
         QuickAccess =
