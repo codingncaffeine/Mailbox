@@ -36,7 +36,10 @@ public sealed class RulesHandler(Func<DateTimeOffset>? now = null) : IArrivalHan
     /// <inheritdoc />
     public long? Handle(MailRepository mail, Folder folder, long messageId, MimeMessage message)
     {
-        var rules = mail.Rules().Where(r => r.Enabled).ToList();
+        // A rule that runs on the server has already run by the time the message is here — as
+        // long as the server has the current script. While it is behind, the rule runs here too.
+        var serverCurrent = mail.ServerRulesCurrent();
+        var rules = mail.Rules().Where(r => r.Enabled && !(r.ServerSide && serverCurrent)).ToList();
         if (rules.Count == 0) return folder.Id;
 
         return Apply(mail, folder, messageId, message, rules, mail.GetMessage(messageId)).FolderId;

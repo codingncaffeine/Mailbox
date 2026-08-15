@@ -5,6 +5,7 @@ using Avalonia.Controls.Templates;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Mailbox.Core.Diagnostics;
 using Mailbox.Core.Rules;
 using Mailbox.Store;
 
@@ -26,7 +27,11 @@ public sealed class RulesAndAlertsDialog : Window
     private readonly ListBox _list = new() { Height = 200 };
     private readonly RuleDescriptionView _description = new();
     private readonly ComboBox _account = new() { MinWidth = 220 };
+    private readonly TextBlock _serverStatus = new() { TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center, MaxWidth = 440 };
+    private readonly Button _retry = new() { Content = "Retry", Padding = new Thickness(9, 3), IsVisible = false };
     private OpenAccount? _current;
+    private bool _publishing;
+    private bool _publishAgain;
 
     private static void Bind(AvaloniaObject target, AvaloniaProperty property, string key)
         => target[!property] = new DynamicResourceExtension(key);
@@ -70,10 +75,13 @@ public sealed class RulesAndAlertsDialog : Window
     private Control Row(RuleRow row)
     {
         var box = new CheckBox { IsChecked = row.Enabled, VerticalAlignment = VerticalAlignment.Center };
-        box.IsCheckedChanged += (_, _) =>
+        box.IsCheckedChanged += async (_, _) =>
         {
+            if (row.Enabled == (box.IsChecked == true)) return;
             row.Enabled = box.IsChecked == true;
             _current?.Mail.SetRuleEnabled(row.Rule.Id, row.Enabled);
+            if (row.Rule.ServerSide) await SyncServerAsync();
+            else ShowServerState();
         };
 
         var name = new TextBlock
@@ -87,6 +95,21 @@ public sealed class RulesAndAlertsDialog : Window
         var stack = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(4, 2) };
         stack.Children.Add(box);
         stack.Children.Add(name);
+
+        if (row.Rule.ServerSide)
+        {
+            var tag = new TextBlock
+            {
+                Text = "on the server",
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(10, 0, 0, 0),
+                Opacity = 0.65,
+                FontSize = 12,
+            };
+            Bind(tag, TextBlock.ForegroundProperty, "dialog.surface.text.brush");
+            stack.Children.Add(tag);
+        }
+
         return stack;
     }
 
@@ -131,6 +154,16 @@ public sealed class RulesAndAlertsDialog : Window
         var close = new Button { Content = "Close", IsCancel = true, IsDefault = true, Width = 74 };
         close.Click += (_, _) => Close();
 
+        Bind(_serverStatus, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
+        _retry.Click += async (_, _) => await PublishAsync();
+        var serverRow = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            VerticalAlignment = VerticalAlignment.Center,
+            Children = { _serverStatus, _retry },
+        };
+
         var pickerRow = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -144,13 +177,20 @@ public sealed class RulesAndAlertsDialog : Window
             Margin = new Thickness(18),
             Children =
             {
-                new StackPanel
+                new DockPanel
                 {
                     [DockPanel.DockProperty] = Dock.Bottom,
-                    Orientation = Orientation.Horizontal,
-                    HorizontalAlignment = HorizontalAlignment.Right,
                     Margin = new Thickness(0, 14, 0, 0),
-                    Children = { close },
+                    Children =
+                    {
+                        new StackPanel
+                        {
+                            [DockPanel.DockProperty] = Dock.Right,
+                            Orientation = Orientation.Horizontal,
+                            Children = { close },
+                        },
+                        serverRow,
+                    },
                 },
                 new StackPanel { Children = { heading, pickerRow, toolbar, columns, _list, describe, _description } },
             },
@@ -190,6 +230,91 @@ public sealed class RulesAndAlertsDialog : Window
         _list.ItemsSource = rows;
         _list.SelectedItem = rows.FirstOrDefault(r => r.Rule.Id == select) ?? rows.FirstOrDefault();
         _description.Show((_list.SelectedItem as RuleRow)?.Rule);
+        ShowServerState();
+    }
+
+    // ---- Rules on the server ------------------------------------------------------------------
+    //
+    // An IMAP account's server-side rules are put on the server after every change here, and
+    // the line beside Close says where the server stands: how many rules it runs, or that it is
+    // behind and why, with Retry. Nothing is asked of a POP3 account's server, which has no
+    // rules to run.
+
+    /// <summary>The line beside Close, from the store's state.</summary>
+    private void ShowServerState()
+    {
+        if (_current is null || !SieveSync.Supports(_current))
+        {
+            _serverStatus.Text = string.Empty;
+            _retry.IsVisible = false;
+            return;
+        }
+
+        var onServer = _current.Mail.Rules().Count(r => r.Enabled && r.ServerSide);
+        var state = _current.Mail.SieveState();
+        if (state is null && onServer == 0)
+        {
+            _serverStatus.Text = "No rules run on the server.";
+            _retry.IsVisible = false;
+        }
+        else if (state is null || state.Stale)
+        {
+            _serverStatus.Text = _publishing ? "Updating the server's rules…" : "The server's rules are out of date.";
+            _retry.IsVisible = !_publishing;
+        }
+        else
+        {
+            _serverStatus.Text = $"{onServer} rule{(onServer == 1 ? "" : "s")} on the server, updated {state.Published.ToLocalTime():d MMM HH:mm}.";
+            _retry.IsVisible = false;
+        }
+    }
+
+    /// <summary>After a change: publish when the account has, or had, rules on the server. One at a time; a change during a publish queues another.</summary>
+    private async Task SyncServerAsync()
+    {
+        if (_current is null || !SieveSync.Supports(_current)) return;
+        var needed = _current.Mail.SieveState() is not null || _current.Mail.Rules().Any(r => r.ServerSide);
+        if (!needed) { ShowServerState(); return; }
+        await PublishAsync();
+    }
+
+    private async Task PublishAsync()
+    {
+        if (_current is null) return;
+        if (_publishing) { _publishAgain = true; return; }
+
+        var account = _current;
+        _publishing = true;
+        ShowServerState();
+        try
+        {
+            do
+            {
+                _publishAgain = false;
+                var outcome = await SieveSync.PublishAsync(account);
+                if (!outcome.Ok) Log.Warn($"Rules and Alerts: {outcome.Message}");
+                if (ReferenceEquals(account, _current) || account.Account.Address == _current?.Account.Address)
+                {
+                    _serverStatus.Text = outcome.Message;
+                }
+            }
+            while (_publishAgain);
+        }
+        finally
+        {
+            _publishing = false;
+        }
+
+        // The list may show a rule the publisher sent back to this computer.
+        if (account.Account.Address == _current?.Account.Address)
+        {
+            var selected = Selected?.Id;
+            var rules = _current!.Mail.Rules();
+            var rows = rules.Select(r => new RuleRow(r)).ToList();
+            _list.ItemsSource = rows;
+            _list.SelectedItem = rows.FirstOrDefault(r => r.Rule.Id == selected) ?? rows.FirstOrDefault();
+            _retry.IsVisible = _current.Mail.SieveState() is { Stale: true } || (_current.Mail.SieveState() is null && rules.Any(r => r.Enabled && r.ServerSide));
+        }
     }
 
     private MailRule? Selected => (_list.SelectedItem as RuleRow)?.Rule;
@@ -206,6 +331,7 @@ public sealed class RulesAndAlertsDialog : Window
         Reload(stored.Id);
 
         if (wizard.RunNow) await RunOnInboxAsync(stored);
+        await SyncServerAsync();
     }
 
     private async Task EditAsync()
@@ -220,6 +346,7 @@ public sealed class RulesAndAlertsDialog : Window
         Reload(rule.Id);
 
         if (wizard.RunNow) await RunOnInboxAsync(edited with { Id = rule.Id });
+        await SyncServerAsync();
     }
 
     private async Task RenameAsync()
@@ -231,6 +358,7 @@ public sealed class RulesAndAlertsDialog : Window
 
         _current.Mail.UpdateRule(rule with { Name = name.Trim() });
         Reload(rule.Id);
+        await SyncServerAsync();
     }
 
     private async Task CopyAsync()
@@ -239,7 +367,7 @@ public sealed class RulesAndAlertsDialog : Window
 
         var copy = _current.Mail.AddRule(rule with { Id = 0, Name = "Copy of " + rule.Name }, DateTimeOffset.UtcNow);
         Reload(copy.Id);
-        await Task.CompletedTask;
+        await SyncServerAsync();
     }
 
     private async Task DeleteAsync()
@@ -251,6 +379,7 @@ public sealed class RulesAndAlertsDialog : Window
 
         _current.Mail.DeleteRule(rule.Id);
         Reload();
+        await SyncServerAsync();
     }
 
     private void Move(int direction)
@@ -265,6 +394,7 @@ public sealed class RulesAndAlertsDialog : Window
         (order[index], order[target]) = (order[target], order[index]);
         _current.Mail.OrderRules(order);
         Reload(rule.Id);
+        _ = SyncServerAsync();
     }
 
     private async Task RunNowAsync()
@@ -323,6 +453,7 @@ public sealed class RulesAndAlertsDialog : Window
         if (edited is null) return;
         _current.Mail.UpdateRule(edited);
         Reload(rule.Id);
+        await SyncServerAsync();
     }
 }
 

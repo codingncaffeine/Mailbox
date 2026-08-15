@@ -156,7 +156,35 @@ public static class WindowCapture
 
         // Set again once it exists: a window manager may place it where it likes on mapping,
         // and the position asked for before that is a request rather than a fact.
-        window.Opened += (_, _) => window.Position = OffScreen;
+        window.Opened += (_, _) =>
+        {
+            window.Position = OffScreen;
+            SizeFromContent(window);
+        };
+    }
+
+    /// <summary>
+    /// A SizeToContent window off-screen measures against no screen at all — the platform's
+    /// auto-size hint is nothing there — and comes out a pixel high. Its content measured on
+    /// its own is the height it would have had; that becomes an explicit height, and the
+    /// window is laid out and photographed at it.
+    /// </summary>
+    public static bool SizeFromContent(Window window)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        if (window.SizeToContent == SizeToContent.Manual || window.Content is not Control content) return false;
+
+        var width = window.Width is > 1 and not double.NaN ? window.Width
+            : window.ClientSize.Width > 1 ? window.ClientSize.Width : 640;
+        content.Measure(new Size(width, double.PositiveInfinity));
+        var desired = content.DesiredSize;
+        if (desired.Height <= 1) return false;
+
+        window.SizeToContent = SizeToContent.Manual;
+        window.Width = width;
+        window.Height = Math.Ceiling(desired.Height);
+        window.InvalidateMeasure();
+        return true;
     }
 
     public static void Capture(Window window, string path, double scale = 1.0)
@@ -171,6 +199,7 @@ public static class WindowCapture
         window.UpdateLayout();
 
         var size = window.ClientSize;
+
         if (size.Width <= 0 || size.Height <= 0)
         {
             throw new InvalidOperationException(

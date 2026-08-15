@@ -49,6 +49,23 @@ public sealed class RuleWizard : Window
         _rule = existing ?? new MailRule { Name = string.Empty };
         _step = existing is null ? 0 : 1;
 
+        // The harness: MAILBOX_WIZARD_STEP opens on a page (0–4), with a sample rule to show
+        // when there is none to edit — a capture of the finish page has something to finish.
+        if (Theming.WindowCapture.IsRequested
+            && int.TryParse(Environment.GetEnvironmentVariable("MAILBOX_WIZARD_STEP"), out var posed))
+        {
+            _step = Math.Clamp(posed, 0, 4);
+            if (existing is null && _step > 0)
+            {
+                _rule = new MailRule
+                {
+                    Name = "Newsletters",
+                    Conditions = [new RuleCondition(RuleConditionKind.From) { Values = ["@example.org"] }],
+                    Actions = [new RuleAction(RuleActionKind.MarkAsRead), new RuleAction(RuleActionKind.Delete)],
+                };
+            }
+        }
+
         Title = "Rules Wizard";
         Width = 620;
         Height = 620;
@@ -316,6 +333,8 @@ public sealed class RuleWizard : Window
     private TextBox? _name;
     private CheckBox? _runNow;
     private CheckBox? _turnOn;
+    private CheckBox? _onServer;
+    private TextBlock? _serverNote;
 
     private Control FinishPage()
     {
@@ -335,7 +354,74 @@ public sealed class RuleWizard : Window
         stack.Children.Add(_runNow);
         stack.Children.Add(_turnOn);
 
+        // Server-side rules: an IMAP account whose server speaks ManageSieve can run the rule
+        // itself, so it works while Mailbox is closed. The checkbox asks the server what it can
+        // do the first time, and says — in the rule's own words — when a rule has to stay here.
+        if (App.Accounts.Find(_mail.OwnAddress() ?? string.Empty) is { } account && SieveSync.Supports(account))
+        {
+            _onServer = new CheckBox { Content = "Run this rule on the mail server, so it works while Mailbox is closed", IsChecked = _rule.ServerSide };
+            _serverNote = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(28, -2, 0, 0), MaxWidth = 540, HorizontalAlignment = HorizontalAlignment.Left };
+            Bind(_onServer, TemplatedControl.ForegroundProperty, "dialog.foreground.brush");
+            Bind(_serverNote, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
+            _onServer.IsCheckedChanged += async (_, _) => await ServerCheckedAsync(account);
+            stack.Children.Add(_onServer);
+            stack.Children.Add(_serverNote);
+            _ = ServerCheckedAsync(account, quiet: true);
+        }
+
         return Page(stack, "Step 3: Review rule description (click an underlined value to edit)");
+    }
+
+    private bool _probing;
+
+    /// <summary>
+    /// The server checkbox's answer: with the server's abilities known (asked once and
+    /// remembered), whether this rule compiles — and why not, when it does not. Ticking it for
+    /// the first time asks the server; a server that cannot be reached is said so, and the box
+    /// clears.
+    /// </summary>
+    private async Task ServerCheckedAsync(OpenAccount account, bool quiet = false)
+    {
+        if (_onServer is null || _serverNote is null || _probing) return;
+
+        var extensions = SieveSync.KnownExtensions(account);
+        if (extensions is null)
+        {
+            if (_onServer.IsChecked != true)
+            {
+                _serverNote.Text = quiet ? string.Empty : "The server will be asked what it can do when this is ticked.";
+                return;
+            }
+
+            _probing = true;
+            _serverNote.Text = "Asking the server what it can do…";
+            try
+            {
+                extensions = await SieveSync.ProbeAsync(account);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                _serverNote.Text = $"The server could not be reached for rules ({ex.Message}). This rule runs on this computer.";
+                _onServer.IsChecked = false;
+                return;
+            }
+            finally
+            {
+                _probing = false;
+            }
+        }
+
+        var compiled = SieveCompiler.Compile(_rule, SieveSync.ContextFor(account, extensions));
+        if (compiled.Compiles)
+        {
+            _serverNote.Text = _onServer.IsChecked == true
+                ? "The server will run this rule as mail arrives."
+                : "The server can run this rule.";
+            return;
+        }
+
+        _serverNote.Text = "This rule stays on this computer: " + string.Join("; ", compiled.Reasons) + ".";
+        if (_onServer.IsChecked == true) _onServer.IsChecked = false;
     }
 
     /// <summary>A name from the first condition's value, as the reference suggests one.</summary>
@@ -353,6 +439,7 @@ public sealed class RuleWizard : Window
             {
                 Name = _name.Text?.Trim() is { Length: > 0 } typed ? typed : SuggestedName(),
                 Enabled = _turnOn?.IsChecked != false,
+                ServerSide = _onServer?.IsChecked == true,
             };
             RunNow = _runNow?.IsChecked == true;
         }

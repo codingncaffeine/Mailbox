@@ -35,6 +35,15 @@ public sealed record AccountSettings(
     public int OfflineMonths { get; init; } = 12;
 
     /// <summary>
+    /// The ManageSieve server for server-side rules — empty for the incoming server's host,
+    /// which is where it nearly always is. IMAP only.
+    /// </summary>
+    public string SieveHost { get; init; } = string.Empty;
+
+    /// <summary>ManageSieve's port; 4190 by convention.</summary>
+    public int SievePort { get; init; } = 4190;
+
+    /// <summary>
     /// Settings key off the address, not the row id. A row id belongs to one store file, and
     /// the point of a file per account is that it can be restored or copied — after which the
     /// id may differ but the address does not.
@@ -64,6 +73,8 @@ public sealed record AccountSettings(
                 ? (int)settings.GetNumber(Key(accountKey, "deleteafterdays"))
                 : null,
             OfflineMonths = (int)settings.GetNumber(Key(accountKey, "offlinemonths"), 12),
+            SieveHost = settings.GetString(Key(accountKey, "sieve.host")),
+            SievePort = (int)settings.GetNumber(Key(accountKey, "sieve.port"), 4190),
         };
     }
 
@@ -81,6 +92,25 @@ public sealed record AccountSettings(
         settings.Set(Key(accountKey, "leaveonserver"), LeaveOnServer);
         if (DeleteAfterDays is { } days) settings.Set(Key(accountKey, "deleteafterdays"), days);
         settings.Set(Key(accountKey, "offlinemonths"), OfflineMonths);
+        settings.Set(Key(accountKey, "sieve.host"), SieveHost);
+        settings.Set(Key(accountKey, "sieve.port"), SievePort);
+    }
+
+    /// <summary>
+    /// How to reach the account's ManageSieve server: the incoming server's host unless the
+    /// account names another, port 4190, STARTTLS required, and the incoming credentials. Null
+    /// for a POP3 account, which has no server-side rules.
+    /// </summary>
+    public ServerSettings? ToSieveServer(Account account, ICredentialStore secrets)
+    {
+        if (account.Protocol != MailProtocol.Imap) return null;
+
+        var host = SieveHost.Length > 0 ? SieveHost : IncomingHost;
+        if (host.Length == 0) return null;
+
+        var password = secrets.LoadAsync(account.Address, Credentials.Incoming).GetAwaiter().GetResult() ?? string.Empty;
+        return new ServerSettings(host, SievePort > 0 ? SievePort : 4190, SecureSocketOptions.StartTls,
+            IncomingUser.Length > 0 ? IncomingUser : account.Address, password);
     }
 
     /// <summary>

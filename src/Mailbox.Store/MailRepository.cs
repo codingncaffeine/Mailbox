@@ -79,11 +79,18 @@ public sealed class MailRepository(MailStore store)
     /// folder created before the account was ever synced becomes the server's own this way,
     /// rather than sitting beside it as a second Sent Items.
     /// </summary>
-    public void MapFolder(long folderId, string imapPath, string name, long? parentId) => _store.Execute(
-        """
-        UPDATE folders SET imap_path = $path, name = $name, parent_id = $parent WHERE id = $id
-        """,
-        ("$path", imapPath), ("$name", name), ("$parent", parentId), ("$id", folderId));
+    public void MapFolder(long folderId, string imapPath, string name, long? parentId)
+    {
+        var before = _store.Query("SELECT imap_path FROM folders WHERE id = $id", r => r.IsDBNull(0) ? null : r.GetString(0), ("$id", folderId)).FirstOrDefault();
+        _store.Execute(
+            """
+            UPDATE folders SET imap_path = $path, name = $name, parent_id = $parent WHERE id = $id
+            """,
+            ("$path", imapPath), ("$name", name), ("$parent", parentId), ("$id", folderId));
+
+        // A server-side rule files by the server's name for the folder; a new name means a new script.
+        if (!string.Equals(before, imapPath, StringComparison.Ordinal)) MarkSieveStale();
+    }
 
     /// <summary>Records where a folder's sync has got to.</summary>
     public void SetFolderSyncState(long folderId, long? uidValidity, long? uidNext, long? highestModSeq)
@@ -125,6 +132,7 @@ public sealed class MailRepository(MailStore store)
             "SELECT id FROM messages WHERE folder_id = $folder", r => r.GetInt64(0), ("$folder", folderId));
         if (ids.Count > 0) DeleteRows(ids);
         _store.Execute("DELETE FROM folders WHERE id = $id", ("$id", folderId));
+        MarkSieveStale();
         return 0;
     });
 
@@ -1751,9 +1759,9 @@ public sealed class MailRepository(MailStore store)
 
     /// <summary>Every rule, in running order.</summary>
     public IReadOnlyList<Mailbox.Core.Rules.MailRule> Rules() => _store.Query(
-        "SELECT id, name, enabled, ordinal, definition FROM rules ORDER BY ordinal, id",
+        "SELECT id, name, enabled, ordinal, definition, server_side FROM rules ORDER BY ordinal, id",
         r => Mailbox.Core.Rules.MailRule.FromDefinition(
-            r.GetInt64(0), r.GetString(1), r.GetInt32(2) != 0, r.GetInt32(3), r.GetString(4)));
+            r.GetInt64(0), r.GetString(1), r.GetInt32(2) != 0, r.GetInt32(3), r.GetString(4), r.GetInt32(5) != 0));
 
     /// <summary>Adds a rule at the end of the order and returns it with its id.</summary>
     public Mailbox.Core.Rules.MailRule AddRule(Mailbox.Core.Rules.MailRule rule, DateTimeOffset now)
@@ -1762,11 +1770,12 @@ public sealed class MailRepository(MailStore store)
 
         _store.Execute(
             """
-            INSERT INTO rules (name, enabled, ordinal, definition, created_utc)
-            VALUES ($name, $enabled, (SELECT count(*) FROM rules), $definition, $now)
+            INSERT INTO rules (name, enabled, ordinal, definition, created_utc, server_side)
+            VALUES ($name, $enabled, (SELECT count(*) FROM rules), $definition, $now, $server)
             """,
             ("$name", rule.Name), ("$enabled", rule.Enabled ? 1 : 0),
-            ("$definition", rule.DefinitionJson()), ("$now", now.ToUnixTimeSeconds()));
+            ("$definition", rule.DefinitionJson()), ("$now", now.ToUnixTimeSeconds()), ("$server", rule.ServerSide ? 1 : 0));
+        if (rule.ServerSide) MarkSieveStale();
 
         return rule with { Id = _store.LastInsertId, Ordinal = (int)_store.ScalarLong("SELECT count(*) - 1 FROM rules") };
     }
@@ -1776,16 +1785,34 @@ public sealed class MailRepository(MailStore store)
     {
         ArgumentNullException.ThrowIfNull(rule);
 
+        var wasServer = _store.ScalarLong("SELECT server_side FROM rules WHERE id = $id", ("$id", rule.Id)) != 0;
         _store.Execute(
-            "UPDATE rules SET name = $name, enabled = $enabled, definition = $definition WHERE id = $id",
+            "UPDATE rules SET name = $name, enabled = $enabled, definition = $definition, server_side = $server WHERE id = $id",
             ("$name", rule.Name), ("$enabled", rule.Enabled ? 1 : 0),
-            ("$definition", rule.DefinitionJson()), ("$id", rule.Id));
+            ("$definition", rule.DefinitionJson()), ("$server", rule.ServerSide ? 1 : 0), ("$id", rule.Id));
+        if (wasServer || rule.ServerSide) MarkSieveStale();
     }
 
-    public void SetRuleEnabled(long id, bool enabled) => _store.Execute(
-        "UPDATE rules SET enabled = $enabled WHERE id = $id", ("$enabled", enabled ? 1 : 0), ("$id", id));
+    /// <summary>
+    /// Whether a rule runs on the server. Set by the wizard; cleared by the publisher for a rule
+    /// the server turned out not to be able to run, so that it runs here instead. Does not mark
+    /// the server behind — the publisher is the one calling.
+    /// </summary>
+    public void SetRuleServerSide(long id, bool serverSide) => _store.Execute(
+        "UPDATE rules SET server_side = $server WHERE id = $id", ("$server", serverSide ? 1 : 0), ("$id", id));
 
-    public void DeleteRule(long id) => _store.Execute("DELETE FROM rules WHERE id = $id", ("$id", id));
+    public void SetRuleEnabled(long id, bool enabled)
+    {
+        _store.Execute("UPDATE rules SET enabled = $enabled WHERE id = $id", ("$enabled", enabled ? 1 : 0), ("$id", id));
+        if (_store.ScalarLong("SELECT server_side FROM rules WHERE id = $id", ("$id", id)) != 0) MarkSieveStale();
+    }
+
+    public void DeleteRule(long id)
+    {
+        var wasServer = _store.ScalarLong("SELECT server_side FROM rules WHERE id = $id", ("$id", id)) != 0;
+        _store.Execute("DELETE FROM rules WHERE id = $id", ("$id", id));
+        if (wasServer) MarkSieveStale();
+    }
 
     /// <summary>Puts the rules in this order — Move Up and Move Down, written back whole.</summary>
     public void OrderRules(IReadOnlyList<long> ids)
@@ -1799,7 +1826,40 @@ public sealed class MailRepository(MailStore store)
 
             return 0;
         });
+
+        if (_store.ScalarLong("SELECT count(*) FROM rules WHERE server_side = 1") > 0) MarkSieveStale();
     }
+
+    // ---- Server-side rules (Sieve) ---------------------------------------------------------------
+    //
+    // The script last put on the server, and whether the server is behind. The rules dialog
+    // publishes; RulesHandler reads: while the state is current, the server-side rules are the
+    // server's to run and are skipped here; while it is stale — rules changed, a folder renamed,
+    // a publish failed — they run here as well.
+
+    /// <summary>The script on the server, or null when Mailbox has never put one there.</summary>
+    public SieveState? SieveState() => _store.Query(
+        "SELECT script, include, published_utc, stale FROM sieve_state WHERE id = 1",
+        r => new SieveState(r.GetString(0), r.IsDBNull(1) ? null : r.GetString(1),
+            DateTimeOffset.FromUnixTimeSeconds(r.GetInt64(2)), r.GetInt32(3) != 0)).FirstOrDefault();
+
+    /// <summary>Records a script as put on the server and active, and the server as current.</summary>
+    public void SetSieveState(string script, string? include, DateTimeOffset now) => _store.Execute(
+        """
+        INSERT INTO sieve_state (id, script, include, published_utc, stale) VALUES (1, $script, $include, $now, 0)
+        ON CONFLICT(id) DO UPDATE SET script = excluded.script, include = excluded.include,
+            published_utc = excluded.published_utc, stale = 0
+        """,
+        ("$script", script), ("$include", include), ("$now", now.ToUnixTimeSeconds()));
+
+    /// <summary>The server no longer has Mailbox's script — it was taken down.</summary>
+    public void ClearSieveState() => _store.Execute("DELETE FROM sieve_state WHERE id = 1");
+
+    /// <summary>The server is behind: what it runs is not what the rules say.</summary>
+    public void MarkSieveStale() => _store.Execute("UPDATE sieve_state SET stale = 1 WHERE id = 1");
+
+    /// <summary>True while the server has the current script, so its rules need not run here.</summary>
+    public bool ServerRulesCurrent() => _store.ScalarLong("SELECT count(*) FROM sieve_state WHERE id = 1 AND stale = 0") > 0;
 
     /// <summary>The store's own address, for the "my name" conditions.</summary>
     public string? OwnAddress() => _store.Query(
