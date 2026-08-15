@@ -144,6 +144,14 @@ public sealed class MessageRow(
     public long FolderId { get; init; }
 
     /// <summary>
+    /// The folder a search result was found in, shown on the row while searching across folders.
+    /// Empty in an ordinary folder view, where every row is in the folder on screen.
+    /// </summary>
+    public string FolderLabel { get; init; } = string.Empty;
+
+    public bool HasFolderLabel => FolderLabel.Length > 0;
+
+    /// <summary>
     /// The colour tokens of the categories on this message, in order. Token names rather than
     /// colours, so the strip is repainted by a theme change like everything else.
     /// </summary>
@@ -376,6 +384,7 @@ public sealed class ShellViewModel : ObservableObject
         ToggleSort = new RelayCommand(() => SortDescending = !SortDescending);
         ToggleNav = new RelayCommand(() => NavCollapsed = !NavCollapsed);
 
+        ClearSearchCommand = new RelayCommand(ClearSearch);
         ShowReadingPane = new RelayCommand(() => ReadingPaneVisible = true);
         HideReadingPane = new RelayCommand(() => ReadingPaneVisible = false);
         ZoomIn = new RelayCommand(() => ZoomPercent += 10);
@@ -766,7 +775,179 @@ public sealed class ShellViewModel : ObservableObject
         get => _searchText;
         set
         {
-            if (Set(ref _searchText, value)) Raise(nameof(ShowSearchPlaceholder));
+            if (!Set(ref _searchText, value)) return;
+            Raise(nameof(ShowSearchPlaceholder));
+            RunSearch();
+        }
+    }
+
+    /// <summary>Where a search looks.</summary>
+    public enum SearchScope
+    {
+        /// <summary>Only the folder on screen.</summary>
+        ThisFolder,
+
+        /// <summary>Every folder of the account whose folder is selected. The reference's default.</summary>
+        CurrentMailbox,
+
+        /// <summary>Every folder of every account.</summary>
+        AllMailboxes,
+    }
+
+    private SearchScope _scope = SearchScope.CurrentMailbox;
+
+    /// <summary>The scope the search box runs against, re-run when it changes.</summary>
+    public SearchScope Scope
+    {
+        get => _scope;
+        set
+        {
+            if (!Set(ref _scope, value)) return;
+            Raise(nameof(ScopeLabel));
+            Raise(nameof(ScopeIndex));
+            if (IsSearching) RunSearch();
+        }
+    }
+
+    /// <summary>The scope selector's options, in the reference's order.</summary>
+    public IReadOnlyList<string> ScopeOptions { get; } =
+        ["This Folder", "Current Mailbox", "All Mailboxes"];
+
+    /// <summary>The scope as an index, so a ComboBox can bind to it.</summary>
+    public int ScopeIndex
+    {
+        get => (int)_scope;
+        set => Scope = (SearchScope)Math.Clamp(value, 0, 2);
+    }
+
+    public string ScopeLabel => ScopeOptions[(int)_scope];
+
+    private bool _isSearching;
+
+    /// <summary>True while search results are on screen rather than a folder.</summary>
+    public bool IsSearching
+    {
+        get => _isSearching;
+        private set
+        {
+            if (Set(ref _isSearching, value)) Raise(nameof(SearchResultSummary));
+        }
+    }
+
+    private int _searchResultCount;
+
+    /// <summary>The line above the results: how many, and where they were looked for.</summary>
+    public string SearchResultSummary => _searchResultCount switch
+    {
+        0 => $"No results in {ScopeLabel}",
+        1 => $"1 result in {ScopeLabel}",
+        _ => $"{_searchResultCount} results in {ScopeLabel}",
+    };
+
+    /// <summary>Clears the search and returns to the folder — the box's ✕ and Escape.</summary>
+    public void ClearSearch()
+    {
+        if (string.IsNullOrEmpty(_searchText) && !IsSearching) return;
+        _searchText = string.Empty;
+        Raise(nameof(SearchText));
+        Raise(nameof(ShowSearchPlaceholder));
+        RunSearch();
+    }
+
+    /// <summary>
+    /// Runs the search box against the store, or returns to the folder when it is empty.
+    /// </summary>
+    /// <remarks>
+    /// Instant: it runs on every keystroke, because FTS5 over a mailbox this size answers in a
+    /// millisecond and the reference filters as you type. Results carry the folder they were
+    /// found in, since a search across folders is only legible if each row says where it is.
+    /// </remarks>
+    private void RunSearch()
+    {
+        if (_accounts is null) return;
+
+        if (string.IsNullOrWhiteSpace(_searchText))
+        {
+            if (!IsSearching) return;
+            IsSearching = false;
+            _searchResultCount = 0;
+            LoadMessages(_selectedFolder);
+            return;
+        }
+
+        Messages.Clear();
+
+        var current = _selectedFolder is { } n && _folderIds.TryGetValue(n, out var where) ? where : default;
+
+        // Which stores and which folder filter each search runs against, by scope.
+        IEnumerable<(OpenAccount Account, long? FolderId)> targets = _scope switch
+        {
+            SearchScope.ThisFolder when current.Account is not null =>
+                [(current.Account, current.FolderId)],
+            SearchScope.CurrentMailbox when current.Account is not null =>
+                [(current.Account, null)],
+            SearchScope.AllMailboxes =>
+                _accounts.All.Select(a => (a, (long?)null)),
+            // No folder selected yet: fall back to every account rather than nothing.
+            _ => _accounts.All.Select(a => (a, (long?)null)),
+        };
+
+        foreach (var (account, folderId) in targets)
+        {
+            var names = FolderNamesFor(account);
+            foreach (var summary in account.Mail.Search(_searchText, folderId))
+            {
+                var label = _scope == SearchScope.ThisFolder
+                    ? string.Empty
+                    : names.GetValueOrDefault(summary.FolderId, string.Empty);
+
+                Messages.Add(new MessageRow(
+                    summary.Id,
+                    summary.DisplayFrom,
+                    summary.Subject,
+                    summary.Preview,
+                    summary.Received,
+                    !summary.IsRead,
+                    $"To: {account.Account.Address}",
+                    summary.Preview)
+                {
+                    SizeBytes = summary.SizeBytes,
+                    HasAttachment = summary.HasAttachment,
+                    IsFlagged = summary.IsFlagged,
+                    ThreadKey = Store.Lists.Arrangements.NormalisedSubject(summary.Subject),
+                    FolderId = summary.FolderId,
+                    FolderLabel = label,
+                });
+            }
+        }
+
+        _searchResultCount = Messages.Count;
+        LoadCategoriesForVisible();
+        IsSearching = true;
+        Raise(nameof(SearchResultSummary));
+        Rebuild();
+        SelectedMessage = Messages.FirstOrDefault();
+    }
+
+    /// <summary>Folder id to display name for one account, for labelling a search result.</summary>
+    private Dictionary<long, string> FolderNamesFor(OpenAccount account) =>
+        account.Mail.Folders(account.Account.Id).ToDictionary(f => f.Id, f => f.Name);
+
+    /// <summary>Fills in the category swatches for whatever is currently in <see cref="Messages"/>.</summary>
+    private void LoadCategoriesForVisible()
+    {
+        // Group ids by account, because categories live in each account's own store.
+        var byId = Messages.ToDictionary(m => m.Id, m => m);
+        foreach (var account in _accounts?.All ?? [])
+        {
+            var mine = account.Mail.CategoriesFor([.. byId.Keys]);
+            foreach (var (id, assigned) in mine)
+            {
+                if (byId.TryGetValue(id, out var row))
+                {
+                    row.CategoryTokens = [.. assigned.Select(c => c.ColourToken)];
+                }
+            }
         }
     }
 
@@ -824,6 +1005,18 @@ public sealed class ShellViewModel : ObservableObject
         {
             if (!Set(ref _selectedFolder, value)) return;
             Raise(nameof(SelectedFolderName));
+
+            // Choosing a folder leaves search behind — the reference drops out of results the
+            // moment a folder is clicked. Clear the box quietly so it does not re-run a search.
+            if (IsSearching || !string.IsNullOrEmpty(_searchText))
+            {
+                _searchText = string.Empty;
+                IsSearching = false;
+                _searchResultCount = 0;
+                Raise(nameof(SearchText));
+                Raise(nameof(ShowSearchPlaceholder));
+            }
+
             LoadMessages(_selectedFolder);
             Raise(nameof(SearchPlaceholder));
             Raise(nameof(WindowTitle));
@@ -1348,6 +1541,7 @@ public sealed class ShellViewModel : ObservableObject
     // Built here rather than in the window so the state and the way it is changed sit together;
     // the window only wires the things that need a Window to act on.
 
+    public RelayCommand ClearSearchCommand { get; }
     public RelayCommand ShowAll { get; }
     public RelayCommand ShowUnread { get; }
     public RelayCommand ToggleSort { get; }

@@ -282,4 +282,30 @@ public class MailRepositoryTests
         Assert.Equal(0, repo.DeleteMessages([]));
         Assert.Single(repo.Messages(inbox.Id));
     }
+
+    /// <summary>
+    /// Instant Search's two scopes at the store layer: a folder id narrows to one folder, and
+    /// null searches every folder in the account — which is what "Current Mailbox" runs.
+    /// </summary>
+    [Fact]
+    public void SearchScopesToOneFolderOrTheWholeAccount()
+    {
+        var (store, repo, inbox) = Fresh();
+        using var _ = store;
+        var archive = repo.FolderWithRole(inbox.AccountId, FolderRole.Archive)!;
+
+        repo.AddMessage(inbox.Id, Sample("uid-1", subject: "Quarterly agenda"));
+        repo.AddMessage(archive.Id, Sample("uid-2", subject: "Old agenda notes"));
+
+        // Whole account: both folders' matches come back.
+        Assert.Equal(2, repo.Search("agenda").Count);
+
+        // Narrowed to the inbox: only its match.
+        var inboxOnly = repo.Search("agenda", inbox.Id);
+        Assert.Equal("Quarterly agenda", Assert.Single(inboxOnly).Subject);
+
+        // A term in neither finds nothing, and a folder with no match is empty.
+        Assert.Empty(repo.Search("biscuits"));
+        Assert.Empty(repo.Search("quarterly", archive.Id));
+    }
 }
