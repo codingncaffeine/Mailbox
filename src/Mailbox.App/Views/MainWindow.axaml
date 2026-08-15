@@ -585,6 +585,20 @@
                                 <Setter Property="Padding" Value="0" />
                                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                             </Style>
+
+                            <!-- A row paints its own ground over the item, so the item's
+                                 selection tint never showed and a selected message looked like
+                                 every other one. The ground comes from a style rather than a
+                                 local value, so the selected state can change it: a local value
+                                 beats every style setter, which is the trap the handoff names.
+                                 The tint is measured off the reference (#B3D3EC in Dark Gray),
+                                 whole row, left edge included. -->
+                            <Style Selector="Grid.row">
+                                <Setter Property="Background" Value="{DynamicResource list.row.background.brush}" />
+                            </Style>
+                            <Style Selector="ListBoxItem:selected Grid.row">
+                                <Setter Property="Background" Value="{DynamicResource list.row.selected.brush}" />
+                            </Style>
                         </ListBox.Styles>
                         <ListBox.ItemTemplate>
                           <views:RowTemplateSelector>
@@ -615,7 +629,7 @@
                                  marker for a thread whose messages are in more than one folder. -->
                             <DataTemplate x:DataType="vm:ConversationRow">
                                 <Grid ColumnDefinitions="4,*"
-                                      Background="{DynamicResource list.row.background.brush}"
+                                      Classes="row"
                                       Height="{DynamicResource list.row.height.value}">
                                     <Rectangle Grid.Column="0"
                                                Fill="{DynamicResource list.row.unread.bar.brush}"
@@ -671,7 +685,7 @@
                             <!-- A message. -->
                             <DataTemplate x:DataType="vm:MessageRow">
                                 <Grid ColumnDefinitions="4,*"
-                                      Background="{DynamicResource list.row.background.brush}"
+                                      Classes="row"
                                       Height="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).RowHeight}">
                                     <!-- The unread bar. 4px, accent, only when unread. -->
                                     <Rectangle Grid.Column="0"

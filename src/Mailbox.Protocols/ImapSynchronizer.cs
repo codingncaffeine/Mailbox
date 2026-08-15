@@ -11,6 +11,13 @@ public sealed record SyncResult(int Downloaded, int OpsPlayed, int Removed, stri
 {
     public bool Succeeded => Error is null;
 
+    /// <summary>
+    /// The store ids of what arrived in the Inbox this sync — the messages a new-mail toast is
+    /// about. Mail pulled into Sent Items or an archive folder is the server catching up, not
+    /// news, so it is counted in <see cref="Downloaded"/> and not here.
+    /// </summary>
+    public IReadOnlyList<long> Arrived { get; init; } = [];
+
     public static SyncResult Failed(string error) => new(0, 0, 0, error);
 }
 
@@ -59,15 +66,17 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
 
             var downloaded = 0;
             var removed = 0;
+            var arrived = new List<long>();
             foreach (var folder in mapped)
             {
                 cancellation.ThrowIfCancellationRequested();
                 var (got, gone) = await PullAsync(session, account, folder, progress, cancellation);
-                downloaded += got;
+                downloaded += got.Count;
                 removed += gone;
+                if (folder.Role == FolderRole.Inbox) arrived.AddRange(got);
             }
 
-            return new SyncResult(downloaded, played, removed);
+            return new SyncResult(downloaded, played, removed) { Arrived = arrived };
         }
         catch (OperationCanceledException)
         {
@@ -312,7 +321,7 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
     /// <summary>
     /// Brings one folder into step: new messages down, gone messages out, changed flags in.
     /// </summary>
-    private async Task<(int Downloaded, int Removed)> PullAsync(
+    private async Task<(IReadOnlyList<long> Downloaded, int Removed)> PullAsync(
         IImapSession session,
         AccountConnection account,
         Folder folder,
@@ -395,7 +404,8 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
         }
     }
 
-    private async Task<int> DownloadAsync(
+    /// <returns>The store ids of the rows written, in the order they were downloaded.</returns>
+    private async Task<IReadOnlyList<long>> DownloadAsync(
         IImapSession session,
         Folder folder,
         IReadOnlyList<long> uids,
@@ -404,7 +414,7 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
         string address,
         CancellationToken cancellation)
     {
-        if (uids.Count == 0) return 0;
+        if (uids.Count == 0) return [];
 
         // Ask the server for arrival dates and flags first, in one fetch, then decide what is
         // within the offline window from that — rather than assuming UID order tracks arrival
@@ -420,7 +430,7 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
             .OrderByDescending(u => u)
             .ToList();
 
-        var downloaded = 0;
+        var downloaded = new List<long>();
         foreach (var uid in wanted)
         {
             cancellation.ThrowIfCancellationRequested();
@@ -436,7 +446,7 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
                 continue;
             }
 
-            progress?.Report(new PollProgress(address, downloaded + 1, wanted.Count, "Receiving"));
+            progress?.Report(new PollProgress(address, downloaded.Count + 1, wanted.Count, "Receiving"));
 
             var meta2 = info.GetValueOrDefault(uid);
             var read = meta2?.Flags.HasFlag(MessageFlags.Seen) ?? false;
@@ -448,10 +458,10 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
 
             var summary = MessageMapper.ToSummary(message, uid.ToString(), raw.Length, _now(), read, flagged);
             var id = _repository.AddMessage(folder.Id, summary, raw);
-            downloaded++;
 
             if (id is { } messageId)
             {
+                downloaded.Add(messageId);
                 await Arrival.RecordSignatureAsync(_repository, Authentication, messageId, message, _now(), cancellation);
             }
         }

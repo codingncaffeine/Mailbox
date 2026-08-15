@@ -384,6 +384,59 @@ public sealed class OptionsWindow : Window
         {
             autocomplete.Content = AutoCompleteRow();
         }
+
+        if (renderer.Slots.TryGetValue("autostart", out var autostart))
+        {
+            autostart.Content = AutostartRows();
+        }
+    }
+
+    /// <summary>
+    /// Start at sign-in, and whether to start into the tray: two checkboxes over one XDG
+    /// autostart entry (§10). Read from the entry rather than from a setting, so a desktop that
+    /// has switched the entry off in its own session settings is shown the truth.
+    /// </summary>
+    private Control AutostartRows()
+    {
+        var autostart = new Mailbox.Core.Platform.Autostart();
+
+        var minimised = new CheckBox
+        {
+            Content = "Start minimised to the notification area",
+            IsChecked = autostart.StartsMinimized,
+            IsEnabled = autostart.IsEnabled,
+            Margin = new Thickness(24, 0, 0, 0),
+        };
+        Bind(minimised, TemplatedControl.ForegroundProperty, "dialog.foreground.brush");
+
+        var enabled = new CheckBox
+        {
+            Content = "Start Mailbox when I sign in",
+            IsChecked = autostart.IsEnabled,
+        };
+        Bind(enabled, TemplatedControl.ForegroundProperty, "dialog.foreground.brush");
+
+        void Save()
+        {
+            try
+            {
+                if (enabled.IsChecked == true) autostart.Enable(minimised.IsChecked == true);
+                else autostart.Disable();
+            }
+            catch (Exception ex)
+            {
+                Mailbox.Core.Diagnostics.Log.Warn("The autostart entry could not be written.", ex);
+            }
+
+            // Re-read rather than assume: what the file says is what will happen at sign-in.
+            enabled.IsChecked = autostart.IsEnabled;
+            minimised.IsEnabled = autostart.IsEnabled;
+        }
+
+        enabled.IsCheckedChanged += (_, _) => Save();
+        minimised.IsCheckedChanged += (_, _) => { if (enabled.IsChecked == true) Save(); };
+
+        return new StackPanel { Spacing = 6, Children = { enabled, minimised } };
     }
 
     /// <summary>

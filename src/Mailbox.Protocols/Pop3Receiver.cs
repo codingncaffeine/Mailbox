@@ -16,6 +16,14 @@ public sealed record PollResult(
 {
     public bool Succeeded => Error is null;
 
+    /// <summary>
+    /// The store ids of the messages that landed in the Inbox this poll, newest last. What a
+    /// new-mail notification acts on: a toast that offers Reply or Delete has to know which
+    /// message it is talking about, and a count cannot say. Mail the filter put in Junk is not
+    /// here — announcing it would undo the filter.
+    /// </summary>
+    public IReadOnlyList<long> Arrived { get; init; } = [];
+
     public static PollResult Failed(string error) => new(0, 0, 0, error);
 }
 
@@ -119,6 +127,7 @@ public sealed class Pop3Receiver(MailRepository repository, Func<DateTimeOffset>
         var downloaded = 0;
         var alreadyHad = 0;
         var toRemove = new List<int>();
+        var arrived = new List<long>();
         var expired = Expired(inbox, account.Policy);
 
         for (var index = 0; index < uids.Count && downloaded < account.Policy.MaxPerPoll; index++)
@@ -137,14 +146,14 @@ public sealed class Pop3Receiver(MailRepository repository, Func<DateTimeOffset>
                 account.Address, downloaded + 1, uids.Count - known.Count, "Receiving"));
 
             var message = await client.GetMessageAsync(index, cancellation);
-            await StoreAsync(inbox, message, uid, cancellation);
+            if (await StoreAsync(inbox, message, uid, cancellation) is { } inInbox) arrived.Add(inInbox);
             downloaded++;
 
             if (!account.Policy.LeaveOnServer) toRemove.Add(index);
         }
 
         var removed = await RemoveAsync(client, toRemove, cancellation);
-        return new PollResult(downloaded, alreadyHad, removed);
+        return new PollResult(downloaded, alreadyHad, removed) { Arrived = arrived };
     }
 
     /// <summary>
@@ -153,7 +162,8 @@ public sealed class Pop3Receiver(MailRepository repository, Func<DateTimeOffset>
     /// </summary>
     public Func<MimeMessage, bool>? IsJunk { get; set; }
 
-    private async Task StoreAsync(
+    /// <returns>The new row's id if the message landed in the inbox itself; null otherwise.</returns>
+    private async Task<long?> StoreAsync(
         Folder inbox, MimeMessage message, string uid, CancellationToken cancellation)
     {
         using var buffer = new MemoryStream();
@@ -175,6 +185,8 @@ public sealed class Pop3Receiver(MailRepository repository, Func<DateTimeOffset>
         {
             await Arrival.RecordSignatureAsync(_repository, Authentication, messageId, message, _now(), cancellation);
         }
+
+        return target.Id == inbox.Id ? id : null;
     }
 
     /// <summary>

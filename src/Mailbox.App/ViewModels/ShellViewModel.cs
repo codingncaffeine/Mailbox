@@ -1466,6 +1466,45 @@ public sealed class ShellViewModel : ObservableObject
         return false;
     }
 
+    /// <summary>
+    /// Selects a message by account and store id: opens the folder it is in, then selects its
+    /// row. Returns the row, or null when there is no such message on this shell.
+    /// </summary>
+    /// <remarks>
+    /// What a notification's click, a reminder's Open Item and anything else that arrives with an
+    /// id rather than a row goes through. Search is left behind, as choosing a folder does.
+    /// </remarks>
+    public MessageRow? RevealMessage(string address, long id)
+    {
+        if (_accounts?.Find(address) is not { } account) return null;
+        if (account.Mail.GetMessage(id)?.FolderId is not { } folderId) return null;
+
+        // By address, not by instance: AccountStores.All hands out a fresh OpenAccount record
+        // per call (each is stamped with whether it is the default), so the one found above is
+        // never the same object the folder table was built from.
+        var node = _folderIds
+            .Where(kv => string.Equals(kv.Value.Account.Account.Address, address, StringComparison.OrdinalIgnoreCase)
+                         && kv.Value.FolderId == folderId)
+            .Select(kv => kv.Key)
+            .FirstOrDefault();
+        if (node is null) return null;
+
+        if (ReferenceEquals(SelectedFolder, node)) ReloadCurrentView();
+        else SelectedFolder = node;
+
+        var row = Messages.FirstOrDefault(m => m.Id == id);
+        if (row is null) return null;
+
+        // Unfold the group and the thread it sits in, or the row is selected and not on screen.
+        _collapsed.Clear();
+        if (ShowAsConversations) _expanded.Add(row.ThreadKey);
+        Rebuild();
+
+        SelectedRow = row;
+        SelectedMessage = row;
+        return row;
+    }
+
     /// <summary>The address of the account whose folder is on screen, for a new message to come from.</summary>
     public string? CurrentAddress => CurrentAccount?.Account.Address;
 

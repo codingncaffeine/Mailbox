@@ -14,6 +14,9 @@ public sealed record AccountRunResult(
     string? Error = null)
 {
     public bool Succeeded => Error is null;
+
+    /// <summary>The store ids of what arrived in this account's Inbox, for the new-mail toast.</summary>
+    public IReadOnlyList<long> Arrived { get; init; } = [];
 }
 
 /// <summary>The whole run.</summary>
@@ -149,7 +152,10 @@ public sealed class SendReceiveService(
         if (account.Protocol == MailProtocol.Imap)
         {
             var sync = await _synchronizer(target.Mail).SyncAsync(account, progress, cancellation);
-            return new AccountRunResult(account.Address, sync.Downloaded, sent, error ?? sync.Error);
+            return new AccountRunResult(account.Address, sync.Downloaded, sent, error ?? sync.Error)
+            {
+                Arrived = sync.Arrived,
+            };
         }
 
         var inbox = target.Mail.FolderWithRole(account.AccountId, FolderRole.Inbox);
@@ -161,6 +167,9 @@ public sealed class SendReceiveService(
 
         var poll = await _receiver(target.Mail).PollAsync(account, inbox, progress, cancellation);
 
-        return new AccountRunResult(account.Address, poll.Downloaded, sent, error ?? poll.Error);
+        return new AccountRunResult(account.Address, poll.Downloaded, sent, error ?? poll.Error)
+        {
+            Arrived = poll.Arrived,
+        };
     }
 }
