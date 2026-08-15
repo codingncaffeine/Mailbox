@@ -41,6 +41,16 @@ public sealed class ServerSettingsDialog : Window
         Minimum = 1, Maximum = 3650, Value = 14, Width = 80,
     };
 
+    // IMAP keeps its folders and flags on the server, so it has no "leave on server" — it has
+    // "how much to keep offline" instead. 0 means everything.
+    private readonly ComboBox _offlineMonths = new()
+    {
+        ItemsSource = new[] { "1 month", "3 months", "12 months", "24 months", "All" },
+        Width = 160,
+    };
+
+    private bool IsImap => _account.Protocol == MailProtocol.Imap;
+
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap, MaxWidth = 420 };
 
     /// <summary>True when settings were saved.</summary>
@@ -100,6 +110,7 @@ public sealed class ServerSettingsDialog : Window
         _leaveOnServer.IsChecked = settings.LeaveOnServer;
         _deleteAfter.IsChecked = settings.DeleteAfterDays is not null;
         if (settings.DeleteAfterDays is { } days) _deleteDays.Value = days;
+        _offlineMonths.SelectedIndex = OfflineIndex(settings.OfflineMonths);
 
         // Removing from the server only means anything while a copy is being left there.
         _leaveOnServer.IsCheckedChanged += (_, _) => UpdatePolicyEnabled();
@@ -146,14 +157,7 @@ public sealed class ServerSettingsDialog : Window
                 Field("Username", _outgoingUser),
                 Field("Encryption", _outgoingSecurity),
 
-                Section("Delivery"),
-                _leaveOnServer,
-                new StackPanel
-                {
-                    Orientation = Orientation.Horizontal,
-                    Spacing = 8,
-                    Children = { _deleteAfter, _deleteDays, Caption("days", 40) },
-                },
+                DeliverySection(),
                 _status,
             },
         };
@@ -176,6 +180,51 @@ public sealed class ServerSettingsDialog : Window
         };
     }
 
+    /// <summary>
+    /// POP3 decides what to do with a copy on the server; IMAP decides how much of the mailbox
+    /// to keep here. Different questions, so the section is different by protocol rather than
+    /// showing a POP3 policy that an IMAP account cannot honour.
+    /// </summary>
+    private Control DeliverySection()
+    {
+        if (IsImap)
+        {
+            return new StackPanel
+            {
+                Spacing = 8,
+                Children =
+                {
+                    Section("Offline"),
+                    Field("Mail to keep offline", _offlineMonths, labelWidth: 140),
+                },
+            };
+        }
+
+        return new StackPanel
+        {
+            Spacing = 8,
+            Children =
+            {
+                Section("Delivery"),
+                _leaveOnServer,
+                new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 8,
+                    Children = { _deleteAfter, _deleteDays, Caption("days", 40) },
+                },
+            },
+        };
+    }
+
+    private static readonly int[] OfflineChoices = [1, 3, 12, 24, 0];
+
+    private static int OfflineIndex(int months)
+    {
+        var found = Array.IndexOf(OfflineChoices, months);
+        return found >= 0 ? found : 2;
+    }
+
     private Control Section(string title)
     {
         var block = new TextBlock
@@ -189,13 +238,13 @@ public sealed class ServerSettingsDialog : Window
     }
 
     private Control Field(string label, Control control, string? second = null,
-        Control? secondControl = null)
+        Control? secondControl = null, double labelWidth = 100)
     {
         var row = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             Spacing = 8,
-            Children = { Caption(label, 100), control },
+            Children = { Caption(label, labelWidth), control },
         };
 
         if (second is not null && secondControl is not null)
@@ -242,6 +291,7 @@ public sealed class ServerSettingsDialog : Window
             DeleteAfterDays = _leaveOnServer.IsChecked == true && _deleteAfter.IsChecked == true
                 ? (int)(_deleteDays.Value ?? 14)
                 : null,
+            OfflineMonths = OfflineChoices[Math.Clamp(_offlineMonths.SelectedIndex, 0, OfflineChoices.Length - 1)],
         };
 
         settings.Save(App.Settings, _account.Address);
