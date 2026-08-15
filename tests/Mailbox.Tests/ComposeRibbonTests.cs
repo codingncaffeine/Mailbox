@@ -191,9 +191,15 @@ public class ComposeRibbonTests
         });
 
     /// <summary>
-    /// A blocked note has to name what is blocking it, not merely that something is. Either a
-    /// phase, or an explicit statement that nothing is planned.
+    /// A blocked note has to name what is blocking it, not merely that something is: a phase, an
+    /// explicit statement that nothing is planned, an open decision — or, since Phase 5, a gap in
+    /// the editor.
     /// </summary>
+    /// <remarks>
+    /// That fourth category is new and is the honest consequence of the survey: the editor is a
+    /// dependency rather than ours, so some of these are blocked on something no phase of this
+    /// project will deliver. Saying "Phase 5" about them would be a lie with a date on it.
+    /// </remarks>
     [Fact]
     public void EveryBlockedNoteNamesItsBlocker()
         => Assert.All(
@@ -201,8 +207,51 @@ public class ComposeRibbonTests
             s => Assert.True(
                 s.Note.Contains("Phase ", StringComparison.Ordinal)
                 || s.Note.Contains("Not planned", StringComparison.Ordinal)
-                || s.Note.Contains("No decision", StringComparison.Ordinal),
+                || s.Note.Contains("No decision", StringComparison.Ordinal)
+                || s.Note.Contains("The editor does not", StringComparison.Ordinal),
                 $"'{s.Command}' is blocked but does not say by what: {s.Note}"));
+
+    /// <summary>
+    /// A tripwire, in the manner of the migration count: what works is a number somebody has to
+    /// change on purpose. It has been wrong in both directions — commands recorded as working
+    /// that quietly were not, and commands still recorded as blocked for a phase that had
+    /// already delivered them.
+    /// </summary>
+    [Fact]
+    public void TheWorkingCountIsWhatSomebodyLastDecidedItWas()
+    {
+        Assert.Equal(46, ComposeAvailability.WorkingCount);
+        Assert.Equal(49, ComposeAvailability.BlockedCount);
+        Assert.Equal(95, ComposeAvailability.All.Count);
+    }
+
+    /// <summary>
+    /// The Format Text tab is the point of the editor, so none of it may quietly go back to
+    /// being blocked on "the editor", which no longer means anything — there is one.
+    /// </summary>
+    [Fact]
+    public void TheFormattingCommandsWork()
+    {
+        CommandId[] formatting =
+        [
+            ComposeCommands.Bold.Id, ComposeCommands.Italic.Id, ComposeCommands.Underline.Id,
+            ComposeCommands.Strikethrough.Id, ComposeCommands.Font.Id,
+            ComposeCommands.FontSize.Id, ComposeCommands.GrowFont.Id,
+            ComposeCommands.ShrinkFont.Id, ComposeCommands.FontColor.Id,
+            ComposeCommands.Highlight.Id, ComposeCommands.Bullets.Id,
+            ComposeCommands.Numbering.Id, ComposeCommands.MultilevelList.Id,
+            ComposeCommands.IncreaseIndent.Id, ComposeCommands.DecreaseIndent.Id,
+            ComposeCommands.Align.Id, ComposeCommands.LineSpacing.Id,
+            ComposeCommands.FormatPainter.Id, ComposeCommands.Table.Id,
+            ComposeCommands.Pictures.Id, ComposeCommands.Link.Id,
+            MailCommands.Undo.Id, ViewCommands.Redo.Id,
+        ];
+
+        Assert.All(formatting, id => Assert.True(
+            ComposeAvailability.Works(id),
+            $"'{id}' formats the document and should work: "
+            + $"{ComposeAvailability.For(id)?.Note}"));
+    }
 
     [Fact]
     public void NoCommandIsDeclaredTwice()

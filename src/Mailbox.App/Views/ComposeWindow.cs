@@ -11,9 +11,11 @@ using Mailbox.App.Theming;
 using Mailbox.Controls.Ribbon;
 using Mailbox.Editor;
 using Mailbox.Core.Commands;
+using Mailbox.Core.Diagnostics;
 using Mailbox.Core.Ribbon;
 using Mailbox.Protocols;
 using Mailbox.Store;
+using Mailbox.Theming.Fonts;
 using Mailbox.Theming.Icons;
 using MimeKit;
 using MimeKit.Utils;
@@ -870,12 +872,109 @@ public sealed class ComposeWindow : Window
             return true;
         }
 
+        if (HandleFormatting(id)) return true;
+        if (HandleInsert(id)) return true;
+
         if (id == ComposeCommands.Symbol.Id) { _ = InsertSymbolAsync(); return true; }
         if (id == ComposeCommands.Link.Id) { _ = InsertLinkAsync(); return true; }
         if (id == ComposeCommands.DelayDelivery.Id) { _ = DelayAsync(); return true; }
         if (id == ComposeCommands.DirectRepliesTo.Id) { _ = DirectRepliesAsync(); return true; }
 
         return false;
+    }
+
+    /// <summary>
+    /// The Format Text tab, and the formatting half of Message.
+    /// </summary>
+    /// <remarks>
+    /// Every one of these acts on the selection, which is the editor's business rather than
+    /// this window's — so each is one call. What is not here is what the editor does not do:
+    /// sub- and superscript, clearing formatting, paragraph marks, borders, shading and sort.
+    /// Those stay recorded as blocked in <see cref="ComposeAvailability"/> with what they want,
+    /// rather than being faked.
+    /// <para>
+    /// The choosers are the compromise. A ribbon control reports which command was pressed and
+    /// never a value with it, so a font, a size, a colour or an alignment has to be asked for
+    /// before the command can act. The reference uses live-previewing galleries; replacing these
+    /// with those is ribbon work, and it is written down in the plan rather than pretended away.
+    /// </para>
+    /// </remarks>
+    private bool HandleFormatting(CommandId id)
+    {
+        if (id == MailCommands.Undo.Id) { _body.Undo(); _body.Focus(); return true; }
+        if (id == ViewCommands.Redo.Id) { _body.Redo(); _body.Focus(); return true; }
+
+        if (id == ComposeCommands.Bold.Id) return Format(_body.ToggleBold);
+        if (id == ComposeCommands.Italic.Id) return Format(_body.ToggleItalic);
+        if (id == ComposeCommands.Underline.Id) return Format(_body.ToggleUnderline);
+        if (id == ComposeCommands.Strikethrough.Id) return Format(_body.ToggleStrikethrough);
+
+        if (id == ComposeCommands.GrowFont.Id) return Format(_body.IncreaseFontSize);
+        if (id == ComposeCommands.ShrinkFont.Id) return Format(_body.DecreaseFontSize);
+
+        if (id == ComposeCommands.Bullets.Id) return Format(_body.ToggleBullet);
+        if (id == ComposeCommands.Numbering.Id) return Format(_body.ToggleNumbering);
+
+        if (id == ComposeCommands.IncreaseIndent.Id) return Format(() => _body.Indent(24));
+        if (id == ComposeCommands.DecreaseIndent.Id) return Format(() => _body.Indent(-24));
+
+        if (id == ComposeCommands.FormatPainter.Id)
+        {
+            if (_body.IsFormatPainterActive)
+            {
+                _body.CancelFormatPainter();
+                Report("Format painter off.");
+            }
+            else
+            {
+                _body.StartFormatPainter();
+                Report("Format painter on — select the text to paint.");
+            }
+
+            _body.Focus();
+            return true;
+        }
+
+        if (id == ComposeCommands.Font.Id) { _ = ChooseFontAsync(); return true; }
+        if (id == ComposeCommands.FontSize.Id) { _ = ChooseFontSizeAsync(); return true; }
+        if (id == ComposeCommands.FontColor.Id) { _ = ChooseColourAsync(highlight: false); return true; }
+        if (id == ComposeCommands.Highlight.Id) { _ = ChooseColourAsync(highlight: true); return true; }
+        if (id == ComposeCommands.Align.Id) { _ = ChooseAlignmentAsync(); return true; }
+        if (id == ComposeCommands.LineSpacing.Id) { _ = ChooseLineSpacingAsync(); return true; }
+        if (id == ComposeCommands.MultilevelList.Id) { _ = ChooseListStyleAsync(); return true; }
+
+        if (id == ComposeCommands.FormatHtml.Id)
+        {
+            Report("This message is already being composed as HTML.");
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>The Insert tab, for the things the document model can actually hold.</summary>
+    private bool HandleInsert(CommandId id)
+    {
+        if (id == ComposeCommands.Table.Id) { _ = InsertTableAsync(); return true; }
+        if (id == ComposeCommands.Pictures.Id) { _ = InsertPictureAsync(); return true; }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Applies something to the selection and puts the caret back where it was.
+    /// </summary>
+    /// <remarks>
+    /// The focus is the point. Pressing a ribbon button moves focus to the button, and a second
+    /// press with the caret no longer in the document formats nothing — which reads as the
+    /// button having stopped working.
+    /// </remarks>
+    private bool Format(Action apply)
+    {
+        apply();
+        _body.Focus();
+        _ribbon.RefreshEnablement();
+        return true;
     }
 
     /// <summary>
@@ -1024,6 +1123,262 @@ public sealed class ComposeWindow : Window
         Report(replaced == 0
             ? $"'{needle}' is not in the message."
             : $"Replaced {replaced}.");
+    }
+
+    /// <summary>
+    /// The font picker, which §6 says lists the Microsoft names.
+    /// </summary>
+    /// <remarks>
+    /// Because that is what people expect to choose, and because it is what goes on the wire:
+    /// a message composed in Calibri names Calibri first, so a Windows reader gets the real
+    /// font. What is rendered here is the metric-compatible substitute, and the entry says so —
+    /// a reader choosing a face is entitled to know whether their recipient will see it and
+    /// whether the layout will hold.
+    /// </remarks>
+    private async Task ChooseFontAsync()
+    {
+        // FontResolver already builds this list, in the reference's own order and carrying
+        // each entry's resolution — it exists for this picker.
+        var choices = App.Fonts.PickerFamilies()
+            .Where(f => !string.Equals(f.Requested, "Segoe UI", StringComparison.Ordinal))
+            .Select(f => new Choice(f.Requested, f.Requested, Describe(f)))
+            .ToList();
+
+        if (await Chooser.AskAsync(this, "Font", "Font:", choices, CaretFont()) is not { } family)
+        {
+            return;
+        }
+
+        _body.SetFontFamily(App.Fonts.Resolve(family).Rendered);
+        _body.Focus();
+        Report($"Font {family}.");
+    }
+
+    /// <summary>What choosing this face actually gets the reader, and their recipient.</summary>
+    private static string Describe(FontResolution font) => font switch
+    {
+        { IsSubstituted: false } => "installed here, and named in the message",
+
+        { Quality: SubstitutionQuality.MetricCompatible } =>
+            $"shown in {font.Rendered}, which lays out identically",
+
+        { MayReflow: true } =>
+            $"shown in {font.Rendered} — similar, but the message will reflow",
+
+        _ => "not installed here; a recipient who has it will see it correctly",
+    };
+
+    /// <summary>The face at the caret, so the picker opens on it.</summary>
+    private string? CaretFont() => _body.GetCaretFormat().FontFamily;
+
+    private async Task ChooseFontSizeAsync()
+    {
+        // The reference's own list.
+        var sizes = new[] { 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36, 48, 72 };
+
+        var choices = sizes
+            .Select(p => new Choice(p.ToString(CultureInfo.InvariantCulture),
+                                    p.ToString(CultureInfo.InvariantCulture)))
+            .ToList();
+
+        var caret = _body.GetCaretFormat().FontSize;
+        var current = ((caret > 0 ? caret * PointsPerPixel : ComposeFontPoints))
+            .ToString("0", CultureInfo.InvariantCulture);
+
+        if (await Chooser.AskAsync(this, "Font Size", "Size, in points:", choices, current)
+            is not { } chosen)
+        {
+            return;
+        }
+
+        if (double.TryParse(chosen, CultureInfo.InvariantCulture, out var points))
+        {
+            _body.SetFontSize(points / PointsPerPixel);
+            _body.Focus();
+            Report($"Size {points:0}pt.");
+        }
+    }
+
+    /// <summary>
+    /// Colour, from the theme rather than from a wheel.
+    /// </summary>
+    /// <remarks>
+    /// These are the values that go into the message, so they are the one place in the
+    /// application where a literal colour is right: a recipient's client knows nothing about
+    /// this theme, and a colour resolved from one would change meaning between them. The
+    /// automatic entry writes nothing at all and lets the reader's own client decide.
+    /// </remarks>
+    private async Task ChooseColourAsync(bool highlight)
+    {
+        var colours = highlight
+            ? new[]
+            {
+                new Choice("None", "none"),
+                new Choice("Yellow", "#FFFF00"), new Choice("Bright green", "#00FF00"),
+                new Choice("Turquoise", "#00FFFF"), new Choice("Pink", "#FF00FF"),
+                new Choice("Blue", "#0000FF"), new Choice("Red", "#FF0000"),
+                new Choice("Grey", "#C0C0C0"),
+            }
+            : new[]
+            {
+                new Choice("Automatic", "none", "the reader's own text colour"),
+                new Choice("Black", "#000000"), new Choice("Dark red", "#C00000"),
+                new Choice("Red", "#FF0000"), new Choice("Orange", "#FFC000"),
+                new Choice("Green", "#008000"), new Choice("Blue", "#0070C0"),
+                new Choice("Dark blue", "#002060"), new Choice("Purple", "#7030A0"),
+                new Choice("Grey", "#808080"),
+            };
+
+        var title = highlight ? "Text Highlight Colour" : "Font Colour";
+
+        if (await Chooser.AskAsync(this, title, "Colour:", colours) is not { } value) return;
+
+        var brush = string.Equals(value, "none", StringComparison.Ordinal)
+            ? null
+            : new SolidColorBrush(Color.Parse(value));
+
+        if (highlight) _body.SetHighlight(brush!);
+        else _body.SetForeground(brush!);
+
+        _body.Focus();
+        Report(title + " set.");
+    }
+
+    private async Task ChooseAlignmentAsync()
+    {
+        var choices = new[]
+        {
+            new Choice("Left", "left"), new Choice("Centre", "center"),
+            new Choice("Right", "right"), new Choice("Justified", "justify"),
+        };
+
+        if (await Chooser.AskAsync(this, "Align", "Alignment:", choices) is not { } value) return;
+
+        _body.SetTextAlignment(value switch
+        {
+            "center" => TextAlignment.Center,
+            "right" => TextAlignment.Right,
+            "justify" => TextAlignment.Justify,
+            _ => TextAlignment.Left,
+        });
+
+        _body.Focus();
+    }
+
+    private async Task ChooseLineSpacingAsync()
+    {
+        var choices = new[]
+        {
+            new Choice("Single", "1.0"), new Choice("1.15", "1.15"),
+            new Choice("1.5 lines", "1.5"), new Choice("Double", "2.0"),
+        };
+
+        if (await Chooser.AskAsync(this, "Line Spacing", "Spacing:", choices) is not { } value)
+        {
+            return;
+        }
+
+        if (double.TryParse(value, CultureInfo.InvariantCulture, out var multiplier))
+        {
+            _body.SetLineSpacing(multiplier);
+            _body.Focus();
+        }
+    }
+
+    private async Task ChooseListStyleAsync()
+    {
+        var choices = new[]
+        {
+            new Choice("Bullet — disc", "disc"), new Choice("Bullet — circle", "circle"),
+            new Choice("Bullet — square", "square"), new Choice("Bullet — dash", "dash"),
+            new Choice("Numbered — 1.", "decimal"), new Choice("Numbered — 1)", "decimalparen"),
+            new Choice("Lettered — a.", "loweralpha"), new Choice("Lettered — A.", "upperalpha"),
+            new Choice("Roman — i.", "lowerroman"),
+        };
+
+        if (await Chooser.AskAsync(this, "List Style", "Marker:", choices) is not { } value)
+        {
+            return;
+        }
+
+        _body.SetListStyle(value switch
+        {
+            "circle" => ListMarkerStyle.Circle,
+            "square" => ListMarkerStyle.Square,
+            "dash" => ListMarkerStyle.Dash,
+            "decimal" => ListMarkerStyle.Decimal,
+            "decimalparen" => ListMarkerStyle.DecimalParen,
+            "loweralpha" => ListMarkerStyle.LowerAlpha,
+            "upperalpha" => ListMarkerStyle.UpperAlpha,
+            "lowerroman" => ListMarkerStyle.LowerRoman,
+            _ => ListMarkerStyle.Disc,
+        });
+
+        _body.Focus();
+    }
+
+    private async Task InsertTableAsync()
+    {
+        var size = await Prompt("Table", "Rows and columns, as 3x4:");
+        if (string.IsNullOrWhiteSpace(size)) return;
+
+        var parts = size.Split(['x', 'X', '*', ',', ' '], StringSplitOptions.RemoveEmptyEntries);
+
+        if (parts.Length != 2
+            || !int.TryParse(parts[0], out var rows)
+            || !int.TryParse(parts[1], out var columns))
+        {
+            Report("A table size reads as rows by columns, like 3x4.");
+            return;
+        }
+
+        // A bound, because the number came from a text box and a table of ten thousand cells is
+        // a hang rather than a table.
+        if (rows is < 1 or > 50 || columns is < 1 or > 20)
+        {
+            Report("A table can be up to 50 rows by 20 columns.");
+            return;
+        }
+
+        _body.InsertTable(rows, columns);
+        _body.Focus();
+        Report($"Inserted a {rows}x{columns} table.");
+    }
+
+    /// <summary>
+    /// A picture from a file, which is the only source the sender's own machine offers.
+    /// </summary>
+    /// <remarks>
+    /// It becomes a related part and a <c>cid:</c> reference when the message is built — the
+    /// serializer asks for that — so the recipient gets the image with the mail rather than a
+    /// request back to somewhere.
+    /// </remarks>
+    private async Task InsertPictureAsync()
+    {
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Insert Picture",
+            AllowMultiple = false,
+            FileTypeFilter = [FilePickerFileTypes.ImageAll],
+        });
+
+        if (files.FirstOrDefault() is not { } file) return;
+
+        try
+        {
+            await using var stream = await file.OpenReadAsync();
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+
+            _body.InsertImageBytes(buffer.ToArray());
+            _body.Focus();
+            Report($"Inserted {file.Name}.");
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Could not insert a picture.", ex);
+            Report("That picture could not be read.");
+        }
     }
 
     private async Task InsertSymbolAsync()

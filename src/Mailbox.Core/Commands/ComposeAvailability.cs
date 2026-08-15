@@ -28,11 +28,13 @@ public sealed record ComposeCommandStatus(
 /// </remarks>
 public static class ComposeAvailability
 {
-    private const string Editor =
-        "Phase 5 — the rich text editor. The body is plain text until it exists.";
+    private const string EditorGap =
+        "The editor does not offer it. Phase 5 took a document model rather than building one, " +
+        "so what is missing here is what that model does not carry — see the survey in §7.3.";
 
-    private const string EditorImage =
-        "Phase 5 — the document model, which is what an image or shape would be placed into.";
+    private const string Drawing =
+        "Not planned for the editor. A drawing surface is a different program inside this one, " +
+        "and mail that needs one is mail with an attachment.";
 
     private const string Stationery =
         "Phase 6 — stationery and themes, and Phase 5 for anywhere to apply them.";
@@ -57,59 +59,78 @@ public static class ComposeAvailability
             "Phase 4 — opening an existing message in its own window."),
         new(ComposeCommands.NextItem.Id, ComposeCommandState.Blocked,
             "Phase 4 — opening an existing message in its own window."),
-        new(MailCommands.Undo.Id, ComposeCommandState.Blocked,
-            "Phase 8 — the undo stack. The body's own text box undoes itself in the meantime."),
-        new(ViewCommands.Redo.Id, ComposeCommandState.Blocked,
-            "Phase 8 — the undo stack. The body's own text box redoes itself in the meantime."),
+        new(MailCommands.Undo.Id, ComposeCommandState.Working, "Undoes the last edit to the body."),
+        new(ViewCommands.Redo.Id, ComposeCommandState.Working, "Redoes it."),
 
         // ---- Clipboard ----------------------------------------------------------------
-        new(ComposeCommands.Paste.Id, ComposeCommandState.Working, "Plain text into the body."),
-        new(ComposeCommands.Cut.Id, ComposeCommandState.Working, "Plain text out of the body."),
-        new(ComposeCommands.Copy.Id, ComposeCommandState.Working, "Plain text out of the body."),
-        new(ComposeCommands.FormatPainter.Id, ComposeCommandState.Blocked, Editor),
+        new(ComposeCommands.Paste.Id, ComposeCommandState.Working,
+            "Pastes, keeping the formatting where the clipboard carries any."),
+        new(ComposeCommands.Cut.Id, ComposeCommandState.Working,
+            "On Ctrl+X. The editor handles it and exposes no method for the button to call."),
+        new(ComposeCommands.Copy.Id, ComposeCommandState.Working,
+            "On Ctrl+C. The editor handles it and exposes no method for the button to call."),
+        new(ComposeCommands.FormatPainter.Id, ComposeCommandState.Working,
+            "Picks up the formatting at the caret, then paints the next selection with it."),
 
         // ---- Font ---------------------------------------------------------------------
-        new(ComposeCommands.Font.Id, ComposeCommandState.Blocked, Editor),
-        new(ComposeCommands.FontSize.Id, ComposeCommandState.Blocked, Editor),
-        new(ComposeCommands.GrowFont.Id, ComposeCommandState.Blocked, Editor),
-        new(ComposeCommands.ShrinkFont.Id, ComposeCommandState.Blocked, Editor),
-        new(ComposeCommands.Bold.Id, ComposeCommandState.Blocked, Editor),
-        new(ComposeCommands.Italic.Id, ComposeCommandState.Blocked, Editor),
-        new(ComposeCommands.Underline.Id, ComposeCommandState.Blocked, Editor),
-        new(ComposeCommands.Strikethrough.Id, ComposeCommandState.Blocked, Editor),
-        new(ComposeCommands.Subscript.Id, ComposeCommandState.Blocked, Editor),
-        new(ComposeCommands.Superscript.Id, ComposeCommandState.Blocked, Editor),
-        new(ComposeCommands.Highlight.Id, ComposeCommandState.Blocked, Editor),
-        new(ComposeCommands.FontColor.Id, ComposeCommandState.Blocked, Editor),
-        new(ComposeCommands.ClearFormatting.Id, ComposeCommandState.Blocked, Editor),
-        new(ComposeCommands.FontDialog.Id, ComposeCommandState.Blocked, Editor),
+        new(ComposeCommands.Font.Id, ComposeCommandState.Working,
+            "Picks a family, listing the Microsoft names and saying what each will actually " +
+            "look like here and to a recipient (§6)."),
+        new(ComposeCommands.FontSize.Id, ComposeCommandState.Working, "Sets the size in points."),
+        new(ComposeCommands.GrowFont.Id, ComposeCommandState.Working, "One step larger."),
+        new(ComposeCommands.ShrinkFont.Id, ComposeCommandState.Working, "One step smaller."),
+        new(ComposeCommands.Bold.Id, ComposeCommandState.Working, "Bolds the selection."),
+        new(ComposeCommands.Italic.Id, ComposeCommandState.Working, "Italicises the selection."),
+        new(ComposeCommands.Underline.Id, ComposeCommandState.Working, "Underlines the selection."),
+        new(ComposeCommands.Strikethrough.Id, ComposeCommandState.Working, "Strikes the selection."),
+        new(ComposeCommands.Subscript.Id, ComposeCommandState.Blocked, EditorGap),
+        new(ComposeCommands.Superscript.Id, ComposeCommandState.Blocked, EditorGap),
+        new(ComposeCommands.Highlight.Id, ComposeCommandState.Working,
+            "Highlights the selection in one of the reference's own colours."),
+        new(ComposeCommands.FontColor.Id, ComposeCommandState.Working,
+            "Colours the selection. Automatic writes no colour and lets the reader's client decide."),
+        new(ComposeCommands.ClearFormatting.Id, ComposeCommandState.Blocked, EditorGap),
+        new(ComposeCommands.FontDialog.Id, ComposeCommandState.Blocked,
+            "Not planned as a dialog. Family, size, colour and highlight each have their own " +
+            "button on this tab, and all four work."),
 
         // ---- Paragraph ----------------------------------------------------------------
-        new(ComposeCommands.Bullets.Id, ComposeCommandState.Blocked, Editor),
-        new(ComposeCommands.Numbering.Id, ComposeCommandState.Blocked, Editor),
-        new(ComposeCommands.MultilevelList.Id, ComposeCommandState.Blocked, Editor),
-        new(ComposeCommands.DecreaseIndent.Id, ComposeCommandState.Blocked, Editor),
-        new(ComposeCommands.IncreaseIndent.Id, ComposeCommandState.Blocked, Editor),
-        new(ComposeCommands.Align.Id, ComposeCommandState.Blocked, Editor),
-        new(ComposeCommands.LineSpacing.Id, ComposeCommandState.Blocked, Editor),
-        new(ComposeCommands.ShowParagraphMarks.Id, ComposeCommandState.Blocked, Editor),
-        new(ComposeCommands.Borders.Id, ComposeCommandState.Blocked, Editor),
-        new(ComposeCommands.Shading.Id, ComposeCommandState.Blocked, Editor),
-        new(ComposeCommands.Sort.Id, ComposeCommandState.Blocked, Editor),
-        new(ComposeCommands.ParagraphDialog.Id, ComposeCommandState.Blocked, Editor),
+        new(ComposeCommands.Bullets.Id, ComposeCommandState.Working, "Makes the paragraphs a bulleted list."),
+        new(ComposeCommands.Numbering.Id, ComposeCommandState.Working, "Makes them a numbered list."),
+        new(ComposeCommands.MultilevelList.Id, ComposeCommandState.Working,
+            "Sets the marker — disc, circle, square, dash, numbers, letters or roman."),
+        new(ComposeCommands.DecreaseIndent.Id, ComposeCommandState.Working, "Outdents the paragraph."),
+        new(ComposeCommands.IncreaseIndent.Id, ComposeCommandState.Working, "Indents it."),
+        new(ComposeCommands.Align.Id, ComposeCommandState.Working,
+            "Left, centre, right or justified."),
+        new(ComposeCommands.LineSpacing.Id, ComposeCommandState.Working,
+            "Single, 1.15, 1.5 or double."),
+        new(ComposeCommands.ShowParagraphMarks.Id, ComposeCommandState.Blocked, EditorGap),
+        new(ComposeCommands.Borders.Id, ComposeCommandState.Blocked, EditorGap),
+        new(ComposeCommands.Shading.Id, ComposeCommandState.Blocked, EditorGap),
+        new(ComposeCommands.Sort.Id, ComposeCommandState.Blocked, EditorGap),
+        new(ComposeCommands.ParagraphDialog.Id, ComposeCommandState.Blocked,
+            "Not planned as a dialog. Alignment, indent, spacing and the list markers each have " +
+            "their own button on this tab, and all four work."),
 
         // ---- Styles and format --------------------------------------------------------
         new(ComposeCommands.Styles.Id, ComposeCommandState.Blocked,
-            "Phase 5, stage 4 — paragraph styles are the last stage of the editor."),
+            "The editor does not offer named paragraph styles — it carries headings and quotes " +
+            "and no style sheet."),
         new(ComposeCommands.ChangeStyles.Id, ComposeCommandState.Blocked,
-            "Phase 5, stage 4 — paragraph styles are the last stage of the editor."),
+            "The editor does not offer named paragraph styles — it carries headings and quotes " +
+            "and no style sheet."),
         new(ComposeCommands.StylesDialog.Id, ComposeCommandState.Blocked,
-            "Phase 5, stage 4 — paragraph styles are the last stage of the editor."),
-        new(ComposeCommands.FormatPlainText.Id, ComposeCommandState.Working,
-            "The only format the body can produce today, and the one it is already in."),
-        new(ComposeCommands.FormatHtml.Id, ComposeCommandState.Blocked, Editor),
+            "The editor does not offer named paragraph styles — it carries headings and quotes " +
+            "and no style sheet."),
+        new(ComposeCommands.FormatPlainText.Id, ComposeCommandState.Blocked,
+            "Phase 6 — composing as plain text only. Every message already carries a plain text " +
+            "alternative beside its HTML, so a recipient who wants text gets text."),
+        new(ComposeCommands.FormatHtml.Id, ComposeCommandState.Working,
+            "The format this window composes in, and says so."),
         new(ComposeCommands.FormatRichText.Id, ComposeCommandState.Blocked,
-            "Phase 5, stage 3 — RTF serialization."),
+            "Phase 6 — the reference's RTF mode. The editor serializes RTF; what is missing is " +
+            "the decision to send it, and TNEF around it."),
 
         // ---- Editing ------------------------------------------------------------------
         new(ComposeCommands.Find.Id, ComposeCommandState.Working, "Finds text in the body."),
@@ -131,9 +152,7 @@ public static class ComposeAvailability
             "Phase 4 — attaching another stored message needs the message picker."),
         new(ComposeCommands.Signature.Id, ComposeCommandState.Blocked,
             "Phase 6 — signatures, which have no settings surface yet."),
-        new(ComposeCommands.Link.Id, ComposeCommandState.Working,
-            "Inserts the address as text, which is what a plain-text body can carry. " +
-            "A real hyperlink is Phase 5."),
+        new(ComposeCommands.Link.Id, ComposeCommandState.Working, "Inserts a real hyperlink."),
 
         // ---- Tags ---------------------------------------------------------------------
         new(ComposeCommands.HighImportance.Id, ComposeCommandState.Working,
@@ -152,26 +171,28 @@ public static class ComposeAvailability
         new(ViewCommands.Apps.Id, ComposeCommandState.Blocked,
             "Phase 15 — the plugin host. There are no add-ins to list."),
         new(ComposeCommands.Editor.Id, ComposeCommandState.Blocked,
-            "Phase 5 — spelling and grammar run against the editor's document."),
+            "Phase 5's remaining piece — Hunspell against the editor's document."),
         new(ViewCommands.ImmersiveReader.Id, ComposeCommandState.Blocked, I18n),
 
         // ---- Insert -------------------------------------------------------------------
-        new(ComposeCommands.Table.Id, ComposeCommandState.Blocked,
-            "Phase 5, stage 3 — table layout is the hardest single piece of the editor."),
-        new(ComposeCommands.Pictures.Id, ComposeCommandState.Blocked, EditorImage),
+        new(ComposeCommands.Table.Id, ComposeCommandState.Working,
+            "Inserts a table, up to 50 rows by 20 columns."),
+        new(ComposeCommands.Pictures.Id, ComposeCommandState.Working,
+            "Inserts a picture from a file. It travels with the message as a related part."),
         new(ComposeCommands.StockImages.Id, ComposeCommandState.Blocked,
             "Not planned. A stock image library is a hosted service, and Mailbox operates none."),
         new(ComposeCommands.OnlinePictures.Id, ComposeCommandState.Blocked,
             "Not planned. Fetching a picture from the web on the sender's behalf is the same " +
             "privacy problem the reading pane refuses; a local file is the supported path."),
-        new(ComposeCommands.Shapes.Id, ComposeCommandState.Blocked, EditorImage),
-        new(ComposeCommands.Icons.Id, ComposeCommandState.Blocked, EditorImage),
+        new(ComposeCommands.Shapes.Id, ComposeCommandState.Blocked, Drawing),
+        new(ComposeCommands.Icons.Id, ComposeCommandState.Blocked, Drawing),
         new(ComposeCommands.Models3D.Id, ComposeCommandState.Blocked,
             "Not planned. A 3D model in an email renders nowhere the recipient is likely to be."),
-        new(ComposeCommands.SmartArt.Id, ComposeCommandState.Blocked, EditorImage),
-        new(ComposeCommands.Chart.Id, ComposeCommandState.Blocked, EditorImage),
+        new(ComposeCommands.SmartArt.Id, ComposeCommandState.Blocked, Drawing),
+        new(ComposeCommands.Chart.Id, ComposeCommandState.Blocked, Drawing),
         new(ComposeCommands.Equation.Id, ComposeCommandState.Blocked,
-            "Phase 5 — an equation needs a document model to sit in."),
+            "Not planned for now. An equation editor is its own project, and mail that needs " +
+            "one is better served by a picture of one."),
         new(ComposeCommands.Symbol.Id, ComposeCommandState.Working,
             "Inserts a character into the body from a picker."),
 
@@ -204,7 +225,7 @@ public static class ComposeAvailability
 
         // ---- Review -------------------------------------------------------------------
         new(ComposeCommands.Spelling.Id, ComposeCommandState.Blocked,
-            "Phase 5, stage 3 — Hunspell runs against the editor's document."),
+            "Phase 5's remaining piece — Hunspell against the editor's document."),
         new(ComposeCommands.Thesaurus.Id, ComposeCommandState.Blocked,
             "Not planned. No free thesaurus with usable licensing has been chosen."),
         new(ComposeCommands.WordCount.Id, ComposeCommandState.Working,
