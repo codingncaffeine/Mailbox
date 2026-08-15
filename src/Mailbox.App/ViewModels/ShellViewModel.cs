@@ -502,7 +502,7 @@ public sealed class ShellViewModel : ObservableObject
     /// Which account and folder each row stands for. Every account has its own store, so a
     /// folder id alone is not enough to find its mail.
     /// </summary>
-    private readonly Dictionary<FolderNode, (OpenAccount Account, long FolderId)> _folderIds = [];
+    private readonly Dictionary<FolderNode, (OpenAccount Account, long FolderId, FolderRole Role)> _folderIds = [];
 
     /// <summary>
     /// Replaces the sample with what the store holds. Returns false when there is no account,
@@ -525,13 +525,83 @@ public sealed class ShellViewModel : ObservableObject
             foreach (var folder in account.Mail.Folders(account.Account.Id))
             {
                 var node = new FolderNode(folder.Name, 1, folder.Unread);
-                _folderIds[node] = (account, folder.Id);
+                _folderIds[node] = (account, folder.Id, folder.Role);
                 Folders.Add(node);
             }
         }
 
         SelectedFolder = Folders.FirstOrDefault(f => _folderIds.ContainsKey(f));
         return true;
+    }
+
+    /// <summary>
+    /// The Outbox, which holds queued mail rather than filed mail.
+    /// </summary>
+    /// <remarks>
+    /// Its rows come from the send queue, not from the messages table — nothing is filed into
+    /// this folder, which is why selecting it showed an empty list however much was waiting.
+    /// <para>
+    /// The row that matters is the one that failed permanently. It keeps its reason in the
+    /// store and had nowhere to show it: the status bar said so once, as it happened, and then
+    /// the message sat in a queue nobody could see.
+    /// </para>
+    /// </remarks>
+    private void LoadOutbox(OpenAccount account)
+    {
+        foreach (var item in account.Mail.Outbox(account.Account.Id))
+        {
+            var raw = account.Mail.LoadBlob(item.BlobId);
+            var message = Parse(raw);
+
+            var state = item.State switch
+            {
+                OutboxState.Failed => $"Not sent — {item.LastError ?? "the server refused it"}",
+                OutboxState.Held => "Held: Mailbox is working offline.",
+                OutboxState.Sending => "Sending…",
+                OutboxState.Sent => "Sent.",
+                _ => item.Attempts > 0
+                    ? $"Waiting to try again (attempt {item.Attempts + 1})."
+                    : "Waiting to be sent.",
+            };
+
+            Messages.Add(new MessageRow(
+                item.Id,
+                message?.To.ToString() ?? account.Account.Address,
+                message?.Subject is { Length: > 0 } subject ? subject : "(no subject)",
+                state,
+                item.Queued.ToLocalTime(),
+
+                // A failure is what the reader is here for, so it is the thing the row bolds.
+                isUnread: item.State == OutboxState.Failed,
+                $"From: {account.Account.Address}",
+                state)
+            {
+                SizeBytes = raw?.Length ?? 0,
+            });
+        }
+
+    }
+
+    /// <summary>
+    /// Reads a queued message far enough to describe it, and shrugs if it will not parse.
+    /// </summary>
+    /// <remarks>
+    /// A row that cannot be read is still a row: the message is in the queue whatever its bytes
+    /// look like, and hiding it would be the same failure this view exists to fix.
+    /// </remarks>
+    private static MimeKit.MimeMessage? Parse(byte[]? raw)
+    {
+        if (raw is not { Length: > 0 }) return null;
+
+        try
+        {
+            using var stream = new MemoryStream(raw);
+            return MimeKit.MimeMessage.Load(stream);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     /// <summary>Loads a folder's mail into the list. Called when the selection changes.</summary>
@@ -541,6 +611,22 @@ public sealed class ShellViewModel : ObservableObject
             || !_folderIds.TryGetValue(folder, out var where)) return;
 
         Messages.Clear();
+
+        // The Outbox is not a folder of filed mail. What is in it is queued, and the row that
+        // matters most is the one that failed permanently — which until now was visible for
+        // exactly as long as the status bar took to say it.
+        if (where.Role == FolderRole.Outbox)
+        {
+            LoadOutbox(where.Account);
+
+            // Through the same arrangement and grouping as any other folder. Filling Messages
+            // is not what puts rows on screen — Rebuild is — and returning early here left the
+            // previous folder's rows displayed over an Outbox that had been loaded correctly.
+            Rebuild();
+            SelectedMessage = Messages.FirstOrDefault();
+            return;
+        }
+
         foreach (var summary in where.Account.Mail.Messages(where.FolderId))
         {
             Messages.Add(new MessageRow(
