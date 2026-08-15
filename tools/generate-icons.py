@@ -89,6 +89,9 @@ WANTED = {
     "reading-pane": "panel_right",
     "message-preview": "panel_bottom",
     "importance": "important",
+    # Low importance is a downward arrow in the reference, not a chevron — a chevron beside
+    # a button reads as that button having a dropdown.
+    "importance-low": "arrow_down",
     "reminder": "alert",
     "mark-complete": "checkmark_circle",
     "new-task": "task_list_add",

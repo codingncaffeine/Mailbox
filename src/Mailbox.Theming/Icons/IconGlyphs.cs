@@ -86,6 +86,7 @@ public static class IconGlyphs
         ["ignore"] = new() { [16] = "\uF36C", [20] = "\uF36D", [24] = "\uF36E", [32] = "\uE4C3" },
         ["immersive"] = new() { [20] = "\uF65B", [24] = "\uF65C" },
         ["importance"] = new() { [16] = "\uF49E", [20] = "\uF49F", [24] = "\uF4A0", [32] = "\U000F0444" },
+        ["importance-low"] = new() { [16] = "\uF147", [20] = "\uF148", [24] = "\uF149", [32] = "\uF14C" },
         ["indent-decrease"] = new() { [16] = "\uED22", [20] = "\uED23", [24] = "\uED24" },
         ["indent-increase"] = new() { [16] = "\uED2C", [20] = "\uED2D", [24] = "\uED2E" },
         ["info"] = new() { [16] = "\uF4A2", [20] = "\uF4A3", [24] = "\uF4A4", [32] = "\U000F0059" },

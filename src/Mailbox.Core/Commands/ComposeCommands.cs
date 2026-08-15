@@ -641,7 +641,11 @@ public static class ComposeCommands
         Id = new("compose.importance.low"),
         Label = "Low Importance",
         Description = "Mark this message as low importance.",
-        Icon = "chevron-down",
+
+        // A downward arrow, as the reference draws it. It was a chevron, which is the glyph a
+        // dropdown affordance uses — so the button read as a stray one beside the flag rather
+        // than as a command, and the whole right of the ribbon looked broken because of it.
+        Icon = "importance-low",
         Category = "Tags",
         Scope = ModuleScope.Mail,
         KeyTip = "LO",

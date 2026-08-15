@@ -330,6 +330,7 @@ public partial class MainWindow : Window
             {
                 var compose = new ComposeWindow(App.Commands, App.Accounts);
                 WindowCapture.ApplyRequestedSize(compose);
+                WindowCapture.HideWhileCapturing(compose);
                 compose.SelectTab(composeTab == "1" ? "message" : composeTab);
 
                 // The ribbon's left half is pale until the body has something in it, so the
