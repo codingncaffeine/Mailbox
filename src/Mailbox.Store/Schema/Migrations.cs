@@ -278,6 +278,44 @@ public static class Migrations
         CREATE INDEX sync_ops_by_folder ON sync_ops (folder_id, server_uid);
         CREATE INDEX sync_ops_by_message ON sync_ops (message_id);
         """,
+
+        // ---- 11: the message body, so search reaches it -------------------------------------
+        //
+        // The FTS index was built with a `body` column that the triggers filled with '' —
+        // subject, sender and preview were searchable, the body was not. The plain text of the
+        // message goes into `body_text` now, and the triggers index it. Existing rows keep an
+        // empty body (their text is in the blob, and re-indexing every blob on migration is the
+        // wrong thing to do to a large store on startup); mail received from here on is searchable
+        // in full. Kept out of the messages row until now because a hundred-thousand-message
+        // folder is the case the list is built to survive, and the list never needs the body.
+        """
+        ALTER TABLE messages ADD COLUMN body_text TEXT NOT NULL DEFAULT '';
+
+        DROP TRIGGER messages_fts_insert;
+        DROP TRIGGER messages_fts_delete;
+        DROP TRIGGER messages_fts_update;
+
+        CREATE TRIGGER messages_fts_insert AFTER INSERT ON messages BEGIN
+            INSERT INTO messages_fts (rowid, subject, from_name, from_address, preview, body)
+            VALUES (new.id, new.subject, new.from_name, new.from_address, new.preview, new.body_text);
+        END;
+
+        CREATE TRIGGER messages_fts_delete AFTER DELETE ON messages BEGIN
+            INSERT INTO messages_fts (messages_fts, rowid, subject, from_name, from_address,
+                                      preview, body)
+            VALUES ('delete', old.id, old.subject, old.from_name, old.from_address,
+                    old.preview, old.body_text);
+        END;
+
+        CREATE TRIGGER messages_fts_update AFTER UPDATE ON messages BEGIN
+            INSERT INTO messages_fts (messages_fts, rowid, subject, from_name, from_address,
+                                      preview, body)
+            VALUES ('delete', old.id, old.subject, old.from_name, old.from_address,
+                    old.preview, old.body_text);
+            INSERT INTO messages_fts (rowid, subject, from_name, from_address, preview, body)
+            VALUES (new.id, new.subject, new.from_name, new.from_address, new.preview, new.body_text);
+        END;
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>

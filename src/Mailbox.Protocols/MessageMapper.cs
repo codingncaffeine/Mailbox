@@ -35,7 +35,10 @@ public static class MessageMapper
             SizeBytes: sizeBytes,
             IsRead: isRead,
             IsFlagged: isFlagged,
-            HasAttachment: message.Attachments.Any());
+            HasAttachment: message.Attachments.Any())
+        {
+            BodyText = FullText(message),
+        };
     }
 
     /// <summary>
@@ -61,6 +64,21 @@ public static class MessageMapper
     /// The first line or two of the body. Plain text if the sender provided it; otherwise the
     /// HTML converted down, because a preview of raw markup is worse than none.
     /// </summary>
+    /// <summary>
+    /// The whole plain text of the message, for the search index — the preview trimmed to two
+    /// hundred characters would miss a word further down, which is the point of a body search.
+    /// </summary>
+    internal static string FullText(MimeMessage message)
+    {
+        var text = message.TextBody
+                   ?? (message.HtmlBody is { } html ? ToPlain(html) : null)
+                   ?? string.Empty;
+
+        // Collapse runs of whitespace so the index is not full of newline noise, but keep it
+        // whole — no length cap.
+        return Condense(text, int.MaxValue);
+    }
+
     internal static string Preview(MimeMessage message)
     {
         var text = message.TextBody

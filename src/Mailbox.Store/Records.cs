@@ -141,6 +141,12 @@ public sealed record MessageSummary(
 {
     /// <summary>Who the row shows: the display name when there is one, else the address.</summary>
     public string DisplayFrom => FromName.Length > 0 ? FromName : FromAddress;
+
+    /// <summary>
+    /// The message's plain text, for the search index. Not shown anywhere and not the preview —
+    /// the whole body, so a search reaches a word buried in it. Empty for a row built by hand.
+    /// </summary>
+    public string BodyText { get; init; } = string.Empty;
 }
 
 /// <summary>
