@@ -321,6 +321,22 @@ public sealed class MailRepository(MailStore store)
     ];
 
     /// <summary>
+    /// Every server id the account holds, across all its folders. POP3's dedupe uses this
+    /// rather than the inbox's alone, because the junk filter files some arriving mail straight
+    /// into Junk — and a message the inbox does not know is not a message to download again.
+    /// </summary>
+    public HashSet<string> ServerUidsInAccount(long accountId) =>
+    [
+        .. _store.Query(
+            """
+            SELECT m.server_uid FROM messages m
+            JOIN folders f ON f.id = m.folder_id
+            WHERE f.account_id = $account AND m.server_uid IS NOT NULL
+            """,
+            r => r.GetString(0), ("$account", accountId)),
+    ];
+
+    /// <summary>
     /// Server ids downloaded before <paramref name="cutoff"/>, for "remove from the server
     /// after this many days".
     /// </summary>
@@ -799,6 +815,107 @@ public sealed class MailRepository(MailStore store)
 
     public IReadOnlyList<string> SafeSenders() => _store.Query(
         "SELECT address FROM safe_senders ORDER BY address", r => r.GetString(0));
+
+    // ---- Blocked senders ----------------------------------------------------------------------
+
+    /// <summary>Whether this sender is on the blocked list — junked whatever the classifier says.</summary>
+    public bool IsBlockedSender(string address)
+    {
+        if (string.IsNullOrWhiteSpace(address)) return false;
+
+        return _store.ScalarLong(
+            "SELECT count(*) FROM blocked_senders WHERE address = $address",
+            ("$address", address.Trim().ToLowerInvariant())) > 0;
+    }
+
+    public void AddBlockedSender(string address, DateTimeOffset now)
+    {
+        if (string.IsNullOrWhiteSpace(address)) return;
+
+        _store.Execute(
+            "INSERT INTO blocked_senders (address, added_utc) VALUES ($address, $now) ON CONFLICT(address) DO NOTHING",
+            ("$address", address.Trim().ToLowerInvariant()), ("$now", now.ToUnixTimeSeconds()));
+    }
+
+    public void RemoveBlockedSender(string address) => _store.Execute(
+        "DELETE FROM blocked_senders WHERE address = $address",
+        ("$address", address.Trim().ToLowerInvariant()));
+
+    public IReadOnlyList<string> BlockedSenders() => _store.Query(
+        "SELECT address FROM blocked_senders ORDER BY address", r => r.GetString(0));
+
+    // ---- The junk corpus ----------------------------------------------------------------------
+    //
+    // The training the naive-Bayes filter (§7.8) weighs a message against. It is the whole corpus
+    // — local, never uploaded — and the classifier reaches it through Mailbox.Junk's IJunkCorpus,
+    // which JunkCorpus below implements over these methods.
+
+    /// <summary>The message totals the per-token counts are normalised against.</summary>
+    public (long Spam, long Ham) JunkMessageTotals() => _store.Query(
+        "SELECT spam_messages, ham_messages FROM junk_corpus WHERE id = 1",
+        r => (r.GetInt64(0), r.GetInt64(1))).FirstOrDefault();
+
+    /// <summary>The spam and ham counts for a set of tokens, one read for the lot.</summary>
+    public Dictionary<string, (long Spam, long Ham)> JunkCounts(IReadOnlyCollection<string> tokens)
+    {
+        var found = new Dictionary<string, (long, long)>(StringComparer.Ordinal);
+        if (tokens.Count == 0) return found;
+
+        foreach (var chunk in tokens.Chunk(400))
+        {
+            var list = string.Join(',', chunk.Select(Quote));
+            foreach (var (token, spam, ham) in _store.Query(
+                $"SELECT token, spam_count, ham_count FROM junk_tokens WHERE token IN ({list})",
+                r => (r.GetString(0), r.GetInt64(1), r.GetInt64(2))))
+            {
+                found[token] = (spam, ham);
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>
+    /// Trains a message into the corpus, or (with <paramref name="add"/> false) trains it back
+    /// out — for a message re-marked the other way. Counts never drop below zero.
+    /// </summary>
+    public void TrainJunk(IReadOnlyCollection<string> tokens, bool spam, bool add)
+    {
+        _store.InTransaction(() =>
+        {
+            var step = add ? 1 : -1;
+
+            _store.Execute(
+                spam
+                    ? "UPDATE junk_corpus SET spam_messages = max(0, spam_messages + $step) WHERE id = 1"
+                    : "UPDATE junk_corpus SET ham_messages = max(0, ham_messages + $step) WHERE id = 1",
+                ("$step", step));
+
+            foreach (var token in tokens.Distinct())
+            {
+                if (spam)
+                {
+                    _store.Execute(
+                        """
+                        INSERT INTO junk_tokens (token, spam_count, ham_count) VALUES ($t, max(0, $step), 0)
+                        ON CONFLICT(token) DO UPDATE SET spam_count = max(0, spam_count + $step)
+                        """,
+                        ("$t", token), ("$step", step));
+                }
+                else
+                {
+                    _store.Execute(
+                        """
+                        INSERT INTO junk_tokens (token, spam_count, ham_count) VALUES ($t, 0, max(0, $step))
+                        ON CONFLICT(token) DO UPDATE SET ham_count = max(0, ham_count + $step)
+                        """,
+                        ("$t", token), ("$step", step));
+                }
+            }
+
+            return 0;
+        });
+    }
 
     /// <summary>
     /// Every domain this mailbox deals with: its own accounts, and everyone it has mail from.

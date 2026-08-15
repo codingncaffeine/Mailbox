@@ -7,6 +7,7 @@ using Mailbox.App.Options;
 using Mailbox.Core;
 using Mailbox.Core.Accounts;
 using Mailbox.Core.Commands;
+using Mailbox.Core.Diagnostics;
 using Mailbox.Core.Ribbon;
 using Mailbox.Store;
 using Mailbox.Store.Lists;
@@ -1467,6 +1468,42 @@ public sealed class ShellViewModel : ObservableObject
         SelectedFolder is { } folder && _folderIds.TryGetValue(folder, out var where)
             ? where.Account
             : _accounts?.All.FirstOrDefault();
+
+    /// <summary>
+    /// Mark as Junk, or Not Junk when the selection is already in the Junk folder.
+    /// </summary>
+    /// <remarks>
+    /// The reference's Junk button is contextual: pressed on inbox mail it trains the message as
+    /// junk and moves it to Junk; pressed on a message already in Junk it is "Not Junk" — trains
+    /// it as good and returns it to the inbox. The training is what makes the filter learn a
+    /// person's own mail, and it reads the message from the store so it trains on the whole of
+    /// it rather than the preview.
+    /// </remarks>
+    public void MarkJunk(IReadOnlyList<MessageRow> rows)
+    {
+        if (rows.Count == 0 || Mail(rows) is not { } mail) return;
+
+        var notJunk = CurrentFolderRole == FolderRole.Junk;
+
+        foreach (var row in rows)
+        {
+            if (mail.LoadRaw(row.Id) is not { } raw) continue;
+
+            try
+            {
+                using var stream = new MemoryStream(raw);
+                var message = MimeKit.MimeMessage.Load(stream);
+                App.Junk.Train(mail, message, spam: !notJunk);
+            }
+            catch (Exception ex)
+            {
+                // A message that will not parse cannot be trained on, but it can still be moved.
+                Log.Warn("Could not train the junk filter on a message.", ex);
+            }
+        }
+
+        MoveTo(rows, notJunk ? FolderRole.Inbox : FolderRole.Junk);
+    }
 
     /// <summary>
     /// The store the rows belong to. Null while the sample is showing, which is what keeps the

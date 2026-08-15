@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Mailbox.Core\Mailbox.Core.csproj" />
+    <ProjectReference Include="..\Mailbox.Junk\Mailbox.Junk.csproj" />
   </ItemGroup>
 
 </Project>

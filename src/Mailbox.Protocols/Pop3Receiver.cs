@@ -114,7 +114,7 @@ public sealed class Pop3Receiver(MailRepository repository, Func<DateTimeOffset>
         // One UIDL call for the whole mailbox rather than one per message: on a mailbox of any
         // size the round trips cost more than the download.
         var uids = await client.GetUidsAsync(cancellation);
-        var known = _repository.ServerUids(inbox.Id);
+        var known = _repository.ServerUidsInAccount(inbox.AccountId);
 
         var downloaded = 0;
         var alreadyHad = 0;
@@ -147,6 +147,12 @@ public sealed class Pop3Receiver(MailRepository repository, Func<DateTimeOffset>
         return new PollResult(downloaded, alreadyHad, removed);
     }
 
+    /// <summary>
+    /// Whether an arriving message is junk, or null to file everything in the inbox. The
+    /// application supplies the classifier; a test that does not care gets no filtering.
+    /// </summary>
+    public Func<MimeMessage, bool>? IsJunk { get; set; }
+
     private async Task StoreAsync(
         Folder inbox, MimeMessage message, string uid, CancellationToken cancellation)
     {
@@ -154,8 +160,16 @@ public sealed class Pop3Receiver(MailRepository repository, Func<DateTimeOffset>
         message.WriteTo(buffer);
         var raw = buffer.ToArray();
 
+        // Filed straight into Junk when the filter says so, rather than delivered to the inbox
+        // and moved a moment later — the reader never sees it arrive where it does not belong.
+        // Read is left false either way: junk is unread, and the count on the Junk folder is how
+        // the reader learns the filter caught something.
+        var target = IsJunk?.Invoke(message) == true
+            ? _repository.FolderWithRole(inbox.AccountId, FolderRole.Junk) ?? inbox
+            : inbox;
+
         var summary = MessageMapper.ToSummary(message, uid, raw.Length, _now());
-        var id = _repository.AddMessage(inbox.Id, summary, raw);
+        var id = _repository.AddMessage(target.Id, summary, raw);
 
         if (id is { } messageId)
         {
