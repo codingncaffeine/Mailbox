@@ -338,6 +338,22 @@ public static class MailCommands
         InDefaultLayout = false,
     };
 
+    /// <summary>
+    /// In the reference, on the File menu rather than the bar — so it is parity, and simply not
+    /// somewhere the shipped layout places it.
+    /// </summary>
+    public static readonly MailboxCommand Print = new()
+    {
+        Id = new("mail.print"),
+        Label = "Print",
+        Description = "Print the selected message.",
+        Icon = "print",
+        Category = "Actions",
+        Scope = ModuleScope.Mail,
+        DefaultGesture = "Ctrl+P",
+        RequiresSingleSelection = true,
+    };
+
     public static readonly MailboxCommand AuthenticationDetails = new()
     {
         Id = new("mail.authresults"),
@@ -359,6 +375,6 @@ public static class MailCommands
         Unread, Categorize, FollowUp,
         Search, AddressBook, FilterEmail,
         SendReceiveAll, WorkOffline, Undo,
-        Snooze, ViewSource, TrackerReport, AuthenticationDetails,
+        Snooze, ViewSource, TrackerReport, AuthenticationDetails, Print,
     ];
 }

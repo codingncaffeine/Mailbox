@@ -808,6 +808,9 @@
                         </Grid>
                     </Border>
 
+                    <!-- What the message carries, above the message itself. -->
+                    <ContentControl Name="ReadingAttachments" DockPanel.Dock="Top" />
+
                     <!-- The message itself, filled with a ReadingPaneBody: the InfoBars and
                          the web engine. Not markup, because what it holds depends on what the
                          sanitizer found in the message. -->
