@@ -106,6 +106,14 @@ public partial class MainWindow : Window
         WireListInteraction(shell);
         WireReadingPane(shell);
         WireFolderMenu(shell);
+
+        // The gallery is a rendering of the Quick Steps list: when the list changes, the ribbon
+        // is rebuilt from it — unless an inline reply has the compose ribbon up, which is put
+        // back with the mail ribbon when the reply closes.
+        App.QuickSteps.Changed += (_, _) =>
+        {
+            if (_inlineCompose is null) _ribbon.Layout = App.MailRibbon();
+        };
         this.FindControl<ContentControl>("UndoSendHost")!.Content = _undoSend;
         WireSchedule(shell);
         DataContext = shell;
@@ -418,6 +426,22 @@ public partial class MainWindow : Window
                 {
                     CaptureNextWindow();
                     await new NewSearchFolderDialog(DataContext is ShellViewModel s ? s.CurrentAccountForCategories() : null).ShowDialog(this);
+                };
+                break;
+
+            case "quicksteps":
+                Opened += async (_, _) =>
+                {
+                    CaptureNextWindow();
+                    await new ManageQuickStepsDialog(DataContext is ShellViewModel s ? s.CurrentAccountForCategories() : null).ShowDialog(this);
+                };
+                break;
+
+            case "quickstepedit":
+                Opened += async (_, _) =>
+                {
+                    CaptureNextWindow();
+                    await new EditQuickStepDialog(App.QuickSteps.All[3], DataContext is ShellViewModel s ? s.CurrentAccountForCategories() : null).ShowDialog(this);
                 };
                 break;
 
@@ -1261,6 +1285,12 @@ public partial class MainWindow : Window
         new PrintPreviewWindow(App.Themes, shell.SelectedFolderName, rows).Show(this);
     }
 
+    /// <summary>Manage Quick Steps: the gallery's launcher. The ribbon follows the list when it closes.</summary>
+    private async Task ManageQuickStepsAsync(ShellViewModel shell)
+    {
+        await new ManageQuickStepsDialog(shell.CurrentAccountForCategories()).ShowDialog(this);
+    }
+
     /// <summary>New Search Folder, for an account or the current one, then selects what it made.</summary>
     private async Task NewSearchFolderAsync(ShellViewModel shell, OpenAccount? account)
     {
@@ -1809,6 +1839,10 @@ public partial class MainWindow : Window
         if (id == ViewCommands.CancelAll.Id) { CancelTransfer(); return; }
         if (id == ViewCommands.SendReceiveGroups.Id) { ShowGroupsMenu(shell); return; }
 
+        // A Quick Step, by the command it is placed as; and the gallery's launcher, which manages them.
+        if (App.QuickSteps.FindByCommand(id) is { } step) { _ = RunQuickStepAsync(shell, step, SelectedRows()); return; }
+        if (id == MailCommands.QuickSteps.Id) { _ = ManageQuickStepsAsync(shell); return; }
+
         if (id == MailCommands.Reply.Id) { Respond(shell, ReplyKind.Reply); return; }
         if (id == MailCommands.ReplyAll.Id) { Respond(shell, ReplyKind.ReplyAll); return; }
         if (id == MailCommands.Forward.Id) { Respond(shell, ReplyKind.Forward); return; }
@@ -1830,9 +1864,9 @@ public partial class MainWindow : Window
     /// repeat them. What the reader has chosen about quoting comes from the Options page, and
     /// the reader's own addresses come from every account, so a reply to all never copies them.
     /// </remarks>
-    private void Respond(ShellViewModel shell, ReplyKind kind)
+    private void Respond(ShellViewModel shell, ReplyKind kind, MimeKit.MimeMessage? message = null, IReadOnlyList<string>? to = null)
     {
-        if (_openMessage is not { } original)
+        if ((message ?? _openMessage) is not { } original)
         {
             shell.StatusRight = "Select a message to reply to.";
             return;
@@ -1849,6 +1883,9 @@ public partial class MainWindow : Window
             Prefix = App.MailOptions.ReplyPrefix,
             PlainText = App.MailOptions.ComposeFormat == ComposeFormat.PlainText,
         });
+
+        // A Quick Step's forward already knows who to: the To line is filled in.
+        if (to is { Count: > 0 }) draft = draft with { To = to };
 
         // The account the message arrived in, which is what a reply means.
         var address = shell.CurrentAddress;
@@ -2066,7 +2103,7 @@ public partial class MainWindow : Window
 
         if (id == MailCommands.Categorize.Id) { ShowCategorizeMenu(shell, rows); return true; }
         if (id == MailCommands.Snooze.Id) { ShowSnoozeMenu(shell, rows); return true; }
-        if (id == MailCommands.MoveTo.Id || id == ViewCommands.MoveToQuick.Id) { ShowMoveMenu(shell, rows); return true; }
+        if (id == MailCommands.MoveTo.Id) { ShowMoveMenu(shell, rows); return true; }
         if (id == MailCommands.Rules.Id) { ShowRulesMenu(shell, rows); return true; }
         if (id == MailCommands.NewItems.Id) { ShowNewItemsMenu(); return true; }
         if (id == MailCommands.FilterEmail.Id) { ShowFilterMenu(shell); return true; }
@@ -2969,6 +3006,13 @@ public partial class MainWindow : Window
         var control = e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Control);
         var shift = e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Shift);
         var rows = SelectedRows();
+
+        // Ctrl+Shift+1..9 run the Quick Step with that shortcut.
+        if (control && shift && RunQuickStepShortcut(shell, e.Key))
+        {
+            e.Handled = true;
+            return;
+        }
 
         switch (e.Key)
         {

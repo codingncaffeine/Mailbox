@@ -1606,6 +1606,49 @@ public sealed class ShellViewModel : ObservableObject
         StatusRight = $"{Describe(rows.Count)} moved to {target.Name}.";
     }
 
+    /// <summary>The pane's node for a folder of an account, or null when it is not shown.</summary>
+    public FolderNode? NodeFor(OpenAccount account, long folderId)
+        => _folderIds.FirstOrDefault(kv =>
+            string.Equals(kv.Value.Account.Account.Address, account.Account.Address, StringComparison.OrdinalIgnoreCase)
+            && kv.Value.FolderId == folderId).Key;
+
+    /// <summary>Copies rows into a folder of the same account; the originals stay where they are.</summary>
+    public void CopyTo(IReadOnlyList<MessageRow> rows, Folder target)
+    {
+        if (rows.Count == 0 || Mail(rows) is not { } mail) return;
+
+        var copied = mail.CopyMessages([.. rows.Select(r => r.Id)], target.Id);
+        RefreshCounts();
+        StatusRight = $"{Describe(copied)} copied to {target.Name}.";
+    }
+
+    /// <summary>Sets the importance the list's column shows.</summary>
+    public void SetImportance(IReadOnlyList<MessageRow> rows, int level)
+    {
+        if (rows.Count == 0 || Mail(rows) is not { } mail) return;
+
+        mail.SetImportance([.. rows.Select(r => r.Id)], level);
+        StatusRight = $"{Describe(rows.Count)} marked {level switch { 0 => "low", 2 => "high", _ => "normal" }} importance.";
+    }
+
+    /// <summary>Puts named categories on the rows — the ones that exist; a name that does not is skipped.</summary>
+    public void AssignCategories(IReadOnlyList<MessageRow> rows, IReadOnlyList<string> names)
+    {
+        if (rows.Count == 0 || Mail(rows) is not { } mail) return;
+
+        var ids = rows.Select(r => r.Id).ToList();
+        foreach (var category in mail.Categories().Where(c => names.Contains(c.Name, StringComparer.OrdinalIgnoreCase)))
+        {
+            mail.Assign(ids, category.Id);
+        }
+
+        var assigned = mail.CategoriesFor(ids);
+        foreach (var row in rows)
+        {
+            row.CategoryTokens = assigned.TryGetValue(row.Id, out var list) ? [.. list.Select(c => c.ColourToken)] : [];
+        }
+    }
+
     /// <summary>Selects a folder by what it is for, which is what Ctrl+Shift+I and friends do.</summary>
     public bool GoTo(FolderRole role)
     {
