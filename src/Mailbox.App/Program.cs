@@ -12,6 +12,16 @@ internal static class Program
         Log.Initialize(ThisAssembly.Version);
         CrashHandler.Install();
 
+        // One instance per session: a second launch — a mailto: click while Mailbox is open —
+        // hands its command line to the running one and exits, rather than starting a second
+        // copy. Skipped for a capture run, where the fidelity harness deliberately starts many
+        // instances at once and they must not collapse into one.
+        if (!Theming.WindowCapture.IsRequested)
+        {
+            App.Instance = new Mailbox.Core.SingleInstance();
+            if (App.Instance.TryHandOff(args)) return 0;
+        }
+
         try
         {
             return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);

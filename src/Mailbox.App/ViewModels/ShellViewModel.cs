@@ -559,6 +559,7 @@ public sealed class ShellViewModel : ObservableObject
         }
 
         SelectedFolder = Folders.FirstOrDefault(f => _folderIds.ContainsKey(f));
+        Raise(nameof(TotalUnread));
         return true;
     }
 
@@ -1482,6 +1483,11 @@ public sealed class ShellViewModel : ObservableObject
 
     /// <summary>The account whose categories a management dialog should edit — the current one.</summary>
     public OpenAccount? CurrentAccountForCategories() => CurrentAccount;
+
+    /// <summary>Unread across every account's Inbox, for the tray icon's tooltip and badge.</summary>
+    public int TotalUnread => Folders
+        .Where(f => _folderIds.TryGetValue(f, out var w) && w.Role == FolderRole.Inbox)
+        .Sum(f => f.Unread);
 
     /// <summary>Re-reads what is on screen — the search results, or the folder — after a change to a row's state.</summary>
     private void ReloadCurrentView()
