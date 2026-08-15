@@ -9,12 +9,16 @@ using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Mailbox.App.Theming;
 using Mailbox.Controls.Ribbon;
+using Mailbox.Editor;
 using Mailbox.Core.Commands;
 using Mailbox.Core.Ribbon;
 using Mailbox.Protocols;
 using Mailbox.Store;
 using Mailbox.Theming.Icons;
 using MimeKit;
+using MimeKit.Utils;
+using AvaloniaRichEditor.Controls;
+using AvaloniaRichEditor.Documents;
 
 namespace Mailbox.App.Views;
 
@@ -26,17 +30,33 @@ namespace Mailbox.App.Views;
 /// is what the reference does and because the ribbon model was built to swap the whole tab set
 /// per host.
 /// <para>
-/// The body is a plain text box. The rich text editor is Phase 5 and is the largest single work
-/// item in the project; until it exists this window composes plain text and says so, rather than
-/// offering formatting buttons that quietly do nothing. What each button does today is recorded
-/// once in <see cref="ComposeAvailability"/> and read from there, so a blocked button reports
-/// what it is waiting for instead of "not wired yet".
+/// The body is a real document. §7.3's survey found a GPL-3-compatible editor that carries the
+/// document model that section planned to build, so what is in-house is the serializer — and
+/// that is the half mail fidelity rests on. Send writes both an HTML body, through
+/// <see cref="EmailHtml"/>, and the plain text alternative, off the same document so the two
+/// cannot disagree.
+/// <para>
+/// The editor rather than its packaged view: the view brings a toolbar and a status bar of its
+/// own, and this window already has a ribbon. What each ribbon button does today is recorded
+/// once in <see cref="ComposeAvailability"/> and read from there, so a button still waiting on
+/// something says what, rather than "not wired yet".
 /// </para>
 /// </remarks>
 public sealed class ComposeWindow : Window
 {
+    /// <summary>
+    /// What new mail is written in. The reference's own default, and the one name §6 cares most
+    /// about getting onto the wire correctly.
+    /// </summary>
+    private const string ComposeFontFamily = "Calibri";
+
+    private const double ComposeFontPoints = 11;
+
+    /// <summary>The document measures in device-independent pixels; mail talks in points.</summary>
+    private const double PointsPerPixel = 0.75;
+
     private const string PlainTextNotice =
-        "Plain text. Formatting arrives with the editor in Phase 5.";
+        "This message is being composed as HTML. Plain-text-only composing is Phase 6.";
 
     private readonly CommandCatalog _catalog;
     private readonly AccountStores? _accounts;
@@ -46,7 +66,7 @@ public sealed class ComposeWindow : Window
     private readonly TextBox _cc = Field();
     private readonly TextBox _bcc = Field();
     private readonly TextBox _subject = Field();
-    private readonly TextBox _body;
+    private readonly RichEditor _body;
     /// <summary>
     /// The sending account, shown as plain text beside the From button.
     /// </summary>
@@ -84,7 +104,7 @@ public sealed class ComposeWindow : Window
         _catalog = catalog;
         _accounts = accounts;
 
-        Title = "Untitled - Message (Plain Text)";
+        Title = "Untitled - Message (HTML)";
         Width = 1000;
         Height = 760;
         MinWidth = 620;
@@ -99,18 +119,24 @@ public sealed class ComposeWindow : Window
 
         TextRendering.Apply(this);
 
-        _body = new TextBox
+        // The editor itself rather than its own view: that wrapper brings a toolbar and a
+        // status bar of its own, and this window already has a ribbon. Two bars disagreeing
+        // about the same document is the mistake the compose window made once already with
+        // its caption buttons.
+        _body = new RichEditor
         {
-            AcceptsReturn = true,
-            AcceptsTab = true,
-            TextWrapping = TextWrapping.Wrap,
-            BorderThickness = default,
-            VerticalContentAlignment = VerticalAlignment.Top,
+            DefaultFontFamily = new FontFamily(App.Fonts.Resolve(ComposeFontFamily).Rendered),
+            DefaultFontSize = ComposeFontPoints / PointsPerPixel,
+            AllowRemoteImagesOnPaste = false,
+            AllowLocalFileImages = false,
+            AutoLinkOnType = true,
         };
+
         // The body is a document page, not a pane — white even in Dark Gray, where the reading
-        // pane is not. See the compose tokens in each theme.
-        Bind(_body, TemplatedControl.BackgroundProperty, "compose.body.background.brush");
-        Bind(_body, TemplatedControl.ForegroundProperty, "compose.body.text.brush");
+        // pane is not. The page is painted by the border around it; these are the marks drawn
+        // on top of it, which have to come from tokens like everything else.
+        Bind(_body, RichEditor.SelectionBrushProperty, "state.selected.brush");
+        Bind(_body, RichEditor.CaretBrushProperty, "compose.body.text.brush");
 
         _ribbon = new RibbonView(catalog, DefaultRibbonLayouts.Compose)
         {
@@ -156,7 +182,7 @@ public sealed class ComposeWindow : Window
         if (!_catalog.TryGet(id, out var command)) return true;
         if (!command.NeutralIcon && !InsertsIntoBody.Contains(id)) return true;
 
-        return !string.IsNullOrEmpty(_body.Text);
+        return !string.IsNullOrEmpty(_body.GetPlainText());
     }
 
     /// <summary>Selects a ribbon tab by id. Used by the fidelity harness, which cannot click.</summary>
@@ -175,7 +201,8 @@ public sealed class ComposeWindow : Window
     /// <summary>Puts text in the body, so a capture can show the ribbon in its enabled state.</summary>
     public void PoseBodyText(string text)
     {
-        _body.Text = text;
+        _body.Clear();
+        _body.InsertText(text);
         _ribbon.RefreshEnablement();
     }
 
@@ -363,8 +390,8 @@ public sealed class ComposeWindow : Window
         {
             if (e.Property != TextBox.TextProperty) return;
             Title = string.IsNullOrWhiteSpace(_subject.Text)
-                ? "Untitled - Message (Plain Text)"
-                : $"{_subject.Text} - Message (Plain Text)";
+                ? "Untitled - Message (HTML)"
+                : $"{_subject.Text} - Message (HTML)";
             caption.Text = Title;
         };
 
@@ -729,10 +756,18 @@ public sealed class ComposeWindow : Window
         if (id == ComposeCommands.SaveDraft.Id) { SaveDraft(); return true; }
         if (id == ComposeCommands.Discard.Id) { Close(); return true; }
 
-        if (id == ComposeCommands.Cut.Id) { _body.Cut(); return true; }
-        if (id == ComposeCommands.Copy.Id) { _body.Copy(); return true; }
-        if (id == ComposeCommands.Paste.Id) { _body.Paste(); return true; }
-        if (id == ComposeCommands.SelectAll.Id) { _body.SelectAll(); _body.Focus(); return true; }
+        // Paste goes through the editor, which reads the clipboard's HTML flavour and keeps
+        // the formatting. Cut, Copy and Select All are the editor's own key handling and it
+        // exposes no method for them, so the buttons say where they are rather than pretending.
+        if (id == ComposeCommands.Paste.Id) { _ = _body.PasteFromClipboardAsync(); return true; }
+
+        if (id == ComposeCommands.Cut.Id || id == ComposeCommands.Copy.Id
+            || id == ComposeCommands.SelectAll.Id)
+        {
+            _body.Focus();
+            Report("Cut, Copy and Select All are on Ctrl+X, Ctrl+C and Ctrl+A.");
+            return true;
+        }
 
         if (id == ComposeCommands.ShowBcc.Id) { Toggle(_bccRow); return true; }
         if (id == ComposeCommands.ShowFrom.Id) { Toggle(_fromRow); return true; }
@@ -801,9 +836,9 @@ public sealed class ComposeWindow : Window
 
     private void StepZoom()
     {
-        var next = _body.FontSize + 2;
-        _body.FontSize = next > 28 ? 12 : next;
-        Report($"Zoom {_body.FontSize:0}pt.");
+        var next = _body.DefaultFontSize + 2;
+        _body.DefaultFontSize = next > 28 ? 12 : next;
+        Report($"Zoom {_body.DefaultFontSize * PointsPerPixel:0}pt.");
     }
 
     private void CheckNames()
@@ -831,8 +866,8 @@ public sealed class ComposeWindow : Window
     /// Restates whatever is worth stating about the message, or hides the bar when nothing is.
     /// </summary>
     /// <remarks>
-    /// The format is not among them: the title bar already reads "Message (Plain Text)", which
-    /// is exactly where the reference says it.
+    /// The format is not among them: the title bar already reads "Message (HTML)", which is
+    /// exactly where the reference says it.
     /// </remarks>
     private void UpdateStatus()
     {
@@ -887,7 +922,7 @@ public sealed class ComposeWindow : Window
 
     private async Task ShowWordCountAsync()
     {
-        var text = _body.Text ?? string.Empty;
+        var text = _body.GetPlainText();
         var words = text.Split(
             [' ', '\t', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries).Length;
         var paragraphs = text.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length;
@@ -904,28 +939,26 @@ public sealed class ComposeWindow : Window
         var needle = await Prompt(replace ? "Replace" : "Find", "Find what:");
         if (string.IsNullOrEmpty(needle)) return;
 
-        var text = _body.Text ?? string.Empty;
-
+        // The editor's own, which searches the document rather than a flattened copy of it —
+        // so a match spanning two differently-formatted runs is still a match, and replacing
+        // one keeps the formatting around it.
         if (!replace)
         {
-            var at = text.IndexOf(needle, StringComparison.CurrentCultureIgnoreCase);
-            if (at < 0) { Report($"'{needle}' is not in the message."); return; }
-
-            _body.SelectionStart = at;
-            _body.SelectionEnd = at + needle.Length;
             _body.Focus();
-            Report($"Found '{needle}'.");
+
+            Report(_body.FindNext(needle, matchCase: false)
+                ? $"Found '{needle}'."
+                : $"'{needle}' is not in the message.");
+
             return;
         }
 
         var with = await Prompt("Replace", "Replace with:") ?? string.Empty;
-        var replaced = text.Replace(needle, with, StringComparison.CurrentCultureIgnoreCase);
-        var count = (text.Length - replaced.Length) / Math.Max(1, needle.Length - with.Length);
+        var replaced = _body.ReplaceAll(needle, with, matchCase: false);
 
-        _body.Text = replaced;
-        Report(text == replaced
+        Report(replaced == 0
             ? $"'{needle}' is not in the message."
-            : $"Replaced {Math.Max(1, Math.Abs(count))}.");
+            : $"Replaced {replaced}.");
     }
 
     private async Task InsertSymbolAsync()
@@ -941,15 +974,20 @@ public sealed class ComposeWindow : Window
         var address = await Prompt("Link", "Address:");
         if (string.IsNullOrWhiteSpace(address)) return;
 
-        Insert(address);
-        Report("Inserted as text. A real hyperlink needs the editor in Phase 5.");
+        // A real one, now that there is a document to put it in.
+        var escaped = address.Trim()
+            .Replace("&", "&amp;", StringComparison.Ordinal)
+            .Replace("<", "&lt;", StringComparison.Ordinal)
+            .Replace(">", "&gt;", StringComparison.Ordinal)
+            .Replace("\"", "&quot;", StringComparison.Ordinal);
+
+        _body.InsertHtml($"<a href=\"{escaped}\">{escaped}</a>");
+        _body.Focus();
     }
 
     private void Insert(string text)
     {
-        var at = Math.Clamp(_body.CaretIndex, 0, (_body.Text ?? string.Empty).Length);
-        _body.Text = (_body.Text ?? string.Empty).Insert(at, text);
-        _body.CaretIndex = at + text.Length;
+        _body.InsertText(text);
         _body.Focus();
     }
 
@@ -1088,7 +1126,31 @@ public sealed class ComposeWindow : Window
             message.Headers.Add("Return-Receipt-To", account.Account.Address);
         }
 
-        var builder = new BodyBuilder { TextBody = _body.Text ?? string.Empty };
+        // Both halves, always. A recipient whose client shows plain text — or who has told it
+        // to — gets a readable message rather than a page of markup, and the two are the same
+        // message rather than two that can disagree, because both come off one document.
+        var builder = new BodyBuilder { TextBody = _body.GetPlainText() };
+
+        // Ours, not the editor's: §6's wire/render split and the narrow set of elements mail
+        // clients actually render. See Mailbox.Editor.EmailHtml for why that is the half worth
+        // keeping in-house.
+        builder.HtmlBody = EmailHtml.Serialize(_body.Document ?? new FlowDocument(), new EmailHtmlOptions
+        {
+            BaseFontFamily = ComposeFontFamily,
+            BaseFontPoints = ComposeFontPoints,
+
+            // An image the writer put in the body becomes a related part and a cid: reference,
+            // which is how mail carries one. Several large clients drop a data: image outright.
+            RegisterImage = (bytes, type) =>
+            {
+                var extension = type.Split('/').ElementAtOrDefault(1) ?? "png";
+                var part = builder.LinkedResources.Add(
+                    $"image-{builder.LinkedResources.Count + 1}.{extension}", bytes);
+
+                part.ContentId = MimeUtils.GenerateMessageId();
+                return $"cid:{part.ContentId}";
+            },
+        });
 
         foreach (var file in _attachments)
         {
@@ -1194,7 +1256,7 @@ public sealed class ComposeWindow : Window
            || !string.IsNullOrWhiteSpace(_cc.Text)
            || !string.IsNullOrWhiteSpace(_bcc.Text)
            || !string.IsNullOrWhiteSpace(_subject.Text)
-           || !string.IsNullOrWhiteSpace(_body.Text)
+           || !string.IsNullOrWhiteSpace(_body.GetPlainText())
            || _attachments.Count > 0;
 
     // ----------------------------------------------------------------------------------
