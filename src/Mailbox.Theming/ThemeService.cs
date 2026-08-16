@@ -127,7 +127,25 @@ public sealed class ThemeService
 
         var resolved = tokens.Resolve();
         AssertCoverage(resolved, themeId);
+        ReportContrast(resolved, themeId);
         return resolved;
+    }
+
+    /// <summary>
+    /// The contrast checker, for a theme file: every text token that cannot be read against its
+    /// surface is named in the log, once per apply. A built-in is held to the same pairs by a
+    /// test and never reports; a file's author is told rather than refused, because a theme that
+    /// is hard to read is theirs to fix and still theirs to use.
+    /// </summary>
+    private void ReportContrast(ResolvedTokens resolved, string themeId)
+    {
+        if (Mailbox.Theming.Files.ThemeLibrary.IsBuiltIn(themeId)) return;
+        var findings = ContrastAudit.Check(resolved);
+        if (findings.Count == 0) return;
+
+        Mailbox.Core.Diagnostics.Log.Warn(
+            $"Theme \"{themeId}\": {findings.Count} pair{(findings.Count == 1 ? "" : "s")} below {ContrastAudit.MinimumRatio:0}:1 — "
+            + string.Join("; ", findings.Select(f => f.ToString())) + ".");
     }
 
     /// <summary>
