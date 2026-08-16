@@ -163,6 +163,36 @@ public partial class MainWindow : Window
             }, DispatcherPriority.Background);
         }
 
+        // Quick Click is a click on a cell, which the harness cannot make: MAILBOX_QUICKCLICK
+        // presses one on the selected row and the log says what the store holds after.
+        if (Environment.GetEnvironmentVariable("MAILBOX_QUICKCLICK") is { Length: > 0 } quick)
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(() =>
+            {
+                if (DataContext is not ShellViewModel s || s.SelectedMessage is not { } row) return;
+
+                var field = quick.Equals("category", StringComparison.OrdinalIgnoreCase)
+                    ? Mailbox.Core.Views.ViewFields.Categories
+                    : Mailbox.Core.Views.ViewFields.Flag;
+
+                Log.Info($"Harness: quick click is set to \u201c{(App.QuickClick.HasCategory ? App.QuickClick.Category : "no category")}\u201d "
+                    + $"and {App.QuickClick.Flag}, over {s.Categories().Count} categories.");
+                QuickClick(s, new QuickClickEventArgs(MessageCells.QuickClickEvent, row, field));
+
+                // Read back from the store rather than from the row: acting on it rebuilt the
+                // view, and the row in hand is the one that was replaced.
+                var after = s.SummaryOf(row);
+                var tags = s.CurrentAccountForCategories()?.Mail.CategoriesFor([row.Id]) is { } map
+                           && map.TryGetValue(row.Id, out var assigned) && assigned.Count > 0
+                    ? string.Join(", ", assigned.Select(c => c.Name))
+                    : "none";
+
+                Log.Info($"Harness: quick click {field} on \u201c{row.Subject}\u201d — "
+                    + $"flag {(after?.FollowUpDue is { } due ? due.LocalDateTime.ToString("yyyy-MM-dd HH:mm") : after?.IsFlagged == true ? "set, no date" : "none")}, "
+                    + $"categories {tags}.");
+            }, DispatcherPriority.Background);
+        }
+
         // AutoArchive's turn, once the window is up and the shell has its accounts. Posted at
         // background priority so the first paint is not behind a prompt.
         Opened += (_, _) => Dispatcher.UIThread.Post(() =>
@@ -554,6 +584,24 @@ public partial class MainWindow : Window
                     if (App.Accounts.Default is not { } open) return;
                     CaptureNextWindow();
                     await new DataFileSettingsDialog(open).ShowDialog(this);
+                };
+                break;
+
+            // The two Set Quick Click dialogs, which otherwise take a ribbon click and a menu.
+            case "quickclickcategory":
+                Opened += async (_, _) =>
+                {
+                    CaptureNextWindow();
+                    var categories = DataContext is ShellViewModel s ? s.Categories() : [];
+                    await new SetQuickClickCategoryDialog(App.QuickClick, categories).ShowDialog(this);
+                };
+                break;
+
+            case "quickclickflag":
+                Opened += async (_, _) =>
+                {
+                    CaptureNextWindow();
+                    await new SetQuickClickFlagDialog(App.QuickClick).ShowDialog(this);
                 };
                 break;
 
@@ -2927,41 +2975,57 @@ public partial class MainWindow : Window
         }
 
         var now = DateTimeOffset.Now;
-        DateTimeOffset EndOf(DateTimeOffset day) => new(day.Year, day.Month, day.Day, 17, 0, 0, day.Offset);
 
-        // The reference's own presets. This Week is the coming Friday; Next Week the one after.
-        var daysToFriday = ((int)DayOfWeek.Friday - (int)now.DayOfWeek + 7) % 7;
-
-        void Preset(string header, DateTimeOffset? due)
+        // The reference's own presets, each under the flag. The dates are the Quick Click
+        // settings' own arithmetic, so the menu and a single click in the Flag column cannot
+        // disagree about what "This Week" means.
+        void Preset(QuickFlag flag)
         {
-            var item = new MenuItem { Header = header };
-            item.Click += (_, _) => shell.FlagForFollowUp(rows, due);
+            var item = new MenuItem { Header = QuickClickSettings.Label(flag), Icon = FlagArtwork() };
+            item.Click += (_, _) => shell.FlagForFollowUp(rows, QuickClickSettings.DueDate(flag, now));
             flyout.Items.Add(item);
         }
 
-        Preset("Today", EndOf(now));
-        Preset("Tomorrow", EndOf(now.AddDays(1)));
-        Preset("This Week", EndOf(now.AddDays(daysToFriday)));
-        Preset("Next Week", EndOf(now.AddDays(daysToFriday + 7)));
-        Preset("No Date", null);
+        Preset(QuickFlag.Today);
+        Preset(QuickFlag.Tomorrow);
+        Preset(QuickFlag.ThisWeek);
+        Preset(QuickFlag.NextWeek);
+        Preset(QuickFlag.NoDate);
 
-        var custom = new MenuItem { Header = "Custom…" };
+        var custom = new MenuItem { Header = "Custom…", Icon = FlagArtwork() };
         custom.Click += async (_, _) => await CustomFlagAsync(shell, rows, reminderOn: false);
         flyout.Items.Add(custom);
 
-        var remind = new MenuItem { Header = "Add Reminder…" };
+        flyout.Items.Add(new Separator());
+
+        var remind = new MenuItem
+        {
+            Header = "Add Reminder…",
+            Icon = new TextBlock
+            {
+                Text = IconGlyphs.GetOrEmpty("reminder", 16),
+                FontFamily = IconFont.Family,
+                FontSize = 12,
+            },
+        };
         remind.Click += async (_, _) => await CustomFlagAsync(shell, rows, reminderOn: true);
         flyout.Items.Add(remind);
 
-        flyout.Items.Add(new Separator());
-
-        var complete = new MenuItem { Header = "Mark Complete" };
+        var complete = new MenuItem { Header = "Mark Complete", Icon = Tick() };
         complete.Click += (_, _) => shell.MarkFollowUpComplete(rows);
         flyout.Items.Add(complete);
 
-        var clear = new MenuItem { Header = "Clear Flag" };
+        // Greyed rather than absent when nothing in the selection carries a flag, as the
+        // reference greys it.
+        var clear = new MenuItem { Header = "Clear Flag", IsEnabled = rows.Any(r => r.IsFlagged) };
         clear.Click += (_, _) => shell.ClearFollowUpFlag(rows);
         flyout.Items.Add(clear);
+
+        flyout.Items.Add(new Separator());
+
+        var quick = new MenuItem { Header = "Set Quick Click…" };
+        quick.Click += async (_, _) => await new SetQuickClickFlagDialog(App.QuickClick).ShowDialog(this);
+        flyout.Items.Add(quick);
 
         flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
     }
@@ -3139,18 +3203,33 @@ public partial class MainWindow : Window
         return window;
     }
 
+    /// <summary>
+    /// The Categorize menu, in the reference's own order: Clear All Categories at the head, the
+    /// categories under a rule, and All Categories… with Set Quick Click… under another.
+    /// </summary>
+    /// <remarks>
+    /// Clear All Categories comes first rather than last, which reads oddly until it is used:
+    /// the list below is what one chooses from, and clearing is the one action that is not a
+    /// choice from that list. It greys with nothing selected rather than disappearing, so the
+    /// menu keeps its shape whatever the selection.
+    /// </remarks>
     private void ShowCategorizeMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
     {
         var flyout = new MenuFlyout();
         var categories = shell.Categories();
 
-        if (categories.Count == 0 || rows.Count == 0)
+        var clear = new MenuItem
         {
-            flyout.Items.Add(new MenuItem
-            {
-                Header = rows.Count == 0 ? "Select a message first" : "No categories are defined",
-                IsEnabled = false,
-            });
+            Header = "Clear All Categories",
+            IsEnabled = rows.Count > 0 && categories.Count > 0,
+        };
+        clear.Click += (_, _) => shell.ClearCategories(rows);
+        flyout.Items.Add(clear);
+        flyout.Items.Add(new Separator());
+
+        if (categories.Count == 0)
+        {
+            flyout.Items.Add(new MenuItem { Header = "No categories are defined", IsEnabled = false });
         }
 
         foreach (var category in categories)
@@ -3158,27 +3237,23 @@ public partial class MainWindow : Window
             var item = new MenuItem
             {
                 Header = category.Name,
-                Icon = CategorySwatch(category.ColourToken),
+                // The swatch is the colour; a tick takes its place where every selected message
+                // already carries it, which is how the reference shows one applied.
+                Icon = rows.Count > 0 && shell.AllHave(rows, category)
+                    ? Tick()
+                    : CategorySwatch(category.ColourToken),
+                IsEnabled = rows.Count > 0,
             };
-
-            if (shell.AllHave(rows, category)) item.Icon = Tick();
 
             var chosen = category;
             item.Click += (_, _) => shell.ToggleCategory(rows, chosen);
             flyout.Items.Add(item);
         }
 
-        if (categories.Count > 0 && rows.Count > 0)
-        {
-            flyout.Items.Add(new Separator());
-            var clear = new MenuItem { Header = "Clear All Categories" };
-            clear.Click += (_, _) => shell.ClearCategories(rows);
-            flyout.Items.Add(clear);
-        }
+        flyout.Items.Add(new Separator());
 
         // Create, rename, recolour, shortcut and delete — the reference puts the way in here.
-        flyout.Items.Add(new Separator());
-        var all = new MenuItem { Header = "All Categories…" };
+        var all = new MenuItem { Header = "All Categories…", Icon = CategorizeArtwork() };
         all.Click += (_, _) =>
         {
             if (shell.CurrentAccountForCategories() is { } account)
@@ -3188,8 +3263,59 @@ public partial class MainWindow : Window
         };
         flyout.Items.Add(all);
 
+        var quick = new MenuItem { Header = "Set Quick Click…" };
+        quick.Click += async (_, _) =>
+            await new SetQuickClickCategoryDialog(App.QuickClick, shell.Categories()).ShowDialog(this);
+        flyout.Items.Add(quick);
+
         flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
     }
+
+    /// <summary>
+    /// A single click on a row's Flag or Categories cell: the reference's Quick Click.
+    /// </summary>
+    /// <remarks>
+    /// The flag cell always acts — the nominated flag is Today until it is changed — and toggles
+    /// rather than only setting, so the same click takes a flag off again. The categories cell
+    /// has nothing nominated to begin with; rather than doing nothing and looking broken, the
+    /// first click opens Set Quick Click… so the choice can be made where it was reached for.
+    /// </remarks>
+    private async void QuickClick(ShellViewModel shell, QuickClickEventArgs e)
+    {
+        IReadOnlyList<ViewModels.MessageRow> rows = [e.Row];
+
+        if (e.Field == Mailbox.Core.Views.ViewFields.Flag)
+        {
+            if (e.Row.IsFlagged) shell.ClearFollowUpFlag(rows);
+            else if (App.QuickClick.Flag == QuickFlag.Complete) shell.MarkFollowUpComplete(rows);
+            else shell.FlagForFollowUp(rows, QuickClickSettings.DueDate(App.QuickClick.Flag, DateTimeOffset.Now));
+            return;
+        }
+
+        if (e.Field != Mailbox.Core.Views.ViewFields.Categories) return;
+
+        var categories = shell.Categories();
+        if (!App.QuickClick.HasCategory || categories.Count == 0)
+        {
+            var dialog = new SetQuickClickCategoryDialog(App.QuickClick, categories);
+            await dialog.ShowDialog(this);
+            if (!App.QuickClick.HasCategory) return;
+        }
+
+        if (categories.FirstOrDefault(c => string.Equals(
+                c.Name, App.QuickClick.Category, StringComparison.OrdinalIgnoreCase)) is { } chosen)
+        {
+            shell.ToggleCategory(rows, chosen);
+        }
+    }
+
+    /// <summary>The four swatches, for the menu entry that opens the category list.</summary>
+    private static Control CategorizeArtwork()
+        => new Mailbox.Controls.Ribbon.RibbonArtwork("categorize", 16);
+
+    /// <summary>The red flag, which the Follow Up menu puts against each of its presets.</summary>
+    private static Control FlagArtwork()
+        => new Mailbox.Controls.Ribbon.RibbonArtwork("followup", 16);
 
     /// <summary>
     /// The Junk menu, in the reference's order: Block Sender, Never Block Sender, Never Block
@@ -4056,6 +4182,10 @@ public partial class MainWindow : Window
         // reference's "use compact layout in widths smaller than N characters".
         list.SizeChanged += (_, e) => shell.ListWidth = e.NewSize.Width;
         shell.ListWidth = list.Bounds.Width;
+
+        // Quick Click: one click on a row's Flag or Categories cell does what Set Quick Click…
+        // nominated, without a menu.
+        list.AddHandler(MessageCells.QuickClickEvent, (object? _, QuickClickEventArgs e) => QuickClick(shell, e));
 
         // With the reading pane off the list takes the window, as the reference's does; with it
         // on, the list is its token's width beside the pane.

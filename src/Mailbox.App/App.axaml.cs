@@ -72,6 +72,9 @@ public partial class App : Application
     /// <summary>Options › Advanced › AutoArchive Settings…, as the archiver reads them.</summary>
     public static Mailbox.Core.Archive.AutoArchiveOptions AutoArchive { get; private set; } = null!;
 
+    /// <summary>What a single click in the list's Categories and Flag columns does.</summary>
+    public static QuickClickSettings QuickClick { get; private set; } = null!;
+
     /// <summary>Which key runs which command — every command's default, with the reader's changes over it.</summary>
     public static Mailbox.Core.Keyboard.KeyMap Keys { get; private set; } = null!;
 
@@ -383,6 +386,7 @@ public partial class App : Application
         Secrets = WindowCapture.IsRequested ? new InMemoryCredentialStore() : Credentials.Best();
         MailOptions = new MailOptions(Settings);
         AutoArchive = new Mailbox.Core.Archive.AutoArchiveOptions(Settings);
+        QuickClick = new QuickClickSettings(Settings);
 
         // Signature checking happens as mail is collected, never as it is drawn. The receiver
         // gets the verifier; nothing else does.

@@ -7,20 +7,24 @@ namespace Mailbox.Tests;
 /// The Simplified bar's narrowing rules, against widths rather than windows.
 /// </summary>
 /// <remarks>
-/// The reference's bar gives way in a fixed order — labels off from the right sparing the
-/// primary, then the primary's, then whole controls off from the right into the "…" — and this
-/// pins that order the way <c>RibbonCollapseTests</c> pins the classic ladder. The panel itself
-/// only turns these answers into visibility.
+/// The reference's bar gives way in a fixed order — labels off a rank at a time from the
+/// lowest, then whole controls off from the right into the "…" — and this pins that order the
+/// way <c>RibbonCollapseTests</c> pins the classic ladder. The panel itself only turns these
+/// answers into visibility.
 /// </remarks>
 public class SimplifiedRowFitTests
 {
     /// <summary>A labelled button: 30 of icon, 50 of label.</summary>
-    private static SimplifiedFit Labelled(bool primary = false)
-        => new(80, 50, primary, false);
+    private static SimplifiedFit Labelled(bool primary = false, int rank = Normal)
+        => new(80, 50, primary ? Primary : rank, false);
 
-    private static SimplifiedFit IconOnly() => new(30, 0, false, false);
+    private static SimplifiedFit IconOnly() => new(30, 0, Normal, false);
 
-    private static SimplifiedFit Rule() => new(9, 0, false, true);
+    private static SimplifiedFit Rule() => new(9, 0, Normal, true);
+
+    private const int Sheddable = Mailbox.Core.Ribbon.RibbonItem.SheddableLabelRank;
+    private const int Normal = Mailbox.Core.Ribbon.RibbonItem.NormalLabelRank;
+    private const int Primary = Mailbox.Core.Ribbon.RibbonItem.PrimaryLabelRank;
 
     [Fact]
     public void EverythingFitsWhenThereIsRoom()
@@ -32,17 +36,41 @@ public class SimplifiedRowFitTests
         Assert.True(labelled[2]);
     }
 
-    /// <summary>Labels go from the right; the primary's stays while any other remains.</summary>
+    /// <summary>
+    /// A rank goes together, and the primary's label stays while any other rank remains.
+    /// </summary>
+    /// <remarks>
+    /// Together rather than one at a time because half a cluster labelled is what nothing in
+    /// the reference looks like: at 1447 all five Respond and Tags words are gone at once.
+    /// </remarks>
     [Fact]
-    public void LabelsDropFromTheRightSparingThePrimary()
+    public void ARankOfLabelsGoesTogetherSparingThePrimary()
     {
-        // Full: 80 + 9 + 80 + 80 = 249. At 210 one label must go — the rightmost, not the primary's.
+        // Full: 80 + 9 + 80 + 80 = 249. At 210 the normal rank's two labels both go.
         var (labelled, shown) = Fit([Labelled(primary: true), Rule(), Labelled(), Labelled()], 210);
 
         Assert.All(shown, Assert.True);
         Assert.True(labelled[0]);
-        Assert.True(labelled[2]);
+        Assert.False(labelled[2]);
         Assert.False(labelled[3]);
+    }
+
+    /// <summary>
+    /// The lowest rank goes first even when it is further left — which is the reference at
+    /// 1447, where Reply and Categorize have lost their words while Unread/Read, to their
+    /// right, has not.
+    /// </summary>
+    [Fact]
+    public void TheLowestRankGoesFirstWhereverItIsOnTheBar()
+    {
+        // Full 249. At 210 only the sheddable label need go, and it is the leftmost of the two.
+        var (labelled, shown) = Fit(
+            [Labelled(primary: true), Rule(), Labelled(rank: Sheddable), Labelled(rank: Normal)], 210);
+
+        Assert.All(shown, Assert.True);
+        Assert.True(labelled[0]);
+        Assert.False(labelled[2]);
+        Assert.True(labelled[3]);
     }
 
     [Fact]

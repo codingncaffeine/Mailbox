@@ -10,9 +10,12 @@ namespace Mailbox.Controls.Ribbon;
 /// <param name="Control">The control on the bar.</param>
 /// <param name="Label">Its text, when it has some the bar may take away; null otherwise.</param>
 /// <param name="Command">What it stands for, so an entry pushed off the bar can be listed.</param>
-/// <param name="KeepsLabel">
-/// True for the entry whose label goes last — the primary command, New Email, which the
-/// reference keeps labelled long after everything else on the bar has become an icon.
+/// <param name="LabelRank">
+/// The order labels are given up in: the lowest rank on the bar goes first, and within a rank
+/// the rightmost goes first. The reference does not simply shed right to left — at 1447 it has
+/// dropped Reply, Reply All, Forward, Categorize and Follow Up while Unread/Read and
+/// Send/Receive All Folders, which are further right, still read as words. New Email is the
+/// highest rank and keeps its label longest.
 /// </param>
 /// <param name="Cluster">Which cluster it belongs to; a cluster's rule goes with its last entry.</param>
 /// <param name="IsRule">True for the vertical rule between clusters.</param>
@@ -20,7 +23,7 @@ public sealed record SimplifiedEntry(
     Control Control,
     TextBlock? Label,
     CommandId? Command,
-    bool KeepsLabel,
+    int LabelRank,
     int Cluster,
     bool IsRule);
 
@@ -104,7 +107,7 @@ public sealed class SimplifiedRowPanel : Panel
         var specs = _entries.Select(e => new SimplifiedFit(
             _fullWidth.GetValueOrDefault(e.Control),
             e.Label is null ? 0 : _labelWidth.GetValueOrDefault(e.Control),
-            e.KeepsLabel,
+            e.LabelRank,
             e.IsRule)).ToArray();
 
         var (labelled, shown) = Fit(specs, available);
@@ -194,7 +197,7 @@ public sealed class SimplifiedRowPanel : Panel
     /// <summary>What one entry costs the fitter: its full width, the width its label alone adds,
     /// whether its label is spared longest, and whether it is a cluster rule.</summary>
     public readonly record struct SimplifiedFit(
-        double FullWidth, double LabelWidth, bool KeepsLabel, bool IsRule);
+        double FullWidth, double LabelWidth, int LabelRank, bool IsRule);
 
     /// <summary>
     /// What to show and what to label at a width, as pure arithmetic over the entries' widths.
@@ -204,7 +207,7 @@ public sealed class SimplifiedRowPanel : Panel
     /// than against a window that has to be sized and photographed — the same discipline
     /// <c>RibbonCollapsePolicy</c> keeps for the classic bar. The rules, in order:
     /// <list type="number">
-    ///   <item>Labels off, from the right, sparing the one marked <c>KeepsLabel</c>.</item>
+    ///   <item>Labels off by ascending <c>LabelRank</c>, and from the right within a rank.</item>
     ///   <item>Then that one's label too, before any whole control goes.</item>
     ///   <item>Then whole controls off, from the right, a cluster's rule going once nothing is
     ///   left to its right.</item>
@@ -228,20 +231,22 @@ public sealed class SimplifiedRowPanel : Panel
 
         if (total <= available) return (labelled, shown);
 
-        // Labels first, from the right, sparing the one that keeps its label longest.
-        for (var i = count - 1; i >= 0 && total > available; i--)
+        // Labels first, a whole rank at a time from the lowest, and every label before any whole
+        // control — which is the reference's order: a bar of icons with everything still on it
+        // rather than a shorter bar of words. A rank goes together rather than one label at a
+        // time because half a cluster labelled is what nothing in the reference ever looks
+        // like: at 1447 all five Respond and Tags words are gone at once while Unread/Read,
+        // further right, still reads.
+        foreach (var rank in entries.Where(e => e.LabelWidth > 0).Select(e => e.LabelRank).Distinct().Order())
         {
-            if (!labelled[i] || entries[i].KeepsLabel) continue;
-            labelled[i] = false;
-            total -= entries[i].LabelWidth;
-        }
+            if (total <= available) break;
 
-        // Then the spared one's label, before any control is pushed off.
-        for (var i = count - 1; i >= 0 && total > available; i--)
-        {
-            if (!labelled[i] || !entries[i].KeepsLabel) continue;
-            labelled[i] = false;
-            total -= entries[i].LabelWidth;
+            for (var i = count - 1; i >= 0; i--)
+            {
+                if (!labelled[i] || entries[i].LabelRank != rank) continue;
+                labelled[i] = false;
+                total -= entries[i].LabelWidth;
+            }
         }
 
         // Then whole controls, from the right. A rule goes once nothing real is left to its right.
