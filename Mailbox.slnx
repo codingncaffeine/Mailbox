@@ -7,6 +7,7 @@
     <Project Path="src/Mailbox.Junk/Mailbox.Junk.csproj" />
     <Project Path="src/Mailbox.Protocols/Mailbox.Protocols.csproj" />
     <Project Path="src/Mailbox.Rendering/Mailbox.Rendering.csproj" />
+    <Project Path="src/Mailbox.Scheduling/Mailbox.Scheduling.csproj" />
     <Project Path="src/Mailbox.Security/Mailbox.Security.csproj" />
     <Project Path="src/Mailbox.Store/Mailbox.Store.csproj" />
     <Project Path="src/Mailbox.Theming/Mailbox.Theming.csproj" />

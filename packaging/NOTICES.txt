@@ -19,6 +19,7 @@ Avalonia, Avalonia.Desktop, Avalonia.Themes.Simple, Avalonia.Wayland, Avalonia.F
 AvaloniaRichEditor — MIT License.
 MailKit and MimeKit — MIT License. Copyright (c) 2013-2026 .NET Foundation and Contributors.
 Microsoft.Data.Sqlite — MIT License. SQLite itself is in the public domain.
+Ical.Net (iCalendar, RFC 5545) — MIT License. Copyright 2007-2026 ical-org. https://github.com/ical-org/ical.net
 WeCantSpell.Hunspell — a port of Hunspell; licensed under the MPL 1.1 / GPL 2.0 / LGPL 2.1
   tri-licence inherited from Hunspell. Full text: the package's license.txt.
 SkiaSharp and HarfBuzzSharp (native rendering, via Avalonia) — MIT License; Skia is BSD-3-Clause,

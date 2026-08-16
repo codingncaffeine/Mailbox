@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Scheduling: the calendar's domain — an appointment as the application thinks of it, the
+    iCalendar text it is kept and sent as, and recurrence expanded into the occurrences a view
+    draws. Ical.Net (MIT) parses and expands RFC 5545; what is ours is the semantics on top
+    (§9): overrides, exceptions, DST-correct wall times, and the edit-scope operations.
+  -->
+
+  <ItemGroup>
+    <PackageReference Include="Ical.Net" Version="$(IcalNetVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Mailbox.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mailbox.Core\Mailbox.Core.csproj" />
+    <ProjectReference Include="..\Mailbox.Store\Mailbox.Store.csproj" />
+  </ItemGroup>
+
+</Project>
