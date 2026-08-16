@@ -259,6 +259,81 @@ public static class TokenKeys
     }
 
     /// <summary>
+    /// The dialogs the reference draws with the operating system's own controls rather than
+    /// its own — Account Settings and its children — which stay light in every theme, the
+    /// dark ones included.
+    /// </summary>
+    /// <remarks>
+    /// Its own family rather than the six dialog tokens because the two disagree by design:
+    /// a themed dialog is chrome and follows the theme, while these follow the desktop's light
+    /// dialog palette whatever the theme says. Every built-in carries the same values, all of
+    /// them measured off the Account Settings captures; a theme file may still override any
+    /// of them, which is why they are tokens and not literals in the views.
+    /// </remarks>
+    public static class SystemDialog
+    {
+        /// <summary>The caption band.</summary>
+        public const string TitleBar = "systemdialog.titlebar";
+        /// <summary>The dialog's ground.</summary>
+        public const string Background = "systemdialog.background";
+        /// <summary>The white band under the caption that names the page, and the rule under it.</summary>
+        public const string Banner = "systemdialog.banner";
+        public const string BannerRule = "systemdialog.banner.rule";
+        public const string Foreground = "systemdialog.foreground";
+        public const string ForegroundDisabled = "systemdialog.foreground.disabled";
+        /// <summary>A tab's page.</summary>
+        public const string Surface = "systemdialog.surface";
+        /// <summary>A tab that is not selected, and the page's faint shadow.</summary>
+        public const string Tab = "systemdialog.tab";
+        /// <summary>The faint line round a tab, a page and between a list's column headers.</summary>
+        public const string Border = "systemdialog.border";
+        public const string ListBackground = "systemdialog.list.background";
+        public const string ListBorder = "systemdialog.list.border";
+        /// <summary>A selected row while the list does not have the focus, and while it does.</summary>
+        public const string Selection = "systemdialog.selection";
+        public const string SelectionFocused = "systemdialog.selection.focused";
+        /// <summary>A toolbar button or row under the pointer.</summary>
+        public const string Hover = "systemdialog.hover";
+        public const string HoverBorder = "systemdialog.hover.border";
+        public const string Pressed = "systemdialog.pressed";
+        /// <summary>The line round a focused or hovered push button, and the focus rectangle.</summary>
+        public const string Accent = "systemdialog.accent";
+        /// <summary>The line round a text field.</summary>
+        public const string FieldBorder = "systemdialog.field.border";
+        /// <summary>A push button: its fill, its line, and the darker line along its bottom edge.</summary>
+        public const string Button = "systemdialog.button";
+        public const string ButtonBorder = "systemdialog.button.border";
+        public const string ButtonBorderBottom = "systemdialog.button.border.bottom";
+        public const string ButtonDisabled = "systemdialog.button.disabled";
+        public const string ButtonDisabledBorder = "systemdialog.button.disabled.border";
+
+        /// <summary>
+        /// The palette of the small coloured toolbar icons these dialogs carry: an envelope, a
+        /// hammer and wrench, a form and pencil, a folder, a book, and the arrows.
+        /// </summary>
+        public const string IconInk = "systemdialog.icon.ink";
+        public const string IconPaper = "systemdialog.icon.paper";
+        public const string IconGold = "systemdialog.icon.gold";
+        public const string IconGoldDark = "systemdialog.icon.gold.dark";
+        public const string IconSteel = "systemdialog.icon.steel";
+        public const string IconSteelDark = "systemdialog.icon.steel.dark";
+        public const string IconWood = "systemdialog.icon.wood";
+        public const string IconGreen = "systemdialog.icon.green";
+        public const string IconBlue = "systemdialog.icon.blue";
+        public const string IconBlueDark = "systemdialog.icon.blue.dark";
+
+        public static readonly IReadOnlyList<string> All =
+        [
+            TitleBar, Background, Banner, BannerRule, Foreground, ForegroundDisabled,
+            Surface, Tab, Border, ListBackground, ListBorder, Selection, SelectionFocused,
+            Hover, HoverBorder, Pressed, Accent, FieldBorder,
+            Button, ButtonBorder, ButtonBorderBottom, ButtonDisabled, ButtonDisabledBorder,
+            IconInk, IconPaper, IconGold, IconGoldDark, IconSteel, IconSteelDark,
+            IconWood, IconGreen, IconBlue, IconBlueDark,
+        ];
+    }
+
+    /// <summary>
     /// The calendar views (§7.4): the month grid's cells and chips, the day and week views'
     /// hours, and the date navigator. Measured off the reference's month view where a
     /// capture exists; the rest follows the theme's own semantics.
@@ -353,6 +428,7 @@ public static class TokenKeys
         Dialog.Background, Dialog.Foreground, Dialog.ForegroundSubtle,
         Dialog.Surface, Dialog.SurfaceText,
         Dialog.Border, Dialog.Selection,
+        .. SystemDialog.All,
         Calendar.Background, Calendar.PastFill, Calendar.TodayFill, Calendar.TodayText, Calendar.SelectedFill,
         Calendar.WorkingHoursFill, Calendar.NonWorkingFill,
         Calendar.GridLine, Calendar.CurrentTimeIndicator, Calendar.AllDayBandBackground,

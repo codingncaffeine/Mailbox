@@ -290,6 +290,12 @@ public class ThemeServiceTests
     [InlineData(TokenKeys.Compose.HeaderText, TokenKeys.Compose.HeaderBackground)]
     [InlineData(TokenKeys.Compose.HeaderLabel, TokenKeys.Compose.HeaderBackground)]
     [InlineData(TokenKeys.Compose.BodyText, TokenKeys.Compose.BodyBackground)]
+    [InlineData(TokenKeys.SystemDialog.Foreground, TokenKeys.SystemDialog.Background)]
+    [InlineData(TokenKeys.SystemDialog.Foreground, TokenKeys.SystemDialog.Banner)]
+    [InlineData(TokenKeys.SystemDialog.Foreground, TokenKeys.SystemDialog.Surface)]
+    [InlineData(TokenKeys.SystemDialog.Foreground, TokenKeys.SystemDialog.ListBackground)]
+    [InlineData(TokenKeys.SystemDialog.Foreground, TokenKeys.SystemDialog.SelectionFocused)]
+    [InlineData(TokenKeys.SystemDialog.Foreground, TokenKeys.SystemDialog.Button)]
     public void ForegroundTokensAreDistinctFromWhatSitsBehindThem(string ink, string ground)
     {
         foreach (var id in OfficeThemes.All)
@@ -451,5 +457,32 @@ public class ThemeServiceTests
                 resolved["ThemeForegroundBrush"]);
             Assert.NotEqual(resolved["ThemeBackgroundBrush"], resolved["ThemeForegroundBrush"]);
         }
+    }
+
+    /// <summary>
+    /// The system dialogs — Account Settings and its children — take the desktop's light dialog
+    /// palette in every theme, Black included, because the reference draws them with the
+    /// desktop's own controls. So every built-in carries the same values for the whole family;
+    /// a theme that painted them differently would be a theme file's choice, not a built-in's.
+    /// </summary>
+    [Fact]
+    public void TheSystemDialogPaletteIsTheSameInEveryBuiltIn()
+    {
+        var reference = OfficeThemes.Build(OfficeThemes.Colorful).Resolve();
+
+        foreach (var id in OfficeThemes.All)
+        {
+            var tokens = OfficeThemes.Build(id).Resolve();
+            foreach (var key in TokenKeys.SystemDialog.All)
+            {
+                Assert.True(tokens.Contains(key), $"{id} lacks {key}");
+                Assert.Equal(reference.GetString(key), tokens.GetString(key));
+            }
+        }
+
+        // The measured values the family is built on.
+        Assert.Equal("#F0F0F0", reference.GetString(TokenKeys.SystemDialog.Background));
+        Assert.Equal("#F9F9F9", reference.GetString(TokenKeys.SystemDialog.Surface));
+        Assert.Equal("#828790", reference.GetString(TokenKeys.SystemDialog.ListBorder));
     }
 }

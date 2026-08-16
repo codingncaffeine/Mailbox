@@ -211,6 +211,21 @@ public abstract class SqliteStore : IDisposable
         return problems;
     }
 
+    /// <summary>
+    /// Gives back the space that deleted mail left behind: rebuilds the file without its free
+    /// pages and folds the write-ahead log into it. The reference's Compact Now. Slow on a
+    /// large store, so it is only ever run when asked for.
+    /// </summary>
+    /// <returns>The file's size afterwards, in bytes.</returns>
+    public long Compact()
+    {
+        // VACUUM cannot run inside a transaction, and there is never one open between calls.
+        Execute("PRAGMA wal_checkpoint(TRUNCATE)");
+        Execute("VACUUM");
+        Execute("PRAGMA wal_checkpoint(TRUNCATE)");
+        return Path == InMemory || !File.Exists(Path) ? 0 : new FileInfo(Path).Length;
+    }
+
     public void Dispose()
     {
         _connection.Dispose();

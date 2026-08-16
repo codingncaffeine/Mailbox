@@ -1,335 +1,252 @@
+using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Primitives;
-using Avalonia.Controls.Templates;
 using Avalonia.Layout;
-using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
 using Mailbox.Protocols;
 using Mailbox.Store;
+using static Mailbox.App.Views.SystemDialogKit;
 
 namespace Mailbox.App.Views;
 
 /// <summary>
-/// The account list: add, remove, reorder, and choose which one sends by default.
+/// The account list: add, remove, reorder, and choose which one sends by default — with the
+/// data files, and the tabs the reference gives the feeds, calendars and address books.
 /// </summary>
 /// <remarks>
+/// A system dialog: the reference draws this one with the desktop's own controls, so it is
+/// the desktop's light grey in every theme, with the older coloured toolbar icons and a tab
+/// strip of faint hairlines. Every measurement is off the Account Settings captures — the
+/// 613×501 window, the 62px white banner naming the page, the tabs 11px under its rule, the
+/// list 583 wide and 175 tall with 17px rows, the Close button 73×21 in the corner.
+/// <para>
 /// The reference gives this seven tabs. Six are here. SharePoint Lists is the one left out: it
 /// is a SharePoint feature this application does not have and will not get, and showing it empty
 /// would be a promise rather than a gap. Published Calendars is kept — the reference publishes
 /// to its own service, but publishing a calendar is CalDAV here, which the calendar module
 /// brings.
+/// </para>
 /// <para>
-/// Data Files is translated rather than copied. The reference lists a .pst per account; there
-/// is one store here holding every account, so the tab shows that file, its size and what is in
-/// it. Presenting a per-account file that does not exist would be a fiction with a Remove
-/// button next to it.
+/// Data Files lists a file per account, as the reference does: each row is a file that can be
+/// backed up, copied to another machine or opened somewhere else on its own. Add opens such a
+/// file; Remove closes one and leaves it on disk, as the reference's does.
+/// </para>
+/// <para>
+/// A button whose feature belongs to a later phase — a feed, a calendar subscription, an
+/// address book — is live and says which part of the application brings it, rather than being
+/// greyed with no explanation or left off the toolbar the reference shows.
 /// </para>
 /// </remarks>
 public sealed class AccountSettingsDialog : Window
 {
-    private readonly ListBox _accounts = new() { Height = 190 };
-    private readonly TextBlock _delivery = new();
-    private readonly Button _change;
+    /// <summary>The window, measured: the reference's client area is 613×501.</summary>
+    private const double DialogWidth = 613;
+    private const double DialogHeight = 501;
+
+    private readonly ClassicTabControl _tabs = new();
+    private readonly TextBlock _bannerHeading = Label(string.Empty, bold: true);
+    private readonly TextBlock _bannerText = Label(string.Empty);
+
+    // Email
+    private readonly ClassicListView _accounts = new();
+    private readonly Button _new;
     private readonly Button _repair;
+    private readonly Button _change;
     private readonly Button _remove;
     private readonly Button _setDefault;
     private readonly Button _up;
     private readonly Button _down;
+    private readonly Button _changeFolder;
+    private readonly TextBlock _deliveryPath = Label(string.Empty, bold: true);
+    private readonly TextBlock _deliveryFile = Label(string.Empty);
+
+    // Data Files
+    private readonly ClassicListView _files = new();
+    private readonly Button _fileAdd;
+    private readonly Button _fileOpen;
+    private readonly Button _fileSettings;
+    private readonly Button _fileDefault;
+    private readonly Button _fileRemove;
+
+    /// <summary>What each tab's banner says: the page name in bold, and the sentence under it.</summary>
+    private static readonly (string Heading, string Text)[] Banners =
+    [
+        ("Email Accounts", "You can add or remove an account. You can select an account and change its settings."),
+        ("Data Files", "Mailbox Data Files"),
+        ("RSS Feeds", "You can add or remove an RSS Feed. You can select an RSS Feed and change its settings."),
+        ("Internet Calendars", "You can add or remove an Internet Calendar. You can select a calendar and change its settings."),
+        ("Published Calendars", "You can change or remove a calendar you have published. You can select a calendar and change its settings."),
+        ("Directories and Address Books", "You can choose a directory or address book below to change or remove it."),
+    ];
+
+    /// <summary>The tab names, in the reference's order, for the harness and the tests.</summary>
+    public static readonly IReadOnlyList<string> TabNames =
+        ["Email", "Data Files", "RSS Feeds", "Internet Calendars", "Published Calendars", "Address Books"];
 
     /// <summary>True when something changed, so the shell knows to reload.</summary>
     public bool Changed { get; private set; }
 
-    public AccountSettingsDialog()
+    /// <param name="startTab">Which tab to open on: an index into <see cref="TabNames"/>, or a name.</param>
+    public AccountSettingsDialog(string? startTab = null)
     {
         Title = "Account Settings";
-        Width = 640;
-        Height = 520;
+        Width = DialogWidth;
+        Height = DialogHeight;
+        MinWidth = 480;
+        MinHeight = 360;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
-        _change = ToolButton("Change…", async () => await ChangeSelectedAsync());
-        _repair = ToolButton("Repair…", async () => await RepairSelectedAsync());
-        _remove = ToolButton("Remove", RemoveSelected);
-        _setDefault = ToolButton("Set as Default", SetDefault);
-        _up = ToolButton("↑", () => Move(-1));
-        _down = ToolButton("↓", () => Move(1));
+        _new = ToolButton("new", "New...", AddAsync);
+        _repair = ToolButton("repair", "Repair...", RepairSelectedAsync);
+        _change = ToolButton("change", "Change...", ChangeSelectedAsync);
+        _setDefault = ToolButton("default", "Set as Default", SetDefault);
+        _remove = ToolButton("remove", "Remove", RemoveSelectedAsync);
+        _up = ToolButton("up", string.Empty, () => Move(-1));
+        _down = ToolButton("down", string.Empty, () => Move(1));
+        _changeFolder = PushButton("Change Folder", ChangeFolderAsync, width: 92);
 
-        _accounts.SelectionChanged += (_, _) => UpdateButtons();
-        _accounts.ItemTemplate = new FuncDataTemplate<AccountRow>((row, _) => Row(row));
+        _fileAdd = ToolButton("add-file", "Add...", AttachAsync);
+        _fileOpen = ToolButton("folder", "Open File Location...", OpenStoreFolder);
+        _fileSettings = ToolButton("change", "Settings...", FileSettingsAsync);
+        _fileDefault = ToolButton("default", "Set as Default", SetDefaultFile);
+        _fileRemove = ToolButton("remove", "Remove", DetachSelectedAsync);
 
-        DialogChrome.Apply(this, Layout());
-        Bind(this, BackgroundProperty, "surface.ground.brush");
+        _tabs.AddTab(TabNames[0], EmailTab());
+        _tabs.AddTab(TabNames[1], DataFilesTab());
+        _tabs.AddTab(TabNames[2], RssTab());
+        _tabs.AddTab(TabNames[3], InternetCalendarsTab());
+        _tabs.AddTab(TabNames[4], PublishedCalendarsTab());
+        _tabs.AddTab(TabNames[5], AddressBooksTab());
+        _tabs.SelectionChanged += (_, _) => ShowBanner();
+
+        SystemDialogChrome.Apply(this, Layout());
         Reload();
-    }
+        ShowBanner();
 
-    /// <summary>One line in the list: the two columns the reference shows.</summary>
-    private sealed record AccountRow(OpenAccount Open)
-    {
-        public Account Account => Open.Account;
-
-        public string Name => Account.DisplayName.Length > 0
-            ? Account.DisplayName
-            : Account.Address;
-
-        public string Type => Open.IsDefault
-            ? $"{Account.TypeLabel} (send from this account by default)"
-            : Account.TypeLabel;
-
-        public string Marker => Open.IsDefault ? "✓" : string.Empty;
-    }
-
-    private Control Row(AccountRow row)
-    {
-        var marker = new TextBlock { Text = row.Marker, Width = 20 };
-        Bind(marker, TextBlock.ForegroundProperty, "accent.rest.brush");
-
-        var name = new TextBlock { Text = row.Name, Width = 300 };
-        Bind(name, TextBlock.ForegroundProperty, "dialog.foreground.brush");
-
-        var type = new TextBlock { Text = row.Type };
-        Bind(type, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
-
-        return new StackPanel
+        if (startTab is { Length: > 0 })
         {
-            Orientation = Orientation.Horizontal,
-            Spacing = 4,
-            Children = { marker, name, type },
-        };
+            var index = int.TryParse(startTab, out var n)
+                ? n
+                : TabNames.ToList().FindIndex(t => t.Equals(startTab, StringComparison.OrdinalIgnoreCase));
+            if (index >= 0 && index < TabNames.Count) _tabs.SelectedIndex = index;
+        }
     }
+
+    /// <summary>Which tab is open, by name.</summary>
+    public string CurrentTab => TabNames[Math.Max(0, _tabs.SelectedIndex)];
+
+    private void ShowBanner()
+    {
+        var (heading, text) = Banners[Math.Max(0, _tabs.SelectedIndex)];
+        _bannerHeading.Text = heading;
+        _bannerText.Text = text;
+    }
+
+    // ---- The frame ------------------------------------------------------------------------
 
     private Control Layout()
     {
-        var heading = new TextBlock { Text = "Email Accounts", FontWeight = FontWeight.SemiBold };
-        Bind(heading, TextBlock.ForegroundProperty, "dialog.foreground.brush");
+        var close = PushButton("Close", Close);
+        close.IsCancel = true;
+        close.IsDefault = true;
 
-        var explain = new TextBlock
-        {
-            Text = "You can add or remove an account. You can select an account and change its "
-                   + "settings.",
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 2, 0, 14),
-        };
-        Bind(explain, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
+        // The bottom band: 38px, the button 9 down and 7 in from the right, measured.
+        var bottom = new Panel { Height = 38 };
+        close.HorizontalAlignment = HorizontalAlignment.Right;
+        close.VerticalAlignment = VerticalAlignment.Top;
+        close.Margin = new Thickness(0, 9, 7, 0);
+        bottom.Children.Add(close);
+        DockPanel.SetDock(bottom, Dock.Bottom);
 
-        var toolbar = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 4,
-            Margin = new Thickness(0, 0, 0, 6),
-            Children =
-            {
-                ToolButton("New…", async () => await AddAsync()),
-                _repair, _change, _setDefault, _remove, _up, _down,
-            },
-        };
+        var banner = Banner(_bannerHeading, _bannerText);
+        DockPanel.SetDock(banner, Dock.Top);
+        var rule = BannerRule();
+        DockPanel.SetDock(rule, Dock.Top);
 
-        Bind(_delivery, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
-        _delivery.TextWrapping = TextWrapping.Wrap;
-        _delivery.Margin = new Thickness(0, 14, 0, 0);
+        // The tabs stand 11px under the rule and 6px in from either edge.
+        _tabs.Margin = new Thickness(6, 11, 6, 0);
 
-        var close = new Button { Content = "Close", IsCancel = true, IsDefault = true };
-        close.Click += (_, _) => Close();
-
-        var email = new StackPanel
-        {
-            Margin = new Thickness(0, 12, 0, 0),
-            Children =
-            {
-                heading, explain, toolbar, _accounts,
-                new TextBlock
-                {
-                    Text = "Selected account delivers new messages to the following location:",
-                    Margin = new Thickness(0, 14, 0, 4),
-                },
-                _delivery,
-            },
-        };
-
-        var stack = new TabControl
-        {
-            ItemsSource = new[]
-            {
-                new TabItem { Header = "Email", Content = email },
-                new TabItem { Header = "Data Files", Content = DataFilesTab() },
-                new TabItem { Header = "RSS Feeds", Content = ComingLater(
-                    "RSS Feeds",
-                    "You can add or remove an RSS Feed. You can select an RSS Feed and change "
-                    + "its settings.",
-                    "Feed subscriptions arrive with the RSS reader.") },
-                new TabItem { Header = "Internet Calendars", Content = ComingLater(
-                    "Internet Calendars",
-                    "You can add or remove a calendar. You can select a calendar and change its "
-                    + "settings.",
-                    "Subscribed calendars arrive with the calendar module.") },
-                new TabItem { Header = "Published Calendars", Content = ComingLater(
-                    "Published Calendars",
-                    "You can publish a calendar so other people can subscribe to it, and change "
-                    + "or remove one you have published.",
-                    "Publishing arrives with the calendar module, over CalDAV rather than the "
-                    + "reference's own service.") },
-                new TabItem { Header = "Address Books", Content = ComingLater(
-                    "Directories and Address Books",
-                    "You can choose a directory or address book below to change or remove it.",
-                    "Address books arrive with the People module.") },
-            },
-        };
-
-        return new DockPanel
-        {
-            Margin = new Thickness(18),
-            Children =
-            {
-                new StackPanel
-                {
-                    [DockPanel.DockProperty] = Dock.Bottom,
-                    Orientation = Orientation.Horizontal,
-                    HorizontalAlignment = HorizontalAlignment.Right,
-                    Margin = new Thickness(0, 14, 0, 0),
-                    Children = { close },
-                },
-                stack,
-            },
-        };
+        return new DockPanel { Children = { banner, rule, bottom, _tabs } };
     }
 
     /// <summary>
-    /// The store, described honestly: one file, its size, and what is filed in it.
+    /// A page: the toolbar across the top, the list under it, and a block of a fixed height
+    /// below the list — 122px, measured — that each tab fills its own way. The list takes the
+    /// height that is left, which at the reference's size is its 175px.
     /// </summary>
-    /// <summary>
-    /// One file per account, listed by name. This is the tab the arrangement earns: each row is
-    /// a file that can be backed up, copied to another machine or deleted on its own.
-    /// </summary>
-    private Control DataFilesTab()
+    private static Grid Page(StackPanel toolbar, ClassicListView list, Panel? below)
     {
-        var rows = new StackPanel { Spacing = 6 };
+        var page = new Grid { RowDefinitions = new RowDefinitions("39,*,122") };
 
-        foreach (var account in App.Accounts.All)
+        Grid.SetRow(toolbar, 0);
+        page.Children.Add(toolbar);
+
+        list.Margin = new Thickness(8, 0, 6, 0);
+        Grid.SetRow(list, 1);
+        page.Children.Add(list);
+
+        if (below is not null)
         {
-            var messages = account.Mail.Folders(account.Account.Id).Sum(f => f.Total);
-            rows.Children.Add(Detail(
-                Path.GetFileName(account.Path),
-                $"{MailboxCleanupDialog.Size(account.Bytes)}  ·  {messages:N0} messages"));
+            Grid.SetRow(below, 2);
+            page.Children.Add(below);
         }
 
-        if (App.Accounts.All.Count == 0) rows.Children.Add(Detail("No accounts yet", string.Empty));
-
-        var open = new Button { Content = "Open File Location…", Padding = new Thickness(9, 4) };
-        open.Click += (_, _) => OpenStoreFolder();
-
-        rows.Children.Add(Detail("Folder", App.Accounts.Directory_));
-        rows.Children.Add(new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Margin = new Thickness(0, 10, 0, 0),
-            Children = { open },
-        });
-
-        return Panel(
-            "Data Files",
-            "Each account is a file of its own, named after the address. Copy one somewhere "
-            + "safe and that account is backed up; delete one and only that account goes.",
-            rows);
+        return page;
     }
 
-    private void OpenStoreFolder()
+    /// <summary>Places a control in a page's lower block at the offsets measured off the capture.</summary>
+    private static T At<T>(T control, double left, double top, double? width = null) where T : Control
     {
-        try
+        control.HorizontalAlignment = HorizontalAlignment.Left;
+        control.VerticalAlignment = VerticalAlignment.Top;
+        control.Margin = new Thickness(left, top, 0, 0);
+        if (width is { } w) control.Width = w;
+        return control;
+    }
+
+    // ---- Email ----------------------------------------------------------------------------
+
+    private Control EmailTab()
+    {
+        _accounts.Columns = [new ClassicColumn("Name", 282), new ClassicColumn("Type", 281)];
+        _accounts.SelectionChanged += (_, _) => UpdateButtons();
+        _accounts.ItemActivated += async (_, _) => await ChangeSelectedAsync();
+
+        var toolbar = Toolbar(_new, _repair, _change, _setDefault, _remove, _up, _down);
+
+        var below = new Panel
         {
-            var folder = App.Accounts.Directory_;
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(folder)
+            Children =
             {
-                UseShellExecute = true,
-            });
-        }
-        catch (Exception ex)
-        {
-            Mailbox.Core.Diagnostics.Log.Warn("Could not open the store's folder.", ex);
-        }
-    }
-
-    private Control Detail(string label, string value)
-    {
-        var name = new TextBlock { Text = label, Width = 90 };
-        Bind(name, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
-
-        var text = new TextBlock { Text = value, TextWrapping = TextWrapping.Wrap, MaxWidth = 420 };
-        Bind(text, TextBlock.ForegroundProperty, "dialog.foreground.brush");
-
-        return new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 8,
-            Children = { name, text },
+                At(Label("Selected account delivers new messages to the following location:"), 7, 16),
+                At(_changeFolder, 9, 36),
+                At(_deliveryPath, 112, 41),
+                At(_deliveryFile, 112, 60),
+            },
         };
+
+        return Page(toolbar, _accounts, below);
     }
 
-    /// <summary>
-    /// A tab whose feature belongs to a later phase. It says what it will hold and which part
-    /// of the application brings it, rather than showing an empty list and a dead New button.
-    /// </summary>
-    private Control ComingLater(string heading, string explain, string note)
-    {
-        var pending = new TextBlock
-        {
-            Text = note,
-            TextWrapping = TextWrapping.Wrap,
-            MaxWidth = 460,
-            Margin = new Thickness(0, 16, 0, 0),
-        };
-        Bind(pending, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
-        return Panel(heading, explain, pending);
-    }
+    /// <summary>One line in the list: the two columns the reference shows.</summary>
+    private static ClassicRow AccountRow(OpenAccount open) => new(
+        [
+            open.Account.DisplayName.Length > 0 ? open.Account.DisplayName : open.Account.Address,
+            open.IsDefault ? $"{open.Account.TypeLabel} (send from this account by default)" : open.Account.TypeLabel,
+        ],
+        Marked: open.IsDefault,
+        Tag: open.Account.Address);
 
-    private Control Panel(string heading, string explain, Control body)
-    {
-        var title = new TextBlock { Text = heading, FontWeight = FontWeight.SemiBold };
-        Bind(title, TextBlock.ForegroundProperty, "dialog.foreground.brush");
-
-        var description = new TextBlock
-        {
-            Text = explain,
-            TextWrapping = TextWrapping.Wrap,
-            MaxWidth = 500,
-            Margin = new Thickness(0, 2, 0, 12),
-        };
-        Bind(description, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
-
-        return new StackPanel
-        {
-            Margin = new Thickness(0, 12, 0, 0),
-            Children = { title, description, body },
-        };
-    }
-
-    private Button ToolButton(string label, Func<Task> onClick)
-    {
-        var button = new Button { Content = label, Padding = new Thickness(9, 4) };
-        button.Click += async (_, _) => await onClick();
-        return button;
-    }
-
-    private Button ToolButton(string label, Action onClick)
-    {
-        var button = new Button { Content = label, Padding = new Thickness(9, 4) };
-        button.Click += (_, _) => onClick();
-        return button;
-    }
+    private OpenAccount? Selected => _accounts.SelectedRow?.Tag is string address ? App.Accounts.Find(address) : null;
 
     private void Reload()
     {
-        var selectedAddress = Selected?.Account.Address;
-
-        _accounts.ItemsSource = App.Accounts.All.Select(a => new AccountRow(a)).ToList();
-        _accounts.SelectedIndex = _accounts.Items
-            .OfType<AccountRow>()
-            .ToList()
-            .FindIndex(r => r.Account.Address == selectedAddress);
-
-        if (_accounts.SelectedIndex < 0 && _accounts.ItemCount > 0) _accounts.SelectedIndex = 0;
+        _accounts.SetRows(App.Accounts.All.Select(AccountRow).ToList());
+        _files.SetRows(App.Accounts.All.Select(FileRow).ToList());
         UpdateButtons();
+        UpdateFileButtons();
     }
-
-    private AccountRow? Selected => _accounts.SelectedItem as AccountRow;
 
     private void UpdateButtons()
     {
@@ -337,13 +254,72 @@ public sealed class AccountSettingsDialog : Window
         _change.IsEnabled = row is not null;
         _repair.IsEnabled = row is not null;
         _remove.IsEnabled = row is not null;
-        _setDefault.IsEnabled = row is not null && !row.Open.IsDefault;
+        _setDefault.IsEnabled = row is not null && !row.IsDefault;
         _up.IsEnabled = row is not null && _accounts.SelectedIndex > 0;
-        _down.IsEnabled = row is not null && _accounts.SelectedIndex < _accounts.ItemCount - 1;
+        _down.IsEnabled = row is not null && _accounts.SelectedIndex < _accounts.Rows.Count - 1;
+        _changeFolder.IsEnabled = row is not null && row.Account.Protocol == MailProtocol.Pop3;
 
-        _delivery.Text = row is null
-            ? "No account selected."
-            : $"{row.Account.Address}\\Inbox  —  in {row.Open.Path}";
+        if (row is null)
+        {
+            _deliveryPath.Text = string.Empty;
+            _deliveryFile.Text = string.Empty;
+            return;
+        }
+
+        // "work@example.net\Inbox", the account and the folder new mail lands in — the
+        // reference's notation, which is the data file's name and the folder's — and the file
+        // under it, its middle elided to fit as the reference elides its path.
+        _deliveryPath.Text = $"{row.Account.Address}\\{DeliveryFolderName(row)}";
+        _deliveryFile.Text = "in data file " + CompactPath(row.Path, 470);
+    }
+
+    private static string DeliveryFolderName(OpenAccount account)
+    {
+        var settings = AccountSettings.Load(App.Settings, account.Account.Address);
+        if (settings?.DeliveryFolderId is { } id && account.Mail.GetFolder(id) is { } folder)
+        {
+            return FolderPath(account, folder);
+        }
+        return "Inbox";
+    }
+
+    /// <summary>The folder's name under its parents', "Inbox\Receipts".</summary>
+    private static string FolderPath(OpenAccount account, Folder folder)
+    {
+        var all = account.Mail.Folders(account.Account.Id).ToDictionary(f => f.Id);
+        var parts = new List<string> { folder.Name };
+        var parent = folder.ParentId;
+        while (parent is { } id && all.TryGetValue(id, out var up) && parts.Count < 16)
+        {
+            parts.Insert(0, up.Name);
+            parent = up.ParentId;
+        }
+        return string.Join("\\", parts);
+    }
+
+    /// <summary>
+    /// A path with its middle segments replaced by "..." until it fits, keeping the first ones
+    /// and the last two — the reference elides its own file's path the same way.
+    /// </summary>
+    private static string CompactPath(string path, double maxWidth)
+    {
+        var typeface = new Typeface(
+            Application.Current?.FindResource("ui.fontfamily") as FontFamily ?? FontFamily.Default);
+        double Width(string s) => new FormattedText(
+            s, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, typeface, 12, Brushes.Black).Width;
+
+        if (Width(path) <= maxWidth) return path;
+
+        var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries).ToList();
+        for (var keep = Math.Max(0, parts.Count - 3); keep >= 0; keep--)
+        {
+            if (parts.Count <= keep + 2) break;
+            var head = string.Join("/", parts.Take(keep));
+            var tail = string.Join("/", parts.TakeLast(2));
+            var candidate = $"/{head}{(keep > 0 ? "/" : string.Empty)}.../{tail}";
+            if (Width(candidate) <= maxWidth || keep == 0) return candidate;
+        }
+        return path;
     }
 
     private async Task AddAsync()
@@ -393,10 +369,9 @@ public sealed class AccountSettingsDialog : Window
 
         if (unchanged)
         {
-            await Confirm.AskAsync(this, "Repair account",
+            await Confirm.TellAsync(this, "Repair account",
                 $"The settings for {row.Account.Address} already match what Mailbox would work "
-                + "out from the address. Nothing to change.",
-                "OK", destructive: false);
+                + "out from the address. Nothing to change.");
             return;
         }
 
@@ -418,6 +393,7 @@ public sealed class AccountSettingsDialog : Window
         {
             LeaveOnServer = current.LeaveOnServer,
             DeleteAfterDays = current.DeleteAfterDays,
+            DeliveryFolderId = current.DeliveryFolderId,
         }).Save(App.Settings, row.Account.Address);
 
         Changed = true;
@@ -446,11 +422,11 @@ public sealed class AccountSettingsDialog : Window
     /// Removes an account and everything filed under it. Confirmed first, and the wording says
     /// what actually goes: with POP3 the store may be the only copy left.
     /// </summary>
-    private async void RemoveSelected()
+    private async Task RemoveSelectedAsync()
     {
         if (Selected is not { } row) return;
 
-        var messages = row.Open.Mail.Folders(row.Account.Id).Sum(f => f.Total);
+        var messages = row.Mail.Folders(row.Account.Id).Sum(f => f.Total);
 
         var confirmed = await Confirm.AskAsync(
             this,
@@ -459,9 +435,9 @@ public sealed class AccountSettingsDialog : Window
             (messages > 0
                 ? $"{messages:N0} message{(messages == 1 ? "" : "s")} will be deleted with it. " +
                   "Where mail was downloaded and removed from the server, this is the only " +
-                  $"copy.\n\nThe file {Path.GetFileName(row.Open.Path)} will be deleted."
+                  $"copy.\n\nThe file {Path.GetFileName(row.Path)} will be deleted."
                 : $"No mail is filed under this account. The file " +
-                  $"{Path.GetFileName(row.Open.Path)} will be deleted."),
+                  $"{Path.GetFileName(row.Path)} will be deleted."),
             "Remove");
 
         if (!confirmed) return;
@@ -471,6 +447,399 @@ public sealed class AccountSettingsDialog : Window
         Reload();
     }
 
-    private static void Bind(AvaloniaObject target, AvaloniaProperty property, string key)
-        => target[!property] = new DynamicResourceExtension(key);
+    /// <summary>
+    /// Where a POP3 account's new mail lands: any folder of the account, its Inbox by default.
+    /// The reference's dialog offers every data file's folders, because its POP accounts can
+    /// deliver into any file; here a file is an account, so the choice is among its own.
+    /// </summary>
+    private async Task ChangeFolderAsync()
+    {
+        if (Selected is not { } row) return;
+
+        var settings = AccountSettings.Load(App.Settings, row.Account.Address);
+        var current = settings?.DeliveryFolderId ?? row.Mail.FolderWithRole(row.Account.Id, FolderRole.Inbox)?.Id;
+
+        var picker = new FolderPickerDialog(
+            "New Email Delivery Location",
+            "Choose a folder for new email:",
+            [row],
+            (row, current),
+            allowRoot: false);
+        await picker.ShowDialog(this);
+
+        if (picker.Result is not { Folder: { } folder }) return;
+        if (settings is null)
+        {
+            await Confirm.TellAsync(this, "Change Folder",
+                $"{row.Account.Address} has no server settings yet, so there is nothing to deliver. "
+                + "Set its servers with Change... first.");
+            return;
+        }
+
+        SetDeliveryFolder(row, settings, folder);
+    }
+
+    /// <summary>Records the folder; the Inbox is recorded as no choice at all, which is what it means.</summary>
+    private void SetDeliveryFolder(OpenAccount row, AccountSettings settings, Folder folder)
+    {
+        var inbox = row.Mail.FolderWithRole(row.Account.Id, FolderRole.Inbox);
+        (settings with { DeliveryFolderId = folder.Id == inbox?.Id ? null : folder.Id })
+            .Save(App.Settings, row.Account.Address);
+        Changed = true;
+        UpdateButtons();
+    }
+
+    // ---- Data Files -----------------------------------------------------------------------
+
+    private Control DataFilesTab()
+    {
+        _files.Columns = [new ClassicColumn("Name", 141), new ClassicColumn("Location", 442)];
+        _files.SelectionChanged += (_, _) => UpdateFileButtons();
+        _files.ItemActivated += async (_, _) => await FileSettingsAsync();
+
+        var toolbar = Toolbar(_fileAdd, _fileSettings, _fileDefault, _fileRemove, _fileOpen);
+
+        var paragraph = Paragraph(
+            "Select a data file in the list, then click Settings for more details or click Open "
+            + "File Location to display the folder that contains the data file. To move or copy "
+            + "these files, you must first quit Mailbox.");
+        paragraph.Width = 476;
+
+        // The button stands 12px under the list at the page's right; a wider window keeps it there.
+        var more = PushButton("Tell Me More...", TellMeMoreAsync, width: 90);
+        more.HorizontalAlignment = HorizontalAlignment.Right;
+        more.VerticalAlignment = VerticalAlignment.Top;
+        more.Margin = new Thickness(0, 12, 7, 0);
+
+        return Page(toolbar, _files, new Panel { Children = { At(paragraph, 7, 11), more } });
+    }
+
+    private static ClassicRow FileRow(OpenAccount open) => new(
+        [Path.GetFileName(open.Path), open.Path],
+        Marked: open.IsDefault,
+        Tag: open.Account.Address);
+
+    private OpenAccount? SelectedFile => _files.SelectedRow?.Tag is string address ? App.Accounts.Find(address) : null;
+
+    private void UpdateFileButtons()
+    {
+        var row = SelectedFile;
+        _fileSettings.IsEnabled = row is not null;
+        _fileDefault.IsEnabled = row is not null && !row.IsDefault;
+        _fileRemove.IsEnabled = row is not null;
+    }
+
+    /// <summary>Opens an account file from elsewhere: a backup, or one detached earlier.</summary>
+    private async Task AttachAsync()
+    {
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Open Mailbox Data File",
+            AllowMultiple = false,
+            FileTypeFilter =
+            [
+                new FilePickerFileType("Mailbox data files") { Patterns = ["*.db"] },
+                FilePickerFileTypes.All,
+            ],
+        });
+
+        if (files.Count == 0 || files[0].TryGetLocalPath() is not { } path) return;
+
+        var (account, error) = App.Accounts.Attach(path);
+        if (account is null)
+        {
+            await Confirm.TellAsync(this, "Open Mailbox Data File", error ?? "The file could not be opened.");
+            return;
+        }
+
+        Changed = true;
+        Reload();
+        _files.SelectedIndex = _files.Rows.ToList().FindIndex(r => Equals(r.Tag, account.Account.Address));
+    }
+
+    private async Task FileSettingsAsync()
+    {
+        if (SelectedFile is not { } row) return;
+
+        var dialog = new DataFileSettingsDialog(row);
+        await dialog.ShowDialog(this);
+
+        if (!dialog.Changed) return;
+        Changed = true;
+        Reload();
+    }
+
+    private void SetDefaultFile()
+    {
+        if (SelectedFile is not { } row) return;
+
+        App.AccountOrder.DefaultAddress = row.Account.Address;
+        Changed = true;
+        Reload();
+    }
+
+    /// <summary>
+    /// Closes a data file and leaves it on disk, as the reference's Remove does here — the
+    /// account disappears from the list, and its mail is in a file that Add can open again.
+    /// </summary>
+    private async Task DetachSelectedAsync()
+    {
+        if (SelectedFile is not { } row) return;
+
+        var confirmed = await Confirm.AskAsync(
+            this,
+            "Remove data file",
+            $"Close {Path.GetFileName(row.Path)}?\n\n"
+            + $"{row.Account.Address} will no longer appear in Mailbox. Its mail is not deleted: "
+            + "the file is moved to the detached folder beside the accounts, and Add... can open "
+            + "it again.",
+            "Remove");
+
+        if (!confirmed) return;
+
+        var moved = Detach(row);
+        if (moved is not null)
+        {
+            await Confirm.TellAsync(this, "Remove data file", $"The file was moved to\n{moved}");
+        }
+    }
+
+    private string? Detach(OpenAccount row)
+    {
+        var moved = App.Accounts.Detach(row.Account.Address);
+        Changed = true;
+        Reload();
+        return moved;
+    }
+
+    private void OpenStoreFolder()
+    {
+        try
+        {
+            var folder = App.Accounts.Directory_;
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(folder)
+            {
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            Mailbox.Core.Diagnostics.Log.Warn("Could not open the store's folder.", ex);
+        }
+    }
+
+    private Task TellMeMoreAsync() => Confirm.TellAsync(this, "Mailbox Data Files",
+        "Each account keeps its mail in a file of its own, named after the address, in the "
+        + "accounts folder. Copy a file somewhere safe and that account is backed up; open it "
+        + "again with Add... on this tab, here or on another machine. Remove closes a file "
+        + "without deleting it. Settings... shows a file's size and can compact it after a lot "
+        + "of mail has been deleted.");
+
+    // ---- RSS Feeds ------------------------------------------------------------------------
+
+    private Control RssTab()
+    {
+        var list = new ClassicListView
+        {
+            Columns = [new ClassicColumn("Feed Name", 338), new ClassicColumn("Last Updated On", 245)],
+        };
+
+        var change = ToolButton("change", "Change...", () => Task.CompletedTask);
+        var remove = ToolButton("remove", "Remove", () => { });
+        change.IsEnabled = false;
+        remove.IsEnabled = false;
+
+        var toolbar = Toolbar(
+            ToolButton("new", "New...", async () =>
+            {
+                var dialog = new SubscriptionDialog(
+                    "New RSS Feed",
+                    "Enter the location of the RSS Feed you want to add to Mailbox:",
+                    "Example: http://www.example.com/feed/main.xml");
+                await dialog.ShowDialog(this);
+                if (dialog.Location is null) return;
+                await Later("RSS Feeds",
+                    "Feed subscriptions arrive with the RSS reader, in a later phase of Mailbox. "
+                    + "Nothing was added.");
+            }),
+            change, remove);
+
+        var paragraph = Paragraph(
+            "Subscribed RSS Feeds are checked once during each download interval. This prevents "
+            + "your RSS Feed from possibly being suspended by an RSS publisher.");
+        paragraph.Width = 560;
+
+        var below = new Panel
+        {
+            Children =
+            {
+                At(Label("Selected RSS Feed delivers new items to the following location:"), 7, 9),
+                At(PushButton("Change Folder", () => Later("RSS Feeds",
+                    "Feed subscriptions arrive with the RSS reader, in a later phase of Mailbox."), width: 92), 9, 36),
+                At(paragraph, 8, 73),
+            },
+        };
+
+        return Page(toolbar, list, below);
+    }
+
+    // ---- Internet Calendars ---------------------------------------------------------------
+
+    private Control InternetCalendarsTab()
+    {
+        var list = new ClassicListView
+        {
+            Columns =
+            [
+                new ClassicColumn("Internet Calendar", 282),
+                new ClassicColumn("Size", 84),
+                new ClassicColumn("Last Updated on", 217),
+            ],
+        };
+
+        var change = ToolButton("change", "Change...", () => Task.CompletedTask);
+        var remove = ToolButton("remove", "Remove", () => { });
+        change.IsEnabled = false;
+        remove.IsEnabled = false;
+
+        var toolbar = Toolbar(
+            ToolButton("new", "New...", async () =>
+            {
+                var dialog = new SubscriptionDialog(
+                    "New Internet Calendar Subscription",
+                    "Enter the location of the Internet Calendar you want to add to Mailbox:",
+                    "Example: webcal://www.example.com/calendars/Calendar.ics");
+                await dialog.ShowDialog(this);
+                if (dialog.Location is null) return;
+                await Later("Internet Calendars",
+                    "Subscribed calendars arrive with the calendar module. Nothing was added.");
+            }),
+            change, remove);
+
+        var paragraph = Paragraph(
+            "Subscribed Internet Calendars are checked once during each download interval. This "
+            + "prevents your list from possibly being suspended by the publisher of an Internet "
+            + "Calendar.");
+        paragraph.Width = 560;
+
+        return Page(toolbar, list, new Panel { Children = { At(paragraph, 8, 9) } });
+    }
+
+    // ---- Published Calendars --------------------------------------------------------------
+
+    private Control PublishedCalendarsTab()
+    {
+        var list = new ClassicListView
+        {
+            Columns = [new ClassicColumn("Calendar", 282), new ClassicColumn("Location", 301)],
+        };
+
+        var change = ToolButton("change", "Change...", () => Task.CompletedTask);
+        var remove = ToolButton("remove", "Remove", () => { });
+        change.IsEnabled = false;
+        remove.IsEnabled = false;
+
+        var paragraph = Paragraph(
+            "Publishing a calendar arrives with the calendar module, over CalDAV. A calendar you "
+            + "publish will be listed here.");
+        paragraph.Width = 560;
+
+        return Page(Toolbar(change, remove), list, new Panel { Children = { At(paragraph, 8, 9) } });
+    }
+
+    // ---- Address Books --------------------------------------------------------------------
+
+    private Control AddressBooksTab()
+    {
+        var list = new ClassicListView
+        {
+            Columns = [new ClassicColumn("Name", 282), new ClassicColumn("Type", 281)],
+        };
+
+        var change = ToolButton("change", "Change...", () => Task.CompletedTask);
+        var remove = ToolButton("remove", "Remove", () => { });
+        change.IsEnabled = false;
+        remove.IsEnabled = false;
+
+        var toolbar = Toolbar(
+            ToolButton("book", "New...", () => Later("Address Books",
+                "Directories and address books arrive with the People module. Nothing was added.")),
+            change, remove);
+
+        return Page(toolbar, list, null);
+    }
+
+    /// <summary>
+    /// What a button says when its feature belongs to a later phase: which part of the
+    /// application brings it, rather than a silent nothing.
+    /// </summary>
+    private Task Later(string title, string message) => Confirm.TellAsync(this, title, message);
+
+    // ---- The harness ----------------------------------------------------------------------
+
+    /// <summary>
+    /// Presses a button for the fidelity harness, which cannot click, and says what the store
+    /// holds afterwards. <c>MAILBOX_ACCOUNTS_ACTION</c>: <c>select:&lt;n&gt;</c> then one of
+    /// <c>setdefault</c>, <c>up</c>, <c>down</c>, <c>changefolder:&lt;name&gt;</c>,
+    /// <c>filedefault</c>, <c>detach</c>, <c>attach:&lt;path&gt;</c>, <c>compact</c>. The two
+    /// that ask a question first are answered here rather than through their dialog, because a
+    /// modal question is what a harness cannot press.
+    /// </summary>
+    internal void Harness(string actions)
+    {
+        foreach (var raw in actions.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var (action, argument) = raw.Split(':', 2) is [var a, var b] ? (a, b) : (raw, string.Empty);
+            switch (action.ToLowerInvariant())
+            {
+                case "select":
+                    _accounts.SelectedIndex = int.Parse(argument, CultureInfo.InvariantCulture);
+                    _files.SelectedIndex = _accounts.SelectedIndex;
+                    break;
+                case "tab":
+                    _tabs.SelectedIndex = int.Parse(argument, CultureInfo.InvariantCulture);
+                    break;
+                case "setdefault": Press(_setDefault); break;
+                case "filedefault": Press(_fileDefault); break;
+                case "up": Press(_up); break;
+                case "down": Press(_down); break;
+                case "changefolder":
+                    if (Selected is { } row && AccountSettings.Load(App.Settings, row.Account.Address) is { } settings
+                        && row.Mail.Folders(row.Account.Id).FirstOrDefault(f => f.Name.Contains(argument, StringComparison.OrdinalIgnoreCase)) is { } folder)
+                    {
+                        SetDeliveryFolder(row, settings, folder);
+                    }
+                    break;
+                case "detach":
+                    if (SelectedFile is { } file) Mailbox.Core.Diagnostics.Log.Info($"Harness: detached to {Detach(file)}");
+                    break;
+                case "attach":
+                    var (attached, error) = App.Accounts.Attach(argument);
+                    Mailbox.Core.Diagnostics.Log.Info($"Harness: attach {(attached is null ? "refused: " + error : "opened " + attached.Path)}");
+                    Reload();
+                    break;
+                case "compact":
+                    if (SelectedFile is { } target) Mailbox.Core.Diagnostics.Log.Info($"Harness: compacted to {target.Store.Compact():N0} bytes");
+                    break;
+            }
+        }
+
+        // What the store says now, for the log to be read back.
+        Mailbox.Core.Diagnostics.Log.Info($"Harness: accounts are {string.Join(", ", App.Accounts.All.Select(a => a.Account.Address + (a.IsDefault ? " (default)" : string.Empty)))}.");
+        foreach (var account in App.Accounts.All)
+        {
+            var settings = AccountSettings.Load(App.Settings, account.Account.Address);
+            Mailbox.Core.Diagnostics.Log.Info($"Harness: {account.Account.Address} delivers to {DeliveryFolderName(account)}"
+                + (settings?.DeliveryFolderId is { } id ? $" (folder {id})" : " (the Inbox, no choice recorded)") + ".");
+        }
+        Mailbox.Core.Diagnostics.Log.Info($"Harness: buttons — change {(_change.IsEnabled ? "on" : "off")}, "
+            + $"set default {(_setDefault.IsEnabled ? "on" : "off")}, up {(_up.IsEnabled ? "on" : "off")}, "
+            + $"down {(_down.IsEnabled ? "on" : "off")}, change folder {(_changeFolder.IsEnabled ? "on" : "off")}.");
+    }
+
+    private static void Press(Button button)
+    {
+        if (!button.IsEnabled) return;
+        button.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+    }
 }

@@ -16,6 +16,9 @@
         <!-- Relative rather than avares:// so it survives the assembly being named
              'mailbox' for the Linux binary. -->
         <StyleInclude Source="/Styles/Shell.axaml" />
+
+        <!-- After Shell.axaml on purpose: a system dialog's rules override the general ones. -->
+        <StyleInclude Source="/Styles/SystemDialog.axaml" />
     </Application.Styles>
 
 </Application>

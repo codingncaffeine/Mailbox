@@ -158,7 +158,10 @@ public sealed class SendReceiveService(
             };
         }
 
-        var inbox = target.Mail.FolderWithRole(account.AccountId, FolderRole.Inbox);
+        // Delivered to the Inbox unless the account says another folder — and to the Inbox
+        // again if that folder has since gone, because mail with nowhere to go is lost mail.
+        var inbox = (account.Policy.DeliveryFolderId is { } chosen ? target.Mail.GetFolder(chosen) : null)
+                    ?? target.Mail.FolderWithRole(account.AccountId, FolderRole.Inbox);
         if (inbox is null)
         {
             return new AccountRunResult(account.Address, 0, sent,

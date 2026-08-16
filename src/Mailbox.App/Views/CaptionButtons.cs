@@ -34,6 +34,14 @@ public sealed class CaptionButtons : StackPanel
     private const double DialogButtonWidth = 46;
     private const double DialogButtonHeight = 33;
 
+    /// <summary>
+    /// A system dialog's caption is the desktop's own: 30px, measured off the Account Settings
+    /// capture, with the cross standing 15px in from the window's right edge — the desktop's
+    /// button reaches out under an invisible resize border the capture does not show.
+    /// </summary>
+    private const double SystemButtonHeight = 30;
+    private const double SystemGlyphInset = 8;
+
     private const double GlyphBox = 10;
     private const double StrokeWidth = 1;
 
@@ -59,18 +67,24 @@ public sealed class CaptionButtons : StackPanel
     /// True for a dialog: a shorter caption with a close button only, painted from the dialog
     /// tokens rather than the title bar's.
     /// </param>
-    public CaptionButtons(Window window, bool dialog = false)
+    /// <param name="system">
+    /// True for a system dialog — Account Settings and its children — whose caption is the
+    /// desktop's light one in every theme: shorter again, and painted from the system dialog
+    /// tokens. Implies <paramref name="dialog"/>.
+    /// </param>
+    public CaptionButtons(Window window, bool dialog = false, bool system = false)
     {
         _window = window;
         Orientation = Orientation.Horizontal;
         VerticalAlignment = VerticalAlignment.Top;
+        dialog |= system;
 
         if (!dialog)
         {
-            Children.Add(Build(MinimizeGlyph(), "Minimize", isClose: false, dialog,
+            Children.Add(Build(MinimizeGlyph(), "Minimize", isClose: false, dialog, system,
                 () => _window.WindowState = WindowState.Minimized));
 
-            _maximize = Build(MaximizeGlyph(), "Maximize", isClose: false, dialog, ToggleMaximize);
+            _maximize = Build(MaximizeGlyph(), "Maximize", isClose: false, dialog, system, ToggleMaximize);
             Children.Add(_maximize);
 
             _window.PropertyChanged += (_, e) =>
@@ -79,7 +93,7 @@ public sealed class CaptionButtons : StackPanel
             };
         }
 
-        Children.Add(Build(CloseGlyph(), "Close", isClose: true, dialog, () => _window.Close()));
+        Children.Add(Build(CloseGlyph(), "Close", isClose: true, dialog, system, () => _window.Close()));
     }
 
     private void ToggleMaximize()
@@ -97,13 +111,13 @@ public sealed class CaptionButtons : StackPanel
     }
 
     private static Button Build(
-        Control glyph, string tip, bool isClose, bool dialog, Action onClick)
+        Control glyph, string tip, bool isClose, bool dialog, bool system, Action onClick)
     {
         var button = new Button
         {
             Content = glyph,
             Width = dialog ? DialogButtonWidth : ButtonWidth,
-            Height = dialog ? DialogButtonHeight : ButtonHeight,
+            Height = system ? SystemButtonHeight : dialog ? DialogButtonHeight : ButtonHeight,
             Padding = default,
             BorderThickness = default,
             CornerRadius = default,
@@ -115,6 +129,14 @@ public sealed class CaptionButtons : StackPanel
         // A dialog's caption sits on the dialog's ground, not the title bar's, and in two of
         // the four themes those are opposite ends of the ramp.
         if (dialog) button.Classes.Add("on-dialog");
+
+        // A system dialog's cross is further right than centred, as the desktop draws it.
+        if (system)
+        {
+            button.Classes.Add("on-system");
+            button.HorizontalContentAlignment = HorizontalAlignment.Right;
+            button.Padding = new Thickness(0, 0, SystemGlyphInset, 1);
+        }
 
         ToolTip.SetTip(button, tip);
         button.Click += (_, _) => onClick();

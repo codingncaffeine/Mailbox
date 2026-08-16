@@ -29,6 +29,51 @@ public static class Confirm
         => (await AskAsync(owner, title, message, confirmLabel, destructive, dontShowAgain: null)).Confirmed;
 
     /// <summary>
+    /// A statement rather than a question: one OK button, which is also the cancel. For
+    /// telling the user something happened, or why it did not.
+    /// </summary>
+    public static async Task TellAsync(Window owner, string title, string message)
+    {
+        var text = new TextBlock
+        {
+            Text = message,
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 420,
+        };
+        Bind(text, TextBlock.ForegroundProperty, "dialog.foreground.brush");
+
+        var window = new Window
+        {
+            Title = title,
+            SizeToContent = SizeToContent.WidthAndHeight,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ShowInTaskbar = false,
+        };
+
+        var ok = new Button { Content = "OK", IsDefault = true, IsCancel = true };
+        ok.Click += (_, _) => window.Close();
+
+        DialogChrome.Apply(window, new StackPanel
+        {
+            Margin = new Thickness(22),
+            Spacing = 18,
+            Children =
+            {
+                text,
+                new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Children = { ok },
+                },
+            },
+        });
+
+        await window.ShowDialog(owner);
+    }
+
+    /// <summary>
     /// The same question, with the reference's "Don't show this message again" beneath it when a
     /// label is given. The caller remembers the answer; this only reports the tick.
     /// </summary>

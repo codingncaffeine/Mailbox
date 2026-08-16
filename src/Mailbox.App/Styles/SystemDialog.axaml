@@ -1,0 +1,183 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        The system dialogs: Account Settings and the small dialogs it opens. The reference
+        draws these with the desktop's own controls, so they take the desktop's light dialog
+        palette in every theme — the systemdialog.* tokens — rather than the dialog.* six.
+        Included after Shell.axaml so that these rules win over the general button and text
+        rules there for anything under a system dialog's root.
+    -->
+
+    <Style Selector="Border.systemdialogroot TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource systemdialog.foreground.brush}" />
+    </Style>
+
+    <!-- The caption's cross stands on the desktop's light caption. Its hover red is the same
+         as every other caption's; that rule is in Shell.axaml. -->
+    <Style Selector="Button.caption-close.on-system">
+        <Setter Property="Foreground" Value="{DynamicResource systemdialog.foreground.brush}" />
+    </Style>
+
+    <!-- ============================== Push button ============================== -->
+    <!--
+        The desktop's push button, measured off the capture: 21px tall in a 1px line with
+        4px corners, and the line a shade darker along the bottom edge. Two nested borders
+        rather than a shadow — a shadow's colour cannot come from a token — the outer one
+        painting the darker bottom edge through a 1px bottom padding, and its corners showing
+        through the inner border's rounding as the desktop's do.
+    -->
+    <Style Selector="Button.sysbutton">
+        <Setter Property="Background" Value="{DynamicResource systemdialog.button.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource systemdialog.button.border.brush}" />
+        <Setter Property="Foreground" Value="{DynamicResource systemdialog.foreground.brush}" />
+        <Setter Property="Height" Value="21" />
+        <Setter Property="MinWidth" Value="73" />
+        <Setter Property="Padding" Value="10,3,10,0" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Name="Edge"
+                        CornerRadius="4"
+                        Background="{DynamicResource systemdialog.button.border.bottom.brush}"
+                        Padding="0,0,0,1">
+                    <Border Name="Frame"
+                            CornerRadius="4"
+                            BorderThickness="1"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}">
+                        <ContentPresenter Name="PART_ContentPresenter"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Padding="{TemplateBinding Padding}"
+                                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          RecognizesAccessKey="True" />
+                    </Border>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+
+    <Style Selector="Button.sysbutton:pointerover">
+        <Setter Property="Background" Value="{DynamicResource systemdialog.hover.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource systemdialog.accent.brush}" />
+    </Style>
+
+    <Style Selector="Button.sysbutton:pressed">
+        <Setter Property="Background" Value="{DynamicResource systemdialog.pressed.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource systemdialog.accent.brush}" />
+    </Style>
+
+    <Style Selector="Button.sysbutton:disabled">
+        <Setter Property="Background" Value="{DynamicResource systemdialog.button.disabled.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource systemdialog.button.disabled.border.brush}" />
+        <Setter Property="Foreground" Value="{DynamicResource systemdialog.foreground.disabled.brush}" />
+    </Style>
+
+    <Style Selector="Button.sysbutton:disabled /template/ Border#Edge">
+        <Setter Property="Background" Value="{DynamicResource systemdialog.button.disabled.border.brush}" />
+    </Style>
+
+    <!-- The label a presenter makes for a string is a TextBlock under the root, and the ground
+         ink rule above would reach it; declared after that rule so the disabled ink wins. -->
+    <Style Selector="Button.sysbutton:disabled TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource systemdialog.foreground.disabled.brush}" />
+    </Style>
+
+    <!-- ============================= Toolbar button ============================ -->
+    <!--
+        The flat buttons along the top of a page: an icon and a word, no line at rest, and a
+        pale blue box under the pointer. Disabled, the word greys and the icon becomes its
+        silhouette — the icon control reads IsEnabled through the button.
+    -->
+    <Style Selector="Button.systool">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource systemdialog.foreground.brush}" />
+        <Setter Property="Padding" Value="4,2,5,2" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Height" Value="22" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Name="Frame"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}">
+                    <ContentPresenter Name="PART_ContentPresenter"
+                                      Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      Padding="{TemplateBinding Padding}"
+                                      HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                      VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                      RecognizesAccessKey="True" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+
+    <Style Selector="Button.systool:pointerover">
+        <Setter Property="Background" Value="{DynamicResource systemdialog.hover.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource systemdialog.hover.border.brush}" />
+    </Style>
+
+    <Style Selector="Button.systool:pressed">
+        <Setter Property="Background" Value="{DynamicResource systemdialog.pressed.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource systemdialog.hover.border.brush}" />
+    </Style>
+
+    <Style Selector="Button.systool:disabled">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource systemdialog.foreground.disabled.brush}" />
+    </Style>
+
+    <Style Selector="Button.systool:disabled TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource systemdialog.foreground.disabled.brush}" />
+    </Style>
+
+    <!-- =============================== Text field ============================== -->
+    <!-- The desktop's edit box: white in a grey-blue hairline, blue when focused. -->
+    <Style Selector="TextBox.sysfield">
+        <Setter Property="Background" Value="{DynamicResource systemdialog.list.background.brush}" />
+        <Setter Property="Foreground" Value="{DynamicResource systemdialog.foreground.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource systemdialog.field.border.brush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="0" />
+        <Setter Property="CaretBrush" Value="{DynamicResource systemdialog.foreground.brush}" />
+        <Setter Property="SelectionBrush" Value="{DynamicResource systemdialog.selection.focused.brush}" />
+        <Setter Property="SelectionForegroundBrush" Value="{DynamicResource systemdialog.foreground.brush}" />
+        <Setter Property="Padding" Value="3,1" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Height" Value="20" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+
+    <Style Selector="TextBox.sysfield:pointerover">
+        <Setter Property="BorderBrush" Value="{DynamicResource systemdialog.list.border.brush}" />
+    </Style>
+
+    <!-- Focused, the line stays as it is: the capture shows the caret in a field whose line
+         is the same grey-blue as at rest. -->
+    <Style Selector="TextBox.sysfield:focus">
+        <Setter Property="BorderBrush" Value="{DynamicResource systemdialog.field.border.brush}" />
+    </Style>
+
+    <!-- The control theme paints its own line on hover and focus straight onto the template's
+         border; the rules above must reach that too or its colours show instead. -->
+    <Style Selector="TextBox.sysfield:pointerover /template/ Border">
+        <Setter Property="BorderBrush" Value="{DynamicResource systemdialog.list.border.brush}" />
+        <Setter Property="Background" Value="{DynamicResource systemdialog.list.background.brush}" />
+    </Style>
+
+    <Style Selector="TextBox.sysfield:focus /template/ Border">
+        <Setter Property="BorderBrush" Value="{DynamicResource systemdialog.field.border.brush}" />
+        <Setter Property="Background" Value="{DynamicResource systemdialog.list.background.brush}" />
+    </Style>
+
+</Styles>

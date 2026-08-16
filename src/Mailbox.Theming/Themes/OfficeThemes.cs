@@ -142,6 +142,7 @@ public static class OfficeThemes
 
         LightSemantics(t);
         LightChrome(t);
+        SystemDialogPalette(t);
 
         // The title bar alone carries the hue. The tab strip below it is light, which is what
         // an earlier guess got wrong — it had the blue running down through the tab strip.
@@ -208,6 +209,7 @@ public static class OfficeThemes
 
         LightSemantics(t);
         LightChrome(t);
+        SystemDialogPalette(t);
 
         // Not actually white: the title bar is the same pale blue-grey as the tab strip, and
         // only the ribbon and the content behind it are truly white.
@@ -297,6 +299,7 @@ public static class OfficeThemes
 
         LightSemantics(t);
         LightChrome(t);
+        SystemDialogPalette(t);
 
         // Content sits light inside dark chrome.
         t.Set(TokenKeys.Surface.Ground, "{palette.content.row}");
@@ -435,6 +438,8 @@ public static class OfficeThemes
         t.Set("palette.raised", "#252525");
         t.Set("palette.sunken", "#171717");
 
+        SystemDialogPalette(t);
+
         // Semantics — dark. Deliberately authored rather than inverted from the light set:
         // a naive inversion produces muddy hover states and unreadable disabled text.
         t.Set(TokenKeys.Surface.Ground, "{palette.ground}");
@@ -572,6 +577,56 @@ public static class OfficeThemes
         t.Set(TokenKeys.Calendar.NavigatorToday, "{palette.brand.primary}");
 
         return t;
+    }
+
+    // ------------------------------------------------------------------------------------
+    // The system dialogs — Account Settings and the small dialogs it opens. The reference
+    // draws these with the desktop's own controls, and the desktop's light dialog palette
+    // does not follow the Office theme: they are the same light grey in Colorful, White,
+    // Dark Gray and Black alike. So every built-in gets the same values, all measured off
+    // the Account Settings captures — the #F0F0F0 ground, the white banner under the
+    // caption with an #AAAAAA rule beneath it, the #F9F9F9 tab page inside #E5E5E5 lines,
+    // the list's #828790 frame, a selected row #F0F0F0 while the list is not focused, and
+    // the #FDFDFD buttons in a #D0D0D0 line that darkens to #BABABA along the bottom.
+    // ------------------------------------------------------------------------------------
+    private static void SystemDialogPalette(TokenSet t)
+    {
+        t.Set(TokenKeys.SystemDialog.TitleBar, "#F3F3F3");
+        t.Set(TokenKeys.SystemDialog.Background, "#F0F0F0");
+        t.Set(TokenKeys.SystemDialog.Banner, "#FFFFFF");
+        t.Set(TokenKeys.SystemDialog.BannerRule, "#AAAAAA");
+        t.Set(TokenKeys.SystemDialog.Foreground, "#000000");
+        t.Set(TokenKeys.SystemDialog.ForegroundDisabled, "#A0A0A0");
+        t.Set(TokenKeys.SystemDialog.Surface, "#F9F9F9");
+        t.Set(TokenKeys.SystemDialog.Tab, "#F3F3F3");
+        t.Set(TokenKeys.SystemDialog.Border, "#E5E5E5");
+        t.Set(TokenKeys.SystemDialog.ListBackground, "#FFFFFF");
+        t.Set(TokenKeys.SystemDialog.ListBorder, "#828790");
+        t.Set(TokenKeys.SystemDialog.Selection, "#F0F0F0");
+        t.Set(TokenKeys.SystemDialog.SelectionFocused, "#CCE8FF");
+        t.Set(TokenKeys.SystemDialog.Hover, "#E5F1FB");
+        t.Set(TokenKeys.SystemDialog.HoverBorder, "#CCE4F7");
+        t.Set(TokenKeys.SystemDialog.Pressed, "#CCE4F7");
+        t.Set(TokenKeys.SystemDialog.Accent, "#0078D4");
+        t.Set(TokenKeys.SystemDialog.FieldBorder, "#ABADB3");
+        t.Set(TokenKeys.SystemDialog.Button, "#FDFDFD");
+        t.Set(TokenKeys.SystemDialog.ButtonBorder, "#D0D0D0");
+        t.Set(TokenKeys.SystemDialog.ButtonBorderBottom, "#BABABA");
+        t.Set(TokenKeys.SystemDialog.ButtonDisabled, "#F9F9F9");
+        t.Set(TokenKeys.SystemDialog.ButtonDisabledBorder, "#E9E9E9");
+
+        // The toolbar icons' colours, sampled from the reference's: a gold envelope in a
+        // blue-grey sleeve, a steel hammer on a wooden handle, a blue arrow.
+        t.Set(TokenKeys.SystemDialog.IconInk, "#000000");
+        t.Set(TokenKeys.SystemDialog.IconPaper, "#FFFFFF");
+        t.Set(TokenKeys.SystemDialog.IconGold, "#F0D060");
+        t.Set(TokenKeys.SystemDialog.IconGoldDark, "#C5922D");
+        t.Set(TokenKeys.SystemDialog.IconSteel, "#90A1B7");
+        t.Set(TokenKeys.SystemDialog.IconSteelDark, "#445975");
+        t.Set(TokenKeys.SystemDialog.IconWood, "#8C7E6E");
+        t.Set(TokenKeys.SystemDialog.IconGreen, "#4CB050");
+        t.Set(TokenKeys.SystemDialog.IconBlue, "#6088D0");
+        t.Set(TokenKeys.SystemDialog.IconBlueDark, "#3058B0");
     }
 
     // ------------------------------------------------------------------------------------
