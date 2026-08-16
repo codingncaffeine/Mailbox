@@ -44,8 +44,8 @@ public sealed class ComposeWindow : Window
     /// <summary>Re-raised from the surface: a message queued and meant to go under Undo Send's hold.</summary>
     public event EventHandler<QueuedMessageEventArgs>? Queued;
 
-    public ComposeWindow(CommandCatalog catalog, AccountStores? accounts)
-        : this(catalog, new ComposeSurface(catalog, accounts))
+    public ComposeWindow(CommandCatalog catalog, AccountStores? accounts, Mailbox.Contacts.ContactBook? contacts = null)
+        : this(catalog, new ComposeSurface(catalog, accounts, contacts))
     {
     }
 
@@ -176,6 +176,9 @@ public sealed class ComposeWindow : Window
 
     /// <summary>What the Auto-Complete List last offered on the To line, for the harness.</summary>
     public (bool IsOpen, int Offered) ToLineCompletion => _surface.ToLineCompletion;
+
+    /// <summary>What the To line is offering, one line each, for the harness.</summary>
+    public IReadOnlyList<string> ToLineSuggestions => _surface.ToLineSuggestions;
 
     // ----------------------------------------------------------------------------------
     // Window chrome

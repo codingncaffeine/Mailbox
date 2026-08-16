@@ -13,7 +13,9 @@ using Mailbox.App.Theming;
 using Mailbox.Controls.Ribbon;
 using Mailbox.Editor;
 using Mailbox.Rendering;
+using Mailbox.Contacts;
 using Mailbox.Core.Commands;
+using Mailbox.Core.Compose;
 using Mailbox.Core.Diagnostics;
 using Mailbox.Core.Ribbon;
 using Mailbox.Core.Settings;
@@ -98,6 +100,9 @@ public sealed class ComposeSurface : UserControl
 
     private readonly CommandCatalog _catalog;
     private readonly AccountStores? _accounts;
+
+    /// <summary>The address book, which the recipient lines offer beside what has been written to before.</summary>
+    private readonly Mailbox.Contacts.ContactBook? _contacts;
 
     private readonly TextBox _to = Field();
     private readonly TextBox _cc = Field();
@@ -226,10 +231,11 @@ public sealed class ComposeSurface : UserControl
     private const string DeleteRepeated = "\u0000delete-repeated";
     private const string EditSignatures = "\u0000signatures";
 
-    public ComposeSurface(CommandCatalog catalog, AccountStores? accounts)
+    public ComposeSurface(CommandCatalog catalog, AccountStores? accounts, Mailbox.Contacts.ContactBook? contacts = null)
     {
         _catalog = catalog;
         _accounts = accounts;
+        _contacts = contacts;
 
         FontFamily = (FontFamily)(Application.Current!.FindResource("ui.fontfamily") ?? FontFamily.Default);
 
@@ -918,15 +924,21 @@ public sealed class ComposeSurface : UserControl
     private readonly List<RecipientAutocomplete> _completions = [];
 
     /// <summary>
-    /// The Auto-Complete List for what has been typed, merged across every account: one entry
-    /// per address, its weight the sum, its name the most-used account's.
+    /// What the Auto-Complete List offers for what has been typed: the addresses written to
+    /// before, merged across every account, and then the address book.
     /// </summary>
-    private IReadOnlyList<Nickname> SuggestRecipients(string typed)
+    /// <remarks>
+    /// Both, in that order, which is the order they are worth: an address written to last week is
+    /// a better guess than one of two thousand contacts, and a contact nobody has written to yet
+    /// would otherwise be unreachable without opening the address book. A contact whose address
+    /// is already remembered stays one entry and gains the contact's name where the cache had
+    /// none.
+    /// </remarks>
+    internal IReadOnlyList<RecipientSuggestion> SuggestRecipients(string typed)
     {
-        if (_accounts is null) return [];
+        var merged = new Dictionary<string, RecipientSuggestion>(StringComparer.OrdinalIgnoreCase);
 
-        var merged = new Dictionary<string, Nickname>(StringComparer.OrdinalIgnoreCase);
-        foreach (var account in _accounts.All)
+        foreach (var account in _accounts?.All ?? [])
         {
             foreach (var entry in account.Mail.SuggestRecipients(typed))
             {
@@ -937,8 +949,26 @@ public sealed class ComposeSurface : UserControl
                         DisplayName = seen.DisplayName.Length > 0 ? seen.DisplayName : entry.DisplayName,
                         LastUsed = entry.LastUsed > seen.LastUsed ? entry.LastUsed : seen.LastUsed,
                     }
-                    : entry;
+                    : new RecipientSuggestion(
+                        entry.Address, entry.DisplayName, entry.Address, entry.Formatted,
+                        Weight: entry.Weight, LastUsed: entry.LastUsed);
             }
+        }
+
+        foreach (var suggestion in _contacts is { } book ? ContactSuggestions.For(book, typed) : [])
+        {
+            if (merged.TryGetValue(suggestion.Key, out var seen))
+            {
+                // Already remembered: one entry, which now knows it is somebody in the book.
+                merged[suggestion.Key] = seen with
+                {
+                    DisplayName = seen.DisplayName.Length > 0 ? seen.DisplayName : suggestion.DisplayName,
+                    Detail = suggestion.Detail,
+                };
+                continue;
+            }
+
+            merged[suggestion.Key] = suggestion;
         }
 
         return
@@ -946,6 +976,7 @@ public sealed class ComposeSurface : UserControl
             .. merged.Values
                 .OrderByDescending(e => e.Weight)
                 .ThenByDescending(e => e.LastUsed)
+                .ThenBy(e => e.DisplayName, StringComparer.CurrentCultureIgnoreCase)
                 .ThenBy(e => e.Address, StringComparer.OrdinalIgnoreCase)
                 .Take(8),
         ];
@@ -984,6 +1015,9 @@ public sealed class ComposeSurface : UserControl
     /// <summary>What the Auto-Complete List last offered on the To line, for the harness.</summary>
     public (bool IsOpen, int Offered) ToLineCompletion =>
         _completions.Count > 0 ? (_completions[0].IsOpen, _completions[0].Offered) : (false, 0);
+
+    /// <summary>What the To line is offering, one line each, for the harness.</summary>
+    public IReadOnlyList<string> ToLineSuggestions => _completions.Count > 0 ? _completions[0].Describe() : [];
 
     private static Control IconBlock(string icon, double size)
     {

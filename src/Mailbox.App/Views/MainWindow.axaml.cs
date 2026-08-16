@@ -1019,7 +1019,7 @@ public partial class MainWindow : Window
         {
             Opened += async (_, _) =>
             {
-                var compose = new ComposeWindow(App.Commands, App.Accounts);
+                var compose = new ComposeWindow(App.Commands, App.Accounts, App.Contacts);
                 WindowCapture.ApplyRequestedSize(compose);
                 WindowCapture.HideWhileCapturing(compose);
                 compose.SelectTab(composeTab == "1" ? "message" : composeTab);
@@ -1052,6 +1052,10 @@ public partial class MainWindow : Window
                         compose.PoseTyping(typed);
                         var (open, offered) = compose.ToLineCompletion;
                         Console.WriteLine($"Auto-complete on To for \"{typed}\": open={open}, offered={offered}");
+                        foreach (var entry in compose.ToLineSuggestions)
+                        {
+                            Console.WriteLine($"  offers {entry}");
+                        }
                     }, DispatcherPriority.Background);
                 }
 
@@ -1179,7 +1183,7 @@ public partial class MainWindow : Window
     /// </summary>
     private void NewMessage(Mailbox.Core.Compose.MailtoLink? mailto = null)
     {
-        var compose = new ComposeWindow(App.Commands, App.Accounts);
+        var compose = new ComposeWindow(App.Commands, App.Accounts, App.Contacts);
 
         // "Always use the default account when composing new messages" is off by default, and
         // off means what the reference means: a message written while looking at the work
@@ -1374,7 +1378,7 @@ public partial class MainWindow : Window
             using var stream = new MemoryStream(raw);
             var message = MimeKit.MimeMessage.Load(stream);
 
-            var compose = new ComposeWindow(App.Commands, App.Accounts);
+            var compose = new ComposeWindow(App.Commands, App.Accounts, App.Contacts);
             compose.Restore(message);
             compose.Queued += (_, e) => OnQueued(e);
             compose.Closed += (_, _) => shell.Refresh();
@@ -2121,7 +2125,7 @@ public partial class MainWindow : Window
         // so it does not multiply, and sending it takes it out of Drafts.
         if (shell.CurrentFolderRole == FolderRole.Drafts && shell.SelectedMessage is { } draft)
         {
-            var compose = new ComposeWindow(App.Commands, App.Accounts);
+            var compose = new ComposeWindow(App.Commands, App.Accounts, App.Contacts);
             compose.EditDraft(draft.Id, message);
             compose.Queued += (_, e) => OnQueued(e);
             compose.Closed += (_, _) => shell.Refresh();
@@ -2854,7 +2858,7 @@ public partial class MainWindow : Window
 
     private void OpenReplyWindow(ShellViewModel shell, ReplyDraft draft, ReplyKind kind, string? address)
     {
-        var compose = new ComposeWindow(App.Commands, App.Accounts);
+        var compose = new ComposeWindow(App.Commands, App.Accounts, App.Contacts);
 
         if (address is { Length: > 0 }) compose.SendFromAccount(address);
 
@@ -2892,7 +2896,7 @@ public partial class MainWindow : Window
         // first, so there is one inline surface at a time rather than a stack nobody asked for.
         if (_inlineCompose is not null) CloseInlineCompose(shell);
 
-        var surface = new ComposeSurface(App.Commands, App.Accounts);
+        var surface = new ComposeSurface(App.Commands, App.Accounts, App.Contacts);
         if (address is { Length: > 0 }) surface.SendFromAccount(address);
         surface.Prefill(draft, kind);
 
