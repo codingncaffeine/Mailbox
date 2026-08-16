@@ -423,6 +423,34 @@ public class CalendarPhaseTests
         Assert.Equal(item.Id, tomorrow[0].ItemId);
     }
 
+    /// <summary>
+    /// A row whose text will not parse still shows, from its columns. Ical.Net accepts a VEVENT
+    /// with no DTSTART and then throws from the property getter, so the failure lands two lines
+    /// past the load — and one damaged row used to take the whole calendar down with it.
+    /// </summary>
+    [Fact]
+    public void ARowWhoseTextWillNotParseIsRebuiltFromItsColumns()
+    {
+        Assert.Throws<FormatException>(() => ICalendarCodec.Parse("BEGIN:VEVENT\r\nUID:broken\r\nEND:VEVENT"));
+
+        var item = new PimItem
+        {
+            CollectionId = 1,
+            Uid = "broken",
+            Kind = CollectionKind.Events,
+            RawPayload = "BEGIN:VEVENT\r\nUID:broken\r\nEND:VEVENT",
+            Summary = "Board meeting",
+            StartsLocal = "2026-08-20T09:00:00",
+            EndsLocal = "2026-08-20T10:00:00",
+            TzId = Zone,
+        };
+
+        var rebuilt = PimEventCodec.FromItem(item);
+
+        Assert.Equal("Board meeting", rebuilt.Summary);
+        Assert.Equal(new DateTime(2026, 8, 20, 9, 0, 0), rebuilt.Start.Wall);
+    }
+
     [Fact]
     public void AnItemWithNoReminderIsNeverDue()
     {

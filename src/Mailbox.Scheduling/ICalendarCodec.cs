@@ -65,23 +65,30 @@ public static class ICalendarCodec
         if (trimmed.StartsWith("BEGIN:VEVENT", StringComparison.OrdinalIgnoreCase))
             trimmed = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:" + ProductId + "\r\n" + trimmed.TrimEnd() + "\r\nEND:VCALENDAR\r\n";
 
-        IcalCalendar? calendar;
+        // Reading the components is inside the guard as well as loading them. Ical.Net accepts a
+        // VEVENT with no DTSTART and then throws from the property getter, so a block that is
+        // missing one gets past Load and takes the caller down two lines later — which is the
+        // damaged row PimEventCodec promises to survive by falling back to the columns.
         try
         {
-            calendar = IcalCalendar.Load(trimmed);
+            var calendar = IcalCalendar.Load(trimmed);
+            if (calendar is null) throw new FormatException("The text is not an iCalendar object.");
+
+            return calendar.Events
+                .Select(FromIcal)
+                .OrderBy(e => e.Uid, StringComparer.Ordinal)
+                .ThenBy(e => e.IsOverride ? 1 : 0)
+                .ThenBy(e => e.RecurrenceId?.Wall ?? DateTime.MinValue)
+                .ToList();
+        }
+        catch (FormatException)
+        {
+            throw;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             throw new FormatException("The text is not an iCalendar object.", ex);
         }
-        if (calendar is null) throw new FormatException("The text is not an iCalendar object.");
-
-        return calendar.Events
-            .Select(FromIcal)
-            .OrderBy(e => e.Uid, StringComparer.Ordinal)
-            .ThenBy(e => e.IsOverride ? 1 : 0)
-            .ThenBy(e => e.RecurrenceId?.Wall ?? DateTime.MinValue)
-            .ToList();
     }
 
     /// <summary>The application's event as Ical.Net holds one, for serialising or expanding.</summary>
