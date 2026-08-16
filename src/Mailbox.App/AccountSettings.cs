@@ -44,6 +44,13 @@ public sealed record AccountSettings(
     public int SievePort { get; init; } = 4190;
 
     /// <summary>
+    /// The folder a POP3 poll delivers into, or null for the Inbox — the reference's Change
+    /// Folder. A folder id within the account's own file, as the rules keep theirs: the file is
+    /// the account, so the id survives a backup and restore with it.
+    /// </summary>
+    public long? DeliveryFolderId { get; init; }
+
+    /// <summary>
     /// Settings key off the address, not the row id. A row id belongs to one store file, and
     /// the point of a file per account is that it can be restored or copied — after which the
     /// id may differ but the address does not.
@@ -75,6 +82,9 @@ public sealed record AccountSettings(
             OfflineMonths = (int)settings.GetNumber(Key(accountKey, "offlinemonths"), 12),
             SieveHost = settings.GetString(Key(accountKey, "sieve.host")),
             SievePort = (int)settings.GetNumber(Key(accountKey, "sieve.port"), 4190),
+            DeliveryFolderId = settings.Has(Key(accountKey, "delivery.folder"))
+                ? (long)settings.GetNumber(Key(accountKey, "delivery.folder"))
+                : null,
         };
     }
 
@@ -94,6 +104,8 @@ public sealed record AccountSettings(
         settings.Set(Key(accountKey, "offlinemonths"), OfflineMonths);
         settings.Set(Key(accountKey, "sieve.host"), SieveHost);
         settings.Set(Key(accountKey, "sieve.port"), SievePort);
+        if (DeliveryFolderId is { } folder) settings.Set(Key(accountKey, "delivery.folder"), folder);
+        else settings.Remove(Key(accountKey, "delivery.folder"));
     }
 
     /// <summary>
@@ -141,6 +153,7 @@ public sealed record AccountSettings(
             {
                 LeaveOnServer = LeaveOnServer,
                 DeleteAfterDays = DeleteAfterDays,
+                DeliveryFolderId = DeliveryFolderId,
             },
             Sync = new ImapPolicy { OfflineMonths = OfflineMonths },
         };

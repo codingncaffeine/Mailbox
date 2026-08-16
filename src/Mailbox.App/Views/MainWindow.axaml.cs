@@ -521,11 +521,39 @@ public partial class MainWindow : Window
 
             // The dialogs behind the Backstage's menus, which otherwise take three clicks to
             // reach and so have never been photographed.
+            // MAILBOX_ACCOUNTS_TAB poses one of its tabs, by index or name;
+            // MAILBOX_ACCOUNTS_ACTION presses its buttons and logs what the store says after.
             case "accounts":
                 Opened += async (_, _) =>
                 {
                     CaptureNextWindow();
-                    await new AccountSettingsDialog().ShowDialog(this);
+                    var accounts = new AccountSettingsDialog(Environment.GetEnvironmentVariable("MAILBOX_ACCOUNTS_TAB"));
+                    if (Environment.GetEnvironmentVariable("MAILBOX_ACCOUNTS_ACTION") is { Length: > 0 } actions)
+                    {
+                        accounts.Opened += (_, _) => accounts.Harness(actions);
+                    }
+                    await accounts.ShowDialog(this);
+                };
+                break;
+
+            // The subscription prompt behind New… on the Internet Calendars tab.
+            case "subscription":
+                Opened += async (_, _) =>
+                {
+                    CaptureNextWindow();
+                    await new SubscriptionDialog(
+                        "New Internet Calendar Subscription",
+                        "Enter the location of the Internet Calendar you want to add to Mailbox:",
+                        "Example: webcal://www.example.com/calendars/Calendar.ics").ShowDialog(this);
+                };
+                break;
+
+            case "datafile":
+                Opened += async (_, _) =>
+                {
+                    if (App.Accounts.Default is not { } open) return;
+                    CaptureNextWindow();
+                    await new DataFileSettingsDialog(open).ShowDialog(this);
                 };
                 break;
 

@@ -197,4 +197,93 @@ public class AccountStoresTests : IDisposable
         Assert.Equal(["one@example.com", "two@example.net"],
             stores.All.Select(a => a.Account.Address));
     }
+
+    /// <summary>
+    /// The Data Files tab's Add and Remove: a file can be closed without being deleted, and
+    /// opened again — here or from a backup somewhere else — under its own address's name.
+    /// </summary>
+    [Fact]
+    public void ADetachedFileKeepsItsMailAndCanBeAttachedAgain()
+    {
+        using var stores = new AccountStores(Accounts, Order());
+        var one = stores.Add("one@example.com", "One", MailProtocol.Pop3);
+        var inbox = one.Mail.FolderWithRole(one.Account.Id, FolderRole.Inbox)!;
+        one.Mail.AddMessage(inbox.Id, new MessageSummary(
+            0, 0, "uid-1", null, "Alice", "alice@example.com", "Kept", "",
+            null, DateTimeOffset.UnixEpoch, 10, false, false, false));
+
+        var moved = stores.Detach("one@example.com");
+
+        Assert.NotNull(moved);
+        Assert.True(File.Exists(moved));
+        Assert.Equal("detached", Path.GetFileName(Path.GetDirectoryName(moved)));
+        Assert.False(File.Exists(Path.Combine(Accounts, "one@example.com.db")));
+        Assert.Empty(stores.All);
+
+        var (attached, error) = stores.Attach(moved!);
+
+        Assert.Null(error);
+        Assert.NotNull(attached);
+        Assert.Equal("one@example.com", attached!.Account.Address);
+        Assert.Equal(Path.Combine(Accounts, "one@example.com.db"), attached.Path);
+        Assert.Equal(1, attached.Mail.Folders(attached.Account.Id).Sum(f => f.Total));
+
+        // The original stays where it was: it may be somebody's only backup.
+        Assert.True(File.Exists(moved));
+    }
+
+    [Fact]
+    public void AttachRefusesWhatItCannotList()
+    {
+        using var stores = new AccountStores(Accounts, Order());
+        stores.Add("one@example.com", "One", MailProtocol.Pop3);
+
+        // A second copy of an open account would collect the same mail twice.
+        var copy = Path.Combine(_root, "copy.db");
+        using (var live = new MailStore(Path.Combine(Accounts, "one@example.com.db")))
+        {
+            Assert.True(StoreBackup.To(live, copy).Ok);
+        }
+        var (again, duplicate) = stores.Attach(copy);
+        Assert.Null(again);
+        Assert.Contains("already open", duplicate);
+
+        // Not a store at all.
+        var junk = Path.Combine(_root, "junk.db");
+        File.WriteAllText(junk, "not a database");
+        var (nothing, damaged) = stores.Attach(junk);
+        Assert.Null(nothing);
+        Assert.NotNull(damaged);
+
+        // A store with no account in it describes nothing.
+        var empty = Path.Combine(_root, "empty.db");
+        using (var _ = new MailStore(empty)) { }
+        var (none, noAccount) = stores.Attach(empty);
+        Assert.Null(none);
+        Assert.Contains("no account", noAccount);
+
+        Assert.Single(stores.All);
+        Assert.Single(Directory.GetFiles(Accounts, "*.db"));
+    }
+
+    [Fact]
+    public void CompactingAStoreLeavesItsMailInPlace()
+    {
+        using var stores = new AccountStores(Accounts, Order());
+        var one = stores.Add("one@example.com", "One", MailProtocol.Pop3);
+        var inbox = one.Mail.FolderWithRole(one.Account.Id, FolderRole.Inbox)!;
+        for (var i = 0; i < 50; i++)
+        {
+            one.Mail.AddMessage(inbox.Id, new MessageSummary(
+                0, 0, $"uid-{i}", null, "Alice", "alice@example.com", $"Message {i}", new string('x', 2000),
+                null, DateTimeOffset.UnixEpoch, 10, false, false, false));
+        }
+
+        var bytes = one.Store.Compact();
+
+        Assert.True(bytes > 0);
+        Assert.Equal(bytes, one.Bytes);
+        Assert.Equal(50, one.Mail.Folders(one.Account.Id).Single(f => f.Id == inbox.Id).Total);
+        Assert.Empty(one.Store.CheckIntegrity());
+    }
 }

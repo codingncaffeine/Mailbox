@@ -39,6 +39,13 @@ public sealed record Pop3Policy
     /// <summary>Remove from the server when it is deleted here.</summary>
     public bool DeleteWhenRemovedLocally { get; init; }
 
+    /// <summary>
+    /// Where a poll files what it downloads: a folder of the account, or null for its Inbox.
+    /// The reference's Change Folder on the account list. A folder that no longer exists
+    /// falls back to the Inbox rather than losing mail.
+    /// </summary>
+    public long? DeliveryFolderId { get; init; }
+
     /// <summary>Stop a single poll after this many messages, so a first run is interruptible.</summary>
     public int MaxPerPoll { get; init; } = 500;
 }

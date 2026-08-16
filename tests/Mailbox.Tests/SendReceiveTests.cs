@@ -190,4 +190,38 @@ public class SendReceiveTests
         Assert.Contains(seen, p => p.Stage == "Receiving");
         Assert.All(seen, p => Assert.Equal("one@example.com", p.Account));
     }
+
+    /// <summary>
+    /// Change Folder: a POP3 account can be told to deliver somewhere other than its Inbox, and
+    /// the poll files there. A folder that has since gone falls back to the Inbox — mail with
+    /// nowhere to go is lost mail.
+    /// </summary>
+    [Fact]
+    public async Task ADeliveryFolderIsWhereThePollFiles()
+    {
+        var h = Build("one@example.com");
+        using var _ = h;
+        var id = h.Accounts[0].Connection.AccountId;
+        var receipts = h.Repo.AddFolder(id, "Receipts");
+        var inbox = h.Repo.FolderWithRole(id, FolderRole.Inbox)!;
+
+        var routed = new TransferTarget(
+            h.Accounts[0].Connection with { Policy = new Pop3Policy { DeliveryFolderId = receipts.Id } },
+            h.Repo);
+        h.Servers["one@example.com"].With("a-1").With("a-2");
+
+        var result = await h.Service.RunAsync([routed], Now, Ct);
+
+        Assert.True(result.AllSucceeded);
+        Assert.Equal(2, h.Repo.Folders(id).Single(f => f.Id == receipts.Id).Total);
+        Assert.Equal(0, h.Repo.Folders(id).Single(f => f.Id == inbox.Id).Total);
+
+        // The folder goes; the next poll lands in the Inbox rather than nowhere.
+        h.Repo.RemoveFolder(receipts.Id);
+        h.Servers["one@example.com"].With("a-3");
+        result = await h.Service.RunAsync([routed], Now, Ct);
+
+        Assert.True(result.AllSucceeded);
+        Assert.Equal(1, h.Repo.Folders(id).Single(f => f.Id == inbox.Id).Total);
+    }
 }

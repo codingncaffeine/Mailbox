@@ -140,6 +140,129 @@ public sealed class AccountStores : IDisposable
         Log.Info($"Removed {address} and deleted {path}.");
     }
 
+    /// <summary>
+    /// Opens an account file from somewhere else — a backup, or a file detached earlier — by
+    /// copying it into the directory under its own address's name and opening it. The
+    /// reference's Add on the Data Files tab. The original is left where it was: it may be
+    /// the only backup its owner has.
+    /// </summary>
+    /// <returns>The opened account, or the reason the file could not be taken.</returns>
+    public (OpenAccount? Account, string? Error) Attach(string source)
+    {
+        if (!File.Exists(source)) return (null, "There is no file there.");
+
+        // Look inside without opening it as a store: opening would migrate the file in place,
+        // and the file may be somebody's only backup. Read-only, and refused before anything
+        // is copied when it does not open, is damaged, or holds no account.
+        string address;
+        try
+        {
+            using var peek = new Microsoft.Data.Sqlite.SqliteConnection(
+                new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
+                {
+                    DataSource = source,
+                    Mode = Microsoft.Data.Sqlite.SqliteOpenMode.ReadOnly,
+                }.ToString());
+            peek.Open();
+
+            using (var check = peek.CreateCommand())
+            {
+                check.CommandText = "PRAGMA integrity_check";
+                using var reader = check.ExecuteReader();
+                var problems = new List<string>();
+                while (reader.Read())
+                {
+                    var line = reader.GetString(0);
+                    if (line != "ok") problems.Add(line);
+                }
+                if (problems.Count > 0) return (null, $"That file is damaged: {string.Join("; ", problems)}");
+            }
+
+            using var who = peek.CreateCommand();
+            who.CommandText = "SELECT address FROM accounts ORDER BY ordinal, id LIMIT 1";
+            address = who.ExecuteScalar() as string ?? string.Empty;
+            if (address.Length == 0) return (null, "That file holds no account.");
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Could not read {source}.", ex);
+            return (null, $"That file could not be read as an account file: {ex.Message}");
+        }
+
+        if (Find(address) is not null)
+        {
+            return (null, $"{address} is already open. Remove it first to replace it with this file.");
+        }
+
+        var destination = Path.Combine(_directory, FileNameFor(address));
+        if (File.Exists(destination))
+        {
+            return (null, $"There is already a file named {Path.GetFileName(destination)} in the accounts folder.");
+        }
+
+        try
+        {
+            File.Copy(source, destination);
+            var store = new MailStore(destination);
+            var mail = new MailRepository(store);
+            var opened = new OpenAccount(mail.Accounts().First(), store, mail);
+            _open.Add(opened);
+            _order.Register(address);
+            Log.Info($"Attached {source} as {destination}.");
+            return (opened, null);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Could not attach {source}.", ex);
+            try { if (File.Exists(destination)) File.Delete(destination); } catch { /* the copy is the casualty, not the source */ }
+            return (null, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Closes an account and moves its file out of the directory without deleting it — the
+    /// reference's Remove on the Data Files tab, which closes a data file and leaves it on
+    /// disk. The file goes to a <c>detached</c> folder beside the accounts, from where
+    /// <see cref="Attach"/> can bring it back.
+    /// </summary>
+    /// <returns>Where the file went, or null when there was no such account.</returns>
+    public string? Detach(string address)
+    {
+        if (Find(address) is not { } account) return null;
+
+        var path = account.Path;
+        account.Store.Dispose();
+        _open.RemoveAll(a => a.Account.Id == account.Account.Id && a.Path == path);
+        _order.Forget(address);
+
+        var folder = Path.Combine(Path.GetDirectoryName(_directory) ?? _directory, "detached");
+        Directory.CreateDirectory(folder);
+        var destination = Path.Combine(folder, Path.GetFileName(path));
+        if (File.Exists(destination))
+        {
+            destination = Path.Combine(folder,
+                $"{Path.GetFileNameWithoutExtension(path)}-{DateTime.Now:yyyyMMdd-HHmmss}.db");
+        }
+
+        // WAL's two companions were folded in on close; anything left is stale and would be
+        // applied over whatever takes the name next.
+        File.Move(path, destination);
+        foreach (var suffix in (string[])["-wal", "-shm"])
+        {
+            try
+            {
+                if (File.Exists(path + suffix)) File.Delete(path + suffix);
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"Could not delete {path}{suffix}.", ex);
+            }
+        }
+
+        Log.Info($"Detached {address}: moved {path} to {destination}.");
+        return destination;
+    }
+
     private void OpenExisting()
     {
         foreach (var path in System.IO.Directory.EnumerateFiles(_directory, "*.db").OrderBy(p => p))

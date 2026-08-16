@@ -107,6 +107,14 @@ public sealed class SettingsStore
     /// <summary>True when the key has been written; false means the caller's default applies.</summary>
     public bool Has(string key) => TryGet(key, out _);
 
+    /// <summary>Forgets a key, so the caller's default applies again. Nothing happens for a key never written.</summary>
+    public void Remove(string key)
+    {
+        if (!_values.Remove(key)) return;
+        Save();
+        Changed?.Invoke(this, key);
+    }
+
     private bool TryGet(string key, [NotNullWhen(true)] out JsonNode? node)
     {
         node = _values.TryGetPropertyValue(key, out var found) ? found : null;

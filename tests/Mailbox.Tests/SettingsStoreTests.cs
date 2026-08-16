@@ -98,4 +98,22 @@ public class SettingsStoreTests : IDisposable
         Assert.True(store.GetBool("a"));
         Assert.False(File.Exists(Path_));
     }
+
+    /// <summary>A key can be forgotten, after which the caller's default applies again.</summary>
+    [Fact]
+    public void RemovingAKeyRestoresTheDefault()
+    {
+        var store = new SettingsStore(Path_);
+        store.Set("account.you@example.com.delivery.folder", 12d);
+        Assert.True(store.Has("account.you@example.com.delivery.folder"));
+
+        var changed = new List<string>();
+        store.Changed += (_, key) => changed.Add(key);
+        store.Remove("account.you@example.com.delivery.folder");
+        store.Remove("never.written");
+
+        Assert.False(store.Has("account.you@example.com.delivery.folder"));
+        Assert.Equal(["account.you@example.com.delivery.folder"], changed);
+        Assert.False(new SettingsStore(Path_).Has("account.you@example.com.delivery.folder"));
+    }
 }
