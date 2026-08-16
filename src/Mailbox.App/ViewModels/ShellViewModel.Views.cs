@@ -220,6 +220,23 @@ public sealed partial class ShellViewModel
     /// <summary>View Settings' OK: the edited view, in force and on the folder.</summary>
     public void UpdateView(MailView view) => Apply(view, persist: true);
 
+    /// <summary>
+    /// A column dragged to a width in the header strip: the view's column takes it, and the
+    /// rows and the folder's saved view follow. By position in the header, which is the view's
+    /// column order.
+    /// </summary>
+    public void ResizeColumn(int index, double width)
+    {
+        var columns = CurrentView.Columns;
+        if (index < 0 || index >= columns.Count) return;
+        var wanted = Math.Max(Views.ViewHeaderStrip.MinColumnWidth, Math.Round(width));
+        if (Math.Abs(columns[index].Width - wanted) < 0.5) return;
+
+        var resized = columns.ToList();
+        resized[index] = resized[index] with { Width = wanted };
+        UpdateView(CurrentView with { Columns = resized });
+    }
+
     /// <summary>Reset View: the folder goes back to the view it was made from, as it came.</summary>
     public void ResetView()
     {
