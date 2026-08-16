@@ -402,6 +402,70 @@ public sealed class OptionsWindow : Window
         {
             cleanupFolder.Content = CleanUpFolderRow();
         }
+
+        if (renderer.Slots.TryGetValue("display", out var display))
+        {
+            display.Content = DisplayRows();
+        }
+    }
+
+    /// <summary>
+    /// Windowing backend and scale, over <see cref="Mailbox.Core.Platform.DisplaySettings"/>:
+    /// two combo boxes and the line that says they take effect at the next start, because
+    /// neither can change under an open window.
+    /// </summary>
+    private Control DisplayRows()
+    {
+        var settings = new Mailbox.Core.Platform.DisplaySettings(App.Settings);
+
+        var backend = new ComboBox
+        {
+            ItemsSource = new[] { "Automatic (currently X11)", "X11", "Wayland (experimental)" },
+            SelectedIndex = settings.Backend switch
+            {
+                Mailbox.Core.Platform.DisplayBackend.X11 => 1,
+                Mailbox.Core.Platform.DisplayBackend.Wayland => 2,
+                _ => 0,
+            },
+            MinWidth = 240,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        backend.SelectionChanged += (_, _) => settings.Backend = backend.SelectedIndex switch
+        {
+            1 => Mailbox.Core.Platform.DisplayBackend.X11,
+            2 => Mailbox.Core.Platform.DisplayBackend.Wayland,
+            _ => Mailbox.Core.Platform.DisplayBackend.Auto,
+        };
+
+        var scales = Mailbox.Core.Platform.DisplaySettings.Scales;
+        var scale = new ComboBox
+        {
+            ItemsSource = new[] { "Automatic (the desktop's own)" }.Concat(scales.Select(v => $"{v * 100:0}%")).ToList(),
+            SelectedIndex = settings.Scale is { } pinned && scales.ToList().IndexOf(pinned) is var i && i >= 0 ? i + 1 : 0,
+            MinWidth = 240,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        scale.SelectionChanged += (_, _) => settings.Scale = scale.SelectedIndex > 0 ? scales[scale.SelectedIndex - 1] : null;
+
+        Control Row(string label, Control control)
+        {
+            var caption = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center, Width = 200 };
+            Bind(caption, TextBlock.ForegroundProperty, "dialog.foreground.brush");
+            return new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { caption, control } };
+        }
+
+        var note = new TextBlock
+        {
+            Text = "These take effect the next time Mailbox starts. Automatic scale follows the desktop; on X11 that is Xft.dpi.",
+            TextWrapping = TextWrapping.Wrap,
+        };
+        Bind(note, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
+
+        return new StackPanel
+        {
+            Spacing = 8,
+            Children = { Row("Windowing:", backend), Row("Scale:", scale), note },
+        };
     }
 
     /// <summary>"Cleaned-up items will go to this folder": the name, and Browse… over the default account's folders.</summary>
