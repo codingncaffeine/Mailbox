@@ -4,6 +4,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Templates;
 using Avalonia.Data;
 using Avalonia.Data.Converters;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
@@ -31,6 +32,19 @@ public sealed class ViewHeaderStrip : Grid
         get => GetValue(ColumnsProperty);
         set => SetValue(ColumnsProperty, value);
     }
+
+    /// <summary>
+    /// Raised when a column's right edge has been dragged and let go: which column, and the
+    /// width it was left at. The strip has already redrawn itself at that width; the shell
+    /// writes it into the view, which is what the rows and the next launch read.
+    /// </summary>
+    public event EventHandler<ColumnResizedEventArgs>? ColumnResized;
+
+    /// <summary>The narrowest a dragged column may be left — the glyph columns' own width.</summary>
+    public const double MinColumnWidth = 24;
+
+    /// <summary>The grab area either side of a column's right edge.</summary>
+    private const double HandleWidth = 6;
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
@@ -72,8 +86,64 @@ public sealed class ViewHeaderStrip : Grid
 
             SetColumn(button, i);
             Children.Add(button);
+
+            // The right edge of a fixed-width column is a handle: drag it and the column is that
+            // wide, as the reference's headers resize. A glyph column is as wide as its glyph and
+            // has none; the subject takes what the others leave, so its edge is not a size.
+            if (!column.IsGlyph && !column.Stretches && i < columns.Count - 1) Children.Add(Handle(i));
         }
     }
+
+    private Control Handle(int index)
+    {
+        var handle = new Border
+        {
+            Width = HandleWidth,
+            Background = Brushes.Transparent,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 0, -HandleWidth / 2, 0),
+            Cursor = new Cursor(StandardCursorType.SizeWestEast),
+            ZIndex = 1,
+        };
+        SetColumn(handle, index);
+
+        double startX = 0, startWidth = 0;
+        var dragging = false;
+
+        handle.PointerPressed += (_, e) =>
+        {
+            if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
+            startX = e.GetPosition(this).X;
+            startWidth = ColumnDefinitions[index].ActualWidth;
+            dragging = true;
+            e.Pointer.Capture(handle);
+            e.Handled = true;
+        };
+        handle.PointerMoved += (_, e) =>
+        {
+            if (!dragging) return;
+            // Live: the header follows the pointer; the rows follow when it is let go.
+            var width = Math.Max(MinColumnWidth, startWidth + e.GetPosition(this).X - startX);
+            ColumnDefinitions[index].Width = new GridLength(width, GridUnitType.Pixel);
+            e.Handled = true;
+        };
+        handle.PointerReleased += (_, e) =>
+        {
+            if (!dragging) return;
+            dragging = false;
+            e.Pointer.Capture(null);
+            ColumnResized?.Invoke(this, new ColumnResizedEventArgs(index, Math.Round(ColumnDefinitions[index].Width.Value)));
+            e.Handled = true;
+        };
+
+        return handle;
+    }
+}
+
+public sealed class ColumnResizedEventArgs(int index, double width) : EventArgs
+{
+    public int Index { get; } = index;
+    public double Width { get; } = width;
 }
 
 /// <summary>

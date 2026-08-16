@@ -91,6 +91,11 @@ public partial class MainWindow : Window
 
         WireQuickAccess(shell);
         WireSearchBoxToListEdge();
+        if (this.FindControl<ViewHeaderStrip>("HeaderStrip") is { } strip)
+        {
+            strip.ColumnResized += (_, e) => shell.ResizeColumn(e.Index, e.Width);
+        }
+
         WireRail(shell);
         WireWindowMenu();
         WireToolbarCommands(shell);
@@ -225,6 +230,23 @@ public partial class MainWindow : Window
 
                 s.Refresh();
                 Log.Info($"Harness: folder op {op} done.");
+            }, DispatcherPriority.Background);
+        }
+
+        // MAILBOX_RESIZE_COLUMN=<index>:<width> — what letting go of a header's drag handle does,
+        // for reading the folder's view back after: a drag cannot be posed.
+        if (Environment.GetEnvironmentVariable("MAILBOX_RESIZE_COLUMN") is { Length: > 0 } resize)
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(() =>
+            {
+                if (DataContext is not ShellViewModel s) return;
+                var parts = resize.Split(':');
+                if (parts.Length == 2 && int.TryParse(parts[0], out var index) && double.TryParse(parts[1], out var width))
+                {
+                    s.ResizeColumn(index, width);
+                    Log.Info($"Harness: column {index} resized to {width}; the view's columns are now " +
+                             string.Join(", ", s.CurrentView.Columns.Select(c => $"{c.Id}={c.Width}")));
+                }
             }, DispatcherPriority.Background);
         }
 

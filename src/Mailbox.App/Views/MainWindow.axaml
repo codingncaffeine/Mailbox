@@ -557,7 +557,7 @@
                             BorderBrush="{DynamicResource border.subtle.brush}"
                             IsVisible="{Binding ShowColumnHeaders}"
                             Padding="10,0,8,0">
-                        <views:ViewHeaderStrip Columns="{Binding Columns}" />
+                        <views:ViewHeaderStrip Name="HeaderStrip" Columns="{Binding Columns}" />
                     </Border>
 
                     <!--
