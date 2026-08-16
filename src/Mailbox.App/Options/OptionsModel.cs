@@ -42,7 +42,20 @@ public sealed record ComboRow(
     IReadOnlyList<string> Items,
     int Selected = 0,
     double Width = 260,
-    double LabelWidth = 200) : OptionRow;
+    double LabelWidth = 200) : OptionRow
+{
+    /// <summary>
+    /// What each entry stands for, when what is stored has to outlive the list's order.
+    /// </summary>
+    /// <remarks>
+    /// A combo keeps its index, which is right for a list this application writes — the reminder
+    /// times, the colours. It is wrong for a list the machine supplies: the zone database is
+    /// hundreds of entries long and is not the same list on the next machine or after the next
+    /// update, so an index into it means a different zone by then. With values, the row keeps the
+    /// entry's own text instead.
+    /// </remarks>
+    public IReadOnlyList<string>? Values { get; init; }
+}
 
 public sealed record TextRow(
     string Label,

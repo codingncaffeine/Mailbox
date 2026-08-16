@@ -30,6 +30,16 @@ public sealed record CalendarEntry
     /// <summary>A read-only collection's items cannot be dragged or edited in place.</summary>
     public bool IsReadOnly { get; init; }
 
+    /// <summary>
+    /// The zone the view is drawing in, which is what a time on its grid means.
+    /// </summary>
+    /// <remarks>
+    /// An appointment states its own wall time in its own zone (§9), and a nine o'clock meeting
+    /// in New York is not at nine o'clock on a calendar in London. The grid is one clock, so an
+    /// entry is placed by what that clock reads at the appointment's instant.
+    /// </remarks>
+    public TimeZoneInfo Zone { get; init; } = TimeZoneInfo.Local;
+
     public string Summary => Occurrence.Event.Summary;
     public string Location => Occurrence.Event.Location;
     public BusyStatus Busy => Occurrence.Event.Busy;
@@ -37,10 +47,20 @@ public sealed record CalendarEntry
     public DateTimeOffset StartUtc => Occurrence.StartUtc;
     public DateTimeOffset EndUtc => Occurrence.EndUtc;
 
-    /// <summary>The start as a local wall time, which is what a view positions by.</summary>
-    public DateTime StartWall => Occurrence.Start.Wall;
+    /// <summary>The start on the view's own clock, which is what a view positions by.</summary>
+    public DateTime StartWall => Reading(Occurrence.Start, StartUtc);
 
-    public DateTime EndWall => Occurrence.End.Wall;
+    public DateTime EndWall => Reading(Occurrence.End, EndUtc);
+
+    /// <summary>
+    /// What the view's clock reads at an instant. An all-day item is a date rather than an
+    /// instant and keeps the one it was written with: converting it would put a holiday on the
+    /// evening before.
+    /// </summary>
+    private DateTime Reading(EventTime time, DateTimeOffset instant)
+        => time.AllDay
+            ? time.Wall
+            : DateTime.SpecifyKind(TimeZoneInfo.ConvertTime(instant, Zone).DateTime, DateTimeKind.Unspecified);
 
     /// <summary>The days this entry touches, as the view's own dates.</summary>
     public (DateOnly First, DateOnly Last) Days()

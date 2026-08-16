@@ -25,6 +25,10 @@ public sealed class CalendarOptions(SettingsStore settings)
     public const string ShowBellKey = "calendar.showbell";
     public const string TimeScaleKey = "calendar.timescale";
     public const string DefaultViewKey = "calendar.view.default";
+    public const string TimeZoneLabelKey = "calendar.timezone.label";
+    public const string SecondTimeZoneShownKey = "calendar.timezone.second.shown";
+    public const string SecondTimeZoneLabelKey = "calendar.timezone.second.label";
+    public const string SecondTimeZoneIdKey = "calendar.timezone.second.id";
 
     /// <summary>One per weekday, so the work week is exactly the days that are ticked.</summary>
     public static string WorkDayKey(DayOfWeek day) => "calendar.workweek." + day.ToString().ToLowerInvariant();
@@ -122,4 +126,33 @@ public sealed class CalendarOptions(SettingsStore settings)
     public string DefaultView => _settings.GetString(DefaultViewKey, "month");
 
     public void SetDefaultView(string view) => _settings.Set(DefaultViewKey, view);
+
+    // ---- Time zones ---------------------------------------------------------------------------
+
+    /// <summary>
+    /// The clock the calendar is drawn on: the machine's own.
+    /// </summary>
+    /// <remarks>
+    /// <b>Divergence.</b> The reference's Time zone dropdown sets the operating system's zone,
+    /// which on this desktop belongs to the desktop — an application that changed it would be
+    /// changing every clock on the machine from inside a mail client. So the row states what the
+    /// machine says and the calendar follows it; what is settable here is what the columns are
+    /// <em>called</em>, and the second zone shown beside them.
+    /// </remarks>
+    public TimeZoneInfo TimeZone => TimeZoneInfo.Local;
+
+    /// <summary>What the machine's own column of hours is headed, or empty for its offset.</summary>
+    public string TimeZoneLabel => _settings.GetString(TimeZoneLabelKey, string.Empty);
+
+    /// <summary>Whether the day and week views draw a second column of hours.</summary>
+    public bool ShowSecondTimeZone => _settings.GetBool(SecondTimeZoneShownKey, false);
+
+    public string SecondTimeZoneLabel => _settings.GetString(SecondTimeZoneLabelKey, string.Empty);
+
+    /// <summary>
+    /// The second zone, or null when there is none to show — which is also what an id this
+    /// machine has never heard of comes to, rather than a view that will not draw.
+    /// </summary>
+    public TimeZoneInfo? SecondTimeZone
+        => ShowSecondTimeZone ? TimeZoneChoices.Find(_settings.GetString(SecondTimeZoneIdKey, string.Empty)) : null;
 }

@@ -464,6 +464,68 @@ public class CalendarPhaseTests
         Assert.Empty(AppointmentReminders.Due(repository, DateTimeOffset.UtcNow));
     }
 
+
+    /// <summary>
+    /// A nine o'clock meeting in New York is not at nine o'clock on a calendar in London: the
+    /// grid is one clock, and an appointment is placed by what that clock reads at its instant.
+    /// </summary>
+    [Fact]
+    public void AnAppointmentWrittenInAnotherZoneIsDrawnAtTheViewsOwnHour()
+    {
+        using var store = PimStore.Transient();
+        var repository = new PimRepository(store);
+        var calendar = repository.AddCollection(CollectionKind.Events, "Work");
+        repository.AddItem(PimEventCodec.ToItem(
+            new CalendarEvent
+            {
+                Uid = "ny@test",
+                Summary = "Call New York",
+                Start = EventTime.At(new DateTime(2026, 8, 18, 9, 0, 0), "America/New_York"),
+                End = EventTime.At(new DateTime(2026, 8, 18, 10, 0, 0), "America/New_York"),
+            },
+            calendar.Id));
+
+        var entry = Assert.Single(Shown(repository, TimeZoneInfo.FindSystemTimeZoneById("Europe/London")));
+
+        Assert.Equal(new DateTime(2026, 8, 18, 14, 0, 0), entry.StartWall);
+        Assert.Equal(new DateTime(2026, 8, 18, 15, 0, 0), entry.EndWall);
+        Assert.Equal(new DateOnly(2026, 8, 18), entry.Days().First);
+    }
+
+    /// <summary>
+    /// An all-day item is a date rather than an instant, so it keeps the day it was written
+    /// with — converting it would put a public holiday on the evening before.
+    /// </summary>
+    [Fact]
+    public void AnAllDayItemKeepsItsDayInEveryZone()
+    {
+        using var store = PimStore.Transient();
+        var repository = new PimRepository(store);
+        var calendar = repository.AddCollection(CollectionKind.Events, "Work");
+        repository.AddItem(PimEventCodec.ToItem(
+            new CalendarEvent
+            {
+                Uid = "holiday@test",
+                Summary = "Public holiday",
+                Start = EventTime.Date(new DateOnly(2026, 8, 20)),
+                End = EventTime.Date(new DateOnly(2026, 8, 21)),
+            },
+            calendar.Id));
+
+        foreach (var zone in new[] { "Europe/London", "America/New_York", "Asia/Tokyo" })
+        {
+            var entry = Assert.Single(Shown(repository, TimeZoneInfo.FindSystemTimeZoneById(zone)));
+            Assert.Equal(new DateOnly(2026, 8, 20), entry.Days().First);
+            Assert.Equal(new DateOnly(2026, 8, 20), entry.Days().Last);
+        }
+    }
+
+    private static IReadOnlyList<Mailbox.Controls.Calendar.CalendarEntry> Shown(PimRepository repository, TimeZoneInfo zone)
+        => new Mailbox.Controls.Calendar.CalendarSource(repository).Between(
+            new DateTimeOffset(2026, 8, 16, 0, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 8, 23, 0, 0, 0, TimeSpan.Zero),
+            zone: zone);
+
     // ---- Helpers -----------------------------------------------------------------------------
 
     private static CalendarEntry Entry(CalendarEvent calendarEvent)

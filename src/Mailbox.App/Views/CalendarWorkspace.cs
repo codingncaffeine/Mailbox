@@ -631,6 +631,10 @@ public sealed class CalendarWorkspace : Border
                 _timeGrid.WorkDayStart = _options.WorkDayStart;
                 _timeGrid.WorkDayEnd = _options.WorkDayEnd;
                 _timeGrid.SlotMinutes = _options.TimeScaleMinutes;
+                _timeGrid.ViewZone = _options.TimeZone;
+                _timeGrid.ZoneLabel = _options.TimeZoneLabel;
+                _timeGrid.SecondZone = _options.SecondTimeZone;
+                _timeGrid.SecondZoneLabel = _options.SecondTimeZoneLabel;
                 _timeGrid.Span = _kind switch
                 {
                     CalendarViewKind.Day => TimeGridSpan.Day,
