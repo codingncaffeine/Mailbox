@@ -51,6 +51,7 @@ public sealed class MonthView : CalendarSurface
     private readonly List<(Rect Box, CalendarEntry Entry)> _entryHits = [];
     private readonly List<(Rect Box, DateOnly Day)> _dayHits = [];
     private Rect _gutter;
+    private ChipDrag? _drag;
 
     public MonthView()
     {
@@ -219,7 +220,60 @@ public sealed class MonthView : CalendarSurface
 
         _gutter = new Rect(width, 0, GutterWidth, height);
         DrawGutter(context, _gutter);
+        DrawGhost(context);
     }
+
+    /// <summary>
+    /// What a drag is proposing: the chip drawn over the cell it would land in, the original
+    /// staying where it is until the pointer is let go.
+    /// </summary>
+    /// <remarks>
+    /// A month cell is one line of text tall, so the ghost is the chip moved by the distance
+    /// between the two cells rather than laid out again — which is exact for a grid of cells that
+    /// differ by at most the pixel <see cref="Slice"/> hands to the earliest columns.
+    /// </remarks>
+    private void DrawGhost(DrawingContext context)
+    {
+        if (_drag is not { Live: true } drag || !drag.Moved) return;
+        if (CellOf(DateOnly.FromDateTime(drag.Entry.StartWall)) is not { } from) return;
+        if (CellOf(DateOnly.FromDateTime(drag.Start)) is not { } to) return;
+
+        var box = drag.Box.Translate(new Vector(to.X - from.X, to.Y - from.Y));
+        var entry = drag.Entry;
+        var lines = Wrap(entry.MonthLabel(Culture), box.Width - ChipTextInset - 2, 1, ChipTextSize);
+        using var fade = context.PushOpacity(0.65);
+        DrawChip(context, box, Palette.Chip(entry.Colour, entry.Busy), lines, selected: true);
+    }
+
+    private Rect? CellOf(DateOnly date)
+    {
+        foreach (var (box, day) in _dayHits)
+        {
+            if (day == date) return box;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The box an appointment was last drawn in, or null when it is not on show.
+    /// </summary>
+    /// <remarks>
+    /// What hit-testing already knows, said out loud, so that a harness drag can be pressed at
+    /// coordinates the view really used rather than at coordinates guessed from the geometry.
+    /// </remarks>
+    public Rect? BoxOf(CalendarEntry entry)
+    {
+        for (var i = _entryHits.Count - 1; i >= 0; i--)
+        {
+            if (ReferenceEquals(_entryHits[i].Entry, entry)) return _entryHits[i].Box;
+        }
+
+        return null;
+    }
+
+    /// <summary>The middle of a day's cell, or null when that day is not on show.</summary>
+    public Point? PointAt(DateOnly day) => CellOf(day)?.Center;
 
     private void DrawHeader(DrawingContext context, int[] columns, double[] columnX, double top)
     {
@@ -438,12 +492,29 @@ public sealed class MonthView : CalendarSurface
         // is the one on top.
         for (var i = _entryHits.Count - 1; i >= 0; i--)
         {
-            if (!_entryHits[i].Box.Contains(point)) continue;
-            var entry = _entryHits[i].Entry;
+            var (box, entry) = _entryHits[i];
+            if (!box.Contains(point)) continue;
             SelectedEntry = entry;
             Selected = entry.Days().First;
             EntrySelected?.Invoke(this, entry);
             if (e.ClickCount >= 2) EntryActivated?.Invoke(this, entry);
+            else if (ChipDrag.CanDrag(entry) && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            {
+                _drag = new ChipDrag
+                {
+                    Entry = entry,
+                    // Only a bar that spans days has ends to take hold of: a single day's chip
+                    // is one line of text, and every grab near its edge would be a resize.
+                    Grip = entry.IsMultiDay ? ChipDrag.GripAt(box, point, horizontal: true) : DragGrip.Move,
+                    Origin = point,
+                    Box = box,
+                    Start = entry.StartWall,
+                    End = entry.EndWall,
+                    AllDay = entry.AllDay,
+                };
+                e.Pointer.Capture(this);
+            }
+
             e.Handled = true;
             return;
         }
@@ -459,6 +530,128 @@ public sealed class MonthView : CalendarSurface
             return;
         }
     }
+
+    protected override void OnPointerMoved(PointerEventArgs e)
+    {
+        base.OnPointerMoved(e);
+        var point = e.GetPosition(this);
+
+        if (_drag is not { } drag)
+        {
+            ShowGripCursor(point);
+            return;
+        }
+
+        if (!drag.Live)
+        {
+            var far = Math.Abs(point.X - drag.Origin.X) > ChipDrag.Threshold
+                      || Math.Abs(point.Y - drag.Origin.Y) > ChipDrag.Threshold;
+            if (!far) return;
+            drag.Live = true;
+            Cursor = new Cursor(drag.Grip == DragGrip.Move ? StandardCursorType.SizeAll : GripCursor(drag.Grip));
+        }
+
+        if (DayAt(point) is { } day) Propose(drag, day);
+
+        InvalidateVisual();
+        e.Handled = true;
+    }
+
+    protected override void OnPointerReleased(PointerReleasedEventArgs e)
+    {
+        base.OnPointerReleased(e);
+        var drag = _drag;
+        _drag = null;
+        Cursor = Cursor.Default;
+        if (drag is null) return;
+
+        e.Pointer.Capture(null);
+        if (!drag.Live) return;
+
+        InvalidateVisual();
+        if (!drag.Moved) return;
+
+        RaiseMoved(new EntryMove(drag.Entry, drag.Start, drag.End, drag.AllDay)
+        {
+            Resized = drag.Grip != DragGrip.Move,
+        });
+        e.Handled = true;
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.Key != Key.Escape || _drag is null) return;
+
+        _drag = null;
+        Cursor = Cursor.Default;
+        InvalidateVisual();
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Where the drag leaves it. A month view moves things by whole days and keeps the time of
+    /// day: dropping Tuesday's ten o'clock meeting on Thursday means Thursday at ten.
+    /// </summary>
+    private void Propose(ChipDrag drag, DateOnly day)
+    {
+        var entry = drag.Entry;
+        var (first, last) = entry.Days();
+
+        if (drag.Grip == DragGrip.Move)
+        {
+            // The grab's own offset into a multi-day bar is kept, so a bar picked up by its
+            // middle does not jump forward by half its length.
+            var lead = DayAt(drag.Origin) is { } held ? Math.Clamp(held.DayNumber - first.DayNumber, 0, last.DayNumber - first.DayNumber) : 0;
+            var shift = day.DayNumber - lead - first.DayNumber;
+            drag.Start = entry.StartWall.AddDays(shift);
+            drag.End = entry.EndWall.AddDays(shift);
+            return;
+        }
+
+        if (drag.Grip == DragGrip.Start)
+        {
+            var start = day <= last ? day : last;
+            drag.Start = start.ToDateTime(TimeOnly.FromDateTime(entry.StartWall));
+            drag.End = entry.EndWall;
+            return;
+        }
+
+        // The end of an all-day run is the day after its last, which is what makes a one-day
+        // item's end tomorrow rather than today.
+        var end = day >= first ? day : first;
+        drag.Start = entry.StartWall;
+        drag.End = entry.AllDay
+            ? end.AddDays(1).ToDateTime(TimeOnly.MinValue)
+            : end.ToDateTime(TimeOnly.FromDateTime(entry.EndWall));
+    }
+
+    private DateOnly? DayAt(Point point)
+    {
+        foreach (var (box, day) in _dayHits)
+        {
+            if (box.Contains(point)) return day;
+        }
+
+        return null;
+    }
+
+    private void ShowGripCursor(Point point)
+    {
+        for (var i = _entryHits.Count - 1; i >= 0; i--)
+        {
+            var (box, entry) = _entryHits[i];
+            if (!box.Contains(point)) continue;
+            var grip = ChipDrag.CanDrag(entry) && entry.IsMultiDay ? ChipDrag.GripAt(box, point, horizontal: true) : DragGrip.Move;
+            Cursor = grip == DragGrip.Move ? Cursor.Default : new Cursor(GripCursor(grip));
+            return;
+        }
+
+        Cursor = Cursor.Default;
+    }
+
+    private static StandardCursorType GripCursor(DragGrip grip)
+        => grip == DragGrip.Start ? StandardCursorType.LeftSide : StandardCursorType.RightSide;
 
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
     {

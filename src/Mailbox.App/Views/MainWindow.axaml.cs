@@ -228,6 +228,19 @@ public partial class MainWindow : Window
             }, DispatcherPriority.Background);
         }
 
+        // A drag is a gesture, which the harness cannot make either: MAILBOX_DRAG presses one
+        // into whichever calendar view is up and the log says where the appointment ended.
+        // Posted after the module pose so the view has laid out and drawn what it is dragging.
+        if (Environment.GetEnvironmentVariable("MAILBOX_DRAG") is { Length: > 0 } drag)
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(
+                () =>
+                {
+                    if (DataContext is ShellViewModel s) PoseCalendarDrag(s, drag);
+                },
+                DispatcherPriority.Background);
+        }
+
         // AutoArchive's turn, once the window is up and the shell has its accounts. Posted at
         // background priority so the first paint is not behind a prompt.
         Opened += (_, _) => Dispatcher.UIThread.Post(() =>

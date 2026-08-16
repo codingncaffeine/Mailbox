@@ -42,6 +42,18 @@ public abstract class CalendarSurface : Control
     /// <summary>The calendar tokens, resolved once and kept until the theme moves.</summary>
     protected CalendarPalette Palette => _palette ??= CalendarPalette.From(this);
 
+    /// <summary>
+    /// An appointment dragged somewhere else, or an edge of one dragged to a new length.
+    /// </summary>
+    /// <remarks>
+    /// Declared here rather than on each view because a drag means the same thing in all of them
+    /// — these are the times the appointment should now keep — and the workspace wires one
+    /// handler per view either way.
+    /// </remarks>
+    public event EventHandler<EntryMove>? EntryMoved;
+
+    protected void RaiseMoved(EntryMove move) => EntryMoved?.Invoke(this, move);
+
     protected Typeface Face => _typeface ??= new Typeface(UiFamily());
     protected Typeface BoldFace => _bold ??= new Typeface(UiFamily(), FontStyle.Normal, FontWeight.Bold);
     protected Typeface SemiBoldFace => _semibold ??= new Typeface(UiFamily(), FontStyle.Normal, FontWeight.SemiBold);
