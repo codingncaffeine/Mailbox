@@ -373,9 +373,16 @@ public static class DefaultRibbonLayouts
         ],
     };
 
+    /// <summary>
+    /// The Calendar module's own tab collection. Transcription notes are on
+    /// <see cref="CalendarRibbonLayout"/>.
+    /// </summary>
+    public static RibbonLayout Calendar { get; } = CalendarRibbonLayout.Build();
+
     public static RibbonLayout For(MailboxModule module) => module switch
     {
         MailboxModule.Mail => Mail,
+        MailboxModule.Calendar => Calendar,
         _ => new RibbonLayout { Module = module, Tabs = [] },
     };
 }

@@ -68,7 +68,7 @@ public sealed class FolderNode(string name, int depth, int unread, bool bold = f
 /// One module entry. Classic renders these as a horizontal strip at the foot of the folder
 /// pane; Modern renders the same collection vertically in the left app rail.
 /// </summary>
-public sealed class ModuleTab(MailboxModule module, string icon, bool isActive)
+public sealed class ModuleTab(MailboxModule module, string icon, bool isActive) : ObservableObject
 {
     public MailboxModule Module { get; } = module;
 
@@ -85,9 +85,22 @@ public sealed class ModuleTab(MailboxModule module, string icon, bool isActive)
     /// resolves from theme tokens — a view model naming a colour is exactly what the coverage
     /// audit is meant to catch.
     /// </summary>
-    public bool IsActive { get; } = isActive;
+    /// <remarks>
+    /// Settable and observed since Phase 11 gave the rail a second module to switch to: the mark
+    /// against the rail's edge has to move when it does, and a value fixed at construction was
+    /// only ever right while Mail was the only module there was.
+    /// </remarks>
+    public bool IsActive
+    {
+        get;
+        set
+        {
+            if (!Set(ref field, value)) return;
+            Raise(nameof(StyleClass));
+        }
+    } = isActive;
 
-    public string StyleClass { get; } = isActive ? "module active" : "module";
+    public string StyleClass => IsActive ? "module active" : "module";
 }
 
 /// <summary>One command on the Quick Access Toolbar in the title bar.</summary>
@@ -2813,8 +2826,49 @@ public sealed partial class ShellViewModel : ObservableObject
         private set => Set(ref field, value);
     } = [];
 
-    public string StatusLeft =>
-        $"Items: {VisibleCount}   Unread: {Messages.Count(m => m.IsUnread)}";
+    public string StatusLeft => Module == MailboxModule.Mail
+        ? $"Items: {VisibleCount}   Unread: {Messages.Count(m => m.IsUnread)}"
+        : ModuleStatusLeft;
+
+    /// <summary>
+    /// What the left of the status bar reads while a module other than Mail is up. The calendar
+    /// counts what its view is showing — "Items: 11" in the reference — and it is the module,
+    /// not the shell, that knows what that number is.
+    /// </summary>
+    public string ModuleStatusLeft
+    {
+        get;
+        set { if (Set(ref field, value)) Raise(nameof(StatusLeft)); }
+    } = string.Empty;
+
+    /// <summary>
+    /// Which module is on screen. Setting it moves the rail's mark and swaps what the workspace
+    /// shows; the shell is what swaps the ribbon with it.
+    /// </summary>
+    public MailboxModule Module
+    {
+        get;
+        set
+        {
+            if (!Set(ref field, value)) return;
+            foreach (var tab in Modules) tab.IsActive = tab.Module == value;
+            Raise(nameof(IsMailModule));
+            Raise(nameof(IsCalendarModule));
+            Raise(nameof(StatusLeft));
+            Raise(nameof(ShowReadingPaneToggles));
+        }
+    } = MailboxModule.Mail;
+
+    public bool IsMailModule => Module == MailboxModule.Mail;
+
+    public bool IsCalendarModule => Module == MailboxModule.Calendar;
+
+    /// <summary>
+    /// The status bar's two layout buttons belong to the message list, so they go with it: the
+    /// reference shows the calendar's own pair there instead, and an inert Normal/Reading pair
+    /// over a calendar would be two buttons that do nothing.
+    /// </summary>
+    public bool ShowReadingPaneToggles => Module == MailboxModule.Mail;
 
     /// <summary>
     /// Empty at rest — the reference's status bar carries the counts on the left and the view

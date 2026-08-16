@@ -34,8 +34,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Mailbox.Core\Mailbox.Core.csproj" />
+    <ProjectReference Include="..\Mailbox.Dav\Mailbox.Dav.csproj" />
     <ProjectReference Include="..\Mailbox.Theming\Mailbox.Theming.csproj" />
+    <ProjectReference Include="..\Mailbox.Controls.Calendar\Mailbox.Controls.Calendar.csproj" />
     <ProjectReference Include="..\Mailbox.Controls.Ribbon\Mailbox.Controls.Ribbon.csproj" />
+    <ProjectReference Include="..\Mailbox.Scheduling\Mailbox.Scheduling.csproj" />
     <ProjectReference Include="..\Mailbox.Store\Mailbox.Store.csproj" />
     <ProjectReference Include="..\Mailbox.Protocols\Mailbox.Protocols.csproj" />
     <ProjectReference Include="..\Mailbox.Editor\Mailbox.Editor.csproj" />

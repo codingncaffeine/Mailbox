@@ -331,8 +331,52 @@ public static class ViewCommands
         KeyTip = "SP",
     };
 
+    /// <summary>
+    /// The rail's modules as commands, one per accelerator.
+    /// </summary>
+    /// <remarks>
+    /// Ctrl+1 to Ctrl+8 are the reference's own module switches (§6), and the enum's values are
+    /// those numbers. They are commands rather than a special case in the key handler so they can
+    /// be rebound, searched for and placed like everything else — and unplaced on the default
+    /// ribbon, because the reference switches modules from the rail and not from a tab.
+    /// </remarks>
+    private static MailboxCommand Module(MailboxModule module, string icon) => new()
+    {
+        Id = new($"app.module.{module.ToString().ToLowerInvariant()}"),
+        Label = module.ToString(),
+        Description = $"Switch to {module}.",
+        Icon = icon,
+        Category = "Go To",
+        DefaultGesture = $"Ctrl+{(int)module}",
+        InDefaultLayout = false,
+    };
+
+    public static readonly MailboxCommand GoToMail = Module(MailboxModule.Mail, "mail");
+    public static readonly MailboxCommand GoToCalendar = Module(MailboxModule.Calendar, "calendar");
+    public static readonly MailboxCommand GoToPeople = Module(MailboxModule.People, "people");
+    public static readonly MailboxCommand GoToTasks = Module(MailboxModule.Tasks, "tasks");
+    public static readonly MailboxCommand GoToNotes = Module(MailboxModule.Notes, "notes");
+    public static readonly MailboxCommand GoToJournal = Module(MailboxModule.Journal, "journal");
+
+    /// <summary>The module a switch command names, or null when it is not one.</summary>
+    public static MailboxModule? ModuleOf(CommandId id)
+    {
+        foreach (var (command, module) in ((MailboxCommand, MailboxModule)[])
+                 [
+                     (GoToMail, MailboxModule.Mail), (GoToCalendar, MailboxModule.Calendar),
+                     (GoToPeople, MailboxModule.People), (GoToTasks, MailboxModule.Tasks),
+                     (GoToNotes, MailboxModule.Notes), (GoToJournal, MailboxModule.Journal),
+                 ])
+        {
+            if (command.Id == id) return module;
+        }
+
+        return null;
+    }
+
     public static IEnumerable<MailboxCommand> All =>
     [
+        GoToMail, GoToCalendar, GoToPeople, GoToTasks, GoToNotes, GoToJournal,
         SendAll, UpdateFolder, SendReceiveGroups, ShowProgress, CancelAll,
         ChangeView, ViewSettings, ArrangeBy, ReverseSort, TighterSpacing, LayoutMenu,
         ChangeViewCompact, ChangeViewSingle, ChangeViewPreview, ManageViews, SaveViewAs, ApplyViewToFolders,

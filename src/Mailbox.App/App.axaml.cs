@@ -13,6 +13,7 @@ using Mailbox.Protocols;
 using Mailbox.Security;
 using Mailbox.Security.Dns;
 using Mailbox.Store;
+using Mailbox.Store.Pim;
 using Mailbox.Theming.Themes;
 using Mailbox.Core.Diagnostics;
 using Mailbox.Theming;
@@ -69,6 +70,9 @@ public partial class App : Application
     /// <summary>The Mail page's settings, typed, for the code that acts on them.</summary>
     public static MailOptions MailOptions { get; private set; } = null!;
 
+    /// <summary>The Calendar page's settings, as the calendar views read them.</summary>
+    public static CalendarOptions CalendarOptions { get; private set; } = null!;
+
     /// <summary>Options › Advanced › AutoArchive Settings…, as the archiver reads them.</summary>
     public static Mailbox.Core.Archive.AutoArchiveOptions AutoArchive { get; private set; } = null!;
 
@@ -80,6 +84,21 @@ public partial class App : Application
 
     /// <summary>The junk filter (§7.8), reading its level live from the Options page.</summary>
     public static JunkService Junk { get; private set; } = null!;
+
+    /// <summary>
+    /// The one PIM store: every calendar, task list, note list and address book (§4).
+    /// </summary>
+    /// <remarks>
+    /// Beside the accounts directory rather than under it, so a harness run that poses a mail
+    /// seed gets that seed's calendar too and never touches the real one.
+    /// </remarks>
+    public static PimStore PimFile { get; private set; } = null!;
+
+    /// <summary>What the modules ask of the PIM store.</summary>
+    public static PimRepository Pim { get; private set; } = null!;
+
+    /// <summary>The DAV engine over those collections, run with Send/Receive (§7.5).</summary>
+    public static CalendarSyncService Calendars { get; private set; } = null!;
 
     /// <summary>The Rules and Alerts wizard's rules, run on arrival and by Run Rules Now.</summary>
     public static RulesHandler Rules { get; private set; } = null!;
@@ -97,6 +116,19 @@ public partial class App : Application
     /// The ribbon the shell renders: the shipped layout with any edits over it, and the Quick
     /// Steps gallery listing the steps as they stand.
     /// </summary>
+    /// <summary>
+    /// Where <c>pim.db</c> goes for a given accounts directory: its parent, which is the data
+    /// directory in a real run and the seed's own directory under the harness.
+    /// </summary>
+    internal static string PimPathBeside(string accountsDirectory)
+    {
+        var parent = System.IO.Path.GetDirectoryName(
+            System.IO.Path.TrimEndingDirectorySeparator(accountsDirectory));
+        return string.IsNullOrEmpty(parent)
+            ? PimStore.DefaultPath()
+            : System.IO.Path.Combine(parent, "pim.db");
+    }
+
     public static RibbonLayout MailRibbon()
         => QuickStepsRibbon.Inject(RibbonEdits.Apply(DefaultRibbonLayouts.Mail), QuickSteps.All);
 
@@ -377,14 +409,19 @@ public partial class App : Application
         // A directory under the harness's own path when capturing, so a screenshot run never
         // touches real mail.
         AccountOrder = new SettingsAccountOrder(Settings);
-        Accounts = new AccountStores(
-            Environment.GetEnvironmentVariable("MAILBOX_STORE") ?? AccountStores.DefaultDirectory(),
-            AccountOrder);
+        var accountsDirectory = Environment.GetEnvironmentVariable("MAILBOX_STORE") ?? AccountStores.DefaultDirectory();
+        Accounts = new AccountStores(accountsDirectory, AccountOrder);
+
+        // pim.db sits beside the accounts directory, so a posed store brings its own calendar.
+        PimFile = new PimStore(PimPathBeside(accountsDirectory));
+        Pim = new PimRepository(PimFile);
 
         // A capture run keeps its passwords in memory: it poses accounts that do not exist, and
         // the keyring may be locked on a headless desktop, where asking it would wait forever.
         Secrets = WindowCapture.IsRequested ? new InMemoryCredentialStore() : Credentials.Best();
+        Calendars = new CalendarSyncService(Pim, Secrets);
         MailOptions = new MailOptions(Settings);
+        CalendarOptions = new CalendarOptions(Settings);
         AutoArchive = new Mailbox.Core.Archive.AutoArchiveOptions(Settings);
         QuickClick = new QuickClickSettings(Settings);
 
@@ -437,6 +474,8 @@ public partial class App : Application
         Commands.RegisterRange(MailCommands.All);
         Commands.RegisterRange(ViewCommands.All);
         Commands.RegisterRange(ComposeCommands.All);
+        Commands.RegisterRange(CalendarCommands.All);
+        Commands.RegisterRange(AppointmentCommands.All);
         Keys = new Mailbox.Core.Keyboard.KeyMap(Settings, Commands);
         Mailbox.Controls.Ribbon.RibbonView.GestureLookup = command => Keys.GestureFor(command.Id)?.Display;
 

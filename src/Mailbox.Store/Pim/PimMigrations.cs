@@ -98,6 +98,15 @@ public static class PimMigrations
             tokenize='unicode61 remove_diacritics 2'
         );
         """,
+
+        // ---- 2: reminders ------------------------------------------------------------------
+        // What has been dismissed is kept as the *start* of the occurrence it was dismissed for,
+        // not as a flag: a repeating appointment's reminder has to come round again next week,
+        // and a boolean would silence the whole series the first time it was dismissed.
+        """
+        ALTER TABLE pim_items ADD COLUMN reminder_dismissed_utc INTEGER;
+        ALTER TABLE pim_items ADD COLUMN reminder_snoozed_utc INTEGER;
+        """,
     ];
 
     public static int Latest => Steps.Count;

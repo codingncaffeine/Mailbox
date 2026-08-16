@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The DAV engine (§7.5). One engine for calendars, task lists, note lists and address books,
+    because CalDAV (RFC 4791) and CardDAV (RFC 6352) are both WebDAV extensions: the core verbs,
+    discovery, the REPORTs, incremental sync over sync-collection (RFC 6578) with a CTag fallback,
+    ETag conflict handling, and the offline queue.
+
+    Built in-house because no usable CalDAV or CardDAV client exists for .NET — the candidates are
+    a small GitHub project, one lightweight package, and a 2019 alpha, none confirming
+    sync-collection.
+  -->
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Mailbox.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mailbox.Core\Mailbox.Core.csproj" />
+    <ProjectReference Include="..\Mailbox.Scheduling\Mailbox.Scheduling.csproj" />
+    <ProjectReference Include="..\Mailbox.Store\Mailbox.Store.csproj" />
+  </ItemGroup>
+
+</Project>

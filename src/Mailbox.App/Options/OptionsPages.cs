@@ -229,16 +229,16 @@ public static class OptionsPages
         [
             new OptionSection("Work time",
             [
-                new ComboRow("Start time:", Times, 16, 130, 200),
-                new ComboRow("End time:", Times, 34, 130, 200),
+                new ComboRow("Start time:", Times, 16, 130, 200) { Key = CalendarOptions.WorkDayStartKey },
+                new ComboRow("End time:", Times, 34, 130, 200) { Key = CalendarOptions.WorkDayEndKey },
                 new SubHeadingRow("Work week:"),
-                new CheckRow("Sun") { Indent = 1 },
-                new CheckRow("Mon", true) { Indent = 1 },
-                new CheckRow("Tue", true) { Indent = 1 },
-                new CheckRow("Wed", true) { Indent = 1 },
-                new CheckRow("Thu", true) { Indent = 1 },
-                new CheckRow("Fri", true) { Indent = 1 },
-                new CheckRow("Sat") { Indent = 1 },
+                new CheckRow("Sun") { Indent = 1, Key = CalendarOptions.WorkDayKey(DayOfWeek.Sunday) },
+                new CheckRow("Mon", true) { Indent = 1, Key = CalendarOptions.WorkDayKey(DayOfWeek.Monday) },
+                new CheckRow("Tue", true) { Indent = 1, Key = CalendarOptions.WorkDayKey(DayOfWeek.Tuesday) },
+                new CheckRow("Wed", true) { Indent = 1, Key = CalendarOptions.WorkDayKey(DayOfWeek.Wednesday) },
+                new CheckRow("Thu", true) { Indent = 1, Key = CalendarOptions.WorkDayKey(DayOfWeek.Thursday) },
+                new CheckRow("Fri", true) { Indent = 1, Key = CalendarOptions.WorkDayKey(DayOfWeek.Friday) },
+                new CheckRow("Sat") { Indent = 1, Key = CalendarOptions.WorkDayKey(DayOfWeek.Saturday) },
                 new ComboRow("First day of week:", Weekdays, 0, 150, 200) { Key = Keys.FirstDayOfWeek },
                 new ComboRow("First week of year:",
                     ["Starts on Jan 1", "First 4-day week", "First full week"], 0, 180, 200),
@@ -246,20 +246,21 @@ public static class OptionsPages
 
             new OptionSection("Calendar options",
             [
-                new ComboRow("Default reminders:", Reminders, 3, 150, 240),
+                new ComboRow("Default reminders:", Reminders, 3, 150, 240) { Key = CalendarOptions.DefaultReminderKey },
                 new CheckRow("Allow attendees to propose new times for meetings", true),
                 new ComboRow("Use this response when proposing a new meeting time:",
                     ["Tentative", "Accept", "Decline"], 0, 150, 340),
                 new CheckRow("Add holidays to the Calendar:"),
                 new CheckRow("Enable an alternate calendar"),
                 new CheckRow("When sending meeting requests outside of your organization, use the iCalendar format", true),
-                new CheckRow("Show bell icon on the calendar for appointments and meetings with reminders", true),
+                new CheckRow("Show bell icon on the calendar for appointments and meetings with reminders", true)
+                    { Key = CalendarOptions.ShowBellKey },
             ]),
 
             new OptionSection("Display options",
             [
-                new ComboRow("Default calendar colour:", Colours, 0, 150, 240),
-                new CheckRow("Use this colour on all calendars"),
+                new ComboRow("Default calendar colour:", Colours, 0, 150, 240) { Key = CalendarOptions.DefaultColourKey },
+                new CheckRow("Use this colour on all calendars") { Key = CalendarOptions.ColourEveryCalendarKey },
                 new CheckRow("Show week numbers in the month view and in the Date Navigator")
                     { Key = Keys.ShowWeekNumbers },
                 new CheckRow("Show a Weather bar on the calendar"),

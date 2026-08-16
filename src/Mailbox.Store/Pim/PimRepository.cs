@@ -257,6 +257,116 @@ public sealed class PimRepository(PimStore store)
             return 0;
         });
 
+    // ---- Reminders ------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Items with a reminder that could be due — everything with one set, hidden calendars
+    /// included, since a reminder is about the appointment and not about what is on screen.
+    /// </summary>
+    /// <remarks>
+    /// Which occurrence is actually due is the scheduling layer's decision, not the store's: a
+    /// series has one row and many occurrences, and only an expansion knows which of them the
+    /// clock has reached.
+    /// </remarks>
+    public IReadOnlyList<PimItem> ItemsWithReminders(CollectionKind kind = CollectionKind.Events)
+        => _store.Query(
+            ItemSelect + " WHERE kind = $kind AND reminder_minutes IS NOT NULL AND sync_state <> 'deleted' ORDER BY starts_utc, id",
+            ReadItem,
+            ("$kind", KindText(kind)));
+
+    /// <summary>What has been dismissed and what has been put off, for one item.</summary>
+    public (DateTimeOffset? Dismissed, DateTimeOffset? Snoozed) ReminderState(long id)
+        => _store.Query(
+                "SELECT reminder_dismissed_utc, reminder_snoozed_utc FROM pim_items WHERE id = $id",
+                r => (
+                    r.IsDBNull(0) ? (DateTimeOffset?)null : DateTimeOffset.FromUnixTimeSeconds(r.GetInt64(0)),
+                    r.IsDBNull(1) ? (DateTimeOffset?)null : DateTimeOffset.FromUnixTimeSeconds(r.GetInt64(1))),
+                ("$id", id))
+            .FirstOrDefault();
+
+    /// <summary>
+    /// Records that a reminder has been dealt with. <paramref name="dismissedOccurrence"/> is the
+    /// start of the occurrence dismissed, so the next one in a series still comes round.
+    /// </summary>
+    public void SetReminderState(long id, DateTimeOffset? dismissedOccurrence, DateTimeOffset? snoozedUntil)
+        => _store.Execute(
+            "UPDATE pim_items SET reminder_dismissed_utc = $dismissed, reminder_snoozed_utc = $snoozed WHERE id = $id",
+            ("$dismissed", dismissedOccurrence?.ToUnixTimeSeconds()),
+            ("$snoozed", snoozedUntil?.ToUnixTimeSeconds()),
+            ("$id", id));
+
+    // ---- The offline queue --------------------------------------------------------------------
+
+    /// <summary>One local change waiting to reach its server.</summary>
+    /// <param name="Op">"put" or "delete".</param>
+    /// <param name="ItemId">The row it is about; null once a delete's row has gone.</param>
+    /// <param name="Href">The server path a delete is for, kept because the row will not be there to ask.</param>
+    public sealed record QueuedChange(long Id, long CollectionId, long? ItemId, string Op, string? Href, string? Etag, int Attempts, string? LastError);
+
+    private const string QueueSelect =
+        "SELECT q.id, q.collection_id, q.item_id, q.op, i.dav_href, i.etag, q.attempts, q.last_error FROM dav_queue q LEFT JOIN pim_items i ON i.id = q.item_id";
+
+    /// <summary>
+    /// Records that an item has to be pushed. One entry per item and operation: queueing the same
+    /// item twice before a sync would send it twice, and the second send would fail its own
+    /// precondition.
+    /// </summary>
+    public long Queue(long collectionId, long? itemId, string op, string? href = null)
+        => _store.InTransaction(() =>
+        {
+            if (itemId is { } id)
+            {
+                _store.Execute("DELETE FROM dav_queue WHERE item_id = $item AND op = $op", ("$item", id), ("$op", op));
+            }
+
+            _store.Execute(
+                "INSERT INTO dav_queue (collection_id, item_id, op, state, created_utc) VALUES ($c, $i, $op, 'queued', $now)",
+                ("$c", collectionId), ("$i", itemId), ("$op", op), ("$now", DateTimeOffset.UtcNow.ToUnixTimeSeconds()));
+
+            var queued = _store.LastInsertId;
+            if (href is { Length: > 0 }) _store.Execute("UPDATE dav_queue SET last_error = NULL WHERE id = $id", ("$id", queued));
+            return queued;
+        });
+
+    /// <summary>What is waiting to go, oldest first; a collection's own when one is named.</summary>
+    public IReadOnlyList<QueuedChange> Queued(long? collectionId = null)
+        => collectionId is { } id
+            ? _store.Query(QueueSelect + " WHERE q.state = 'queued' AND q.collection_id = $c ORDER BY q.id", ReadQueued, ("$c", id))
+            : _store.Query(QueueSelect + " WHERE q.state = 'queued' ORDER BY q.id", ReadQueued);
+
+    public void Dequeue(long id) => _store.Execute("DELETE FROM dav_queue WHERE id = $id", ("$id", id));
+
+    /// <summary>Leaves a failed change queued with what went wrong, so a later sync retries it.</summary>
+    public void QueueFailed(long id, string error)
+        => _store.Execute(
+            "UPDATE dav_queue SET attempts = attempts + 1, last_error = $error WHERE id = $id",
+            ("$error", error), ("$id", id));
+
+    private static QueuedChange ReadQueued(SqliteDataReader r) => new(
+        r.GetInt64(0), r.GetInt64(1), r.IsDBNull(2) ? null : r.GetInt64(2), r.GetString(3),
+        r.IsDBNull(4) ? null : r.GetString(4), r.IsDBNull(5) ? null : r.GetString(5),
+        r.GetInt32(6), r.IsDBNull(7) ? null : r.GetString(7));
+
+    /// <summary>Every item in a collection with its server path and tag, for a sync's diff.</summary>
+    public IReadOnlyDictionary<string, (long Id, string? Etag)> HrefsIn(long collectionId)
+    {
+        var map = new Dictionary<string, (long, string?)>(StringComparer.Ordinal);
+        foreach (var row in _store.Query(
+                     "SELECT id, dav_href, etag FROM pim_items WHERE collection_id = $c AND dav_href IS NOT NULL",
+                     r => (Id: r.GetInt64(0), Href: r.GetString(1), Etag: r.IsDBNull(2) ? null : r.GetString(2)),
+                     ("$c", collectionId)))
+        {
+            map[row.Href] = (row.Id, row.Etag);
+        }
+
+        return map;
+    }
+
+    /// <summary>The row a server path names, or null when this store has never seen it.</summary>
+    public PimItem? ItemByHref(long collectionId, string href)
+        => _store.Query(ItemSelect + " WHERE collection_id = $c AND dav_href = $href", ReadItem, ("$c", collectionId), ("$href", href))
+            .FirstOrDefault();
+
     // ---- Reading and writing rows -----------------------------------------------------------
 
     private static (string, object?)[] Parameters(PimItem item) =>

@@ -1016,9 +1016,38 @@ public sealed class RibbonView : ContentControl
         Bind(box, Border.BorderBrushProperty, "border.strong.brush");
         Bind(box, Border.BackgroundProperty, "surface.raised.brush");
 
+        // A picker that shows its label carries its icon and name in front of the box, as the
+        // appointment window's Show As and Reminder do: "▤ Show As: [ Busy ⌄ ]". The colon is
+        // the renderer's, not the command's — a labelled control is how Office writes one, and
+        // the same command placed as a plain button must not gain punctuation from it.
+        Control face = box;
+        if (item.ShowLabel && item.Kind == RibbonItemKind.ComboBox)
+        {
+            var caption = new TextBlock
+            {
+                Text = command.Label + ":",
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            Bind(caption, TextBlock.ForegroundProperty, "text.primary.brush");
+            Bind(caption, TextBlock.FontSizeProperty, "type.ui.size.value");
+
+            face = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 6,
+                VerticalAlignment = VerticalAlignment.Center,
+                Children =
+                {
+                    BuildIcon(command, RibbonMetrics.SimplifiedIconSize, 20, RibbonMetrics.SimplifiedIconFontSize),
+                    caption,
+                    box,
+                },
+            };
+        }
+
         var button = new Button
         {
-            Content = box,
+            Content = face,
             Padding = new Thickness(RibbonMetrics.FieldPadding, 0),
             BorderThickness = default,
             Background = Brushes.Transparent,

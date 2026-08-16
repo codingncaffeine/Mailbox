@@ -1,0 +1,818 @@
+using System.Globalization;
+using Avalonia.Controls;
+using Avalonia.Threading;
+using Mailbox.App.Options;
+using Mailbox.App.ViewModels;
+using Mailbox.Controls.Calendar;
+using Mailbox.Core.Commands;
+using Mailbox.Core.Diagnostics;
+using Mailbox.Core.Ribbon;
+using Mailbox.Scheduling;
+using Mailbox.Store.Pim;
+
+namespace Mailbox.App.Views;
+
+/// <summary>
+/// The Calendar module in the shell: switching to it, the workspace it puts in the window, and
+/// the commands its ribbon presses.
+/// </summary>
+/// <remarks>
+/// A partial of the shell rather than a class of its own for the reason the Quick Steps half is:
+/// it needs the window's ribbon, its dialogs and its status line, and passing those three round
+/// is a worse seam than a second file.
+/// </remarks>
+public partial class MainWindow
+{
+    private CalendarWorkspace? _calendar;
+
+    /// <summary>
+    /// Today, as the whole module believes it. <c>MAILBOX_TODAY</c> pins it so a capture of the
+    /// calendar is the same picture next year — without it every month view would shade a
+    /// different half of itself and no reference comparison would hold.
+    /// </summary>
+    internal static DateOnly CalendarToday { get; } =
+        Environment.GetEnvironmentVariable("MAILBOX_TODAY") is { Length: > 0 } pinned
+        && DateOnly.TryParseExact(pinned, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day)
+            ? day
+            : DateOnly.FromDateTime(DateTime.Now);
+
+    /// <summary>
+    /// The moment the now line is drawn at. A pinned day gets no now line: the line would be at
+    /// the real clock's time on a day that is not the real one.
+    /// </summary>
+    internal static DateTime? CalendarNow { get; } =
+        Environment.GetEnvironmentVariable("MAILBOX_TODAY") is { Length: > 0 } ? null : DateTime.Now;
+
+    /// <summary>The calendar ribbon: the shipped layout with the reader's edits over it.</summary>
+    private static RibbonLayout CalendarRibbon() => App.RibbonEdits.Apply(DefaultRibbonLayouts.Calendar);
+
+    /// <summary>
+    /// Puts a module on screen: the rail's mark, the workspace in the window, and the ribbon
+    /// that belongs to it.
+    /// </summary>
+    private void SwitchModule(ShellViewModel shell, MailboxModule module)
+    {
+        if (module is not (MailboxModule.Mail or MailboxModule.Calendar))
+        {
+            // The remaining four are whole modules in Part IV, and a button that says which
+            // phase brings it is better than one that does nothing.
+            shell.StatusRight = module switch
+            {
+                MailboxModule.People => "People arrives with Phase 12.",
+                MailboxModule.Tasks or MailboxModule.Notes or MailboxModule.Journal
+                    => $"{module} arrives with Phase 13.",
+                _ => $"{module} is Phase 14, with the rest of the shell.",
+            };
+            return;
+        }
+
+        if (shell.Module == module) return;
+        shell.Module = module;
+
+        if (module == MailboxModule.Calendar)
+        {
+            var workspace = EnsureCalendar(shell);
+            this.FindControl<ContentControl>("ModuleHost")!.Content = workspace;
+            _ribbon.Layout = CalendarRibbon();
+            shell.ModuleStatusLeft = workspace.Status;
+        }
+        else
+        {
+            _ribbon.Layout = App.MailRibbon();
+        }
+
+        Log.Info($"Module: {module}.");
+    }
+
+    private CalendarWorkspace EnsureCalendar(ShellViewModel shell)
+    {
+        if (_calendar is not null) return _calendar;
+
+        var workspace = new CalendarWorkspace(App.Pim, App.CalendarOptions, CalendarToday, CalendarNow)
+        {
+            IsNavVisible = shell.NavVisible,
+        };
+
+        workspace.Changed += (_, _) => shell.ModuleStatusLeft = workspace.Status;
+        workspace.NewRequested += (_, when) => _ = NewAppointmentAsync(shell, when.Start, when.AllDay);
+        workspace.EntryOpened += (_, entry) => _ = OpenAppointmentAsync(shell, entry);
+        _calendar = workspace;
+        return workspace;
+    }
+
+    /// <summary>
+    /// The Calendar module's commands. Returns false for anything it does not own, so the
+    /// shell's own list carries on.
+    /// </summary>
+    private bool RunCalendarCommand(ShellViewModel shell, CommandId id)
+    {
+        if (ViewCommands.ModuleOf(id) is { } module)
+        {
+            SwitchModule(shell, module);
+            return true;
+        }
+
+        if (id == CalendarCommands.NewAppointment.Id)
+        {
+            SwitchModule(shell, MailboxModule.Calendar);
+            var calendar = EnsureCalendar(shell);
+            _ = NewAppointmentAsync(shell, calendar.Anchor.ToDateTime(NextHalfHour()), allDay: false);
+            return true;
+        }
+
+        if (id == CalendarCommands.NewMeeting.Id)
+        {
+            SwitchModule(shell, MailboxModule.Calendar);
+            var calendar = EnsureCalendar(shell);
+            _ = NewAppointmentAsync(shell, calendar.Anchor.ToDateTime(NextHalfHour()), allDay: false, meeting: true);
+            return true;
+        }
+
+        // Everything below wants the module up, and pressing one from the mail ribbon through
+        // the harness is exactly how the audit checks it.
+        if (id == CalendarCommands.AddFocusTime.Id) { SwitchModule(shell, MailboxModule.Calendar); AddFocusTime(shell); return true; }
+        if (id == CalendarCommands.Today.Id) { WithCalendar(shell, c => c.GoToday()); return true; }
+        if (id == CalendarCommands.Next7Days.Id) { WithCalendar(shell, c => c.ShowNextSevenDays()); return true; }
+        if (id == CalendarCommands.Back.Id) { WithCalendar(shell, c => c.Step(-1)); return true; }
+        if (id == CalendarCommands.Forward.Id) { WithCalendar(shell, c => c.Step(1)); return true; }
+        if (id == CalendarCommands.GoToDate.Id) { _ = GoToDateAsync(shell); return true; }
+        if (id == CalendarCommands.DayView.Id) { WithCalendar(shell, c => c.SetView(CalendarViewKind.Day)); return true; }
+        if (id == CalendarCommands.WorkWeekView.Id) { WithCalendar(shell, c => c.SetView(CalendarViewKind.WorkWeek)); return true; }
+        if (id == CalendarCommands.WeekView.Id) { WithCalendar(shell, c => c.SetView(CalendarViewKind.Week)); return true; }
+        if (id == CalendarCommands.MonthView.Id) { WithCalendar(shell, c => c.SetView(CalendarViewKind.Month)); return true; }
+        if (id == CalendarCommands.ScheduleView.Id) { WithCalendar(shell, c => c.SetView(CalendarViewKind.Schedule)); return true; }
+        if (id == CalendarCommands.CalendarOptions.Id) { _ = ShowOptions("calendar"); return true; }
+        if (id == CalendarCommands.OpenItem.Id) { OpenSelectedAppointment(shell); return true; }
+        if (id == CalendarCommands.DeleteItem.Id) { _ = DeleteSelectedAppointmentAsync(shell); return true; }
+        if (id == CalendarCommands.OpenCalendar.Id) { ShowAddCalendarMenu(shell); return true; }
+        if (id == CalendarCommands.NewCalendar.Id) { _ = NewCalendarAsync(shell); return true; }
+        if (id == CalendarCommands.OpenFromInternet.Id) { _ = SubscribeAsync(shell); return true; }
+        if (id == CalendarCommands.DeleteCalendar.Id) { _ = DeleteCalendarAsync(shell); return true; }
+
+        return false;
+    }
+
+    /// <summary>
+    /// The Add button's menu, in the reference's own order: the two address-book entries, the
+    /// internet subscription, calendar groups, then the two that make or open a calendar.
+    /// </summary>
+    private void ShowAddCalendarMenu(ShellViewModel shell)
+    {
+        SwitchModule(shell, MailboxModule.Calendar);
+        var flyout = new MenuFlyout();
+
+        void Entry(string header, Action run, bool enabled = true)
+        {
+            var item = new MenuItem { Header = header, IsEnabled = enabled };
+            item.Click += (_, _) => run();
+            flyout.Items.Add(item);
+        }
+
+        Entry("From Address Book…", () => shell.StatusRight = "Adding a calendar from the address book arrives with Phase 12.");
+        Entry("From Room List…", () => shell.StatusRight = "Room lists arrive with Phase 12.");
+        Entry("From Internet…", () => _ = SubscribeAsync(shell));
+        Entry("Calendar Groups", () => shell.StatusRight = "Calendar groups arrive with the People module.");
+        flyout.Items.Add(new Separator());
+        Entry("Create New Blank Calendar…", () => _ = NewCalendarAsync(shell));
+        Entry("Open Shared Calendar…", () => shell.StatusRight = "A shared calendar is a subscription — use From Internet… with its address.");
+
+        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+    }
+
+    private async Task NewCalendarAsync(ShellViewModel shell)
+    {
+        var name = await Prompt.AskAsync(this, "Create New Folder", "Name:", "Calendar");
+        if (string.IsNullOrWhiteSpace(name)) return;
+
+        var calendar = App.Pim.AddCollection(CollectionKind.Events, name.Trim(), App.CalendarOptions.DefaultColour);
+        shell.StatusRight = $"“{calendar.DisplayName}” added.";
+        Log.Info($"Calendar: collection {calendar.Id} added.");
+        AfterStoreChange(shell);
+    }
+
+    /// <summary>
+    /// New Internet Calendar Subscription: an address, and a read-only collection that the DAV
+    /// engine then keeps up to date like any other.
+    /// </summary>
+    private async Task SubscribeAsync(ShellViewModel shell)
+    {
+        var url = await Prompt.AskAsync(this, "New Internet Calendar Subscription", "Address of the calendar:");
+        if (string.IsNullOrWhiteSpace(url)) return;
+
+        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var address)
+            || address.Scheme is not ("http" or "https" or "webcal"))
+        {
+            await Confirm.TellAsync(this, "New Internet Calendar Subscription", "That is not a calendar address.");
+            return;
+        }
+
+        // webcal: is the same URL over HTTP; every publisher writes it that way and no client has
+        // ever spoken a webcal protocol.
+        if (address.Scheme == "webcal") address = new UriBuilder(address) { Scheme = "https", Port = -1 }.Uri;
+
+        var name = await Prompt.AskAsync(this, "New Internet Calendar Subscription", "Name:", address.Host);
+        if (string.IsNullOrWhiteSpace(name)) return;
+
+        var calendar = App.Pim.AddCollection(
+            CollectionKind.Events, name.Trim(), App.CalendarOptions.DefaultColour,
+            account: string.Empty, davUrl: address.ToString(), readOnly: true);
+
+        shell.StatusRight = $"“{calendar.DisplayName}” subscribed. It fills on the next send/receive.";
+        Log.Info($"Calendar: subscribed to {address} as collection {calendar.Id}.");
+        AfterStoreChange(shell);
+    }
+
+    private async Task DeleteCalendarAsync(ShellViewModel shell)
+    {
+        var calendars = App.Pim.Collections(CollectionKind.Events);
+        if (calendars.Count <= 1)
+        {
+            shell.StatusRight = "The last calendar cannot be deleted.";
+            return;
+        }
+
+        var chosen = EnsureCalendar(shell).SelectedEntry?.CollectionId ?? calendars[^1].Id;
+        var calendar = calendars.First(c => c.Id == chosen);
+
+        if (!await Confirm.AskAsync(
+                this, "Delete Folder",
+                $"Are you sure you want to delete “{calendar.DisplayName}” and everything in it?",
+                "Delete"))
+        {
+            return;
+        }
+
+        App.Pim.RemoveCollection(calendar.Id);
+        shell.StatusRight = $"“{calendar.DisplayName}” deleted.";
+        AfterStoreChange(shell);
+    }
+
+    private void WithCalendar(ShellViewModel shell, Action<CalendarWorkspace> act)
+    {
+        SwitchModule(shell, MailboxModule.Calendar);
+        var calendar = EnsureCalendar(shell);
+        act(calendar);
+        shell.ModuleStatusLeft = calendar.Status;
+    }
+
+    /// <summary>The next half hour on the clock, which is where a new appointment starts.</summary>
+    private static TimeOnly NextHalfHour()
+    {
+        var now = CalendarNow ?? DateTime.Now;
+        var minutes = now.Minute < 30 ? 30 : 60;
+        var start = now.Date.AddHours(now.Hour).AddMinutes(minutes);
+        return TimeOnly.FromDateTime(start);
+    }
+
+    /// <summary>
+    /// Add Focus Time: the next free block of the working day, booked as Busy.
+    /// </summary>
+    /// <remarks>
+    /// The reference's button reaches a service that is not in scope here (§ out of scope), so
+    /// this does what the name says with what the machine already knows — the calendar it has
+    /// and the working hours Options names. Rule 2: the feature is the reference's, the
+    /// mechanism is ours.
+    /// </remarks>
+    private void AddFocusTime(ShellViewModel shell)
+    {
+        var calendar = EnsureCalendar(shell);
+        var length = TimeSpan.FromHours(2);
+        var day = calendar.Anchor < CalendarToday ? CalendarToday : calendar.Anchor;
+        var open = App.CalendarOptions.WorkDayStart;
+        var close = App.CalendarOptions.WorkDayEnd;
+
+        var source = new CalendarSource(App.Pim);
+        var workDays = App.CalendarOptions.WorkDays;
+
+        for (var offset = 0; offset < 14; offset++)
+        {
+            var date = day.AddDays(offset);
+
+            // A working block goes in the working week: the Options page names both which hours
+            // and which days, and booking Sunday afternoon is not what the button says.
+            if (!workDays.Contains(date.DayOfWeek)) continue;
+
+            var from = date.ToDateTime(open, DateTimeKind.Unspecified);
+            var until = date.ToDateTime(close, DateTimeKind.Unspecified);
+            var taken = source
+                .Between(Instant(from), Instant(until))
+                .Where(e => e.Busy != BusyStatus.Free)
+                .OrderBy(e => e.StartWall)
+                .ToList();
+
+            var cursor = from;
+            if (offset == 0 && cursor < DateTime.Now) cursor = RoundUp(DateTime.Now);
+
+            foreach (var entry in taken)
+            {
+                if (entry.StartWall - cursor >= length) break;
+                if (entry.EndWall > cursor) cursor = entry.EndWall;
+            }
+
+            if (cursor + length > until) continue;
+
+            var written = SaveAppointment(new CalendarEvent
+            {
+                Uid = CalendarEvent.NewUid(),
+                Summary = "Focus time",
+                Start = EventTime.At(cursor, TimeZoneInfo.Local.Id),
+                End = EventTime.At(cursor + length, TimeZoneInfo.Local.Id),
+                Busy = BusyStatus.Busy,
+                ReminderMinutes = 15,
+            });
+
+            calendar.GoTo(DateOnly.FromDateTime(cursor));
+            shell.StatusRight = $"Focus time booked for {cursor.ToString("dddd HH:mm", CultureInfo.CurrentCulture)}.";
+            Log.Info($"Focus time: item {written.Id} at {cursor:yyyy-MM-dd HH:mm}.");
+            return;
+        }
+
+        shell.StatusRight = "No free block long enough in the next two weeks.";
+    }
+
+    private static DateTime RoundUp(DateTime when)
+    {
+        var minutes = when.Minute < 30 ? 30 : 60;
+        return when.Date.AddHours(when.Hour).AddMinutes(minutes);
+    }
+
+    private static DateTimeOffset Instant(DateTime wall)
+        => new DateTimeOffset(DateTime.SpecifyKind(wall, DateTimeKind.Unspecified), TimeZoneInfo.Local.GetUtcOffset(wall)).ToUniversalTime();
+
+    /// <summary>Writes an appointment into the default calendar and refreshes the view.</summary>
+    internal PimItem SaveAppointment(CalendarEvent calendarEvent, PimItem? existing = null, long? collectionId = null)
+    {
+        var calendar = collectionId ?? App.Pim.DefaultCalendar().Id;
+        var row = PimEventCodec.ToItem(calendarEvent, calendar, existing);
+        var written = existing is null ? App.Pim.AddItem(row) : Store(row);
+
+        // A calendar with a server behind it gets the change queued rather than sent now: an
+        // edit made with the network down is a longer queue, not a lost edit (§7.5).
+        App.Calendars.QueuePut(written);
+        _calendar?.Reload();
+        return written;
+
+        PimItem Store(PimItem item)
+        {
+            App.Pim.UpdateItem(item);
+            return item;
+        }
+    }
+
+    // ---- The appointment window ---------------------------------------------------------------
+
+    /// <summary>A blank appointment on a day, opened for editing and written if it is kept.</summary>
+    private async Task NewAppointmentAsync(ShellViewModel shell, DateTime start, bool allDay, bool meeting = false)
+    {
+        var zone = TimeZoneInfo.Local.Id;
+        var fresh = new CalendarEvent
+        {
+            Uid = CalendarEvent.NewUid(),
+            Start = allDay ? EventTime.Date(DateOnly.FromDateTime(start)) : EventTime.At(start, zone),
+            End = allDay ? EventTime.Date(DateOnly.FromDateTime(start).AddDays(1)) : EventTime.At(start.AddMinutes(30), zone),
+            Busy = BusyStatus.Busy,
+            ReminderMinutes = App.CalendarOptions.DefaultReminderMinutes,
+        };
+
+        var calendars = App.Pim.Collections(CollectionKind.Events);
+        if (calendars.Count == 0) calendars = [App.Pim.DefaultCalendar()];
+
+        var window = new AppointmentWindow(App.Commands, fresh, calendars, calendars[0].Id, meeting);
+        await window.ShowDialog(this);
+        if (window.Result is not { Deleted: false } result) return;
+
+        var written = SaveAppointment(result.Event, existing: null, result.CollectionId);
+        shell.StatusRight = $"“{Named(result.Event)}” added to {calendars.First(c => c.Id == result.CollectionId).DisplayName}.";
+        Log.Info($"Calendar: item {written.Id} added — {result.Event.Start.ToLocalText()} {Named(result.Event)}.");
+
+        if (result.Sent) SendMeetingRequest(shell, result.Event);
+        AfterStoreChange(shell);
+    }
+
+    /// <summary>
+    /// Sends a meeting invitation: an ordinary message carrying a <c>METHOD:REQUEST</c> part to
+    /// everyone asked, queued in the Outbox with the rest.
+    /// </summary>
+    /// <remarks>
+    /// The organizer is the account it goes from, written onto the appointment as it is sent —
+    /// a REQUEST with no ORGANIZER is one no client can reply to.
+    /// </remarks>
+    private void SendMeetingRequest(ShellViewModel shell, CalendarEvent meeting)
+    {
+        if (meeting.Attendees.Count == 0)
+        {
+            shell.StatusRight = "Nobody was asked, so nothing was sent.";
+            return;
+        }
+
+        var account = App.Accounts.All.FirstOrDefault(a => a.IsDefault) ?? App.Accounts.All.FirstOrDefault();
+        if (account is null)
+        {
+            shell.StatusRight = "There is no account to send the invitation from.";
+            return;
+        }
+
+        try
+        {
+            var organizer = account.Account.Address;
+            var payload = Imip.Request(meeting with { Organizer = organizer, Status = "CONFIRMED" });
+
+            var message = new MimeKit.MimeMessage();
+            message.From.Add(new MimeKit.MailboxAddress(App.Settings.GetString(OptionsPages.Keys.UserName), organizer));
+            foreach (var attendee in meeting.Attendees)
+            {
+                message.To.Add(MimeKit.MailboxAddress.Parse(attendee.Address));
+            }
+
+            message.Subject = Named(meeting);
+
+            var calendar = new MimeKit.TextPart("calendar") { Text = payload };
+            calendar.ContentType.Parameters["method"] = "REQUEST";
+            calendar.ContentType.Parameters["charset"] = "utf-8";
+            message.Body = new MimeKit.Multipart("alternative")
+            {
+                new MimeKit.TextPart("plain") { Text = Imip.Describe(new ItipMessage(ItipMethod.Request, meeting, payload)) },
+                calendar,
+            };
+
+            var outboxId = new Mailbox.Protocols.SmtpSender(account.Mail).Queue(account.Account.Id, message);
+            Log.Info($"Meeting request queued as {outboxId} to {meeting.Attendees.Count} attendee(s).");
+            shell.StatusRight = $"The invitation to “{Named(meeting)}” is in the Outbox.";
+        }
+        catch (FormatException ex)
+        {
+            Log.Warn("An attendee's address could not be read.", ex);
+            shell.StatusRight = "One of the attendees' addresses could not be read; nothing was sent.";
+        }
+    }
+
+    /// <summary>
+    /// Opens an occurrence. A repeating one asks first, because editing one week and editing
+    /// every week are different operations and the reference never guesses which was meant.
+    /// </summary>
+    private async Task OpenAppointmentAsync(ShellViewModel shell, CalendarEntry entry)
+    {
+        var stored = App.Pim.Item(entry.ItemId);
+        if (stored is null)
+        {
+            shell.StatusRight = "That appointment is no longer in the calendar.";
+            return;
+        }
+
+        var master = PimEventCodec.FromItem(stored);
+        var scope = EditScope.Series;
+        if (entry.Occurrence.IsPartOfSeries && !master.IsOverride)
+        {
+            scope = await EditScopePrompt.AskAsync(this, Named(master), deleting: false);
+            if (scope == EditScope.None) return;
+        }
+
+        var calendars = App.Pim.Collections(CollectionKind.Events);
+        var editing = scope == EditScope.Occurrence
+            ? SeriesEditor.OverrideFor(master, entry.Occurrence)
+            : master;
+
+        var window = new AppointmentWindow(App.Commands, editing, calendars, stored.CollectionId, meeting: editing.Attendees.Count > 0);
+        await window.ShowDialog(this);
+        if (window.Result is not { } result) return;
+
+        if (result.Deleted)
+        {
+            await RemoveAsync(shell, entry, stored, master, scope);
+            return;
+        }
+
+        if (scope == EditScope.Occurrence)
+        {
+            // The override is a sibling row of its master, not a replacement for it.
+            var written = SaveAppointment(result.Event, existing: null, result.CollectionId);
+            Log.Info($"Calendar: occurrence {written.Id} overridden at {result.Event.RecurrenceId?.ToLocalText()}.");
+        }
+        else
+        {
+            var written = SaveAppointment(result.Event, stored, result.CollectionId);
+            Log.Info($"Calendar: item {written.Id} saved — {Named(result.Event)}.");
+        }
+
+        shell.StatusRight = $"“{Named(result.Event)}” saved.";
+        AfterStoreChange(shell);
+    }
+
+    private async Task DeleteSelectedAppointmentAsync(ShellViewModel shell)
+    {
+        var calendar = EnsureCalendar(shell);
+        if (calendar.SelectedEntry is not { } entry)
+        {
+            shell.StatusRight = "Select an appointment first.";
+            return;
+        }
+
+        var stored = App.Pim.Item(entry.ItemId);
+        if (stored is null) return;
+        var master = PimEventCodec.FromItem(stored);
+
+        var scope = EditScope.Series;
+        if (entry.Occurrence.IsPartOfSeries && !master.IsOverride)
+        {
+            scope = await EditScopePrompt.AskAsync(this, Named(master), deleting: true);
+            if (scope == EditScope.None) return;
+        }
+
+        await RemoveAsync(shell, entry, stored, master, scope);
+    }
+
+    /// <summary>
+    /// Takes an appointment off the calendar: the whole series, or one occurrence — which is an
+    /// EXDATE on the master rather than a row anywhere, unless the occurrence is itself an
+    /// override, in which case the override goes and the pattern's own occurrence comes back.
+    /// </summary>
+    private Task RemoveAsync(ShellViewModel shell, CalendarEntry entry, PimItem stored, CalendarEvent master, EditScope scope)
+    {
+        if (scope == EditScope.Series || !entry.Occurrence.IsPartOfSeries)
+        {
+            App.Calendars.Remove(stored);
+            shell.StatusRight = $"“{Named(master)}” deleted.";
+            Log.Info($"Calendar: item {stored.Id} deleted.");
+        }
+        else if (master.IsOverride)
+        {
+            App.Calendars.Remove(stored);
+            shell.StatusRight = $"That change to “{Named(master)}” was removed.";
+            Log.Info($"Calendar: override {stored.Id} removed.");
+        }
+        else
+        {
+            var excluded = SeriesEditor.Exclude(master, entry.Occurrence.RecurrenceId ?? entry.Occurrence.Start);
+            SaveAppointment(excluded, stored, stored.CollectionId);
+            shell.StatusRight = $"One occurrence of “{Named(master)}” deleted.";
+            Log.Info($"Calendar: occurrence excluded at {entry.Occurrence.Start.ToLocalText()}.");
+        }
+
+        AfterStoreChange(shell);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Runs the DAV engine over every calendar with a server behind it, and says what came of it.
+    /// </summary>
+    /// <remarks>
+    /// A conflict is reported rather than resolved: the reference refetches, shows what the
+    /// server has, and lets the reader choose. That prompt is what §20 records as outstanding;
+    /// what is not outstanding is that nothing has been overwritten.
+    /// </remarks>
+    internal async Task SyncCalendarsAsync(ShellViewModel shell, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var report = await App.Calendars.SyncAsync(cancellationToken).ConfigureAwait(true);
+            if (report.Collections == 0) return;
+
+            _calendar?.Reload();
+            if (_calendar is { } calendar) shell.ModuleStatusLeft = calendar.Status;
+
+            if (report.Conflicts.Count > 0)
+            {
+                shell.StatusRight = report.Conflicts.Count == 1
+                    ? $"“{report.Conflicts[0].Summary}” changed on the server as well and was not sent."
+                    : $"{report.Conflicts.Count} appointments changed on the server as well and were not sent.";
+            }
+            else if (report.DidAnything)
+            {
+                shell.StatusRight = $"Calendars updated: {report.Pulled} in, {report.Pushed} out.";
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The run was cancelled with the mail poll; nothing to say that the mail half has not.
+        }
+        catch (HttpRequestException ex)
+        {
+            Log.Warn("The calendars could not be synchronised.", ex);
+            shell.StatusRight = "The calendars could not be reached.";
+        }
+    }
+
+    /// <summary>
+    /// Sends the answer to an invitation: an ordinary message carrying a <c>METHOD:REPLY</c>
+    /// part, queued in the Outbox like anything else this application sends.
+    /// </summary>
+    /// <remarks>
+    /// iMIP is scheduling over ordinary mail (RFC 6047), so a reply is a message and goes out on
+    /// the next send/receive with the rest. What the calendar records happened when the button
+    /// was pressed; this is the half the organizer sees.
+    /// </remarks>
+    internal void SendInvitationReply(ShellViewModel shell, InvitationBar.Answer answer)
+    {
+        AfterStoreChange(shell);
+
+        var verdict = answer.Response switch
+        {
+            ItipResponse.Accepted => "Accepted",
+            ItipResponse.Tentative => "Tentative",
+            _ => "Declined",
+        };
+
+        if (!answer.SendReply)
+        {
+            shell.StatusRight = $"{verdict}. No reply was sent.";
+            return;
+        }
+
+        var organizer = ItipAddress(answer.Invitation.Organizer);
+        if (organizer.Length == 0)
+        {
+            shell.StatusRight = $"{verdict}. The invitation names no organizer to reply to.";
+            return;
+        }
+
+        var account = App.Accounts.All.FirstOrDefault(a =>
+                          string.Equals(a.Account.Address, _reading?.RecipientAddress, StringComparison.OrdinalIgnoreCase))
+                      ?? App.Accounts.All.FirstOrDefault();
+        if (account is null)
+        {
+            shell.StatusRight = $"{verdict}. There is no account to reply from.";
+            return;
+        }
+
+        try
+        {
+            var message = new MimeKit.MimeMessage();
+            message.From.Add(new MimeKit.MailboxAddress(App.Settings.GetString(OptionsPages.Keys.UserName), account.Account.Address));
+            message.To.Add(MimeKit.MailboxAddress.Parse(organizer));
+            message.Subject = $"{verdict}: {answer.Invitation.Event.Summary}";
+
+            // Both parts, as RFC 6047 asks: the words for a person, the payload for a client.
+            var body = new MimeKit.TextPart("plain") { Text = $"{verdict}: {answer.Invitation.Event.Summary}" };
+            var calendar = new MimeKit.TextPart("calendar") { Text = answer.Payload };
+            calendar.ContentType.Parameters["method"] = "REPLY";
+            calendar.ContentType.Parameters["charset"] = "utf-8";
+            message.Body = new MimeKit.Multipart("alternative") { body, calendar };
+
+            var outboxId = new Mailbox.Protocols.SmtpSender(account.Mail).Queue(account.Account.Id, message);
+            Log.Info($"Invitation reply queued as {outboxId} to {organizer}.");
+            shell.StatusRight = $"{verdict}. The reply is in the Outbox.";
+        }
+        catch (FormatException ex)
+        {
+            Log.Warn("The invitation's organizer address could not be read.", ex);
+            shell.StatusRight = $"{verdict}. The organizer's address could not be read.";
+        }
+    }
+
+    private static string ItipAddress(string address)
+    {
+        var text = address.Trim();
+        return text.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase) ? text[7..] : text;
+    }
+
+    private void AfterStoreChange(ShellViewModel shell)
+    {
+        _calendar?.Reload();
+        if (_calendar is { } calendar) shell.ModuleStatusLeft = calendar.Status;
+    }
+
+    private static string Named(CalendarEvent appointment)
+        => appointment.Summary.Length > 0 ? appointment.Summary : "(no subject)";
+
+    /// <summary>Go to Date: the reference's small prompt with a date and which view to show it in.</summary>
+    private async Task GoToDateAsync(ShellViewModel shell)
+    {
+        SwitchModule(shell, MailboxModule.Calendar);
+        var calendar = EnsureCalendar(shell);
+        var dialog = new GoToDateDialog(calendar.Anchor, calendar.Kind);
+        await dialog.ShowDialog(this);
+        if (dialog.Chosen is not { } chosen) return;
+
+        calendar.SetView(dialog.View);
+        calendar.GoTo(chosen);
+        shell.ModuleStatusLeft = calendar.Status;
+    }
+
+    /// <summary>
+    /// Opens one of the calendar module's own windows for a capture. The harness cannot click, so
+    /// each is posed with something in it rather than photographed empty.
+    /// </summary>
+    internal async Task ShowCalendarPeekAsync(string which)
+    {
+        if (DataContext is not ShellViewModel shell) return;
+        SwitchModule(shell, MailboxModule.Calendar);
+        var calendar = EnsureCalendar(shell);
+
+        switch (which)
+        {
+            case "recurrence":
+            {
+                var dialog = new RecurrenceDialog("FREQ=WEEKLY;BYDAY=MO", calendar.Anchor, TimeSpan.FromMinutes(30));
+                await dialog.ShowDialog(this);
+                Log.Info($"Harness: recurrence dialog came back with “{dialog.Rrule ?? "no rule"}”.");
+                return;
+            }
+
+            case "editscope":
+            {
+                var scope = await EditScopePrompt.AskAsync(this, "Weekly sync", deleting: false);
+                Log.Info($"Harness: edit scope chose {scope}.");
+                return;
+            }
+
+            case "gotodate":
+            {
+                var dialog = new GoToDateDialog(calendar.Anchor, calendar.Kind);
+                await dialog.ShowDialog(this);
+                Log.Info($"Harness: go to date chose {dialog.Chosen?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "nothing"}.");
+                return;
+            }
+
+            default:
+            {
+                var meeting = which == "newmeeting";
+                await NewAppointmentAsync(shell, calendar.Anchor.ToDateTime(new TimeOnly(8, 0)), allDay: false, meeting: meeting);
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Opens an appointment by the row it is on — what the Reminders window asks for, and what an
+    /// invitation's "open in the calendar" will.
+    /// </summary>
+    internal async Task OpenAppointmentByIdAsync(ShellViewModel shell, long itemId)
+    {
+        if (App.Pim.Item(itemId) is not { } stored) return;
+
+        SwitchModule(shell, MailboxModule.Calendar);
+        var calendar = EnsureCalendar(shell);
+        var master = PimEventCodec.FromItem(stored);
+        calendar.GoTo(DateOnly.FromDateTime(master.Start.Wall));
+
+        var calendars = App.Pim.Collections(CollectionKind.Events);
+        var window = new AppointmentWindow(App.Commands, master, calendars, stored.CollectionId, master.Attendees.Count > 0);
+        await window.ShowDialog(this);
+        if (window.Result is not { } result) return;
+
+        if (result.Deleted) App.Calendars.Remove(stored);
+        else SaveAppointment(result.Event, stored, result.CollectionId);
+        AfterStoreChange(shell);
+    }
+
+    private void OpenSelectedAppointment(ShellViewModel shell)
+    {
+        var calendar = EnsureCalendar(shell);
+        if (calendar.SelectedEntry is not { } entry)
+        {
+            shell.StatusRight = "Select an appointment first.";
+            return;
+        }
+
+        _ = OpenAppointmentAsync(shell, entry);
+    }
+
+    /// <summary>
+    /// Posts the module switch the harness asked for, after the window is up so the workspace
+    /// measures against a real size.
+    /// </summary>
+    private void ApplyModulePose(ShellViewModel shell)
+    {
+        var module = Environment.GetEnvironmentVariable("MAILBOX_MODULE")?.Trim().ToLowerInvariant();
+        if (string.IsNullOrEmpty(module)) return;
+
+        Opened += (_, _) => Dispatcher.UIThread.Post(
+            () =>
+            {
+                SwitchModule(shell, module switch
+                {
+                    "calendar" => MailboxModule.Calendar,
+                    "people" => MailboxModule.People,
+                    "tasks" => MailboxModule.Tasks,
+                    "notes" => MailboxModule.Notes,
+                    "journal" => MailboxModule.Journal,
+                    _ => MailboxModule.Mail,
+                });
+
+                if (shell.Module != MailboxModule.Calendar) return;
+                var calendar = EnsureCalendar(shell);
+
+                if (Environment.GetEnvironmentVariable("MAILBOX_CALENDAR_VIEW")?.Trim().ToLowerInvariant() is { Length: > 0 } view)
+                {
+                    calendar.SetView(view switch
+                    {
+                        "day" => CalendarViewKind.Day,
+                        "workweek" or "work-week" => CalendarViewKind.WorkWeek,
+                        "week" => CalendarViewKind.Week,
+                        "schedule" => CalendarViewKind.Schedule,
+                        _ => CalendarViewKind.Month,
+                    });
+                }
+
+                if (Environment.GetEnvironmentVariable("MAILBOX_CALENDAR_DATE") is { Length: > 0 } date
+                    && DateOnly.TryParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var on))
+                {
+                    calendar.GoTo(on);
+                }
+
+                shell.ModuleStatusLeft = calendar.Status;
+                Log.Info($"Harness: calendar showing {calendar.Kind}, {calendar.Status}.");
+            },
+            DispatcherPriority.Loaded);
+    }
+}
