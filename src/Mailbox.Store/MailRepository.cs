@@ -198,11 +198,11 @@ public sealed class MailRepository(MailStore store)
                 INSERT OR IGNORE INTO messages
                     (folder_id, blob_id, server_uid, message_id, in_reply_to, thread_key,
                      from_name, from_address, subject, preview, body_text, sent_utc, received_utc,
-                     size_bytes, is_read, is_flagged, has_attachment, importance, to_addresses, cc_addresses)
+                     size_bytes, is_read, is_flagged, has_attachment, importance, to_addresses, cc_addresses, expires_utc)
                 VALUES
                     ($folder, $blob, $uid, $messageId, NULL, $thread,
                      $fromName, $fromAddress, $subject, $preview, $bodyText, $sent, $received,
-                     $size, $read, $flagged, $attachment, $importance, $to, $cc)
+                     $size, $read, $flagged, $attachment, $importance, $to, $cc, $expires)
                 """,
                 ("$folder", folderId),
                 ("$blob", blobId),
@@ -222,7 +222,8 @@ public sealed class MailRepository(MailStore store)
                 ("$attachment", message.HasAttachment ? 1 : 0),
                 ("$importance", message.Importance),
                 ("$to", string.Join(',', message.To)),
-                ("$cc", string.Join(',', message.Cc)));
+                ("$cc", string.Join(',', message.Cc)),
+                ("$expires", message.Expires?.ToUnixTimeSeconds()));
 
             if (inserted != 0)
             {
@@ -1836,6 +1837,29 @@ public sealed class MailRepository(MailStore store)
         if (_store.ScalarLong("SELECT count(*) FROM rules WHERE server_side = 1") > 0) MarkSieveStale();
     }
 
+    // ---- AutoArchive -----------------------------------------------------------------------------
+
+    /// <summary>A folder's own AutoArchive choice, as Core's document, or null for the default.</summary>
+    public string? FolderAutoArchive(long folderId) => _store.Query(
+        "SELECT autoarchive_json FROM folders WHERE id = $id", r => r.IsDBNull(0) ? null : r.GetString(0), ("$id", folderId)).FirstOrDefault();
+
+    public void SetFolderAutoArchive(long folderId, string? json) => _store.Execute(
+        "UPDATE folders SET autoarchive_json = $json WHERE id = $id", ("$json", json), ("$id", folderId));
+
+    /// <summary>The messages of a folder received before a moment — what AutoArchive moves or deletes.</summary>
+    public IReadOnlyList<MessageSummary> MessagesOlderThan(long folderId, DateTimeOffset cutoff) => _store.Query(
+        "SELECT * FROM messages WHERE folder_id = $folder AND received_utc < $cutoff ORDER BY received_utc",
+        ReadMessage, ("$folder", folderId), ("$cutoff", cutoff.ToUnixTimeSeconds()));
+
+    /// <summary>The messages whose own Expires header has passed, across the account.</summary>
+    public IReadOnlyList<MessageSummary> ExpiredMessages(DateTimeOffset now) => _store.Query(
+        """
+        SELECT m.* FROM messages m JOIN folders f ON f.id = m.folder_id
+        WHERE m.expires_utc IS NOT NULL AND m.expires_utc < $now AND f.role NOT IN ('outbox', 'deleted')
+        ORDER BY m.received_utc
+        """,
+        ReadMessage, ("$now", now.ToUnixTimeSeconds()));
+
     // ---- Views ---------------------------------------------------------------------------------
     //
     // A folder's current view is a JSON document on its row; the views a reader saves by name
@@ -2448,6 +2472,7 @@ public sealed class MailRepository(MailStore store)
         IsFocused = r.GetInt32(r.GetOrdinal("is_focused")) != 0,
         To = Split(r.GetString(r.GetOrdinal("to_addresses"))),
         Cc = Split(r.GetString(r.GetOrdinal("cc_addresses"))),
+        Expires = NullableLong(r, "expires_utc") is { } expires ? DateTimeOffset.FromUnixTimeSeconds(expires) : null,
     };
 
     private static IReadOnlyList<string> Split(string joined)

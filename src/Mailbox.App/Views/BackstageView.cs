@@ -418,6 +418,8 @@ public sealed class BackstageView : Border
         {
             MenuEntry("cleanup", "Mailbox Cleanup…",
                 "See what is taking up room and clear it.", "tools.cleanup"),
+            MenuEntry("archive", "Clean Up Old Items…",
+                "Move old items to the Archive folder now, by folder or by the AutoArchive settings.", "tools.archive"),
             MenuEntry("delete", "Empty Deleted Items Folder",
                 "Permanently delete everything in Deleted Items.", "tools.emptydeleted"),
             MenuEntry("undo", "Recover Deleted Items…",

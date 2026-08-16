@@ -57,6 +57,9 @@ public partial class App : Application
     /// <summary>The Mail page's settings, typed, for the code that acts on them.</summary>
     public static MailOptions MailOptions { get; private set; } = null!;
 
+    /// <summary>Options › Advanced › AutoArchive Settings…, as the archiver reads them.</summary>
+    public static Mailbox.Core.Archive.AutoArchiveOptions AutoArchive { get; private set; } = null!;
+
     /// <summary>The junk filter (§7.8), reading its level live from the Options page.</summary>
     public static JunkService Junk { get; private set; } = null!;
 
@@ -305,6 +308,7 @@ public partial class App : Application
         // the keyring may be locked on a headless desktop, where asking it would wait forever.
         Secrets = WindowCapture.IsRequested ? new InMemoryCredentialStore() : Credentials.Best();
         MailOptions = new MailOptions(Settings);
+        AutoArchive = new Mailbox.Core.Archive.AutoArchiveOptions(Settings);
 
         // Signature checking happens as mail is collected, never as it is drawn. The receiver
         // gets the verifier; nothing else does.
