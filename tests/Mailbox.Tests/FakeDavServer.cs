@@ -207,6 +207,14 @@ public sealed class FakeDavServer : HttpMessageHandler
             return Plain(HttpStatusCode.PreconditionFailed);
         }
 
+        // A calendar collection takes whole VCALENDARs, not bare components — Radicale answers
+        // "Item type 'VEVENT' not supported in 'VCALENDAR' collection" and every other server
+        // says something like it. A fake that accepted one let a real bug through for months.
+        if (!body.Contains("BEGIN:VCALENDAR", StringComparison.OrdinalIgnoreCase))
+        {
+            return Plain(HttpStatusCode.BadRequest);
+        }
+
         var exists = _items.TryGetValue(path, out var current);
         if (ifNoneMatch && exists) return Plain(HttpStatusCode.PreconditionFailed);
         if (ifMatch is { Length: > 0 } && (!exists || current.Etag != ifMatch)) return Plain(HttpStatusCode.PreconditionFailed);

@@ -71,6 +71,7 @@ public sealed class CalDavSync(DavClient client, PimRepository repository)
 
         var (pushed, conflicts) = await PushAsync(collection, root, cancellationToken).ConfigureAwait(false);
         var (pulled, removed) = await PullAsync(collection, root, cancellationToken).ConfigureAwait(false);
+        await RememberCtagAsync(collection, root, moved: pushed + pulled + removed > 0, cancellationToken).ConfigureAwait(false);
         return new DavSyncResult(pulled, removed, pushed, conflicts);
     }
 
@@ -252,11 +253,29 @@ public sealed class CalDavSync(DavClient client, PimRepository repository)
         }
 
         var pulled = await FetchAsync(collection, root, changed, cancellationToken).ConfigureAwait(false);
-
-        // The CTag is what makes the next poll one request instead of this one.
-        var ctag = await ReadCtagAsync(root, cancellationToken).ConfigureAwait(false);
-        _repository.SetCollectionSync(collection.Id, ctag ?? collection.Ctag, collection.SyncToken);
         return (pulled, removed);
+    }
+
+    /// <summary>
+    /// Files the collection's CTag, which is what makes the next poll one request instead of all
+    /// of these.
+    /// </summary>
+    /// <remarks>
+    /// Read again only when something moved — including this machine's own push, which moves it
+    /// as surely as anyone else's — and on the first sync of a collection that has never had one.
+    /// A server that answers <c>sync-collection</c> has a CTag as well, and not filing it left
+    /// the cheap check unable to fire on exactly the servers that poll most often: every idle
+    /// poll of Radicale was a PROPFIND, a REPORT and a decision, where one PROPFIND would do.
+    /// </remarks>
+    private async Task RememberCtagAsync(Collection collection, Uri root, bool moved, CancellationToken cancellationToken)
+    {
+        var current = _repository.Collection(collection.Id) ?? collection;
+        if (!moved && current.Ctag is { Length: > 0 }) return;
+
+        if (await ReadCtagAsync(root, cancellationToken).ConfigureAwait(false) is { Length: > 0 } ctag)
+        {
+            _repository.SetCollectionSync(collection.Id, ctag, current.SyncToken);
+        }
     }
 
     /// <summary>
@@ -447,11 +466,21 @@ public sealed class CalDavSync(DavClient client, PimRepository repository)
     /// The whole VCALENDAR a PUT sends: a series' master and every override together, because a
     /// server keeps one resource per UID and a PUT of the master alone deletes the overrides.
     /// </summary>
+    /// <remarks>
+    /// A row made here keeps its VEVENT and nothing round it, which is all the store needs and
+    /// less than a server takes: Radicale answers a bare component
+    /// <c>400 Item type 'VEVENT' not supported in 'VCALENDAR' collection</c>, and it is right to.
+    /// A payload that came from a server goes back verbatim — re-serializing it would drop
+    /// whatever that server cares about and we do not model.
+    /// </remarks>
     private string Whole(PimItem item)
     {
         var family = _repository.ItemsByUid(item.CollectionId, item.Uid);
-        if (family.Count <= 1) return item.RawPayload;
-        return ICalendarCodec.SerializeCalendar(family.Select(PimEventCodec.FromItem).ToList());
+        if (family.Count > 1) return ICalendarCodec.SerializeCalendar(family.Select(PimEventCodec.FromItem).ToList());
+
+        return item.RawPayload.Contains("BEGIN:VCALENDAR", StringComparison.OrdinalIgnoreCase)
+            ? item.RawPayload
+            : ICalendarCodec.SerializeCalendar([PimEventCodec.FromItem(item)]);
     }
 
     /// <summary>The path a new item is written to: its UID, as every server expects.</summary>
