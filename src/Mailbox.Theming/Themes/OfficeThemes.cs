@@ -354,8 +354,10 @@ public static class OfficeThemes
         // The ribbon's coloured artwork, measured off home.png. Every value is darker than the
         // light themes': the panel under it is #BDBDBD rather than white, and the reference
         // deepens the artwork to keep it readable there rather than reusing one set.
-        t.Set(TokenKeys.RibbonIcon.Respond, "#91005A");
-        t.Set(TokenKeys.RibbonIcon.Forward, "#005BA1");
+        t.Set(TokenKeys.RibbonIcon.Outline, "#4D4D4D");
+        t.Set(TokenKeys.RibbonIcon.Magenta, "#91005A");
+        t.Set(TokenKeys.RibbonIcon.Blue, "#005BA1");
+        t.Set(TokenKeys.RibbonIcon.Green, "#094509");
         t.Set(TokenKeys.RibbonIcon.Flag, "#E37D80");
         t.Set(TokenKeys.RibbonIcon.FlagOutline, "#751D1F");
         t.Set(TokenKeys.RibbonIcon.FlagPole, "#4D4D4D");
@@ -527,8 +529,10 @@ public static class OfficeThemes
         // themes' the other way round: on a #292929 ribbon the reference draws the light colour
         // as the outline and the saturated one as the fill, so the shape reads as a lit edge
         // rather than a dark blob. Lifting the light values wholesale would not have found this.
-        t.Set(TokenKeys.RibbonIcon.Respond, "#D471D8");
-        t.Set(TokenKeys.RibbonIcon.Forward, "#3B9ADC");
+        t.Set(TokenKeys.RibbonIcon.Outline, "#D4D4D4");
+        t.Set(TokenKeys.RibbonIcon.Magenta, "#D471D8");
+        t.Set(TokenKeys.RibbonIcon.Blue, "#3B9ADC");
+        t.Set(TokenKeys.RibbonIcon.Green, "#A1DDAA");
         t.Set(TokenKeys.RibbonIcon.Flag, "#D42314");
         t.Set(TokenKeys.RibbonIcon.FlagOutline, "#F67780");
         t.Set(TokenKeys.RibbonIcon.FlagPole, "#D4D4D4");
@@ -710,8 +714,10 @@ public static class OfficeThemes
         // The ribbon's coloured artwork, measured off the Colorful and White captures — the two
         // themes draw it identically, both having a white ribbon under it. Dark Gray darkens
         // every value for its mid-grey ribbon and Black inverts each pair; both override below.
-        t.Set(TokenKeys.RibbonIcon.Respond, "#A846B2");
-        t.Set(TokenKeys.RibbonIcon.Forward, "#1E8BCD");
+        t.Set(TokenKeys.RibbonIcon.Outline, "#3A3A38");
+        t.Set(TokenKeys.RibbonIcon.Magenta, "#A846B2");
+        t.Set(TokenKeys.RibbonIcon.Blue, "#1E8BCD");
+        t.Set(TokenKeys.RibbonIcon.Green, "#309048");
         t.Set(TokenKeys.RibbonIcon.Flag, "#FF9198");
         t.Set(TokenKeys.RibbonIcon.FlagOutline, "#D42314");
         t.Set(TokenKeys.RibbonIcon.FlagPole, "#3A3A38");

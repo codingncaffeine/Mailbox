@@ -120,24 +120,47 @@ public static class TokenKeys
     /// The ribbon's icons are not one colour.
     /// </summary>
     /// <remarks>
-    /// The reference draws them as polychrome artwork and gives each theme its own tint of it —
-    /// Reply and Reply All are magenta, Forward is blue, Follow Up is a red flag on a grey pole,
-    /// Categorize is four coloured swatches — and the tint is not a shade of the accent: it is
-    /// picked per theme so the artwork reads on that theme's ribbon. Every value here is
-    /// measured off the four theme captures, and Black inverts each pair, drawing the light
-    /// colour as the outline and the saturated one as the fill.
+    /// The reference draws them as polychrome artwork — outlined shapes with a light fill, and
+    /// colour where colour means something: Reply and Reply All are magenta, Forward and the
+    /// Apps grid and Change View are blue, Send/Receive is green, Follow Up is a red flag on a
+    /// grey pole, Categorize is four coloured swatches. Everything else is that one dark
+    /// outline, which is why an accent-blue ribbon reads as another application.
     /// <para>
-    /// Only the commands whose artwork is coloured take these; the rest of the ribbon stays a
-    /// monochrome glyph in the accent or the text colour, as <c>NeutralIcon</c> decides.
+    /// Each theme has its own tint of the whole set, and it is not a shade of the accent: it is
+    /// picked so the artwork reads on that theme's ribbon. Every value here is measured off the
+    /// four theme captures, and Black inverts each pair of the swatches and the flag, drawing
+    /// the light colour as the outline and the saturated one as the fill.
+    /// </para>
+    /// <para>
+    /// Our icons come from a monochrome font, so a glyph takes one of these and the fill and the
+    /// small coloured badges inside a two-tone icon — New Email's green plus, Archive's green
+    /// lid, Move To's blue arrow — are not reproduced. The two whose meaning <em>is</em> their
+    /// colours are drawn instead, by <c>RibbonArtwork</c>.
     /// </para>
     /// </remarks>
     public static class RibbonIcon
     {
-        /// <summary>Reply and Reply All — the magenta arrows.</summary>
-        public const string Respond = "ribbon.icon.respond";
+        /// <summary>
+        /// The dark line every outlined icon is drawn with — most of the ribbon.
+        /// </summary>
+        /// <remarks>
+        /// The reference's icons are outlined shapes with a light fill, and the outline is this
+        /// one colour throughout: New Email, Delete, Archive, Move To, Unread/Read, Address
+        /// Book, Filter, Quick Steps and the rest. A monochrome font can draw the outline and
+        /// not the fill, so this is what the ribbon's glyphs take unless a command says
+        /// otherwise. It is not <c>text.primary</c>: that is the near-black of the formatting
+        /// run, which <c>NeutralIcon</c> asks for and the reference draws a shade darker again.
+        /// </remarks>
+        public const string Outline = "ribbon.icon.outline";
 
-        /// <summary>Forward's blue arrow, and the Apps grid.</summary>
-        public const string Forward = "ribbon.icon.forward";
+        /// <summary>Reply and Reply All — the magenta arrows.</summary>
+        public const string Magenta = "ribbon.icon.magenta";
+
+        /// <summary>Forward's arrow, the Apps grid and Change View — the icons drawn wholly in blue.</summary>
+        public const string Blue = "ribbon.icon.blue";
+
+        /// <summary>Send/Receive All Folders' circling arrows, drawn wholly in green.</summary>
+        public const string Green = "ribbon.icon.green";
 
         /// <summary>The Follow Up flag: its cloth, its outline, and the pole under it.</summary>
         public const string Flag = "ribbon.icon.flag";
@@ -156,7 +179,7 @@ public static class TokenKeys
 
         public static readonly IReadOnlyList<string> All =
         [
-            Respond, Forward, Flag, FlagOutline, FlagPole,
+            Outline, Magenta, Blue, Green, Flag, FlagOutline, FlagPole,
             SwatchBlue, SwatchBlueOutline, SwatchGrey, SwatchGreyOutline,
             SwatchGold, SwatchGoldOutline, SwatchGreen, SwatchGreenOutline,
         ];
