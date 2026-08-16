@@ -303,6 +303,19 @@ public static class OfficeThemes
         t.Set(TokenKeys.Surface.Raised, "{palette.content.row}");
         t.Set(TokenKeys.Surface.Sunken, "{palette.content.pane}");
 
+        // The month view, measured: days to come, days gone, today's whole cell, the lines
+        // between, and the navigator's block over the days on show.
+        t.Set(TokenKeys.Calendar.Background, "#D2D0CE");
+        t.Set(TokenKeys.Calendar.PastFill, "#A19F9D");
+        t.Set(TokenKeys.Calendar.HeaderBackground, "#A19F9D");
+        t.Set(TokenKeys.Calendar.GridLine, "#323130");
+        t.Set(TokenKeys.Calendar.TodayFill, "#0078D4");
+        t.Set(TokenKeys.Calendar.ChipDefault, "#0078D4");
+        t.Set(TokenKeys.Calendar.NavigatorRange, "#0067B0");
+        t.Set(TokenKeys.Calendar.WorkingHoursFill, "#D2D0CE");
+        t.Set(TokenKeys.Calendar.NonWorkingFill, "#A19F9D");
+        t.Set(TokenKeys.Calendar.AllDayBandBackground, "#A19F9D");
+
         t.Set(TokenKeys.TitleBar.Background, "{palette.chrome.titlebar}");
         t.Set(TokenKeys.TitleBar.Foreground, "{palette.neutral.white}");
         t.Set(TokenKeys.TitleBar.Search, "#BDBDBD");
@@ -537,11 +550,26 @@ public static class OfficeThemes
         t.Set(TokenKeys.Dialog.Selection, "{palette.brand.light}");
 
         t.Set(TokenKeys.Calendar.Background, "{palette.ground}");
+        t.Set(TokenKeys.Calendar.PastFill, "{palette.sunken}");
+        t.Set(TokenKeys.Calendar.TodayFill, "{palette.brand.primary}");
+        t.Set(TokenKeys.Calendar.TodayText, "#0A0A0A");
+        t.Set(TokenKeys.Calendar.SelectedFill, "{palette.brand.light}");
         t.Set(TokenKeys.Calendar.WorkingHoursFill, "{palette.raised}");
         t.Set(TokenKeys.Calendar.NonWorkingFill, "{palette.sunken}");
         t.Set(TokenKeys.Calendar.GridLine, "{palette.neutral.light}");
         t.Set(TokenKeys.Calendar.CurrentTimeIndicator, "#E8776F");
         t.Set(TokenKeys.Calendar.AllDayBandBackground, "{palette.raised}");
+        t.Set(TokenKeys.Calendar.HeaderBackground, "{palette.sunken}");
+        t.Set(TokenKeys.Calendar.HeaderText, "{palette.neutral.primary}");
+        t.Set(TokenKeys.Calendar.DayText, "{palette.neutral.primary}");
+        t.Set(TokenKeys.Calendar.HourText, "{palette.neutral.secondary}");
+        t.Set(TokenKeys.Calendar.ChipDefault, "{palette.brand.primary}");
+        t.Set(TokenKeys.Calendar.ChipGround, "{palette.ground}");
+        t.Set(TokenKeys.Calendar.ChipTint, "0.7");
+        t.Set(TokenKeys.Calendar.ChipText, "{palette.neutral.primary}");
+        t.Set(TokenKeys.Calendar.OutOfOffice, "#B79BE0");
+        t.Set(TokenKeys.Calendar.NavigatorRange, "{palette.brand.dark}");
+        t.Set(TokenKeys.Calendar.NavigatorToday, "{palette.brand.primary}");
 
         return t;
     }
@@ -651,10 +679,25 @@ public static class OfficeThemes
         t.Set(TokenKeys.StatusBar.Foreground, "{palette.neutral.white}");
 
         t.Set(TokenKeys.Calendar.Background, "{palette.neutral.white}");
+        t.Set(TokenKeys.Calendar.PastFill, "{palette.neutral.lighter}");
+        t.Set(TokenKeys.Calendar.TodayFill, "{palette.brand.primary}");
+        t.Set(TokenKeys.Calendar.TodayText, "{palette.neutral.white}");
+        t.Set(TokenKeys.Calendar.SelectedFill, "{palette.brand.light}");
         t.Set(TokenKeys.Calendar.WorkingHoursFill, "{palette.neutral.white}");
         t.Set(TokenKeys.Calendar.NonWorkingFill, "{palette.neutral.lighter}");
         t.Set(TokenKeys.Calendar.GridLine, "{palette.neutral.light}");
         t.Set(TokenKeys.Calendar.CurrentTimeIndicator, "#A4262C");
         t.Set(TokenKeys.Calendar.AllDayBandBackground, "{palette.neutral.lighter}");
+        t.Set(TokenKeys.Calendar.HeaderBackground, "{palette.neutral.lighter}");
+        t.Set(TokenKeys.Calendar.HeaderText, "{palette.neutral.primary}");
+        t.Set(TokenKeys.Calendar.DayText, "{palette.neutral.primary}");
+        t.Set(TokenKeys.Calendar.HourText, "{palette.neutral.secondary}");
+        t.Set(TokenKeys.Calendar.ChipDefault, "{palette.brand.primary}");
+        t.Set(TokenKeys.Calendar.ChipGround, "{palette.neutral.white}");
+        t.Set(TokenKeys.Calendar.ChipTint, "0.8");
+        t.Set(TokenKeys.Calendar.ChipText, "{palette.neutral.primary}");
+        t.Set(TokenKeys.Calendar.OutOfOffice, "#7B3FA6");
+        t.Set(TokenKeys.Calendar.NavigatorRange, "{palette.brand.primary}");
+        t.Set(TokenKeys.Calendar.NavigatorToday, "{palette.brand.indicator}");
     }
 }

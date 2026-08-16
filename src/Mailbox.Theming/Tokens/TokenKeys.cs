@@ -258,14 +258,47 @@ public static class TokenKeys
         public const string Selection = "dialog.selection";
     }
 
+    /// <summary>
+    /// The calendar views (§7.4): the month grid's cells and chips, the day and week views'
+    /// hours, and the date navigator. Measured off the reference's month view where a
+    /// capture exists; the rest follows the theme's own semantics.
+    /// </summary>
     public static class Calendar
     {
+        /// <summary>A day cell that is today or later; the ground of the day and week views.</summary>
         public const string Background = "calendar.background";
+        /// <summary>A day cell already gone by — the reference shades the past.</summary>
+        public const string PastFill = "calendar.past.fill";
+        /// <summary>Today's whole cell in the month view.</summary>
+        public const string TodayFill = "calendar.today.fill";
+        public const string TodayText = "calendar.today.text";
+        /// <summary>The selected day, or the selected time slot.</summary>
+        public const string SelectedFill = "calendar.selected.fill";
         public const string WorkingHoursFill = "calendar.workinghours.fill";
         public const string NonWorkingFill = "calendar.nonworking.fill";
         public const string GridLine = "calendar.gridline";
         public const string CurrentTimeIndicator = "calendar.currenttime";
         public const string AllDayBandBackground = "calendar.allday.background";
+        /// <summary>The weekday header row across the top of a view.</summary>
+        public const string HeaderBackground = "calendar.header.background";
+        public const string HeaderText = "calendar.header.text";
+        /// <summary>The day numbers in the month view.</summary>
+        public const string DayText = "calendar.day.text";
+        /// <summary>The time ruler down the day and week views.</summary>
+        public const string HourText = "calendar.hour.text";
+        /// <summary>The colour of a calendar that has none of its own.</summary>
+        public const string ChipDefault = "calendar.chip.default";
+        /// <summary>What a chip's colour is tinted toward for its fill, and the light stripe of Free and Tentative.</summary>
+        public const string ChipGround = "calendar.chip.ground";
+        /// <summary>How far toward the ground the fill goes: 0 is the colour itself, 1 the ground.</summary>
+        public const string ChipTint = "calendar.chip.tint";
+        public const string ChipText = "calendar.chip.text";
+        /// <summary>The Out of Office stripe.</summary>
+        public const string OutOfOffice = "calendar.outofoffice";
+        /// <summary>The date navigator's block over the days a view is showing.</summary>
+        public const string NavigatorRange = "calendar.navigator.range";
+        /// <summary>Today in the date navigator.</summary>
+        public const string NavigatorToday = "calendar.navigator.today";
     }
 
     public static class Typography
@@ -320,8 +353,12 @@ public static class TokenKeys
         Dialog.Background, Dialog.Foreground, Dialog.ForegroundSubtle,
         Dialog.Surface, Dialog.SurfaceText,
         Dialog.Border, Dialog.Selection,
-        Calendar.Background, Calendar.WorkingHoursFill, Calendar.NonWorkingFill,
+        Calendar.Background, Calendar.PastFill, Calendar.TodayFill, Calendar.TodayText, Calendar.SelectedFill,
+        Calendar.WorkingHoursFill, Calendar.NonWorkingFill,
         Calendar.GridLine, Calendar.CurrentTimeIndicator, Calendar.AllDayBandBackground,
+        Calendar.HeaderBackground, Calendar.HeaderText, Calendar.DayText, Calendar.HourText,
+        Calendar.ChipDefault, Calendar.ChipGround, Calendar.ChipTint, Calendar.ChipText, Calendar.OutOfOffice,
+        Calendar.NavigatorRange, Calendar.NavigatorToday,
         Typography.UiFamily, Typography.UiSize, Typography.UiSizeSmall, Typography.UiSizeLarge,
         Typography.ContentFamily, Typography.ContentSize, Typography.MonoFamily,
     ];
