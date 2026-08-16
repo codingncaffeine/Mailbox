@@ -241,4 +241,66 @@ public class SpellCheckTests : IDisposable
             // A scratch directory that will not delete is not a test failure.
         }
     }
+
+    // ---- The Proofing switches ----------------------------------------------------------------
+
+    [Fact]
+    public async Task TheIgnoreSwitchesAreOnByDefaultAndCanBeTurnedOff()
+    {
+        WriteDictionary("en_GB", "the", "report", "is", "at");
+        var spelling = await LoadAsync();
+
+        // On: an acronym, a code and an address are not words to check.
+        Assert.Empty(spelling.Check("the NASA report R2D2 is at http://example.com/x"));
+
+        spelling.Options = new SpellCheckOptions(IgnoreUppercase: false, IgnoreWithNumbers: false, IgnoreAddresses: false);
+        var found = spelling.Check("the NASA report R2D2 is at http://example.com/x");
+        Assert.Contains(found, m => m.Word == "NASA");
+        Assert.Contains(found, m => m.Word == "R2D2");
+        Assert.Contains(found, m => m.Word == "http");
+        Assert.DoesNotContain(found, m => m.Word == "report");
+    }
+
+    [Fact]
+    public async Task ARepeatedWordIsFlaggedOnceAndOnlyWhenAsked()
+    {
+        WriteDictionary("en_GB", "the", "cat", "sat");
+        var spelling = await LoadAsync();
+
+        var found = spelling.Check("the the cat sat sat  sat");
+        var repeated = found.Where(m => m.IsRepeated).ToList();
+        Assert.Equal(["the", "sat", "sat"], repeated.Select(m => m.Word));
+        Assert.Equal(4, repeated[0].Offset);
+        // The words themselves are spelled correctly, so nothing else is reported.
+        Assert.Equal(3, found.Count);
+
+        // A repeated word across a line of punctuation, or of capitals, is not a slip.
+        Assert.Empty(spelling.Check("the. The cat"));
+        Assert.Empty(spelling.Check("NASA NASA"));
+
+        spelling.Options = new SpellCheckOptions(FlagRepeatedWords: false);
+        Assert.Empty(spelling.Check("the the cat"));
+    }
+
+    [Fact]
+    public async Task APersonalWordCanBeListedAndForgotten()
+    {
+        WriteDictionary("en_GB", "the");
+        var personal = Path.Combine(_directory, "personal.txt");
+        var spelling = await LoadAsync(personal: personal);
+
+        spelling.Add("Mailbox");
+        spelling.Add("Selawik");
+        Assert.Equal(["Mailbox", "Selawik"], spelling.PersonalWords);
+        Assert.True(spelling.IsCorrect("Selawik"));
+
+        Assert.True(spelling.Remove("Selawik"));
+        Assert.False(spelling.Remove("Selawik"));
+        Assert.Equal(["Mailbox"], spelling.PersonalWords);
+        Assert.False(spelling.IsCorrect("Selawik"));
+
+        // The list on disk follows.
+        var back = await LoadAsync(personal: personal);
+        Assert.Equal(["Mailbox"], back.PersonalWords);
+    }
 }

@@ -223,6 +223,7 @@ public sealed class ComposeSurface : UserControl
 
     /// <summary>Not a word anybody would suggest, so it cannot collide with one.</summary>
     private const string AddToDictionary = "\u0000add";
+    private const string DeleteRepeated = "\u0000delete-repeated";
     private const string EditSignatures = "\u0000signatures";
 
     public ComposeSurface(CommandCatalog catalog, AccountStores? accounts)
@@ -1772,6 +1773,13 @@ public sealed class ComposeSurface : UserControl
             return;
         }
 
+        // The Proofing switches, read each pass so an Options change shows on the next F7.
+        _spelling.Options = new SpellCheckOptions(
+            App.MailOptions.SpellingIgnoresUppercase,
+            App.MailOptions.SpellingIgnoresNumbers,
+            App.MailOptions.SpellingIgnoresAddresses,
+            App.MailOptions.SpellingFlagsRepeated);
+
         var text = _body.GetPlainText();
         var found = _spelling.Check(text);
 
@@ -1788,24 +1796,40 @@ public sealed class ComposeSurface : UserControl
         // reader dismisses, because a dialog per word is a thing to be able to get out of.
         var corrected = 0;
 
-        foreach (var word in found.DistinctBy(w => w.Word, StringComparer.Ordinal))
+        foreach (var word in found.DistinctBy(w => (w.Word, w.IsRepeated)))
         {
             var choices = new List<Choice> { new("Ignore", string.Empty, "leave it as written") };
 
-            choices.AddRange(_spelling.Suggest(word.Word)
-                .Select(s => new Choice(s, s, "replace every one in this message")));
+            if (word.IsRepeated)
+            {
+                // "the the": the reference offers to delete the second one.
+                choices.Add(new Choice("Delete repeated word", DeleteRepeated, "keep one of the two"));
+            }
+            else
+            {
+                choices.AddRange(_spelling.Suggest(word.Word)
+                    .Select(s => new Choice(s, s, "replace every one in this message")));
 
-            choices.Add(new Choice("Add to dictionary", AddToDictionary,
-                "keep it, and stop asking about it"));
+                choices.Add(new Choice("Add to dictionary", AddToDictionary,
+                    "keep it, and stop asking about it"));
+            }
 
             var answer = await Chooser.AskAsync(
-                Host, "Spelling", $"Not in the dictionary: {word.Word}", choices);
+                Host, "Spelling", word.IsRepeated ? $"Repeated word: {word.Word} {word.Word}" : $"Not in the dictionary: {word.Word}", choices);
 
             if (answer is null) break;
 
             if (answer == AddToDictionary)
             {
                 _spelling.Add(word.Word);
+                continue;
+            }
+
+            if (answer == DeleteRepeated)
+            {
+                // Each "word word" becomes "word": the doubled form replaced by the single, every
+                // time it occurs, which is what the reader asked for on seeing the first.
+                corrected += _body.ReplaceAll($"{word.Word} {word.Word}", word.Word, matchCase: false);
                 continue;
             }
 
@@ -1822,7 +1846,7 @@ public sealed class ComposeSurface : UserControl
     }
 
     /// <summary>Beside the mail, not in the system dictionary, which is not ours to edit.</summary>
-    private static string PersonalDictionaryPath()
+    internal static string PersonalDictionaryPath()
     {
         var data = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
 
