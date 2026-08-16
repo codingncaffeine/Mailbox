@@ -2675,7 +2675,7 @@ public sealed partial class ShellViewModel : ObservableObject
     public bool NavVisible => !NavCollapsed;
     public string CollapseGlyph => NavCollapsed ? "\u203A" : "\u2039";
 
-    /// <summary>Reading pane on the right, or off entirely — the two the status bar offers.</summary>
+    /// <summary>Reading pane shown, or off entirely — the two the status bar offers.</summary>
     public bool ReadingPaneVisible
     {
         get;
@@ -2685,6 +2685,21 @@ public sealed partial class ShellViewModel : ObservableObject
             App.Settings.Set(OptionsPages.Keys.ShowReadingPane, value);
         }
     } = App.Settings.GetBool(OptionsPages.Keys.ShowReadingPane, true);
+
+    /// <summary>
+    /// Where a shown reading pane sits: beside the list (Right, the reference's default) or
+    /// under it (Bottom), as View › Layout › Reading Pane offers. Under the list, the list is as
+    /// wide as the window and so shows its single-line layout, as the reference's does there.
+    /// </summary>
+    public bool ReadingPaneAtBottom
+    {
+        get;
+        set
+        {
+            if (!Set(ref field, value)) return;
+            App.Settings.Set(OptionsPages.Keys.ReadingPaneAtBottom, value);
+        }
+    } = App.Settings.GetBool(OptionsPages.Keys.ReadingPaneAtBottom, false);
 
     /// <summary>Zoom applies to the reading pane's body, which is what it scales.</summary>
     public double ReadingFontSize => 14.5 * (ZoomPercent / 100d);
