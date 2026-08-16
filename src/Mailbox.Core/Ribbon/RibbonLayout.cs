@@ -221,6 +221,21 @@ public sealed record RibbonItem
             Text = text,
         };
 
+    /// <summary>
+    /// A picker with its icon and name in front of it — the appointment window's Show As and
+    /// Reminder, which read "Show As: [ Busy ⌄ ]" rather than as a bare box.
+    /// </summary>
+    public static RibbonItem LabelledCombo(CommandId command, double width, string text = "")
+        => new()
+        {
+            Command = command,
+            Size = RibbonItemSize.Small,
+            Kind = RibbonItemKind.ComboBox,
+            ShowLabel = true,
+            Width = width,
+            Text = text,
+        };
+
     /// <summary>A fixed-width input on the bar, like Search People.</summary>
     public static RibbonItem Field(CommandId command, double width, string placeholder = "")
         => new()

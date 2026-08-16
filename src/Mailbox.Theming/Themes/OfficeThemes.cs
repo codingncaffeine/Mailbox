@@ -307,17 +307,43 @@ public static class OfficeThemes
         t.Set(TokenKeys.Surface.Sunken, "{palette.content.pane}");
 
         // The month view, measured: days to come, days gone, today's whole cell, the lines
-        // between, and the navigator's block over the days on show.
+        // between, and the navigator's block over the days on show. The grid is light content
+        // inside dark chrome, as the rows are — so the cells and their ink stay dark-on-light
+        // while the toolbar above them, which is chrome, goes the other way.
         t.Set(TokenKeys.Calendar.Background, "#D2D0CE");
         t.Set(TokenKeys.Calendar.PastFill, "#A19F9D");
         t.Set(TokenKeys.Calendar.HeaderBackground, "#A19F9D");
+        t.Set(TokenKeys.Calendar.HeaderText, "#000000");
+        t.Set(TokenKeys.Calendar.HeaderLine, "#3B3A39");
         t.Set(TokenKeys.Calendar.GridLine, "#323130");
+        t.Set(TokenKeys.Calendar.DayText, "#000000");
+        t.Set(TokenKeys.Calendar.PastText, "#323130");
         t.Set(TokenKeys.Calendar.TodayFill, "#0078D4");
         t.Set(TokenKeys.Calendar.ChipDefault, "#0078D4");
-        t.Set(TokenKeys.Calendar.NavigatorRange, "#0067B0");
         t.Set(TokenKeys.Calendar.WorkingHoursFill, "#D2D0CE");
         t.Set(TokenKeys.Calendar.NonWorkingFill, "#A19F9D");
         t.Set(TokenKeys.Calendar.AllDayBandBackground, "#A19F9D");
+
+        t.Set(TokenKeys.Calendar.ToolbarText, "#FFFFFF");
+        t.Set(TokenKeys.Calendar.ToolbarButton, "#BEBBB8");
+        t.Set(TokenKeys.Calendar.ToolbarButtonBorder, "#484644");
+        t.Set(TokenKeys.Calendar.ToolbarButtonText, "#252423");
+        t.Set(TokenKeys.Calendar.Link, "#8FC3F0");
+
+        // A chip's fill is the calendar's colour mixed toward this ground, which is a shade off
+        // white here rather than white: the same blue reads nine points darker in this theme
+        // than in Colorful, and that is where the difference lives.
+        t.Set(TokenKeys.Calendar.ChipGround, "#F4F4F4");
+        t.Set(TokenKeys.Calendar.ChipTint, "0.835");
+        t.Set(TokenKeys.Calendar.ChipFreeFill, "#E8E7E7");
+        t.Set(TokenKeys.Calendar.ChipFreeStripe, "#F9F9F9");
+        t.Set(TokenKeys.Calendar.ChipHatch, "#D1D2D1");
+
+        t.Set(TokenKeys.Calendar.NavigatorBackground, "#616161");
+        t.Set(TokenKeys.Calendar.NavigatorText, "#F3F2F1");
+        t.Set(TokenKeys.Calendar.NavigatorRange, "#0067B0");
+        t.Set(TokenKeys.Calendar.NavigatorRangeText, "#FFFFFF");
+        t.Set(TokenKeys.Calendar.NavigatorToday, "#0072C6");
 
         t.Set(TokenKeys.TitleBar.Background, "{palette.chrome.titlebar}");
         t.Set(TokenKeys.TitleBar.Foreground, "{palette.neutral.white}");
@@ -593,27 +619,51 @@ public static class OfficeThemes
         t.Set(TokenKeys.Dialog.Border, "{palette.neutral.quaternary}");
         t.Set(TokenKeys.Dialog.Selection, "{palette.brand.light}");
 
-        t.Set(TokenKeys.Calendar.Background, "{palette.ground}");
-        t.Set(TokenKeys.Calendar.PastFill, "{palette.sunken}");
-        t.Set(TokenKeys.Calendar.TodayFill, "{palette.brand.primary}");
-        t.Set(TokenKeys.Calendar.TodayText, "#0A0A0A");
+        // The month view, measured. Today's cell stays the same blue as everywhere else and its
+        // number stays white — the one part of the grid this theme does not darken.
+        t.Set(TokenKeys.Calendar.Background, "#323130");
+        t.Set(TokenKeys.Calendar.PastFill, "#1B1B1B");
+        t.Set(TokenKeys.Calendar.TodayFill, "#0078D4");
+        t.Set(TokenKeys.Calendar.TodayText, "#FFFFFF");
         t.Set(TokenKeys.Calendar.SelectedFill, "{palette.brand.light}");
-        t.Set(TokenKeys.Calendar.WorkingHoursFill, "{palette.raised}");
-        t.Set(TokenKeys.Calendar.NonWorkingFill, "{palette.sunken}");
-        t.Set(TokenKeys.Calendar.GridLine, "{palette.neutral.light}");
+        t.Set(TokenKeys.Calendar.WorkingHoursFill, "#323130");
+        t.Set(TokenKeys.Calendar.NonWorkingFill, "#1B1B1B");
+        t.Set(TokenKeys.Calendar.GridLine, "#000000");
         t.Set(TokenKeys.Calendar.CurrentTimeIndicator, "#E8776F");
-        t.Set(TokenKeys.Calendar.AllDayBandBackground, "{palette.raised}");
-        t.Set(TokenKeys.Calendar.HeaderBackground, "{palette.sunken}");
-        t.Set(TokenKeys.Calendar.HeaderText, "{palette.neutral.primary}");
-        t.Set(TokenKeys.Calendar.DayText, "{palette.neutral.primary}");
+        t.Set(TokenKeys.Calendar.AllDayBandBackground, "#1B1B1B");
+        t.Set(TokenKeys.Calendar.HeaderBackground, "#1B1B1B");
+        t.Set(TokenKeys.Calendar.HeaderText, "#E1DFDD");
+        t.Set(TokenKeys.Calendar.HeaderLine, "#000000");
+        t.Set(TokenKeys.Calendar.DayText, "#E1DFDD");
+        t.Set(TokenKeys.Calendar.PastText, "#A19F9D");
         t.Set(TokenKeys.Calendar.HourText, "{palette.neutral.secondary}");
-        t.Set(TokenKeys.Calendar.ChipDefault, "{palette.brand.primary}");
-        t.Set(TokenKeys.Calendar.ChipGround, "{palette.ground}");
-        t.Set(TokenKeys.Calendar.ChipTint, "0.7");
-        t.Set(TokenKeys.Calendar.ChipText, "{palette.neutral.primary}");
+
+        t.Set(TokenKeys.Calendar.ToolbarText, "#E1DFDD");
+        t.Set(TokenKeys.Calendar.ToolbarButton, "#444444");
+        t.Set(TokenKeys.Calendar.ToolbarButtonBorder, "#666666");
+        t.Set(TokenKeys.Calendar.ToolbarButtonText, "#FFFFFF");
+        t.Set(TokenKeys.Calendar.Link, "#8FC3F0");
+
+        // Here a chip is the calendar's colour taken half way to black rather than most of the
+        // way to white, and the two edges swap: the pale edge is the Busy one and the saturated
+        // one belongs to Free. Every other inversion in this theme works the same way.
+        t.Set(TokenKeys.Calendar.ChipDefault, "#0078D4");
+        t.Set(TokenKeys.Calendar.ChipGround, "#060608");
+        t.Set(TokenKeys.Calendar.ChipTint, "0.5");
+        t.Set(TokenKeys.Calendar.ChipText, "#FAF9F8");
+        t.Set(TokenKeys.Calendar.ChipFreeFill, "#2D2C2B");
+        t.Set(TokenKeys.Calendar.ChipFreeStripe, "#31302F");
+        t.Set(TokenKeys.Calendar.ChipHatch, "#2D3236");
+        t.Set(TokenKeys.Calendar.ChipEdgeGround, "#FFFFFF");
+        t.Set(TokenKeys.Calendar.ChipEdgeSoft, "0");
+        t.Set(TokenKeys.Calendar.ChipEdgeStrong, "0.36");
         t.Set(TokenKeys.Calendar.OutOfOffice, "#B79BE0");
-        t.Set(TokenKeys.Calendar.NavigatorRange, "{palette.brand.dark}");
-        t.Set(TokenKeys.Calendar.NavigatorToday, "{palette.brand.primary}");
+
+        t.Set(TokenKeys.Calendar.NavigatorBackground, "#1F1F1F");
+        t.Set(TokenKeys.Calendar.NavigatorText, "#E1DFDD");
+        t.Set(TokenKeys.Calendar.NavigatorRange, "#424242");
+        t.Set(TokenKeys.Calendar.NavigatorRangeText, "#F1F1F1");
+        t.Set(TokenKeys.Calendar.NavigatorToday, "#0072C6");
 
         return t;
     }
@@ -791,26 +841,49 @@ public static class OfficeThemes
         t.Set(TokenKeys.StatusBar.Background, "{palette.brand.primary}");
         t.Set(TokenKeys.StatusBar.Foreground, "{palette.neutral.white}");
 
-        t.Set(TokenKeys.Calendar.Background, "{palette.neutral.white}");
-        t.Set(TokenKeys.Calendar.PastFill, "{palette.neutral.lighter}");
-        t.Set(TokenKeys.Calendar.TodayFill, "{palette.brand.primary}");
-        t.Set(TokenKeys.Calendar.TodayText, "{palette.neutral.white}");
+        // The calendar module, measured off the four month-view captures. Colorful and White
+        // draw it identically — a white grid on a near-white pane — so both are authored here
+        // and Dark Gray, which shares this helper, overrides every value it disagrees with.
+        // The day and week views take the same palette; their own captures will refine them.
+        t.Set(TokenKeys.Calendar.Background, "#FFFFFF");
+        t.Set(TokenKeys.Calendar.PastFill, "#FAF9F8");
+        t.Set(TokenKeys.Calendar.TodayFill, "#0078D4");
+        t.Set(TokenKeys.Calendar.TodayText, "#FFFFFF");
         t.Set(TokenKeys.Calendar.SelectedFill, "{palette.brand.light}");
-        t.Set(TokenKeys.Calendar.WorkingHoursFill, "{palette.neutral.white}");
-        t.Set(TokenKeys.Calendar.NonWorkingFill, "{palette.neutral.lighter}");
-        t.Set(TokenKeys.Calendar.GridLine, "{palette.neutral.light}");
+        t.Set(TokenKeys.Calendar.WorkingHoursFill, "#FFFFFF");
+        t.Set(TokenKeys.Calendar.NonWorkingFill, "#FAF9F8");
+        t.Set(TokenKeys.Calendar.GridLine, "#D2D0CE");
         t.Set(TokenKeys.Calendar.CurrentTimeIndicator, "#A4262C");
-        t.Set(TokenKeys.Calendar.AllDayBandBackground, "{palette.neutral.lighter}");
-        t.Set(TokenKeys.Calendar.HeaderBackground, "{palette.neutral.lighter}");
-        t.Set(TokenKeys.Calendar.HeaderText, "{palette.neutral.primary}");
-        t.Set(TokenKeys.Calendar.DayText, "{palette.neutral.primary}");
+        t.Set(TokenKeys.Calendar.AllDayBandBackground, "#FAF9F8");
+        t.Set(TokenKeys.Calendar.HeaderBackground, "#FFFFFF");
+        t.Set(TokenKeys.Calendar.HeaderText, "#3B3A39");
+        t.Set(TokenKeys.Calendar.HeaderLine, "#EDEBE9");
+        t.Set(TokenKeys.Calendar.DayText, "#3B3A39");
+        t.Set(TokenKeys.Calendar.PastText, "#605E5C");
         t.Set(TokenKeys.Calendar.HourText, "{palette.neutral.secondary}");
-        t.Set(TokenKeys.Calendar.ChipDefault, "{palette.brand.primary}");
-        t.Set(TokenKeys.Calendar.ChipGround, "{palette.neutral.white}");
-        t.Set(TokenKeys.Calendar.ChipTint, "0.8");
+
+        t.Set(TokenKeys.Calendar.ToolbarText, "#3B3A39");
+        t.Set(TokenKeys.Calendar.ToolbarButton, "#FFFFFF");
+        t.Set(TokenKeys.Calendar.ToolbarButtonBorder, "#B3B0AD");
+        t.Set(TokenKeys.Calendar.ToolbarButtonText, "#3B3A39");
+        t.Set(TokenKeys.Calendar.Link, "{palette.brand.primary}");
+
+        t.Set(TokenKeys.Calendar.ChipDefault, "#0078D4");
+        t.Set(TokenKeys.Calendar.ChipGround, "#FFFFFF");
+        t.Set(TokenKeys.Calendar.ChipTint, "0.835");
         t.Set(TokenKeys.Calendar.ChipText, "{palette.neutral.primary}");
+        t.Set(TokenKeys.Calendar.ChipFreeFill, "#FEFEFD");
+        t.Set(TokenKeys.Calendar.ChipFreeStripe, "#FFFFFF");
+        t.Set(TokenKeys.Calendar.ChipHatch, "#FBFDFE");
+        t.Set(TokenKeys.Calendar.ChipEdgeGround, "#FFFFFF");
+        t.Set(TokenKeys.Calendar.ChipEdgeSoft, "0.36");
+        t.Set(TokenKeys.Calendar.ChipEdgeStrong, "0");
         t.Set(TokenKeys.Calendar.OutOfOffice, "#7B3FA6");
-        t.Set(TokenKeys.Calendar.NavigatorRange, "{palette.brand.primary}");
-        t.Set(TokenKeys.Calendar.NavigatorToday, "{palette.brand.indicator}");
+
+        t.Set(TokenKeys.Calendar.NavigatorBackground, "#FAFAFA");
+        t.Set(TokenKeys.Calendar.NavigatorText, "#3B3A39");
+        t.Set(TokenKeys.Calendar.NavigatorRange, "#DEECF9");
+        t.Set(TokenKeys.Calendar.NavigatorRangeText, "#3B3A39");
+        t.Set(TokenKeys.Calendar.NavigatorToday, "#0072C6");
     }
 }

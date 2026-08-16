@@ -54,6 +54,7 @@ public class CommandCatalogTests
         catalog.RegisterRange(MailCommands.All);
         catalog.RegisterRange(ViewCommands.All);
         catalog.RegisterRange(ComposeCommands.All);
+        catalog.RegisterRange(CalendarCommands.All);
         return catalog;
     }
 
@@ -136,6 +137,7 @@ public class CommandCatalogTests
     {
         { "mail", DefaultRibbonLayouts.Mail },
         { "compose", DefaultRibbonLayouts.Compose },
+        { "calendar", DefaultRibbonLayouts.Calendar },
     };
 
     /// <summary>

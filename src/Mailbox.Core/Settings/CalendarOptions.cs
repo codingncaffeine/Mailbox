@@ -1,0 +1,125 @@
+namespace Mailbox.Core.Settings;
+
+/// <summary>
+/// The Calendar page's settings, read by the views that act on them.
+/// </summary>
+/// <remarks>
+/// The reading half of the page, exactly as <see cref="MailOptions"/> is for Mail: the rows
+/// already persist under their keys, and until something reads one the setting is a control that
+/// remembers itself and does nothing. Every accessor here has a feature behind it; a row with no
+/// accessor is one nothing reads yet, and §20 says so per row.
+/// </remarks>
+public sealed class CalendarOptions(SettingsStore settings)
+{
+    private readonly SettingsStore _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+
+    // ---- Keys, declared on the rows in OptionsPages ----------------------------------------
+
+    public const string WorkDayStartKey = "calendar.workday.start";
+    public const string WorkDayEndKey = "calendar.workday.end";
+    public const string FirstDayOfWeekKey = "calendar.firstdayofweek";
+    public const string ShowWeekNumbersKey = "calendar.showweeknumbers";
+    public const string DefaultReminderKey = "calendar.reminder.default";
+    public const string DefaultColourKey = "calendar.colour.default";
+    public const string ColourEveryCalendarKey = "calendar.colour.all";
+    public const string ShowBellKey = "calendar.showbell";
+    public const string TimeScaleKey = "calendar.timescale";
+    public const string DefaultViewKey = "calendar.view.default";
+
+    /// <summary>One per weekday, so the work week is exactly the days that are ticked.</summary>
+    public static string WorkDayKey(DayOfWeek day) => "calendar.workweek." + day.ToString().ToLowerInvariant();
+
+    // ---- The working day --------------------------------------------------------------------
+
+    /// <summary>
+    /// The combos hold an index into a list of half hours from midnight, so 16 is 8:00 and 34 is
+    /// 17:00 — the reference's own defaults.
+    /// </summary>
+    public TimeOnly WorkDayStart => HalfHour(WorkDayStartKey, 16);
+
+    public TimeOnly WorkDayEnd => HalfHour(WorkDayEndKey, 34);
+
+    private TimeOnly HalfHour(string key, int fallback)
+    {
+        var slot = Math.Clamp((int)_settings.GetNumber(key, fallback), 0, 47);
+        return TimeOnly.FromTimeSpan(TimeSpan.FromMinutes(slot * 30));
+    }
+
+    /// <summary>The days Work Week shows. Monday to Friday unless the page says otherwise.</summary>
+    public IReadOnlySet<DayOfWeek> WorkDays
+    {
+        get
+        {
+            var days = new HashSet<DayOfWeek>();
+            foreach (var day in Enum.GetValues<DayOfWeek>())
+            {
+                var standard = day is not (DayOfWeek.Saturday or DayOfWeek.Sunday);
+                if (_settings.GetBool(WorkDayKey(day), standard)) days.Add(day);
+            }
+
+            // A week with no days in it is a view with no columns; fall back rather than draw one.
+            return days.Count > 0 ? days : [DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday];
+        }
+    }
+
+    public DayOfWeek FirstDayOfWeek => (DayOfWeek)Math.Clamp((int)_settings.GetNumber(FirstDayOfWeekKey, 0), 0, 6);
+
+    public bool ShowWeekNumbers => _settings.GetBool(ShowWeekNumbersKey, false);
+
+    // ---- Appointments -----------------------------------------------------------------------
+
+    /// <summary>
+    /// How long before an appointment its reminder is due, or null when the page says none.
+    /// </summary>
+    /// <remarks>
+    /// The combo's entries are 0, 5, 10, 15, 30 minutes, 1 hour and 2 hours, and the reference
+    /// ships 15 — index 3.
+    /// </remarks>
+    public int? DefaultReminderMinutes => (int)_settings.GetNumber(DefaultReminderKey, 3) switch
+    {
+        0 => 0,
+        1 => 5,
+        2 => 10,
+        4 => 30,
+        5 => 60,
+        6 => 120,
+        _ => 15,
+    };
+
+    /// <summary>Whether a reminder shows a bell against the appointment.</summary>
+    public bool ShowBell => _settings.GetBool(ShowBellKey, true);
+
+    /// <summary>The colour a calendar with none of its own is drawn in — the combo's order.</summary>
+    public string DefaultColour => (int)_settings.GetNumber(DefaultColourKey, 0) switch
+    {
+        1 => "#107C10",
+        2 => "#CA5010",
+        3 => "#8764B8",
+        4 => "#D13438",
+        5 => "#69797E",
+        6 => "#C19C00",
+        7 => "#038387",
+        _ => string.Empty,
+    };
+
+    /// <summary>Whether that colour is forced on every calendar rather than only the new ones.</summary>
+    public bool ColourEveryCalendar => _settings.GetBool(ColourEveryCalendarKey, false);
+
+    /// <summary>Minutes a row of the day and week views covers: 5, 6, 10, 15, 30 or 60.</summary>
+    public int TimeScaleMinutes => (int)_settings.GetNumber(TimeScaleKey, 30) switch
+    {
+        5 => 5,
+        6 => 6,
+        10 => 10,
+        15 => 15,
+        60 => 60,
+        _ => 30,
+    };
+
+    public void SetTimeScale(int minutes) => _settings.Set(TimeScaleKey, minutes);
+
+    /// <summary>The arrangement the module opens in, remembered as it is changed.</summary>
+    public string DefaultView => _settings.GetString(DefaultViewKey, "month");
+
+    public void SetDefaultView(string view) => _settings.Set(DefaultViewKey, view);
+}

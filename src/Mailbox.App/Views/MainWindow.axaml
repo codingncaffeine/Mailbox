@@ -370,6 +370,7 @@
         </Border>
 
         <Border Grid.Row="2" Grid.Column="1"
+                IsVisible="{Binding IsMailModule}"
                 Margin="{DynamicResource workspace.inset.rightmargin}"
                 CornerRadius="8,8,0,0"
                 ClipToBounds="True"
@@ -1005,6 +1006,13 @@
         </Grid>
         </Border>
 
+        <!-- The other modules' workspaces sit in the same cell as the mail panes and take turns
+             with them, so the rail switches what fills the window rather than what fills a pane.
+             Filled from code, because a calendar view is drawn rather than composed. -->
+        <ContentControl Grid.Row="2" Grid.Column="1"
+                        Name="ModuleHost"
+                        IsVisible="{Binding !IsMailModule}" />
+
         <!-- Backstage. A full-window takeover across every row, so it covers the ribbon and
              the panes alike. -->
 
@@ -1047,6 +1055,7 @@
                             VerticalAlignment="Center">
                     <Button Classes="flat"
                             Margin="2,0"
+                            IsVisible="{Binding ShowReadingPaneToggles}"
                             Command="{Binding ShowReadingPane}"
                             Content="{Binding ReadingPaneGlyph}"
                             FontFamily="{Binding IconFamily}"
@@ -1056,6 +1065,7 @@
                             ToolTip.Tip="Normal" />
                     <Button Classes="flat"
                             Margin="2,0,10,0"
+                            IsVisible="{Binding ShowReadingPaneToggles}"
                             Command="{Binding HideReadingPane}"
                             Content="{Binding ReadingGlyph}"
                             FontFamily="{Binding IconFamily}"

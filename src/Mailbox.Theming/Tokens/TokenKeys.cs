@@ -426,21 +426,60 @@ public static class TokenKeys
         /// <summary>The weekday header row across the top of a view.</summary>
         public const string HeaderBackground = "calendar.header.background";
         public const string HeaderText = "calendar.header.text";
+        /// <summary>The line closing the weekday header, which the reference draws lighter than the grid's own.</summary>
+        public const string HeaderLine = "calendar.header.line";
         /// <summary>The day numbers in the month view.</summary>
         public const string DayText = "calendar.day.text";
+        /// <summary>A day number already gone by: the reference dims the past as well as shading it.</summary>
+        public const string PastText = "calendar.past.text";
         /// <summary>The time ruler down the day and week views.</summary>
         public const string HourText = "calendar.hour.text";
+
+        /// <summary>The row above a calendar view holding Today, the arrows and the date.</summary>
+        public const string ToolbarText = "calendar.toolbar.text";
+        public const string ToolbarButton = "calendar.toolbar.button";
+        public const string ToolbarButtonBorder = "calendar.toolbar.button.border";
+        public const string ToolbarButtonText = "calendar.toolbar.button.text";
+        /// <summary>
+        /// A link on the appointment form, which sits on the workspace's own ground rather than
+        /// on a page: light blue over the dark themes' chrome, the brand blue over the light
+        /// themes' white.
+        /// </summary>
+        public const string Link = "calendar.link";
+
         /// <summary>The colour of a calendar that has none of its own.</summary>
         public const string ChipDefault = "calendar.chip.default";
-        /// <summary>What a chip's colour is tinted toward for its fill, and the light stripe of Free and Tentative.</summary>
+        /// <summary>What a chip's colour is tinted toward for its fill.</summary>
         public const string ChipGround = "calendar.chip.ground";
         /// <summary>How far toward the ground the fill goes: 0 is the colour itself, 1 the ground.</summary>
         public const string ChipTint = "calendar.chip.tint";
         public const string ChipText = "calendar.chip.text";
+        /// <summary>A Free appointment is drawn hollow — a neutral fill rather than a tint of its colour.</summary>
+        public const string ChipFreeFill = "calendar.chip.free.fill";
+        /// <summary>The pale stripe down a Free appointment, where a Busy one has a solid bar.</summary>
+        public const string ChipFreeStripe = "calendar.chip.free.stripe";
+        /// <summary>The ground the Tentative stripe's diagonals are drawn over.</summary>
+        public const string ChipHatch = "calendar.chip.hatch";
+        /// <summary>What a chip's edge is mixed toward when it is softened.</summary>
+        public const string ChipEdgeGround = "calendar.chip.edge.ground";
+        /// <summary>
+        /// How far a Free chip's edge moves toward <see cref="ChipEdgeGround"/>: the reference draws
+        /// it as the lighter of the two edges. Black inverts the pair, as it inverts the ribbon's
+        /// swatches, so this is a token rather than a constant.
+        /// </summary>
+        public const string ChipEdgeSoft = "calendar.chip.edge.soft";
+        /// <summary>The same mix for a Busy, Tentative or Out of Office chip's edge.</summary>
+        public const string ChipEdgeStrong = "calendar.chip.edge.strong";
         /// <summary>The Out of Office stripe.</summary>
         public const string OutOfOffice = "calendar.outofoffice";
+
+        /// <summary>The panel the date navigator's months are drawn on, inside the navigation pane.</summary>
+        public const string NavigatorBackground = "calendar.navigator.background";
+        public const string NavigatorText = "calendar.navigator.text";
         /// <summary>The date navigator's block over the days a view is showing.</summary>
         public const string NavigatorRange = "calendar.navigator.range";
+        /// <summary>Ink on that block — dark in the light themes, light in the dark ones.</summary>
+        public const string NavigatorRangeText = "calendar.navigator.range.text";
         /// <summary>Today in the date navigator.</summary>
         public const string NavigatorToday = "calendar.navigator.today";
     }
@@ -502,9 +541,15 @@ public static class TokenKeys
         Calendar.Background, Calendar.PastFill, Calendar.TodayFill, Calendar.TodayText, Calendar.SelectedFill,
         Calendar.WorkingHoursFill, Calendar.NonWorkingFill,
         Calendar.GridLine, Calendar.CurrentTimeIndicator, Calendar.AllDayBandBackground,
-        Calendar.HeaderBackground, Calendar.HeaderText, Calendar.DayText, Calendar.HourText,
-        Calendar.ChipDefault, Calendar.ChipGround, Calendar.ChipTint, Calendar.ChipText, Calendar.OutOfOffice,
-        Calendar.NavigatorRange, Calendar.NavigatorToday,
+        Calendar.HeaderBackground, Calendar.HeaderText, Calendar.HeaderLine,
+        Calendar.DayText, Calendar.PastText, Calendar.HourText,
+        Calendar.ToolbarText, Calendar.ToolbarButton, Calendar.ToolbarButtonBorder, Calendar.ToolbarButtonText,
+        Calendar.Link,
+        Calendar.ChipDefault, Calendar.ChipGround, Calendar.ChipTint, Calendar.ChipText,
+        Calendar.ChipFreeFill, Calendar.ChipFreeStripe, Calendar.ChipHatch,
+        Calendar.ChipEdgeGround, Calendar.ChipEdgeSoft, Calendar.ChipEdgeStrong, Calendar.OutOfOffice,
+        Calendar.NavigatorBackground, Calendar.NavigatorText,
+        Calendar.NavigatorRange, Calendar.NavigatorRangeText, Calendar.NavigatorToday,
         Typography.UiFamily, Typography.UiSize, Typography.UiSizeSmall, Typography.UiSizeLarge,
         Typography.ContentFamily, Typography.ContentSize, Typography.MonoFamily,
     ];

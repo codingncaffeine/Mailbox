@@ -124,6 +124,7 @@ public partial class MainWindow : Window
         Closed += (_, _) => _notifier.Dispose();
 
         ApplyHarnessState(shell);
+        ApplyModulePose(shell);
 
         // The posed selection, once more, after the list has bound and had its say. Loaded runs
         // before Background, which is where MAILBOX_RUN acts, so a run sees it.
@@ -161,6 +162,40 @@ public partial class MainWindow : Window
                     if (DataContext is ShellViewModel s) Log.Info($"Harness: status \u201c{s.StatusRight}\u201d");
                 }
             }, DispatcherPriority.Background);
+        }
+
+        // Accept, Tentative and Decline are buttons on a bar, which a capture cannot press:
+        // MAILBOX_INVITE presses one on the selected message and the log says what the calendar
+        // holds afterwards.
+        if (Environment.GetEnvironmentVariable("MAILBOX_INVITE") is { Length: > 0 } invite)
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(
+                () =>
+                {
+                    if (_reading?.Invitation is not { } bar)
+                    {
+                        Log.Info("Harness: the selected message carries no invitation.");
+                        return;
+                    }
+
+                    bar.Respond(invite.Trim().ToLowerInvariant() switch
+                    {
+                        "tentative" => Mailbox.Scheduling.ItipResponse.Tentative,
+                        "decline" => Mailbox.Scheduling.ItipResponse.Declined,
+                        _ => Mailbox.Scheduling.ItipResponse.Accepted,
+                    });
+
+                    // Read the store back rather than the bar: the answer is a write, and what
+                    // the calendar holds is the claim being checked.
+                    foreach (var item in App.Pim.ItemsBetween(
+                                 DateTimeOffset.UtcNow.AddYears(-1), DateTimeOffset.UtcNow.AddYears(1)))
+                    {
+                        Log.Info($"Harness: calendar holds “{item.Summary}”, {item.Busy}, {item.Status}.");
+                    }
+
+                    if (DataContext is ShellViewModel s) Log.Info($"Harness: status “{s.StatusRight}”");
+                },
+                DispatcherPriority.Background);
         }
 
         // Quick Click is a click on a cell, which the harness cannot make: MAILBOX_QUICKCLICK
@@ -480,6 +515,22 @@ public partial class MainWindow : Window
         switch (Environment.GetEnvironmentVariable("MAILBOX_PEEK")?.ToLowerInvariant())
         {
             case "calendar": Opened += (_, _) => TogglePeek(); break;
+
+            // The calendar module's own windows. Each opens over the shell, so the harness
+            // photographs the next window rather than this one.
+            case "appointment":
+            case "newmeeting":
+            case "recurrence":
+            case "editscope":
+            case "gotodate":
+                Opened += (_, _) => Dispatcher.UIThread.Post(
+                    () =>
+                    {
+                        CaptureNextWindow();
+                        _ = ShowCalendarPeekAsync(Environment.GetEnvironmentVariable("MAILBOX_PEEK")!.ToLowerInvariant());
+                    },
+                    DispatcherPriority.Background);
+                break;
 
             // Undo Send's toast is there for a few seconds after a send, which a capture cannot
             // make happen. Posed against a fixed clock so the countdown reads the same every run
@@ -1507,6 +1558,10 @@ public partial class MainWindow : Window
         this.FindControl<ContentControl>("ReadingBody")!.Content = _reading;
         this.FindControl<ContentControl>("ReadingAttachments")!.Content = _attachments;
 
+        // An answered invitation is two things: a write into the calendar, which the bar has
+        // already done, and a message to the organizer, which only the shell can queue.
+        _reading.InvitationAnswered += (_, answer) => SendInvitationReply(shell, answer);
+
         shell.PropertyChanged += (_, e) =>
         {
             switch (e.PropertyName)
@@ -2068,33 +2123,20 @@ public partial class MainWindow : Window
     private CalendarPeek? _floatingPeek;
 
     /// <summary>
-    /// Gives each rail module a command. Calendar toggles the peek; the rest are inert until
-    /// their modules exist.
+    /// Gives each rail module a command. Mail and Calendar switch the window over; the rest say
+    /// which phase brings them, which is better than a button that does nothing.
     /// </summary>
+    /// <remarks>
+    /// Until Phase 11 the Calendar button toggled the peek, because there was no module to switch
+    /// to. Now it switches, and the peek is what a <em>hover</em> over the button opens — the
+    /// reference's own arrangement, and the reason the peek was built as its own control.
+    /// </remarks>
     private void WireRail(ShellViewModel shell)
     {
         foreach (var tab in shell.Modules)
         {
             var module = tab.Module;
-            tab.Activate = new RelayCommand(() =>
-            {
-                // Mail is where this is; Calendar has its peek. The rest are whole modules in
-                // Part IV, and a button that says so is better than one that does nothing.
-                switch (module)
-                {
-                    case MailboxModule.Mail: break;
-                    case MailboxModule.Calendar: TogglePeek(); break;
-                    default:
-                        shell.StatusRight = module switch
-                        {
-                            MailboxModule.People => "People arrives with Phase 12.",
-                            MailboxModule.Tasks or MailboxModule.Notes or MailboxModule.Journal
-                                => $"{module} arrives with Phase 13.",
-                            _ => $"{module} is Phase 14, with the rest of the shell.",
-                        };
-                        break;
-                }
-            });
+            tab.Activate = new RelayCommand(() => SwitchModule(shell, module));
         }
     }
 
@@ -2688,6 +2730,7 @@ public partial class MainWindow : Window
         if (id == MailCommands.ReplyAll.Id) { Respond(shell, ReplyKind.ReplyAll); return; }
         if (id == MailCommands.Forward.Id) { Respond(shell, ReplyKind.Forward); return; }
 
+        if (RunCalendarCommand(shell, id)) return;
         if (RunOverSelection(shell, id)) return;
         if (RunViewCommand(shell, id)) return;
 
@@ -3173,12 +3216,21 @@ public partial class MainWindow : Window
         var due = new List<DueReminder>();
         foreach (var account in App.Accounts.All)
         {
-            foreach (var message in account.Mail.DueReminders(now)) due.Add(new DueReminder(account, message));
+            foreach (var message in account.Mail.DueReminders(now)) due.Add(DueReminder.ForMessage(account, message));
+        }
+
+        // Appointments join the same queue, as §9 asks: one window over every module, with one
+        // Dismiss All, rather than a second window for the calendar.
+        foreach (var appointment in Mailbox.Scheduling.AppointmentReminders.Due(App.Pim, now))
+        {
+            due.Add(DueReminder.ForAppointment(appointment));
         }
 
         // Announced once per item per time: a snoozed reminder that comes round again is a new
         // announcement, and its key carries the time so it is.
-        var fresh = due.Where(d => _announced.Add((d.Account.Account.Address, d.Message.Id ^ (d.Message.Reminder?.ToUnixTimeSeconds() ?? 0)))).ToList();
+        var fresh = due.Where(d => _announced.Add(d.IsAppointment
+            ? ("calendar", d.Appointment!.ItemId ^ d.Appointment.StartsUtc.ToUnixTimeSeconds())
+            : (d.Account!.Account.Address, d.Message!.Id ^ (d.Message.Reminder?.ToUnixTimeSeconds() ?? 0)))).ToList();
 
         if (due.Count == 0)
         {
@@ -3202,7 +3254,7 @@ public partial class MainWindow : Window
             {
                 _notifier.Notify(ToastFor(new NewMailToast(
                     "Reminder: " + item.Subject, item.DueIn(DateTimeOffset.Now),
-                    item.Account.Account.Address, item.Message.Id)));
+                    item.Account?.Account.Address ?? string.Empty, item.Message?.Id ?? 0)));
             }
         }
     }
@@ -3214,6 +3266,11 @@ public partial class MainWindow : Window
         {
             BringForward();
             RevealMessage(shell, item.Address, item.MessageId);
+        };
+        window.OpenAppointmentRequested += (_, itemId) =>
+        {
+            BringForward();
+            _ = OpenAppointmentByIdAsync(shell, itemId);
         };
         Closed += (_, _) =>
         {
@@ -3869,6 +3926,10 @@ public partial class MainWindow : Window
             // An account whose server-side rules could not be put on the server gets another try
             // now that the server has answered a poll.
             _ = SieveSync.RepublishStaleAsync();
+
+            // Send/Receive is one button in the reference and it covers the calendars too, so the
+            // DAV engine runs on the same press (§7.5) rather than on a second one.
+            await SyncCalendarsAsync(shell, _cancellation.Token);
         }
         catch (OperationCanceledException)
         {

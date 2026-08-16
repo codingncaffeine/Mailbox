@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The calendar views (§7.4). Avalonia has no calendar grid and the reference's is specific, so
+    the month grid, the day/week time grid, the schedule timeline and the date navigator are all
+    drawn here — geometry measured off the reference captures, every colour from a calendar.*
+    token. No dependency on the application, so a view can be exercised on its own.
+  -->
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Mailbox.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mailbox.Core\Mailbox.Core.csproj" />
+    <ProjectReference Include="..\Mailbox.Scheduling\Mailbox.Scheduling.csproj" />
+    <ProjectReference Include="..\Mailbox.Theming\Mailbox.Theming.csproj" />
+  </ItemGroup>
+
+</Project>

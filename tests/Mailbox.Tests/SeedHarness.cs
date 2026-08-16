@@ -1,5 +1,7 @@
 using Mailbox.Core.Settings;
+using Mailbox.Scheduling;
 using Mailbox.Store;
+using Mailbox.Store.Pim;
 using MimeKit;
 using MimeKit.Utils;
 
@@ -22,6 +24,16 @@ namespace Mailbox.Tests;
 /// </remarks>
 public class SeedHarness
 {
+    /// <summary>
+    /// The day the seed is dated against: <c>MAILBOX_TODAY</c> when it is set, so a seed and a
+    /// pinned clock agree and a capture is the same picture next year.
+    /// </summary>
+    private static DateOnly SeedToday()
+        => Environment.GetEnvironmentVariable("MAILBOX_TODAY") is { Length: > 0 } pinned
+           && DateOnly.TryParseExact(pinned, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var day)
+            ? day
+            : DateOnly.FromDateTime(DateTime.Today);
+
     /// <summary>An 8-byte PNG header, which is enough to be a distinct inline part.</summary>
     private static readonly byte[] TinyPng = [137, 80, 78, 71, 13, 10, 26, 10];
 
@@ -61,9 +73,127 @@ public class SeedHarness
                 + "it round.",
                 "agenda.pdf", "application/pdf", 38_000),
 
+            Invitation("Priya Raman", "priya@example.net", "work@example.net", SeedToday().AddDays(4)),
+
             Forwarded());
 
         SeedImap(stores, "imap@example.org");
+        SeedCalendar(Path.Combine(target, "pim.db"));
+    }
+
+    /// <summary>
+    /// A calendar to look at: <c>pim.db</c> beside the accounts directory, exactly where the
+    /// application looks for it when <c>MAILBOX_STORE</c> poses one.
+    /// </summary>
+    /// <remarks>
+    /// Shaped to reach the parts of the month view that only appear for certain items: a series
+    /// with an override and an exception, an all-day item, one running over two days, one of each
+    /// Show As so all four chip treatments are on screen, and a day with more than fits so the
+    /// overflow mark is drawn. Every subject, place and name is invented.
+    /// <para>
+    /// Dated against <c>MAILBOX_TODAY</c> when it is set, so a seed and a pinned clock agree; the
+    /// reference capture's own today is 2026-08-16.
+    /// </para>
+    /// </remarks>
+    private static void SeedCalendar(string path)
+    {
+        var today = SeedToday();
+
+        if (File.Exists(path)) File.Delete(path);
+        using var store = new PimStore(path);
+        var pim = new PimRepository(store);
+
+        var calendar = pim.AddCollection(CollectionKind.Events, "Calendar", "#0078D4").Id;
+        var team = pim.AddCollection(CollectionKind.Events, "Team", "#107C10").Id;
+        var zone = TimeZoneInfo.Local.Id;
+
+        void Add(long collection, CalendarEvent calendarEvent)
+            => pim.AddItem(PimEventCodec.ToItem(calendarEvent, collection));
+
+        CalendarEvent At(string summary, string location, DateOnly on, int hour, int minutes, BusyStatus busy)
+            => new()
+            {
+                Uid = CalendarEvent.NewUid(),
+                Summary = summary,
+                Location = location,
+                Start = EventTime.At(on.ToDateTime(new TimeOnly(hour, 0)), zone),
+                End = EventTime.At(on.ToDateTime(new TimeOnly(hour, 0)).AddMinutes(minutes), zone),
+                Busy = busy,
+                ReminderMinutes = 15,
+            };
+
+        // The four Show As treatments, so a capture has one of each side by side.
+        Add(calendar, At("Design review", "https://example.com/meet/design-review", today.AddDays(-4), 17, 60, BusyStatus.Tentative));
+        Add(calendar, At("Dentist", "Fern Street Practice", today.AddDays(-4), 18, 45, BusyStatus.Busy));
+        Add(calendar, At("Gym", "", today.AddDays(-11), 7, 60, BusyStatus.Free));
+        Add(calendar, At("Away", "", today.AddDays(9), 9, 480, BusyStatus.OutOfOffice));
+
+        // A day with more than the cell can hold, so the overflow mark is drawn.
+        var busyDay = today.AddDays(-5);
+        Add(calendar, At("Standup", "Room 2", busyDay, 9, 15, BusyStatus.Busy));
+        Add(calendar, At("Interview: platform engineer", "Room 4 | Ground floor | Building A", busyDay, 11, 60, BusyStatus.Busy));
+        Add(calendar, At("Lunch with A. Person", "The Corner Cafe, 14 Bridge Street", busyDay, 13, 60, BusyStatus.Free));
+        Add(calendar, At("Release readiness", "https://example.com/meet/release", busyDay, 15, 30, BusyStatus.Tentative));
+        Add(calendar, At("Retro", "Room 2", busyDay, 16, 60, BusyStatus.Busy));
+
+        // An all-day item and one that runs over two days, so the month view's bands are drawn.
+        Add(calendar, new CalendarEvent
+        {
+            Uid = CalendarEvent.NewUid(),
+            Summary = "Public holiday",
+            Start = EventTime.Date(today.AddDays(4)),
+            End = EventTime.Date(today.AddDays(5)),
+            Busy = BusyStatus.Free,
+        });
+
+        Add(team, new CalendarEvent
+        {
+            Uid = CalendarEvent.NewUid(),
+            Summary = "Offsite",
+            Location = "Riverside Centre",
+            Start = EventTime.Date(today.AddDays(11)),
+            End = EventTime.Date(today.AddDays(14)),
+            Busy = BusyStatus.OutOfOffice,
+        });
+
+        // A weekly series with one occurrence moved and one taken out, which is the pair that
+        // exercises overrides and EXDATE together.
+        var seriesStart = today.AddDays(-14);
+        var master = new CalendarEvent
+        {
+            Uid = CalendarEvent.NewUid(),
+            Summary = "Weekly sync",
+            Location = "https://example.com/meet/weekly",
+            Start = EventTime.At(seriesStart.ToDateTime(new TimeOnly(10, 0)), zone),
+            End = EventTime.At(seriesStart.ToDateTime(new TimeOnly(10, 30)), zone),
+            Rrule = "FREQ=WEEKLY;BYDAY=" + Code(seriesStart.DayOfWeek),
+            ExceptionDates = [EventTime.At(seriesStart.AddDays(7).ToDateTime(new TimeOnly(10, 0)), zone)],
+            Busy = BusyStatus.Busy,
+            ReminderMinutes = 15,
+        };
+        Add(calendar, master);
+
+        var movedFrom = seriesStart.AddDays(21);
+        Add(calendar, master with
+        {
+            Rrule = null,
+            ExceptionDates = [],
+            RecurrenceId = EventTime.At(movedFrom.ToDateTime(new TimeOnly(10, 0)), zone),
+            Start = EventTime.At(movedFrom.ToDateTime(new TimeOnly(14, 0)), zone),
+            End = EventTime.At(movedFrom.ToDateTime(new TimeOnly(15, 0)), zone),
+            Summary = "Weekly sync (moved)",
+        });
+
+        static string Code(DayOfWeek day) => day switch
+        {
+            DayOfWeek.Sunday => "SU",
+            DayOfWeek.Monday => "MO",
+            DayOfWeek.Tuesday => "TU",
+            DayOfWeek.Wednesday => "WE",
+            DayOfWeek.Thursday => "TH",
+            DayOfWeek.Friday => "FR",
+            _ => "SA",
+        };
     }
 
     /// <summary>
@@ -115,6 +245,52 @@ public class SeedHarness
     {
         var message = Envelope(name, address, subject);
         message.Body = new TextPart("plain") { Text = body };
+        return message;
+    }
+
+    /// <summary>
+    /// A meeting invitation as iMIP carries one (RFC 6047): words for a person and a
+    /// <c>METHOD:REQUEST</c> part for a client, so the reading pane's invitation bar has
+    /// something to draw.
+    /// </summary>
+    private static MimeMessage Invitation(string name, string address, string to, DateOnly on)
+    {
+        var message = Envelope(name, address, "Design review");
+        message.To.Clear();
+        message.To.Add(new MailboxAddress("You", to));
+
+        var payload = $"""
+            BEGIN:VCALENDAR
+            VERSION:2.0
+            PRODID:-//Example//EN
+            METHOD:REQUEST
+            BEGIN:VEVENT
+            UID:seed-invitation@example.net
+            DTSTAMP:{on.ToDateTime(TimeOnly.MinValue):yyyyMMdd}T080000Z
+            DTSTART:{on.ToDateTime(TimeOnly.MinValue):yyyyMMdd}T140000Z
+            DTEND:{on.ToDateTime(TimeOnly.MinValue):yyyyMMdd}T150000Z
+            SUMMARY:Design review
+            LOCATION:Room 2
+            SEQUENCE:1
+            ORGANIZER;CN={name}:mailto:{address}
+            ATTENDEE;CN=You;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:{to}
+            END:VEVENT
+            END:VCALENDAR
+            """.ReplaceLineEndings("\r\n");
+
+        var calendar = new TextPart("calendar") { Text = payload };
+        calendar.ContentType.Parameters["method"] = "REQUEST";
+        calendar.ContentType.Parameters["charset"] = "utf-8";
+
+        message.Body = new Multipart("alternative")
+        {
+            new TextPart("plain")
+            {
+                Text = "Putting an hour in for the review. Shout if that clashes with anything.",
+            },
+            calendar,
+        };
+
         return message;
     }
 

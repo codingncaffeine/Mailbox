@@ -5,20 +5,48 @@ using Avalonia.Controls.Templates;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Mailbox.Scheduling;
 using Mailbox.Store;
 using Mailbox.Theming.Icons;
 
 namespace Mailbox.App.Views;
 
-/// <summary>One line in the Reminders window: a flagged message whose reminder time has come.</summary>
-public sealed record DueReminder(OpenAccount Account, MessageSummary Message)
+/// <summary>
+/// One line in the Reminders window: a flagged message, or an appointment, whose reminder time
+/// has come.
+/// </summary>
+/// <remarks>
+/// One queue across the modules is the point (§9) — the reference's window mixes mail, meetings
+/// and tasks in one list with one Dismiss All — so this carries either rather than the window
+/// holding two lists that would have to be interleaved by hand at every use.
+/// </remarks>
+public sealed record DueReminder
 {
-    public string Subject => Message.Subject.Length > 0 ? Message.Subject : "(no subject)";
+    /// <summary>The account a flagged message is in, or null for an appointment.</summary>
+    public OpenAccount? Account { get; init; }
+
+    public MessageSummary? Message { get; init; }
+
+    /// <summary>The appointment, or null for a flagged message.</summary>
+    public DueAppointment? Appointment { get; init; }
+
+    public bool IsAppointment => Appointment is not null;
+
+    public static DueReminder ForMessage(OpenAccount account, MessageSummary message)
+        => new() { Account = account, Message = message };
+
+    public static DueReminder ForAppointment(DueAppointment appointment)
+        => new() { Appointment = appointment };
+
+    public string Subject => IsAppointment
+        ? (Appointment!.Summary.Length > 0 ? Appointment.Summary : "(no subject)")
+        : (Message!.Subject.Length > 0 ? Message.Subject : "(no subject)");
 
     /// <summary>"Due in 2 hours", "Overdue by 15 minutes", "No due date" — the reference's column.</summary>
     public string DueIn(DateTimeOffset now)
     {
-        if (Message.FollowUpDue is not { } due) return "No due date";
+        var when = IsAppointment ? Appointment!.StartsUtc : Message!.FollowUpDue;
+        if (when is not { } due) return "No due date";
 
         var span = due - now;
         var overdue = span < TimeSpan.Zero;
@@ -28,7 +56,9 @@ public sealed record DueReminder(OpenAccount Account, MessageSummary Message)
             : span.TotalHours >= 1 ? $"{(int)span.TotalHours} hour{((int)span.TotalHours == 1 ? "" : "s")}"
             : $"{Math.Max(1, (int)span.TotalMinutes)} minute{((int)span.TotalMinutes == 1 ? "" : "s")}";
 
-        return overdue ? $"Overdue by {words}" : $"Due in {words}";
+        return overdue
+            ? (IsAppointment ? $"Started {words} ago" : $"Overdue by {words}")
+            : $"Due in {words}";
     }
 }
 
@@ -89,7 +119,7 @@ public sealed class RemindersWindow : Window
         var open = new Button { Content = "Open Item" };
         open.Click += (_, _) =>
         {
-            if (Selected().FirstOrDefault() is { } first) OpenRequested?.Invoke(this, (first.Account.Account.Address, first.Message.Id));
+            Open(Selected().FirstOrDefault());
         };
 
         var dismiss = new Button { Content = "Dismiss" };
@@ -98,10 +128,7 @@ public sealed class RemindersWindow : Window
         var snooze = new Button { Content = "Snooze" };
         snooze.Click += (_, _) => Snooze(Selected(), SnoozeSpans[Math.Max(0, _snooze.SelectedIndex)].Span);
 
-        _list.DoubleTapped += (_, _) =>
-        {
-            if (Selected().FirstOrDefault() is { } first) OpenRequested?.Invoke(this, (first.Account.Account.Address, first.Message.Id));
-        };
+        _list.DoubleTapped += (_, _) => Open(Selected().FirstOrDefault());
 
         var snoozeLabel = new TextBlock { Text = "Click Snooze to be reminded again in:", VerticalAlignment = VerticalAlignment.Center };
         Bind(snoozeLabel, TextBlock.ForegroundProperty, "dialog.foreground.brush");
@@ -131,11 +158,21 @@ public sealed class RemindersWindow : Window
         };
     }
 
+    /// <summary>Asks the shell to open an appointment from the calendar.</summary>
+    public event EventHandler<long>? OpenAppointmentRequested;
+
+    private void Open(DueReminder? item)
+    {
+        if (item is null) return;
+        if (item.Appointment is { } appointment) OpenAppointmentRequested?.Invoke(this, appointment.ItemId);
+        else if (item.Account is { } account && item.Message is { } message) OpenRequested?.Invoke(this, (account.Account.Address, message.Id));
+    }
+
     private Control Row(DueReminder item)
     {
         var glyph = new TextBlock
         {
-            Text = IconGlyphs.GetOrEmpty("flag", 16),
+            Text = IconGlyphs.GetOrEmpty(item.IsAppointment ? "calendar" : "flag", 16),
             FontFamily = IconFont.Family,
             FontSize = 14,
             VerticalAlignment = VerticalAlignment.Center,
@@ -184,9 +221,14 @@ public sealed class RemindersWindow : Window
 
     private void Dismiss(List<DueReminder> items)
     {
-        foreach (var group in items.GroupBy(i => i.Account.Account.Address))
+        foreach (var group in items.Where(i => !i.IsAppointment).GroupBy(i => i.Account!.Account.Address))
         {
-            group.First().Account.Mail.SetReminder([.. group.Select(i => i.Message.Id)], null);
+            group.First().Account!.Mail.SetReminder([.. group.Select(i => i.Message!.Id)], null);
+        }
+
+        foreach (var item in items.Where(i => i.IsAppointment))
+        {
+            AppointmentReminders.Dismiss(App.Pim, item.Appointment!);
         }
 
         Show([.. _due.Except(items)]);
@@ -195,9 +237,14 @@ public sealed class RemindersWindow : Window
     private void Snooze(List<DueReminder> items, TimeSpan span)
     {
         var later = DateTimeOffset.UtcNow + span;
-        foreach (var group in items.GroupBy(i => i.Account.Account.Address))
+        foreach (var group in items.Where(i => !i.IsAppointment).GroupBy(i => i.Account!.Account.Address))
         {
-            group.First().Account.Mail.SetReminder([.. group.Select(i => i.Message.Id)], later);
+            group.First().Account!.Mail.SetReminder([.. group.Select(i => i.Message!.Id)], later);
+        }
+
+        foreach (var item in items.Where(i => i.IsAppointment))
+        {
+            AppointmentReminders.Snooze(App.Pim, item.Appointment!, later);
         }
 
         Show([.. _due.Except(items)]);

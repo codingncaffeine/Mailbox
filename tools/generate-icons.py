@@ -107,6 +107,25 @@ WANTED = {
     "schedule-view": "calendar_agenda",
     "add": "add",
 
+    # ---- Calendar module (Phase 11) -----------------------------------------------------
+    "new-appointment": "calendar_add",
+    "open-calendar": "calendar_arrow_right",
+    "calendar-groups": "calendar_multiple",
+    "publish-calendar": "globe",
+    "email-calendar": "calendar_reply",
+    "goto-date": "calendar_search",
+    "recurrence": "arrow_repeat_all",
+    "time-scale": "clock",
+    "overlay": "layer",
+    "calendar-color": "color",
+    "show-as": "circle_half_fill",
+    "calendar-settings": "calendar_settings",
+    "calendar-sync": "calendar_sync",
+    "cancel-meeting": "calendar_cancel",
+    "accept": "calendar_checkmark",
+    "decline": "clock_dismiss",
+    "daily-task-list": "task_list_square_ltr",
+
     # ---- Compose window: Clipboard and Basic Text -------------------------------------
     "paste": "clipboard_paste",
     "cut": "cut",

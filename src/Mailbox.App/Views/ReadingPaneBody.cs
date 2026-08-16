@@ -135,6 +135,32 @@ public sealed class ReadingPaneBody : UserControl
     /// <summary>The sender's address, for the safe-sender decision.</summary>
     private string SenderAddress => _message?.From.Mailboxes.FirstOrDefault()?.Address ?? string.Empty;
 
+    /// <summary>
+    /// Which of our addresses this message came to, which is the one an invitation answers as.
+    /// </summary>
+    /// <remarks>
+    /// Read off the message rather than taken from the default account: a reply from the wrong
+    /// address is a reply the organizer's client cannot match to anybody it invited.
+    /// </remarks>
+    public string RecipientAddress
+    {
+        get
+        {
+            var ours = App.Accounts.All.Select(a => a.Account.Address).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var mine = (_message?.To.Mailboxes ?? []).Concat(_message?.Cc.Mailboxes ?? [])
+                .FirstOrDefault(m => ours.Contains(m.Address));
+            return mine?.Address ?? App.Accounts.All.FirstOrDefault()?.Account.Address ?? string.Empty;
+        }
+    }
+
+    /// <summary>The invitation bar on show, for the harness — a capture cannot press a button.</summary>
+    private InvitationBar? _invitation;
+
+    internal InvitationBar? Invitation => _invitation;
+
+    /// <summary>Raised when Accept, Tentative or Decline was pressed; the shell sends the reply.</summary>
+    public event EventHandler<InvitationBar.Answer>? InvitationAnswered;
+
     private void Refresh()
     {
         _bars.Children.Clear();
@@ -148,6 +174,24 @@ public sealed class ReadingPaneBody : UserControl
 
         var trust = SenderTrust.Evaluate(_message, FamiliarDomains(), _verified);
         if (trust.Warnings.Count > 0) _bars.Children.Add(TrustBar(trust));
+
+        // An invitation is the one bar that goes above the trust strip in the reference: it is
+        // what the message is, not a caveat about it.
+        if (InvitationBar.Read(_message) is { } invitation)
+        {
+            var bar = new InvitationBar(
+                invitation,
+                RecipientAddress,
+                App.Pim,
+                _message.From.Mailboxes.FirstOrDefault()?.Name);
+            bar.Answered += (_, answer) => InvitationAnswered?.Invoke(this, answer);
+            _bars.Children.Insert(0, bar);
+            _invitation = bar;
+        }
+        else
+        {
+            _invitation = null;
+        }
 
         var disableLinks = _suspectedJunk && App.MailOptions.DisableLinksInJunk;
 
