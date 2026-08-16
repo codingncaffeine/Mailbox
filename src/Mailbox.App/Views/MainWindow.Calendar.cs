@@ -1,5 +1,8 @@
 using System.Globalization;
 using Avalonia.Controls;
+using Avalonia;
+using Avalonia.Layout;
+using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Threading;
 using Mailbox.App.Options;
 using Mailbox.App.ViewModels;
@@ -9,6 +12,7 @@ using Mailbox.Core.Diagnostics;
 using Mailbox.Core.Ribbon;
 using Mailbox.Scheduling;
 using Mailbox.Store.Pim;
+using Mailbox.Theming.Icons;
 
 namespace Mailbox.App.Views;
 
@@ -145,6 +149,7 @@ public partial class MainWindow
         if (id == CalendarCommands.OpenItem.Id) { OpenSelectedAppointment(shell); return true; }
         if (id == CalendarCommands.DeleteItem.Id) { _ = DeleteSelectedAppointmentAsync(shell); return true; }
         if (id == CalendarCommands.OpenCalendar.Id) { ShowAddCalendarMenu(shell); return true; }
+        if (id == CalendarCommands.Share.Id) { ShowShareCalendarMenu(shell); return true; }
         if (id == CalendarCommands.NewCalendar.Id) { _ = NewCalendarAsync(shell); return true; }
         if (id == CalendarCommands.OpenFromInternet.Id) { _ = SubscribeAsync(shell); return true; }
         if (id == CalendarCommands.DeleteCalendar.Id) { _ = DeleteCalendarAsync(shell); return true; }
@@ -157,26 +162,76 @@ public partial class MainWindow
     /// internet subscription, calendar groups, then the two that make or open a calendar.
     /// </summary>
     private void ShowAddCalendarMenu(ShellViewModel shell)
+        => _ribbon.OpenMenuUnder(CalendarCommands.OpenCalendar.Id, BuildAddCalendarMenu(shell), this);
+
+    private MenuFlyout BuildAddCalendarMenu(ShellViewModel shell)
     {
         SwitchModule(shell, MailboxModule.Calendar);
         var flyout = new MenuFlyout();
 
-        void Entry(string header, Action run, bool enabled = true)
+        void Entry(string header, string? icon, Action run)
         {
-            var item = new MenuItem { Header = header, IsEnabled = enabled };
+            var item = new MenuItem { Header = header, Icon = MenuIcon(icon) };
             item.Click += (_, _) => run();
             flyout.Items.Add(item);
         }
 
-        Entry("From Address Book…", () => shell.StatusRight = "Adding a calendar from the address book arrives with Phase 12.");
-        Entry("From Room List…", () => shell.StatusRight = "Room lists arrive with Phase 12.");
-        Entry("From Internet…", () => _ = SubscribeAsync(shell));
-        Entry("Calendar Groups", () => shell.StatusRight = "Calendar groups arrive with the People module.");
+        // The reference's own six, with its own icons — and Create New Blank Calendar carrying
+        // none, which is not an omission but what the capture shows.
+        Entry("From _Address Book…", "contact-card", () => shell.StatusRight = "Adding a calendar from the address book arrives with Phase 12.");
+        Entry("From _Room List…", "room-list", () => shell.StatusRight = "Room lists arrive with Phase 12.");
+        Entry("From _Internet…", "publish-calendar", () => _ = SubscribeAsync(shell));
+        Entry("_Calendar Groups", "calendar-groups", () => shell.StatusRight = "Calendar groups arrive with the People module.");
         flyout.Items.Add(new Separator());
-        Entry("Create New Blank Calendar…", () => _ = NewCalendarAsync(shell));
-        Entry("Open Shared Calendar…", () => shell.StatusRight = "A shared calendar is a subscription — use From Internet… with its address.");
+        Entry("Create New _Blank Calendar…", null, () => _ = NewCalendarAsync(shell));
+        Entry("_Open Shared Calendar…", "share", () => shell.StatusRight = "A shared calendar is a subscription — use From Internet… with its address.");
 
-        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+        return flyout;
+    }
+
+    /// <summary>The Share button's menu: send a calendar on, or put it somewhere to subscribe to.</summary>
+    private void ShowShareCalendarMenu(ShellViewModel shell)
+    {
+        SwitchModule(shell, MailboxModule.Calendar);
+        var flyout = new MenuFlyout();
+
+        void Entry(string header, string? icon, Action run)
+        {
+            var item = new MenuItem { Header = header, Icon = MenuIcon(icon) };
+            item.Click += (_, _) => run();
+            flyout.Items.Add(item);
+        }
+
+        Entry("_E-mail Calendar…", "email-calendar", () => shell.StatusRight = "E-mailing a calendar arrives with Phase 12.");
+        Entry("_Share Calendar…", "share", () => shell.StatusRight = "Sharing a calendar wants CalDAV publishing, which is still to come.");
+        Entry("_Publish Online…", "publish-calendar", () => shell.StatusRight = "Publishing a calendar wants CalDAV publishing, which is still to come.");
+        flyout.Items.Add(new Separator());
+        Entry("Calendar _Permissions…", "permission", () => shell.StatusRight = "Permissions belong to the server a calendar is published on.");
+
+        _ribbon.OpenMenuUnder(CalendarCommands.Share.Id, flyout, this);
+    }
+
+    /// <summary>
+    /// A menu entry's icon, drawn from the icon font at the size the reference's menus use.
+    /// </summary>
+    /// <remarks>
+    /// Null for the entries the reference leaves bare. A menu where every row has an icon reads
+    /// as a different menu from one where two do not, and the gaps are part of the shape.
+    /// </remarks>
+    private static Control? MenuIcon(string? icon)
+    {
+        if (icon is not { Length: > 0 }) return null;
+
+        var glyph = new TextBlock
+        {
+            Text = IconGlyphs.GetOrEmpty(icon, 16),
+            FontFamily = IconFont.Family,
+            FontSize = 15,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        glyph[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("text.primary.brush");
+        return glyph;
     }
 
     private async Task NewCalendarAsync(ShellViewModel shell)
@@ -712,6 +767,32 @@ public partial class MainWindow
             {
                 var scope = await EditScopePrompt.AskAsync(this, "Weekly sync", deleting: false);
                 Log.Info($"Harness: edit scope chose {scope}.");
+                return;
+            }
+
+            case "addmenu":
+            {
+                // A flyout is a separate surface and never appears in a capture, so what it holds
+                // and where it hangs are checked by reading them back.
+                var menu = BuildAddCalendarMenu(shell);
+
+                // Switching the module rebuilt the bar, and a control that has not been through
+                // a layout pass has no bounds to read — the same trap a band that will not grow
+                // until UpdateLayout falls into.
+                _ribbon.UpdateLayout();
+
+                if (_ribbon.ControlFor(CalendarCommands.OpenCalendar.Id) is { } anchor
+                    && anchor.TranslatePoint(new Point(0, anchor.Bounds.Height), this) is { } corner)
+                {
+                    Log.Info($"Harness: the Add menu hangs from ({corner.X:0}, {corner.Y:0}), the button's own bottom-left.");
+                }
+
+                foreach (var entry in menu.Items.OfType<MenuItem>())
+                {
+                    Log.Info($"Harness: Add menu — \u201c{entry.Header}\u201d{(entry.Icon is null ? ", no icon" : ", with an icon")}.");
+                }
+
+                _ribbon.OpenMenuUnder(CalendarCommands.OpenCalendar.Id, menu, this);
                 return;
             }
 

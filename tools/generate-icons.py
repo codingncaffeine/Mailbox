@@ -125,6 +125,7 @@ WANTED = {
     "accept": "calendar_checkmark",
     "decline": "clock_dismiss",
     "daily-task-list": "task_list_square_ltr",
+    "room-list": "conference_room",
 
     # ---- Compose window: Clipboard and Basic Text -------------------------------------
     "paste": "clipboard_paste",

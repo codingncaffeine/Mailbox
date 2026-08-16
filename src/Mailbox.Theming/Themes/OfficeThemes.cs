@@ -324,6 +324,11 @@ public static class OfficeThemes
         t.Set(TokenKeys.Calendar.NonWorkingFill, "#A19F9D");
         t.Set(TokenKeys.Calendar.AllDayBandBackground, "#A19F9D");
 
+        // Measured off the capture with the Add menu open: the button wears a #CCCCCC face
+        // inside a #5C5C5C line, which is lighter than this theme's #BDBDBD ribbon.
+        t.Set(TokenKeys.Ribbon.ButtonOpen, "#CCCCCC");
+        t.Set(TokenKeys.Ribbon.ButtonOpenBorder, "#5C5C5C");
+
         t.Set(TokenKeys.Calendar.ToolbarText, "#FFFFFF");
         t.Set(TokenKeys.Calendar.ToolbarButton, "#BEBBB8");
         t.Set(TokenKeys.Calendar.ToolbarButtonBorder, "#484644");
@@ -550,6 +555,8 @@ public static class OfficeThemes
         t.Set(TokenKeys.Ribbon.GroupSeparator, "{palette.neutral.quaternary}");
         t.Set(TokenKeys.Ribbon.GalleryBackground, "{ribbon.background}");
         t.Set(TokenKeys.Ribbon.GalleryBorder, "{palette.neutral.tertiary}");
+        t.Set(TokenKeys.Ribbon.ButtonOpen, "#3D3D3D");
+        t.Set(TokenKeys.Ribbon.ButtonOpenBorder, "#6B6B6B");
 
         // The ribbon's coloured artwork, measured off the Black capture. Each pair is the light
         // themes' the other way round: on a #292929 ribbon the reference draws the light colour
@@ -760,6 +767,8 @@ public static class OfficeThemes
         // the relation measured in Dark Gray, where the line is #858585 on a #BDBDBD panel.
         t.Set(TokenKeys.Ribbon.GalleryBackground, "{ribbon.background}");
         t.Set(TokenKeys.Ribbon.GalleryBorder, "{palette.neutral.tertiary}");
+        t.Set(TokenKeys.Ribbon.ButtonOpen, "{palette.neutral.light}");
+        t.Set(TokenKeys.Ribbon.ButtonOpenBorder, "{palette.neutral.tertiary}");
 
         // The ribbon's coloured artwork, measured off the Colorful and White captures — the two
         // themes draw it identically, both having a white ribbon under it. Dark Gray darkens

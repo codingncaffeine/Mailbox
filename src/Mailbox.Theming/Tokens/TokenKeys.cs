@@ -112,6 +112,19 @@ public static class TokenKeys
         /// </summary>
         public const string GalleryBackground = "ribbon.gallery.background";
         public const string GalleryBorder = "ribbon.gallery.border";
+
+        /// <summary>
+        /// The box round a dropdown's button while its own menu is open, which is how the menu
+        /// says which button it belongs to.
+        /// </summary>
+        /// <remarks>
+        /// Measured in Dark Gray, the one theme an open menu was captured in: a #CCCCCC face
+        /// inside a #5C5C5C line, on a #BDBDBD ribbon — <em>lighter</em> than the ribbon, where a
+        /// pressed content control is darker than its surface. The other three are authored from
+        /// their own neutrals, since nothing lighter than a white ribbon exists to use.
+        /// </remarks>
+        public const string ButtonOpen = "ribbon.button.open";
+        public const string ButtonOpenBorder = "ribbon.button.open.border";
         public const string Height = "ribbon.height";
         public const string TabStripHeight = "ribbon.tabstrip.height";
     }
@@ -520,6 +533,7 @@ public static class TokenKeys
         Ribbon.Background, Ribbon.TabStripBackground, Ribbon.TabRest, Ribbon.TabHover,
         Ribbon.TabSelected, Ribbon.TabUnderline, Ribbon.TabText, Ribbon.TabTextSelected, Ribbon.GroupLabel,
         Ribbon.GroupSeparator, Ribbon.GalleryBackground, Ribbon.GalleryBorder,
+        Ribbon.ButtonOpen, Ribbon.ButtonOpenBorder,
         Ribbon.Height, Ribbon.TabStripHeight,
         .. RibbonIcon.All,
         Workspace.Inset,
