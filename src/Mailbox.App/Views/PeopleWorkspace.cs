@@ -321,7 +321,7 @@ public sealed class PeopleWorkspace : Border
         };
         badge[!BackgroundProperty] = new DynamicResourceExtension("accent.subtle.brush");
 
-        if (Photograph(contact) is { } photo)
+        if (_options.ShowPhotographs && Photograph(contact) is { } photo)
         {
             badge.Child = new Image { Source = photo, Stretch = Stretch.UniformToFill, Width = 56, Height = 56 };
         }
