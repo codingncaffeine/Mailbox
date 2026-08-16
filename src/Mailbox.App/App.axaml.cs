@@ -256,6 +256,52 @@ public partial class App : Application
         }
     }
 
+    private static FileSystemWatcher? _themeWatcher;
+
+    /// <summary>
+    /// Watches the themes directory and reloads the library when a theme file changes; the
+    /// service re-applies the current theme when it is one of the files. Debounced through the
+    /// dispatcher, because an editor saving a file raises several events for one save. A
+    /// directory that does not exist yet is not watched — there is nothing in it to change —
+    /// and a capture run has no need of it.
+    /// </summary>
+    private static void WatchThemeFiles(string directory)
+    {
+        if (WindowCapture.IsRequested || !Directory.Exists(directory)) return;
+
+        try
+        {
+            _themeWatcher = new FileSystemWatcher(directory, "*" + Mailbox.Theming.Files.ThemeFileFormat.Extension)
+            {
+                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
+                EnableRaisingEvents = true,
+            };
+
+            var pending = false;
+            void Reload(object? _, FileSystemEventArgs e)
+            {
+                if (pending) return;
+                pending = true;
+                Dispatcher.UIThread.Post(async () =>
+                {
+                    await Task.Delay(250);
+                    pending = false;
+                    Themes.ReplaceLibrary(Mailbox.Theming.Files.ThemeLibrary.Load(directory));
+                    Log.Info($"Theme files reloaded after {e.Name} changed.");
+                });
+            }
+
+            _themeWatcher.Changed += Reload;
+            _themeWatcher.Created += Reload;
+            _themeWatcher.Deleted += Reload;
+            _themeWatcher.Renamed += (o, e) => Reload(o, e);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            Log.Warn("The themes directory could not be watched; edits to theme files show at the next start.", ex);
+        }
+    }
+
     /// <summary>
     /// Applies the stored theme and density. The environment variables still win, because the
     /// fidelity harness sets them to photograph a theme that is not the one chosen here.
@@ -264,9 +310,18 @@ public partial class App : Application
     {
         if (Environment.GetEnvironmentVariable(ThemeService.ThemeVariable) is null
             && Settings.GetString(ThemeSetting) is { Length: > 0 } theme
-            && OfficeThemes.All.Contains(theme))
+            && Themes.Library.Canonical(theme) is { } known)
         {
-            Themes.Apply(theme);
+            try
+            {
+                Themes.Apply(known);
+            }
+            catch (Mailbox.Theming.Tokens.ThemeResolutionException ex)
+            {
+                // A theme file that no longer resolves — a base gone, a token missing — is not
+                // a reason the application will not start; it says so and stays on Colorful.
+                Log.Warn($"The saved theme \"{theme}\" could not be applied: {ex.Message}");
+            }
         }
 
         if (Environment.GetEnvironmentVariable(ThemeService.DensityVariable) is not null) return;
@@ -309,8 +364,12 @@ public partial class App : Application
             }
         }
         Fonts = FontResolver.FromSystem();
-        Themes = new ThemeService(Fonts);
+        // The reader's theme files beside the built-ins, and a watch on their directory so an
+        // edit to the theme in use shows without a restart (§8's hot reload).
+        var themesDirectory = Mailbox.Theming.Files.ThemeLibrary.DefaultDirectory();
+        Themes = new ThemeService(Fonts, Mailbox.Theming.Files.ThemeLibrary.Load(themesDirectory));
         RestoreAppearance();
+        WatchThemeFiles(themesDirectory);
 
         // A directory under the harness's own path when capturing, so a screenshot run never
         // touches real mail.

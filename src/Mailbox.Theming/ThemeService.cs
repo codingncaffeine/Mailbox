@@ -34,22 +34,46 @@ public sealed class ThemeService
     /// <summary>Overrides the startup density: compact, cozy or comfortable.</summary>
     public const string DensityVariable = "MAILBOX_DENSITY";
 
-    public ThemeService(FontResolver fonts)
+    public ThemeService(FontResolver fonts, Mailbox.Theming.Files.ThemeLibrary? library = null)
     {
         _fonts = fonts;
-        ThemeId = ResolveStartupTheme();
+        Library = library ?? Mailbox.Theming.Files.ThemeLibrary.BuiltIns;
+        ThemeId = ResolveStartupTheme(Library);
         Density = ResolveStartupDensity();
         Tokens = Compose(ThemeId, Density, null);
     }
 
-    private static string ResolveStartupTheme()
+    /// <summary>The themes that can be applied: the built-ins and the reader's theme files.</summary>
+    public Mailbox.Theming.Files.ThemeLibrary Library { get; private set; }
+
+    /// <summary>
+    /// Replaces the library — the themes directory has changed — and re-applies the current
+    /// theme from it when the theme is one of the files, so an edit shows without a restart. A
+    /// current theme the new library no longer has falls back to Colorful.
+    /// </summary>
+    public void ReplaceLibrary(Mailbox.Theming.Files.ThemeLibrary library)
+    {
+        ArgumentNullException.ThrowIfNull(library);
+        Library = library;
+        if (Mailbox.Theming.Files.ThemeLibrary.IsBuiltIn(ThemeId)) return;
+
+        try
+        {
+            Apply(library.Contains(ThemeId) ? ThemeId : OfficeThemes.Colorful);
+        }
+        catch (ThemeResolutionException ex)
+        {
+            Mailbox.Core.Diagnostics.Log.Warn($"Theme \"{ThemeId}\" could not be re-applied after its file changed: {ex.Message}");
+            Apply(OfficeThemes.Colorful);
+        }
+    }
+
+    private static string ResolveStartupTheme(Mailbox.Theming.Files.ThemeLibrary library)
     {
         var requested = Environment.GetEnvironmentVariable(ThemeVariable);
         if (string.IsNullOrWhiteSpace(requested)) return OfficeThemes.Colorful;
 
-        return OfficeThemes.All.FirstOrDefault(
-            t => string.Equals(t, requested, StringComparison.OrdinalIgnoreCase))
-            ?? OfficeThemes.Colorful;
+        return library.Canonical(requested.Trim()) ?? OfficeThemes.Colorful;
     }
 
     private static Density ResolveStartupDensity()
@@ -69,7 +93,10 @@ public sealed class ThemeService
     /// <summary>User overrides layered on top of the built-in. Null for an unmodified theme.</summary>
     public TokenSet? UserOverrides { get; private set; }
 
-    public bool IsDark => OfficeThemes.IsDark(ThemeId);
+    public bool IsDark => Library.IsDark(ThemeId);
+
+    /// <summary>What the theme picker shows for a theme, built-in or file.</summary>
+    public string DisplayName(string id) => Library.DisplayName(id);
 
     public event EventHandler<ThemeChangedEventArgs>? Changed;
 
@@ -92,7 +119,7 @@ public sealed class ThemeService
 
     private ResolvedTokens Compose(string themeId, Density density, TokenSet? overrides)
     {
-        var tokens = OfficeThemes.Build(themeId);
+        var tokens = Library.Build(themeId);
         ApplyDensity(tokens, density);
         ApplyFontResolution(tokens);
 

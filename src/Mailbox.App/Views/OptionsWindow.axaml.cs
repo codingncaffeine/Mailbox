@@ -723,20 +723,29 @@ public sealed class OptionsWindow : Window
 
     private ComboBox ThemeCombo()
     {
+        // The built-ins, then the reader's theme files, in the library's order.
+        var ids = _themes.Library.Ids;
         var combo = new ComboBox
         {
-            ItemsSource = OptionsPages.ThemeNames.ToList(),
-            SelectedIndex = OfficeThemes.All.ToList().IndexOf(_themes.ThemeId),
+            ItemsSource = ids.Select(_themes.DisplayName).ToList(),
+            SelectedIndex = ids.ToList().FindIndex(id => string.Equals(id, _themes.ThemeId, StringComparison.OrdinalIgnoreCase)),
             MinWidth = 160,
             VerticalAlignment = VerticalAlignment.Center,
         };
         combo.SelectionChanged += (_, _) =>
         {
-            if (combo.SelectedIndex < 0) return;
+            if (combo.SelectedIndex < 0 || combo.SelectedIndex >= ids.Count) return;
 
-            var id = OfficeThemes.All[combo.SelectedIndex];
-            _themes.Apply(id);
-            App.Settings.Set(App.ThemeSetting, id);
+            var id = ids[combo.SelectedIndex];
+            try
+            {
+                _themes.Apply(id);
+                App.Settings.Set(App.ThemeSetting, id);
+            }
+            catch (Mailbox.Theming.Tokens.ThemeResolutionException ex)
+            {
+                Mailbox.Core.Diagnostics.Log.Warn($"Theme \"{id}\" could not be applied: {ex.Message}");
+            }
         };
         return combo;
     }
