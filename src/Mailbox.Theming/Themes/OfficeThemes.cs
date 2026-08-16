@@ -313,6 +313,9 @@ public static class OfficeThemes
         t.Set(TokenKeys.Ribbon.TabUnderline, "#B3D6F2");
         t.Set(TokenKeys.Ribbon.TabText, "{palette.neutral.white}");
         t.Set(TokenKeys.Ribbon.TabTextSelected, "{palette.neutral.white}");
+        // Measured off the classic capture: the Quick Steps box is the panel's #BDBDBD inside a
+        // #858585 line.
+        t.Set(TokenKeys.Ribbon.GalleryBorder, "#858585");
 
         t.Set(TokenKeys.Nav.Background, "{palette.chrome.nav}");
         t.Set(TokenKeys.Nav.ItemText, "{palette.neutral.white}");
@@ -461,6 +464,8 @@ public static class OfficeThemes
         t.Set(TokenKeys.Ribbon.TabTextSelected, "#FFFFFF");
         t.Set(TokenKeys.Ribbon.GroupLabel, "{palette.neutral.secondary}");
         t.Set(TokenKeys.Ribbon.GroupSeparator, "{palette.neutral.quaternary}");
+        t.Set(TokenKeys.Ribbon.GalleryBackground, "{ribbon.background}");
+        t.Set(TokenKeys.Ribbon.GalleryBorder, "{palette.neutral.tertiary}");
 
         t.Set(TokenKeys.Nav.Background, "#141414");
         t.Set(TokenKeys.Nav.ItemText, "{palette.neutral.primary}");
@@ -558,6 +563,10 @@ public static class OfficeThemes
         t.Set(TokenKeys.Ribbon.Background, "{palette.neutral.white}");
         t.Set(TokenKeys.Ribbon.GroupLabel, "{palette.neutral.secondary}");
         t.Set(TokenKeys.Ribbon.GroupSeparator, "{palette.neutral.quaternary}");
+        // The gallery box is the panel's own fill inside a line a shade darker than the rules —
+        // the relation measured in Dark Gray, where the line is #858585 on a #BDBDBD panel.
+        t.Set(TokenKeys.Ribbon.GalleryBackground, "{ribbon.background}");
+        t.Set(TokenKeys.Ribbon.GalleryBorder, "{palette.neutral.tertiary}");
 
         t.Set(TokenKeys.Rail.Background, "{palette.neutral.lighter}");
         t.Set(TokenKeys.Rail.ItemText, "{palette.neutral.secondary}");

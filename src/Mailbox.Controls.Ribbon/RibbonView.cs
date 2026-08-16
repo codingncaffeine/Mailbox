@@ -264,6 +264,7 @@ public sealed class RibbonView : ContentControl
         _tabControls.Clear();
         _itemControls.Clear();
         _collapsedGroups.Clear();
+        _labelWidth = null;
 
         var root = new Grid
         {
@@ -1507,8 +1508,10 @@ public sealed class RibbonView : ContentControl
             Margin = new Thickness(2, 2, 2, 4),
             VerticalAlignment = VerticalAlignment.Top,
         };
-        Bind(box, Border.BorderBrushProperty, "border.subtle.brush");
-        Bind(box, Border.BackgroundProperty, "surface.sunken.brush");
+        // The gallery's own pair, not the content surface's: a gallery is chrome, and in Dark
+        // Gray the content pane is dark where the panel it sits in is light.
+        Bind(box, Border.BorderBrushProperty, "ribbon.gallery.border.brush");
+        Bind(box, Border.BackgroundProperty, "ribbon.gallery.background.brush");
         return box;
     }
 
@@ -1561,13 +1564,15 @@ public sealed class RibbonView : ContentControl
         stack.Children.Add(BuildIcon(
             command.Icon, RibbonMetrics.LargeIconSize, 24, command.NeutralIcon));
 
+        // Two lines at the reference's break, or one — decided here from measured widths rather
+        // than by wrapping inside a fixed width, which broke a long word in the middle and put a
+        // three-word label on three lines. The button is as wide as the wider line.
         var label = new TextBlock
         {
-            Text = command.Label,
-            TextWrapping = TextWrapping.Wrap,
+            Text = string.Join('\n', LargeButtonLabel.Lines(command.Label, LabelWidth)),
+            TextWrapping = TextWrapping.NoWrap,
             TextAlignment = TextAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Center,
-            MaxWidth = RibbonMetrics.LargeButtonMaxWidth - 8,
             LineHeight = 13,
         };
         Bind(label, TextBlock.ForegroundProperty, "text.primary.brush");
@@ -1589,6 +1594,31 @@ public sealed class RibbonView : ContentControl
 
         return WrapAsButton(stack, command, new Thickness(4, 4, 4, 2),
             RibbonMetrics.LargeButtonMinWidth, RibbonMetrics.ItemAreaHeight);
+    }
+
+    /// <summary>
+    /// The width a large button's label line will measure, in the ribbon's own label font, for
+    /// choosing where the label breaks. Resolved at each rebuild rather than once, because the
+    /// theme's resources are what name the font and the size, and a static would ask before they
+    /// are there. Falls back to the default face where there is no application to ask.
+    /// </summary>
+    private Func<string, double> LabelWidth => _labelWidth ??= MakeLabelWidth();
+    private Func<string, double>? _labelWidth;
+
+    private static Func<string, double> MakeLabelWidth()
+    {
+        var app = Application.Current;
+        var family = app is not null && app.TryFindResource("ui.fontfamily", out var f) && f is FontFamily found
+            ? found
+            : FontFamily.Default;
+        var size = app is not null && app.TryFindResource("type.ui.size.small.value", out var v) && v is double d
+            ? d
+            : 12;
+        var typeface = new Typeface(family);
+
+        return text => new FormattedText(
+            text, System.Globalization.CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
+            typeface, size, null).Width;
     }
 
     private Control BuildSmallButton(MailboxCommand command, RibbonItem item)

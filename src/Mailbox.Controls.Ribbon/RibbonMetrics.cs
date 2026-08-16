@@ -109,19 +109,15 @@ public static class RibbonMetrics
     public const double GroupMinWidth = 32;
 
     public const double LargeIconSize = 32;
-    public const double LargeButtonMinWidth = 46;
-
     /// <summary>
     /// Measured from the reference rather than chosen: scanning the classic ribbon's icon row
     /// puts Reply at 340.5, Reply All at 384.5 and Forward at 431.5, so the pitch is 44 to 47.
+    /// A large button is no wider than its label needs — and the label breaks into two lines
+    /// where the reference's does (<c>LargeButtonLabel</c> in Core), which is what keeps "New
+    /// Email" and "Reply All" at this pitch. There is no maximum: a wrap inside a fixed width
+    /// used to break "Signature" in the middle and put "Send/Receive All Folders" on three lines.
     /// </summary>
-    /// <remarks>
-    /// This is what makes a two-word label wrap. At 84 it did not, so "New Email" and "Reply
-    /// All" each rendered on one line and every large button was half again as wide as the
-    /// reference's — which pushed the whole Home tab past the window and had groups collapsing
-    /// at widths where the reference collapses nothing.
-    /// </remarks>
-    public const double LargeButtonMaxWidth = 54;
+    public const double LargeButtonMinWidth = 46;
 
     public const double SmallIconSize = 16;
     public const double SmallButtonHeight = 22;
