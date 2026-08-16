@@ -177,7 +177,7 @@ public partial class MainWindow
         {
             case QuickStepKind.NewMessage:
             {
-                var compose = new ComposeWindow(App.Commands, App.Accounts);
+                var compose = new ComposeWindow(App.Commands, App.Accounts, App.Contacts);
                 if (shell.CurrentAddress is { Length: > 0 } address && !App.MailOptions.AlwaysUseDefaultAccount) compose.SendFromAccount(address);
                 compose.ComposeFromMailto(new Mailbox.Core.Compose.MailtoLink(action.Values, [], [], action.Subject ?? string.Empty, string.Empty));
                 compose.Queued += (_, e) => OnQueued(e);
@@ -224,7 +224,7 @@ public partial class MainWindow
             ],
         };
 
-        var compose = new ComposeWindow(App.Commands, App.Accounts);
+        var compose = new ComposeWindow(App.Commands, App.Accounts, App.Contacts);
         if (shell.CurrentAddress is { Length: > 0 } address) compose.SendFromAccount(address);
         compose.Prefill(draft, ReplyKind.Forward);
         compose.Queued += (_, e) => OnQueued(e);

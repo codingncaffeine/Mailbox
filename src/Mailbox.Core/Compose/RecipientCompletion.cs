@@ -88,3 +88,27 @@ public static class RecipientCompletion
 
     private static bool IsSeparator(char c, bool commasSeparate) => c == ';' || (commasSeparate && c == ',');
 }
+
+/// <summary>
+/// One entry the Auto-Complete List offers, whichever list it came from: the addresses that have
+/// been written to before, and the address book.
+/// </summary>
+/// <remarks>
+/// A type of its own rather than the store's nickname record, because the two sources answer
+/// differently. A remembered address can be forgotten and a contact cannot — the ✕ takes an entry
+/// out of a cache, and taking somebody out of the address book is not what pressing it means. And
+/// a distribution list has no one address at all: what goes on the line is everybody in it, which
+/// is why what is inserted is carried separately from what is shown.
+/// </remarks>
+/// <param name="Key">What the entry dedupes by — an address, or a group's own id.</param>
+/// <param name="Insert">What goes on the recipient line when it is chosen.</param>
+/// <param name="Detail">What the row says on its right: "Contact", "3 members", or nothing.</param>
+public sealed record RecipientSuggestion(
+    string Key,
+    string DisplayName,
+    string Address,
+    string Insert,
+    string Detail = "",
+    int Weight = 0,
+    DateTimeOffset LastUsed = default,
+    bool CanForget = true);

@@ -10,7 +10,6 @@ using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.VisualTree;
 using Mailbox.Core.Compose;
-using Mailbox.Store;
 
 namespace Mailbox.App.Views;
 
@@ -33,7 +32,7 @@ namespace Mailbox.App.Views;
 internal sealed class RecipientAutocomplete
 {
     private readonly TextBox _box;
-    private readonly Func<string, IReadOnlyList<Nickname>> _suggest;
+    private readonly Func<string, IReadOnlyList<RecipientSuggestion>> _suggest;
     private readonly Action<string> _forget;
     private readonly Func<bool> _enabled;
     private readonly Func<bool> _commasSeparate;
@@ -45,7 +44,7 @@ internal sealed class RecipientAutocomplete
 
     private RecipientAutocomplete(
         TextBox box,
-        Func<string, IReadOnlyList<Nickname>> suggest,
+        Func<string, IReadOnlyList<RecipientSuggestion>> suggest,
         Action<string> forget,
         Func<bool> enabled,
         Func<bool> commasSeparate)
@@ -60,7 +59,7 @@ internal sealed class RecipientAutocomplete
         {
             Focusable = false,
             MaxHeight = 8 * 40,
-            ItemTemplate = new FuncDataTemplate<Nickname>((entry, _) => Row(entry)),
+            ItemTemplate = new FuncDataTemplate<RecipientSuggestion>((entry, _) => Row(entry)),
         };
         Bind(_list, TemplatedControl.BackgroundProperty, "surface.overlay.brush");
 
@@ -105,7 +104,7 @@ internal sealed class RecipientAutocomplete
     /// <param name="commasSeparate">Whether a comma ends an entry, from the same page.</param>
     public static RecipientAutocomplete Attach(
         TextBox box,
-        Func<string, IReadOnlyList<Nickname>> suggest,
+        Func<string, IReadOnlyList<RecipientSuggestion>> suggest,
         Action<string> forget,
         Func<bool> enabled,
         Func<bool> commasSeparate)
@@ -119,6 +118,15 @@ internal sealed class RecipientAutocomplete
 
     /// <summary>How many entries the last refresh offered. For the harness, which cannot see a popup.</summary>
     public int Offered { get; private set; }
+
+    /// <summary>
+    /// What it is offering, in order, as one line each — the only way to check a popup, which is
+    /// a separate surface and never appears in a capture.
+    /// </summary>
+    public IReadOnlyList<string> Describe()
+        => _list.ItemsSource is IEnumerable<RecipientSuggestion> entries
+            ? [.. entries.Select(e => $"{e.DisplayName}|{e.Address}|{e.Detail}|{e.Insert}")]
+            : [];
 
     /// <summary>Re-reads the line and shows, updates or hides the list accordingly.</summary>
     public void Refresh()
@@ -155,10 +163,10 @@ internal sealed class RecipientAutocomplete
     }
 
     /// <summary>Puts the chosen entry on the line in place of what was being typed.</summary>
-    private void Accept(Nickname entry)
+    private void Accept(RecipientSuggestion entry)
     {
         var (text, caret) = RecipientCompletion.Replace(
-            _box.Text, _box.CaretIndex, entry.Formatted, _commasSeparate());
+            _box.Text, _box.CaretIndex, entry.Insert, _commasSeparate());
 
         Close();
         _box.Text = text;
@@ -181,7 +189,7 @@ internal sealed class RecipientAutocomplete
                 break;
             case Key.Enter:
             case Key.Tab:
-                if (_list.SelectedItem is Nickname chosen)
+                if (_list.SelectedItem is RecipientSuggestion chosen)
                 {
                     Accept(chosen);
                     e.Handled = true;
@@ -207,7 +215,7 @@ internal sealed class RecipientAutocomplete
     /// One suggestion: the name in the ink the list uses, the address quieter beside it, and
     /// the ✕ that takes it out of the list for good.
     /// </summary>
-    private Control Row(Nickname entry)
+    private Control Row(RecipientSuggestion entry)
     {
         var grid = new Grid
         {
@@ -230,37 +238,54 @@ internal sealed class RecipientAutocomplete
             text.Children.Add(name);
         }
 
-        var address = new TextBlock
+        if (entry.Address.Length > 0)
         {
-            Text = entry.Address,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        Bind(address, TextBlock.ForegroundProperty,
-            entry.DisplayName.Length > 0 ? "text.secondary.brush" : "text.primary.brush");
-        text.Children.Add(address);
+            var address = new TextBlock
+            {
+                Text = entry.Address,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            Bind(address, TextBlock.ForegroundProperty,
+                entry.DisplayName.Length > 0 ? "text.secondary.brush" : "text.primary.brush");
+            text.Children.Add(address);
+        }
+
+        // What kind of entry it is, where that is worth saying: a contact, or how many people a
+        // distribution list will put on the line.
+        if (entry.Detail.Length > 0)
+        {
+            var detail = new TextBlock { Text = entry.Detail, VerticalAlignment = VerticalAlignment.Center, FontSize = 11 };
+            Bind(detail, TextBlock.ForegroundProperty, "text.secondary.brush");
+            text.Children.Add(detail);
+        }
 
         Grid.SetColumn(text, 0);
         grid.Children.Add(text);
 
-        var remove = new Button
+        // Only what came from the Auto-Complete List can be taken out of it: the ✕ empties a
+        // cache, and it is not how somebody is removed from the address book.
+        if (entry.CanForget)
         {
-            Content = "✕",
-            FontSize = 11,
-            Padding = new Thickness(6, 0),
-            VerticalAlignment = VerticalAlignment.Center,
-            Focusable = false,
-        };
-        remove.Classes.Add("plain");
-        Bind(remove, TemplatedControl.ForegroundProperty, "text.secondary.brush");
-        ToolTip.SetTip(remove, "Remove from the Auto-Complete List");
-        remove.Click += (_, e) =>
-        {
-            e.Handled = true;
-            _forget(entry.Address);
-            Refresh();
-        };
-        Grid.SetColumn(remove, 1);
-        grid.Children.Add(remove);
+            var remove = new Button
+            {
+                Content = "✕",
+                FontSize = 11,
+                Padding = new Thickness(6, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                Focusable = false,
+            };
+            remove.Classes.Add("plain");
+            Bind(remove, TemplatedControl.ForegroundProperty, "text.secondary.brush");
+            ToolTip.SetTip(remove, "Remove from the Auto-Complete List");
+            remove.Click += (_, e) =>
+            {
+                e.Handled = true;
+                _forget(entry.Address);
+                Refresh();
+            };
+            Grid.SetColumn(remove, 1);
+            grid.Children.Add(remove);
+        }
 
         // A click on the row itself is a choice. Handled on release rather than press, so
         // the ✕ — a button, which acts on release — is not pre-empted by the row under it.
