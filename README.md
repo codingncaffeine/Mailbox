@@ -100,6 +100,20 @@ Logs are written to `$XDG_STATE_HOME/mailbox/logs`, five runs kept.
 
 ---
 
+## Themes
+
+The four themes are complete token sets, and any of them can be the base of one of your own.
+A theme is a JSON file in `~/.config/mailbox/themes/` — an id, a name, the theme it starts from,
+and the tokens it changes, as few as it likes: three palette entries over `black` are a whole
+theme, because everything the base derives from them follows. Edits show while Mailbox is
+running; the theme picker in Options › General lists your files after the built-ins.
+
+```sh
+mailbox --export-theme darkgray my-theme.mailbox-theme.json   # a complete theme to start from
+```
+
+`assets/themes/` holds the four built-ins in that form, as the documentation of every token.
+
 ## Layout
 
 ```
@@ -112,7 +126,8 @@ src/Mailbox.App              Avalonia shell, Options, account view
 tests/Mailbox.Tests          247 tests, no UI thread required
 tools/generate-icons.py      regenerates the icon glyph map
 assets/                      bundled fonts and the application icon
-packaging/                   desktop entry, MIME associations, icon install
+packaging/                   desktop entry, MIME associations, icon install, the release build and its dependency test
+assets/themes/               the four built-in themes as theme files (generated: tools/export-themes.sh)
 ```
 
 Several components are written from scratch rather than taken off the shelf, because no

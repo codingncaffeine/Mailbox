@@ -440,11 +440,11 @@ public sealed partial class ShellViewModel : ObservableObject
         _catalog = catalog;
         _themes = themes;
         QuickAccessCustomization = quickAccess;
-        _selectedTheme = OfficeThemes.DisplayName(themes.ThemeId);
+        _selectedTheme = themes.DisplayName(themes.ThemeId);
         LayoutMode = layoutMode;
 
         Themes = new ObservableCollection<string>(
-            OfficeThemes.All.Select(OfficeThemes.DisplayName));
+            themes.Library.Ids.Select(themes.DisplayName));
 
         QuickAccess = new ObservableCollection<QuickAccessButton>(
             ToolbarButtons(catalog, quickAccess?.Commands ?? layout.QuickAccess));
@@ -1433,9 +1433,16 @@ public sealed partial class ShellViewModel : ObservableObject
         {
             if (!Set(ref _selectedTheme, value)) return;
 
-            var id = OfficeThemes.All.FirstOrDefault(
-                t => OfficeThemes.DisplayName(t) == value) ?? OfficeThemes.Colorful;
-            _themes.Apply(id);
+            var id = _themes.Library.Ids.FirstOrDefault(
+                t => _themes.DisplayName(t) == value) ?? OfficeThemes.Colorful;
+            try
+            {
+                _themes.Apply(id);
+            }
+            catch (Mailbox.Theming.Tokens.ThemeResolutionException ex)
+            {
+                Log.Warn($"Theme \"{id}\" could not be applied: {ex.Message}");
+            }
         }
     }
 

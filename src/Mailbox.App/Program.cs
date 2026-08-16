@@ -12,6 +12,13 @@ internal static class Program
         Log.Initialize(ThisAssembly.Version);
         CrashHandler.Install();
 
+        // `mailbox --export-theme <id> [path]` writes a built-in as a theme file and exits: the
+        // starting point for a theme of one's own, and the documentation of what one is made of.
+        if (args.Length >= 2 && string.Equals(args[0], "--export-theme", StringComparison.OrdinalIgnoreCase))
+        {
+            return ExportTheme(args[1], args.Length > 2 ? args[2] : null);
+        }
+
         // One instance per session: a second launch — a mailto: click while Mailbox is open —
         // hands its command line to the running one and exits, rather than starting a second
         // copy. Skipped for a capture run, where the fidelity harness deliberately starts many
@@ -51,6 +58,24 @@ internal static class Program
             // rather than printing a truncated trace to a terminal nobody was watching.
             Console.Error.WriteLine(Log.Crash("startup", ex));
             return 1;
+        }
+    }
+
+    private static int ExportTheme(string id, string? path)
+    {
+        try
+        {
+            var file = Mailbox.Theming.Files.ThemeLibrary.Export(id);
+            var target = path ?? file.Id + Mailbox.Theming.Files.ThemeFileFormat.Extension;
+            File.WriteAllText(target, Mailbox.Theming.Files.ThemeFileFormat.Write(file));
+            Console.WriteLine($"Wrote {target} ({file.Tokens.Count} tokens). Put it in {Mailbox.Theming.Files.ThemeLibrary.DefaultDirectory()} under a new id to make it yours.");
+            return 0;
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine(ex.Message);
+            Console.Error.WriteLine("Built-in themes: " + string.Join(", ", Mailbox.Theming.Themes.OfficeThemes.All));
+            return 2;
         }
     }
 
