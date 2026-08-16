@@ -309,6 +309,30 @@ public class ThemeServiceTests
     }
 
     /// <summary>
+    /// The pairs above are the checker's own list, so a theme file is held to what the built-ins
+    /// are held to — and every built-in passes the checker whole, extra pairs included.
+    /// </summary>
+    [Fact]
+    public void TheContrastCheckerPassesEveryBuiltInAndNamesWhatAFileGetsWrong()
+    {
+        foreach (var id in OfficeThemes.All)
+        {
+            var service = Service();
+            service.Apply(id);
+            Assert.Empty(ContrastAudit.Check(service.Tokens));
+        }
+
+        // A theme that paints its tab labels in the strip's own colour is told which pair.
+        var tokens = OfficeThemes.Build(OfficeThemes.Colorful);
+        tokens.Set(TokenKeys.Ribbon.TabText, "{ribbon.tabstrip.background}");
+        var findings = ContrastAudit.Check(tokens.Resolve());
+        var finding = Assert.Single(findings);
+        Assert.Equal(TokenKeys.Ribbon.TabText, finding.Ink);
+        Assert.Equal(1.0, finding.Ratio, 2);
+        Assert.Contains("1.00:1", finding.ToString());
+    }
+
+    /// <summary>
     /// A mark is not text, and the text threshold is the wrong standard for one.
     /// </summary>
     /// <remarks>
