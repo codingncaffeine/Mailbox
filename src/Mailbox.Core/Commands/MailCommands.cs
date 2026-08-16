@@ -23,6 +23,7 @@ public static class MailCommands
         Scope = ModuleScope.Mail,
         KeyTip = "N",
         DefaultGesture = "Ctrl+N",
+        AlsoGestures = ["Ctrl+Shift+M"],
     };
 
     public static readonly MailboxCommand NewItems = new()
@@ -416,6 +417,7 @@ public static class MailCommands
         Category = "Find",
         KeyTip = "SE",
         DefaultGesture = "Ctrl+E",
+        AlsoGestures = ["F3"],
     };
 
     public static readonly MailboxCommand AddressBook = new()
@@ -450,6 +452,7 @@ public static class MailCommands
         Category = "Send & Receive",
         KeyTip = "O",
         DefaultGesture = "F9",
+        AlsoGestures = ["Ctrl+M"],
     };
 
     public static readonly MailboxCommand WorkOffline = new()

@@ -160,7 +160,8 @@
                                        IsHitTestVisible="False"
                                        Foreground="{DynamicResource titlebar.search.text.brush}"
                                        FontSize="{DynamicResource type.ui.size.value}" />
-                            <TextBox Text="{Binding SearchText}"
+                            <TextBox Name="TitleSearchBox"
+                                     Text="{Binding SearchText}"
                                      Classes="titlebar-search"
                                      VerticalAlignment="Center"
                                      Padding="0"
@@ -493,7 +494,8 @@
                             Padding="6,5"
                             BorderThickness="0,0,0,1"
                             BorderBrush="{DynamicResource border.subtle.brush}">
-                        <TextBox Text="{Binding SearchText}"
+                        <TextBox Name="ListSearchBox"
+                                 Text="{Binding SearchText}"
                                  PlaceholderText="{Binding SearchPlaceholder}"
                                  FontSize="{DynamicResource type.ui.size.value}"
                                  Padding="6,3"

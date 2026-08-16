@@ -2269,6 +2269,23 @@ public partial class MainWindow : Window
     /// Puts the floating ribbon away when the click lands outside it and outside the tab strip
     /// that raised it. Tunnelled, so it runs before whatever was clicked handles the press.
     /// </summary>
+    /// <summary>
+    /// Ctrl+E and F3: the cursor goes to whichever search box the layout is showing — the title
+    /// bar's, or the one over the list in the Modern layout — with what is typed there selected,
+    /// as the reference selects it.
+    /// </summary>
+    private void FocusSearchBox(ShellViewModel shell)
+    {
+        var box = shell.ShowListSearch
+            ? this.FindControl<TextBox>("ListSearchBox")
+            : this.FindControl<TextBox>("TitleSearchBox");
+        if (box is null) return;
+
+        box.Focus();
+        box.SelectAll();
+        Log.Debug("Search box focused.");
+    }
+
     private void OnWindowPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (_floatingRibbon is null || e.Source is not Visual source) return;
@@ -2296,6 +2313,7 @@ public partial class MainWindow : Window
         if (id == MailCommands.SendReceiveAll.Id) { _ = SendReceiveAsync(shell); return; }
         if (id == MailCommands.WorkOffline.Id) { ToggleWorkOffline(shell); return; }
         if (id == ViewCommands.Refresh.Id) { shell.Refresh(); return; }
+        if (id == MailCommands.Search.Id) { FocusSearchBox(shell); return; }
         if (id == MailCommands.GoToInbox.Id) { shell.GoTo(FolderRole.Inbox); return; }
         if (id == MailCommands.GoToOutbox.Id) { shell.GoTo(FolderRole.Outbox); return; }
         if (id == MailCommands.PermanentDelete.Id) { _ = ConfirmPermanentDeleteAsync(shell, SelectedRows()); return; }

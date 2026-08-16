@@ -133,6 +133,11 @@ public sealed class KeyMap
     }
 
     /// <summary>The command a chord runs, or null when it runs none.</summary>
+    /// <remarks>
+    /// Every command's own shortcut — the reader's or the shipped one — is looked at first, and
+    /// only then the shipped "also" chords (<see cref="MailboxCommand.AlsoGestures"/>), so a chord
+    /// the reader has given to some command is that command's whatever else shipped with it.
+    /// </remarks>
     public CommandId? CommandFor(Chord chord)
     {
         ArgumentNullException.ThrowIfNull(chord);
@@ -141,7 +146,31 @@ public sealed class KeyMap
             if (GestureFor(command.Id) is { } gesture && gesture == chord) return command.Id;
         }
 
+        foreach (var command in _catalog.All)
+        {
+            foreach (var also in command.AlsoGestures)
+            {
+                if (Chord.Parse(also) is { } gesture && gesture == chord) return command.Id;
+            }
+        }
+
         return null;
+    }
+
+    /// <summary>
+    /// The shipped chords that also run a command, beyond <see cref="GestureFor"/> — those of
+    /// them the reader has not since given to something else.
+    /// </summary>
+    public IReadOnlyList<Chord> AlsoGesturesFor(CommandId id)
+    {
+        if (!_catalog.TryGet(id, out var command)) return [];
+        var chords = new List<Chord>();
+        foreach (var also in command.AlsoGestures)
+        {
+            if (Chord.Parse(also) is { } chord && CommandFor(chord) == id) chords.Add(chord);
+        }
+
+        return chords;
     }
 
     /// <summary>True when the command's shortcut is not the one it shipped with.</summary>
@@ -155,7 +184,11 @@ public sealed class KeyMap
     {
         ArgumentNullException.ThrowIfNull(chord);
         var previous = CommandFor(chord);
-        if (previous is { } other && other != id) SetOverride(other, string.Empty);
+
+        // Taken from the previous owner only when the chord was its own shortcut. One held as a
+        // shipped "also" chord needs nothing done — the new owner's own shortcut outranks it —
+        // and stripping the owner would take its real shortcut away instead.
+        if (previous is { } other && other != id && GestureFor(other) == chord) SetOverride(other, string.Empty);
         SetOverride(id, chord.ToString());
         Save();
         return previous is { } lost && lost != id ? lost : null;
