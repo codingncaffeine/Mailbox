@@ -57,13 +57,12 @@ public partial class MainWindow
     /// </summary>
     private void SwitchModule(ShellViewModel shell, MailboxModule module)
     {
-        if (module is not (MailboxModule.Mail or MailboxModule.Calendar))
+        if (module is not (MailboxModule.Mail or MailboxModule.Calendar or MailboxModule.People))
         {
-            // The remaining four are whole modules in Part IV, and a button that says which
+            // The remaining three are whole modules in Part IV, and a button that says which
             // phase brings it is better than one that does nothing.
             shell.StatusRight = module switch
             {
-                MailboxModule.People => "People arrives with Phase 12.",
                 MailboxModule.Tasks or MailboxModule.Notes or MailboxModule.Journal
                     => $"{module} arrives with Phase 13.",
                 _ => $"{module} is Phase 14, with the rest of the shell.",
@@ -74,16 +73,31 @@ public partial class MainWindow
         if (shell.Module == module) return;
         shell.Module = module;
 
-        if (module == MailboxModule.Calendar)
+        var host = this.FindControl<ContentControl>("ModuleHost")!;
+
+        switch (module)
         {
-            var workspace = EnsureCalendar(shell);
-            this.FindControl<ContentControl>("ModuleHost")!.Content = workspace;
-            _ribbon.Layout = CalendarRibbon();
-            shell.ModuleStatusLeft = workspace.Status;
-        }
-        else
-        {
-            _ribbon.Layout = App.MailRibbon();
+            case MailboxModule.Calendar:
+            {
+                var workspace = EnsureCalendar(shell);
+                host.Content = workspace;
+                _ribbon.Layout = CalendarRibbon();
+                shell.ModuleStatusLeft = workspace.Status;
+                break;
+            }
+
+            case MailboxModule.People:
+            {
+                var workspace = EnsurePeople(shell);
+                host.Content = workspace;
+                _ribbon.Layout = PeopleRibbon();
+                shell.ModuleStatusLeft = workspace.Status;
+                break;
+            }
+
+            default:
+                _ribbon.Layout = App.MailRibbon();
+                break;
         }
 
         Log.Info($"Module: {module}.");
@@ -1047,6 +1061,15 @@ public partial class MainWindow
                     "journal" => MailboxModule.Journal,
                     _ => MailboxModule.Mail,
                 });
+
+                if (shell.Module == MailboxModule.People)
+                {
+                    var people = EnsurePeople(shell);
+                    shell.ModuleStatusLeft = people.Status;
+                    Log.Info($"Harness: People showing {people.Status}.");
+                    ApplyPeoplePose(shell);
+                    return;
+                }
 
                 if (shell.Module != MailboxModule.Calendar) return;
                 var calendar = EnsureCalendar(shell);

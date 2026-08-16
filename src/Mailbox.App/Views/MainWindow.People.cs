@@ -1,0 +1,337 @@
+using System.Globalization;
+using Avalonia.Controls;
+using Avalonia.Threading;
+using Mailbox.App.ViewModels;
+using Mailbox.Contacts;
+using Mailbox.Core.Commands;
+using Mailbox.Core.Diagnostics;
+using Mailbox.Core.Ribbon;
+using Mailbox.Store.Pim;
+
+namespace Mailbox.App.Views;
+
+/// <summary>
+/// The People module in the shell: switching to it, the workspace it puts in the window, and the
+/// commands its ribbon presses.
+/// </summary>
+/// <remarks>
+/// A partial of the shell for the reason the calendar's half is: it needs the window's ribbon,
+/// its dialogs and its status line.
+/// </remarks>
+public partial class MainWindow
+{
+    private PeopleWorkspace? _people;
+
+    /// <summary>The People ribbon: the shipped layout with the reader's edits over it.</summary>
+    private static RibbonLayout PeopleRibbon() => App.RibbonEdits.Apply(DefaultRibbonLayouts.People);
+
+    private PeopleWorkspace EnsurePeople(ShellViewModel shell)
+    {
+        if (_people is not null) return _people;
+
+        var workspace = new PeopleWorkspace(App.Contacts, App.PeopleOptions)
+        {
+            IsNavVisible = shell.NavVisible,
+        };
+
+        workspace.Changed += (_, _) => shell.ModuleStatusLeft = workspace.Status;
+        workspace.ContactOpened += (_, row) => _ = OpenContactAsync(shell, row);
+        workspace.NewRequested += (_, _) => _ = NewContactAsync(shell);
+        _people = workspace;
+        return workspace;
+    }
+
+    /// <summary>
+    /// The People module's commands. Returns false for anything it does not own, so the shell's
+    /// own list carries on.
+    /// </summary>
+    private bool RunPeopleCommand(ShellViewModel shell, CommandId id)
+    {
+        if (id == PeopleCommands.NewContact.Id)
+        {
+            SwitchModule(shell, MailboxModule.People);
+            _ = NewContactAsync(shell);
+            return true;
+        }
+
+        if (id == PeopleCommands.NewContactGroup.Id)
+        {
+            SwitchModule(shell, MailboxModule.People);
+            _ = NewContactAsync(shell, group: true);
+            return true;
+        }
+
+        if (id == PeopleCommands.OpenContact.Id) { OpenSelectedContact(shell); return true; }
+        if (id == PeopleCommands.Delete.Id) { _ = DeleteSelectedContactAsync(shell); return true; }
+        if (id == PeopleCommands.EmailContact.Id) { EmailSelectedContact(shell); return true; }
+        if (id == PeopleCommands.NewAddressBook.Id) { _ = NewAddressBookAsync(shell); return true; }
+        if (id == PeopleCommands.DeleteAddressBook.Id) { _ = DeleteAddressBookAsync(shell); return true; }
+
+        // The views, the tags and the rest are placed and say what they wait for, as the
+        // calendar's unfinished buttons do (§20).
+        if (WaitingPeopleCommand(id) is { } waiting)
+        {
+            SwitchModule(shell, MailboxModule.People);
+            shell.StatusRight = waiting;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>What a People button that is placed but not yet live says when pressed.</summary>
+    private static string? WaitingPeopleCommand(CommandId id)
+    {
+        if (id == PeopleCommands.BusinessCardView.Id || id == PeopleCommands.CardView.Id
+            || id == PeopleCommands.PhoneView.Id || id == PeopleCommands.ListView.Id)
+        {
+            return "The People list is the People view; the card, phone and list arrangements come with the module's other views.";
+        }
+
+        if (id == PeopleCommands.PeopleView.Id) return "This is the People view.";
+        if (id == PeopleCommands.MeetContact.Id) return "Inviting a contact to a meeting arrives with the Scheduling Assistant.";
+        if (id == PeopleCommands.MoreCommunicate.Id) return "The other ways to reach somebody arrive with the module's actions.";
+        if (id == PeopleCommands.MoveTo.Id) return "Moving a contact between address books arrives with the module's actions.";
+        if (id == PeopleCommands.MailMerge.Id) return "Mail merge arrives with Phase 16.";
+        if (id == PeopleCommands.ForwardContact.Id) return "Forwarding a contact as a vCard arrives with the module's actions.";
+        if (id == PeopleCommands.ShareContacts.Id) return "Sharing an address book wants CardDAV publishing, which is still to come.";
+        if (id == PeopleCommands.OpenSharedContacts.Id) return "A shared address book is a CardDAV account — add one in Account Settings.";
+        if (id == PeopleCommands.Categorize.Id || id == PeopleCommands.FollowUp.Id || id == PeopleCommands.Private.Id)
+        {
+            return "Tagging a contact arrives with the shared categories.";
+        }
+
+        if (id == PeopleCommands.NewItems.Id) return "New Items arrives with the rest of the modules.";
+        return null;
+    }
+
+    // ---- Contacts -------------------------------------------------------------------------------
+
+    /// <summary>Makes a contact or a group, opens it for editing, and writes it if it is kept.</summary>
+    private async Task NewContactAsync(ShellViewModel shell, bool group = false)
+    {
+        var people = EnsurePeople(shell);
+        var book = App.Contacts.Default();
+
+        var fresh = new Contact
+        {
+            Uid = Contact.NewUid(),
+            IsGroup = group,
+        };
+
+        var window = new ContactWindow(App.Commands, fresh, App.Contacts.AddressBooks(), book.Id);
+        await window.ShowDialog(this);
+        if (window.Result is not { Deleted: false } result) return;
+
+        var written = App.Contacts.Save(result.Contact, result.CollectionId);
+        App.PimSync.QueuePut(written);
+        people.Reload();
+        people.Select(written.Id);
+
+        shell.StatusRight = $"“{result.Contact.Named()}” added to {App.Contacts.AddressBooks().First(b => b.Id == result.CollectionId).DisplayName}.";
+        Log.Info($"People: contact {written.Id} added — {result.Contact.Named()}.");
+        shell.ModuleStatusLeft = people.Status;
+    }
+
+    /// <summary>Opens somebody, and writes what comes back.</summary>
+    private async Task OpenContactAsync(ShellViewModel shell, ContactRow row)
+    {
+        var people = EnsurePeople(shell);
+        if (App.Contacts.Repository.Item(row.Id) is not { } stored)
+        {
+            shell.StatusRight = "That contact is no longer in the address book.";
+            people.Reload();
+            return;
+        }
+
+        var contact = App.Contacts.Full(row.Id) ?? row.Contact;
+        var window = new ContactWindow(App.Commands, contact, App.Contacts.AddressBooks(), row.CollectionId);
+        await window.ShowDialog(this);
+        if (window.Result is not { } result) return;
+
+        if (result.Deleted)
+        {
+            App.PimSync.Remove(stored);
+            shell.StatusRight = $"“{contact.Named()}” deleted.";
+            Log.Info($"People: contact {row.Id} deleted.");
+        }
+        else
+        {
+            var written = App.Contacts.Save(result.Contact, result.CollectionId, stored);
+            App.PimSync.QueuePut(written);
+            shell.StatusRight = $"“{result.Contact.Named()}” saved.";
+            Log.Info($"People: contact {written.Id} saved.");
+        }
+
+        people.Reload();
+        shell.ModuleStatusLeft = people.Status;
+    }
+
+    private void OpenSelectedContact(ShellViewModel shell)
+    {
+        var people = EnsurePeople(shell);
+        if (people.Selected is not { } row)
+        {
+            shell.StatusRight = "Select a contact first.";
+            return;
+        }
+
+        _ = OpenContactAsync(shell, row);
+    }
+
+    private async Task DeleteSelectedContactAsync(ShellViewModel shell)
+    {
+        var people = EnsurePeople(shell);
+        if (people.Selected is not { } row)
+        {
+            shell.StatusRight = "Select a contact first.";
+            return;
+        }
+
+        if (App.Contacts.Repository.Item(row.Id) is not { } stored) return;
+
+        if (!await Confirm.AskAsync(
+                this, "Delete Contact",
+                $"Are you sure you want to delete “{row.Named()}”?",
+                "Delete"))
+        {
+            return;
+        }
+
+        App.PimSync.Remove(stored);
+        people.Reload();
+        shell.StatusRight = $"“{row.Named()}” deleted.";
+        shell.ModuleStatusLeft = people.Status;
+        Log.Info($"People: contact {row.Id} deleted.");
+    }
+
+    /// <summary>Starts a message to whoever is picked — a group goes to everybody in it.</summary>
+    private void EmailSelectedContact(ShellViewModel shell)
+    {
+        var people = EnsurePeople(shell);
+        if (people.Selected is not { } row)
+        {
+            shell.StatusRight = "Select a contact first.";
+            return;
+        }
+
+        var contact = App.Contacts.Full(row.Id) ?? row.Contact;
+        var addresses = contact.IsGroup
+            ? contact.Members.Select(Recipient).Where(a => a.Length > 0).ToList()
+            : contact.PrimaryEmail is { Length: > 0 } one ? [one] : new List<string>();
+
+        if (addresses.Count == 0)
+        {
+            shell.StatusRight = $"“{contact.Named()}” has no e-mail address.";
+            return;
+        }
+
+        NewMessage(new Mailbox.Core.Compose.MailtoLink(addresses, [], [], string.Empty, string.Empty));
+        Log.Info($"People: composing to {addresses.Count} address(es) from contact {row.Id}.");
+
+        string Recipient(GroupMember member)
+        {
+            if (member.Address is { Length: > 0 }) return member.Name is { Length: > 0 } named ? $"{named} <{member.Address}>" : member.Address;
+
+            // A member kept by UID: the address comes from the contact it points at.
+            var pointed = App.Contacts.Rows().FirstOrDefault(r => r.Contact.Uid == member.Uid);
+            return pointed?.Contact.PrimaryEmail ?? string.Empty;
+        }
+    }
+
+    // ---- Address books --------------------------------------------------------------------------
+
+    private async Task NewAddressBookAsync(ShellViewModel shell)
+    {
+        var name = await Prompt.AskAsync(this, "Create New Folder", "Name:", "Contacts");
+        if (string.IsNullOrWhiteSpace(name)) return;
+
+        var book = App.Contacts.Repository.AddCollection(CollectionKind.Contacts, name.Trim());
+        shell.StatusRight = $"“{book.DisplayName}” added.";
+        Log.Info($"People: address book {book.Id} added.");
+        EnsurePeople(shell).Reload();
+    }
+
+    private async Task DeleteAddressBookAsync(ShellViewModel shell)
+    {
+        var books = App.Contacts.AddressBooks();
+        if (books.Count <= 1)
+        {
+            shell.StatusRight = "The last address book cannot be deleted.";
+            return;
+        }
+
+        var people = EnsurePeople(shell);
+        var chosen = people.Selected?.CollectionId ?? books[^1].Id;
+        var book = books.First(b => b.Id == chosen);
+
+        if (!await Confirm.AskAsync(
+                this, "Delete Folder",
+                $"Are you sure you want to delete “{book.DisplayName}” and everything in it?",
+                "Delete"))
+        {
+            return;
+        }
+
+        App.Contacts.Repository.RemoveCollection(book.Id);
+        shell.StatusRight = $"“{book.DisplayName}” deleted.";
+        people.Reload();
+        shell.ModuleStatusLeft = people.Status;
+    }
+
+    // ---- The harness ----------------------------------------------------------------------------
+
+    /// <summary>
+    /// Poses the People module's own windows, since the harness cannot click.
+    /// </summary>
+    internal async Task ShowPeoplePeekAsync(string which)
+    {
+        if (DataContext is not ShellViewModel shell) return;
+        SwitchModule(shell, MailboxModule.People);
+        var people = EnsurePeople(shell);
+
+        switch (which)
+        {
+            case "contactgroup":
+                await NewContactAsync(shell, group: true);
+                return;
+
+            case "contact":
+            default:
+            {
+                // MAILBOX_SELECT names who, as it does everywhere else; the pose that acts on it
+                // is posted at the same priority as this one, so it is read here rather than
+                // waited for.
+                var wanted = Environment.GetEnvironmentVariable("MAILBOX_SELECT");
+                var row = people.Selected
+                          ?? (wanted is { Length: > 0 }
+                              ? people.Rows.FirstOrDefault(r => r.Named().Contains(wanted, StringComparison.OrdinalIgnoreCase))
+                              : null)
+                          ?? people.Rows.FirstOrDefault();
+
+                if (row is null) await NewContactAsync(shell);
+                else await OpenContactAsync(shell, row);
+                return;
+            }
+        }
+    }
+
+    /// <summary>Puts the People module on screen for a capture, with somebody picked.</summary>
+    private void ApplyPeoplePose(ShellViewModel shell)
+    {
+        if (Environment.GetEnvironmentVariable("MAILBOX_SELECT") is not { Length: > 0 } wanted) return;
+
+        Dispatcher.UIThread.Post(
+            () =>
+            {
+                if (shell.Module != MailboxModule.People) return;
+                var people = EnsurePeople(shell);
+                var row = people.Rows.FirstOrDefault(r => r.Named().Contains(wanted, StringComparison.OrdinalIgnoreCase));
+                if (row is null) return;
+
+                people.Select(row.Id);
+                Log.Info($"Harness: People showing “{row.Named()}” of {people.Rows.Count.ToString(CultureInfo.InvariantCulture)}.");
+            },
+            DispatcherPriority.Background);
+    }
+}

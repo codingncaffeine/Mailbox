@@ -1,10 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    The calendar views (§7.4). Avalonia has no calendar grid and the reference's is specific, so
-    the month grid, the day/week time grid, the schedule timeline and the date navigator are all
-    drawn here — geometry measured off the reference captures, every colour from a calendar.*
-    token. No dependency on the application, so a view can be exercised on its own.
+    The People module's views (§9). Drawn rather than composed for the reason the calendar's are:
+    an address book is a long list of short rows, and a control per row is a control per row.
+    What is here is what the reference draws and Avalonia has no equivalent of — the contact list
+    with the alphabet index down its side, and the card that shows one person.
   -->
 
   <ItemGroup>
@@ -16,9 +16,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Mailbox.Contacts\Mailbox.Contacts.csproj" />
     <ProjectReference Include="..\Mailbox.Controls.Common\Mailbox.Controls.Common.csproj" />
     <ProjectReference Include="..\Mailbox.Core\Mailbox.Core.csproj" />
-    <ProjectReference Include="..\Mailbox.Scheduling\Mailbox.Scheduling.csproj" />
     <ProjectReference Include="..\Mailbox.Theming\Mailbox.Theming.csproj" />
   </ItemGroup>
 

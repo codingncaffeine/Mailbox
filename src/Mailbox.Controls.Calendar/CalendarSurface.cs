@@ -1,46 +1,26 @@
-using System.Globalization;
 using Avalonia;
-using Avalonia.Controls;
 using Avalonia.Media;
-using Mailbox.Theming.Fonts;
+using Mailbox.Controls.Common;
 using Mailbox.Theming.Tokens;
 
 namespace Mailbox.Controls.Calendar;
 
 /// <summary>
-/// What every calendar view shares: the resolved palette, the UI face, and the text and chip
-/// drawing the reference's views are made of.
+/// What every calendar view shares on top of a drawn surface: the resolved calendar palette and
+/// the chip drawing the reference's views are made of.
 /// </summary>
-/// <remarks>
-/// These views are drawn rather than composed, for the reason §7.4 gives — a month grid is a
-/// thousand rectangles and seven hundred pieces of text, and a control per cell would be a
-/// control per cell. Drawing also puts every hairline on a whole device pixel, which is the
-/// difference between a grid and a smear.
-/// </remarks>
-public abstract class CalendarSurface : Control
+public abstract class CalendarSurface : DrawnSurface
 {
     private CalendarPalette? _palette;
-    private Typeface? _typeface;
-    private Typeface? _bold;
-    private Typeface? _semibold;
-
-    protected CalendarSurface()
-    {
-        ClipToBounds = true;
-        // A theme change rewrites the resource dictionary rather than the tree, so the cached
-        // palette is the one thing that has to be thrown away for the view to follow it.
-        ResourcesChanged += (_, _) =>
-        {
-            _palette = null;
-            _typeface = null;
-            _bold = null;
-            _semibold = null;
-            InvalidateVisual();
-        };
-    }
 
     /// <summary>The calendar tokens, resolved once and kept until the theme moves.</summary>
     protected CalendarPalette Palette => _palette ??= CalendarPalette.From(this);
+
+    /// <summary>
+    /// A theme change rewrites the resource dictionary rather than the tree, so the cached
+    /// palette is what has to be thrown away for the view to follow it.
+    /// </summary>
+    protected override void OnPaletteChanged() => _palette = null;
 
     /// <summary>
     /// An appointment dragged somewhere else, or an edge of one dragged to a new length.
@@ -53,127 +33,6 @@ public abstract class CalendarSurface : Control
     public event EventHandler<EntryMove>? EntryMoved;
 
     protected void RaiseMoved(EntryMove move) => EntryMoved?.Invoke(this, move);
-
-    protected Typeface Face => _typeface ??= new Typeface(UiFamily());
-    protected Typeface BoldFace => _bold ??= new Typeface(UiFamily(), FontStyle.Normal, FontWeight.Bold);
-    protected Typeface SemiBoldFace => _semibold ??= new Typeface(UiFamily(), FontStyle.Normal, FontWeight.SemiBold);
-
-    /// <summary>The culture dates and times are written in.</summary>
-    protected static CultureInfo Culture => CultureInfo.CurrentCulture;
-
-    private FontFamily UiFamily()
-    {
-        // Through the collection key the bridge publishes: a bundled family asked for by its
-        // bare name is not found, and the view would silently draw in the fallback face.
-        if (this.TryFindResource("ui.fontfamily", out var found) && found is FontFamily family) return family;
-        return BundledFonts.FamilyFor("Segoe UI");
-    }
-
-    // ---- Text ------------------------------------------------------------------------------
-
-    protected FormattedText Ink(string text, double size, Color colour, Typeface? face = null)
-        => new(text, Culture, FlowDirection.LeftToRight, face ?? Face, size, Palette.Brush(colour));
-
-    /// <summary>
-    /// Draws a run so its baseline lands on <paramref name="baseline"/>.
-    /// </summary>
-    /// <remarks>
-    /// Baselines rather than tops, because a top is a different distance from the ink in every
-    /// face and size, and the reference's own measurements are of ink. Every number in these
-    /// views that positions text is a baseline read off a capture.
-    /// </remarks>
-    protected static void DrawAt(DrawingContext context, FormattedText text, double left, double baseline)
-        => context.DrawText(text, new Point(left, baseline - text.Baseline));
-
-    /// <summary>
-    /// Breaks a line to a width the way the reference's chips do: on spaces where it can, inside
-    /// a word where it must — a long URL is split mid-token rather than overflowing — and the
-    /// last line it is allowed ends in an ellipsis when there is more.
-    /// </summary>
-    protected IReadOnlyList<string> Wrap(string text, double width, int maxLines, double size, Typeface? face = null)
-    {
-        if (string.IsNullOrEmpty(text) || maxLines <= 0 || width <= 0) return [];
-
-        var lines = new List<string>();
-        var rest = text.Trim();
-
-        while (rest.Length > 0 && lines.Count < maxLines)
-        {
-            var last = lines.Count == maxLines - 1;
-            if (Measure(rest, size, face) <= width)
-            {
-                lines.Add(rest);
-                break;
-            }
-
-            var take = LongestFitting(rest, width, size, face, last);
-            if (take <= 0) take = 1;
-            var line = rest[..take].TrimEnd();
-            if (last)
-            {
-                // Room for the ellipsis is taken out of the line, not added to it.
-                while (line.Length > 0 && Measure(line + "…", size, face) > width) line = line[..^1].TrimEnd();
-                lines.Add(line + "…");
-                break;
-            }
-
-            lines.Add(line);
-            rest = rest[take..].TrimStart();
-        }
-
-        return lines;
-    }
-
-    /// <summary>How many characters of the text fit, preferring the last space inside them.</summary>
-    private int LongestFitting(string text, double width, double size, Typeface? face, bool allowMidWord)
-    {
-        var lo = 1;
-        var hi = text.Length;
-        while (lo < hi)
-        {
-            var mid = (lo + hi + 1) / 2;
-            if (Measure(text[..mid], size, face) <= width) lo = mid;
-            else hi = mid - 1;
-        }
-
-        if (allowMidWord) return lo;
-
-        // Back up to the last space, unless the first word is itself longer than the line —
-        // then the break has to fall inside it, which is what the reference does to a URL.
-        var space = text.LastIndexOf(' ', Math.Min(lo, text.Length - 1));
-        return space > 0 ? space : lo;
-    }
-
-    private readonly Dictionary<(string Text, double Size, int Weight), double> _widths = [];
-
-    protected double Measure(string text, double size, Typeface? face = null)
-    {
-        var typeface = face ?? Face;
-        var key = (text, size, (int)typeface.Weight);
-        if (_widths.TryGetValue(key, out var cached)) return cached;
-        var width = new FormattedText(text, Culture, FlowDirection.LeftToRight, typeface, size, null).Width;
-        // Wrapping measures a prefix per binary-search step, so the cache is what keeps a full
-        // month's chips to one pass; it is bounded because a long day's text is unbounded.
-        if (_widths.Count > 8192) _widths.Clear();
-        _widths[key] = width;
-        return width;
-    }
-
-    // ---- Rules -----------------------------------------------------------------------------
-
-    /// <summary>
-    /// A hairline on a whole device pixel.
-    /// </summary>
-    /// <remarks>
-    /// Filled rather than stroked. A stroke straddles the coordinate it is given, so a 1px line
-    /// at an integer lands half in each of two pixels and renders as two grey ones; the grid's
-    /// crispness is the whole reason these views are drawn.
-    /// </remarks>
-    protected void Line(DrawingContext context, double x, double y, double width, double height, Color colour)
-        => context.FillRectangle(Palette.Brush(colour), new Rect(Math.Round(x), Math.Round(y), Math.Max(1, Math.Round(width)), Math.Max(1, Math.Round(height))));
-
-    protected void Fill(DrawingContext context, Rect rect, Color colour)
-        => context.FillRectangle(Palette.Brush(colour), rect);
 
     // ---- Chips -----------------------------------------------------------------------------
 

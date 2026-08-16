@@ -127,6 +127,20 @@ WANTED = {
     "daily-task-list": "task_list_square_ltr",
     "room-list": "conference_room",
 
+    # ---- People module (Phase 12) -------------------------------------------------------
+    "contact-group": "people_team",
+    "open-item": "open",
+    "new-email": "mail_add",
+    "business-card": "contact_card_group",
+    "phone": "phone",
+    "list-view": "list",
+    "move-to": "folder_arrow_right",
+    "mail-merge": "mail_template",
+    "open-folder": "folder_open",
+    "new-folder": "folder_add",
+    "delete-folder": "folder_prohibited",
+    "follow-up": "flag",
+
     # ---- Compose window: Clipboard and Basic Text -------------------------------------
     "paste": "clipboard_paste",
     "cut": "cut",

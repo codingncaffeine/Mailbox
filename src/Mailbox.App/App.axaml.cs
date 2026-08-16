@@ -73,6 +73,12 @@ public partial class App : Application
     /// <summary>The Calendar page's settings, as the calendar views read them.</summary>
     public static CalendarOptions CalendarOptions { get; private set; } = null!;
 
+    /// <summary>The People page's settings, as the People module reads them.</summary>
+    public static PeopleOptions PeopleOptions { get; private set; } = null!;
+
+    /// <summary>The address books, and what reads and writes a contact in them.</summary>
+    public static Mailbox.Contacts.ContactBook Contacts { get; private set; } = null!;
+
     /// <summary>Options › Advanced › AutoArchive Settings…, as the archiver reads them.</summary>
     public static Mailbox.Core.Archive.AutoArchiveOptions AutoArchive { get; private set; } = null!;
 
@@ -422,6 +428,8 @@ public partial class App : Application
         PimSync = new PimSyncService(Pim, Secrets);
         MailOptions = new MailOptions(Settings);
         CalendarOptions = new CalendarOptions(Settings);
+        PeopleOptions = new PeopleOptions(Settings);
+        Contacts = new Mailbox.Contacts.ContactBook(Pim);
         AutoArchive = new Mailbox.Core.Archive.AutoArchiveOptions(Settings);
         QuickClick = new QuickClickSettings(Settings);
 
@@ -476,6 +484,7 @@ public partial class App : Application
         Commands.RegisterRange(ComposeCommands.All);
         Commands.RegisterRange(CalendarCommands.All);
         Commands.RegisterRange(AppointmentCommands.All);
+        Commands.RegisterRange(PeopleCommands.All);
         Keys = new Mailbox.Core.Keyboard.KeyMap(Settings, Commands);
         Mailbox.Controls.Ribbon.RibbonView.GestureLookup = command => Keys.GestureFor(command.Id)?.Display;
 

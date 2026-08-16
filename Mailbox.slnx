@@ -3,6 +3,8 @@
     <Project Path="src/Mailbox.App/Mailbox.App.csproj" />
     <Project Path="src/Mailbox.Contacts/Mailbox.Contacts.csproj" />
     <Project Path="src/Mailbox.Controls.Calendar/Mailbox.Controls.Calendar.csproj" />
+    <Project Path="src/Mailbox.Controls.Common/Mailbox.Controls.Common.csproj" />
+    <Project Path="src/Mailbox.Controls.People/Mailbox.Controls.People.csproj" />
     <Project Path="src/Mailbox.Controls.Ribbon/Mailbox.Controls.Ribbon.csproj" />
     <Project Path="src/Mailbox.Core/Mailbox.Core.csproj" />
     <Project Path="src/Mailbox.Dav/Mailbox.Dav.csproj" />

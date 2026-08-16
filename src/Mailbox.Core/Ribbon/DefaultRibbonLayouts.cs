@@ -380,10 +380,17 @@ public static class DefaultRibbonLayouts
     /// </summary>
     public static RibbonLayout Calendar { get; } = CalendarRibbonLayout.Build();
 
+    /// <summary>
+    /// The People module's own tab collection. Transcription notes are on
+    /// <see cref="PeopleRibbonLayout"/> — including which half of it has a capture.
+    /// </summary>
+    public static RibbonLayout People { get; } = PeopleRibbonLayout.Build();
+
     public static RibbonLayout For(MailboxModule module) => module switch
     {
         MailboxModule.Mail => Mail,
         MailboxModule.Calendar => Calendar,
+        MailboxModule.People => People,
         _ => new RibbonLayout { Module = module, Tabs = [] },
     };
 }
