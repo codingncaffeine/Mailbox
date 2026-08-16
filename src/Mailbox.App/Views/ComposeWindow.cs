@@ -92,6 +92,10 @@ public sealed class ComposeWindow : Window
         };
         _ribbon.BackstageRequested += (_, _) => ShowBackstage();
 
+        // The bar's "…" and what it would list, for the harness — a flyout is a separate
+        // surface and never appears in a capture.
+        OverflowMenu = () => _ribbon.OpenOverflowMenu();
+
         // "Show tabs only" collapses the ribbon to its strip and floats the body over the
         // surface on a tab click; without a host for that body the tabs did nothing here, and
         // with the chevron gone there was no menu to undo the choice from.
@@ -137,6 +141,9 @@ public sealed class ComposeWindow : Window
     public void SendFromAccount(string address) => _surface.SendFromAccount(address);
 
     /// <summary>Selects a ribbon tab by id. Used by the fidelity harness, which cannot click.</summary>
+    /// <summary>Opens the bar's "…" and hands back what it holds. Harness only.</summary>
+    public Func<IReadOnlyList<string>> OverflowMenu { get; private set; } = () => [];
+
     public void SelectTab(string tabId)
     {
         // "file" is not a tab with a body — it opens the Backstage over the window.

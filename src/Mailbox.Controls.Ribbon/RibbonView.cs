@@ -109,6 +109,29 @@ public sealed class RibbonView : ContentControl
     /// </summary>
     public void OpenDisplayOptions() => _displayOptions?.Flyout?.ShowAt(_displayOptions);
 
+    /// <summary>
+    /// The bar's "…" and its menu, for the harness: a flyout cannot be photographed, so what it
+    /// would list is read back instead.
+    /// </summary>
+    private Button? _barOverflow;
+
+    /// <summary>Opens the bar's "…" menu and returns what it holds, in order.</summary>
+    public IReadOnlyList<string> OpenOverflowMenu()
+    {
+        if (_barOverflow?.Flyout is not MenuFlyout flyout) return [];
+
+        flyout.ShowAt(_barOverflow);
+
+        return [.. flyout.Items
+            .OfType<object>()
+            .Select(item => item switch
+            {
+                MenuItem menu => menu.Header as string ?? "?",
+                Separator => "—",
+                _ => item.GetType().Name,
+            })];
+    }
+
     public event EventHandler<RibbonCommandEventArgs>? CommandInvoked;
 
     /// <summary>Raised when the File tab is clicked. The shell opens the Backstage.</summary>
@@ -638,6 +661,7 @@ public sealed class RibbonView : ContentControl
         var overflowMenu = new MenuFlyout { Placement = PlacementMode.BottomEdgeAlignedRight };
         overflowMenu.Opening += (_, _) => FillOverflowMenu(overflowMenu, tab, strip.Overflowed);
         overflow.Flyout = overflowMenu;
+        _barOverflow = overflow;
         tail.Children.Add(overflow);
 
         // The panel takes what the column gives it and decides what to show; nothing scrolls
@@ -1015,74 +1039,43 @@ public sealed class RibbonView : ContentControl
     /// off comes first and in bar order, so a reader who saw a button disappear finds it where
     /// they would look; a rule separates it from the rest.
     /// </remarks>
+    /// <summary>
+    /// Fills the bar's "…" from <see cref="OverflowMenu.Plan"/> — what the bar pushed off at
+    /// this width, then the rest of the tab under its groups. The plan decides what belongs
+    /// there; this only draws it.
+    /// </summary>
     private void FillOverflowMenu(MenuFlyout flyout, RibbonTab tab, IReadOnlyList<CommandId> pushedOff)
     {
         flyout.Items.Clear();
 
-        foreach (var id in pushedOff)
+        var barItems = _layout.SimplifiedRows.TryGetValue(tab.Id, out var row) ? row : [];
+        var plan = OverflowMenu.Plan(
+            tab, barItems, pushedOff, [.. _catalog.BeyondDefaultLayout], id => _catalog.TryGet(id, out _));
+
+        foreach (var entry in plan)
         {
-            if (!_catalog.TryGet(id, out var command)) continue;
-            flyout.Items.Add(MenuItemFor(command));
+            if (entry.IsRule)
+            {
+                flyout.Items.Add(new Separator());
+            }
+            else if (entry.IsSubmenu)
+            {
+                var submenu = new MenuItem { Header = entry.Label };
+                foreach (var id in entry.Children) submenu.Items.Add(MenuItemFor(_catalog.Get(id)));
+                flyout.Items.Add(submenu);
+            }
+            else if (entry.Command is { } command)
+            {
+                flyout.Items.Add(MenuItemFor(_catalog.Get(command)));
+            }
         }
 
-        if (pushedOff.Count > 0) flyout.Items.Add(new Separator());
-
-        var rest = BuildOverflowMenu(tab);
-        if (rest.ItemsSource is IEnumerable<object> items)
+        if (flyout.Items.Count == 0)
         {
-            foreach (var item in items) flyout.Items.Add(item);
+            flyout.Items.Add(new MenuItem { Header = OverflowMenu.EmptyLabel, IsEnabled = false });
         }
     }
 
-    /// <summary>
-    /// The commands this tab owns that its row has no room for, plus everything the default
-    /// layout leaves out entirely. Empty is a real answer — a tab whose row already shows
-    /// everything gets a disabled note rather than a menu that opens onto nothing.
-    /// </summary>
-    private MenuFlyout BuildOverflowMenu(RibbonTab tab)
-    {
-        var shown = (_layout.SimplifiedRows.TryGetValue(tab.Id, out var row) ? row : [])
-            .Where(i => i.Kind != RibbonItemKind.Separator)
-            .Select(i => i.Command)
-            .ToHashSet();
-
-        var hidden = tab.Groups
-            .SelectMany(g => g.Items)
-            .Where(i => i.Kind != RibbonItemKind.Separator && !shown.Contains(i.Command))
-            .Select(i => i.Command)
-            .Distinct()
-            .Concat(_catalog.BeyondDefaultLayout.Select(c => c.Id))
-            .Distinct()
-            .Where(id => _catalog.TryGet(id, out _))
-            .ToList();
-
-        var flyout = new MenuFlyout { Placement = PlacementMode.BottomEdgeAlignedRight };
-
-        if (hidden.Count == 0)
-        {
-            flyout.ItemsSource = new[]
-            {
-                new MenuItem { Header = "Nothing further on this tab", IsEnabled = false },
-            };
-            return flyout;
-        }
-
-        flyout.ItemsSource = hidden
-            .Select(id => _catalog.Get(id))
-            .OrderBy(c => c.Label, StringComparer.CurrentCulture)
-            .Select(command =>
-            {
-                var item = new MenuItem { Header = command.Label };
-                item.Click += (_, _) =>
-                    CommandInvoked?.Invoke(this, new RibbonCommandEventArgs(command.Id));
-                return item;
-            })
-            .ToList();
-
-        return flyout;
-    }
-
-    /// <summary>A menu entry that runs a command, as every entry on the bar's menus does.</summary>
     private MenuItem MenuItemFor(MailboxCommand command)
     {
         var item = new MenuItem { Header = command.Label };
