@@ -123,6 +123,14 @@ public static class OfficeThemes
         t.Set("palette.brand.dark", "#0C5595");
         t.Set("palette.brand.darker", "#0A4A82");
         t.Set("palette.brand.light", "#EFF6FC");
+        // The chrome's own blues, measured — each a little off the primary, and each named so
+        // that a theme file changing the primary carries them along by the same offsets.
+        t.Set("palette.brand.titlebar", "#0078D4");
+        t.Set("palette.brand.search", "#CCE4F6");
+        t.Set("palette.brand.searchtext", "#1664A7");
+        t.Set("palette.brand.indicator", "#0072C6");
+        t.Set("palette.brand.underline", "#106EBE");
+        t.Set("palette.brand.avatar", "#004E8C");
         t.Set("palette.neutral.white", "#FFFFFF");
         t.Set("palette.neutral.lighter", "#F3F2F1");
         t.Set("palette.neutral.light", "#EDEBE9");
@@ -137,11 +145,11 @@ public static class OfficeThemes
 
         // The title bar alone carries the hue. The tab strip below it is light, which is what
         // an earlier guess got wrong — it had the blue running down through the tab strip.
-        t.Set(TokenKeys.TitleBar.Background, "#0078D4");
+        t.Set(TokenKeys.TitleBar.Background, "{palette.brand.titlebar}");
         t.Set(TokenKeys.TitleBar.Foreground, "{palette.neutral.white}");
-        t.Set(TokenKeys.TitleBar.Search, "#CCE4F6");
-        t.Set(TokenKeys.TitleBar.SearchBorder, "#CCE4F6");   // no border in the capture
-        t.Set(TokenKeys.TitleBar.SearchText, "#1664A7");
+        t.Set(TokenKeys.TitleBar.Search, "{palette.brand.search}");
+        t.Set(TokenKeys.TitleBar.SearchBorder, "{palette.brand.search}");   // no border in the capture
+        t.Set(TokenKeys.TitleBar.SearchText, "{palette.brand.searchtext}");
 
         // Chrome below the title bar, measured. Colorful and White share every one of these:
         // the two themes differ only in the title bar and the search box sitting in it.
@@ -153,11 +161,11 @@ public static class OfficeThemes
         t.Set(TokenKeys.Category.Green, "#107C10");
         t.Set(TokenKeys.Category.Blue, "#0078D4");
         t.Set(TokenKeys.Category.Purple, "#8764B8");
-        t.Set(TokenKeys.Avatar.Background, "#004E8C");
+        t.Set(TokenKeys.Avatar.Background, "{palette.brand.avatar}");
         t.Set(TokenKeys.Avatar.Foreground, "{palette.neutral.white}");
         t.Set(TokenKeys.Rail.Background, "#EFE9E6");
         t.Set(TokenKeys.Rail.ItemText, "#242424");
-        t.Set(TokenKeys.Rail.Indicator, "#0072C6");
+        t.Set(TokenKeys.Rail.Indicator, "{palette.brand.indicator}");
         t.Set(TokenKeys.Nav.Background, "#F5F5F5");
         t.Set(TokenKeys.StatusBar.Background, "#F5F5F5");
         t.Set(TokenKeys.StatusBar.Foreground, "#242424");
@@ -168,7 +176,7 @@ public static class OfficeThemes
         t.Set(TokenKeys.Ribbon.TabRest, "#00000000");
         t.Set(TokenKeys.Ribbon.TabHover, "#14000000");
         t.Set(TokenKeys.Ribbon.TabSelected, "#00000000");
-        t.Set(TokenKeys.Ribbon.TabUnderline, "#106EBE");
+        t.Set(TokenKeys.Ribbon.TabUnderline, "{palette.brand.underline}");
         t.Set(TokenKeys.Ribbon.TabText, "#242424");
         t.Set(TokenKeys.Ribbon.TabTextSelected, "#242424");
 
@@ -186,6 +194,9 @@ public static class OfficeThemes
         t.Set("palette.brand.dark", "#0C5595");
         t.Set("palette.brand.darker", "#0A4A82");
         t.Set("palette.brand.light", "#EFF6FC");
+        t.Set("palette.brand.indicator", "#0072C6");
+        t.Set("palette.brand.underline", "#106EBE");
+        t.Set("palette.brand.avatar", "#004E8C");
         t.Set("palette.neutral.white", "#FFFFFF");
         t.Set("palette.neutral.lighter", "#F8F8F8");
         t.Set("palette.neutral.light", "#EDEBE9");
@@ -216,11 +227,11 @@ public static class OfficeThemes
         t.Set(TokenKeys.Category.Green, "#107C10");
         t.Set(TokenKeys.Category.Blue, "#0078D4");
         t.Set(TokenKeys.Category.Purple, "#8764B8");
-        t.Set(TokenKeys.Avatar.Background, "#004E8C");
+        t.Set(TokenKeys.Avatar.Background, "{palette.brand.avatar}");
         t.Set(TokenKeys.Avatar.Foreground, "{palette.neutral.white}");
         t.Set(TokenKeys.Rail.Background, "#EFE9E6");
         t.Set(TokenKeys.Rail.ItemText, "#242424");
-        t.Set(TokenKeys.Rail.Indicator, "#0072C6");
+        t.Set(TokenKeys.Rail.Indicator, "{palette.brand.indicator}");
         t.Set(TokenKeys.Nav.Background, "#F5F5F5");
         t.Set(TokenKeys.StatusBar.Background, "#F5F5F5");
         t.Set(TokenKeys.StatusBar.Foreground, "#242424");
@@ -231,7 +242,7 @@ public static class OfficeThemes
         t.Set(TokenKeys.Ribbon.TabRest, "#00000000");
         t.Set(TokenKeys.Ribbon.TabHover, "#14000000");
         t.Set(TokenKeys.Ribbon.TabSelected, "#00000000");
-        t.Set(TokenKeys.Ribbon.TabUnderline, "#106EBE");
+        t.Set(TokenKeys.Ribbon.TabUnderline, "{palette.brand.underline}");
         t.Set(TokenKeys.Ribbon.TabText, "#242424");
         t.Set(TokenKeys.Ribbon.TabTextSelected, "#242424");
 
@@ -256,6 +267,10 @@ public static class OfficeThemes
         t.Set("palette.brand.dark", "#0C5595");
         t.Set("palette.brand.darker", "#0A4A82");
         t.Set("palette.brand.light", "#B3D3EC");     // measured: selected row
+        t.Set("palette.brand.itemactive", "#8FC3F0");
+        t.Set("palette.brand.indicator", "#0072C6");
+        t.Set("palette.brand.underline", "#B3D6F2");
+        t.Set("palette.brand.avatar", "#0F548C");
         t.Set("palette.neutral.white", "#FFFFFF");
 
         // Measured chrome.
@@ -300,19 +315,19 @@ public static class OfficeThemes
         t.Set(TokenKeys.Category.Green, "#5EC75E");
         t.Set(TokenKeys.Category.Blue, "#5CAFEA");
         t.Set(TokenKeys.Category.Purple, "#B79BE0");
-        t.Set(TokenKeys.Avatar.Background, "#0F548C");
+        t.Set(TokenKeys.Avatar.Background, "{palette.brand.avatar}");
         t.Set(TokenKeys.Avatar.Foreground, "{palette.neutral.white}");
         t.Set(TokenKeys.Rail.Background, "{palette.chrome.rail}");
         t.Set(TokenKeys.Rail.ItemText, "#E8E8E8");
-        t.Set(TokenKeys.Rail.ItemActive, "#8FC3F0");
-        t.Set(TokenKeys.Rail.Indicator, "#0072C6");
+        t.Set(TokenKeys.Rail.ItemActive, "{palette.brand.itemactive}");
+        t.Set(TokenKeys.Rail.Indicator, "{palette.brand.indicator}");
         t.Set(TokenKeys.Backstage.Field, "#9C9C9C");
         t.Set(TokenKeys.Ribbon.Background, "{palette.chrome.ribbon}");
         t.Set(TokenKeys.Ribbon.TabStripBackground, "{palette.chrome.tabstrip}");
         t.Set(TokenKeys.Ribbon.TabRest, "#00000000");
         t.Set(TokenKeys.Ribbon.TabHover, "#1AFFFFFF");
         t.Set(TokenKeys.Ribbon.TabSelected, "#00000000");
-        t.Set(TokenKeys.Ribbon.TabUnderline, "#B3D6F2");
+        t.Set(TokenKeys.Ribbon.TabUnderline, "{palette.brand.underline}");
         t.Set(TokenKeys.Ribbon.TabText, "{palette.neutral.white}");
         t.Set(TokenKeys.Ribbon.TabTextSelected, "{palette.neutral.white}");
         // Measured off the classic capture: the rules between groups and the Quick Steps box's
@@ -324,7 +339,7 @@ public static class OfficeThemes
         t.Set(TokenKeys.Nav.ItemText, "{palette.neutral.white}");
         t.Set(TokenKeys.Nav.ItemHover, "#1AFFFFFF");
         t.Set(TokenKeys.Nav.ItemSelected, "{palette.chrome.navselected}");
-        t.Set(TokenKeys.Nav.UnreadCount, "#8FC3F0");
+        t.Set(TokenKeys.Nav.UnreadCount, "{palette.brand.itemactive}");
 
         // Measured off the Options capture: the dialog is chrome, so it is dark here while the
         // content around it is light — #525252 ground, #BDBDBD boxes, a #808080 line round
@@ -392,6 +407,9 @@ public static class OfficeThemes
         t.Set("palette.brand.dark", "#2B87DC");
         t.Set("palette.brand.darker", "#1B6CB8");
         t.Set("palette.brand.light", "#12283A");
+        t.Set("palette.brand.itemactive", "#58B8FE");
+        t.Set("palette.brand.underline", "#82C7FF");
+        t.Set("palette.brand.avatar", "#0F6CBD");
         t.Set("palette.neutral.white", "#FFFFFF");
         t.Set("palette.neutral.lighter", "#2B2B2B");
         t.Set("palette.neutral.light", "#333333");
@@ -446,12 +464,12 @@ public static class OfficeThemes
         t.Set(TokenKeys.Category.Green, "#5EC75E");
         t.Set(TokenKeys.Category.Blue, "#5CAFEA");
         t.Set(TokenKeys.Category.Purple, "#B79BE0");
-        t.Set(TokenKeys.Avatar.Background, "#0F6CBD");
+        t.Set(TokenKeys.Avatar.Background, "{palette.brand.avatar}");
         t.Set(TokenKeys.Avatar.Foreground, "{palette.neutral.white}");
         t.Set(TokenKeys.Rail.Background, "#201A17");
         t.Set(TokenKeys.Rail.ItemText, "#FFFFFF");
-        t.Set(TokenKeys.Rail.ItemActive, "#58B8FE");
-        t.Set(TokenKeys.Rail.Indicator, "#58B8FE");
+        t.Set(TokenKeys.Rail.ItemActive, "{palette.brand.itemactive}");
+        t.Set(TokenKeys.Rail.Indicator, "{palette.brand.itemactive}");
         t.Set(TokenKeys.Backstage.Rail, "#1B1B1B");
         t.Set(TokenKeys.Backstage.RailText, "{palette.neutral.primary}");
         t.Set(TokenKeys.Backstage.RailDisabled, "{palette.neutral.tertiary}");
@@ -462,7 +480,7 @@ public static class OfficeThemes
         t.Set(TokenKeys.Ribbon.TabRest, "#00000000");
         t.Set(TokenKeys.Ribbon.TabHover, "#1AFFFFFF");
         t.Set(TokenKeys.Ribbon.TabSelected, "#00000000");
-        t.Set(TokenKeys.Ribbon.TabUnderline, "#82C7FF");
+        t.Set(TokenKeys.Ribbon.TabUnderline, "{palette.brand.underline}");
         t.Set(TokenKeys.Ribbon.TabText, "#FFFFFF");
         t.Set(TokenKeys.Ribbon.TabTextSelected, "#FFFFFF");
         t.Set(TokenKeys.Ribbon.GroupLabel, "{palette.neutral.secondary}");
@@ -574,7 +592,7 @@ public static class OfficeThemes
         t.Set(TokenKeys.Rail.Background, "{palette.neutral.lighter}");
         t.Set(TokenKeys.Rail.ItemText, "{palette.neutral.secondary}");
         t.Set(TokenKeys.Rail.ItemActive, "{palette.brand.primary}");
-        t.Set(TokenKeys.Rail.Indicator, "#0072C6");
+        t.Set(TokenKeys.Rail.Indicator, "{palette.brand.indicator}");
 
         // Backstage keeps a dark rail whatever the theme, so these are literal rather than
         // derived from the light palette around them.

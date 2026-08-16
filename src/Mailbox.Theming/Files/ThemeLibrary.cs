@@ -118,11 +118,17 @@ public sealed class ThemeLibrary
 
         // The base's tokens first, then each file over them, the requested theme last.
         var tokens = root ?? new TokenSet();
+        var setByFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (var i = chain.Count - 1; i >= 0; i--)
         {
             tokens = tokens.OverlaidWith(chain[i].Tokens);
+            foreach (var key in chain[i].Tokens.Keys) setByFiles.Add(key);
         }
 
+        // A file that says the brand colour and nothing more gets the rest of its brand palette
+        // derived from the base's own relationships, so a hover, a selection or the title bar is
+        // not the base's blue under a new primary.
+        AccentDerivation.Complete(tokens, root, setByFiles, IsDark(id));
         return tokens;
     }
 
