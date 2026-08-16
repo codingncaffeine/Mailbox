@@ -103,6 +103,15 @@ public static class TokenKeys
         public const string TabTextSelected = "ribbon.tab.text.selected";
         public const string GroupLabel = "ribbon.group.label";
         public const string GroupSeparator = "ribbon.group.separator";
+
+        /// <summary>
+        /// A gallery's box on the ribbon — Quick Steps. Its own pair rather than the content
+        /// surface's, because a gallery is chrome: in Dark Gray the reference draws it in the
+        /// panel's own fill with a mid-grey line, and the content pane's dark grey there painted
+        /// it as a dark box in a light panel.
+        /// </summary>
+        public const string GalleryBackground = "ribbon.gallery.background";
+        public const string GalleryBorder = "ribbon.gallery.border";
         public const string Height = "ribbon.height";
         public const string TabStripHeight = "ribbon.tabstrip.height";
     }
@@ -294,7 +303,8 @@ public static class TokenKeys
         Backstage.RailRule, Backstage.Field,
         Ribbon.Background, Ribbon.TabStripBackground, Ribbon.TabRest, Ribbon.TabHover,
         Ribbon.TabSelected, Ribbon.TabUnderline, Ribbon.TabText, Ribbon.TabTextSelected, Ribbon.GroupLabel,
-        Ribbon.GroupSeparator, Ribbon.Height, Ribbon.TabStripHeight,
+        Ribbon.GroupSeparator, Ribbon.GalleryBackground, Ribbon.GalleryBorder,
+        Ribbon.Height, Ribbon.TabStripHeight,
         Workspace.Inset,
         Compose.BodyBackground, Compose.BodyText,
         Compose.HeaderBackground, Compose.FieldRule,
