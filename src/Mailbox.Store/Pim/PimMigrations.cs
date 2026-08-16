@@ -107,6 +107,45 @@ public static class PimMigrations
         ALTER TABLE pim_items ADD COLUMN reminder_dismissed_utc INTEGER;
         ALTER TABLE pim_items ADD COLUMN reminder_snoozed_utc INTEGER;
         """,
+
+        // ---- 3: contacts -------------------------------------------------------------------
+        // A contact's own columns beside the vCard, for the same reason an appointment has its
+        // own: the list sorts and indexes by them and never parses a card to draw a row. File As
+        // is the one that matters most — it is what the list orders by and what the index letters
+        // down its side are taken from, and it is a decision a person can make and keep.
+        //
+        // Addresses and numbers go in a table rather than in three columns each. "Who is
+        // a.person@example.com?" is a question the reading pane, the autocomplete and the group
+        // editor all ask, and it wants an index, not three OR clauses. Photographs go in a table
+        // of their own so that listing five hundred contacts does not read five hundred
+        // photographs.
+        """
+        ALTER TABLE pim_items ADD COLUMN file_as    TEXT    NOT NULL DEFAULT '';
+        ALTER TABLE pim_items ADD COLUMN first_name TEXT    NOT NULL DEFAULT '';
+        ALTER TABLE pim_items ADD COLUMN last_name  TEXT    NOT NULL DEFAULT '';
+        ALTER TABLE pim_items ADD COLUMN company    TEXT    NOT NULL DEFAULT '';
+        ALTER TABLE pim_items ADD COLUMN job_title  TEXT    NOT NULL DEFAULT '';
+        ALTER TABLE pim_items ADD COLUMN is_group   INTEGER NOT NULL DEFAULT 0;
+
+        CREATE INDEX pim_items_filed ON pim_items(collection_id, file_as);
+
+        CREATE TABLE pim_contact_fields (
+            item_id  INTEGER NOT NULL REFERENCES pim_items(id) ON DELETE CASCADE,
+            kind     TEXT    NOT NULL CHECK (kind IN ('email', 'phone', 'im')),
+            value    TEXT    NOT NULL,
+            label    TEXT    NOT NULL DEFAULT '',   -- business | home | mobile | businessfax | ...
+            ordinal  INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE INDEX pim_contact_fields_item ON pim_contact_fields(item_id);
+        CREATE INDEX pim_contact_fields_value ON pim_contact_fields(kind, value);
+
+        CREATE TABLE pim_photos (
+            item_id    INTEGER PRIMARY KEY REFERENCES pim_items(id) ON DELETE CASCADE,
+            media_type TEXT NOT NULL DEFAULT 'image/jpeg',
+            bytes      BLOB NOT NULL
+        );
+        """,
     ];
 
     public static int Latest => Steps.Count;
