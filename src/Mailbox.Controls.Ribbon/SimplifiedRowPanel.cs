@@ -1,4 +1,6 @@
 using Avalonia;
+using Avalonia.Layout;
+using Avalonia.VisualTree;
 using Avalonia.Controls;
 using Mailbox.Core.Commands;
 
@@ -62,6 +64,10 @@ public sealed class SimplifiedRowPanel : Panel
 
     private readonly List<CommandId> _overflowed = [];
 
+    /// <summary>Read once: this sits inside a layout pass, which runs on every resize.</summary>
+    private static readonly bool Trace =
+        Environment.GetEnvironmentVariable("MAILBOX_RIBBON_TRACE") == "1";
+
     /// <summary>The commands the bar could not fit, left to right, for the "…" menu.</summary>
     public IReadOnlyList<CommandId> Overflowed => _overflowed;
 
@@ -119,7 +125,7 @@ public sealed class SimplifiedRowPanel : Panel
         {
             var entry = _entries[i];
             entry.Control.IsVisible = shown[i];
-            if (shown[i] && entry.Label is not null) entry.Label.IsVisible = labelled[i];
+            if (shown[i] && entry.Label is not null) Show(entry.Label, labelled[i], entry.Control);
         }
 
         // The decision was arithmetic over cached widths; the truth is what the controls
@@ -143,6 +149,18 @@ public sealed class SimplifiedRowPanel : Panel
                 shown[i] = false;
                 entry.Control.IsVisible = false;
                 continue;
+            }
+
+            // MAILBOX_RIBBON_TRACE=1 says what every entry measured and whether it kept its
+            // label. A bar that is too wide is arithmetic, and this is how the arithmetic is
+            // read back — it is what found hidden labels still taking their room.
+            if (Trace)
+            {
+                Mailbox.Core.Diagnostics.Log.Info(
+                    $"Ribbon: {entry.Command?.Value ?? (entry.IsRule ? "rule" : "entry")} "
+                    + $"full={_fullWidth.GetValueOrDefault(entry.Control):0} "
+                    + $"label={(entry.Label is null ? 0 : _labelWidth.GetValueOrDefault(entry.Control)):0} "
+                    + $"labelled={labelled[i]} measured={actual:0}");
             }
 
             width += actual;
@@ -176,6 +194,29 @@ public sealed class SimplifiedRowPanel : Panel
         if (!wasOverflowed.SequenceEqual(_overflowed)) OverflowChanged?.Invoke(this, EventArgs.Empty);
 
         return new Size(Math.Min(width, available), height);
+    }
+
+    /// <summary>
+    /// Shows or hides a label and makes every control between it and its button measure again.
+    /// </summary>
+    /// <remarks>
+    /// Hiding a child invalidates that child, not the panel holding it, and a panel whose
+    /// measure is still thought valid hands back the width it had when the child was showing.
+    /// So a hidden label went on taking its room: the bar looked narrowed and was not, and
+    /// pushed controls into the "…" that the reference still fits. The walk stops at the
+    /// entry's own control, which this panel measures itself a moment later.
+    /// </remarks>
+    private static void Show(Control label, bool visible, Control until)
+    {
+        if (label.IsVisible == visible) return;
+
+        label.IsVisible = visible;
+
+        for (var parent = label.GetVisualParent(); parent is not null; parent = parent.GetVisualParent())
+        {
+            if (parent is Layoutable layoutable) layoutable.InvalidateMeasure();
+            if (ReferenceEquals(parent, until)) break;
+        }
     }
 
     protected override Size ArrangeOverride(Size finalSize)

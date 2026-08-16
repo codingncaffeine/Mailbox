@@ -65,6 +65,7 @@ public static class ViewCommands
         Label = "Change View",
         Description = "Switch between Compact, Single and Preview layouts.",
         Icon = "change-view",
+        IconTint = "ribbon.icon.blue",
         Category = "Current View",
         KeyTip = "CV",
     };
@@ -88,6 +89,7 @@ public static class ViewCommands
         Label = "Compact",
         Description = "The Compact view: a card in a narrow list, a line with a preview in a wide one.",
         Icon = "change-view",
+        IconTint = "ribbon.icon.blue",
         Category = "Current View",
         InDefaultLayout = false,
     };
@@ -98,6 +100,7 @@ public static class ViewCommands
         Label = "Single",
         Description = "The Single view: one line per message, in columns.",
         Icon = "change-view",
+        IconTint = "ribbon.icon.blue",
         Category = "Current View",
         InDefaultLayout = false,
     };
@@ -108,6 +111,7 @@ public static class ViewCommands
         Label = "Preview",
         Description = "The Preview view: one line per message with its preview beneath.",
         Icon = "change-view",
+        IconTint = "ribbon.icon.blue",
         Category = "Current View",
         InDefaultLayout = false,
     };
@@ -257,6 +261,7 @@ public static class ViewCommands
         Label = "All Apps",
         Description = "Open the apps list — Folders, Notes, Shortcuts and anything installed.",
         Icon = "apps",
+        IconTint = "ribbon.icon.blue",
         Category = "Add-ins",
         KeyTip = "T",
     };

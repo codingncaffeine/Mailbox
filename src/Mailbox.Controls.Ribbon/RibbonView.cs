@@ -1725,10 +1725,14 @@ public sealed class RibbonView : ContentControl
             VerticalAlignment = VerticalAlignment.Center,
             TextAlignment = TextAlignment.Center,
         };
+        // The ribbon's icons are outlines, not accents. The reference draws almost all of them
+        // in one dark line colour and reserves colour for the few that mean something by it —
+        // an accent-blue ribbon was the single biggest thing making ours read as another
+        // application. NeutralIcon is a shade darker again: the formatting run's near-black.
         Bind(glyph, TextBlock.ForegroundProperty,
             tint is { Length: > 0 } ? tint + ".brush"
             : neutral ? "text.primary.brush"
-            : "accent.rest.brush");
+            : "ribbon.icon.outline.brush");
 
         return new Border
         {
