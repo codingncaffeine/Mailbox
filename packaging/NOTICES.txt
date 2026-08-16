@@ -1,0 +1,34 @@
+Mailbox is licensed under the GNU General Public License, version 3 or later — see LICENSE.
+
+It is built with, and ships copies of, the following works. Each remains under its own licence;
+this file collects the attributions their licences ask for.
+
+Fonts
+-----
+Selawik (selawk*.ttf) — Copyright 2015, Microsoft Corporation, with Reserved Font Name Selawik.
+  SIL Open Font License, Version 1.1. Full text: Selawik-LICENSE.txt beside the fonts.
+Fluent UI System Icons (FluentSystemIcons-Regular.ttf) — Copyright (c) 2020 Microsoft Corporation.
+  MIT License.
+Inter — Copyright (c) 2016 The Inter Project Authors. SIL Open Font License, Version 1.1.
+  Bundled by Avalonia.Fonts.Inter as the framework's fallback face.
+
+Libraries (bundled in the self-contained publish)
+--------------------------------------------------
+Avalonia, Avalonia.Desktop, Avalonia.Themes.Simple, Avalonia.Wayland, Avalonia.Fonts.Inter,
+  Avalonia.Controls.WebView — MIT License. https://avaloniaui.net
+AvaloniaRichEditor — MIT License.
+MailKit and MimeKit — MIT License. Copyright (c) 2013-2026 .NET Foundation and Contributors.
+Microsoft.Data.Sqlite — MIT License. SQLite itself is in the public domain.
+WeCantSpell.Hunspell — a port of Hunspell; licensed under the MPL 1.1 / GPL 2.0 / LGPL 2.1
+  tri-licence inherited from Hunspell. Full text: the package's license.txt.
+SkiaSharp and HarfBuzzSharp (native rendering, via Avalonia) — MIT License; Skia is BSD-3-Clause,
+  HarfBuzz is the "Old MIT" licence.
+.NET runtime (self-contained) — MIT License. Copyright (c) .NET Foundation and Contributors.
+
+Runtime dependencies (installed by the package, not bundled)
+------------------------------------------------------------
+WPE WebKit, libwpe and WPEBackend-fdo render the reading pane — BSD-2-Clause / LGPL-2.1.
+libsecret's secret-tool keeps passwords in the desktop keyring — LGPL-2.1.
+notify-send raises the desktop notifications — LGPL-2.1.
+Hunspell dictionaries and the Carlito, Caladea and other metric-compatible fonts come from the
+distribution's own packages, under their own licences.
