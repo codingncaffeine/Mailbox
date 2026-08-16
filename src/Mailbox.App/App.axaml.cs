@@ -441,7 +441,7 @@ public partial class App : Application
         // The junk filter, at the level the Junk Options dialog currently holds. Read live so a
         // change applies to the next message; §7.8's corpus is per account, so the classifier is
         // handed the arriving message's own store.
-        Junk = new JunkService(MailOptions);
+        Junk = new JunkService(MailOptions, Contacts);
 
         // What acts on a message as it arrives, in order: the junk filter, then the rules. Both
         // protocols run the same pipeline, so a rule means the same thing on POP3 and IMAP.

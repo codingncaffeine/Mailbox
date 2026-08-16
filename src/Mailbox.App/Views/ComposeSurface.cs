@@ -1194,6 +1194,7 @@ public sealed class ComposeSurface : UserControl
         if (id == ComposeCommands.Zoom.Id) { StepZoom(); return true; }
         if (id == ComposeCommands.AttachFile.Id) { _ = AttachAsync(); return true; }
         if (id == ComposeCommands.CheckNames.Id) { CheckNames(); return true; }
+        if (id == MailCommands.AddressBook.Id) { _ = PickNamesAsync(); return true; }
         if (id == ComposeCommands.Find.Id || id == ComposeCommands.Replace.Id)
         {
             _ = FindAsync(replace: id == ComposeCommands.Replace.Id);
@@ -1355,16 +1356,86 @@ public sealed class ComposeSurface : UserControl
         Report($"Zoom {_body.DefaultFontSize * PointsPerPixel:0}pt.");
     }
 
+    /// <summary>
+    /// Check Names: what is not an address is looked up in the address book, and replaced where
+    /// exactly one contact answers to it.
+    /// </summary>
+    /// <remarks>
+    /// One match is resolved; several are left alone and named, because picking between two
+    /// people called Person is a decision the reader makes and not one a button makes for them.
+    /// </remarks>
     private void CheckNames()
     {
+        var resolved = 0;
+        var ambiguous = new List<string>();
+
+        if (_contacts is { } book)
+        {
+            foreach (var box in new[] { _to, _cc, _bcc })
+            {
+                var entries = Split(box.Text).ToList();
+                if (entries.Count == 0) continue;
+
+                var rewritten = new List<string>(entries.Count);
+                foreach (var entry in entries)
+                {
+                    if (MailboxAddress.TryParse(entry, out _))
+                    {
+                        rewritten.Add(entry);
+                        continue;
+                    }
+
+                    var found = ContactSuggestions.For(book, entry, limit: 4);
+                    if (found.Count == 1)
+                    {
+                        rewritten.Add(found[0].Insert);
+                        resolved++;
+                        continue;
+                    }
+
+                    if (found.Count > 1) ambiguous.Add(entry);
+                    rewritten.Add(entry);
+                }
+
+                var joined = string.Join("; ", rewritten);
+                if (!string.Equals(joined, box.Text?.Trim(), StringComparison.Ordinal)) box.Text = joined;
+            }
+        }
+
         var bad = BadAddresses();
 
-        Report(bad.Count == 0
-            ? "Every address parses. Resolving a bare name against contacts is Phase 12."
-            : "Could not read: " + string.Join("; ", bad));
+        Report(
+            bad.Count > 0 ? "Could not read: " + string.Join("; ", bad)
+            : ambiguous.Count > 0 ? "More than one contact answers to: " + string.Join("; ", ambiguous)
+            : resolved > 0 ? $"{resolved} name(s) resolved against the address book."
+            : "Every address parses.");
     }
 
     /// <summary>Every recipient entry that is not an address, named by its field.</summary>
+    /// <summary>
+    /// The Address Book, filling whichever lines names were put on. The window is the reference's
+    /// own Select Names, which is why it has all three rather than only To.
+    /// </summary>
+    private async Task PickNamesAsync()
+    {
+        if (_contacts is not { } book || TopLevel.GetTopLevel(this) is not Window owner) return;
+
+        var picked = await AddressBookDialog.PickAsync(owner, book);
+        if (picked is null || picked.IsEmpty) return;
+
+        Append(_to, picked.To);
+        Append(_cc, picked.Cc);
+        Append(_bcc, picked.Bcc);
+        UpdateStatus();
+
+        static void Append(TextBox box, IReadOnlyList<string> addresses)
+        {
+            if (addresses.Count == 0) return;
+            var already = box.Text is { Length: > 0 } text ? text.TrimEnd().TrimEnd(';') + "; " : string.Empty;
+            box.Text = already + string.Join("; ", addresses);
+        }
+    }
+
     private List<string> BadAddresses()
     {
         var bad = new List<string>();

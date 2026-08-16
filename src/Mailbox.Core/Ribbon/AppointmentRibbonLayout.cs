@@ -181,10 +181,15 @@ public static class AppointmentRibbonLayout
                 ],
             },
 
-            // Present in the strip because the reference has it, and empty because what it holds
-            // is the free/busy grid of §7.4's Schedule View pointed at the attendees — Phase 12,
-            // when there are contacts to point it at. §20 records it.
+            // These two replace the form rather than adding buttons above it, which is why they
+            // carry no groups: the window swaps its workspace when one is chosen.
             new RibbonTab { Id = "scheduling", Label = "Scheduling Assistant", KeyTip = "G", Groups = [] },
+
+            // Tracking is the organizer's own tab: an appointment nobody was asked to has nothing
+            // to track, and the reference does not offer it there either.
+            .. meeting
+                ? new[] { new RibbonTab { Id = "tracking", Label = "Tracking", KeyTip = "K", Groups = [] } }
+                : [],
 
             new RibbonTab { Id = "insert", Label = "Insert", KeyTip = "N", Groups = [] },
             new RibbonTab { Id = "formattext", Label = "Format Text", KeyTip = "O", Groups = [] },

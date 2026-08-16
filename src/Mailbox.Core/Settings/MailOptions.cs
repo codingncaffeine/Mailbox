@@ -203,7 +203,7 @@ public sealed class MailOptions(SettingsStore settings)
         set => _settings.Set(JunkSafeAutoAddKey, value);
     }
 
-    /// <summary>Whether mail from a contact is never junk. On; the contacts arrive with Phase 12.</summary>
+    /// <summary>Whether mail from somebody in the address book is never junk. On by default.</summary>
     public bool TrustContacts
     {
         get => _settings.GetBool(JunkTrustContactsKey, true);

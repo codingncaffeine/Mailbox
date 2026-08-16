@@ -564,6 +564,8 @@ public partial class MainWindow : Window
             // The People module's own windows, posed the same way.
             case "contact":
             case "contactgroup":
+            case "addressbook":
+            case "selectnames":
                 Opened += (_, _) => Dispatcher.UIThread.Post(
                     () =>
                     {
@@ -1247,7 +1249,7 @@ public partial class MainWindow : Window
 
             if (string.Equals(arg, "--new-contact", StringComparison.Ordinal))
             {
-                if (DataContext is ShellViewModel s) s.StatusRight = "Contacts arrive with Phase 12.";
+                RunCommand(PeopleCommands.NewContact.Id);
                 return;
             }
 
@@ -3664,7 +3666,7 @@ public partial class MainWindow : Window
         Entry("_E-mail Message", "mail-new", () => NewMessage());
         Entry("_Appointment", "new-appointment", () => RunCommand(CalendarCommands.NewAppointment.Id));
         Entry("_Meeting", "meeting", () => RunCommand(CalendarCommands.NewMeeting.Id));
-        Waiting("_Contact", "contact-card", "Phase 12");
+        Entry("_Contact", "contact-card", () => RunCommand(PeopleCommands.NewContact.Id));
         Waiting("_Task", "new-task", "Phase 13");
         flyout.Items.Add(new Separator());
 

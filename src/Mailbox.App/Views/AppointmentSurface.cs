@@ -534,9 +534,12 @@ public sealed class AppointmentSurface : UserControl
         var start = whole ? EventTime.Date(DateOnly.FromDateTime(StartWall())) : EventTime.At(StartWall(), zone);
         var end = whole ? EventTime.Date(DateOnly.FromDateTime(EndWall())) : EventTime.At(EndWall(), zone);
 
+        // Somebody already asked keeps their name and their answer: the form holds addresses and
+        // nothing else, so rebuilding an attendee from the box alone would throw away every reply
+        // the meeting has had the moment it is saved.
         var attendees = new List<EventAttendee>();
-        attendees.AddRange(Addresses(_required.Text).Select(a => new EventAttendee(a, Rsvp: true)));
-        attendees.AddRange(Addresses(_optional.Text).Select(a => new EventAttendee(a, Role: "OPT-PARTICIPANT", Rsvp: true)));
+        attendees.AddRange(Addresses(_required.Text).Select(a => Asked(a, "REQ-PARTICIPANT")));
+        attendees.AddRange(Addresses(_optional.Text).Select(a => Asked(a, "OPT-PARTICIPANT")));
 
         return _original with
         {
@@ -562,6 +565,33 @@ public sealed class AppointmentSurface : UserControl
         };
     }
 
+    /// <summary>
+    /// An attendee as the form now states them, carrying forward what the appointment already
+    /// knew about anybody who was on it before.
+    /// </summary>
+    private EventAttendee Asked(string address, string role)
+    {
+        var known = _original.Attendees.FirstOrDefault(a => SameAddress(a.Address, address));
+        return known is null
+            ? new EventAttendee(address, Role: role, Rsvp: true)
+            : known with { Address = address, Role = role };
+    }
+
+    /// <summary>Two addresses are the same person, <c>mailto:</c> and letter case aside.</summary>
+    private static bool SameAddress(string left, string right)
+        => string.Equals(Bare(left), Bare(right), StringComparison.OrdinalIgnoreCase);
+
+    private static string Bare(string address)
+    {
+        var text = address.Trim();
+        if (text.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase)) text = text[7..];
+
+        // "A. Person <a.person@example.com>" is the same person as the address inside it.
+        var open = text.LastIndexOf('<');
+        var close = text.LastIndexOf('>');
+        return open >= 0 && close > open ? text[(open + 1)..close].Trim() : text;
+    }
+
     private static IEnumerable<string> Addresses(string? text)
         => string.IsNullOrWhiteSpace(text)
             ? []
@@ -581,6 +611,18 @@ public sealed class AppointmentSurface : UserControl
     // ---- Harness poses ------------------------------------------------------------------------
 
     /// <summary>Fills the form, so a capture shows something to measure.</summary>
+    /// <summary>
+    /// Moves the appointment, keeping everything else — what the Scheduling Assistant does when
+    /// a time is picked out of everybody's day.
+    /// </summary>
+    public void MoveTo(DateTime start, DateTime end)
+    {
+        _startDate.SelectedDate = start.Date;
+        _startTime.SelectedIndex = Slot(start);
+        _endDate.SelectedDate = end.Date;
+        _endTime.SelectedIndex = Slot(end);
+    }
+
     public void Pose(string title, string location, string notes = "")
     {
         _title.Text = title;

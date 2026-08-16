@@ -64,6 +64,7 @@ public partial class MainWindow
         if (id == PeopleCommands.OpenContact.Id) { OpenSelectedContact(shell); return true; }
         if (id == PeopleCommands.Delete.Id) { _ = DeleteSelectedContactAsync(shell); return true; }
         if (id == PeopleCommands.EmailContact.Id) { EmailSelectedContact(shell); return true; }
+        if (id == MailCommands.AddressBook.Id) { _ = ShowAddressBookAsync(shell); return true; }
         if (id == PeopleCommands.NewAddressBook.Id) { _ = NewAddressBookAsync(shell); return true; }
         if (id == PeopleCommands.DeleteAddressBook.Id) { _ = DeleteAddressBookAsync(shell); return true; }
 
@@ -239,6 +240,17 @@ public partial class MainWindow
         }
     }
 
+    /// <summary>
+    /// The Address Book window, which the ribbon's own button and Ctrl+Shift+B open: the contacts
+    /// to look through, with no message to put them on.
+    /// </summary>
+    private async Task ShowAddressBookAsync(ShellViewModel shell)
+    {
+        var dialog = new AddressBookDialog(App.Contacts, picking: false);
+        await dialog.ShowDialog(this);
+        shell.StatusRight = $"Address Book: {App.Contacts.Rows().Count} contact(s).";
+    }
+
     // ---- Address books --------------------------------------------------------------------------
 
     private async Task NewAddressBookAsync(ShellViewModel shell)
@@ -292,6 +304,19 @@ public partial class MainWindow
 
         switch (which)
         {
+            case "addressbook":
+                await ShowAddressBookAsync(shell);
+                return;
+
+            // The same window with the three lines a message needs, which is what the compose
+            // window's To button opens.
+            case "selectnames":
+            {
+                var picked = await AddressBookDialog.PickAsync(this, App.Contacts);
+                Log.Info($"Harness: Select Names came back with {picked?.To.Count ?? 0} on To.");
+                return;
+            }
+
             case "contactgroup":
                 await NewContactAsync(shell, group: true);
                 return;
