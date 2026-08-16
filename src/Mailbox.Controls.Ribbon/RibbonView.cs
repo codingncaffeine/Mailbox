@@ -44,6 +44,12 @@ public sealed class RibbonFloatEventArgs(Control? body) : EventArgs
 /// </remarks>
 public sealed class RibbonView : ContentControl
 {
+    /// <summary>
+    /// The shortcut a tooltip shows for a command, when the application keeps a key map of its
+    /// own; null falls back to the command's shipped gesture.
+    /// </summary>
+    public static Func<Mailbox.Core.Commands.MailboxCommand, string?>? GestureLookup { get; set; }
+
     private readonly CommandCatalog _catalog;
 
     // What Alt traversal adorns. Rebuilt with the visual tree, because the controls a KeyTip
@@ -1618,7 +1624,7 @@ public sealed class RibbonView : ContentControl
         var tip = new StackPanel { Spacing = 2, MaxWidth = 260 };
         tip.Children.Add(new TextBlock
         {
-            Text = command.Label + (command.DefaultGesture is { } g ? $"  ({g})" : string.Empty),
+            Text = command.Label + ((GestureLookup?.Invoke(command) ?? command.DefaultGesture) is { } g ? $"  ({g})" : string.Empty),
             FontWeight = FontWeight.SemiBold,
         });
         tip.Children.Add(new TextBlock

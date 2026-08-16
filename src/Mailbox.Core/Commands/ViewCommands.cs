@@ -162,6 +162,17 @@ public static class ViewCommands
         InDefaultLayout = false,
     };
 
+    public static readonly MailboxCommand Refresh = new()
+    {
+        Id = new("view.refresh"),
+        Label = "Refresh",
+        Description = "Reload the folder pane and the list from the store.",
+        Icon = "sync",
+        Category = "Window",
+        DefaultGesture = "F5",
+        InDefaultLayout = false,
+    };
+
     public static readonly MailboxCommand ArrangeBy = new()
     {
         Id = new("view.arrangeby"),
@@ -319,7 +330,7 @@ public static class ViewCommands
         SendAll, UpdateFolder, SendReceiveGroups, ShowProgress, CancelAll,
         ChangeView, ViewSettings, ArrangeBy, ReverseSort, TighterSpacing, LayoutMenu,
         ChangeViewCompact, ChangeViewSingle, ChangeViewPreview, ManageViews, SaveViewAs, ApplyViewToFolders,
-        OpenViewSettings, ResetView,
+        OpenViewSettings, ResetView, Refresh,
         ImmersiveReader, ShowFocusedInbox,
         Redo, Apps, SearchPeople, ReadAloud,
         MoveToQuick, ToManager, TeamEmail,

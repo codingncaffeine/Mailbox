@@ -669,7 +669,7 @@ public sealed partial class ShellViewModel : ObservableObject
     /// Replaces the sample with what the store holds. Returns false when there is no account,
     /// which leaves the sample in place.
     /// </summary>
-    private bool LoadFromStore()
+    private bool LoadFromStore(bool selectFirst = true)
     {
         if (_accounts is null) return false;
 
@@ -731,7 +731,7 @@ public sealed partial class ShellViewModel : ObservableObject
             }
         }
 
-        SelectedFolder = Folders.FirstOrDefault(f => _folderIds.ContainsKey(f));
+        if (selectFirst) SelectedFolder = Folders.FirstOrDefault(f => _folderIds.ContainsKey(f));
         Raise(nameof(TotalUnread));
         return true;
     }
@@ -1792,6 +1792,18 @@ public sealed partial class ShellViewModel : ObservableObject
 
     private void Rebuild()
     {
+        // The list is replaced wholesale, and a replaced list has nothing selected: what was
+        // selected is put back once the new list is in, when it is still there to select.
+        var keep = SelectedRow as MessageRow ?? SelectedMessage;
+        RebuildRows();
+        if (keep is not null && VisibleRows.Contains(keep) && !ReferenceEquals(SelectedRow, keep))
+        {
+            SelectedRow = keep;
+        }
+    }
+
+    private void RebuildRows()
+    {
         var built = new List<object>();
 
         var rows = Filter == ListFilter.None ? Messages : Messages.Where(Passes);
@@ -1886,17 +1898,39 @@ public sealed partial class ShellViewModel : ObservableObject
     // The list owns the selection, and a command that reaches back for it can act on something
     // other than what the user had highlighted when they pressed the key.
 
-    /// <summary>Marks rows read or unread, in the store and on screen.</summary>
-    public void SetRead(IReadOnlyList<MessageRow> rows, bool read)
+    /// <summary>Marks rows read or unread, in the store and on screen. Quiet leaves the status line alone — read by looking is not news.</summary>
+    public void SetRead(IReadOnlyList<MessageRow> rows, bool read, bool quiet = false)
     {
         if (rows.Count == 0) return;
 
         Mail(rows)?.SetRead([.. rows.Select(r => r.Id)], read);
         foreach (var row in rows) row.IsUnread = !read;
 
-        RefreshCounts();
-        StatusRight = $"{Describe(rows.Count)} marked {(read ? "read" : "unread")}.";
+        // Read by looking happens in the middle of a selection change; the pane's counts can
+        // wait a moment rather than being rebuilt under it.
+        if (quiet) RequestCountsRefresh();
+        else RefreshCounts();
+        if (!quiet) StatusRight = $"{Describe(rows.Count)} marked {(read ? "read" : "unread")}.";
     }
+
+    private Avalonia.Threading.DispatcherTimer? _countsTimer;
+
+    /// <summary>Refreshes the folder pane's counts shortly, once, however many changes ask.</summary>
+    private void RequestCountsRefresh()
+    {
+        if (_countsTimer is not null) return;
+        _countsTimer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+        _countsTimer.Tick += (_, _) =>
+        {
+            _countsTimer?.Stop();
+            _countsTimer = null;
+            RefreshCounts();
+        };
+        _countsTimer.Start();
+    }
+
+    /// <summary>True while a row is still in the list — one deleted or moved away is not read by looking.</summary>
+    public bool IsListed(MessageRow row) => Messages.Contains(row);
 
     /// <summary>
     /// The folders a selection could be moved to: those of its own account, the one it is in
@@ -2012,8 +2046,7 @@ public sealed partial class ShellViewModel : ObservableObject
             StatusRight = $"{Describe(rows.Count)} moved to Deleted Items.";
         }
 
-        foreach (var row in rows) Messages.Remove(row);
-        Rebuild();
+        RemoveRows(rows);
         RefreshCounts();
     }
 
@@ -2025,9 +2058,7 @@ public sealed partial class ShellViewModel : ObservableObject
             is not { } target) return;
 
         mail.MoveMessages([.. rows.Select(r => r.Id)], target.Id);
-        foreach (var row in rows) Messages.Remove(row);
-
-        Rebuild();
+        RemoveRows(rows);
         RefreshCounts();
         StatusRight = $"{Describe(rows.Count)} moved to {target.Name}.";
     }
@@ -2044,9 +2075,7 @@ public sealed partial class ShellViewModel : ObservableObject
         if (rows.Count == 0) return;
 
         where.Account.Mail.MoveMessages(ids, where.FolderId);
-        foreach (var row in rows) Messages.Remove(row);
-
-        Rebuild();
+        RemoveRows(rows);
         RefreshCounts();
         StatusRight = $"{Describe(rows.Count)} moved to {target.Name}.";
     }
@@ -2296,8 +2325,7 @@ public sealed partial class ShellViewModel : ObservableObject
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
         mail.Snooze([.. rows.Select(r => r.Id)], until);
-        foreach (var row in rows) Messages.Remove(row);
-        Rebuild();
+        RemoveRows(rows);
         RefreshCounts();
 
         var local = until.LocalDateTime;
@@ -2479,11 +2507,43 @@ public sealed partial class ShellViewModel : ObservableObject
     private void RefreshCounts()
     {
         var selected = SelectedFolder?.Name;
-        if (_accounts is null || !LoadFromStore()) { Rebuild(); return; }
+        if (_accounts is null || !LoadFromStore(selectFirst: false)) { Rebuild(); return; }
 
-        if (selected is not null)
+        // The pane was rebuilt with fresh counts; the same folder stays selected in it — by
+        // the field, not the setter, so the list is not reloaded from the store and whatever is
+        // selected in it stays selected. Callers keep Messages themselves.
+        if (selected is not null && Folders.FirstOrDefault(f => f.Name == selected) is { } node && !ReferenceEquals(node, _selectedFolder))
         {
-            SelectedFolder = Folders.FirstOrDefault(f => f.Name == selected) ?? SelectedFolder;
+            _selectedFolder = node;
+            Raise(nameof(SelectedFolder));
+        }
+    }
+
+    /// <summary>
+    /// Takes rows out of the list — deleted, moved, archived — and moves the selection to the
+    /// row that followed the last of them, or the one before, as the reference does; the list
+    /// never ends up showing nothing after a delete.
+    /// </summary>
+    private void RemoveRows(IReadOnlyList<MessageRow> rows)
+    {
+        var visible = VisibleRows.OfType<MessageRow>().ToList();
+        var removed = rows.ToHashSet();
+        var wasSelected = SelectedMessage is { } current && removed.Contains(current);
+        MessageRow? next = null;
+        if (wasSelected)
+        {
+            var last = rows.Select(r => visible.IndexOf(r)).DefaultIfEmpty(-1).Max();
+            next = visible.Skip(last + 1).FirstOrDefault(r => !removed.Contains(r))
+                   ?? visible.Take(Math.Max(0, last)).LastOrDefault(r => !removed.Contains(r));
+        }
+
+        foreach (var row in rows) Messages.Remove(row);
+        Rebuild();
+
+        if (wasSelected)
+        {
+            SelectedRow = next;
+            SelectedMessage = next;
         }
     }
 

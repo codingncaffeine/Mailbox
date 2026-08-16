@@ -418,6 +418,25 @@ public sealed class RibbonEditorView : CustomizationEditor
 
     // ---- Footer ----------------------------------------------------------------------------
 
+    /// <summary>The reference's "Keyboard shortcuts: Customize…" under the command gallery.</summary>
+    protected override Control BuildGalleryFooter()
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 8, 0, 0) };
+        var label = new TextBlock { Text = "Keyboard shortcuts:", VerticalAlignment = VerticalAlignment.Center };
+        Bind(label, TextBlock.ForegroundProperty, "dialog.foreground.brush");
+        var customize = DialogButton("Customize...");
+        customize.Click += async (_, _) =>
+        {
+            if (TopLevel.GetTopLevel(this) is Window owner)
+            {
+                await new Views.CustomizeKeyboardDialog(App.Keys, App.Commands).ShowDialog(owner);
+            }
+        };
+        row.Children.Add(label);
+        row.Children.Add(customize);
+        return row;
+    }
+
     protected override Control BuildTargetFooter()
     {
         var row = new StackPanel
