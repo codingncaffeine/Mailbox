@@ -252,3 +252,6 @@ public sealed record OutboxItem(
 /// <param name="Published">When it was put there.</param>
 /// <param name="Stale">True when the rules or folder names have changed since, or a publish failed.</param>
 public sealed record SieveState(string Script, string? Include, DateTimeOffset Published, bool Stale);
+
+/// <summary>A view a reader saved by name — the definition is Core's MailView document.</summary>
+public sealed record SavedView(long Id, string Name, string Definition);

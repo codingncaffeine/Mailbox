@@ -455,6 +455,40 @@ public partial class MainWindow : Window
                 };
                 break;
 
+            // The View tab's dialogs over the folder on screen: Advanced View Settings and its
+            // seven editors, Manage All Views, Apply View.
+            case "viewsettings":
+            case "showcolumns":
+            case "groupby":
+            case "viewsort":
+            case "viewfilter":
+            case "othersettings":
+            case "conditionalformatting":
+            case "formatcolumns":
+            case "manageviews":
+            case "applyview":
+                Opened += async (_, _) =>
+                {
+                    if (DataContext is not ShellViewModel s) return;
+                    CaptureNextWindow();
+                    var view = s.CurrentView;
+                    Window dialog = Environment.GetEnvironmentVariable("MAILBOX_PEEK")?.ToLowerInvariant() switch
+                    {
+                        "showcolumns" => new ShowColumnsDialog(view.Columns),
+                        "groupby" => new GroupByDialog(view),
+                        "viewsort" => new SortDialog(view),
+                        "viewfilter" => new FilterDialog(Environment.GetEnvironmentVariable("MAILBOX_FILTER") ?? view.Filter, "Filter"),
+                        "othersettings" => new OtherSettingsDialog(view),
+                        "conditionalformatting" => new ConditionalFormattingDialog(view.Formats),
+                        "formatcolumns" => new FormatColumnsDialog(view),
+                        "manageviews" when s.ViewAccount is { } a => new ManageViewsDialog(a, view, s.SelectedFolderName),
+                        "applyview" when s.ViewAccount is { } a => new ApplyViewToFoldersDialog(a, s.ViewFolderId),
+                        _ => new AdvancedViewSettingsDialog(view, s.ViewAccount),
+                    };
+                    await dialog.ShowDialog(this);
+                };
+                break;
+
             case "quicksteps":
                 Opened += async (_, _) =>
                 {
@@ -1613,6 +1647,10 @@ public partial class MainWindow : Window
                 case "thisweek": shell.Filter = ShellViewModel.ListFilter.ThisWeek; break;
                 case "focused": shell.FocusedInboxOn = true; break;
                 case "other": shell.FocusedInboxOn = true; shell.ShowOther = true; break;
+                case "conversations": shell.ShowAsConversations = true; break;
+                case "view-compact": shell.ChangeView(Mailbox.Core.Views.MailView.CompactName); break;
+                case "view-single": shell.ChangeView(Mailbox.Core.Views.MailView.SingleName); break;
+                case "view-preview": shell.ChangeView(Mailbox.Core.Views.MailView.PreviewName); break;
                 default: Log.Warn($"Unknown MAILBOX_STATE: {state}"); break;
             }
         }
@@ -1649,7 +1687,12 @@ public partial class MainWindow : Window
     private void WireArrangeMenu(ShellViewModel shell)
     {
         if (this.FindControl<Button>("ArrangeButton") is not { } button) return;
+        button.Flyout = ArrangeFlyout(shell);
+    }
 
+    /// <summary>The arrangement menu — behind the list's "By Date" label and the ribbon's Arrange By alike.</summary>
+    private static MenuFlyout ArrangeFlyout(ShellViewModel shell)
+    {
         var flyout = new MenuFlyout { Placement = PlacementMode.BottomEdgeAlignedRight };
 
         void Build()
@@ -1692,7 +1735,120 @@ public partial class MainWindow : Window
         }
 
         Build();
-        button.Flyout = flyout;
+        return flyout;
+    }
+
+    // ---- The View tab's first cluster ------------------------------------------------------------
+
+    /// <summary>
+    /// Change View: the gallery's three, the account's saved views, then Manage Views, Save
+    /// Current View As a New View and Apply Current View to Other Mail Folders — the reference's
+    /// menu, each entry a command.
+    /// </summary>
+    private void ShowChangeViewMenu(ShellViewModel shell)
+    {
+        var flyout = new MenuFlyout();
+
+        void Entry(string header, Action run, bool ticked = false, bool enabled = true)
+        {
+            var item = new MenuItem { Header = header, IsEnabled = enabled, Icon = ticked ? new TextBlock { Text = "\u2713" } : null };
+            item.Click += (_, _) => run();
+            flyout.Items.Add(item);
+        }
+
+        var current = shell.CurrentViewName;
+        foreach (var name in shell.ViewNames)
+        {
+            var chosen = name;
+            Entry(chosen, () => shell.ChangeView(chosen), ticked: string.Equals(chosen, current, StringComparison.OrdinalIgnoreCase));
+            if (chosen == Mailbox.Core.Views.MailView.PreviewName && shell.ViewNames.Count > 3) flyout.Items.Add(new Separator());
+        }
+
+        flyout.Items.Add(new Separator());
+        Entry(ViewCommands.ManageViews.Label, () => _ = ManageViewsAsync(shell), enabled: shell.ViewAccount is not null);
+        Entry(ViewCommands.SaveViewAs.Label, () => _ = SaveViewAsAsync(shell), enabled: shell.ViewAccount is not null);
+        Entry(ViewCommands.ApplyViewToFolders.Label, () => _ = ApplyViewToFoldersAsync(shell), enabled: shell.ViewAccount is not null);
+
+        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+    }
+
+    /// <summary>Current View: View Settings… and Reset View.</summary>
+    private void ShowCurrentViewMenu(ShellViewModel shell)
+    {
+        var flyout = new MenuFlyout();
+        var settings = new MenuItem { Header = ViewCommands.OpenViewSettings.Label };
+        settings.Click += (_, _) => _ = ShowViewSettingsAsync(shell);
+        var reset = new MenuItem { Header = ViewCommands.ResetView.Label };
+        reset.Click += (_, _) => shell.ResetView();
+        flyout.Items.Add(settings);
+        flyout.Items.Add(reset);
+        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+    }
+
+    /// <summary>Layout: the folder pane, the reading pane and the To-Do Bar, as the reference's menu has them.</summary>
+    private void ShowLayoutMenu(ShellViewModel shell)
+    {
+        var flyout = new MenuFlyout();
+
+        MenuItem Sub(string header) { var item = new MenuItem { Header = header }; flyout.Items.Add(item); return item; }
+        void Entry(MenuItem parent, string header, Action run, bool ticked)
+        {
+            var item = new MenuItem { Header = header, Icon = ticked ? new TextBlock { Text = "\u2713" } : null };
+            item.Click += (_, _) => run();
+            parent.Items.Add(item);
+        }
+
+        var folder = Sub("Folder Pane");
+        Entry(folder, "Normal", () => shell.NavCollapsed = false, !shell.NavCollapsed);
+        Entry(folder, "Minimized", () => shell.NavCollapsed = true, shell.NavCollapsed);
+
+        var reading = Sub("Reading Pane");
+        Entry(reading, "Right", () => shell.ReadingPaneVisible = true, shell.ReadingPaneVisible);
+        Entry(reading, "Off", () => shell.ReadingPaneVisible = false, !shell.ReadingPaneVisible);
+
+        var todo = Sub("To-Do Bar");
+        Entry(todo, "Calendar", () => { if (!shell.IsCalendarDocked) TogglePeek(); }, shell.IsCalendarDocked);
+        Entry(todo, "Off", () => { if (shell.IsCalendarDocked) UndockPeek(); }, !shell.IsCalendarDocked);
+
+        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+    }
+
+    /// <summary>View Settings…: Advanced View Settings over the folder's view; OK applies, Reset Current View resets.</summary>
+    private async Task ShowViewSettingsAsync(ShellViewModel shell)
+    {
+        var dialog = new AdvancedViewSettingsDialog(shell.CurrentView, shell.ViewAccount);
+        await dialog.ShowDialog(this);
+        if (dialog.ResetRequested) { shell.ResetView(); return; }
+        if (dialog.Result is { } edited) shell.UpdateView(edited);
+    }
+
+    private async Task ManageViewsAsync(ShellViewModel shell)
+    {
+        if (shell.ViewAccount is not { } account) return;
+        var dialog = new ManageViewsDialog(account, shell.CurrentView, shell.SelectedFolderName);
+        await dialog.ShowDialog(this);
+        if (dialog.CurrentModified is { } modified) shell.UpdateView(modified);
+        if (dialog.Applied is { } applied) shell.ChangeView(applied.Name);
+        shell.RaiseViewNames();
+    }
+
+    private async Task SaveViewAsAsync(ShellViewModel shell)
+    {
+        if (shell.ViewAccount is null) return;
+        var name = await Prompt.AskAsync(this, "Save Current View As a New View", "Name of new view:", string.Empty);
+        if (string.IsNullOrWhiteSpace(name)) return;
+        if (!shell.SaveViewAs(name))
+        {
+            await Confirm.AskAsync(this, "Save Current View", "That name is one of the views that ship; choose another.", "OK", destructive: false);
+        }
+    }
+
+    private async Task ApplyViewToFoldersAsync(ShellViewModel shell)
+    {
+        if (shell.ViewAccount is not { } account) return;
+        var dialog = new ApplyViewToFoldersDialog(account, shell.ViewFolderId);
+        await dialog.ShowDialog(this);
+        if (dialog.Result is { } folders) shell.ApplyViewTo(folders);
     }
 
     /// <summary>
@@ -1872,6 +2028,21 @@ public partial class MainWindow : Window
         if (id == MailCommands.NewSearchFolder.Id) { _ = NewSearchFolderAsync(shell, null); return; }
         if (id == ViewCommands.CancelAll.Id) { CancelTransfer(); return; }
         if (id == ViewCommands.SendReceiveGroups.Id) { ShowGroupsMenu(shell); return; }
+
+        // The View tab's first cluster: Change View, Current View, Arrange By, Layout, and the
+        // entries behind them as commands of their own.
+        if (id == ViewCommands.ChangeView.Id) { ShowChangeViewMenu(shell); return; }
+        if (id == ViewCommands.ViewSettings.Id) { ShowCurrentViewMenu(shell); return; }
+        if (id == ViewCommands.ArrangeBy.Id) { ArrangeFlyout(shell).ShowAt(_ribbon ?? (Control)this, showAtPointer: true); return; }
+        if (id == ViewCommands.LayoutMenu.Id) { ShowLayoutMenu(shell); return; }
+        if (id == ViewCommands.ChangeViewCompact.Id) { shell.ChangeView(Mailbox.Core.Views.MailView.CompactName); return; }
+        if (id == ViewCommands.ChangeViewSingle.Id) { shell.ChangeView(Mailbox.Core.Views.MailView.SingleName); return; }
+        if (id == ViewCommands.ChangeViewPreview.Id) { shell.ChangeView(Mailbox.Core.Views.MailView.PreviewName); return; }
+        if (id == ViewCommands.OpenViewSettings.Id) { _ = ShowViewSettingsAsync(shell); return; }
+        if (id == ViewCommands.ResetView.Id) { shell.ResetView(); return; }
+        if (id == ViewCommands.ManageViews.Id) { _ = ManageViewsAsync(shell); return; }
+        if (id == ViewCommands.SaveViewAs.Id) { _ = SaveViewAsAsync(shell); return; }
+        if (id == ViewCommands.ApplyViewToFolders.Id) { _ = ApplyViewToFoldersAsync(shell); return; }
 
         // A Quick Step, by the command it is placed as; and the gallery's launcher, which manages them.
         if (App.QuickSteps.FindByCommand(id) is { } step) { _ = RunQuickStepAsync(shell, step, SelectedRows()); return; }
@@ -3242,6 +3413,26 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
+    /// <summary>The list pane's width: the token's beside the reading pane, the rest of the window without it.</summary>
+    private void FitListPane(ShellViewModel shell)
+    {
+        if (this.FindControl<Grid>("PaneGrid") is not { } grid || this.FindControl<Border>("ListPane") is not { } pane) return;
+        if (grid.ColumnDefinitions.Count < 4) return;
+
+        if (shell.ReadingPaneVisible)
+        {
+            grid.ColumnDefinitions[3].Width = GridLength.Auto;
+            grid.ColumnDefinitions[5].Width = new GridLength(1, GridUnitType.Star);
+            pane[!WidthProperty] = new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("list.width.value");
+        }
+        else
+        {
+            pane.ClearValue(WidthProperty);
+            grid.ColumnDefinitions[3].Width = new GridLength(1, GridUnitType.Star);
+            grid.ColumnDefinitions[5].Width = GridLength.Auto;
+        }
+    }
+
     /// <summary>
     /// The row actions and dragging to a folder.
     /// </summary>
@@ -3252,6 +3443,19 @@ public partial class MainWindow : Window
     private void WireListInteraction(ShellViewModel shell)
     {
         if (this.FindControl<ListBox>("MessageList") is not { } list) return;
+
+        // The list's width decides whether the Compact view draws the card or the line — the
+        // reference's "use compact layout in widths smaller than N characters".
+        list.SizeChanged += (_, e) => shell.ListWidth = e.NewSize.Width;
+        shell.ListWidth = list.Bounds.Width;
+
+        // With the reading pane off the list takes the window, as the reference's does; with it
+        // on, the list is its token's width beside the pane.
+        FitListPane(shell);
+        shell.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ShellViewModel.ReadingPaneVisible)) FitListPane(shell);
+        };
 
         // The action buttons. Found by walking up from what was clicked, because the button
         // itself lives inside a template the list owns.

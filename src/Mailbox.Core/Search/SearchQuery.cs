@@ -65,11 +65,14 @@ public sealed record SearchQuery
     /// <summary>The same for the sent date.</summary>
     public (DateTimeOffset? After, DateTimeOffset? Before)? Sent { get; init; }
 
+    /// <summary><c>due:today</c>, <c>due:&lt;today</c> (overdue): a span the follow-up's due date must fall in.</summary>
+    public (DateTimeOffset? After, DateTimeOffset? Before)? Due { get; init; }
+
     /// <summary>True when the query has nothing to match on at all — an empty box.</summary>
     public bool IsEmpty =>
         Words.Count == 0 && From.Count == 0 && To.Count == 0 && Cc.Count == 0 && Subject.Count == 0
         && Body.Count == 0 && Categories.Count == 0 && HasAttachment is null && IsRead is null
-        && IsFlagged is null && Importance is null && Size is null && Received is null && Sent is null;
+        && IsFlagged is null && Importance is null && Size is null && Received is null && Sent is null && Due is null;
 
     /// <summary>True when the query needs the full-text index — it has words for it.</summary>
     public bool HasText => Words.Count > 0 || From.Count > 0 || Subject.Count > 0 || Body.Count > 0;
@@ -141,6 +144,9 @@ public sealed record SearchQuery
                 case "sent":
                     query = query with { Sent = ParseSpan(value, today) ?? query.Sent };
                     break;
+                case "due":
+                    query = query with { Due = ParseSpan(value, today) ?? query.Due };
+                    break;
                 default:
                     // Not a keyword the reference knows: a word with a colon in it, searched for.
                     words.Add(Unquote(token));
@@ -155,7 +161,7 @@ public sealed record SearchQuery
     }
 
     /// <summary>Splits on spaces, keeping a quoted phrase — and a keyword with a quoted value — whole.</summary>
-    internal static IReadOnlyList<string> Tokens(string text)
+    public static IReadOnlyList<string> Tokens(string text)
     {
         var tokens = new List<string>();
         var current = new System.Text.StringBuilder();
@@ -225,24 +231,35 @@ public sealed record SearchQuery
         var day = new DateTimeOffset(today.Date, today.Offset);
         DateTimeOffset StartOfWeek(DateTimeOffset d) => d.AddDays(-(int)d.DayOfWeek);
 
-        switch (text)
-        {
-            case "today": return (day, day.AddDays(1));
-            case "yesterday": return (day.AddDays(-1), day);
-            case "thisweek": return (StartOfWeek(day), StartOfWeek(day).AddDays(7));
-            case "lastweek": return (StartOfWeek(day).AddDays(-7), StartOfWeek(day));
-            case "thismonth": return (new DateTimeOffset(day.Year, day.Month, 1, 0, 0, 0, day.Offset), new DateTimeOffset(day.Year, day.Month, 1, 0, 0, 0, day.Offset).AddMonths(1));
-            case "lastmonth":
-            {
-                var first = new DateTimeOffset(day.Year, day.Month, 1, 0, 0, 0, day.Offset);
-                return (first.AddMonths(-1), first);
-            }
-            case "thisyear": return (new DateTimeOffset(day.Year, 1, 1, 0, 0, 0, day.Offset), new DateTimeOffset(day.Year + 1, 1, 1, 0, 0, 0, day.Offset));
-        }
-
         var bound = Bound.Exact;
         if (text.StartsWith('>')) { bound = Bound.After; text = text[1..]; }
         else if (text.StartsWith('<')) { bound = Bound.Before; text = text[1..]; }
+
+        // A date word is a span; with a bound it is what lies before its start or after its end
+        // — due:<today is overdue, received:>lastweek is this week and on.
+        var first = new DateTimeOffset(day.Year, day.Month, 1, 0, 0, 0, day.Offset);
+        (DateTimeOffset Start, DateTimeOffset End)? word = text switch
+        {
+            "today" => (day, day.AddDays(1)),
+            "yesterday" => (day.AddDays(-1), day),
+            "last7days" or "lastsevendays" => (day.AddDays(-6), day.AddDays(1)),
+            "thisweek" => (StartOfWeek(day), StartOfWeek(day).AddDays(7)),
+            "lastweek" => (StartOfWeek(day).AddDays(-7), StartOfWeek(day)),
+            "thismonth" => (first, first.AddMonths(1)),
+            "lastmonth" => (first.AddMonths(-1), first),
+            "thisyear" => (new DateTimeOffset(day.Year, 1, 1, 0, 0, 0, day.Offset), new DateTimeOffset(day.Year + 1, 1, 1, 0, 0, 0, day.Offset)),
+            _ => null,
+        };
+
+        if (word is { } span)
+        {
+            return bound switch
+            {
+                Bound.After => (span.End, null),
+                Bound.Before => (null, span.Start),
+                _ => (span.Start, span.End),
+            };
+        }
 
         if (!DateTime.TryParse(text, CultureInfo.CurrentCulture, DateTimeStyles.AssumeLocal, out var parsed)
             && !DateTime.TryParseExact(text, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out parsed))

@@ -200,6 +200,102 @@ public sealed class MessageRow(
 
     public string DisplayFrom => From;
 
+    // ---- Facts for a view's filter and conditional formatting ---------------------------------
+
+    public string FromAddress { get; init; } = string.Empty;
+    public IReadOnlyList<string> To { get; init; } = [];
+    public IReadOnlyList<string> Cc { get; init; } = [];
+    public DateTimeOffset? Sent { get; init; }
+
+    /// <summary>The names of the categories on this message, beside their colour tokens.</summary>
+    public IReadOnlyList<string> CategoryNames { get; set; } = [];
+
+    /// <summary>What a search-syntax condition sees of this row.</summary>
+    public Mailbox.Core.Search.SearchFacts Facts() => new()
+    {
+        FromName = From,
+        FromAddress = FromAddress,
+        To = To,
+        Cc = Cc,
+        Subject = Subject,
+        Body = Body.Length > 0 ? Body : Preview,
+        Categories = CategoryNames,
+        HasAttachment = HasAttachment,
+        IsRead = !IsUnread,
+        IsFlagged = IsFlagged,
+        Importance = Importance,
+        SizeBytes = SizeBytes,
+        Received = Received,
+        Sent = Sent,
+        Due = FollowUpDue,
+    };
+
+    // ---- How the view draws this row ---------------------------------------------------------
+
+    /// <summary>True while the list is in the compact card layout; the template selector reads it.</summary>
+    public bool IsCard { get; set; }
+
+    /// <summary>
+    /// The conditional-formatting rule the row matched, or null for none. Set by the shell when
+    /// the list is rebuilt; the row's weight, style and ink follow it, with the unread styling
+    /// underneath.
+    /// </summary>
+    public Mailbox.Core.Views.ConditionalFormat? Format
+    {
+        get;
+        set
+        {
+            if (!Set(ref field, value)) return;
+            Raise(nameof(SenderWeight));
+            Raise(nameof(SubjectWeight));
+            Raise(nameof(FormatStyle));
+            Raise(nameof(FormatBrushToken));
+            Raise(nameof(InkToken));
+        }
+    }
+
+    public FontStyle FormatStyle => Format is { Italic: true } ? FontStyle.Italic : FontStyle.Normal;
+
+    /// <summary>The token of the ink a rule asks for, or null to leave the theme's own.</summary>
+    public string? FormatBrushToken => Format?.ColourToken;
+
+    /// <summary>
+    /// Whether the view's "Unread messages" rule is on. Off, an unread row draws like a read one
+    /// — the bar at its edge stays, the bold and the blue go.
+    /// </summary>
+    public bool UnreadStyling
+    {
+        get;
+        set
+        {
+            if (!Set(ref field, value)) return;
+            Raise(nameof(ShowAsUnread));
+            Raise(nameof(SenderWeight));
+            Raise(nameof(SubjectWeight));
+            Raise(nameof(InkToken));
+        }
+    } = true;
+
+    /// <summary>Unread, and drawn as unread.</summary>
+    public bool ShowAsUnread => IsUnread && UnreadStyling;
+
+    /// <summary>The ink the row's text takes: a rule's token, else the unread ink, else null for the theme's own.</summary>
+    public string? InkToken => FormatBrushToken ?? (ShowAsUnread ? "list.row.unread.text" : null);
+
+    /// <summary>The Sent column: the sent date written the way Received is, or as Format Columns says.</summary>
+    public string SentLabel => Sent is { } sent ? DateLabel(sent, Mailbox.Core.Views.ViewFields.Sent) : string.Empty;
+
+    /// <summary>The Size column: KB, as the reference writes it.</summary>
+    public string SizeLabel => SizeBytes <= 0 ? string.Empty : $"{Math.Max(1, (SizeBytes + 512) / 1024)} KB";
+
+    /// <summary>The Importance column: an exclamation for high, an arrow for low, nothing for normal.</summary>
+    public string ImportanceGlyph => Importance switch { 2 => "!", 0 => "\u2193", _ => string.Empty };
+
+    /// <summary>The Reminder column: a bell while a reminder is set.</summary>
+    public string ReminderGlyph => HasReminder ? "\u23F0" : string.Empty;
+
+    public bool HasReminder { get; init; }
+
     /// <summary>
     /// Mutable, because marking read is the one thing a row does to itself often enough that
     /// rebuilding the list for it would be visible.
@@ -212,6 +308,8 @@ public sealed class MessageRow(
             if (!Set(ref field, value)) return;
             Raise(nameof(SenderWeight));
             Raise(nameof(SubjectWeight));
+            Raise(nameof(ShowAsUnread));
+            Raise(nameof(InkToken));
         }
     } = isUnread;
 
@@ -235,14 +333,31 @@ public sealed class MessageRow(
     /// <summary>0 low, 1 normal, 2 high — the message's own importance, for the "!" column and Filter Email.</summary>
     public int Importance { get; init; } = 1;
 
-    /// <summary>How the row writes its date: a time today, a weekday this week, else the date.</summary>
-    public string ReceivedLabel => ShellViewModel.Received(Received);
+    /// <summary>Format Columns' choice for the date columns of the view on screen, by field id.</summary>
+    public static IReadOnlyDictionary<string, Mailbox.Core.Views.DateFormat> DateFormats { get; set; } = new Dictionary<string, Mailbox.Core.Views.DateFormat>();
+
+    /// <summary>How the row writes its date: a time today, a weekday this week, else the date — or as Format Columns says.</summary>
+    public string ReceivedLabel => DateLabel(Received, Mailbox.Core.Views.ViewFields.Received);
+
+    /// <summary>A date the way the view's format for that column writes it.</summary>
+    internal static string DateLabel(DateTimeOffset when, string field)
+    {
+        var format = DateFormats.TryGetValue(field, out var f) ? f : Mailbox.Core.Views.DateFormat.BestFit;
+        var local = when.ToLocalTime();
+        return format switch
+        {
+            Mailbox.Core.Views.DateFormat.Short => local.ToString("d"),
+            Mailbox.Core.Views.DateFormat.Long => local.ToString("ddd d MMM yyyy h:mm tt"),
+            Mailbox.Core.Views.DateFormat.TimeOnly => local.ToString("h:mm tt"),
+            _ => ShellViewModel.Received(when),
+        };
+    }
 
     /// <summary>A flag while a follow-up is open, a check once it is complete, nothing otherwise.</summary>
     public string FlagGlyph => IsFlagged ? "\u2691" : FollowUpComplete ? "\u2713" : string.Empty;
 
-    public FontWeight SenderWeight => IsUnread ? FontWeight.Bold : FontWeight.Normal;
-    public FontWeight SubjectWeight => IsUnread ? FontWeight.SemiBold : FontWeight.Normal;
+    public FontWeight SenderWeight => ShowAsUnread || Format is { Bold: true } ? FontWeight.Bold : FontWeight.Normal;
+    public FontWeight SubjectWeight => ShowAsUnread || Format is { Bold: true } ? FontWeight.SemiBold : FontWeight.Normal;
 }
 
 /// <summary>
@@ -264,6 +379,10 @@ public sealed class ConversationRow(MessageRow newest, int count, bool expanded,
     public string Glyph => IsExpanded ? "\u2304" : "\u203A";
     public string CountLabel => Count.ToString();
     public string SplitGlyph => IsSplit ? "\u21C4" : string.Empty;
+
+    /// <summary>True while the list is in the compact card layout.</summary>
+    public bool IsCard => Newest.IsCard;
+
     public string From => Newest.From;
     public string Subject => Newest.Subject;
     public string Preview => Newest.Preview;
@@ -292,7 +411,7 @@ public sealed class GroupHeaderRow(string header, int count, bool collapsed)
 /// passes a squint test against real the reference application, not that it moves mail. Phases 2 onward replace
 /// each collection with the real store.
 /// </summary>
-public sealed class ShellViewModel : ObservableObject
+public sealed partial class ShellViewModel : ObservableObject
 {
     private readonly ThemeService _themes;
     private FolderNode? _selectedFolder;
@@ -404,11 +523,7 @@ public sealed class ShellViewModel : ObservableObject
 
         _selectedMessage = Messages.FirstOrDefault();
 
-        foreach (var column in Columns)
-        {
-            var title = column.Title;
-            column.Sort = new RelayCommand(() => SortBy(title));
-        }
+        RebuildColumns();
 
         ShowAll = new RelayCommand(() => UnreadOnly = false);
         ShowUnread = new RelayCommand(() => UnreadOnly = true);
@@ -776,6 +891,7 @@ public sealed class ShellViewModel : ObservableObject
         if (!_folderIds.TryGetValue(folder, out var where)) return;
 
         Messages.Clear();
+        LoadFolderView(where.Account, where.FolderId);
 
         // The Outbox is not a folder of filed mail. What is in it is queued, and the row that
         // matters most is the one that failed permanently — which until now was visible for
@@ -825,6 +941,11 @@ public sealed class ShellViewModel : ObservableObject
                 Importance = summary.Importance,
                 ThreadKey = Store.Lists.Arrangements.NormalisedSubject(summary.Subject),
                 FolderId = summary.FolderId,
+                FromAddress = summary.FromAddress,
+                To = summary.To,
+                Cc = summary.Cc,
+                Sent = summary.Sent,
+                HasReminder = summary.Reminder is not null,
             });
         }
 
@@ -835,6 +956,7 @@ public sealed class ShellViewModel : ObservableObject
             if (categories.TryGetValue(row.Id, out var assigned))
             {
                 row.CategoryTokens = [.. assigned.Select(c => c.ColourToken)];
+                row.CategoryNames = [.. assigned.Select(c => c.Name)];
             }
         }
 
@@ -1506,6 +1628,7 @@ public sealed class ShellViewModel : ObservableObject
             _collapsed.Clear();
             Rebuild();
             Raise(nameof(ArrangementLabel));
+            RememberSort();
         }
     } = Arrangement.Date;
 
@@ -1522,6 +1645,7 @@ public sealed class ShellViewModel : ObservableObject
             if (!Set(ref field, value)) return;
             Rebuild();
             Raise(nameof(SortGlyph));
+            RememberSort();
         }
     } = true;
 
@@ -1583,16 +1707,23 @@ public sealed class ShellViewModel : ObservableObject
             if (!Set(ref field, Math.Clamp(value, 0, 3))) return;
             Raise(nameof(RowHeight));
             Raise(nameof(ShowPreviewLine));
+            Raise(nameof(ShowCardPreview));
         }
     } = 1;
 
-    public bool ShowPreviewLine => CompactRows && PreviewLines > 0;
+    public bool ShowPreviewLine => CompactRows && PreviewLines > 0 && !CardRows;
+
+    /// <summary>The card's preview lines, when the view has any.</summary>
+    public bool ShowCardPreview => CardRows && PreviewLines > 0;
 
     /// <summary>
-    /// Row height follows the mode and the preview count, so a taller row is a taller row
-    /// rather than a clipped one.
+    /// Row height follows the layout and the preview count, so a taller row is a taller row
+    /// rather than a clipped one: the card stacks sender, subject and preview; the line has
+    /// its preview beneath.
     /// </summary>
-    public double RowHeight => CompactRows ? 26 + (PreviewLines * 18) : 24;
+    public double RowHeight => CardRows
+        ? 44 + (PreviewLines * 16)
+        : CompactRows ? 26 + (PreviewLines * 18) : 24;
 
     /// <summary>
     /// Show as Conversations. Off, the list is one row per message; on, replies fold under the
@@ -1624,7 +1755,26 @@ public sealed class ShellViewModel : ObservableObject
         var built = new List<object>();
 
         var rows = Filter == ListFilter.None ? Messages : Messages.Where(Passes);
-        var groups = Store.Lists.Arrangements.Group(rows, Arrangement, SortDescending);
+        if (!_viewFilter.IsEmpty) rows = rows.Where(r => Mailbox.Core.Search.SearchMatcher.Matches(_viewFilter, r.Facts()));
+        var groups = Store.Lists.Arrangements.Group(rows, GroupArrangement, GroupDescending);
+
+        // Group By's "All collapsed": every group of this build starts shut, once.
+        if (_collapseAllNext)
+        {
+            _collapseAllNext = false;
+            foreach (var group in groups) _collapsed.Add(group.Header);
+        }
+
+        // Other Settings' "Show items in Groups" off: one run of rows, no headers.
+        if (!CurrentView.ShowInGroups && groups.Count > 0)
+        {
+            var flat = groups.SelectMany(g => g.Items).ToList();
+            var content = ShowAsConversations ? Threaded(flat) : [.. flat.Select(r => (object)Reset(r))];
+            VisibleRows = content;
+            Raise(nameof(VisibleCount));
+            Raise(nameof(StatusLeft));
+            return;
+        }
 
         foreach (var group in groups)
         {
@@ -1662,6 +1812,7 @@ public sealed class ShellViewModel : ObservableObject
             }
 
             var open = _expanded.Contains(thread.Newest.ThreadKey);
+            Reset(thread.Newest);
             rows.Add(new ConversationRow(thread.Newest, thread.Count, open, thread.IsSplit));
 
             if (!open) continue;
@@ -1677,9 +1828,12 @@ public sealed class ShellViewModel : ObservableObject
     }
 
     /// <summary>Clears any indent left over from a previous conversation view.</summary>
-    private static MessageRow Reset(MessageRow row)
+    private MessageRow Reset(MessageRow row)
     {
         row.Depth = 0;
+        row.IsCard = CardRows;
+        row.UnreadStyling = _unreadStyled;
+        row.Format = FormatFor(row);
         return row;
     }
 
@@ -2355,8 +2509,12 @@ public sealed class ShellViewModel : ObservableObject
             "From" => Arrangement.From,
             "To" => Arrangement.To,
             "Subject" => Arrangement.Subject,
-            "Received" => Arrangement.Date,
+            "Received" or "Sent" or "Date" => Arrangement.Date,
             "Size" => Arrangement.Size,
+            "Importance" => Arrangement.Importance,
+            "Flag" => Arrangement.Flag,
+            "Attachments" => Arrangement.Attachments,
+            "Categories" => Arrangement.Categories,
             _ => (Arrangement?)null,
         };
 
@@ -2417,16 +2575,14 @@ public sealed class ShellViewModel : ObservableObject
 
 
     /// <summary>
-    /// Message-list columns in the reference's own order. The first four are icon-only glyph
-    /// columns — importance, reminder, item type and attachment.
+    /// Message-list columns, from the current view, in its order. The glyph columns —
+    /// importance, reminder, item type, attachment — are drawn narrow and unlabelled.
     /// </summary>
-    public MessageColumn[] Columns { get; } =
-    [
-        new("!", 18, isGlyph: true), new("\u2302", 18, isGlyph: true),
-        new("\u25A4", 18, isGlyph: true), new("\u25EF", 18, isGlyph: true),
-        new("From", 150), new("Subject", 300), new("Received", 100),
-        new("Size", 55), new("Categories", 90), new("Mention", 70),
-    ];
+    public IReadOnlyList<MessageColumn> Columns
+    {
+        get;
+        private set => Set(ref field, value);
+    } = [];
 
     public string StatusLeft =>
         $"Items: {VisibleCount}   Unread: {Messages.Count(m => m.IsUnread)}";
@@ -2444,8 +2600,11 @@ public sealed class ShellViewModel : ObservableObject
 }
 
 /// <summary>One header cell in the message list's column strip.</summary>
-public sealed class MessageColumn(string title, double width, bool isGlyph = false)
+public sealed class MessageColumn(string field, string title, double width, bool isGlyph = false)
 {
+    /// <summary>The view field this column shows — <see cref="Mailbox.Core.Views.ViewFields"/>.</summary>
+    public string Field { get; } = field;
+
     public string Title { get; } = title;
     public double Width { get; } = width;
 
@@ -2456,6 +2615,9 @@ public sealed class MessageColumn(string title, double width, bool isGlyph = fal
 
     /// <summary>Icon-only columns render centred and unlabelled — importance, flag, attachment.</summary>
     public bool IsGlyph { get; } = isGlyph;
+
+    /// <summary>The subject column takes what the others leave.</summary>
+    public bool Stretches => Field == Mailbox.Core.Views.ViewFields.Subject;
 }
 
 /// <summary>Minimal ICommand for view-model-driven buttons.</summary>

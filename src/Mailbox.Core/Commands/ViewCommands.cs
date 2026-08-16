@@ -80,6 +80,88 @@ public static class ViewCommands
         KeyTip = "VS",
     };
 
+    // The Change View gallery's three, the Current View menu's two, and the gallery's three
+    // dialogs, as commands: keyboard, harness and the menus all run the same thing.
+    public static readonly MailboxCommand ChangeViewCompact = new()
+    {
+        Id = new("view.change.compact"),
+        Label = "Compact",
+        Description = "The Compact view: a card in a narrow list, a line with a preview in a wide one.",
+        Icon = "change-view",
+        Category = "Current View",
+        InDefaultLayout = false,
+    };
+
+    public static readonly MailboxCommand ChangeViewSingle = new()
+    {
+        Id = new("view.change.single"),
+        Label = "Single",
+        Description = "The Single view: one line per message, in columns.",
+        Icon = "change-view",
+        Category = "Current View",
+        InDefaultLayout = false,
+    };
+
+    public static readonly MailboxCommand ChangeViewPreview = new()
+    {
+        Id = new("view.change.preview"),
+        Label = "Preview",
+        Description = "The Preview view: one line per message with its preview beneath.",
+        Icon = "change-view",
+        Category = "Current View",
+        InDefaultLayout = false,
+    };
+
+    public static readonly MailboxCommand ManageViews = new()
+    {
+        Id = new("view.manage"),
+        Label = "Manage Views…",
+        Description = "Create, copy, modify, rename and delete the views this folder can use.",
+        Icon = "view-settings",
+        Category = "Current View",
+        InDefaultLayout = false,
+    };
+
+    public static readonly MailboxCommand SaveViewAs = new()
+    {
+        Id = new("view.saveas"),
+        Label = "Save Current View As a New View…",
+        Description = "Keep the current view under a name of your own.",
+        Icon = "view-settings",
+        Category = "Current View",
+        InDefaultLayout = false,
+    };
+
+    public static readonly MailboxCommand ApplyViewToFolders = new()
+    {
+        Id = new("view.applyto"),
+        Label = "Apply Current View to Other Mail Folders…",
+        Description = "Put this folder's view on other folders of the account.",
+        Icon = "view-settings",
+        Category = "Current View",
+        InDefaultLayout = false,
+    };
+
+    public static readonly MailboxCommand OpenViewSettings = new()
+    {
+        Id = new("view.viewsettings"),
+        Label = "View Settings…",
+        Description = "Advanced View Settings: columns, grouping, sorting, filtering and conditional formatting.",
+        Icon = "view-settings",
+        Category = "Current View",
+        InDefaultLayout = false,
+    };
+
+    public static readonly MailboxCommand ResetView = new()
+    {
+        Id = new("view.reset"),
+        Label = "Reset View",
+        Description = "Put this folder's view back the way it came.",
+        Icon = "view-settings",
+        Category = "Current View",
+        InDefaultLayout = false,
+    };
+
     public static readonly MailboxCommand ArrangeBy = new()
     {
         Id = new("view.arrangeby"),
@@ -236,6 +318,8 @@ public static class ViewCommands
     [
         SendAll, UpdateFolder, SendReceiveGroups, ShowProgress, CancelAll,
         ChangeView, ViewSettings, ArrangeBy, ReverseSort, TighterSpacing, LayoutMenu,
+        ChangeViewCompact, ChangeViewSingle, ChangeViewPreview, ManageViews, SaveViewAs, ApplyViewToFolders,
+        OpenViewSettings, ResetView,
         ImmersiveReader, ShowFocusedInbox,
         Redo, Apps, SearchPeople, ReadAloud,
         MoveToQuick, ToManager, TeamEmail,

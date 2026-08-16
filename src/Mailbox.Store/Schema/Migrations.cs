@@ -557,6 +557,23 @@ public static class Migrations
             stale          INTEGER NOT NULL DEFAULT 0
         );
         """,
+
+        // ---- 24: views ------------------------------------------------------------------------
+        //
+        // Change View and Advanced View Settings. A folder's current view — layout, columns,
+        // grouping, sort, filter, formatting — is one JSON document on the folder (Core's
+        // MailView writes and reads it), null for the shipped Compact view untouched. Views a
+        // reader saves by name live in `views`, per account like everything here, so Manage
+        // Views can offer them to any folder and Reset can go back to what was saved.
+        """
+        ALTER TABLE folders ADD COLUMN view_json TEXT;
+        CREATE TABLE views (
+            id            INTEGER PRIMARY KEY,
+            name          TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+            definition    TEXT    NOT NULL,
+            created_utc   INTEGER NOT NULL
+        );
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>
