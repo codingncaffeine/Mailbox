@@ -60,8 +60,8 @@ internal sealed class RibbonGroupsPanel : Panel
             Children.Add(slots[i].Compact);
             Children.Add(slots[i].Popup);
 
-            if (i >= slots.Count - 1) continue;
-
+            // A rule after every group, the last included: the reference closes its last group
+            // with one (measured at x=1311 after Send/Receive on the Home tab).
             var rule = separator();
             _separators.Add(rule);
             Children.Add(rule);
@@ -110,10 +110,6 @@ internal sealed class RibbonGroupsPanel : Panel
             var width = shown.DesiredSize.Width;
             shown.Arrange(new Rect(x, 0, width, finalSize.Height));
             x += width;
-
-            // Separators sit between groups, so there is one fewer of them than there are
-            // groups and the last group is not followed by one.
-            if (i >= _separators.Count) continue;
 
             var rule = _separators[i];
             rule.Arrange(new Rect(x, 0, rule.DesiredSize.Width, finalSize.Height));

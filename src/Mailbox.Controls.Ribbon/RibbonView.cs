@@ -1227,11 +1227,12 @@ public sealed class RibbonView : ContentControl
 
     private Control BuildGroupSeparator()
     {
+        // Through the label row, as the reference's runs: 5 rows clear at the top and 6 at the
+        // bottom of the 100, measured.
         var rule = new Border
         {
             Width = 1,
-            Margin = new Thickness(0, RibbonMetrics.SeparatorMargin,
-                                   0, RibbonMetrics.GroupLabelHeight + RibbonMetrics.SeparatorMargin),
+            Margin = new Thickness(0, RibbonMetrics.SeparatorTop, 0, RibbonMetrics.SeparatorBottom),
         };
         Bind(rule, Border.BackgroundProperty, "ribbon.group.separator.brush");
         return rule;
@@ -1281,7 +1282,7 @@ public sealed class RibbonView : ContentControl
             VerticalAlignment = VerticalAlignment.Center,
         };
 
-        stack.Children.Add(BuildIcon(CollapsedGroupIcon(group), RibbonMetrics.LargeIconSize, 24));
+        stack.Children.Add(BuildIcon(CollapsedGroupIcon(group), RibbonMetrics.LargeIconSize, 32));
 
         var chevron = new TextBlock
         {
@@ -1408,11 +1409,12 @@ public sealed class RibbonView : ContentControl
                 {
                     Orientation = Orientation.Vertical,
                     VerticalAlignment = VerticalAlignment.Top,
+                    Margin = new Thickness(0, RibbonMetrics.SmallStackTop, 0, 0),
                 };
                 row.Children.Add(smallColumn);
             }
 
-            smallColumn.Children.Add(BuildSmallButton(command, item));
+            smallColumn.Children.Add(BuildSmallButton(command, item, RibbonMetrics.SmallButtonHeight));
         }
 
         return row;
@@ -1465,18 +1467,19 @@ public sealed class RibbonView : ContentControl
         {
             if (_catalog.TryGet(item.Command, out var command))
             {
-                entries.Children.Add(BuildSmallButton(command, item));
+                entries.Children.Add(BuildSmallButton(command, item, RibbonMetrics.GallerySlotHeight));
             }
         }
 
         // The entries scroll inside the box; the chevrons drive that scroller and the third
         // glyph opens the whole gallery as a menu. Drawn as glyphs they did nothing at all.
+        // Three entries fill the box exactly, as the reference's Quick Steps do.
         var viewer = new ScrollViewer
         {
             Content = entries,
             VerticalScrollBarVisibility = ScrollBarVisibility.Hidden,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            MaxHeight = RibbonMetrics.BodyHeight - 28,
+            Height = RibbonMetrics.GalleryInteriorHeight,
         };
 
         var scroll = new StackPanel
@@ -1499,13 +1502,15 @@ public sealed class RibbonView : ContentControl
         Grid.SetColumn(scroll, 1);
         inner.Children.Add(scroll);
 
+        // On the body's 6th row with a 1px line, so its entries' text lands on rows 15, 39 and
+        // 63 as the reference's does — measured, and why there is no vertical padding.
         var box = new Border
         {
             Child = inner,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(2),
-            Padding = new Thickness(2),
-            Margin = new Thickness(2, 2, 2, 4),
+            Padding = new Thickness(2, 0),
+            Margin = new Thickness(2, RibbonMetrics.GalleryTop, 2, 0),
             VerticalAlignment = VerticalAlignment.Top,
         };
         // The gallery's own pair, not the content surface's: a gallery is chrome, and in Dark
@@ -1517,11 +1522,13 @@ public sealed class RibbonView : ContentControl
 
     private Control BuildGroupFooter(RibbonGroup group, bool withLauncher = true)
     {
+        // Top-aligned in the label row, which puts the label's baseline on the body's 93rd row
+        // — where the reference's is, measured. Centred it sat two rows lower.
         var label = new TextBlock
         {
             Text = GroupLabel(group),
             HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Top,
         };
         Bind(label, TextBlock.ForegroundProperty, "ribbon.group.label.brush");
         Bind(label, TextBlock.FontSizeProperty, "type.ui.size.small.value");
@@ -1562,7 +1569,7 @@ public sealed class RibbonView : ContentControl
         };
 
         stack.Children.Add(BuildIcon(
-            command.Icon, RibbonMetrics.LargeIconSize, 24, command.NeutralIcon));
+            command.Icon, RibbonMetrics.LargeIconSize, 32, command.NeutralIcon));
 
         // Two lines at the reference's break, or one — decided here from measured widths rather
         // than by wrapping inside a fixed width, which broke a long word in the middle and put a
@@ -1573,7 +1580,7 @@ public sealed class RibbonView : ContentControl
             TextWrapping = TextWrapping.NoWrap,
             TextAlignment = TextAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Center,
-            LineHeight = 13,
+            LineHeight = RibbonMetrics.LargeLabelLineHeight,
         };
         Bind(label, TextBlock.ForegroundProperty, "text.primary.brush");
         Bind(label, TextBlock.FontSizeProperty, "type.ui.size.small.value");
@@ -1592,8 +1599,12 @@ public sealed class RibbonView : ContentControl
             stack.Children.Add(chevron);
         }
 
-        return WrapAsButton(stack, command, new Thickness(4, 4, 4, 2),
+        // Top-aligned, so a one-line label's icon sits where a two-line label's does — the
+        // reference's Delete and New Email icons start on the same row.
+        var button = WrapAsButton(stack, command, new Thickness(4, RibbonMetrics.LargeButtonPaddingTop, 4, 2),
             RibbonMetrics.LargeButtonMinWidth, RibbonMetrics.ItemAreaHeight);
+        button.VerticalContentAlignment = VerticalAlignment.Top;
+        return button;
     }
 
     /// <summary>
@@ -1621,7 +1632,7 @@ public sealed class RibbonView : ContentControl
             typeface, size, null).Width;
     }
 
-    private Control BuildSmallButton(MailboxCommand command, RibbonItem item)
+    private Control BuildSmallButton(MailboxCommand command, RibbonItem item, double height)
     {
         var row = new StackPanel
         {
@@ -1661,15 +1672,16 @@ public sealed class RibbonView : ContentControl
         }
 
         return WrapAsButton(row, command, new Thickness(4, 0),
-            RibbonMetrics.SmallButtonMinWidth, RibbonMetrics.SmallButtonHeight);
+            RibbonMetrics.SmallButtonMinWidth, height);
     }
 
     /// <param name="fontSize">
-    /// The em size to draw at. Defaults to a fraction of the box, but the Simplified bar sets it
-    /// explicitly: its glyphs are measured at 17px of ink in the reference and the derived size
-    /// produced 10, which made every icon on the bar look like a thumbnail of itself. The box
-    /// stays at its measured width so the button pitch does not move; the glyph is allowed to
-    /// fill it.
+    /// The em size to draw at. Defaults to the box — the artwork at its own size — because a
+    /// fraction of the box made every icon a thumbnail of itself: the reference's large icons
+    /// carry 26–28 rows of ink in their 32px box and its small ones 14 in 16, measured off the
+    /// classic capture, where ours carried 18 and 9 at 0.72 of the box. The Simplified bar sets
+    /// it explicitly: its glyphs are measured at 17px of ink in an 18px box, and the box stays at
+    /// its measured width so the button pitch does not move while the glyph fills it.
     /// </param>
     private Control BuildIcon(
         string iconName, double boxSize, int artworkSize, bool neutral = false,
@@ -1679,7 +1691,7 @@ public sealed class RibbonView : ContentControl
         {
             Text = IconGlyphs.GetOrEmpty(iconName, artworkSize),
             FontFamily = IconFont.Family,
-            FontSize = fontSize ?? boxSize * 0.72,
+            FontSize = fontSize ?? boxSize,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
             TextAlignment = TextAlignment.Center,
