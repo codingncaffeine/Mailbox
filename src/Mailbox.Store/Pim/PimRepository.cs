@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Data.Sqlite;
 
 namespace Mailbox.Store.Pim;
@@ -85,7 +86,8 @@ public sealed class PimRepository(PimStore store)
         SELECT id, collection_id, uid, kind, dav_href, etag, raw_payload, summary, description, location,
                starts_utc, ends_utc, starts_local, ends_local, tz_id, all_day, status, priority, percent_complete,
                completed_utc, rrule, recurrence_id, is_override, sequence, organizer, busy, reminder_minutes,
-               categories, last_modified, sync_state
+               categories, last_modified, sync_state,
+               file_as, first_name, last_name, company, job_title, is_group
         FROM pim_items
         """;
 
@@ -145,12 +147,14 @@ public sealed class PimRepository(PimStore store)
                     (collection_id, uid, kind, dav_href, etag, raw_payload, summary, description, location,
                      starts_utc, ends_utc, starts_local, ends_local, tz_id, all_day, status, priority, percent_complete,
                      completed_utc, rrule, recurrence_id, is_override, sequence, organizer, busy, reminder_minutes,
-                     categories, last_modified, sync_state)
+                     categories, last_modified, sync_state,
+                     file_as, first_name, last_name, company, job_title, is_group)
                 VALUES
                     ($collection, $uid, $kind, $href, $etag, $raw, $summary, $description, $location,
                      $starts, $ends, $startsLocal, $endsLocal, $tz, $allDay, $status, $priority, $percent,
                      $completed, $rrule, $recurrenceId, $override, $sequence, $organizer, $busy, $reminder,
-                     $categories, $modified, $sync)
+                     $categories, $modified, $sync,
+                     $fileAs, $firstName, $lastName, $company, $jobTitle, $isGroup)
                 """,
                 Parameters(item));
             var id = _store.LastInsertId;
@@ -173,7 +177,9 @@ public sealed class PimRepository(PimStore store)
                     starts_utc = $starts, ends_utc = $ends, starts_local = $startsLocal, ends_local = $endsLocal, tz_id = $tz,
                     all_day = $allDay, status = $status, priority = $priority, percent_complete = $percent, completed_utc = $completed,
                     rrule = $rrule, recurrence_id = $recurrenceId, is_override = $override, sequence = $sequence, organizer = $organizer,
-                    busy = $busy, reminder_minutes = $reminder, categories = $categories, last_modified = $modified, sync_state = $sync
+                    busy = $busy, reminder_minutes = $reminder, categories = $categories, last_modified = $modified, sync_state = $sync,
+                    file_as = $fileAs, first_name = $firstName, last_name = $lastName, company = $company,
+                    job_title = $jobTitle, is_group = $isGroup
                 WHERE id = $id
                 """,
                 [.. Parameters(item), ("$id", item.Id)]);
@@ -220,17 +226,153 @@ public sealed class PimRepository(PimStore store)
 
     private void IndexItem(long id, PimItem item)
     {
+        // The fourth column is who the item concerns: an appointment's attendees, and a contact's
+        // own addresses and numbers — the same question asked of two kinds of item.
+        var people = item.Kind == CollectionKind.Contacts
+            ? string.Join(' ', new[] { item.FileAs, item.FirstName, item.LastName, item.Company, item.JobTitle }
+                    .Where(p => p is { Length: > 0 })
+                    .Concat(ContactFields(id).Select(f => f.Value)))
+            : string.Join(' ', Attendees(id).Select(a => a.Name.Length > 0 ? a.Name + " " + a.Address : a.Address));
+
         _store.Execute("DELETE FROM pim_fts WHERE rowid = $id", ("$id", id));
         _store.Execute(
             "INSERT INTO pim_fts (rowid, summary, description, location, attendees) VALUES ($id, $s, $d, $l, $a)",
-            ("$id", id), ("$s", item.Summary), ("$d", item.Description), ("$l", item.Location),
-            ("$a", string.Join(' ', Attendees(id).Select(a => a.Name.Length > 0 ? a.Name + " " + a.Address : a.Address))));
+            ("$id", id), ("$s", item.Summary), ("$d", item.Description), ("$l", item.Location), ("$a", people));
     }
 
     /// <summary>A search string as an FTS5 query: every word a prefix, so "stan" finds "standup".</summary>
     private static string FtsQuery(string text)
         => string.Join(" ", text.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(w => "\"" + w.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"*"));
+
+    // ---- Contacts ---------------------------------------------------------------------------
+
+    /// <summary>
+    /// An address book's contacts, in the order the list shows them: by File As, which is what
+    /// the index letters down its side are taken from.
+    /// </summary>
+    /// <param name="collectionIds">Only these address books; null for every visible one.</param>
+    public IReadOnlyList<PimItem> Contacts(IReadOnlyCollection<long>? collectionIds = null)
+    {
+        var scope = collectionIds is { Count: > 0 }
+            ? $" AND i.collection_id IN ({string.Join(",", collectionIds.Select(id => id.ToString(CultureInfo.InvariantCulture)))})"
+            : " AND c.is_visible = 1";
+
+        return _store.Query(
+            ItemSelect
+            + $"""
+
+                WHERE id IN (
+                    SELECT i.id FROM pim_items i JOIN collections c ON c.id = i.collection_id
+                    WHERE i.kind = 'vcard' AND i.sync_state <> 'deleted'{scope})
+                ORDER BY file_as COLLATE NOCASE, summary COLLATE NOCASE, id
+                """,
+            ReadItem);
+    }
+
+    /// <summary>
+    /// Who holds this address, over every address book.
+    /// </summary>
+    /// <remarks>
+    /// The question the reading pane asks of a sender, the compose window of a recipient and the
+    /// group editor of a member. Indexed rather than scanned, and case-insensitive because an
+    /// address is.
+    /// </remarks>
+    public IReadOnlyList<PimItem> ContactsWithAddress(string address)
+    {
+        if (string.IsNullOrWhiteSpace(address)) return [];
+        return _store.Query(
+            ItemSelect
+            + """
+
+                WHERE id IN (
+                    SELECT item_id FROM pim_contact_fields
+                    WHERE kind = 'email' AND value = $value COLLATE NOCASE)
+                  AND sync_state <> 'deleted'
+                ORDER BY file_as COLLATE NOCASE, id
+                """,
+            ReadItem, ("$value", address.Trim()));
+    }
+
+    /// <summary>
+    /// Contacts whose name, company or address begins with what has been typed — the address
+    /// book's half of the compose window's autocomplete.
+    /// </summary>
+    public IReadOnlyList<PimItem> FindContacts(string prefix, int limit = 20)
+    {
+        if (string.IsNullOrWhiteSpace(prefix)) return [];
+        var like = prefix.Trim().Replace("%", "\\%", StringComparison.Ordinal).Replace("_", "\\_", StringComparison.Ordinal) + "%";
+
+        return _store.Query(
+            ItemSelect
+            + """
+
+                WHERE kind = 'vcard' AND sync_state <> 'deleted'
+                  AND (summary LIKE $like ESCAPE '\' COLLATE NOCASE
+                       OR file_as LIKE $like ESCAPE '\' COLLATE NOCASE
+                       OR first_name LIKE $like ESCAPE '\' COLLATE NOCASE
+                       OR last_name LIKE $like ESCAPE '\' COLLATE NOCASE
+                       OR company LIKE $like ESCAPE '\' COLLATE NOCASE
+                       OR id IN (SELECT item_id FROM pim_contact_fields WHERE kind = 'email' AND value LIKE $like ESCAPE '\' COLLATE NOCASE))
+                ORDER BY file_as COLLATE NOCASE, id
+                LIMIT $limit
+                """,
+            ReadItem, ("$like", like), ("$limit", limit));
+    }
+
+    /// <summary>A contact's addresses and numbers, in the order the card shows them.</summary>
+    public IReadOnlyList<ContactField> ContactFields(long itemId)
+        => _store.Query(
+            "SELECT kind, value, label, ordinal FROM pim_contact_fields WHERE item_id = $id ORDER BY kind, ordinal",
+            r => new ContactField(r.GetString(0), r.GetString(1), r.GetString(2), r.GetInt32(3)),
+            ("$id", itemId));
+
+    /// <summary>
+    /// Replaces a contact's addresses and numbers, and re-indexes it — the addresses are part of
+    /// what search has to find a person by, and they are not written until after the row is.
+    /// </summary>
+    public void SetContactFields(long itemId, IReadOnlyList<ContactField> fields)
+    {
+        ArgumentNullException.ThrowIfNull(fields);
+        _store.InTransaction(() =>
+        {
+            _store.Execute("DELETE FROM pim_contact_fields WHERE item_id = $id", ("$id", itemId));
+
+            var ordinal = 0;
+            foreach (var field in fields.Where(f => f.Value is { Length: > 0 }))
+            {
+                _store.Execute(
+                    "INSERT INTO pim_contact_fields (item_id, kind, value, label, ordinal) VALUES ($id, $kind, $value, $label, $ordinal)",
+                    ("$id", itemId), ("$kind", field.Kind), ("$value", field.Value.Trim()),
+                    ("$label", field.Label), ("$ordinal", field.Ordinal == 0 ? ordinal++ : field.Ordinal));
+            }
+
+            if (Item(itemId) is { } item) IndexItem(itemId, item);
+            return 0;
+        });
+    }
+
+    /// <summary>A contact's photograph, or null when it has none.</summary>
+    public (string MediaType, byte[] Bytes)? ContactPhoto(long itemId)
+        => _store.Query(
+            "SELECT media_type, bytes FROM pim_photos WHERE item_id = $id",
+            r => (r.GetString(0), (byte[])r.GetValue(1)),
+            ("$id", itemId)).Cast<(string, byte[])?>().FirstOrDefault();
+
+    /// <summary>Stores a contact's photograph, or takes it away when there is none.</summary>
+    public void SetContactPhoto(long itemId, byte[]? bytes, string mediaType = "image/jpeg")
+    {
+        if (bytes is not { Length: > 0 })
+        {
+            _store.Execute("DELETE FROM pim_photos WHERE item_id = $id", ("$id", itemId));
+            return;
+        }
+
+        _store.Execute(
+            "INSERT INTO pim_photos (item_id, media_type, bytes) VALUES ($id, $type, $bytes) " +
+            "ON CONFLICT(item_id) DO UPDATE SET media_type = $type, bytes = $bytes",
+            ("$id", itemId), ("$type", mediaType), ("$bytes", bytes));
+    }
 
     // ---- Attendees --------------------------------------------------------------------------
 
@@ -379,6 +521,8 @@ public sealed class PimRepository(PimStore store)
         ("$rrule", item.Rrule), ("$recurrenceId", item.RecurrenceId), ("$override", item.IsOverride ? 1 : 0), ("$sequence", item.Sequence),
         ("$organizer", item.Organizer), ("$busy", item.Busy), ("$reminder", item.ReminderMinutes), ("$categories", item.Categories),
         ("$modified", item.LastModified.ToUnixTimeSeconds()), ("$sync", SyncText(item.SyncState)),
+        ("$fileAs", item.FileAs), ("$firstName", item.FirstName), ("$lastName", item.LastName),
+        ("$company", item.Company), ("$jobTitle", item.JobTitle), ("$isGroup", item.IsGroup ? 1 : 0),
     ];
 
     private static PimItem ReadItem(SqliteDataReader r) => new()
@@ -413,6 +557,12 @@ public sealed class PimRepository(PimStore store)
         Categories = r.GetString(27),
         LastModified = DateTimeOffset.FromUnixTimeSeconds(r.GetInt64(28)),
         SyncState = ParseSync(r.GetString(29)),
+        FileAs = r.GetString(30),
+        FirstName = r.GetString(31),
+        LastName = r.GetString(32),
+        Company = r.GetString(33),
+        JobTitle = r.GetString(34),
+        IsGroup = r.GetInt32(35) != 0,
     };
 
     private static Collection ReadCollection(SqliteDataReader r) => new(

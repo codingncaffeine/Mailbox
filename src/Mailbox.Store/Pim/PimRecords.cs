@@ -84,4 +84,24 @@ public sealed record PimItem
     public PimSyncState SyncState { get; init; } = PimSyncState.Synced;
     public string? DavHref { get; init; }
     public string? Etag { get; init; }
+
+    // ---- A contact's own columns ---------------------------------------------------------------
+    // Empty for everything that is not one. They are here rather than in a table of their own for
+    // the reason the calendar's are: a list draws its rows from columns and never parses a card.
+
+    /// <summary>What the contact list orders by, and what its index letters are taken from.</summary>
+    public string FileAs { get; init; } = string.Empty;
+
+    public string FirstName { get; init; } = string.Empty;
+    public string LastName { get; init; } = string.Empty;
+    public string Company { get; init; } = string.Empty;
+    public string JobTitle { get; init; } = string.Empty;
+
+    /// <summary>A distribution list rather than a person.</summary>
+    public bool IsGroup { get; init; }
 }
+
+/// <summary>One of a contact's addresses or numbers, indexed so it can be looked up by value.</summary>
+/// <param name="Kind">email · phone · im.</param>
+/// <param name="Label">Which one it is — business, home, mobile — as the card labels it.</param>
+public sealed record ContactField(string Kind, string Value, string Label = "", int Ordinal = 0);
