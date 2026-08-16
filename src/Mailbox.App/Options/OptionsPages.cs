@@ -434,6 +434,13 @@ public static class OptionsPages
                 new SlotRow("schedule"),
             ]),
 
+            // Linux-native: the reference never had to choose a windowing backend or a scale.
+            // Both are read when Mailbox starts, so the row says so.
+            new OptionSection("Display",
+            [
+                new SlotRow("display"),
+            ]),
+
             new OptionSection("Developers",
             [
                 new CheckRow("Show plugin user interface errors"),

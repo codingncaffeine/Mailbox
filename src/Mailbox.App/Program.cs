@@ -20,6 +20,21 @@ internal static class Program
         {
             App.Instance = new Mailbox.Core.SingleInstance();
             if (App.Instance.TryHandOff(args)) return 0;
+
+            // The reader's display choices — backend and scale — go into the environment the
+            // platform reads, before it reads it. A capture run pins its own scale instead.
+            try
+            {
+                var display = new Mailbox.Core.Platform.DisplaySettings(new Mailbox.Core.Settings.SettingsStore());
+                if (display.ApplyToEnvironment(Environment.GetEnvironmentVariable, Environment.SetEnvironmentVariable) is { } applied)
+                {
+                    Log.Info(applied);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("The display settings could not be read; starting with the desktop's own.", ex);
+            }
         }
         else
         {
