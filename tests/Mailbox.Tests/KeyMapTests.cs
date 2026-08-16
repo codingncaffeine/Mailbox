@@ -103,4 +103,45 @@ public class KeyMapTests : IDisposable
         Assert.False(keys.IsCustomised(MailCommands.NewEmail.Id));
         Assert.Equal(2, raised);
     }
+
+    // ---- The reference's second chords ---------------------------------------------------
+
+    [Fact]
+    public void AnAlsoChordRunsTheCommandTooAndIsNotItsShownShortcut()
+    {
+        var (_, _, keys) = Fresh();
+
+        Assert.Equal(MailCommands.SendReceiveAll.Id, keys.CommandFor(Chord.Parse("F9")!));
+        Assert.Equal(MailCommands.SendReceiveAll.Id, keys.CommandFor(Chord.Parse("Ctrl+M")!));
+        Assert.Equal(MailCommands.NewEmail.Id, keys.CommandFor(Chord.Parse("Ctrl+Shift+M")!));
+        Assert.Equal(MailCommands.Search.Id, keys.CommandFor(Chord.Parse("F3")!));
+
+        // The tooltip and the editor show the command's own shortcut, not the extra one.
+        Assert.Equal("F9", keys.GestureFor(MailCommands.SendReceiveAll.Id)!.Display);
+        Assert.Equal([Chord.Parse("Ctrl+M")!], keys.AlsoGesturesFor(MailCommands.SendReceiveAll.Id));
+    }
+
+    [Fact]
+    public void AReadersAssignmentTakesAnAlsoChordAway()
+    {
+        var (_, _, keys) = Fresh();
+
+        keys.Assign(MailCommands.Delete.Id, Chord.Parse("Ctrl+M")!);
+
+        Assert.Equal(MailCommands.Delete.Id, keys.CommandFor(Chord.Parse("Ctrl+M")!));
+        Assert.Empty(keys.AlsoGesturesFor(MailCommands.SendReceiveAll.Id));
+        // And F9 still sends and receives.
+        Assert.Equal(MailCommands.SendReceiveAll.Id, keys.CommandFor(Chord.Parse("F9")!));
+    }
+
+    [Fact]
+    public void ResettingTheReadersAssignmentGivesTheAlsoChordBack()
+    {
+        var (_, _, keys) = Fresh();
+
+        keys.Assign(MailCommands.Delete.Id, Chord.Parse("Ctrl+M")!);
+        keys.Reset(MailCommands.Delete.Id);
+
+        Assert.Equal(MailCommands.SendReceiveAll.Id, keys.CommandFor(Chord.Parse("Ctrl+M")!));
+    }
 }

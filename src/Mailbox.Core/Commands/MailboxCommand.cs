@@ -48,6 +48,15 @@ public sealed record MailboxCommand
     public string? DefaultGesture { get; init; }
 
     /// <summary>
+    /// Further shortcuts that also run the command, as shipped: the reference gives a few
+    /// commands two — F9 and Ctrl+M both send and receive, Ctrl+N and Ctrl+Shift+M both start a
+    /// message, Ctrl+E and F3 both go to Search. These are consulted after every command's own
+    /// shortcut, so a reader who gives one of these chords to another command takes it away
+    /// from here without having to be asked.
+    /// </summary>
+    public IReadOnlyList<string> AlsoGestures { get; init; } = [];
+
+    /// <summary>
     /// False for commands that exist but are not in the reference application — Snooze, Undo Send, Message
     /// Source. They are fully present in the catalogue and customization gallery, they are
     /// simply absent from the default ribbon layout so first run is an exact clone.
