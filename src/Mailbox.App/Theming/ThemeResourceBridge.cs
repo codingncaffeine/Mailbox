@@ -63,19 +63,21 @@ public sealed class ThemeResourceBridge
         }
 
         // Convenience aliases so common XAML reads naturally.
+        // Through BundledFonts.FamilyFor, because a family Mailbox bundles is found only through
+        // its collection: asked for by its bare name, Selawik was never drawn.
         if (tokens.TryGetString(TokenKeys.Typography.UiFamily, out var uiFamily))
         {
-            _target["ui.fontfamily"] = new FontFamily(uiFamily);
+            _target["ui.fontfamily"] = Mailbox.Theming.Fonts.BundledFonts.FamilyFor(uiFamily);
         }
 
         if (tokens.TryGetString(TokenKeys.Typography.ContentFamily, out var contentFamily))
         {
-            _target["content.fontfamily"] = new FontFamily(contentFamily);
+            _target["content.fontfamily"] = Mailbox.Theming.Fonts.BundledFonts.FamilyFor(contentFamily);
         }
 
         if (tokens.TryGetString(TokenKeys.Typography.MonoFamily, out var monoFamily))
         {
-            _target["mono.fontfamily"] = new FontFamily(monoFamily);
+            _target["mono.fontfamily"] = Mailbox.Theming.Fonts.BundledFonts.FamilyFor(monoFamily);
         }
 
         PublishControlThemePalette(tokens);

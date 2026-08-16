@@ -217,7 +217,7 @@ public sealed class ComposeSurface : UserControl
         // buttons.
         _body = new RichEditor
         {
-            DefaultFontFamily = new FontFamily(App.Fonts.Resolve(ComposeFontFamily).Rendered),
+            DefaultFontFamily = Mailbox.Theming.Fonts.BundledFonts.FamilyFor(App.Fonts.Resolve(ComposeFontFamily).Rendered),
             DefaultFontSize = ComposeFontPoints / PointsPerPixel,
             AllowRemoteImagesOnPaste = false,
             AllowLocalFileImages = false,

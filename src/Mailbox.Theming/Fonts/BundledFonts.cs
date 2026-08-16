@@ -29,6 +29,21 @@ public static class BundledFonts
     public static IReadOnlyList<string> Families { get; } = [SelawikFamily];
 
     /// <summary>
+    /// The family as Avalonia has to be asked for it. A bundled family is found only through its
+    /// collection — <c>fonts:Mailbox#Selawik</c> — while a bare name is looked up among the
+    /// system's fonts alone, and a bare "Selawik" drew Noto Sans (or whatever fontconfig had)
+    /// from the first session until session 7, some six to ten percent wider than the metrics
+    /// the whole chrome was measured against. Any other family is returned as it is.
+    /// </summary>
+    public static FontFamily FamilyFor(string rendered)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(rendered);
+        return Families.Contains(rendered, StringComparer.OrdinalIgnoreCase)
+            ? new FontFamily("fonts:Mailbox#" + rendered)
+            : new FontFamily(rendered);
+    }
+
+    /// <summary>
     /// Registers the bundled typefaces with Avalonia so they resolve by plain family name —
     /// <c>Selawik</c> rather than an <c>avares://</c> URI. Call once at startup, before the
     /// first <see cref="FontResolver"/> is built.

@@ -64,6 +64,10 @@ public partial class MainWindow : Window
         // bar. In the reference the bar carries the item counts and nothing else.
         Log.Info($"Text rendering: {TextRendering.Describe()}");
         Log.Info($"UI font: {App.Fonts.Resolve("Segoe UI").Rendered}");
+        if (Avalonia.Media.FontManager.Current.TryGetGlyphTypeface(new Avalonia.Media.Typeface((Avalonia.Media.FontFamily)(Application.Current!.FindResource("ui.fontfamily") ?? Avalonia.Media.FontFamily.Default)), out var uiFace))
+        {
+            Log.Info($"UI font drawn as: {uiFace.FamilyName} (asked for {Application.Current!.FindResource("ui.fontfamily")})");
+        }
         Log.Info($"Body font: {App.Fonts.Resolve("Calibri").Rendered}");
 
         var quickAccess = App.QuickAccess;
