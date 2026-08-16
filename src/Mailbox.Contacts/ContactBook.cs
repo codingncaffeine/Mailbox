@@ -24,6 +24,9 @@ public sealed class ContactBook(PimRepository repository)
 {
     private readonly PimRepository _repository = repository ?? throw new ArgumentNullException(nameof(repository));
 
+    /// <summary>The store underneath, for the panes that act on a whole address book.</summary>
+    public PimRepository Repository => _repository;
+
     /// <summary>The address books, in the order the navigation pane lists them.</summary>
     public IReadOnlyList<Collection> AddressBooks() => _repository.Collections(CollectionKind.Contacts);
 

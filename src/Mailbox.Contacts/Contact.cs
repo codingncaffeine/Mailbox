@@ -85,6 +85,31 @@ public sealed record GroupMember(string Address = "", string Name = "", string U
     public bool IsEmpty => Address.Length == 0 && Uid.Length == 0;
 }
 
+/// <summary>Reading a member out of what somebody typed into a group's box.</summary>
+public static class GroupMembers
+{
+    /// <summary>
+    /// <c>Name &lt;someone@example.com&gt;</c>, or a bare address. Empty for anything that is
+    /// neither — a group with a member who has no address is a group that cannot be written to.
+    /// </summary>
+    public static GroupMember Parse(string? text)
+    {
+        var typed = text?.Trim() ?? string.Empty;
+        if (typed.Length == 0) return new GroupMember();
+
+        var open = typed.LastIndexOf('<');
+        var close = typed.LastIndexOf('>');
+        if (open >= 0 && close > open)
+        {
+            var address = typed[(open + 1)..close].Trim();
+            var name = typed[..open].Trim().Trim('"');
+            return address.Contains('@', StringComparison.Ordinal) ? new GroupMember(address, name) : new GroupMember();
+        }
+
+        return typed.Contains('@', StringComparison.Ordinal) ? new GroupMember(typed) : new GroupMember();
+    }
+}
+
 /// <summary>
 /// A person or a group as the application thinks of one: one record whichever vCard version it
 /// arrived in, and the one every view, the card and the autocomplete read.

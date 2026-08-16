@@ -85,7 +85,9 @@ public static class VCardCodec
             DisplayName = Text(card.DisplayNames),
             FirstName = Part(name?.Given),
             MiddleName = Middle(name),
-            LastName = Part(name?.Surnames),
+            // A "?" surname is the placeholder a writer puts in when a 3.0 card has no name to
+            // state; it is not somebody's name and is not shown as one.
+            LastName = Part(name?.Surnames) is "?" ? string.Empty : Part(name?.Surnames),
             Prefix = Part(name?.Prefixes),
             Suffix = Part(name?.Suffixes),
             NickName = card.NickNames?.FirstOrDefault(n => n is { IsEmpty: false })?.Value?.FirstOrDefault() ?? string.Empty,
@@ -327,8 +329,12 @@ public static class VCardCodec
 
         if (!contact.IsGroup)
         {
+            // A card written with no N at all comes back with "?" for a surname: 3.0 requires the
+            // property, so the library invents one. A contact who is a company rather than a
+            // person — "3 Hills Catering" — has no name parts, and its own name is the answer.
+            var bare = (contact.LastName + contact.FirstName + contact.MiddleName + contact.Prefix + contact.Suffix).Trim().Length == 0;
             var name = NameBuilder.Create()
-                .AddSurname(contact.LastName)
+                .AddSurname(bare ? contact.Named() : contact.LastName)
                 .AddGiven(contact.FirstName)
                 .AddGeneration(contact.MiddleName)
                 .AddPrefix(contact.Prefix)

@@ -291,20 +291,23 @@ public static class OptionsPages
             new OptionSection("Names and filing",
             [
                 new ComboRow("Default \"Full Name\" order:",
-                    ["First (Middle) Last", "Last First", "First Last1 Last2"], 0, 220, 240),
+                    ["First (Middle) Last", "Last First", "First Last1 Last2"], 0, 220, 240)
+                    { Key = PeopleOptions.FullNameOrderKey },
                 new ComboRow("Default \"File As\" order:",
-                    ["Last, First", "First Last", "Company", "Last, First (Company)"], 0, 220, 240),
-                new CheckRow("Check for duplicates when saving new contacts", true),
+                    ["Last, First", "First Last", "Company", "Last, First (Company)"], 0, 220, 240)
+                    { Key = PeopleOptions.FileAsOrderKey },
+                new CheckRow("Check for duplicates when saving new contacts", true)
+                    { Key = PeopleOptions.CheckDuplicatesKey },
             ]),
 
             new OptionSection("Contacts index",
             [
-                new CheckRow("Show an additional index", true),
+                new CheckRow("Show an additional index", true) { Key = PeopleOptions.ShowIndexKey },
             ]),
 
             new OptionSection("Online status and photographs",
             [
-                new CheckRow("Show user photographs when available", true),
+                new CheckRow("Show user photographs when available", true) { Key = PeopleOptions.ShowPhotographsKey },
             ]),
         ]);
 

@@ -1,6 +1,7 @@
 using Mailbox.Core.Settings;
 using Mailbox.Scheduling;
 using Mailbox.Store;
+using Mailbox.Contacts;
 using Mailbox.Store.Pim;
 using MimeKit;
 using MimeKit.Utils;
@@ -79,6 +80,7 @@ public class SeedHarness
 
         SeedImap(stores, "imap@example.org");
         SeedCalendar(Path.Combine(target, "pim.db"));
+        SeedContacts(Path.Combine(target, "pim.db"));
     }
 
     /// <summary>
@@ -194,6 +196,120 @@ public class SeedHarness
             DayOfWeek.Friday => "FR",
             _ => "SA",
         };
+    }
+
+    /// <summary>
+    /// An address book to look at, in the same <c>pim.db</c> the calendar is in.
+    /// </summary>
+    /// <remarks>
+    /// Shaped to reach the parts of the People list that only appear for certain contacts: names
+    /// spread over the index so several of its letters are live, one filed under a digit, a
+    /// contact with a photograph and one without, a group with two members, and somebody with
+    /// every field the card can show. Every name, address and number is invented.
+    /// </remarks>
+    private static void SeedContacts(string path)
+    {
+        using var store = new PimStore(path);
+        var book = new ContactBook(new PimRepository(store));
+        var contacts = book.Default();
+        var team = new PimRepository(store).AddCollection(CollectionKind.Contacts, "Team");
+
+        void Add(Contact contact, long collection) => book.Save(contact, collection);
+
+        Add(
+            new Contact
+            {
+                Uid = "a.person@example.com",
+                DisplayName = "A. Person",
+                FirstName = "A.",
+                LastName = "Person",
+                Company = "Example Ltd.",
+                Department = "Research",
+                JobTitle = "Principal Engineer",
+                Emails = [new ContactEmail("a.person@example.com"), new ContactEmail("a.person@example.net")],
+                Phones =
+                [
+                    new ContactPhone("+44 20 7946 0000"),
+                    new ContactPhone("+44 7700 900000", PhoneKind.Mobile),
+                    new ContactPhone("+44 20 7946 0001", PhoneKind.BusinessFax),
+                ],
+                Addresses =
+                [
+                    new ContactAddress { Street = "1 Example Street", City = "London", PostalCode = "EC1A 1AA", Country = "United Kingdom" },
+                ],
+                Urls = ["https://example.com/a.person"],
+                Notes = "Prefers e-mail.",
+                Birthday = new DateOnly(1980, 4, 1),
+                Categories = ["Colleagues"],
+                Photo = new ContactPhoto(Portrait(), "image/png"),
+            },
+            contacts.Id);
+
+        Add(
+            new Contact
+            {
+                Uid = "b.other@example.com",
+                DisplayName = "B. Other",
+                FirstName = "B.",
+                LastName = "Other",
+                Company = "Another Ltd.",
+                JobTitle = "Buyer",
+                Emails = [new ContactEmail("b.other@example.com")],
+                Phones = [new ContactPhone("+44 161 496 0002", PhoneKind.Home)],
+            },
+            contacts.Id);
+
+        Add(
+            new Contact
+            {
+                Uid = "c.reader@example.org",
+                DisplayName = "C. Reader",
+                FirstName = "C.",
+                LastName = "Reader",
+                Company = "Example Ltd.",
+                Emails = [new ContactEmail("c.reader@example.org")],
+            },
+            team.Id);
+
+        Add(
+            new Contact
+            {
+                Uid = "3hills@example.net",
+                DisplayName = "3 Hills Catering",
+                Company = "3 Hills Catering",
+                FileAs = "3 Hills Catering",
+                Emails = [new ContactEmail("orders@example.net")],
+                Phones = [new ContactPhone("+44 20 7946 0100")],
+            },
+            contacts.Id);
+
+        Add(
+            new Contact
+            {
+                Uid = "research-team@example.com",
+                DisplayName = "Research team",
+                IsGroup = true,
+                Members =
+                [
+                    new GroupMember(Uid: "a.person@example.com"),
+                    new GroupMember("c.reader@example.org", "C. Reader"),
+                ],
+            },
+            contacts.Id);
+    }
+
+    /// <summary>
+    /// A contact's photograph: a tiny PNG drawn here rather than shipped, so the seed carries no
+    /// picture of anybody real.
+    /// </summary>
+    private static byte[] Portrait()
+    {
+        // A 2x2 PNG in one flat colour. It exists to prove a photograph reaches the card and the
+        // list, not to look like a person.
+        const string Base64 =
+            "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAGElEQVR42mPo33wTK2KgokR0/TKsiIoSAMs4c2FyFDbnAAAAAElFTkSuQmCC";
+
+        return Convert.FromBase64String(Base64);
     }
 
     /// <summary>

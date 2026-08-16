@@ -561,6 +561,18 @@ public partial class MainWindow : Window
                     DispatcherPriority.Background);
                 break;
 
+            // The People module's own windows, posed the same way.
+            case "contact":
+            case "contactgroup":
+                Opened += (_, _) => Dispatcher.UIThread.Post(
+                    () =>
+                    {
+                        CaptureNextWindow();
+                        _ = ShowPeoplePeekAsync(Environment.GetEnvironmentVariable("MAILBOX_PEEK")!.ToLowerInvariant());
+                    },
+                    DispatcherPriority.Background);
+                break;
+
             // Undo Send's toast is there for a few seconds after a send, which a capture cannot
             // make happen. Posed against a fixed clock so the countdown reads the same every run
             // — a photograph of a number that changes is not a measurement.
@@ -2783,6 +2795,7 @@ public partial class MainWindow : Window
         if (id == MailCommands.Forward.Id) { Respond(shell, ReplyKind.Forward); return; }
 
         if (RunCalendarCommand(shell, id)) return;
+        if (RunPeopleCommand(shell, id)) return;
         if (RunOverSelection(shell, id)) return;
         if (RunViewCommand(shell, id)) return;
 

@@ -306,4 +306,37 @@ public class VCardTests
         Assert.Equal(2, back.Count);
         Assert.Equal(["A. Person", "B. Person"], back.Select(c => c.DisplayName));
     }
+    /// <summary>
+    /// A contact who is a company rather than a person has no name parts, and 3.0 requires an N:
+    /// written without one the card comes back with "?" for a surname, which is a placeholder and
+    /// not somebody's name.
+    /// </summary>
+    [Fact]
+    public void AContactWithNoNamePartsDoesNotComeBackCalledQuestionMark()
+    {
+        var company = new Contact
+        {
+            Uid = "3hills@example.net",
+            DisplayName = "3 Hills Catering",
+            Company = "3 Hills Catering",
+        };
+
+        foreach (var version in new[] { VCardVersion.V3, VCardVersion.V4 })
+        {
+            var back = VCardCodec.ParseOne(VCardCodec.Serialize(company, version));
+
+            Assert.Equal("3 Hills Catering", back.Named());
+            Assert.NotEqual("?", back.LastName);
+            Assert.Equal('#', back.IndexLetter());
+        }
+    }
+
+    [Fact]
+    public void AMemberTypedByHandIsReadAsANameAndAnAddress()
+    {
+        Assert.Equal(new GroupMember("b.person@example.com", "B. Person"), GroupMembers.Parse("B. Person <b.person@example.com>"));
+        Assert.Equal(new GroupMember("b.person@example.com"), GroupMembers.Parse("  b.person@example.com "));
+        Assert.True(GroupMembers.Parse("not an address").IsEmpty);
+        Assert.True(GroupMembers.Parse(null).IsEmpty);
+    }
 }
