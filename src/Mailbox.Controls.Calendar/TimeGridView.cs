@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Input;
 using Avalonia.Media;
+using Mailbox.Core.Settings;
 using Mailbox.Scheduling;
 using Mailbox.Theming.Tokens;
 
@@ -34,6 +35,9 @@ public sealed class TimeGridView : CalendarSurface
 {
     /// <summary>The ruler's width. Authored: wide enough for "12" at 20px and "00" beside it.</summary>
     private const double RulerWidth = 62;
+
+    /// <summary>The zone names over the rulers, small enough to sit inside the header band.</summary>
+    private const double ZoneLabelTextSize = 11;
 
     /// <summary>The header band over the day columns, the month view's own height.</summary>
     private const double HeaderHeight = 28;
@@ -79,6 +83,10 @@ public sealed class TimeGridView : CalendarSurface
     private double _slotHeight = 21;
     private TimeOnly _workStart = new(8, 0);
     private TimeOnly _workEnd = new(17, 0);
+    private TimeZoneInfo _viewZone = TimeZoneInfo.Local;
+    private TimeZoneInfo? _secondZone;
+    private string _zoneLabel = string.Empty;
+    private string _secondZoneLabel = string.Empty;
     private DayOfWeek _firstDayOfWeek = DayOfWeek.Sunday;
     private IReadOnlySet<DayOfWeek> _workDays = new HashSet<DayOfWeek>
     {
@@ -181,6 +189,38 @@ public sealed class TimeGridView : CalendarSurface
         }
     }
 
+    /// <summary>The clock the grid is drawn on — the machine's own unless a test says otherwise.</summary>
+    public TimeZoneInfo ViewZone
+    {
+        get => _viewZone;
+        set => Set(ref _viewZone, value ?? TimeZoneInfo.Local);
+    }
+
+    /// <summary>
+    /// A second clock, drawn in a column of its own to the left of the first, or null for none.
+    /// </summary>
+    public TimeZoneInfo? SecondZone
+    {
+        get => _secondZone;
+        set => Set(ref _secondZone, value);
+    }
+
+    /// <summary>What the two columns are headed; empty takes the zone's offset instead.</summary>
+    public string ZoneLabel
+    {
+        get => _zoneLabel;
+        set => Set(ref _zoneLabel, value ?? string.Empty);
+    }
+
+    public string SecondZoneLabel
+    {
+        get => _secondZoneLabel;
+        set => Set(ref _secondZoneLabel, value ?? string.Empty);
+    }
+
+    /// <summary>How much of the left-hand edge the hours take: two columns when a second zone shows.</summary>
+    private double RulerSpan => SecondZone is null ? RulerWidth : RulerWidth * 2;
+
     public event EventHandler<DateOnly>? DaySelected;
     public event EventHandler<CalendarEntry>? EntrySelected;
     public event EventHandler<CalendarEntry>? EntryActivated;
@@ -237,13 +277,13 @@ public sealed class TimeGridView : CalendarSurface
         _slotHits.Clear();
 
         var width = Math.Max(0, Bounds.Width - GutterWidth);
-        if (width < RulerWidth + 40 || Bounds.Height < 80) return;
+        if (width < RulerSpan + 40 || Bounds.Height < 80) return;
 
         var days = Days();
         var gridLine = Palette.Colour(TokenKeys.Calendar.GridLine);
-        var columns = MonthView.Slice(width - RulerWidth, days.Count);
+        var columns = MonthView.Slice(width - RulerSpan, days.Count);
         var columnX = new double[days.Count];
-        var at = RulerWidth;
+        var at = RulerSpan;
         for (var i = 0; i < days.Count; i++)
         {
             columnX[i] = at;
@@ -254,6 +294,7 @@ public sealed class TimeGridView : CalendarSurface
         Fill(context, new Rect(0, 0, width, 1), gridLine);
         Fill(context, new Rect(0, 1, width, HeaderHeight), Palette.Colour(TokenKeys.Calendar.HeaderBackground));
         DrawHeader(context, days, columns, columnX);
+        DrawZoneLabels(context);
         Fill(context, new Rect(0, 1 + HeaderHeight, width, 1), Palette.Colour(TokenKeys.Calendar.HeaderLine));
 
         var bandTop = 2 + HeaderHeight;
@@ -330,7 +371,7 @@ public sealed class TimeGridView : CalendarSurface
         var height = Math.Max(laneHeight + 4, (lanes * (laneHeight + 1)) + 3);
 
         Fill(context, new Rect(0, top, width, height), Palette.Colour(TokenKeys.Calendar.AllDayBandBackground));
-        Fill(context, new Rect(RulerWidth, top, 1, height), Palette.Colour(TokenKeys.Calendar.GridLine));
+        Fill(context, new Rect(RulerSpan, top, 1, height), Palette.Colour(TokenKeys.Calendar.GridLine));
 
         foreach (var bar in bars)
         {
@@ -386,7 +427,7 @@ public sealed class TimeGridView : CalendarSurface
             var minutes = (firstSlot + s) * SlotMinutes;
             if (minutes > 24 * 60) break;
             var y = Math.Round(top + (((minutes - ScrollMinutes) / SlotMinutes) * SlotHeight));
-            Fill(context, new Rect(RulerWidth, y, width - RulerWidth, 1), minutes % 60 == 0 ? gridLine : minorLine);
+            Fill(context, new Rect(RulerSpan, y, width - RulerSpan, 1), minutes % 60 == 0 ? gridLine : minorLine);
         }
 
         for (var c = 0; c < days.Count; c++)
@@ -395,7 +436,7 @@ public sealed class TimeGridView : CalendarSurface
         }
 
         DrawRuler(context, top, height, firstSlot, slots, gridLine);
-        Fill(context, new Rect(RulerWidth, top, 1, height), gridLine);
+        Fill(context, new Rect(RulerSpan, top, 1, height), gridLine);
 
         for (var c = 0; c < days.Count; c++)
         {
@@ -407,27 +448,87 @@ public sealed class TimeGridView : CalendarSurface
 
     /// <summary>
     /// The time ruler: the hour as a numeral with its minutes small beside it, which is how the
-    /// reference draws it — one label per hour however fine the time scale is.
+    /// reference draws it — one label per hour however fine the time scale is. A second zone
+    /// puts a column of its own to the left, as the reference does.
     /// </summary>
     private void DrawRuler(DrawingContext context, double top, double height, int firstSlot, int slots, Color gridLine)
     {
-        Fill(context, new Rect(0, top, RulerWidth, height), Palette.Colour(TokenKeys.Calendar.HeaderBackground));
+        Fill(context, new Rect(0, top, RulerSpan, height), Palette.Colour(TokenKeys.Calendar.HeaderBackground));
 
+        DrawHours(context, RulerSpan, top, height, firstSlot, slots, gridLine, zone: null);
+        if (SecondZone is not { } second) return;
+
+        DrawHours(context, RulerWidth, top, height, firstSlot, slots, gridLine, second);
+
+        // The line between the two columns, so they read as two clocks rather than one wide one.
+        Fill(context, new Rect(RulerWidth, top, 1, height), Palette.Colour(TokenKeys.Calendar.HeaderLine));
+    }
+
+    /// <summary>
+    /// One column of hours, right-aligned on <paramref name="right"/>.
+    /// </summary>
+    /// <param name="zone">
+    /// The clock to write, or null for the view's own. A second zone's hours are read at each
+    /// row's own instant rather than at a fixed offset: half the world moves its clocks twice a
+    /// year, and the two columns are a different distance apart on either side of the day it
+    /// happens.
+    /// </param>
+    private void DrawHours(DrawingContext context, double right, double top, double height, int firstSlot, int slots, Color gridLine, TimeZoneInfo? zone)
+    {
         var ink = Palette.Colour(TokenKeys.Calendar.HourText);
+        var day = Days() is { Count: > 0 } days ? days[0] : Anchor;
+
         for (var s = 0; s <= slots; s++)
         {
             var minutes = (firstSlot + s) * SlotMinutes;
             if (minutes % 60 != 0 || minutes >= 24 * 60) continue;
             var y = top + (((minutes - ScrollMinutes) / SlotMinutes) * SlotHeight);
             var when = TimeOnly.FromTimeSpan(TimeSpan.FromMinutes(minutes));
+            if (zone is not null) when = TimeOnly.FromDateTime(Elsewhere(day, when, zone));
+
             // "%h" rather than "h": a lone custom specifier reads as a standard format, and "h"
             // is not one — the ruler threw rather than drawing.
             var hour = Ink(when.ToString("%h", Culture), HourTextSize, ink);
             var rest = Ink(when.ToString("mm", Culture), MinuteTextSize, ink);
-            DrawAt(context, hour, RulerWidth - 26 - hour.Width, y + HourTextSize);
-            DrawAt(context, rest, RulerWidth - 22, y + MinuteTextSize + 2);
+            DrawAt(context, hour, right - 26 - hour.Width, y + HourTextSize);
+            DrawAt(context, rest, right - 22, y + MinuteTextSize + 2);
 
-            Fill(context, new Rect(RulerWidth - 8, Math.Round(y), 8, 1), gridLine);
+            Fill(context, new Rect(right - 8, Math.Round(y), 8, 1), gridLine);
+        }
+    }
+
+    /// <summary>What another zone's clock reads at a moment on this one.</summary>
+    private DateTime Elsewhere(DateOnly day, TimeOnly at, TimeZoneInfo zone)
+    {
+        var here = day.ToDateTime(at, DateTimeKind.Unspecified);
+        var instant = new DateTimeOffset(here, ViewZone.GetUtcOffset(here)).ToUniversalTime();
+        return TimeZoneInfo.ConvertTime(instant, zone).DateTime;
+    }
+
+    /// <summary>
+    /// The zone labels over the two columns of hours: what each is called, or its offset when it
+    /// is called nothing.
+    /// </summary>
+    private void DrawZoneLabels(DrawingContext context)
+    {
+        if (SecondZone is null && ZoneLabel.Length == 0) return;
+
+        var ink = Palette.Colour(TokenKeys.Calendar.HeaderText);
+        var day = Days() is { Count: > 0 } days ? days[0] : Anchor;
+        var noon = new DateTimeOffset(day.ToDateTime(new TimeOnly(12, 0)), ViewZone.GetUtcOffset(day.ToDateTime(new TimeOnly(12, 0))));
+
+        Label(RulerSpan, ZoneLabel.Length > 0 ? ZoneLabel : TimeZoneChoices.ShortLabel(ViewZone, noon));
+        if (SecondZone is { } second)
+        {
+            Label(RulerWidth, SecondZoneLabel.Length > 0 ? SecondZoneLabel : TimeZoneChoices.ShortLabel(second, noon));
+        }
+
+        void Label(double right, string text)
+        {
+            var run = Ink(text, ZoneLabelTextSize, ink);
+            var left = Math.Max(2, right - 6 - run.Width);
+            using var clip = context.PushClip(new Rect(right - RulerWidth, 1, RulerWidth, HeaderHeight));
+            DrawAt(context, run, left, 1 + HeaderBaseline - 2);
         }
     }
 
@@ -494,9 +595,9 @@ public sealed class TimeGridView : CalendarSurface
         var figure = new StreamGeometry();
         using (var draw = figure.Open())
         {
-            draw.BeginFigure(new Point(RulerWidth - 7, y - 4), isFilled: true);
-            draw.LineTo(new Point(RulerWidth - 1, y + 1));
-            draw.LineTo(new Point(RulerWidth - 7, y + 6));
+            draw.BeginFigure(new Point(RulerSpan - 7, y - 4), isFilled: true);
+            draw.LineTo(new Point(RulerSpan - 1, y + 1));
+            draw.LineTo(new Point(RulerSpan - 7, y + 6));
             draw.EndFigure(true);
         }
 

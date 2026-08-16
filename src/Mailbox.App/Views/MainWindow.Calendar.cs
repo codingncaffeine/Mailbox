@@ -585,9 +585,8 @@ public partial class MainWindow
         }
 
         var master = PimEventCodec.FromItem(stored);
-        var zone = master.Start.TzId ?? TimeZoneInfo.Local.Id;
-        var start = move.AllDay ? EventTime.Date(DateOnly.FromDateTime(move.Start)) : EventTime.At(move.Start, zone);
-        var end = move.AllDay ? EventTime.Date(DateOnly.FromDateTime(move.End)) : EventTime.At(move.End, zone);
+        var start = move.AllDay ? EventTime.Date(DateOnly.FromDateTime(move.Start)) : Stated(master.Start, move.Start, entry.Zone);
+        var end = move.AllDay ? EventTime.Date(DateOnly.FromDateTime(move.End)) : Stated(master.Start, move.End, entry.Zone);
 
         var occurrence = entry.Occurrence.IsPartOfSeries && !master.IsOverride;
         var edited = (occurrence ? SeriesEditor.OverrideFor(master, entry.Occurrence) : master) with
@@ -607,6 +606,27 @@ public partial class MainWindow
             : $"“{name}” moved to {Moment(move)}.";
         Log.Info($"Calendar: item {written.Id} {(move.Resized ? "resized" : "moved")} to {start.ToLocalText()}–{end.ToLocalText()}{(occurrence ? ", as an override" : string.Empty)}.");
         AfterStoreChange(shell);
+    }
+
+    /// <summary>
+    /// A time the grid was read at, stated in the zone the appointment keeps its times in.
+    /// </summary>
+    /// <remarks>
+    /// A drag speaks in whatever the view's clock reads; the appointment goes on saying what it
+    /// always said. Writing the grid's reading straight onto an appointment written in another
+    /// zone would move it by the difference between the two — the one place the drag could
+    /// silently mean something other than where it was let go.
+    /// </remarks>
+    private static EventTime Stated(EventTime original, DateTime reading, TimeZoneInfo viewZone)
+    {
+        var wall = DateTime.SpecifyKind(reading, DateTimeKind.Unspecified);
+
+        // A floating time means "wherever you are", so it is already in the view's own terms.
+        if (original.TzId is not { Length: > 0 } tzId) return new EventTime(wall, null);
+
+        var instant = new DateTimeOffset(wall, viewZone.GetUtcOffset(wall)).ToUniversalTime();
+        var zone = original.Zone();
+        return EventTime.At(TimeZoneInfo.ConvertTime(instant, zone).DateTime, tzId);
     }
 
     /// <summary>What a moved appointment's new time reads as on the status bar.</summary>

@@ -25,7 +25,10 @@ public sealed class CalendarSource(PimRepository repository)
     /// Everything on the visible calendars between two instants, in start order.
     /// </summary>
     /// <param name="collectionIds">Only these calendars; null for every visible one.</param>
-    /// <param name="zone">The zone a floating or all-day time is placed in; the machine's if null.</param>
+    /// <param name="zone">
+    /// The clock the view reads: what a floating or all-day time is placed by, and what an
+    /// appointment written in another zone is drawn at. The machine's own if null.
+    /// </param>
     public IReadOnlyList<CalendarEntry> Between(
         DateTimeOffset fromUtc,
         DateTimeOffset toUtc,
@@ -66,6 +69,7 @@ public sealed class CalendarSource(PimRepository repository)
                     CollectionName = calendar.DisplayName,
                     Colour = colour,
                     IsReadOnly = calendar.IsReadOnly,
+                    Zone = zone ?? TimeZoneInfo.Local,
                 });
             }
         }

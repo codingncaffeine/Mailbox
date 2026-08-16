@@ -145,12 +145,29 @@ public sealed class OptionsPageRenderer
         var combo = new ComboBox
         {
             ItemsSource = row.Items.ToList(),
-            SelectedIndex = key is null
-                ? row.Selected
-                : (int)_settings.GetNumber(key, row.Selected),
             MinWidth = row.Width,
             VerticalAlignment = VerticalAlignment.Center,
         };
+
+        // A row that names what its entries stand for keeps the text; every other keeps the
+        // index, which is what a list this application wrote can be trusted to mean.
+        if (key is not null && row.Values is { Count: > 0 } values)
+        {
+            var stored = _settings.GetString(key, string.Empty);
+            var found = values.ToList().IndexOf(stored);
+            combo.SelectedIndex = found >= 0 ? found : Math.Clamp(row.Selected, 0, values.Count - 1);
+            combo.SelectionChanged += (_, _) =>
+            {
+                if (combo.SelectedIndex >= 0 && combo.SelectedIndex < values.Count)
+                {
+                    _settings.Set(key, values[combo.SelectedIndex]);
+                }
+            };
+
+            return Labelled(row.Label, combo, row.LabelWidth, row.HasInfo);
+        }
+
+        combo.SelectedIndex = key is null ? row.Selected : (int)_settings.GetNumber(key, row.Selected);
         if (key is not null)
         {
             combo.SelectionChanged += (_, _) => _settings.Set(key, combo.SelectedIndex);

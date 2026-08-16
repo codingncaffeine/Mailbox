@@ -266,11 +266,21 @@ public static class OptionsPages
                 new CheckRow("Show a Weather bar on the calendar"),
             ]),
 
+            // The reference's Time zone dropdown sets the operating system's zone. That belongs
+            // to the desktop here, so the row states what the machine says and the calendar
+            // follows it; the labels and the second zone are the settable half (§6).
             new OptionSection("Time zones",
             [
-                new TextRow("Label:", "", 180, 200),
-                new ComboRow("Time zone:", ["System time zone"], 0, 300, 200),
-                new CheckRow("Show a second time zone"),
+                new TextRow("Label:", "", 180, 200) { Key = CalendarOptions.TimeZoneLabelKey },
+                new ComboRow("Time zone:", [TimeZoneChoices.Describe(TimeZoneInfo.Local)], 0, 300, 200)
+                    { IsDisabled = true },
+                new NoteRow("The calendar is drawn on the machine's own clock. Change it in the desktop's settings.")
+                    { Indent = 1 },
+                new CheckRow("Show a second time zone") { Key = CalendarOptions.SecondTimeZoneShownKey },
+                new TextRow("Label:", "", 180, 200)
+                    { Indent = 1, Key = CalendarOptions.SecondTimeZoneLabelKey },
+                new ComboRow("Time zone:", ZoneNames, HomeZone, 300, 200)
+                    { Indent = 1, Key = CalendarOptions.SecondTimeZoneIdKey, Values = ZoneIds },
             ]),
         ]);
 
@@ -520,6 +530,23 @@ public static class OptionsPages
         ["Blue", "Green", "Orange", "Purple", "Red", "Grey", "Yellow", "Teal"];
 
     private static readonly string[] Times = BuildTimes();
+
+    /// <summary>
+    /// Every zone this machine knows, as the reference's own list reads them: west to east, each
+    /// written "(UTC-05:00) Eastern Time (New York)". The id is what is stored, so the choice
+    /// survives a machine whose zone database lists them in a different order.
+    /// </summary>
+    private static readonly string[] ZoneNames =
+        [.. TimeZoneChoices.All.Select(TimeZoneChoices.Describe)];
+
+    private static readonly string[] ZoneIds = [.. TimeZoneChoices.All.Select(z => z.Id)];
+
+    /// <summary>
+    /// Where the second zone's list opens before anything has been chosen: on the machine's own,
+    /// as the reference's does. The first entry of a list ordered by offset is Midway Atoll,
+    /// which is nobody's idea of a default.
+    /// </summary>
+    private static readonly int HomeZone = Math.Max(0, Array.IndexOf(ZoneIds, TimeZoneInfo.Local.Id));
 
     private static string[] BuildTimes()
     {
