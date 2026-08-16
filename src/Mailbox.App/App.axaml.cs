@@ -51,6 +51,9 @@ public partial class App : Application
     /// </summary>
     public static RibbonDisplaySettings RibbonDisplay { get; private set; } = null!;
 
+    /// <summary>The Favourites section at the top of the folder pane: which folders, in what order.</summary>
+    public static Mailbox.Core.Folders.Favourites Favourites { get; private set; } = null!;
+
     /// <summary>Which accounts are checked together, and when.</summary>
     public static SendReceiveGroups Groups { get; private set; } = null!;
 
@@ -377,6 +380,7 @@ public partial class App : Application
         QuickSteps.Changed += (_, _) => RegisterQuickSteps();
         QuickAccess = new QuickAccessLayout(Settings, DefaultRibbonLayouts.Mail.QuickAccess);
         RibbonDisplay = new RibbonDisplaySettings(Settings);
+        Favourites = new Mailbox.Core.Folders.Favourites(Settings);
         Groups = new SendReceiveGroups(Settings);
         Signatures = new Signatures(Settings);
         UndoSend = new UndoSend(Settings);
