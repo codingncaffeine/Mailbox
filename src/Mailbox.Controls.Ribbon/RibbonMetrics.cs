@@ -81,14 +81,31 @@ public static class RibbonMetrics
     /// </summary>
     public const double InlineSeparatorMargin = 6;
 
-    /// <summary>Height of the expanded ribbon body, excluding the tab strip.</summary>
-    public const double BodyHeight = 92;
+    /// <summary>
+    /// Height of the expanded ribbon body, excluding the tab strip. Measured off the classic
+    /// capture: the panel runs 100 rows, from the row under the tab strip to the row above its
+    /// shadow. It was 92 until session 7, and everything inside it sat 8px too high.
+    /// </summary>
+    public const double BodyHeight = 100;
 
-    /// <summary>Height of the group label strip at the bottom of the body.</summary>
-    public const double GroupLabelHeight = 16;
+    /// <summary>
+    /// Height of the group label strip at the bottom of the body. The label is top-aligned in
+    /// it, which puts its baseline on the body's 93rd row as measured — 7 rows above the bottom.
+    /// </summary>
+    public const double GroupLabelHeight = 18;
 
     /// <summary>Vertical space available to items, above the group label.</summary>
     public const double ItemAreaHeight = BodyHeight - GroupLabelHeight;
+
+    /// <summary>
+    /// A large button's content is top-aligned, not centred — a one-line label's icon sits where
+    /// a two-line label's does — with the icon box starting on the body's 8th row (measured
+    /// 8..39) and the label's baselines then landing on the 53rd and 69th, as measured.
+    /// </summary>
+    public const double LargeButtonPaddingTop = 8;
+
+    /// <summary>The pitch of a large button's two label lines: measured 16, was 13.</summary>
+    public const double LargeLabelLineHeight = 16;
 
     public const double TabPaddingH = 11;
 
@@ -120,13 +137,35 @@ public static class RibbonMetrics
     public const double LargeButtonMinWidth = 46;
 
     public const double SmallIconSize = 16;
-    public const double SmallButtonHeight = 22;
+
+    /// <summary>
+    /// A small button's height, which is the pitch of a stack of them: measured 26 off the Move
+    /// group's three rows and the Delete group's three icons (was 22). The stack starts
+    /// <see cref="SmallStackTop"/> down the item area so its icons land on rows 9, 35 and 61 —
+    /// measured 9, 35 and 60.
+    /// </summary>
+    public const double SmallButtonHeight = 26;
+    public const double SmallStackTop = 4;
     public const double SmallButtonMinWidth = 60;
 
     /// <summary>Small buttons stack three to a column, filling the item area exactly.</summary>
     public const int SmallButtonsPerColumn = 3;
 
-    public const double SeparatorMargin = 3;
+    /// <summary>
+    /// A gallery's entries are shorter than a stack's buttons: three of them fill the 72px
+    /// interior of the Quick Steps box, measured, so each is 24. The box itself starts on the
+    /// body's 6th row and its border is a pixel.
+    /// </summary>
+    public const double GallerySlotHeight = 24;
+    public const double GalleryTop = 6;
+    public const double GalleryInteriorHeight = 3 * GallerySlotHeight;
+
+    /// <summary>
+    /// The rule between groups runs almost the body's whole height, through the label row:
+    /// measured from the 5th row to the 93rd of 100, so 5 clear above and 6 below.
+    /// </summary>
+    public const double SeparatorTop = 5;
+    public const double SeparatorBottom = 6;
 
     /// <summary>
     /// The Ribbon Display Options chevron sits in the bottom-right corner of the ribbon panel in

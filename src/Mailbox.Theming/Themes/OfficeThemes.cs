@@ -81,8 +81,10 @@ public static class OfficeThemes
         t.Set("motion.normal", "150");
 
         // Chrome geometry, measured from reference captures.
-        t.Set(TokenKeys.Ribbon.TabStripHeight, "28");
-        t.Set(TokenKeys.Ribbon.Height, "94");
+        // The layout reads RibbonMetrics for these; the tokens carry the same measured numbers
+        // so a theme file cannot contradict the control.
+        t.Set(TokenKeys.Ribbon.TabStripHeight, "29");
+        t.Set(TokenKeys.Ribbon.Height, "100");
         t.Set(TokenKeys.Nav.Width, "236");
 
         // Title bar, all measured. The search box clears the top by 7px and its left edge
@@ -313,8 +315,9 @@ public static class OfficeThemes
         t.Set(TokenKeys.Ribbon.TabUnderline, "#B3D6F2");
         t.Set(TokenKeys.Ribbon.TabText, "{palette.neutral.white}");
         t.Set(TokenKeys.Ribbon.TabTextSelected, "{palette.neutral.white}");
-        // Measured off the classic capture: the Quick Steps box is the panel's #BDBDBD inside a
-        // #858585 line.
+        // Measured off the classic capture: the rules between groups and the Quick Steps box's
+        // line are both #858585 on the panel's #BDBDBD.
+        t.Set(TokenKeys.Ribbon.GroupSeparator, "#858585");
         t.Set(TokenKeys.Ribbon.GalleryBorder, "#858585");
 
         t.Set(TokenKeys.Nav.Background, "{palette.chrome.nav}");
