@@ -59,6 +59,32 @@ public static class WindowCapture
             : 1.0;
 
     /// <summary>
+    /// Lays the window out at the capture's scale, whatever the X server says the screen's is.
+    /// Call before the platform initialises.
+    /// </summary>
+    /// <remarks>
+    /// The X11 backend takes its scaling from <c>Xft.dpi</c> — 100 on the machine this was
+    /// found on, so the window is laid out at 1.0417 on a device grid of 0.96 logical pixels,
+    /// and a capture that then renders at 1× puts every edge on a fraction: a panel's top row 20%
+    /// covered, a hairline as two grey rows. Every measurement against a 100% reference has been
+    /// a pixel noisy for that reason. Naming a screen that does not exist in
+    /// <c>AVALONIA_SCREEN_SCALE_FACTORS</c> is what makes the backend stop consulting
+    /// <c>Xft.dpi</c> (any other screen falls back to the global factor), and the global factor
+    /// then carries the capture's own scale — so <c>MAILBOX_CAPTURE_SCALE=1.5</c> is a real 1.5×
+    /// layout rendered at 1.5×, not a 1.04× layout blown up. Interactive runs are untouched: what
+    /// the app should make of <c>Xft.dpi</c> on screen is the HiDPI item's question.
+    /// </remarks>
+    public static void PinLayoutScale()
+    {
+        if (!IsRequested) return;
+
+        Environment.SetEnvironmentVariable("AVALONIA_SCREEN_SCALE_FACTORS", "mailbox-capture=1");
+        Environment.SetEnvironmentVariable(
+            "AVALONIA_GLOBAL_SCALE_FACTOR",
+            Scale.ToString(System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>
     /// Poses the window at an exact size, given as <c>MAILBOX_SIZE=1024x820</c>.
     /// </summary>
     /// <remarks>

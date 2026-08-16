@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using Mailbox.App.Theming;
 using Mailbox.Controls.Ribbon;
 using Mailbox.Core.Commands;
@@ -32,6 +33,10 @@ public sealed class ComposeWindow : Window
     private readonly RibbonView _ribbon;
     private TextBlock _caption = null!;
     private ContentControl _backstage = null!;
+
+    /// <summary>Where a collapsed ribbon's body floats over the surface, and the body floating there.</summary>
+    private Canvas _floatLayer = null!;
+    private Control? _floatingRibbon;
 
     /// <summary>Set once the save-on-close prompt has been answered, so the second close does not re-ask.</summary>
     private bool _closing;
@@ -73,6 +78,11 @@ public sealed class ComposeWindow : Window
             CommandEnabled = _surface.IsCommandEnabled,
         };
 
+        // This window's ribbon opens as it was last left, remembered apart from the shell's: the
+        // reference keeps a message window's layout separately from the main window's. The
+        // harness's pose reaches both windows through one variable.
+        RibbonDisplayMemory.Wire(_ribbon, RibbonWindow.Compose, Environment.GetEnvironmentVariable("MAILBOX_RIBBON"));
+
         // The ribbon is the window's; the surface is what a command acts on. Close any floating
         // group body first — that is a ribbon affordance — then route the command in.
         _ribbon.CommandInvoked += (_, e) =>
@@ -81,6 +91,12 @@ public sealed class ComposeWindow : Window
             _surface.Invoke(e.Command);
         };
         _ribbon.BackstageRequested += (_, _) => ShowBackstage();
+
+        // "Show tabs only" collapses the ribbon to its strip and floats the body over the
+        // surface on a tab click; without a host for that body the tabs did nothing here, and
+        // with the chevron gone there was no menu to undo the choice from.
+        _ribbon.FloatingBodyChanged += (_, e) => ShowFloatingRibbon(e.Body);
+        AddHandler(PointerPressedEvent, OnWindowPointerPressed, Avalonia.Interactivity.RoutingStrategies.Tunnel);
 
         // The surface says when a command's enabled state may have changed; the ribbon repaints.
         _surface.EnablementChanged += (_, _) => _ribbon.RefreshEnablement();
@@ -180,8 +196,13 @@ public sealed class ComposeWindow : Window
         DockPanel.SetDock(ribbonHost, Dock.Top);
         root.Children.Add(ribbonHost);
 
-        // The surface fills the rest.
-        root.Children.Add(_surface);
+        // The surface fills the rest, with a layer over it for a collapsed ribbon's body: the
+        // body floats over the content, as it does in the shell, rather than pushing it down.
+        var workspace = new Grid();
+        workspace.Children.Add(_surface);
+        _floatLayer = new Canvas { IsHitTestVisible = true, ZIndex = 1 };
+        workspace.Children.Add(_floatLayer);
+        root.Children.Add(workspace);
 
         layered.Children.Add(root);
 
@@ -284,6 +305,42 @@ public sealed class ComposeWindow : Window
         button.Click += (_, _) => _surface.Invoke(command.Id);
         return button;
     }
+
+    /// <summary>
+    /// Hosts the body a collapsed ribbon floats on a tab click, or takes it down when null.
+    /// In the layer over the surface rather than a popup, for the shell's reasons: it clips and
+    /// z-orders with the window, and it appears in a capture.
+    /// </summary>
+    private void ShowFloatingRibbon(Control? body)
+    {
+        if (_floatingRibbon is not null)
+        {
+            _floatLayer.Children.Remove(_floatingRibbon);
+            _floatingRibbon = null;
+        }
+
+        if (body is null) return;
+
+        body.Width = _floatLayer.Bounds.Width > 0 ? _floatLayer.Bounds.Width : Width;
+        Canvas.SetLeft(body, 0);
+        Canvas.SetTop(body, 0);
+
+        _floatLayer.Children.Add(body);
+        _floatingRibbon = body;
+    }
+
+    /// <summary>A click anywhere but the ribbon or its floating body rolls the body up.</summary>
+    private void OnWindowPointerPressed(object? sender, Avalonia.Input.PointerPressedEventArgs e)
+    {
+        if (_floatingRibbon is null || e.Source is not Visual source) return;
+        if (IsWithin(source, _floatingRibbon) || IsWithin(source, _ribbon)) return;
+
+        _ribbon.CloseFloatingBody();
+    }
+
+    private static bool IsWithin(Visual node, Visual? ancestor)
+        => ancestor is not null
+           && (ReferenceEquals(node, ancestor) || node.GetVisualAncestors().Contains(ancestor));
 
     /// <summary>
     /// Opens the Backstage over this window. Same pages and behaviour as the shell's —

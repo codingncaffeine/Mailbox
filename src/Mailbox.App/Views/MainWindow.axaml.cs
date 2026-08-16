@@ -52,16 +52,8 @@ public partial class MainWindow : Window
         var layout = App.MailRibbon();
         var layoutMode = ShellLayoutModes.Resolve();
 
-        _ribbon = new RibbonView(App.Commands, layout)
-        {
-            DisplayMode = Environment.GetEnvironmentVariable("MAILBOX_RIBBON")?.ToLowerInvariant()
-                switch
-                {
-                    "classic" => RibbonDisplayMode.Classic,
-                    "collapsed" or "revealed" => RibbonDisplayMode.Collapsed,
-                    _ => RibbonDisplayMode.Simplified,
-                },
-        };
+        _ribbon = new RibbonView(App.Commands, layout);
+        RibbonDisplayMemory.Wire(_ribbon, RibbonWindow.Shell, Environment.GetEnvironmentVariable("MAILBOX_RIBBON"));
         _ribbon.CommandInvoked += OnRibbonCommand;
         _ribbon.BackstageRequested += (_, _) => ShowBackstage();
         _ribbon.FloatingBodyChanged += (_, e) => ShowFloatingRibbon(e.Body);

@@ -131,4 +131,21 @@ public static class RibbonMetrics
     public const int SmallButtonsPerColumn = 3;
 
     public const double SeparatorMargin = 3;
+
+    /// <summary>
+    /// The Ribbon Display Options chevron sits in the bottom-right corner of the ribbon panel in
+    /// both layouts, not on the bar's centre line. Measured off three captures — the shell's
+    /// Simplified and Classic ribbons and the compose window's — the glyph's centre is 14px in
+    /// from the panel's right edge and 13px up from its bottom in every one, so a box of these
+    /// dimensions placed flush in the corner puts it there.
+    /// </summary>
+    public const double DisplayOptionsWidth = 28;
+    public const double DisplayOptionsHeight = 26;
+
+    /// <summary>
+    /// The clearance the Simplified row keeps before the chevron's column, so that when the bar
+    /// is full its "…" ends where the reference's does: measured 45px short of the panel's right
+    /// edge, which is this plus the chevron's box.
+    /// </summary>
+    public const double DisplayOptionsGap = 17;
 }
