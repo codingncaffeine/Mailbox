@@ -95,7 +95,8 @@ public static class DefaultRibbonLayouts
             // width: a formatting run, and the glyph-only Delete and Move stacks.
             ["home"] = Bar(
                 Cluster("new", "New",
-                    RibbonItem.Small(MailCommands.NewEmail.Id, RibbonItemKind.SplitButton)),
+                    RibbonItem.Small(MailCommands.NewEmail.Id, RibbonItemKind.SplitButton)
+                        with { ChevronCommand = MailCommands.NewItems.Id }),
 
                 Cluster("movedelete", "Move & Delete",
                     RibbonItem.Glyph(MailCommands.Delete.Id, RibbonItemKind.SplitButton),

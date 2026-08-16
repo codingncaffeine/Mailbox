@@ -332,6 +332,27 @@ public static class ViewCommands
     };
 
     /// <summary>
+    /// The shortcut list itself: "?" shows every command and the key that runs it.
+    /// </summary>
+    /// <remarks>
+    /// Customize Keyboard already lists exactly that, so "?" opens it rather than a second window
+    /// that would have to be kept in step with the first. Both spellings of the key are bound —
+    /// the "?" of a US keyboard is Shift and the key left of the right Shift, and a layout that
+    /// puts "?" there unshifted sends it alone.
+    /// </remarks>
+    public static readonly MailboxCommand KeyboardShortcuts = new()
+    {
+        Id = new("app.keyboard"),
+        Label = "Keyboard Shortcuts",
+        Description = "Show every command and the key that runs it.",
+        Icon = "keyboard",
+        Category = "Help",
+        DefaultGesture = "Shift+OemQuestion",
+        AlsoGestures = ["OemQuestion"],
+        InDefaultLayout = false,
+    };
+
+    /// <summary>
     /// The rail's modules as commands, one per accelerator.
     /// </summary>
     /// <remarks>
@@ -382,7 +403,7 @@ public static class ViewCommands
         ChangeViewCompact, ChangeViewSingle, ChangeViewPreview, ManageViews, SaveViewAs, ApplyViewToFolders,
         OpenViewSettings, ResetView, Refresh,
         ImmersiveReader, ShowFocusedInbox,
-        Redo, Apps, SearchPeople, ReadAloud,
+        Redo, Apps, SearchPeople, ReadAloud, KeyboardShortcuts,
         MoveToQuick, ToManager, TeamEmail,
     ];
 }

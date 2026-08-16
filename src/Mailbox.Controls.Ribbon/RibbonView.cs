@@ -5,6 +5,7 @@ using Avalonia.Controls.Primitives.PopupPositioning;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using Mailbox.Core.Commands;
 using Mailbox.Core.Ribbon;
 using Mailbox.Theming.Icons;
@@ -12,9 +13,19 @@ using Mailbox.Theming.Icons;
 namespace Mailbox.Controls.Ribbon;
 
 /// <summary>Raised when a ribbon control is activated.</summary>
-public sealed class RibbonCommandEventArgs(CommandId command) : EventArgs
+public sealed class RibbonCommandEventArgs(CommandId command, bool fromChevron = false) : EventArgs
 {
     public CommandId Command { get; } = command;
+
+    /// <summary>
+    /// True when the chevron half of a split button was pressed rather than its action half.
+    /// </summary>
+    /// <remarks>
+    /// The two halves usually carry different commands, so most hosts never look at this; it is
+    /// here for the one that wants to open a menu from the chevron and act from the other half
+    /// while both name the same command.
+    /// </remarks>
+    public bool FromChevron { get; } = fromChevron;
 }
 
 /// <summary>
@@ -286,6 +297,8 @@ public sealed class RibbonView : ContentControl
     {
         _tabControls.Clear();
         _itemControls.Clear();
+        _splitLighters.Clear();
+        _menuOpeners.Clear();
         _collapsedGroups.Clear();
         _labelWidth = null;
 
@@ -746,10 +759,10 @@ public sealed class RibbonView : ContentControl
             HorizontalContentAlignment = HorizontalAlignment.Left,
             VerticalContentAlignment = VerticalAlignment.Top,
             BorderThickness = default,
-            Background = Brushes.Transparent,
+            Classes = { RibbonButtonClass },
             Flyout = BuildDisplayOptionsMenu(),
         };
-        ToolTip.SetTip(chevron, "Ribbon Display Options");
+        ToolTip.SetTip(chevron, Screentip("Ribbon Display Options", "Choose how much of the ribbon is shown."));
 
         _displayOptions = chevron;
         return chevron;
@@ -812,9 +825,9 @@ public sealed class RibbonView : ContentControl
             VerticalAlignment = VerticalAlignment.Bottom,
             VerticalContentAlignment = VerticalAlignment.Bottom,
             BorderThickness = default,
-            Background = Brushes.Transparent,
+            Classes = { RibbonButtonClass },
         };
-        ToolTip.SetTip(button, command.Label);
+        ToolTip.SetTip(button, Screentip(command));
         button.Click += (_, _) =>
             CommandInvoked?.Invoke(this, new RibbonCommandEventArgs(command.Id));
 
@@ -874,6 +887,74 @@ public sealed class RibbonView : ContentControl
             .ToList();
 
         return flyout;
+    }
+
+    /// <summary>
+    /// The class every button on the ribbon wears.
+    /// </summary>
+    /// <remarks>
+    /// These buttons leave their rest state to the stylesheet rather than setting it here,
+    /// because a local value beats every style setter — a <c>Background</c> assigned in code is
+    /// exactly why no button on this bar had a hover state at all. The class is what the
+    /// hover, pressed and open rules hang off.
+    /// </remarks>
+    public const string RibbonButtonClass = "ribbonbutton";
+
+    /// <summary>Forces the hover state on a command's control, for the harness, which cannot point.</summary>
+    /// <remarks>
+    /// A split button is a box round two buttons, and its lit state is a class on the box rather
+    /// than a pseudo-class on a button — so posing it means asking the box, not the control that
+    /// happens to be on top.
+    /// </remarks>
+    public void ForceHover(CommandId id)
+    {
+        if (ControlFor(id) is not { } control) return;
+
+        if (_splitLighters.TryGetValue(control, out var light))
+        {
+            light(true);
+            if (control is Border { Child: Panel row } && row.Children.FirstOrDefault() is Button action)
+            {
+                ((IPseudoClasses)action.Classes).Add(":pointerover");
+            }
+
+            return;
+        }
+
+        ((IPseudoClasses)control.Classes).Add(":pointerover");
+    }
+
+    /// <summary>How each split button's box is lit, so the harness can pose what a pointer does.</summary>
+    private readonly Dictionary<Control, Action<bool>> _splitLighters = [];
+
+    /// <summary>What Alt+Down does over each control that has a menu behind it.</summary>
+    private readonly Dictionary<Control, Action> _menuOpeners = [];
+
+    /// <summary>
+    /// Opens the menu of whatever ribbon control has the focus, and says whether there was one.
+    /// </summary>
+    /// <remarks>
+    /// Alt+Down is the reference's "open split buttons": with the keyboard on a split button it
+    /// drops the chevron's menu rather than doing what the other half does, and on a drop-down it
+    /// is simply the button. Every other Alt+Down in the application belongs to whoever else wants
+    /// it — the caller asks this first and carries on when the answer is no.
+    /// </remarks>
+    public bool OpenFocusedMenu()
+    {
+        var focused = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() as Visual;
+
+        // The focus sits on one half of a split button, so the walk upwards is what finds the
+        // control the menu was registered against.
+        for (var node = focused; node is not null; node = node.GetVisualParent())
+        {
+            if (node is Control control && _menuOpeners.TryGetValue(control, out var open))
+            {
+                open();
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -1005,23 +1086,85 @@ public sealed class RibbonView : ContentControl
             row.Children.Add(label);
         }
 
-        if (item.Kind is RibbonItemKind.DropDown or RibbonItemKind.SplitButton)
+        var padding = new Thickness(item.ShowLabel ? 8 : RibbonMetrics.SimplifiedGlyphPadding, 0);
+
+        // A split button is two hit areas, so it is two buttons; a drop-down is one, so the
+        // chevron rides inside it.
+        if (item.Kind == RibbonItemKind.SplitButton)
         {
-            var chevron = new TextBlock
-            {
-                Text = IconGlyphs.GetOrEmpty("chevron-down", 16),
-                FontFamily = IconFont.Family,
-                FontSize = 9,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(1, 2, 0, 0),
-            };
-            Bind(chevron, TextBlock.ForegroundProperty, "text.secondary.brush");
-            row.Children.Add(chevron);
+            return WrapAsSplitButton(row, command, item, padding, RibbonMetrics.SimplifiedButtonHeight);
         }
 
-        return WrapAsButton(row, command,
-            new Thickness(item.ShowLabel ? 8 : RibbonMetrics.SimplifiedGlyphPadding, 0),
-            0, RibbonMetrics.SimplifiedButtonHeight);
+        if (item.Kind == RibbonItemKind.DropDown) row.Children.Add(Chevron());
+
+        var built = WrapAsButton(row, command, padding, 0, RibbonMetrics.SimplifiedButtonHeight);
+        if (item.Kind == RibbonItemKind.DropDown)
+        {
+            _menuOpeners[built] = () => CommandInvoked?.Invoke(this, new RibbonCommandEventArgs(command.Id));
+        }
+
+        return built;
+    }
+
+    /// <summary>
+    /// The two-line screentip every control on the ribbon carries: the command's name with its
+    /// shortcut in brackets, in bold, over a sentence saying what it does.
+    /// </summary>
+    /// <remarks>
+    /// The reference gives every button one of these — "New Item (Ctrl+N)" over "Create a new
+    /// item." — not a one-line title, and the shortcut in the heading is how most people ever
+    /// learn one. The chord comes from the key map rather than the command's shipped default, so
+    /// a rebound key shows the key it was rebound to.
+    /// </remarks>
+    private Control Screentip(MailboxCommand command)
+    {
+        var gesture = GestureLookup?.Invoke(command) ?? command.DefaultGesture;
+
+        var heading = new TextBlock
+        {
+            Text = command.Label + (gesture is { Length: > 0 } chord ? $" ({chord})" : string.Empty),
+            FontWeight = FontWeight.SemiBold,
+            TextWrapping = TextWrapping.Wrap,
+        };
+        Bind(heading, TextBlock.ForegroundProperty, "systemdialog.foreground.brush");
+
+        var tip = new StackPanel { Spacing = 2, MaxWidth = 260, Children = { heading } };
+
+        if (command.Description is { Length: > 0 } description)
+        {
+            var body = new TextBlock { Text = description, TextWrapping = TextWrapping.Wrap };
+            Bind(body, TextBlock.ForegroundProperty, "systemdialog.foreground.brush");
+            tip.Children.Add(body);
+        }
+
+        return tip;
+    }
+
+    /// <summary>The same two-line shape for a control that stands for no single command.</summary>
+    private Control Screentip(string heading, string description)
+    {
+        var title = new TextBlock { Text = heading, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap };
+        Bind(title, TextBlock.ForegroundProperty, "systemdialog.foreground.brush");
+
+        var body = new TextBlock { Text = description, TextWrapping = TextWrapping.Wrap };
+        Bind(body, TextBlock.ForegroundProperty, "systemdialog.foreground.brush");
+
+        return new StackPanel { Spacing = 2, MaxWidth = 260, Children = { title, body } };
+    }
+
+    /// <summary>The small arrow that says a button opens something.</summary>
+    private TextBlock Chevron()
+    {
+        var chevron = new TextBlock
+        {
+            Text = IconGlyphs.GetOrEmpty("chevron-down", 16),
+            FontFamily = IconFont.Family,
+            FontSize = 9,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(1, 2, 0, 0),
+        };
+        Bind(chevron, TextBlock.ForegroundProperty, "text.secondary.brush");
+        return chevron;
     }
 
     /// <summary>
@@ -1125,9 +1268,9 @@ public sealed class RibbonView : ContentControl
             Content = face,
             Padding = new Thickness(RibbonMetrics.FieldPadding, 0),
             BorderThickness = default,
-            Background = Brushes.Transparent,
+            Classes = { RibbonButtonClass },
         };
-        ToolTip.SetTip(button, command.Label);
+        ToolTip.SetTip(button, Screentip(command));
         button.Click += (_, _) => CommandInvoked?.Invoke(this, new RibbonCommandEventArgs(command.Id));
 
         Record(command.Id, button);
@@ -1274,7 +1417,7 @@ public sealed class RibbonView : ContentControl
         return rule;
     }
 
-    private Button BuildGlyphButton(string icon, string tip, double size, Action onClick)
+    private Button BuildGlyphButton(string icon, string tip, double size, Action onClick, string? description = null)
     {
         var glyph = new TextBlock
         {
@@ -1292,9 +1435,9 @@ public sealed class RibbonView : ContentControl
             Padding = new Thickness(8, 0),
             Height = RibbonMetrics.SimplifiedButtonHeight,
             BorderThickness = default,
-            Background = Brushes.Transparent,
+            Classes = { RibbonButtonClass },
         };
-        ToolTip.SetTip(button, tip);
+        ToolTip.SetTip(button, Screentip(tip, description ?? "Show what the bar has no room for."));
         button.Click += (_, _) => onClick();
         return button;
     }
@@ -1402,12 +1545,12 @@ public sealed class RibbonView : ContentControl
             MinWidth = RibbonMetrics.LargeButtonMinWidth,
             Height = RibbonMetrics.ItemAreaHeight,
             BorderThickness = default,
-            CornerRadius = new CornerRadius(2),
-            Background = Brushes.Transparent,
+            CornerRadius = new CornerRadius(RibbonMetrics.ButtonCornerRadius),
+            Classes = { RibbonButtonClass },
             HorizontalContentAlignment = HorizontalAlignment.Center,
             VerticalContentAlignment = VerticalAlignment.Center,
         };
-        ToolTip.SetTip(button, GroupLabel(group));
+        ToolTip.SetTip(button, Screentip(GroupLabel(group), $"The {GroupLabel(group)} commands, which this window is too narrow to show."));
 
         // Built when it is first opened rather than with the button. Most collapsed groups are
         // never opened, and this tree is the same size as the one the group would have drawn.
@@ -1533,7 +1676,7 @@ public sealed class RibbonView : ContentControl
         Bind(text, TextBlock.ForegroundProperty, "text.secondary.brush");
 
         var button = new Button { Content = text, Classes = { "flat" }, Padding = new Thickness(2, 0) };
-        ToolTip.SetTip(button, tip);
+        ToolTip.SetTip(button, Screentip(tip, "Scroll the gallery."));
         button.Click += (_, _) => onClick();
         return button;
     }
@@ -1649,7 +1792,7 @@ public sealed class RibbonView : ContentControl
         };
         Bind(launcher, TemplatedControl.ForegroundProperty, "ribbon.group.label.brush");
         Bind(launcher, TemplatedControl.FontSizeProperty, "type.ui.size.small.value");
-        ToolTip.SetTip(launcher, $"{group.Label} options");
+        ToolTip.SetTip(launcher, Screentip($"{GroupLabel(group)} options", $"Open the full options for {GroupLabel(group)}."));
 
         var opens = group.DialogLauncher.Value;
         launcher.Click += (_, _) =>
@@ -1704,6 +1847,7 @@ public sealed class RibbonView : ContentControl
         var button = WrapAsButton(stack, command, new Thickness(4, RibbonMetrics.LargeButtonPaddingTop, 4, 2),
             RibbonMetrics.LargeButtonMinWidth, RibbonMetrics.ItemAreaHeight);
         button.VerticalContentAlignment = VerticalAlignment.Top;
+        RecordMenu(button, command, item);
         return button;
     }
 
@@ -1770,8 +1914,27 @@ public sealed class RibbonView : ContentControl
             row.Children.Add(chevron);
         }
 
-        return WrapAsButton(row, command, new Thickness(4, 0),
+        var button = WrapAsButton(row, command, new Thickness(4, 0),
             RibbonMetrics.SmallButtonMinWidth, height);
+        RecordMenu(button, command, item);
+        return button;
+    }
+
+    /// <summary>
+    /// Notes what Alt+Down does on a classic-bar button that has a menu behind it.
+    /// </summary>
+    /// <remarks>
+    /// A split button on this bar is one hit area with a chevron drawn under the label rather than
+    /// the simplified bar's two halves, so the key opens the menu the chevron stands for — which
+    /// for a plain drop-down is the button's own command.
+    /// </remarks>
+    private void RecordMenu(Control button, MailboxCommand command, RibbonItem item)
+    {
+        if (item.Kind is not (RibbonItemKind.DropDown or RibbonItemKind.SplitButton)) return;
+
+        _menuOpeners[button] = () => CommandInvoked?.Invoke(this, new RibbonCommandEventArgs(
+            item.Kind == RibbonItemKind.SplitButton ? item.ChevronCommand ?? command.Id : command.Id,
+            fromChevron: item.Kind == RibbonItemKind.SplitButton));
     }
 
     /// <param name="fontSize">
@@ -1840,6 +2003,100 @@ public sealed class RibbonView : ContentControl
         };
     }
 
+    /// <summary>
+    /// A split button: one box, two hit areas, a divider between them.
+    /// </summary>
+    /// <remarks>
+    /// The reference outlines a split button under the pointer and lights only the half being
+    /// pointed at — which is what tells a reader the two halves do different things, because they
+    /// do: New Email writes a message and its chevron opens New Items. Both halves are real
+    /// buttons; the box round them carries the line, and the halves carry their own fill.
+    /// <para>
+    /// The border is there at rest as well, in a transparent brush, so nothing moves by a pixel
+    /// when the pointer arrives.
+    /// </para>
+    /// </remarks>
+    private Control WrapAsSplitButton(
+        Control content, MailboxCommand command, RibbonItem item, Thickness padding, double height)
+    {
+        var inner = height - 2;
+
+        var action = new Button
+        {
+            Content = content,
+            Padding = padding,
+            Height = inner,
+            BorderThickness = default,
+            CornerRadius = new CornerRadius(RibbonMetrics.ButtonCornerRadius, 0, 0, RibbonMetrics.ButtonCornerRadius),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Classes = { RibbonButtonClass },
+        };
+
+        var chevron = new Button
+        {
+            Content = Chevron(),
+            Padding = new Thickness(RibbonMetrics.SplitChevronPadding, 0),
+            Height = inner,
+            BorderThickness = default,
+            CornerRadius = new CornerRadius(0, RibbonMetrics.ButtonCornerRadius, RibbonMetrics.ButtonCornerRadius, 0),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Classes = { RibbonButtonClass },
+        };
+
+        var divider = new Border { Width = 1, Margin = new Thickness(0, 3), Classes = { "ribbonsplitdivider" } };
+
+        var box = new Border
+        {
+            Classes = { "ribbonsplit" },
+            Height = height,
+            Child = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                VerticalAlignment = VerticalAlignment.Center,
+                Children = { action, divider, chevron },
+            },
+        };
+
+        // The line and the divider belong to the whole control, so they answer to the pointer
+        // being anywhere over it rather than to either half.
+        box.PointerEntered += (_, _) => Lit(true);
+        box.PointerExited += (_, _) => Lit(false);
+
+        void Lit(bool on)
+        {
+            if (on)
+            {
+                box.Classes.Add("hovered");
+                divider.Classes.Add("hovered");
+            }
+            else
+            {
+                box.Classes.Remove("hovered");
+                divider.Classes.Remove("hovered");
+            }
+        }
+
+        var screentip = Screentip(command);
+        ToolTip.SetTip(action, screentip);
+        ToolTip.SetTip(chevron, Screentip(
+            item.ChevronCommand is { } other && _catalog.TryGet(other, out var second) ? second : command));
+
+        action.Click += (_, _) => CommandInvoked?.Invoke(this, new RibbonCommandEventArgs(command.Id));
+        chevron.Click += (_, _) => OpenMenu();
+
+        void OpenMenu() => CommandInvoked?.Invoke(
+            this, new RibbonCommandEventArgs(item.ChevronCommand ?? command.Id, fromChevron: true));
+
+        _splitLighters[box] = Lit;
+        foreach (var part in (Control[])[box, action, chevron]) _menuOpeners[part] = OpenMenu;
+        Record(command.Id, box);
+        if (CommandEnabled is { } enabled) box.IsEnabled = enabled(command.Id);
+
+        return box;
+    }
+
     private Button WrapAsButton(
         Control content, MailboxCommand command, Thickness padding, double minWidth, double height)
     {
@@ -1850,26 +2107,13 @@ public sealed class RibbonView : ContentControl
             MinWidth = minWidth,
             Height = height,
             BorderThickness = default,
-            CornerRadius = new CornerRadius(2),
-            Background = Brushes.Transparent,
+            CornerRadius = new CornerRadius(RibbonMetrics.ButtonCornerRadius),
+            Classes = { RibbonButtonClass },
             HorizontalContentAlignment = HorizontalAlignment.Center,
             VerticalContentAlignment = VerticalAlignment.Center,
         };
 
-        // Two-line screentip: bold heading over a description, as Office does — not a
-        // one-line tooltip.
-        var tip = new StackPanel { Spacing = 2, MaxWidth = 260 };
-        tip.Children.Add(new TextBlock
-        {
-            Text = command.Label + ((GestureLookup?.Invoke(command) ?? command.DefaultGesture) is { } g ? $"  ({g})" : string.Empty),
-            FontWeight = FontWeight.SemiBold,
-        });
-        tip.Children.Add(new TextBlock
-        {
-            Text = command.Description,
-            TextWrapping = TextWrapping.Wrap,
-        });
-        ToolTip.SetTip(button, tip);
+        ToolTip.SetTip(button, Screentip(command));
 
         button.Click += (_, _) => CommandInvoked?.Invoke(this, new RibbonCommandEventArgs(command.Id));
 

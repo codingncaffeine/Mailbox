@@ -26,6 +26,73 @@ public static class MailCommands
         AlsoGestures = ["Ctrl+Shift+M"],
     };
 
+    // ---- The keyboard's own commands ---------------------------------------------------
+    // Reached by a chord and by a double click rather than from a button, so unplaced on the
+    // default ribbon — the reference has no button for any of these either.
+
+    /// <summary>
+    /// Opens the selected message in a window of its own, which otherwise takes a double click.
+    /// </summary>
+    public static readonly MailboxCommand OpenItem = new()
+    {
+        Id = new("mail.open"),
+        Label = "Open",
+        Description = "Open the selected message in its own window.",
+        Icon = "folder-open",
+        Category = "Actions",
+        Scope = ModuleScope.Mail,
+        DefaultGesture = "Shift+Enter",
+
+        // Enter opens whatever the open module has selected — a message here, an appointment in
+        // the calendar — so both are bound to it and the lookup picks by module.
+        AlsoGestures = ["Enter"],
+        RequiresSelection = true,
+        InDefaultLayout = false,
+    };
+
+    /// <summary>
+    /// Flags the selection, or marks a flagged one complete — one key for the pair, as the
+    /// reference binds Insert.
+    /// </summary>
+    public static readonly MailboxCommand ToggleFlag = new()
+    {
+        Id = new("mail.flag.toggle"),
+        Label = "Flag or Complete",
+        Description = "Flag the selected messages, or mark them complete if they are already flagged.",
+        Icon = "flag",
+        Category = "Tags",
+        Scope = ModuleScope.Mail,
+        DefaultGesture = "Insert",
+        RequiresSelection = true,
+        InDefaultLayout = false,
+    };
+
+    public static readonly MailboxCommand NextMessage = new()
+    {
+        Id = new("mail.next"),
+        Label = "Next Message",
+        Description = "Select the next message in the list.",
+        Icon = "chevron-down",
+        Category = "Go To",
+        Scope = ModuleScope.Mail,
+        DefaultGesture = "Ctrl+OemPeriod",
+        AlsoGestures = ["Ctrl+Shift+OemPeriod"],
+        InDefaultLayout = false,
+    };
+
+    public static readonly MailboxCommand PreviousMessage = new()
+    {
+        Id = new("mail.previous"),
+        Label = "Previous Message",
+        Description = "Select the previous message in the list.",
+        Icon = "chevron-up",
+        Category = "Go To",
+        Scope = ModuleScope.Mail,
+        DefaultGesture = "Ctrl+OemComma",
+        AlsoGestures = ["Ctrl+Shift+OemComma"],
+        InDefaultLayout = false,
+    };
+
     public static readonly MailboxCommand NewItems = new()
     {
         Id = new("mail.new.items"),
@@ -680,5 +747,6 @@ public static class MailCommands
         Snooze, ViewSource, TrackerReport, AuthenticationDetails, Print, PrintToPdf, PrintList,
         RecoverDeleted, NewSearchFolder,
         MoveToOther, MoveToFocused, AlwaysMoveToOther, AlwaysMoveToFocused,
+        OpenItem, ToggleFlag, NextMessage, PreviousMessage,
     ];
 }

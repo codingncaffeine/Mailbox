@@ -1,6 +1,27 @@
 namespace Mailbox.Core.Commands;
 
 /// <summary>
+/// Which window a command belongs to.
+/// </summary>
+/// <remarks>
+/// Every command lives in one catalogue, so the shell and the windows that open over it share
+/// one another's ids — and one another's keys. Ctrl+U marks a message unread in the shell and
+/// underlines a word in a compose window, and both are ordinary commands; this is what tells
+/// the shell's key map that only one of them is its to run.
+/// </remarks>
+public enum CommandSurface
+{
+    /// <summary>The main window: the modules, their ribbons and their lists.</summary>
+    Shell,
+
+    /// <summary>The compose window and the editor inside it.</summary>
+    Compose,
+
+    /// <summary>The appointment and meeting window.</summary>
+    Appointment,
+}
+
+/// <summary>
 /// One thing Mailbox can do. Every user-invokable action is one of these — there is no
 /// other way for UI to trigger behaviour, which is what makes the ribbon rearrangeable
 /// and lets an unplaced command still be searchable, bindable and reachable.
@@ -52,6 +73,12 @@ public sealed record MailboxCommand
     public string? IconArtwork { get; init; }
 
     public ModuleScope Scope { get; init; } = ModuleScope.Any;
+
+    /// <summary>
+    /// The window this command belongs to. Stamped where each class lists its commands for
+    /// registration, so no single definition can be the one that forgets.
+    /// </summary>
+    public CommandSurface Surface { get; init; } = CommandSurface.Shell;
 
     /// <summary>
     /// KeyTip characters shown when Alt is pressed. 1–3 uppercase characters, no whitespace,

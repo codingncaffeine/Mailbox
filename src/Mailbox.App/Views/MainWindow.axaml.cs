@@ -235,17 +235,22 @@ public partial class MainWindow : Window
             if (DataContext is ShellViewModel s) _ = AutoArchiveIfDueAsync(s);
         }, DispatcherPriority.Background);
 
-        // Presses a shortcut through the key map: MAILBOX_KEY=Ctrl+Q — the map's answer runs
-        // as the keystroke would, and the store says what it did.
-        if (Environment.GetEnvironmentVariable("MAILBOX_KEY") is { Length: > 0 } key)
+        // Presses shortcuts through the window's own key handler: MAILBOX_KEY=Ctrl+Q, or several
+        // in order — MAILBOX_KEY=F6,F6 — and the log says what each one did. Punctuation keys go
+        // by their Oem names here, the comma being the separator.
+        if (Environment.GetEnvironmentVariable("MAILBOX_KEY") is { Length: > 0 } keys)
         {
-            Opened += (_, _) => Dispatcher.UIThread.Post(() =>
+            // One post per chord, so each is pressed on its own pass of the loop as a person's
+            // would be — the list rebuilds itself between keystrokes, and a run that pressed
+            // them all in one pass would be testing something nobody can do.
+            Opened += (_, _) =>
             {
-                var chord = Mailbox.Core.Keyboard.Chord.Parse(key);
-                var command = chord is null ? null : App.Keys.CommandFor(chord);
-                Log.Info($"Harness: key {key} → {(command?.Value ?? "nothing")}.");
-                if (command is { } id) RunCommand(id);
-            }, DispatcherPriority.Background);
+                foreach (var key in keys.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    var one = key;
+                    Dispatcher.UIThread.Post(() => PressChord(one), DispatcherPriority.Background);
+                }
+            };
         }
 
         // A folder operation over the posed folder, for reading the store back:
@@ -2587,7 +2592,24 @@ public partial class MainWindow : Window
 
         if (Environment.GetEnvironmentVariable("MAILBOX_HOVER") is { Length: > 0 } hovered)
         {
-            Opened += (_, _) => caption.ForceHover(hovered.ToLowerInvariant());
+            // A pointer is the one thing a capture run does not have, so the state is posed.
+            // "ribbon:<command-id>" reaches the bar; anything else is a caption button.
+            if (hovered.StartsWith("ribbon:", StringComparison.OrdinalIgnoreCase))
+            {
+                var id = new CommandId(hovered["ribbon:".Length..].Trim());
+                Opened += (_, _) => Dispatcher.UIThread.Post(
+                    () =>
+                    {
+                        _ribbon.UpdateLayout();
+                        _ribbon.ForceHover(id);
+                        Log.Info($"Harness: hovering {id}.");
+                    },
+                    DispatcherPriority.Loaded);
+            }
+            else
+            {
+                Opened += (_, _) => caption.ForceHover(hovered.ToLowerInvariant());
+            }
         }
 
         if (this.FindControl<Control>("TitleBar") is not { } bar) return;
@@ -2734,6 +2756,12 @@ public partial class MainWindow : Window
         // A Quick Step, by the command it is placed as; and the gallery's launcher, which manages them.
         if (App.QuickSteps.FindByCommand(id) is { } step) { _ = RunQuickStepAsync(shell, step, SelectedRows()); return; }
         if (id == MailCommands.QuickSteps.Id) { _ = ManageQuickStepsAsync(shell); return; }
+
+        // The keyboard's own: open, step through the list, and the shortcut list itself.
+        if (id == MailCommands.OpenItem.Id) { OpenMessageWindow(shell); return; }
+        if (id == MailCommands.NextMessage.Id) { StepSelection(shell, 1); return; }
+        if (id == MailCommands.PreviousMessage.Id) { StepSelection(shell, -1); return; }
+        if (id == ViewCommands.KeyboardShortcuts.Id) { _ = ShowKeyboardShortcutsAsync(); return; }
 
         if (id == MailCommands.Reply.Id) { Respond(shell, ReplyKind.Reply); return; }
         if (id == MailCommands.ReplyAll.Id) { Respond(shell, ReplyKind.ReplyAll); return; }
@@ -2998,6 +3026,18 @@ public partial class MainWindow : Window
         // otherwise. Same for the flag.
         if (id == MailCommands.Unread.Id) { shell.SetRead(rows, read: rows.Any(r => r.IsUnread)); return true; }
         if (id == MailCommands.FollowUp.Id) { ShowFollowUpMenu(shell, rows); return true; }
+
+        // Insert: flag what is not flagged, and mark what is flagged complete. Unlike the click
+        // on the flag column, which takes the flag off again, this is the reference's own reading
+        // of the key — "flag a message or mark a flagged message as complete".
+        if (id == MailCommands.ToggleFlag.Id)
+        {
+            if (rows.Count == 0) return true;
+            if (rows.All(r => r.IsFlagged)) shell.MarkFollowUpComplete(rows);
+            else if (App.QuickClick.Flag == QuickFlag.Complete) shell.MarkFollowUpComplete(rows);
+            else shell.FlagForFollowUp(rows, QuickClickSettings.DueDate(App.QuickClick.Flag, DateTimeOffset.Now));
+            return true;
+        }
 
         if (id == MailCommands.Categorize.Id) { ShowCategorizeMenu(shell, rows); return true; }
         if (id == MailCommands.Snooze.Id) { ShowSnoozeMenu(shell, rows); return true; }
@@ -3570,25 +3610,50 @@ public partial class MainWindow : Window
     /// <summary>New Items: a new message today, and the other kinds when their modules exist.</summary>
     private void ShowNewItemsMenu()
     {
+        if (DataContext is not ShellViewModel shell) return;
+
         var flyout = new MenuFlyout();
 
-        var mail = new MenuItem { Header = "Email Message" };
-        mail.Click += (_, _) => NewMessage();
-        flyout.Items.Add(mail);
-        flyout.Items.Add(new Separator());
-
-        foreach (var (label, phase) in new[]
-                 {
-                     ("Appointment", "Phase 11"), ("Meeting", "Phase 11"),
-                     ("Contact", "Phase 12"), ("Task", "Phase 13"), ("Note", "Phase 13"),
-                 })
+        void Entry(string header, string icon, Action run)
         {
-            var item = new MenuItem { Header = label, IsEnabled = false };
-            ToolTip.SetTip(item, $"{label}s arrive with {phase}.");
+            var item = new MenuItem { Header = header, Icon = MenuIcon(icon) };
+            item.Click += (_, _) => run();
             flyout.Items.Add(item);
         }
 
-        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+        void Waiting(string header, string icon, string phase)
+        {
+            var item = new MenuItem { Header = header, Icon = MenuIcon(icon), IsEnabled = false };
+            ToolTip.SetTip(item, $"{header}s arrive with {phase}.");
+            flyout.Items.Add(item);
+        }
+
+        // The reference's own list, in its own order, with the mnemonics it underlines.
+        Entry("_E-mail Message", "mail-new", () => NewMessage());
+        Entry("_Appointment", "new-appointment", () => RunCommand(CalendarCommands.NewAppointment.Id));
+        Entry("_Meeting", "meeting", () => RunCommand(CalendarCommands.NewMeeting.Id));
+        Waiting("_Contact", "contact-card", "Phase 12");
+        Waiting("_Task", "new-task", "Phase 13");
+        flyout.Items.Add(new Separator());
+
+        var using_ = new MenuItem { Header = "E-mail Message _Using" };
+        using_.Items.Add(new MenuItem { Header = "Plain Text", IsEnabled = false });
+        using_.Items.Add(new MenuItem { Header = "Rich Text", IsEnabled = false });
+        ToolTip.SetTip(using_, "Choosing a format per message arrives with the stationery work.");
+        flyout.Items.Add(using_);
+
+        var more = new MenuItem { Header = "M_ore Items" };
+        more.Items.Add(new MenuItem { Header = "Note", IsEnabled = false });
+        more.Items.Add(new MenuItem { Header = "Choose Form…", IsEnabled = false });
+        ToolTip.SetTip(more, "The rest of the item types arrive with their modules.");
+        flyout.Items.Add(more);
+
+        // New Items has its own button on the classic ribbon and hangs off New Email's chevron
+        // on the Simplified bar, so the menu falls back to whichever of the two is on screen.
+        _ribbon.OpenMenuUnder(
+            MailCommands.NewItems.Id, flyout,
+            _ribbon.ControlFor(MailCommands.NewEmail.Id) ?? this);
+        shell.StatusRight = string.Empty;
     }
 
     /// <summary>Filter Email: the reference's filters, one at a time, and Snoozed beside them.</summary>
@@ -4136,6 +4201,16 @@ public partial class MainWindow : Window
             _keyTips.End();
         }
 
+        // Alt+Down opens a split button's menu while the button has the focus, which is the one
+        // meaning of that chord the calendar's own must not take: the ribbon is asked first and
+        // only answers when something of its own is focused.
+        if (e.Key is Avalonia.Input.Key.Down && e.KeyModifiers == Avalonia.Input.KeyModifiers.Alt
+            && _ribbon?.OpenFocusedMenu() == true)
+        {
+            e.Handled = true;
+            return;
+        }
+
         base.OnKeyDown(e);
         if (e.Handled || DataContext is not ShellViewModel shell) return;
 
@@ -4149,32 +4224,237 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Esc gives up a search, from the box or from the list — the folder comes back. Not a
+        // command, because it undoes a state rather than doing something, and because a command
+        // would fire wherever the caret was.
+        if (e.Key is Avalonia.Input.Key.Escape && shell.SearchText.Length > 0)
+        {
+            shell.SearchText = string.Empty;
+            (this.FindControl<Control>("MessageList") ?? (Control)this).Focus();
+            e.Handled = true;
+            return;
+        }
+
+        // F6 walks the panes, Shift+F6 and Ctrl+Shift+Tab walk them backwards.
+        if (e.Key is Avalonia.Input.Key.F6 || (control && shift && e.Key is Avalonia.Input.Key.Tab))
+        {
+            CycleRegion(shell, shift || e.Key is Avalonia.Input.Key.Tab ? -1 : 1);
+            e.Handled = true;
+            return;
+        }
+
+        // Page and Home and End move the message in the reading pane while the pane has the
+        // focus, which is where F6 leaves it.
+        if (e.KeyModifiers is Avalonia.Input.KeyModifiers.None && ScrollReadingPane(e.Key))
+        {
+            e.Handled = true;
+            return;
+        }
+
         // Everything else the keyboard does here goes through the key map — a command's own
-        // shortcut, or the one the reader gave it in Customize Keyboard. A key with text focus
-        // in a box keeps its meaning there: the box has already had the event.
-        if (Chord(e) is { } chord && App.Keys.CommandFor(chord) is { } id
-            && !id.Value.StartsWith("compose.", StringComparison.Ordinal))
+        // shortcut, or the one the reader gave it in Customize Keyboard — asked for the module
+        // that is open, so Delete throws away whichever kind of item is in front of the reader.
+        if (Keystroke.Of(e) is not { } chord || IsTyping(chord)) return;
+        if (App.Keys.CommandFor(chord, shell.Module) is { } id)
         {
             RunCommand(id);
             e.Handled = true;
         }
     }
 
-    /// <summary>The keystroke as the key map names it — null for a modifier alone.</summary>
-    private static Mailbox.Core.Keyboard.Chord? Chord(Avalonia.Input.KeyEventArgs e)
+    /// <summary>
+    /// Pages the reading pane, and says whether it was the reading pane's key to take.
+    /// </summary>
+    /// <remarks>
+    /// Only while the focus is inside the pane: Home and End belong to the message list when the
+    /// list has them, and to the message being read when the pane does. A rendered message shown
+    /// in the web view keeps its own keys — they never reach here — so this is what moves the
+    /// text that is drawn rather than browsed.
+    /// </remarks>
+    private bool ScrollReadingPane(Avalonia.Input.Key key)
     {
-        if (e.Key is Avalonia.Input.Key.LeftCtrl or Avalonia.Input.Key.RightCtrl or Avalonia.Input.Key.LeftShift or Avalonia.Input.Key.RightShift
-            or Avalonia.Input.Key.LeftAlt or Avalonia.Input.Key.RightAlt or Avalonia.Input.Key.LWin or Avalonia.Input.Key.RWin or Avalonia.Input.Key.None)
+        if (key is not (Avalonia.Input.Key.PageUp or Avalonia.Input.Key.PageDown
+            or Avalonia.Input.Key.Home or Avalonia.Input.Key.End))
         {
-            return null;
+            return false;
         }
 
-        var modifiers = Mailbox.Core.Keyboard.ChordModifiers.None;
-        if (e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Control)) modifiers |= Mailbox.Core.Keyboard.ChordModifiers.Control;
-        if (e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Alt)) modifiers |= Mailbox.Core.Keyboard.ChordModifiers.Alt;
-        if (e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Shift)) modifiers |= Mailbox.Core.Keyboard.ChordModifiers.Shift;
-        if (e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Meta)) modifiers |= Mailbox.Core.Keyboard.ChordModifiers.Meta;
-        return new Mailbox.Core.Keyboard.Chord(modifiers, e.Key.ToString());
+        if (this.FindControl<Border>("ReadingPane") is not { IsEffectivelyVisible: true } pane) return false;
+
+        var inside = false;
+        for (var node = FocusManager?.GetFocusedElement() as Visual; node is not null && !inside; node = node.GetVisualParent())
+        {
+            inside = ReferenceEquals(node, pane);
+        }
+
+        if (!inside || pane.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault() is not { } scroller) return false;
+
+        switch (key)
+        {
+            case Avalonia.Input.Key.PageUp: scroller.PageUp(); break;
+            case Avalonia.Input.Key.PageDown: scroller.PageDown(); break;
+            case Avalonia.Input.Key.Home: scroller.ScrollToHome(); break;
+            default: scroller.ScrollToEnd(); break;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// F6: the focus moves to the next pane, and round again at the end.
+    /// </summary>
+    /// <remarks>
+    /// The panes are the ones on screen, so the reading pane is skipped when it is off and the
+    /// calendar's workspace stands where the message list does in the other module. The pane a
+    /// key lands on is made focusable as it is asked for rather than in the markup — a border is
+    /// not a tab stop, and making it one would put it in Tab's way as well as F6's.
+    /// </remarks>
+    private void CycleRegion(ShellViewModel shell, int by)
+    {
+        var regions = new List<Control>();
+
+        void Add(string name)
+        {
+            if (this.FindControl<Control>(name) is { IsEffectivelyVisible: true } found) regions.Add(found);
+        }
+
+        Add("FolderList");
+        if (shell.Module == MailboxModule.Mail)
+        {
+            Add("MessageList");
+            if (shell.ReadingPaneVisible) Add("ReadingPane");
+        }
+        else
+        {
+            Add("ModuleHost");
+        }
+
+        if (regions.Count == 0) return;
+
+        // Which pane the focus is in now: the walk upwards, because the focus is on something
+        // inside the pane rather than on the pane itself.
+        var at = -1;
+        for (var node = FocusManager?.GetFocusedElement() as Visual; node is not null && at < 0; node = node.GetVisualParent())
+        {
+            at = regions.FindIndex(r => ReferenceEquals(r, node));
+        }
+
+        var next = regions[at < 0 ? 0 : ((at + by) % regions.Count + regions.Count) % regions.Count];
+        next.Focusable = true;
+        next.Focus(NavigationMethod.Directional);
+    }
+
+    /// <summary>
+    /// Ctrl+. and Ctrl+, — the next and previous message, whatever the list is arranged by.
+    /// </summary>
+    /// <remarks>
+    /// The step is over the rows on screen rather than over the folder, so a collapsed group or a
+    /// filter is respected, and the group headers between them are stepped past: selecting one
+    /// collapses it, which is not what asking for the next message means.
+    /// </remarks>
+    private static void StepSelection(ShellViewModel shell, int by)
+    {
+        var rows = shell.VisibleRows;
+        if (rows.Count == 0) return;
+
+        var from = shell.SelectedRow is { } current ? IndexOf(rows, current) : -1;
+        for (var at = from + by; at >= 0 && at < rows.Count; at += by)
+        {
+            if (rows[at] is ViewModels.GroupHeaderRow) continue;
+            shell.SelectedRow = rows[at];
+            return;
+        }
+
+        static int IndexOf(IReadOnlyList<object> rows, object row)
+        {
+            for (var at = 0; at < rows.Count; at++)
+            {
+                if (ReferenceEquals(rows[at], row)) return at;
+            }
+
+            return -1;
+        }
+    }
+
+    /// <summary>
+    /// "?" — the list of every command and the key that runs it, which is Customize Keyboard.
+    /// </summary>
+    private async Task ShowKeyboardShortcutsAsync()
+        => await new CustomizeKeyboardDialog(App.Keys, App.Commands).ShowDialog(this);
+
+    /// <summary>
+    /// Whether a chord belongs to the box the caret is in rather than to the window.
+    /// </summary>
+    /// <remarks>
+    /// A box that takes text owns the plain keys while it has the focus: Insert, "?" and Enter
+    /// are the reader typing, not Flag, the shortcut list and Open. Only a chord holding Ctrl or
+    /// Alt — or a function key, which types nothing — is the window's to run. The keys the box
+    /// itself acts on, Delete and Backspace among them, never reach here: it has marked them
+    /// handled already.
+    /// </remarks>
+    private bool IsTyping(Mailbox.Core.Keyboard.Chord chord)
+        => Keystroke.IsTyping(chord) && FocusManager?.GetFocusedElement() is TextBox;
+
+    /// <summary>
+    /// Presses one chord as a person would, and says what it did.
+    /// </summary>
+    /// <remarks>
+    /// Through the window's own key handler rather than straight to the command, so what the pose
+    /// exercises is what a keystroke does — the panes F6 walks, the menu Alt+Down opens, the keys
+    /// a text box keeps to itself — and not only the map's answer. What it did is read back from
+    /// the store and the focus rather than assumed.
+    /// </remarks>
+    private void PressChord(string key)
+    {
+        // "focus:<control name or ribbon command id>" puts the focus somewhere first, a keystroke
+        // meaning different things in different places: Alt+Down opens the menu of the split
+        // button that has the focus and moves the calendar when nothing on the bar does.
+        if (key.StartsWith("focus:", StringComparison.OrdinalIgnoreCase))
+        {
+            var what = key["focus:".Length..].Trim();
+            _ribbon.UpdateLayout();
+
+            var target = this.FindControl<Control>(what) ?? _ribbon.ControlFor(new CommandId(what));
+            if (target is not null)
+            {
+                target.Focusable = true;
+                target.Focus();
+            }
+
+            Log.Info($"Harness: focus asked for {what} — {(FocusManager?.GetFocusedElement() as Control)?.Name ?? target?.GetType().Name ?? "nothing"} has it.");
+            return;
+        }
+
+        var chord = Mailbox.Core.Keyboard.Chord.Parse(key);
+        var module = (DataContext as ShellViewModel)?.Module ?? MailboxModule.Mail;
+        var command = chord is null ? null : App.Keys.CommandFor(chord, module);
+        Log.Info($"Harness: key {key} → {(command?.Value ?? "nothing")}.");
+
+        if (chord is not null && Enum.TryParse<Avalonia.Input.Key>(chord.Key, out var pressed))
+        {
+            // Raised at whatever has the focus and left to bubble, which is the path a real
+            // keystroke takes: the list gets Home before the window does, and the window sees
+            // only what the list did not take.
+            var at = FocusManager?.GetFocusedElement() as Avalonia.Interactivity.Interactive ?? this;
+            at.RaiseEvent(new Avalonia.Input.KeyEventArgs
+            {
+                RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent,
+                Source = at,
+                Key = pressed,
+                KeyModifiers = Keystroke.Modifiers(chord.Modifiers),
+            });
+        }
+
+        if (DataContext is not ShellViewModel shell) return;
+
+        var row = shell.SelectedMessage;
+        var after = row is null ? null : shell.SummaryOf(row);
+        var focused = FocusManager?.GetFocusedElement() as Control;
+        Log.Info($"Harness: after {key} — focus on {focused?.Name ?? focused?.GetType().Name ?? "nothing"}, "
+            + $"selected “{row?.Subject ?? "nothing"}” of {SelectedRows().Count}, "
+            + $"flag {(after?.FollowUpDue is { } due ? due.LocalDateTime.ToString("yyyy-MM-dd HH:mm") : after?.IsFlagged == true ? "set, no date" : "none")}, "
+            + $"{(after?.IsRead == true ? "read" : "unread")}, search “{shell.SearchText}”, "
+            + $"status “{shell.StatusRight}”.");
     }
 
     /// <summary>Runs a query across every mailbox — what Mailbox Cleanup's Find buttons hand over.</summary>
@@ -4271,6 +4551,27 @@ public partial class MainWindow : Window
         // reference's "use compact layout in widths smaller than N characters".
         list.SizeChanged += (_, e) => shell.ListWidth = e.NewSize.Width;
         shell.ListWidth = list.Bounds.Width;
+
+        // Home and End go to the first and last message, which in a grouped list is not the
+        // first and last row: the list's own Home lands on a group header, and selecting one
+        // folds the group rather than showing a message. Taken before the list sees them.
+        list.AddHandler(KeyDownEvent, (object? _, Avalonia.Input.KeyEventArgs e) =>
+        {
+            if (e.Key is not (Avalonia.Input.Key.Home or Avalonia.Input.Key.End)) return;
+            if (e.KeyModifiers is not (Avalonia.Input.KeyModifiers.None or Avalonia.Input.KeyModifiers.Control)) return;
+
+            var rows = shell.VisibleRows;
+            var wanted = e.Key is Avalonia.Input.Key.Home
+                ? rows.FirstOrDefault(r => r is not ViewModels.GroupHeaderRow)
+                : rows.LastOrDefault(r => r is not ViewModels.GroupHeaderRow);
+
+            if (wanted is null) return;
+
+            shell.SelectedRow = wanted;
+            list.SelectedItem = wanted;
+            list.ScrollIntoView(wanted);
+            e.Handled = true;
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
 
         // Quick Click: one click on a row's Flag or Categories cell does what Set Quick Click…
         // nominated, without a menu.
@@ -4423,6 +4724,49 @@ public partial class MainWindow : Window
 
             shell.MoveToFolder(ids, target);
         });
+
+        WireFolderTypeAhead(shell, folders);
+    }
+
+    /// <summary>
+    /// A letter or a digit in the folder pane jumps to the next folder whose name begins with it.
+    /// </summary>
+    /// <remarks>
+    /// "Next" rather than "first", so pressing the same key again walks the folders that share a
+    /// letter and comes round to the start — which is how a long list is reached by keyboard. The
+    /// search wraps through the whole pane, so it always lands somewhere if anything matches.
+    /// </remarks>
+    private static void WireFolderTypeAhead(ShellViewModel shell, ListBox folders)
+    {
+        folders.AddHandler(KeyDownEvent, (object? _, Avalonia.Input.KeyEventArgs e) =>
+        {
+            if (e.KeyModifiers is not Avalonia.Input.KeyModifiers.None) return;
+
+            var typed = e.Key switch
+            {
+                >= Avalonia.Input.Key.A and <= Avalonia.Input.Key.Z => (char)('a' + (e.Key - Avalonia.Input.Key.A)),
+                >= Avalonia.Input.Key.D0 and <= Avalonia.Input.Key.D9 => (char)('0' + (e.Key - Avalonia.Input.Key.D0)),
+                >= Avalonia.Input.Key.NumPad0 and <= Avalonia.Input.Key.NumPad9 => (char)('0' + (e.Key - Avalonia.Input.Key.NumPad0)),
+                _ => '\0',
+            };
+
+            if (typed == '\0') return;
+
+            var nodes = shell.Folders;
+            if (nodes.Count == 0) return;
+
+            var from = shell.SelectedFolder is { } current ? nodes.IndexOf(current) : -1;
+            for (var step = 1; step <= nodes.Count; step++)
+            {
+                var node = nodes[(from + step) % nodes.Count];
+                if (node.Name.Length == 0 || char.ToLowerInvariant(node.Name[0]) != typed) continue;
+
+                shell.SelectedFolder = node;
+                folders.ScrollIntoView(node);
+                e.Handled = true;
+                return;
+            }
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
     }
 
     /// <summary>Which folder row the pointer is over, or null when it is over nothing.</summary>

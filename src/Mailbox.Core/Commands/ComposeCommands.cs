@@ -574,7 +574,13 @@ public static class ComposeCommands
         Category = "Names",
         Scope = ModuleScope.Mail,
         KeyTip = "K2",
-        DefaultGesture = "Ctrl+K",
+
+        // The reference gives Ctrl+K to both this and Insert Hyperlink, and decides between them
+        // by where the caret is. One chord runs one command here, so the shortcut this one shows
+        // is Alt+K — the reference's other key for it — and Ctrl+K is kept as a second, which the
+        // hyperlink's own claim on that chord outranks.
+        DefaultGesture = "Alt+K",
+        AlsoGestures = ["Ctrl+K"],
     };
 
     // ---- Message and Insert · Include -------------------------------------------------
@@ -621,6 +627,7 @@ public static class ComposeCommands
         Category = "Links",
         Scope = ModuleScope.Mail,
         KeyTip = "LI",
+        DefaultGesture = "Ctrl+K",
     };
 
     // ---- Message tab · Tags -----------------------------------------------------------
@@ -1056,8 +1063,7 @@ public static class ComposeCommands
         KeyTip = "A1",
     };
 
-    /// <summary>Every command this class declares, for registration.</summary>
-    public static IReadOnlyList<MailboxCommand> All { get; } =
+    private static IReadOnlyList<MailboxCommand> Declared { get; } =
     [
         Send, SaveDraft, Discard, PreviousItem, NextItem,
         Paste, Cut, Copy, FormatPainter,
@@ -1081,4 +1087,11 @@ public static class ComposeCommands
         SaveSentItemTo, DelayDelivery, DirectRepliesTo,
         Spelling, Thesaurus, WordCount, SmartLookup, Language, CheckAccessibility,
     ];
+
+    /// <summary>
+    /// Every command this class declares, for registration — each stamped as the compose
+    /// window's, which is what keeps Ctrl+U underlining here and marking unread in the shell.
+    /// </summary>
+    public static IReadOnlyList<MailboxCommand> All { get; } =
+        [.. Declared.Select(c => c with { Surface = CommandSurface.Compose })];
 }

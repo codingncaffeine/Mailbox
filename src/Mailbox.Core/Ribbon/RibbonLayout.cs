@@ -122,6 +122,17 @@ public sealed record RibbonItem
     public bool IsDisabled { get; init; }
 
     /// <summary>
+    /// What the chevron half of a <see cref="RibbonItemKind.SplitButton"/> runs, when that is not
+    /// the item's own command.
+    /// </summary>
+    /// <remarks>
+    /// A split button is two buttons: New Email writes a message and its chevron opens New Items.
+    /// Which command the second half runs is a property of the layout, like everything else the
+    /// bar places — not a special case in the renderer.
+    /// </remarks>
+    public CommandId? ChevronCommand { get; init; }
+
+    /// <summary>
     /// Fixed width, for the fields the reference sizes rather than letting them fit their
     /// contents — the Font and Font Size boxes on the compose ribbon are 107px and 51px
     /// whatever is in them.

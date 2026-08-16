@@ -1490,6 +1490,14 @@ public sealed partial class ShellViewModel : ObservableObject
     /// What the list has selected, which may be a group header. Headers are not messages, so
     /// selecting one leaves the reading pane alone rather than blanking it.
     /// </summary>
+    /// <remarks>
+    /// Selecting a header folds its group and selecting a conversation opens it, and both of
+    /// those replace the row list — which cannot be done from here. The list is in the middle of
+    /// its own selection update when it sets this, and swapping its items under it leaves its
+    /// selection model holding a row number past the end of the new list, which throws where
+    /// nothing can catch it. So the fold happens on the next pass of the loop, by which time the
+    /// update has finished. Pressing Home in a grouped list is what found this.
+    /// </remarks>
     public object? SelectedRow
     {
         get;
@@ -1497,13 +1505,23 @@ public sealed partial class ShellViewModel : ObservableObject
         {
             if (!Set(ref field, value)) return;
             if (value is MessageRow row) SelectedMessage = row;
-            if (value is GroupHeaderRow header) ToggleGroupCollapsed(header.Header);
+            if (value is GroupHeaderRow header) Later(() => ToggleGroupCollapsed(header.Header));
             if (value is ConversationRow thread)
             {
                 SelectedMessage = thread.Newest;
-                ToggleConversation(thread);
+                Later(() => ToggleConversation(thread));
             }
         }
+    }
+
+    /// <summary>
+    /// Runs something on the next pass of the loop, or now where there is no loop to wait for —
+    /// a test builds this class without one and would otherwise never see the result.
+    /// </summary>
+    private static void Later(Action what)
+    {
+        if (Avalonia.Application.Current is null) what();
+        else Avalonia.Threading.Dispatcher.UIThread.Post(what, Avalonia.Threading.DispatcherPriority.Background);
     }
 
     public MessageRow? SelectedMessage

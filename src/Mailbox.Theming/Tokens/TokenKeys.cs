@@ -125,6 +125,20 @@ public static class TokenKeys
         /// </remarks>
         public const string ButtonOpen = "ribbon.button.open";
         public const string ButtonOpenBorder = "ribbon.button.open.border";
+
+        /// <summary>
+        /// The fill under the pointer. Measured #D1D1D1 on Dark Gray's #BDBDBD ribbon — a plain
+        /// button takes this and nothing else, no line round it.
+        /// </summary>
+        public const string ButtonHover = "ribbon.button.hover";
+
+        /// <summary>
+        /// The line round a <em>split</em> button under the pointer, and the divider between its
+        /// two halves. A split button is outlined where a plain one is not, because the outline
+        /// is what says the two halves can be hit separately — and only the half being pointed at
+        /// takes the fill.
+        /// </summary>
+        public const string ButtonSplitBorder = "ribbon.button.split.border";
         public const string Height = "ribbon.height";
         public const string TabStripHeight = "ribbon.tabstrip.height";
     }
@@ -369,6 +383,13 @@ public static class TokenKeys
         public const string Tab = "systemdialog.tab";
         /// <summary>The faint line round a tab, a page and between a list's column headers.</summary>
         public const string Border = "systemdialog.border";
+
+        /// <summary>
+        /// The line round a screentip. Its own value rather than the dialog's line, which is much
+        /// lighter: measured #666666 round the reference's #F0F0F0 tip, and a #E5E5E5 edge would
+        /// leave the tip with no visible boundary at all against a light window.
+        /// </summary>
+        public const string TooltipBorder = "systemdialog.tooltip.border";
         public const string ListBackground = "systemdialog.list.background";
         public const string ListBorder = "systemdialog.list.border";
         /// <summary>A selected row while the list does not have the focus, and while it does.</summary>
@@ -410,6 +431,7 @@ public static class TokenKeys
             Surface, Tab, Border, ListBackground, ListBorder, Selection, SelectionFocused,
             Hover, HoverBorder, Pressed, Accent, FieldBorder,
             Button, ButtonBorder, ButtonBorderBottom, ButtonDisabled, ButtonDisabledBorder,
+            TooltipBorder,
             IconInk, IconPaper, IconGold, IconGoldDark, IconSteel, IconSteelDark,
             IconWood, IconGreen, IconBlue, IconBlueDark,
         ];
@@ -533,7 +555,7 @@ public static class TokenKeys
         Ribbon.Background, Ribbon.TabStripBackground, Ribbon.TabRest, Ribbon.TabHover,
         Ribbon.TabSelected, Ribbon.TabUnderline, Ribbon.TabText, Ribbon.TabTextSelected, Ribbon.GroupLabel,
         Ribbon.GroupSeparator, Ribbon.GalleryBackground, Ribbon.GalleryBorder,
-        Ribbon.ButtonOpen, Ribbon.ButtonOpenBorder,
+        Ribbon.ButtonOpen, Ribbon.ButtonOpenBorder, Ribbon.ButtonHover, Ribbon.ButtonSplitBorder,
         Ribbon.Height, Ribbon.TabStripHeight,
         .. RibbonIcon.All,
         Workspace.Inset,

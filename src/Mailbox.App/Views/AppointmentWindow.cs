@@ -86,10 +86,22 @@ public sealed class AppointmentWindow : Window
         if (meeting) _surface.InfoBar = "You haven't sent this meeting invitation yet.";
 
         Content = BuildRoot();
+        // Escape gives up, and everything else goes through the key map asked for this window's
+        // own commands — Alt+S saves and closes, Ctrl+Enter sends — so a rebound shortcut is
+        // rebound here too and a plain keystroke stays the reader typing.
         KeyDown += (_, e) =>
         {
-            if (e.Key != Key.Escape) return;
-            _surface.Cancel();
+            if (e.Key == Key.Escape)
+            {
+                _surface.Cancel();
+                e.Handled = true;
+                return;
+            }
+
+            if (Keystroke.Of(e) is not { } chord || Keystroke.IsTyping(chord)) return;
+            if (App.Keys.CommandFor(chord, CommandSurface.Appointment) is not { } id) return;
+
+            if (_surface.Invoke(id) is { Length: > 0 } message) _surface.InfoBar = message;
             e.Handled = true;
         };
     }

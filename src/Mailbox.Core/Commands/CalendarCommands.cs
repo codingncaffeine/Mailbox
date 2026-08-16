@@ -24,9 +24,18 @@ public static class CalendarCommands
         Description = "Create a new appointment in your calendar.",
         Icon = "new-appointment",
         Category = "New",
-        Scope = ModuleScope.Calendar,
+
+        // Every module, not the calendar alone: Ctrl+Shift+A books an appointment from wherever
+        // the reader is, as the reference's creation chords all do, and the customization gallery
+        // offers it on the mail ribbon for the same reason.
+        Scope = ModuleScope.Any,
         KeyTip = "NA",
         DefaultGesture = "Ctrl+Shift+A",
+
+        // Ctrl+N makes the new item of whichever module is open, and in this one that is an
+        // appointment. The lookup prefers a command scoped to the open module, so this and
+        // Mail's own Ctrl+N coexist rather than one taking the key from the other.
+        AlsoGestures = ["Ctrl+N"],
     };
 
     public static readonly MailboxCommand NewMeeting = new()
@@ -36,7 +45,7 @@ public static class CalendarCommands
         Description = "Invite people to a new appointment and track their replies.",
         Icon = "meeting",
         Category = "New",
-        Scope = ModuleScope.Calendar,
+        Scope = ModuleScope.Any,
         KeyTip = "NM",
         DefaultGesture = "Ctrl+Shift+Q",
     };
@@ -82,6 +91,8 @@ public static class CalendarCommands
         Category = "Go To",
         Scope = ModuleScope.Calendar,
         KeyTip = "OD",
+        DefaultGesture = "Alt+Home",
+        AlsoGestures = ["Alt+Shift+Y"],
     };
 
     public static readonly MailboxCommand Next7Days = new()
@@ -115,6 +126,10 @@ public static class CalendarCommands
         Icon = "chevron-left",
         Category = "Go To",
         Scope = ModuleScope.Calendar,
+        // One command for every view's "go back one": a day in Day view, a week in the week
+        // views, a month in Month. The owner's list names a chord per unit, so all three run it.
+        DefaultGesture = "Ctrl+Alt+Left",
+        AlsoGestures = ["Alt+Down", "Alt+PageDown"],
         InDefaultLayout = false,
     };
 
@@ -126,6 +141,8 @@ public static class CalendarCommands
         Icon = "chevron-right",
         Category = "Go To",
         Scope = ModuleScope.Calendar,
+        DefaultGesture = "Ctrl+Alt+Right",
+        AlsoGestures = ["Alt+Up", "Alt+PageUp"],
         InDefaultLayout = false,
     };
 
@@ -164,6 +181,7 @@ public static class CalendarCommands
         Scope = ModuleScope.Calendar,
         KeyTip = "AK",
         DefaultGesture = "Ctrl+Alt+3",
+        AlsoGestures = ["Alt+OemMinus"],
     };
 
     public static readonly MailboxCommand MonthView = new()
@@ -176,6 +194,7 @@ public static class CalendarCommands
         Scope = ModuleScope.Calendar,
         KeyTip = "AM",
         DefaultGesture = "Ctrl+Alt+4",
+        AlsoGestures = ["Alt+OemPlus"],
     };
 
     public static readonly MailboxCommand ScheduleView = new()
@@ -333,6 +352,7 @@ public static class CalendarCommands
         Category = "Actions",
         Scope = ModuleScope.Calendar,
         RequiresSelection = true,
+        DefaultGesture = "Enter",
         InDefaultLayout = false,
     };
 

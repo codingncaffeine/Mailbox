@@ -32,7 +32,27 @@ public static class RibbonMetrics
     /// </summary>
     public const double BodyBottomGap = 6;
 
-    public const double SimplifiedButtonHeight = 30;
+    /// <summary>
+    /// The box a button on the Simplified bar occupies, which is what the pointer lights.
+    /// </summary>
+    /// <remarks>
+    /// Measured off a capture with a button hovered: 41 in a 49-tall bar, so four clear rows
+    /// above and below. It read as 30 while nothing drew it, and a 30-tall fill inside a 49-tall
+    /// row is visibly a smaller button than the reference's.
+    /// </remarks>
+    public const double SimplifiedButtonHeight = 41;
+
+    /// <summary>
+    /// The corner of the box a button wears under the pointer. Measured: the fill rounds over
+    /// about four rows at its corner.
+    /// </summary>
+    public const double ButtonCornerRadius = 4;
+
+    /// <summary>
+    /// The padding either side of a split button's chevron. Measured: its half is 20 wide,
+    /// which a 9px glyph reaches with five each side.
+    /// </summary>
+    public const double SplitChevronPadding = 5;
     public const double SimplifiedIconSize = 18;
 
     /// <summary>

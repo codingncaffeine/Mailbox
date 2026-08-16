@@ -43,7 +43,8 @@ public static class CalendarRibbonLayout
             ["home"] = Bar(
                 Cluster("new", "New",
                     RibbonItem.Small(CalendarCommands.NewAppointment.Id),
-                    RibbonItem.Small(CalendarCommands.NewMeeting.Id, RibbonItemKind.SplitButton),
+                    RibbonItem.Small(CalendarCommands.NewMeeting.Id, RibbonItemKind.SplitButton)
+                        with { ChevronCommand = CalendarCommands.NewItems.Id },
                     RibbonItem.Sheddable(CalendarCommands.AddFocusTime.Id)),
 
                 Cluster("goto", "Go To",
@@ -127,7 +128,8 @@ public static class CalendarRibbonLayout
                         Items =
                         [
                             RibbonItem.Large(CalendarCommands.NewAppointment.Id),
-                            RibbonItem.Large(CalendarCommands.NewMeeting.Id, RibbonItemKind.SplitButton),
+                            RibbonItem.Large(CalendarCommands.NewMeeting.Id, RibbonItemKind.SplitButton)
+                                with { ChevronCommand = CalendarCommands.NewItems.Id },
                             RibbonItem.Large(CalendarCommands.NewItems.Id, RibbonItemKind.DropDown),
                         ],
                     },

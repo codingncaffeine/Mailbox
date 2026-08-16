@@ -328,6 +328,8 @@ public static class OfficeThemes
         // inside a #5C5C5C line, which is lighter than this theme's #BDBDBD ribbon.
         t.Set(TokenKeys.Ribbon.ButtonOpen, "#CCCCCC");
         t.Set(TokenKeys.Ribbon.ButtonOpenBorder, "#5C5C5C");
+        t.Set(TokenKeys.Ribbon.ButtonHover, "#D1D1D1");
+        t.Set(TokenKeys.Ribbon.ButtonSplitBorder, "#757575");
 
         t.Set(TokenKeys.Calendar.ToolbarText, "#FFFFFF");
         t.Set(TokenKeys.Calendar.ToolbarButton, "#BEBBB8");
@@ -557,6 +559,8 @@ public static class OfficeThemes
         t.Set(TokenKeys.Ribbon.GalleryBorder, "{palette.neutral.tertiary}");
         t.Set(TokenKeys.Ribbon.ButtonOpen, "#3D3D3D");
         t.Set(TokenKeys.Ribbon.ButtonOpenBorder, "#6B6B6B");
+        t.Set(TokenKeys.Ribbon.ButtonHover, "#383838");
+        t.Set(TokenKeys.Ribbon.ButtonSplitBorder, "#4D4D4D");
 
         // The ribbon's coloured artwork, measured off the Black capture. Each pair is the light
         // themes' the other way round: on a #292929 ribbon the reference draws the light colour
@@ -696,6 +700,7 @@ public static class OfficeThemes
         t.Set(TokenKeys.SystemDialog.Surface, "#F9F9F9");
         t.Set(TokenKeys.SystemDialog.Tab, "#F3F3F3");
         t.Set(TokenKeys.SystemDialog.Border, "#E5E5E5");
+        t.Set(TokenKeys.SystemDialog.TooltipBorder, "#666666");
         t.Set(TokenKeys.SystemDialog.ListBackground, "#FFFFFF");
         t.Set(TokenKeys.SystemDialog.ListBorder, "#828790");
         t.Set(TokenKeys.SystemDialog.Selection, "#F0F0F0");
@@ -769,6 +774,8 @@ public static class OfficeThemes
         t.Set(TokenKeys.Ribbon.GalleryBorder, "{palette.neutral.tertiary}");
         t.Set(TokenKeys.Ribbon.ButtonOpen, "{palette.neutral.light}");
         t.Set(TokenKeys.Ribbon.ButtonOpenBorder, "{palette.neutral.tertiary}");
+        t.Set(TokenKeys.Ribbon.ButtonHover, "{palette.neutral.lighter}");
+        t.Set(TokenKeys.Ribbon.ButtonSplitBorder, "{palette.neutral.tertiary}");
 
         // The ribbon's coloured artwork, measured off the Colorful and White captures — the two
         // themes draw it identically, both having a white ribbon under it. Dark Gray darkens
