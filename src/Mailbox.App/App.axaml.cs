@@ -60,6 +60,9 @@ public partial class App : Application
     /// <summary>Options › Advanced › AutoArchive Settings…, as the archiver reads them.</summary>
     public static Mailbox.Core.Archive.AutoArchiveOptions AutoArchive { get; private set; } = null!;
 
+    /// <summary>Which key runs which command — every command's default, with the reader's changes over it.</summary>
+    public static Mailbox.Core.Keyboard.KeyMap Keys { get; private set; } = null!;
+
     /// <summary>The junk filter (§7.8), reading its level live from the Options page.</summary>
     public static JunkService Junk { get; private set; } = null!;
 
@@ -359,6 +362,8 @@ public partial class App : Application
         Commands.RegisterRange(MailCommands.All);
         Commands.RegisterRange(ViewCommands.All);
         Commands.RegisterRange(ComposeCommands.All);
+        Keys = new Mailbox.Core.Keyboard.KeyMap(Settings, Commands);
+        Mailbox.Controls.Ribbon.RibbonView.GestureLookup = command => Keys.GestureFor(command.Id)?.Display;
 
         RibbonEdits = new RibbonCustomization();
         QuickSteps = new QuickSteps(Settings);

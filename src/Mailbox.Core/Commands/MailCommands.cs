@@ -316,8 +316,71 @@ public static class MailCommands
         Category = "Tags",
         Scope = ModuleScope.Mail,
         KeyTip = "W",
+        RequiresSelection = true,
+    };
+
+    // The keyboard's own two, as the reference has them: Ctrl+Q reads, Ctrl+U unreads.
+    public static readonly MailboxCommand MarkAsRead = new()
+    {
+        Id = new("mail.read"),
+        Label = "Mark as Read",
+        Description = "Mark the selected messages as read.",
+        Icon = "unread",
+        Category = "Tags",
+        Scope = ModuleScope.Mail,
+        DefaultGesture = "Ctrl+Q",
+        RequiresSelection = true,
+        InDefaultLayout = false,
+    };
+
+    public static readonly MailboxCommand MarkAsUnread = new()
+    {
+        Id = new("mail.unread"),
+        Label = "Mark as Unread",
+        Description = "Mark the selected messages as unread.",
+        Icon = "unread",
+        Category = "Tags",
+        Scope = ModuleScope.Mail,
         DefaultGesture = "Ctrl+U",
         RequiresSelection = true,
+        InDefaultLayout = false,
+    };
+
+    public static readonly MailboxCommand PermanentDelete = new()
+    {
+        Id = new("mail.delete.permanent"),
+        Label = "Delete Permanently",
+        Description = "Delete the selected messages for good, after asking — Deleted Items is skipped.",
+        Icon = "delete",
+        Category = "Delete",
+        Scope = ModuleScope.Mail,
+        DefaultGesture = "Shift+Delete",
+        RequiresSelection = true,
+        InDefaultLayout = false,
+    };
+
+    public static readonly MailboxCommand GoToInbox = new()
+    {
+        Id = new("nav.inbox"),
+        Label = "Go to Inbox",
+        Description = "Open the Inbox.",
+        Icon = "mail",
+        Category = "Go To",
+        Scope = ModuleScope.Mail,
+        DefaultGesture = "Ctrl+Shift+I",
+        InDefaultLayout = false,
+    };
+
+    public static readonly MailboxCommand GoToOutbox = new()
+    {
+        Id = new("nav.outbox"),
+        Label = "Go to Outbox",
+        Description = "Open the Outbox.",
+        Icon = "mail",
+        Category = "Go To",
+        Scope = ModuleScope.Mail,
+        DefaultGesture = "Ctrl+Shift+O",
+        InDefaultLayout = false,
     };
 
     public static readonly MailboxCommand Categorize = new()
@@ -586,6 +649,7 @@ public static class MailCommands
         Ignore, CleanUp, Junk, Delete, Archive,
         BlockSender, NeverBlockSender, NeverBlockDomain, NeverBlockGroup, NotJunk, JunkOptions,
         CleanUpConversation, CleanUpFolder, CleanUpFolderAndSubfolders,
+        MarkAsRead, MarkAsUnread, PermanentDelete, GoToInbox, GoToOutbox,
         Reply, ReplyAll, Forward, Meeting, MoreRespond,
         MoveTo, Rules, QuickSteps,
         Unread, Categorize, FollowUp,

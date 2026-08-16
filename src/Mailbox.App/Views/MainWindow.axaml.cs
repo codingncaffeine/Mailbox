@@ -168,6 +168,19 @@ public partial class MainWindow : Window
             if (DataContext is ShellViewModel s) _ = AutoArchiveIfDueAsync(s);
         }, DispatcherPriority.Background);
 
+        // Presses a shortcut through the key map: MAILBOX_KEY=Ctrl+Q — the map's answer runs
+        // as the keystroke would, and the store says what it did.
+        if (Environment.GetEnvironmentVariable("MAILBOX_KEY") is { Length: > 0 } key)
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(() =>
+            {
+                var chord = Mailbox.Core.Keyboard.Chord.Parse(key);
+                var command = chord is null ? null : App.Keys.CommandFor(chord);
+                Log.Info($"Harness: key {key} → {(command?.Value ?? "nothing")}.");
+                if (command is { } id) RunCommand(id);
+            }, DispatcherPriority.Background);
+        }
+
         // A folder operation over the posed folder, for reading the store back:
         // MAILBOX_FOLDER_OP=new:<name> | rename:<name> | delete | markread | empty.
         if (Environment.GetEnvironmentVariable("MAILBOX_FOLDER_OP") is { Length: > 0 } op)
@@ -514,6 +527,14 @@ public partial class MainWindow : Window
                 {
                     CaptureNextWindow();
                     await new ReadingPaneOptionsDialog(App.MailOptions).ShowDialog(this);
+                };
+                break;
+
+            case "keyboard":
+                Opened += async (_, _) =>
+                {
+                    CaptureNextWindow();
+                    await new CustomizeKeyboardDialog(App.Keys, App.Commands).ShowDialog(this);
                 };
                 break;
 
@@ -1343,9 +1364,9 @@ public partial class MainWindow : Window
         var options = App.MailOptions;
         var next = shell.SelectedMessage;
 
-        if (_viewed is { } previous && !ReferenceEquals(previous, next) && previous.IsUnread && options.ReadingPaneMarkOnChange)
+        if (_viewed is { } previous && !ReferenceEquals(previous, next) && previous.IsUnread && options.ReadingPaneMarkOnChange && shell.IsListed(previous))
         {
-            shell.SetRead([previous], read: true);
+            shell.SetRead([previous], read: true, quiet: true);
         }
 
         _viewed = next;
@@ -1355,14 +1376,14 @@ public partial class MainWindow : Window
         if (next is not { IsUnread: true } || !options.ReadingPaneMarkOnView || !shell.ReadingPaneVisible) return;
 
         var wait = TimeSpan.FromSeconds(Math.Max(0, options.ReadingPaneMarkSeconds));
-        if (wait == TimeSpan.Zero) { shell.SetRead([next], read: true); return; }
+        if (wait == TimeSpan.Zero) { shell.SetRead([next], read: true, quiet: true); return; }
 
         _markReadTimer = new DispatcherTimer { Interval = wait };
         _markReadTimer.Tick += (_, _) =>
         {
             _markReadTimer?.Stop();
             _markReadTimer = null;
-            if (ReferenceEquals(shell.SelectedMessage, next) && next.IsUnread) shell.SetRead([next], read: true);
+            if (ReferenceEquals(shell.SelectedMessage, next) && next.IsUnread && shell.IsListed(next)) shell.SetRead([next], read: true, quiet: true);
         };
         _markReadTimer.Start();
     }
@@ -2282,6 +2303,12 @@ public partial class MainWindow : Window
 
         if (id == MailCommands.SendReceiveAll.Id) { _ = SendReceiveAsync(shell); return; }
         if (id == MailCommands.WorkOffline.Id) { ToggleWorkOffline(shell); return; }
+        if (id == ViewCommands.Refresh.Id) { shell.Refresh(); return; }
+        if (id == MailCommands.GoToInbox.Id) { shell.GoTo(FolderRole.Inbox); return; }
+        if (id == MailCommands.GoToOutbox.Id) { shell.GoTo(FolderRole.Outbox); return; }
+        if (id == MailCommands.PermanentDelete.Id) { _ = ConfirmPermanentDeleteAsync(shell, SelectedRows()); return; }
+        if (id == MailCommands.MarkAsRead.Id) { shell.SetRead(SelectedRows(), read: true); return; }
+        if (id == MailCommands.MarkAsUnread.Id) { shell.SetRead(SelectedRows(), read: false); return; }
         if (id == MailCommands.NewEmail.Id) { NewMessage(); return; }
         if (id == ViewCommands.ShowProgress.Id) { ShowProgressDialog(shell); return; }
         if (id == MailCommands.ViewSource.Id) { ShowMessageSource(shell); return; }
@@ -3623,7 +3650,6 @@ public partial class MainWindow : Window
 
         var control = e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Control);
         var shift = e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Shift);
-        var rows = SelectedRows();
 
         // Ctrl+Shift+1..9 run the Quick Step with that shortcut.
         if (control && shift && RunQuickStepShortcut(shell, e.Key))
@@ -3632,51 +3658,32 @@ public partial class MainWindow : Window
             return;
         }
 
-        switch (e.Key)
+        // Everything else the keyboard does here goes through the key map — a command's own
+        // shortcut, or the one the reader gave it in Customize Keyboard. A key with text focus
+        // in a box keeps its meaning there: the box has already had the event.
+        if (Chord(e) is { } chord && App.Keys.CommandFor(chord) is { } id
+            && !id.Value.StartsWith("compose.", StringComparison.Ordinal))
         {
-            case Avalonia.Input.Key.F9:
-                _ = SendReceiveAsync(shell);
-                break;
+            RunCommand(id);
+            e.Handled = true;
+        }
+    }
 
-            case Avalonia.Input.Key.F5:
-                shell.Refresh();
-                break;
-
-            // Delete goes to Deleted Items; Shift+Delete asks first, because with POP3 the
-            // store may be the only copy left.
-            case Avalonia.Input.Key.Delete when shift:
-                _ = ConfirmPermanentDeleteAsync(shell, rows);
-                break;
-
-            case Avalonia.Input.Key.Delete:
-                shell.Delete(rows, permanently: false);
-                break;
-
-            case Avalonia.Input.Key.Q when control:
-                shell.SetRead(rows, read: true);
-                break;
-
-            case Avalonia.Input.Key.U when control:
-                shell.SetRead(rows, read: false);
-                break;
-
-            case Avalonia.Input.Key.G when control && shift:
-                shell.SetFlagged(rows, flagged: rows.Any(r => !r.IsFlagged));
-                break;
-
-            case Avalonia.Input.Key.I when control && shift:
-                shell.GoTo(FolderRole.Inbox);
-                break;
-
-            case Avalonia.Input.Key.O when control && shift:
-                shell.GoTo(FolderRole.Outbox);
-                break;
-
-            default:
-                return;
+    /// <summary>The keystroke as the key map names it — null for a modifier alone.</summary>
+    private static Mailbox.Core.Keyboard.Chord? Chord(Avalonia.Input.KeyEventArgs e)
+    {
+        if (e.Key is Avalonia.Input.Key.LeftCtrl or Avalonia.Input.Key.RightCtrl or Avalonia.Input.Key.LeftShift or Avalonia.Input.Key.RightShift
+            or Avalonia.Input.Key.LeftAlt or Avalonia.Input.Key.RightAlt or Avalonia.Input.Key.LWin or Avalonia.Input.Key.RWin or Avalonia.Input.Key.None)
+        {
+            return null;
         }
 
-        e.Handled = true;
+        var modifiers = Mailbox.Core.Keyboard.ChordModifiers.None;
+        if (e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Control)) modifiers |= Mailbox.Core.Keyboard.ChordModifiers.Control;
+        if (e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Alt)) modifiers |= Mailbox.Core.Keyboard.ChordModifiers.Alt;
+        if (e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Shift)) modifiers |= Mailbox.Core.Keyboard.ChordModifiers.Shift;
+        if (e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Meta)) modifiers |= Mailbox.Core.Keyboard.ChordModifiers.Meta;
+        return new Mailbox.Core.Keyboard.Chord(modifiers, e.Key.ToString());
     }
 
     /// <summary>Runs a query across every mailbox — what Mailbox Cleanup's Find buttons hand over.</summary>
