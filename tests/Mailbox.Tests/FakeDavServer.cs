@@ -22,15 +22,24 @@ public sealed class FakeDavServer : HttpMessageHandler
     private readonly List<(string Href, string? Etag, bool Removed)> _history = [];
     private int _tokenCounter;
 
-    public FakeDavServer(string origin = "https://dav.example.net")
+    /// <param name="addressBook">
+    /// Serve an address book rather than a calendar. One collection at a time, because a test
+    /// wants one and serving both would double every branch in here to prove nothing extra.
+    /// </param>
+    public FakeDavServer(string origin = "https://dav.example.net", bool addressBook = false)
     {
         Origin = new Uri(origin);
-        CalendarUrl = new Uri(Origin, "/calendars/you/home/");
+        IsAddressBook = addressBook;
+        CalendarUrl = new Uri(Origin, addressBook ? "/addressbooks/you/contacts/" : "/calendars/you/home/");
     }
 
     public Uri Origin { get; }
 
+    /// <summary>The collection this server has, whichever kind it is.</summary>
     public Uri CalendarUrl { get; }
+
+    /// <summary>True when the collection is an address book: a different REPORT and a different type.</summary>
+    public bool IsAddressBook { get; }
 
     /// <summary>Turn off to exercise the CTag and ETag fallback path.</summary>
     public bool SupportsSyncCollection { get; set; } = true;
@@ -107,11 +116,26 @@ public sealed class FakeDavServer : HttpMessageHandler
 
         if (body.Contains("calendar-home-set", StringComparison.Ordinal))
         {
-            return MultiStatus($"""
-                <d:response><d:href>{path}</d:href><d:propstat>
-                  <d:prop><c:calendar-home-set><d:href>{CalendarUrl.AbsolutePath}</d:href></c:calendar-home-set></d:prop>
-                  <d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
-                """);
+            // A server with only address books answers this with nothing at all, which is what
+            // makes the client ask for the other home as well.
+            return IsAddressBook
+                ? MultiStatus(string.Empty)
+                : MultiStatus($"""
+                    <d:response><d:href>{path}</d:href><d:propstat>
+                      <d:prop><c:calendar-home-set><d:href>{CalendarUrl.AbsolutePath}</d:href></c:calendar-home-set></d:prop>
+                      <d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+                    """);
+        }
+
+        if (body.Contains("addressbook-home-set", StringComparison.Ordinal))
+        {
+            return IsAddressBook
+                ? MultiStatus($"""
+                    <d:response><d:href>{path}</d:href><d:propstat>
+                      <d:prop><card:addressbook-home-set><d:href>{CalendarUrl.AbsolutePath}</d:href></card:addressbook-home-set></d:prop>
+                      <d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+                    """)
+                : MultiStatus(string.Empty);
         }
 
         if (body.Contains("getetag", StringComparison.Ordinal))
@@ -128,11 +152,11 @@ public sealed class FakeDavServer : HttpMessageHandler
         var self = $"""
             <d:response><d:href>{CalendarUrl.AbsolutePath}</d:href><d:propstat>
               <d:prop>
-                <d:resourcetype><d:collection/><c:calendar/></d:resourcetype>
-                <d:displayname>Work</d:displayname>
+                <d:resourcetype><d:collection/>{(IsAddressBook ? "<card:addressbook/>" : "<c:calendar/>")}</d:resourcetype>
+                <d:displayname>{(IsAddressBook ? "Contacts" : "Work")}</d:displayname>
                 <cs:getctag>{Ctag}</cs:getctag>
                 {(SupportsSyncCollection ? $"<d:sync-token>{CurrentSyncToken}</d:sync-token>" : string.Empty)}
-                <c:supported-calendar-component-set><c:comp name="VEVENT"/></c:supported-calendar-component-set>
+                {(IsAddressBook ? string.Empty : "<c:supported-calendar-component-set><c:comp name=\"VEVENT\"/></c:supported-calendar-component-set>")}
                 <x1:calendar-color>#107C10FF</x1:calendar-color>
                 <d:current-user-privilege-set><d:privilege><d:read/></d:privilege><d:privilege><d:write/></d:privilege></d:current-user-privilege-set>
               </d:prop>
@@ -176,7 +200,8 @@ public sealed class FakeDavServer : HttpMessageHandler
             return MultiStatus(rows.ToString(), CurrentSyncToken);
         }
 
-        if (body.Contains("calendar-multiget", StringComparison.Ordinal))
+        if (body.Contains("calendar-multiget", StringComparison.Ordinal)
+            || body.Contains("addressbook-multiget", StringComparison.Ordinal))
         {
             var rows = new StringBuilder();
             foreach (var href in Hrefs(body))
@@ -185,7 +210,7 @@ public sealed class FakeDavServer : HttpMessageHandler
                 rows.Append($"""
                     <d:response><d:href>{href}</d:href><d:propstat>
                       <d:prop><d:getetag>"{item.Etag}"</d:getetag>
-                      <c:calendar-data>{System.Security.SecurityElement.Escape(item.Payload)}</c:calendar-data></d:prop>
+                      {(IsAddressBook ? "<card:address-data>" : "<c:calendar-data>")}{System.Security.SecurityElement.Escape(item.Payload)}{(IsAddressBook ? "</card:address-data>" : "</c:calendar-data>")}</d:prop>
                       <d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
                     """);
             }
@@ -210,7 +235,8 @@ public sealed class FakeDavServer : HttpMessageHandler
         // A calendar collection takes whole VCALENDARs, not bare components — Radicale answers
         // "Item type 'VEVENT' not supported in 'VCALENDAR' collection" and every other server
         // says something like it. A fake that accepted one let a real bug through for months.
-        if (!body.Contains("BEGIN:VCALENDAR", StringComparison.OrdinalIgnoreCase))
+        // An address book is the same rule with the other noun.
+        if (!body.Contains(IsAddressBook ? "BEGIN:VCARD" : "BEGIN:VCALENDAR", StringComparison.OrdinalIgnoreCase))
         {
             return Plain(HttpStatusCode.BadRequest);
         }
@@ -281,6 +307,7 @@ public sealed class FakeDavServer : HttpMessageHandler
         var xml = $"""
             <?xml version="1.0" encoding="utf-8"?>
             <d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"
+                           xmlns:card="urn:ietf:params:xml:ns:carddav"
                            xmlns:cs="http://calendarserver.org/ns/" xmlns:x1="http://apple.com/ns/ical/">
             {responses}
             {(syncToken is null ? string.Empty : $"<d:sync-token>{syncToken}</d:sync-token>")}

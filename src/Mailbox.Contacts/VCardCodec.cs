@@ -24,10 +24,6 @@ public static class VCardCodec
     internal const string GroupKindKey = "X-ADDRESSBOOKSERVER-KIND";
     internal const string GroupMemberKey = "X-ADDRESSBOOKSERVER-MEMBER";
 
-    /// <summary>The application registers itself once, as the library asks, before writing.</summary>
-    private static readonly object Registration = new();
-    private static bool _registered;
-
     /// <summary>
     /// Every contact in a vCard file. A file may hold many, which is what an export is.
     /// </summary>
@@ -61,7 +57,6 @@ public static class VCardCodec
     public static string SerializeMany(IReadOnlyList<Contact> contacts, VCardVersion version = VCardVersion.V3)
     {
         ArgumentNullException.ThrowIfNull(contacts);
-        Register();
 
         var cards = contacts.Select(c => Write(c, version)).ToList();
 
@@ -72,18 +67,6 @@ public static class VCardCodec
             cards,
             version == VCardVersion.V4 ? VCdVersion.V4_0 : VCdVersion.V3_0,
             options: VcfOpts.Default | VcfOpts.WriteNonStandardProperties);
-    }
-
-    private static void Register()
-    {
-        lock (Registration)
-        {
-            if (_registered) return;
-            // The library wants an application identifier before it will write PID parameters.
-            // The name-nowhere rule applies here as everywhere: this names Mailbox and nothing else.
-            VCard.RegisterApp(new Uri("https://github.com/codingncaffeine/Mailbox"));
-            _registered = true;
-        }
     }
 
     // ---- vCard → Contact -----------------------------------------------------------------------

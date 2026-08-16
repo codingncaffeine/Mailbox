@@ -131,8 +131,8 @@ public sealed class CalendarConflictDialog : Window
     {
         var conflict = _conflicts[Index];
         var done = choice == ConflictChoice.Local
-            ? CalDavSync.KeepLocal(_repository, conflict)
-            : CalDavSync.KeepServer(_repository, conflict);
+            ? DavSync.KeepLocal(_repository, conflict)
+            : DavSync.KeepServer(_repository, conflict);
 
         _choices[conflict.ItemId] = done ? choice : ConflictChoice.Later;
 
