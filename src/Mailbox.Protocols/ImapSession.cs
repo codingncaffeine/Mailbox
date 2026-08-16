@@ -76,8 +76,14 @@ public interface IImapSession : IDisposable
     /// <summary>Every folder the account can see, the Inbox among them.</summary>
     Task<IReadOnlyList<RemoteFolder>> ListFoldersAsync(CancellationToken cancellation);
 
-    /// <summary>Makes a folder at the top of the account's own namespace.</summary>
-    Task<RemoteFolder> CreateFolderAsync(string name, CancellationToken cancellation);
+    /// <summary>Makes a folder at the top of the account's own namespace, or under a folder by its path.</summary>
+    Task<RemoteFolder> CreateFolderAsync(string name, CancellationToken cancellation, string? parentPath = null);
+
+    /// <summary>Renames a folder in place; the folders under it move with it. Returns it as it is now.</summary>
+    Task<RemoteFolder> RenameFolderAsync(string path, string newName, CancellationToken cancellation);
+
+    /// <summary>Deletes a folder and what it holds — the folders under it too.</summary>
+    Task DeleteFolderAsync(string path, CancellationToken cancellation);
 
     /// <summary>Selects a folder for the operations that follow, and says where it stands.</summary>
     Task<FolderState> OpenAsync(string path, CancellationToken cancellation);
@@ -222,9 +228,11 @@ public sealed class MailKitImapSession : IImapSession
         return result;
     }
 
-    public async Task<RemoteFolder> CreateFolderAsync(string name, CancellationToken cancellation)
+    public async Task<RemoteFolder> CreateFolderAsync(string name, CancellationToken cancellation, string? parentPath = null)
     {
-        var root = _client.GetFolder(_client.PersonalNamespaces[0]);
+        var root = parentPath is { Length: > 0 }
+            ? await _client.GetFolderAsync(parentPath, cancellation)
+            : _client.GetFolder(_client.PersonalNamespaces[0]);
         var created = await root.CreateAsync(name, true, cancellation)
             ?? throw new InvalidOperationException($"The server did not create \"{name}\".");
         try
@@ -236,7 +244,22 @@ public sealed class MailKitImapSession : IImapSession
             // Subscription is a courtesy to other clients; a server that refuses it still made the folder.
         }
 
-        return new RemoteFolder(created.FullName, created.Name, null, FolderRole.None, true, false);
+        return new RemoteFolder(created.FullName, created.Name, parentPath is { Length: > 0 } ? parentPath : null, FolderRole.None, true, false);
+    }
+
+    public async Task<RemoteFolder> RenameFolderAsync(string path, string newName, CancellationToken cancellation)
+    {
+        var folder = await _client.GetFolderAsync(path, cancellation);
+        var parent = folder.ParentFolder ?? _client.GetFolder(_client.PersonalNamespaces[0]);
+        await folder.RenameAsync(parent, newName, cancellation);
+        var parentPath = folder.ParentFolder is { FullName.Length: > 0 } up ? up.FullName : null;
+        return new RemoteFolder(folder.FullName, folder.Name, parentPath, FolderRole.None, true, false);
+    }
+
+    public async Task DeleteFolderAsync(string path, CancellationToken cancellation)
+    {
+        var folder = await _client.GetFolderAsync(path, cancellation);
+        await folder.DeleteAsync(cancellation);
     }
 
     public async Task<FolderState> OpenAsync(string path, CancellationToken cancellation)

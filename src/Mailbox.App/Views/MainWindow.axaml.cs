@@ -168,6 +168,31 @@ public partial class MainWindow : Window
             if (DataContext is ShellViewModel s) _ = AutoArchiveIfDueAsync(s);
         }, DispatcherPriority.Background);
 
+        // A folder operation over the posed folder, for reading the store back:
+        // MAILBOX_FOLDER_OP=new:<name> | rename:<name> | delete | markread | empty.
+        if (Environment.GetEnvironmentVariable("MAILBOX_FOLDER_OP") is { Length: > 0 } op)
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(async () =>
+            {
+                if (DataContext is not ShellViewModel s || s.SelectedFolder is not { } node || s.FolderOf(node) is not { } where) return;
+                var colon = op.IndexOf(':');
+                var verb = colon > 0 ? op[..colon] : op;
+                var arg = colon > 0 ? op[(colon + 1)..] : string.Empty;
+                var manager = new FolderManager(where.Account.Mail);
+                switch (verb)
+                {
+                    case "new": await manager.CreateAsync(ConnectionFor(where.Account), where.Account.Account.Id, arg, where.Folder.Id); break;
+                    case "rename": await manager.RenameAsync(ConnectionFor(where.Account), where.Folder, arg); break;
+                    case "delete": await manager.DeleteAsync(ConnectionFor(where.Account), where.Folder); break;
+                    case "markread": s.MarkFolderRead(where.Account, where.Folder.Id); break;
+                    case "empty": s.EmptyFolder(where.Account, where.Folder.Id); break;
+                }
+
+                s.Refresh();
+                Log.Info($"Harness: folder op {op} done.");
+            }, DispatcherPriority.Background);
+        }
+
         // Runs AutoArchive now, without the prompt: MAILBOX_AUTOARCHIVE=run — for reading the
         // store back after.
         if (Environment.GetEnvironmentVariable("MAILBOX_AUTOARCHIVE") == "run")
@@ -481,6 +506,31 @@ public partial class MainWindow : Window
                 {
                     CaptureNextWindow();
                     await new AutoArchiveSettingsDialog(App.AutoArchive).ShowDialog(this);
+                };
+                break;
+
+            case "readingpane":
+                Opened += async (_, _) =>
+                {
+                    CaptureNextWindow();
+                    await new ReadingPaneOptionsDialog(App.MailOptions).ShowDialog(this);
+                };
+                break;
+
+            case "newfolder":
+            case "folderprops":
+            case "folderarchive":
+                Opened += async (_, _) =>
+                {
+                    if (DataContext is not ShellViewModel s || s.SelectedFolder is not { } node || s.FolderOf(node) is not { } where) return;
+                    CaptureNextWindow();
+                    Window dialog = Environment.GetEnvironmentVariable("MAILBOX_PEEK")?.ToLowerInvariant() switch
+                    {
+                        "newfolder" => new NewFolderDialog(where.Account, where.Folder.Id),
+                        "folderarchive" => new FolderPropertiesDialog(where.Account, where.Folder, startTab: 1),
+                        _ => new FolderPropertiesDialog(where.Account, where.Folder),
+                    };
+                    await dialog.ShowDialog(this);
                 };
                 break;
 
@@ -1277,9 +1327,50 @@ public partial class MainWindow : Window
         ShowSelectedMessage(shell);
     }
 
+    // ---- Read by looking: the Reading Pane options ---------------------------------------------
+
+    private ViewModels.MessageRow? _viewed;
+    private DispatcherTimer? _markReadTimer;
+
+    /// <summary>
+    /// The Reading Pane options at work: the message the pane showed until now is marked read
+    /// when "mark item as read when selection changes" is on; the one it shows now is marked
+    /// read after the wait when "mark items as read when viewed" is on — if it is still the one
+    /// on show when the wait is up.
+    /// </summary>
+    private void MarkReadByLooking(ShellViewModel shell)
+    {
+        var options = App.MailOptions;
+        var next = shell.SelectedMessage;
+
+        if (_viewed is { } previous && !ReferenceEquals(previous, next) && previous.IsUnread && options.ReadingPaneMarkOnChange)
+        {
+            shell.SetRead([previous], read: true);
+        }
+
+        _viewed = next;
+        _markReadTimer?.Stop();
+        _markReadTimer = null;
+
+        if (next is not { IsUnread: true } || !options.ReadingPaneMarkOnView || !shell.ReadingPaneVisible) return;
+
+        var wait = TimeSpan.FromSeconds(Math.Max(0, options.ReadingPaneMarkSeconds));
+        if (wait == TimeSpan.Zero) { shell.SetRead([next], read: true); return; }
+
+        _markReadTimer = new DispatcherTimer { Interval = wait };
+        _markReadTimer.Tick += (_, _) =>
+        {
+            _markReadTimer?.Stop();
+            _markReadTimer = null;
+            if (ReferenceEquals(shell.SelectedMessage, next) && next.IsUnread) shell.SetRead([next], read: true);
+        };
+        _markReadTimer.Start();
+    }
+
     private void ShowSelectedMessage(ShellViewModel shell)
     {
         if (_reading is null) return;
+        MarkReadByLooking(shell);
 
         var raw = shell.SelectedRaw;
         MimeKit.MimeMessage? message = null;
@@ -1405,6 +1496,135 @@ public partial class MainWindow : Window
     /// heading and on each search folder — New Search Folder, Customize This Search Folder,
     /// Rename Folder, Delete Folder.
     /// </summary>
+    /// <summary>
+    /// The reference's menu over a folder: New Folder, Rename, Delete, Mark All as Read, Clean Up
+    /// Folder, Empty Folder, Properties. A role folder — Inbox, Sent Items, Deleted Items and
+    /// the rest — cannot be renamed or deleted; Deleted Items and Junk Email offer Empty Folder.
+    /// </summary>
+    private void FillFolderMenu(MenuFlyout flyout, ShellViewModel shell, OpenAccount account, Folder folder)
+    {
+        void Entry(string header, Func<Task> run, bool enabled = true)
+        {
+            var item = new MenuItem { Header = header, IsEnabled = enabled };
+            item.Click += async (_, _) => await run();
+            flyout.Items.Add(item);
+        }
+
+        var ordinary = folder.Role == FolderRole.None;
+        Entry("New Folder…", () => NewFolderAsync(shell, account, folder.Id));
+        Entry("Rename Folder", () => RenameFolderAsync(shell, account, folder), ordinary);
+        Entry("Delete Folder", () => DeleteFolderAsync(shell, account, folder), ordinary);
+        flyout.Items.Add(new Separator());
+        Entry("Mark All as Read", () =>
+        {
+            var count = shell.MarkFolderRead(account, folder.Id);
+            shell.StatusRight = count == 0 ? $"Nothing unread in {folder.Name}." : $"{count} message{(count == 1 ? "" : "s")} in {folder.Name} marked read.";
+            return Task.CompletedTask;
+        });
+        Entry("Clean Up Folder", () =>
+        {
+            shell.SelectFolder(account, folder.Id);
+            RunCommand(MailCommands.CleanUpFolder.Id);
+            return Task.CompletedTask;
+        });
+        if (folder.Role is FolderRole.Deleted or FolderRole.Junk)
+        {
+            Entry("Empty Folder", () => EmptyFolderAsync(shell, account, folder));
+        }
+
+        flyout.Items.Add(new Separator());
+        Entry("Properties…", () => FolderPropertiesAsync(shell, account, folder));
+    }
+
+    /// <summary>The account's connection for a folder operation on the server — null for POP3, whose folders live here.</summary>
+    private static AccountConnection? ConnectionFor(OpenAccount account)
+        => account.Account.Protocol == MailProtocol.Imap
+            ? AccountSettings.Load(App.Settings, account.Account.Address)?.ToConnection(account.Account, App.Secrets)
+            : null;
+
+    private async Task NewFolderAsync(ShellViewModel shell, OpenAccount account, long? parentId)
+    {
+        var dialog = new NewFolderDialog(account, parentId);
+        await dialog.ShowDialog(this);
+        if (dialog.Result is not { } wanted) return;
+
+        try
+        {
+            var made = await Task.Run(() => new FolderManager(account.Mail).CreateAsync(ConnectionFor(account), account.Account.Id, wanted.Name, wanted.ParentId));
+            shell.SelectFolder(account, made.Id);
+            shell.StatusRight = $"Folder “{made.Name}” created.";
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            Log.Warn($"New Folder failed: {ex.Message}");
+            await Confirm.AskAsync(this, "Create New Folder", $"The folder could not be created: {ex.Message}", "OK", destructive: false);
+        }
+    }
+
+    private async Task RenameFolderAsync(ShellViewModel shell, OpenAccount account, Folder folder)
+    {
+        var name = await Prompt.AskAsync(this, "Rename Folder", "New name:", folder.Name);
+        if (string.IsNullOrWhiteSpace(name) || name.Trim() == folder.Name) return;
+
+        try
+        {
+            await Task.Run(() => new FolderManager(account.Mail).RenameAsync(ConnectionFor(account), folder, name.Trim()));
+            shell.SelectFolder(account, folder.Id);
+            shell.StatusRight = $"Folder renamed to “{name.Trim()}”.";
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            Log.Warn($"Rename Folder failed: {ex.Message}");
+            await Confirm.AskAsync(this, "Rename Folder", $"The folder could not be renamed: {ex.Message}", "OK", destructive: false);
+        }
+    }
+
+    private async Task DeleteFolderAsync(ShellViewModel shell, OpenAccount account, Folder folder)
+    {
+        var go = await Confirm.AskAsync(this, "Delete Folder",
+            $"Delete the folder “{folder.Name}”, its subfolders and everything in them?", "Delete");
+        if (!go) return;
+
+        try
+        {
+            await Task.Run(() => new FolderManager(account.Mail).DeleteAsync(ConnectionFor(account), folder));
+            shell.Refresh();
+            shell.StatusRight = $"Folder “{folder.Name}” deleted.";
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            Log.Warn($"Delete Folder failed: {ex.Message}");
+            await Confirm.AskAsync(this, "Delete Folder", $"The folder could not be deleted: {ex.Message}", "OK", destructive: false);
+        }
+    }
+
+    private async Task EmptyFolderAsync(ShellViewModel shell, OpenAccount account, Folder folder)
+    {
+        var total = account.Mail.Messages(folder.Id, int.MaxValue).Count;
+        if (total == 0) { shell.StatusRight = $"{folder.Name} is already empty."; return; }
+        var go = await Confirm.AskAsync(this, "Empty Folder",
+            $"Permanently delete {total:N0} item{(total == 1 ? "" : "s")} from {folder.Name}?", "Delete");
+        if (!go) return;
+        var count = shell.EmptyFolder(account, folder.Id);
+        shell.StatusRight = $"{folder.Name} emptied: {count:N0} item{(count == 1 ? "" : "s")}.";
+    }
+
+    private async Task FolderPropertiesAsync(ShellViewModel shell, OpenAccount account, Folder folder, int tab = 0)
+    {
+        var dialog = new FolderPropertiesDialog(account, folder, tab);
+        await dialog.ShowDialog(this);
+        if (dialog.Policy is { } policy)
+        {
+            account.Mail.SetFolderAutoArchive(folder.Id, policy.Mode == Mailbox.Core.Archive.FolderArchiveMode.Default ? null : policy.ToJson());
+        }
+
+        if (dialog.NewName is { } name && name != folder.Name)
+        {
+            await Task.Run(() => new FolderManager(account.Mail).RenameAsync(ConnectionFor(account), folder, name));
+            shell.SelectFolder(account, folder.Id);
+        }
+    }
+
     private void WireFolderMenu(ShellViewModel shell)
     {
         if (this.FindControl<ListBox>("FolderList") is not { } folders) return;
@@ -1421,6 +1641,14 @@ public partial class MainWindow : Window
         flyout.Opening += (_, _) =>
         {
             flyout.Items.Clear();
+
+            // An ordinary folder: the reference's menu over it.
+            if (pressed is not null && shell.FolderOf(pressed) is { } where)
+            {
+                FillFolderMenu(flyout, shell, where.Account, where.Folder);
+                return;
+            }
+
             if (pressed is null || shell.SearchFolderAccount(pressed) is not { } account)
             {
                 flyout.Items.Add(new MenuItem { Header = "No actions here yet", IsEnabled = false });
