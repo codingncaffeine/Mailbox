@@ -16,6 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Mailbox.Contacts\Mailbox.Contacts.csproj" />
     <ProjectReference Include="..\Mailbox.Core\Mailbox.Core.csproj" />
     <ProjectReference Include="..\Mailbox.Scheduling\Mailbox.Scheduling.csproj" />
     <ProjectReference Include="..\Mailbox.Store\Mailbox.Store.csproj" />

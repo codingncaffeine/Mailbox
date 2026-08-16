@@ -40,7 +40,7 @@ public class DavTests
         using var server = new FakeDavServer();
         using var client = new DavClient(handler: server);
 
-        var found = await CalDavDiscovery.FindAsync(client, server.Origin, TestContext.Current.CancellationToken);
+        var found = await DavDiscovery.FindAsync(client, server.Origin, TestContext.Current.CancellationToken);
 
         var calendar = Assert.Single(found);
         Assert.Equal(CollectionKind.Events, calendar.Kind);
@@ -61,7 +61,7 @@ public class DavTests
         var (store, repository, calendar) = Fresh(server);
         using var _ = store;
 
-        var result = await new CalDavSync(client, repository).SyncAsync(calendar, TestContext.Current.CancellationToken);
+        var result = await new DavSync(client, repository).SyncAsync(calendar, TestContext.Current.CancellationToken);
 
         Assert.Equal(2, result.Pulled);
         Assert.Equal(0, result.Removed);
@@ -81,7 +81,7 @@ public class DavTests
         using var client = new DavClient(handler: server);
         var (store, repository, calendar) = Fresh(server);
         using var _ = store;
-        var sync = new CalDavSync(client, repository);
+        var sync = new DavSync(client, repository);
 
         await sync.SyncAsync(calendar, TestContext.Current.CancellationToken);
         server.Publish("two.ics", Vevent("two@test", "Retro"));
@@ -102,7 +102,7 @@ public class DavTests
         using var client = new DavClient(handler: server);
         var (store, repository, calendar) = Fresh(server);
         using var _ = store;
-        var sync = new CalDavSync(client, repository);
+        var sync = new DavSync(client, repository);
 
         await sync.SyncAsync(calendar, TestContext.Current.CancellationToken);
         server.Withdraw(href);
@@ -126,7 +126,7 @@ public class DavTests
         using var client = new DavClient(handler: server);
         var (store, repository, calendar) = Fresh(server);
         using var _ = store;
-        var sync = new CalDavSync(client, repository);
+        var sync = new DavSync(client, repository);
 
         var first = await sync.SyncAsync(calendar, TestContext.Current.CancellationToken);
         Assert.Equal(2, first.Pulled);
@@ -147,7 +147,7 @@ public class DavTests
         using var client = new DavClient(handler: server);
         var (store, repository, calendar) = Fresh(server);
         using var _ = store;
-        var sync = new CalDavSync(client, repository);
+        var sync = new DavSync(client, repository);
         await sync.SyncAsync(calendar, TestContext.Current.CancellationToken);
 
         server.Requests.Clear();
@@ -173,7 +173,7 @@ public class DavTests
         var item = repository.AddItem(PimEventCodec.ToItem(appointment, calendar.Id));
         repository.Queue(calendar.Id, item.Id, "put");
 
-        var result = await new CalDavSync(client, repository).SyncAsync(calendar, TestContext.Current.CancellationToken);
+        var result = await new DavSync(client, repository).SyncAsync(calendar, TestContext.Current.CancellationToken);
 
         Assert.Equal(1, result.Pushed);
         Assert.Empty(repository.Queued(calendar.Id));
@@ -205,7 +205,7 @@ public class DavTests
         repository.Queue(calendar.Id, item.Id, "put");
         server.NextWriteConflicts = true;
 
-        var result = await new CalDavSync(client, repository).SyncAsync(calendar, TestContext.Current.CancellationToken);
+        var result = await new DavSync(client, repository).SyncAsync(calendar, TestContext.Current.CancellationToken);
 
         Assert.Equal(0, result.Pushed);
         var conflict = Assert.Single(result.Conflicts);
@@ -224,7 +224,7 @@ public class DavTests
         using var client = new DavClient(handler: server);
         var (store, repository, calendar) = Fresh(server);
         using var _ = store;
-        var sync = new CalDavSync(client, repository);
+        var sync = new DavSync(client, repository);
         await sync.SyncAsync(calendar, TestContext.Current.CancellationToken);
 
         var item = Assert.Single(repository.Items(calendar.Id));
@@ -271,7 +271,7 @@ public class DavTests
             calendar.Id));
 
         repository.Queue(calendar.Id, stored.Id, "put");
-        await new CalDavSync(client, repository).SyncAsync(calendar, TestContext.Current.CancellationToken);
+        await new DavSync(client, repository).SyncAsync(calendar, TestContext.Current.CancellationToken);
 
         var payload = server.PayloadOf(repository.Item(stored.Id)!.DavHref!);
         Assert.Contains("RRULE", payload, StringComparison.Ordinal);
@@ -301,7 +301,7 @@ public class DavTests
             calendar.Id));
         repository.Queue(calendar.Id, item.Id, "put");
 
-        var result = await new CalDavSync(client, repository).SyncAsync(calendar, TestContext.Current.CancellationToken);
+        var result = await new DavSync(client, repository).SyncAsync(calendar, TestContext.Current.CancellationToken);
 
         Assert.Equal(0, result.Pushed);
         Assert.Equal(0, server.Count);
@@ -341,11 +341,11 @@ public class DavTests
     /// Sets up the case the whole conflict path exists for: an appointment edited here while
     /// somebody else edited it there, so the queued write is refused on its ETag.
     /// </summary>
-    private static async Task<(CalDavSync Sync, DavConflict Conflict, PimItem Item, string Href)> Clash(
+    private static async Task<(DavSync Sync, DavConflict Conflict, PimItem Item, string Href)> Clash(
         FakeDavServer server, DavClient client, PimRepository repository, Collection calendar, CancellationToken cancellationToken)
     {
         var href = server.Publish("clash.ics", Vevent("clash@test", "Review"));
-        var sync = new CalDavSync(client, repository);
+        var sync = new DavSync(client, repository);
         await sync.SyncAsync(calendar, cancellationToken);
 
         var item = repository.Items(calendar.Id).Single();
@@ -399,7 +399,7 @@ public class DavTests
 
         var (sync, conflict, item, href) = await Clash(server, client, repository, calendar, TestContext.Current.CancellationToken);
 
-        Assert.True(CalDavSync.KeepLocal(repository, conflict));
+        Assert.True(DavSync.KeepLocal(repository, conflict));
         Assert.Equal(conflict.ServerEtag, repository.Item(item.Id)!.Etag);
         var requeued = Assert.Single(repository.Queued(calendar.Id));
         Assert.Equal(0, requeued.Attempts);
@@ -424,7 +424,7 @@ public class DavTests
 
         var (sync, conflict, item, href) = await Clash(server, client, repository, calendar, TestContext.Current.CancellationToken);
 
-        Assert.True(CalDavSync.KeepServer(repository, conflict));
+        Assert.True(DavSync.KeepServer(repository, conflict));
 
         var kept = repository.Item(item.Id)!;
         Assert.Equal("Review moved there", kept.Summary);
@@ -471,7 +471,7 @@ public class DavTests
         using var client = new DavClient(handler: server);
         var (store, repository, calendar) = Fresh(server);
         using var _ = store;
-        var sync = new CalDavSync(client, repository);
+        var sync = new DavSync(client, repository);
         await sync.SyncAsync(calendar, TestContext.Current.CancellationToken);
 
         var item = repository.Items(calendar.Id).Single();
@@ -491,7 +491,7 @@ public class DavTests
         Assert.True(server.Has(href));
 
         // Keeping the server's copy brings the row back rather than leaving it marked deleted.
-        Assert.True(CalDavSync.KeepServer(repository, conflict));
+        Assert.True(DavSync.KeepServer(repository, conflict));
         Assert.Equal(PimSyncState.Synced, repository.Item(item.Id)!.SyncState);
         Assert.Empty(repository.Queued(calendar.Id));
     }

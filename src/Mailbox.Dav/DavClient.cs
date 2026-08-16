@@ -163,6 +163,30 @@ public sealed class DavClient : IDisposable
         return new DavWriteResult(response.StatusCode, null, false);
     }
 
+    /// <summary>
+    /// Makes an address book — extended MKCOL (RFC 5689) with a resourcetype, there being no
+    /// MKADDRESSBOOK the way there is a MKCALENDAR.
+    /// </summary>
+    public async Task<DavWriteResult> MakeAddressBookAsync(Uri url, string displayName, CancellationToken cancellationToken = default)
+    {
+        var body = $"""
+            <?xml version="1.0" encoding="utf-8"?>
+            <D:mkcol xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav">
+              <D:set><D:prop>
+                <D:resourcetype><D:collection/><C:addressbook/></D:resourcetype>
+                <D:displayname>{System.Security.SecurityElement.Escape(displayName)}</D:displayname>
+              </D:prop></D:set>
+            </D:mkcol>
+            """;
+
+        using var request = new HttpRequestMessage(new HttpMethod("MKCOL"), url)
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/xml"),
+        };
+        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        return new DavWriteResult(response.StatusCode, null, false);
+    }
+
     /// <summary>Reads one item's payload, for a server whose multiget cannot be trusted.</summary>
     public async Task<DavResponse> GetAsync(Uri url, CancellationToken cancellationToken = default)
     {

@@ -24,8 +24,8 @@ public sealed record DavSyncResult(int Pulled, int Removed, int Pushed, IReadOnl
 /// <para>
 /// Both copies travel with the report — the server's payload and the tag it is filed under — so
 /// the reader can be shown the two and asked, and so whichever answer comes back can be carried
-/// out without a second round trip. <see cref="CalDavSync.KeepLocal"/> and
-/// <see cref="CalDavSync.KeepServer"/> are the two answers.
+/// out without a second round trip. <see cref="DavSync.KeepLocal"/> and
+/// <see cref="DavSync.KeepServer"/> are the two answers.
 /// </para>
 /// </remarks>
 /// <param name="ServerEtag">What the server's copy is filed under, which is the precondition a
@@ -55,10 +55,21 @@ public sealed record DavConflict(
 /// acceptable at real sizes, and several servers still do not implement RFC 6578.
 /// </para>
 /// </remarks>
-public sealed class CalDavSync(DavClient client, PimRepository repository)
+public sealed class DavSync(DavClient client, PimRepository repository, IDavPayload payload)
 {
     private readonly DavClient _client = client ?? throw new ArgumentNullException(nameof(client));
     private readonly PimRepository _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+    private readonly IDavPayload _payload = payload ?? throw new ArgumentNullException(nameof(payload));
+
+    /// <summary>A sync for a calendar, which is what most collections are.</summary>
+    public DavSync(DavClient client, PimRepository repository)
+        : this(client, repository, DavPayloads.Calendar)
+    {
+    }
+
+    /// <summary>The sync a collection wants, by what it holds.</summary>
+    public static DavSync For(DavClient client, PimRepository repository, Collection collection)
+        => new(client, repository, DavPayloads.For(collection?.Kind ?? CollectionKind.Events));
 
     /// <summary>Pushes this collection's queue, then pulls what changed on the server.</summary>
     public async Task<DavSyncResult> SyncAsync(Collection collection, CancellationToken cancellationToken = default)
@@ -103,7 +114,7 @@ public sealed class CalDavSync(DavClient client, PimRepository repository)
                     continue;
                 }
 
-                var url = CalDavDiscovery.Absolute(root, gone)!;
+                var url = DavDiscovery.Absolute(root, gone)!;
                 var response = await _client.DeleteAsync(url, change.Etag, cancellationToken).ConfigureAwait(false);
                 if (response.Ok || response.Status == HttpStatusCode.NotFound)
                 {
@@ -137,11 +148,11 @@ public sealed class CalDavSync(DavClient client, PimRepository repository)
             }
 
             var href = item.DavHref is { Length: > 0 } existing ? existing : NewHref(item.Uid);
-            var target = CalDavDiscovery.Absolute(root, href)!;
-            var payload = Whole(item);
+            var target = DavDiscovery.Absolute(root, href)!;
+            var payload = _payload.Whole(_repository, item);
 
             var write = await _client
-                .PutAsync(target, payload, item.Etag, ifNoneMatch: item.Etag is null, cancellationToken: cancellationToken)
+                .PutAsync(target, payload, item.Etag, ifNoneMatch: item.Etag is null, contentType: _payload.ContentType, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
 
             if (write.Ok)
@@ -310,7 +321,7 @@ public sealed class CalDavSync(DavClient client, PimRepository repository)
         {
             var slice = hrefs.Skip(start).Take(Batch).ToList();
             var response = await _client
-                .ReportAsync(root, DavXml.CalendarMultiget(slice), depth: 1, cancellationToken)
+                .ReportAsync(root, _payload.Multiget(slice), depth: 1, cancellationToken)
                 .ConfigureAwait(false);
 
             if (response.Status != HttpStatusCode.MultiStatus) continue;
@@ -318,7 +329,7 @@ public sealed class CalDavSync(DavClient client, PimRepository repository)
             foreach (var resource in response.MultiStatus.Found)
             {
                 if (resource.Data is not { Length: > 0 } payload) continue;
-                written += Store(collection, resource.Href, resource.Etag, payload);
+                written += _payload.Store(_repository, collection.Id, resource.Href, resource.Etag, payload, overLocalChanges: false);
             }
         }
 
@@ -326,7 +337,7 @@ public sealed class CalDavSync(DavClient client, PimRepository repository)
     }
 
     internal int Store(Collection collection, string href, string? etag, string payload)
-        => Store(_repository, collection.Id, href, etag, payload);
+        => _payload.Store(_repository, collection.Id, href, etag, payload, overLocalChanges: false);
 
     /// <summary>
     /// Writes one server payload into the store: a VCALENDAR may hold a series' master and its
@@ -340,7 +351,7 @@ public sealed class CalDavSync(DavClient client, PimRepository repository)
     /// False for a pull, which must leave a row whose own change has not gone up yet alone; true
     /// only when the reader has chosen the server's copy over it.
     /// </param>
-    internal static int Store(PimRepository repository, long collectionId, string href, string? etag, string payload, bool overLocalChanges = false)
+    internal static int StoreCalendar(PimRepository repository, long collectionId, string href, string? etag, string payload, bool overLocalChanges = false)
     {
         IReadOnlyList<CalendarEvent> events;
         try
@@ -444,7 +455,14 @@ public sealed class CalDavSync(DavClient client, PimRepository repository)
         ArgumentNullException.ThrowIfNull(conflict);
 
         if (conflict.ServerPayload is not { Length: > 0 } payload) return false;
-        if (Store(repository, conflict.CollectionId, conflict.Href, conflict.ServerEtag, payload, overLocalChanges: true) == 0) return false;
+
+        // Which kind of thing is being kept follows from the collection it is in, so a caller
+        // settling a conflict does not have to know or say.
+        var kind = repository.Collection(conflict.CollectionId)?.Kind ?? CollectionKind.Events;
+        if (DavPayloads.For(kind).Store(repository, conflict.CollectionId, conflict.Href, conflict.ServerEtag, payload, overLocalChanges: true) == 0)
+        {
+            return false;
+        }
 
         Drop(repository, conflict, conflict.LocalDelete ? "delete" : "put");
         return true;
@@ -460,27 +478,6 @@ public sealed class CalDavSync(DavClient client, PimRepository repository)
                 repository.Dequeue(queued.Id);
             }
         }
-    }
-
-    /// <summary>
-    /// The whole VCALENDAR a PUT sends: a series' master and every override together, because a
-    /// server keeps one resource per UID and a PUT of the master alone deletes the overrides.
-    /// </summary>
-    /// <remarks>
-    /// A row made here keeps its VEVENT and nothing round it, which is all the store needs and
-    /// less than a server takes: Radicale answers a bare component
-    /// <c>400 Item type 'VEVENT' not supported in 'VCALENDAR' collection</c>, and it is right to.
-    /// A payload that came from a server goes back verbatim — re-serializing it would drop
-    /// whatever that server cares about and we do not model.
-    /// </remarks>
-    private string Whole(PimItem item)
-    {
-        var family = _repository.ItemsByUid(item.CollectionId, item.Uid);
-        if (family.Count > 1) return ICalendarCodec.SerializeCalendar(family.Select(PimEventCodec.FromItem).ToList());
-
-        return item.RawPayload.Contains("BEGIN:VCALENDAR", StringComparison.OrdinalIgnoreCase)
-            ? item.RawPayload
-            : ICalendarCodec.SerializeCalendar([PimEventCodec.FromItem(item)]);
     }
 
     /// <summary>The path a new item is written to: its UID, as every server expects.</summary>

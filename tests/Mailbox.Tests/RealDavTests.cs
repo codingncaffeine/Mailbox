@@ -1,4 +1,5 @@
 using System.Globalization;
+using Mailbox.Contacts;
 using Mailbox.Dav;
 using Mailbox.Scheduling;
 using Mailbox.Store.Pim;
@@ -37,7 +38,7 @@ public class RealDavTests
         public required Collection Calendar { get; init; }
         public required Uri Url { get; init; }
 
-        public CalDavSync Sync => new(Client, Repository);
+        public DavSync Sync => DavSync.For(Client, Repository, Calendar);
 
         public Collection Fresh => Repository.Collection(Calendar.Id)!;
 
@@ -62,7 +63,7 @@ public class RealDavTests
         Assert.SkipUnless(Server is { Length: > 0 }, "Set MAILBOX_CALDAV_URL to run against a real server.");
 
         var client = new DavClient(Credentials);
-        var home = await CalDavDiscovery.FindHomeAsync(client, new Uri(Server!), cancellationToken);
+        var home = await DavDiscovery.FindHomeAsync(client, new Uri(Server!), cancellationToken);
         Assert.SkipWhen(home is null, $"No calendar home set found at {Server}.");
 
         // A calendar of this run's own. The name carries the test, so a run that fails and leaves
@@ -89,6 +90,27 @@ public class RealDavTests
         Rrule = rrule,
     };
 
+    /// <summary>An address book of this run's own, for the CardDAV half.</summary>
+    private static async Task<Fixture> ConnectBookAsync(string name, CancellationToken cancellationToken)
+    {
+        Assert.SkipUnless(Server is { Length: > 0 }, "Set MAILBOX_CALDAV_URL to run against a real server.");
+
+        var client = new DavClient(Credentials);
+        var homes = await DavDiscovery.FindHomesAsync(client, new Uri(Server!), cancellationToken);
+        Assert.SkipWhen(homes.Count == 0, $"No home set found at {Server}.");
+
+        var url = new Uri(homes[^1], $"mailbox-{name}-{Environment.ProcessId.ToString(CultureInfo.InvariantCulture)}/");
+        var made = await client.MakeAddressBookAsync(url, $"Mailbox {name}", cancellationToken);
+        Assert.True(made.Ok, $"MKCOL answered {(int)made.Status}.");
+
+        var store = PimStore.Transient();
+        var repository = new PimRepository(store);
+        var book = repository.AddCollection(
+            CollectionKind.Contacts, $"Mailbox {name}", string.Empty, Credentials.UserName ?? "dav", url.ToString());
+
+        return new Fixture { Client = client, Store = store, Repository = repository, Calendar = book, Url = url };
+    }
+
     /// <summary>
     /// The walk RFC 6764 lays down, against a server that really has to answer each step: the
     /// well-known path, the principal, the home set, and what is in it.
@@ -99,7 +121,7 @@ public class RealDavTests
         var token = TestContext.Current.CancellationToken;
         using var fixture = await ConnectAsync("discovery", token);
 
-        var found = await CalDavDiscovery.FindAsync(fixture.Client, new Uri(Server!), token);
+        var found = await DavDiscovery.FindAsync(fixture.Client, new Uri(Server!), token);
 
         Assert.Contains(found, c => c.Url.AbsolutePath == fixture.Url.AbsolutePath);
         var mine = found.First(c => c.Url.AbsolutePath == fixture.Url.AbsolutePath);
@@ -231,7 +253,7 @@ public class RealDavTests
         // Neither side has been overwritten: this is the whole reason the precondition is sent.
         Assert.Equal("Review moved here", repository.Item(item.Id)!.Summary);
 
-        Assert.True(CalDavSync.KeepLocal(repository, conflict));
+        Assert.True(DavSync.KeepLocal(repository, conflict));
         var settled = await sync.SyncAsync(fixture.Fresh, token);
 
         Assert.Equal(1, settled.Pushed);
@@ -272,7 +294,7 @@ public class RealDavTests
         var other = new PimRepository(second);
         var mirror = other.AddCollection(
             CollectionKind.Events, "Mirror", "#0078D4", Credentials.UserName ?? "dav", fixture.Url.ToString());
-        var pulled = await new CalDavSync(fixture.Client, other).SyncAsync(mirror, token);
+        var pulled = await new DavSync(fixture.Client, other).SyncAsync(mirror, token);
 
         Assert.Equal(2, pulled.Pulled);
         var rows = other.ItemsByUid(mirror.Id, "series@mailbox.test");
@@ -282,5 +304,114 @@ public class RealDavTests
 
         // Both rows are one resource on the server, as RFC 4791 requires.
         Assert.Single(rows.Select(r => r.DavHref).Distinct(StringComparer.Ordinal));
+    }
+    // ---- CardDAV, against the same server -------------------------------------------------------
+
+    /// <summary>
+    /// A contact's whole life over CardDAV: made here, pushed as a card, changed, and taken off
+    /// again — with the addresses that make it findable written by the same pull.
+    /// </summary>
+    [Fact]
+    public async Task AContactGoesUpAsACardAndComesBackWithItsAddresses()
+    {
+        var token = TestContext.Current.CancellationToken;
+        using var fixture = await ConnectBookAsync("contacts", token);
+        var repository = fixture.Repository;
+        var contacts = new ContactBook(repository);
+
+        var written = contacts.Save(
+            new Contact
+            {
+                Uid = "person@mailbox.test",
+                DisplayName = "A. Person",
+                FirstName = "A.",
+                LastName = "Person",
+                Company = "Example Ltd.",
+                Emails = [new ContactEmail("a.person@example.com")],
+                Phones = [new ContactPhone("+44 7700 900000", PhoneKind.Mobile)],
+            },
+            fixture.Calendar.Id);
+        repository.Queue(fixture.Calendar.Id, written.Id, "put");
+
+        var pushed = await fixture.Sync.SyncAsync(fixture.Fresh, token);
+        Assert.Equal(1, pushed.Pushed);
+        Assert.Empty(pushed.Conflicts);
+
+        var stored = repository.Item(written.Id)!;
+        Assert.NotNull(stored.Etag);
+
+        var theirs = await fixture.Client.GetAsync(new Uri(fixture.Url, stored.DavHref!), token);
+        Assert.True(theirs.Ok, $"GET answered {(int)theirs.Status}.");
+        Assert.Contains("BEGIN:VCARD", theirs.Body, StringComparison.Ordinal);
+        Assert.Contains("A. Person", theirs.Body, StringComparison.Ordinal);
+
+        // Read back into a store that has never seen it, which is what another client does.
+        using var second = PimStore.Transient();
+        var other = new PimRepository(second);
+        var mirror = other.AddCollection(
+            CollectionKind.Contacts, "Mirror", string.Empty, Credentials.UserName ?? "dav", fixture.Url.ToString());
+        Assert.Equal(1, (await DavSync.For(fixture.Client, other, mirror).SyncAsync(mirror, token)).Pulled);
+
+        var mirrored = new ContactBook(other);
+        var row = Assert.Single(mirrored.Rows());
+        Assert.Equal("A. Person", row.Contact.DisplayName);
+        Assert.Equal("Example Ltd.", row.Contact.Company);
+        Assert.Equal("a.person@example.com", row.Contact.PrimaryEmail);
+        Assert.Single(mirrored.WithAddress("a.person@example.com"));
+
+        // And off again.
+        repository.SetSyncState(written.Id, PimSyncState.Deleted);
+        repository.Queue(fixture.Calendar.Id, written.Id, "delete");
+        Assert.Equal(1, (await fixture.Sync.SyncAsync(fixture.Fresh, token)).Pushed);
+        Assert.Empty(repository.Items(fixture.Calendar.Id));
+    }
+
+    /// <summary>
+    /// Discovery finds an address book as well as a calendar: they are two home sets on one
+    /// principal, and a client that asks for only one finds only one.
+    /// </summary>
+    [Fact]
+    public async Task DiscoveryFindsTheAddressBookToo()
+    {
+        var token = TestContext.Current.CancellationToken;
+        using var fixture = await ConnectBookAsync("discovery-book", token);
+
+        var found = await DavDiscovery.FindAsync(fixture.Client, new Uri(Server!), token);
+
+        var mine = found.FirstOrDefault(c => c.Url.AbsolutePath == fixture.Url.AbsolutePath);
+        Assert.NotNull(mine);
+        Assert.Equal(CollectionKind.Contacts, mine!.Kind);
+    }
+
+    /// <summary>A distribution list is a card on the wire, and comes back with everyone in it.</summary>
+    [Fact]
+    public async Task AGroupSurvivesTheServer()
+    {
+        var token = TestContext.Current.CancellationToken;
+        using var fixture = await ConnectBookAsync("group", token);
+        var contacts = new ContactBook(fixture.Repository);
+
+        var written = contacts.Save(
+            new Contact
+            {
+                Uid = "team@mailbox.test",
+                DisplayName = "Research team",
+                IsGroup = true,
+                Members = [new GroupMember(Uid: "person@mailbox.test"), new GroupMember("b.person@example.com", "B. Person")],
+            },
+            fixture.Calendar.Id);
+        fixture.Repository.Queue(fixture.Calendar.Id, written.Id, "put");
+        Assert.Equal(1, (await fixture.Sync.SyncAsync(fixture.Fresh, token)).Pushed);
+
+        using var second = PimStore.Transient();
+        var other = new PimRepository(second);
+        var mirror = other.AddCollection(
+            CollectionKind.Contacts, "Mirror", string.Empty, Credentials.UserName ?? "dav", fixture.Url.ToString());
+        Assert.Equal(1, (await DavSync.For(fixture.Client, other, mirror).SyncAsync(mirror, token)).Pulled);
+
+        var group = new ContactBook(other).Full(other.Items(mirror.Id).Single().Id)!;
+        Assert.True(group.IsGroup);
+        Assert.Equal(2, group.Members.Count);
+        Assert.Contains(group.Members, m => m.Name == "B. Person");
     }
 }

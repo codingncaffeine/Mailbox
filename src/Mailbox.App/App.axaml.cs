@@ -98,7 +98,7 @@ public partial class App : Application
     public static PimRepository Pim { get; private set; } = null!;
 
     /// <summary>The DAV engine over those collections, run with Send/Receive (§7.5).</summary>
-    public static CalendarSyncService Calendars { get; private set; } = null!;
+    public static PimSyncService PimSync { get; private set; } = null!;
 
     /// <summary>The Rules and Alerts wizard's rules, run on arrival and by Run Rules Now.</summary>
     public static RulesHandler Rules { get; private set; } = null!;
@@ -419,7 +419,7 @@ public partial class App : Application
         // A capture run keeps its passwords in memory: it poses accounts that do not exist, and
         // the keyring may be locked on a headless desktop, where asking it would wait forever.
         Secrets = WindowCapture.IsRequested ? new InMemoryCredentialStore() : Credentials.Best();
-        Calendars = new CalendarSyncService(Pim, Secrets);
+        PimSync = new PimSyncService(Pim, Secrets);
         MailOptions = new MailOptions(Settings);
         CalendarOptions = new CalendarOptions(Settings);
         AutoArchive = new Mailbox.Core.Archive.AutoArchiveOptions(Settings);

@@ -405,7 +405,7 @@ public partial class MainWindow
 
         // A calendar with a server behind it gets the change queued rather than sent now: an
         // edit made with the network down is a longer queue, not a lost edit (§7.5).
-        App.Calendars.QueuePut(written);
+        App.PimSync.QueuePut(written);
         _calendar?.Reload();
         return written;
 
@@ -685,13 +685,13 @@ public partial class MainWindow
     {
         if (scope == EditScope.Series || !entry.Occurrence.IsPartOfSeries)
         {
-            App.Calendars.Remove(stored);
+            App.PimSync.Remove(stored);
             shell.StatusRight = $"“{Named(master)}” deleted.";
             Log.Info($"Calendar: item {stored.Id} deleted.");
         }
         else if (master.IsOverride)
         {
-            App.Calendars.Remove(stored);
+            App.PimSync.Remove(stored);
             shell.StatusRight = $"That change to “{Named(master)}” was removed.";
             Log.Info($"Calendar: override {stored.Id} removed.");
         }
@@ -719,7 +719,7 @@ public partial class MainWindow
     {
         try
         {
-            var report = await App.Calendars.SyncAsync(cancellationToken).ConfigureAwait(true);
+            var report = await App.PimSync.SyncAsync(cancellationToken).ConfigureAwait(true);
             if (report.Collections == 0) return;
 
             _calendar?.Reload();
@@ -1009,7 +1009,7 @@ public partial class MainWindow
         await window.ShowDialog(this);
         if (window.Result is not { } result) return;
 
-        if (result.Deleted) App.Calendars.Remove(stored);
+        if (result.Deleted) App.PimSync.Remove(stored);
         else SaveAppointment(result.Event, stored, result.CollectionId);
         AfterStoreChange(shell);
     }

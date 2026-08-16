@@ -151,7 +151,7 @@ public sealed class InvitationBar : Border
         {
             var row = PimEventCodec.ToItem(updated, calendar.Id, existing);
             stored = existing is null ? _repository.AddItem(row) : Save(row);
-            App.Calendars.QueuePut(stored);
+            App.PimSync.QueuePut(stored);
         }
 
         var payload = Imip.Reply(_invitation, _address, response);
@@ -171,7 +171,7 @@ public sealed class InvitationBar : Border
         var calendar = _repository.DefaultCalendar();
         foreach (var item in _repository.ItemsByUid(calendar.Id, _invitation.Event.Uid))
         {
-            App.Calendars.Remove(item);
+            App.PimSync.Remove(item);
         }
 
         Log.Info($"Invitation: “{_invitation.Event.Summary}” removed after a cancellation.");

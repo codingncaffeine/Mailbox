@@ -16,7 +16,7 @@ public sealed record DavCollection(
 
 /// <summary>
 /// Finding a server's collections from an address and a password, in the order RFC 6764 lays
-/// down: the well-known path, then the principal, then the home set, then what is in it.
+/// down: the well-known path, then the principal, then the home sets, then what is in them.
 /// </summary>
 /// <remarks>
 /// Every step is allowed to fail into the next. Servers differ over which of them they answer —
@@ -24,9 +24,12 @@ public sealed record DavCollection(
 /// directly — and a discovery that gives up at the first missing step finds nothing on half of
 /// them. Handing in a URL that is already a collection is therefore also a valid start.
 /// </remarks>
-public static class CalDavDiscovery
+public static class DavDiscovery
 {
-    /// <summary>The collections a server offers this account, calendars first.</summary>
+    /// <summary>
+    /// Every collection a server offers this account: the calendars and the address books, which
+    /// on most servers live in two different homes and on some in one.
+    /// </summary>
     public static async Task<IReadOnlyList<DavCollection>> FindAsync(
         DavClient client,
         Uri server,
@@ -35,20 +38,30 @@ public static class CalDavDiscovery
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(server);
 
-        var home = await FindHomeAsync(client, server, cancellationToken).ConfigureAwait(false);
-        if (home is null) return [];
+        var found = new List<DavCollection>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
 
+        foreach (var home in await FindHomesAsync(client, server, cancellationToken).ConfigureAwait(false))
+        {
+            if (!seen.Add(home.AbsoluteUri)) continue;
+            await ListAsync(client, home, found, cancellationToken).ConfigureAwait(false);
+        }
+
+        return found;
+    }
+
+    private static async Task ListAsync(DavClient client, Uri home, List<DavCollection> found, CancellationToken cancellationToken)
+    {
         var listing = await client.PropFindAsync(home, DavXml.CollectionProperties(), depth: 1, cancellationToken)
             .ConfigureAwait(false);
-        if (!listing.Ok && listing.Status != System.Net.HttpStatusCode.MultiStatus) return [];
+        if (!listing.Ok && listing.Status != System.Net.HttpStatusCode.MultiStatus) return;
 
-        var found = new List<DavCollection>();
         foreach (var resource in listing.MultiStatus.Found)
         {
             if (!resource.IsCalendar && !resource.IsAddressBook) continue;
 
             var url = Absolute(home, resource.Href);
-            if (url is null) continue;
+            if (url is null || found.Any(c => c.Url.AbsoluteUri == url.AbsoluteUri)) continue;
 
             // A calendar that says which components it takes is trusted; one that says nothing
             // is taken as events, which is what every server means by an unqualified calendar.
@@ -70,8 +83,6 @@ public static class CalDavDiscovery
                 resource.SyncToken,
                 resource.IsReadOnly));
         }
-
-        return found;
     }
 
     /// <summary>
@@ -79,7 +90,22 @@ public static class CalDavDiscovery
     /// principal URL, or the home itself.
     /// </summary>
     public static async Task<Uri?> FindHomeAsync(DavClient client, Uri server, CancellationToken cancellationToken = default)
+        => (await FindHomesAsync(client, server, cancellationToken).ConfigureAwait(false)).FirstOrDefault();
+
+    /// <summary>
+    /// Where this account's collections live — the calendar home and the address-book home, which
+    /// are two properties on the same principal and are often two different places.
+    /// </summary>
+    /// <remarks>
+    /// Both are asked for at every start, and the first start that answers either one wins: a
+    /// server that publishes only calendars answers one and not the other, and a server that
+    /// publishes an address book at the URL it was handed answers neither.
+    /// </remarks>
+    public static async Task<IReadOnlyList<Uri>> FindHomesAsync(DavClient client, Uri server, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(client);
+        ArgumentNullException.ThrowIfNull(server);
+
         foreach (var start in Starts(server))
         {
             var principalResponse = await client
@@ -91,25 +117,36 @@ public static class CalDavDiscovery
                 .FirstOrDefault(h => h is { Length: > 0 });
 
             var principal = principalHref is null ? start : Absolute(start, principalHref) ?? start;
+            var homes = new List<Uri>();
 
-            var homeResponse = await client
-                .PropFindAsync(principal, DavXml.CalendarHomeSet(), depth: 0, cancellationToken)
-                .ConfigureAwait(false);
+            foreach (var (body, property) in new[]
+                     {
+                         (DavXml.CalendarHomeSet(), DavXml.CalDav + "calendar-home-set"),
+                         (DavXml.AddressBookHomeSet(), DavXml.CardDav + "addressbook-home-set"),
+                     })
+            {
+                var response = await client.PropFindAsync(principal, body, depth: 0, cancellationToken).ConfigureAwait(false);
+                var href = response.MultiStatus.Found
+                    .Select(r => r.HrefIn(property))
+                    .FirstOrDefault(h => h is { Length: > 0 });
 
-            var homeHref = homeResponse.MultiStatus.Found
-                .Select(r => r.HrefIn(DavXml.CalDav + "calendar-home-set"))
-                .FirstOrDefault(h => h is { Length: > 0 });
+                if (href is { Length: > 0 } && Absolute(principal, href) is { } home
+                    && !homes.Any(h => h.AbsoluteUri == home.AbsoluteUri))
+                {
+                    homes.Add(home);
+                }
+            }
 
-            if (homeHref is { Length: > 0 } && Absolute(principal, homeHref) is { } home) return home;
+            if (homes.Count > 0) return homes;
 
             // No home set: the URL handed in may already be one, which is what a server that
             // only publishes a calendar address gives you.
             var listing = await client.PropFindAsync(start, DavXml.CollectionProperties(), depth: 1, cancellationToken)
                 .ConfigureAwait(false);
-            if (listing.MultiStatus.Found.Any(r => r.IsCalendar || r.IsAddressBook)) return start;
+            if (listing.MultiStatus.Found.Any(r => r.IsCalendar || r.IsAddressBook)) return [start];
         }
 
-        return null;
+        return [];
     }
 
     /// <summary>The URLs to try, in order: what was given, then the two well-known paths.</summary>

@@ -5,7 +5,7 @@ using Mailbox.Store.Pim;
 
 namespace Mailbox.App;
 
-/// <summary>What a run over every calendar came to, for the status line and the progress dialog.</summary>
+/// <summary>What a run over every collection came to, for the status line and the progress dialog.</summary>
 public sealed record CalendarSyncReport(int Collections, int Pulled, int Removed, int Pushed, IReadOnlyList<DavConflict> Conflicts)
 {
     public static readonly CalendarSyncReport Nothing = new(0, 0, 0, 0, []);
@@ -14,8 +14,8 @@ public sealed record CalendarSyncReport(int Collections, int Pulled, int Removed
 }
 
 /// <summary>
-/// Runs the DAV engine over the calendars this machine has, on the same schedule mail is
-/// collected on.
+/// Runs the DAV engine over the collections this machine has — calendars and address books
+/// alike — on the same schedule mail is collected on.
 /// </summary>
 /// <remarks>
 /// Send/Receive is one button in the reference and it covers the calendars too, so this hangs off
@@ -27,7 +27,7 @@ public sealed record CalendarSyncReport(int Collections, int Pulled, int Removed
 /// Nothing here writes a password anywhere.
 /// </para>
 /// </remarks>
-public sealed class CalendarSyncService(PimRepository repository, ICredentialStore secrets)
+public sealed class PimSyncService(PimRepository repository, ICredentialStore secrets)
 {
     private readonly PimRepository _repository = repository ?? throw new ArgumentNullException(nameof(repository));
     private readonly ICredentialStore _secrets = secrets ?? throw new ArgumentNullException(nameof(secrets));
@@ -54,7 +54,6 @@ public sealed class CalendarSyncService(PimRepository repository, ICredentialSto
         {
             var password = await _secrets.LoadAsync(account.Key, Purpose, cancellationToken).ConfigureAwait(false);
             using var client = new DavClient(new DavCredentials(account.Key, password));
-            var sync = new CalDavSync(client, _repository);
 
             foreach (var collection in account)
             {
@@ -64,12 +63,12 @@ public sealed class CalendarSyncService(PimRepository repository, ICredentialSto
                     // A collection with nothing queued and an unmoved CTag needs no further
                     // requests at all.
                     if (_repository.Queued(collection.Id).Count == 0
-                        && await sync.IsUnchangedAsync(collection, cancellationToken).ConfigureAwait(false))
+                        && await DavSync.For(client, _repository, collection).IsUnchangedAsync(collection, cancellationToken).ConfigureAwait(false))
                     {
                         continue;
                     }
 
-                    var result = await sync.SyncAsync(collection, cancellationToken).ConfigureAwait(false);
+                    var result = await DavSync.For(client, _repository, collection).SyncAsync(collection, cancellationToken).ConfigureAwait(false);
                     pulled += result.Pulled;
                     removed += result.Removed;
                     pushed += result.Pushed;
@@ -90,7 +89,7 @@ public sealed class CalendarSyncService(PimRepository repository, ICredentialSto
         var report = new CalendarSyncReport(touched, pulled, removed, pushed, conflicts);
         if (report.DidAnything || conflicts.Count > 0)
         {
-            Log.Info($"Calendars: {pulled} in, {removed} removed, {pushed} out, {conflicts.Count} conflict(s).");
+            Log.Info($"Collections: {pulled} in, {removed} removed, {pushed} out, {conflicts.Count} conflict(s).");
         }
 
         return report;
