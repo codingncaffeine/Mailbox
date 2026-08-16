@@ -65,15 +65,36 @@ public sealed class ComposeSurface : UserControl
     /// picker is only ever reached through a command, and a command means the surface is live.</summary>
     private Window Host => Owner ?? throw new InvalidOperationException("The compose surface is not hosted in a window.");
     /// <summary>
-    /// What new mail is written in. The reference's own default, and the one name §6 cares most
-    /// about getting onto the wire correctly.
+    /// What this message is written in: Personal Stationery's font for new mail, for a reply or
+    /// forward, or for plain text — Calibri 11 unless the reader has chosen otherwise, which is
+    /// the reference's own default and the one name §6 cares most about getting onto the wire
+    /// correctly. The family here is the wire name; the editor draws its substitute.
     /// </summary>
-    private const string ComposeFontFamily = "Calibri";
-
-    private const double ComposeFontPoints = 11;
+    private MessageFont _font = MessageFont.Default;
 
     /// <summary>The document measures in device-independent pixels; mail talks in points.</summary>
     private const double PointsPerPixel = 0.75;
+
+    /// <summary>
+    /// Writes in a stationery font: the editor's default face and size become the font's
+    /// substitute at its size, and its weight, slant and colour are put on the empty document
+    /// so what is typed comes out in them — the runs then carry them, and the wire says what
+    /// the screen shows. Only for a body nothing has been typed into; a draft keeps its own.
+    /// </summary>
+    private void UseFont(MessageFont font)
+    {
+        _font = font;
+        _body.DefaultFontFamily = Mailbox.Theming.Fonts.BundledFonts.FamilyFor(App.Fonts.Resolve(font.Family).Rendered);
+        _body.DefaultFontSize = font.Points / PointsPerPixel;
+
+        if (!string.IsNullOrWhiteSpace(_body.GetPlainText())) return;
+        if (font.Bold) _body.ToggleBold();
+        if (font.Italic) _body.ToggleItalic();
+        if (font.Colour is { } hex && Avalonia.Media.Color.TryParse(hex, out var colour))
+        {
+            _body.SetForeground(new Avalonia.Media.SolidColorBrush(colour));
+        }
+    }
 
     private readonly CommandCatalog _catalog;
     private readonly AccountStores? _accounts;
@@ -217,8 +238,6 @@ public sealed class ComposeSurface : UserControl
         // buttons.
         _body = new RichEditor
         {
-            DefaultFontFamily = Mailbox.Theming.Fonts.BundledFonts.FamilyFor(App.Fonts.Resolve(ComposeFontFamily).Rendered),
-            DefaultFontSize = ComposeFontPoints / PointsPerPixel,
             AllowRemoteImagesOnPaste = false,
             AllowLocalFileImages = false,
             AutoLinkOnType = true,
@@ -255,6 +274,7 @@ public sealed class ComposeSurface : UserControl
         _wantsDeliveryReceipt = App.MailOptions.RequestDeliveryReceipt;
         _wantsReadReceipt = App.MailOptions.RequestReadReceipt;
         _plainText = App.MailOptions.ComposeFormat == ComposeFormat.PlainText;
+        UseFont(App.Stationery.Get(_plainText ? StationeryUse.PlainText : StationeryUse.NewMessages));
 
         Content = BuildSurface();
         Focusable = true;
@@ -425,6 +445,10 @@ public sealed class ComposeSurface : UserControl
     public void Prefill(ReplyDraft draft, ReplyKind kind)
     {
         ArgumentNullException.ThrowIfNull(draft);
+
+        // A reply or a forward is written in Personal Stationery's font for replies, which may
+        // differ from the one new mail starts in.
+        UseFont(App.Stationery.Get(_plainText ? StationeryUse.PlainText : StationeryUse.Replies));
 
         _to.Text = string.Join("; ", draft.To);
         _cc.Text = string.Join("; ", draft.Cc);
@@ -1496,7 +1520,7 @@ public sealed class ComposeSurface : UserControl
             .ToList();
 
         var caret = _body.GetCaretFormat().FontSize;
-        var current = ((caret > 0 ? caret * PointsPerPixel : ComposeFontPoints))
+        var current = ((caret > 0 ? caret * PointsPerPixel : _font.Points))
             .ToString("0", CultureInfo.InvariantCulture);
 
         if (await Chooser.AskAsync(Host, "Font Size", "Size, in points:", choices, current)
@@ -1713,7 +1737,7 @@ public sealed class ComposeSurface : UserControl
 
     /// <summary>The shared editor, over this window and its sending account.</summary>
     private Task EditSignaturesAsync()
-        => SignatureEditor.EditAsync(Host, SendingAccount()?.Account.Address, Report);
+        => new StationeryDialog(App.Signatures, App.Stationery, App.Accounts.All, SendingAccount()?.Account.Address, tab: 0).ShowDialog(Host);
 
     /// <summary>
     /// Spelling, over the whole message.
@@ -2131,8 +2155,9 @@ public sealed class ComposeSurface : UserControl
         // half is the message and there is no other.
         if (!_plainText) builder.HtmlBody = EmailHtml.Serialize(_body.Document ?? new FlowDocument(), new EmailHtmlOptions
         {
-            BaseFontFamily = ComposeFontFamily,
-            BaseFontPoints = ComposeFontPoints,
+            BaseFontFamily = _font.Family,
+            BaseFontPoints = _font.Points,
+            BaseColour = _font.Colour,
 
             // An image the writer put in the body becomes a related part and a cid: reference,
             // which is how mail carries one. Several large clients drop a data: image outright.

@@ -46,6 +46,9 @@ public sealed record EmailHtmlOptions
     public string BaseFontFamily { get; init; } = "Calibri";
 
     public double BaseFontPoints { get; init; } = 11;
+
+    /// <summary>The colour the message is written in — <c>#RRGGBB</c> — or null for the reader's own.</summary>
+    public string? BaseColour { get; init; }
 }
 
 /// <summary>
@@ -137,6 +140,11 @@ public static class EmailHtml
         if (options.BaseFontPoints > 0)
         {
             baseStyle.Add($"font-size:{Number(options.BaseFontPoints)}pt");
+        }
+
+        if (options.BaseColour is { Length: > 0 } colour)
+        {
+            baseStyle.Add($"color:{colour}");
         }
 
         var style = baseStyle.Count > 0 ? $" style=\"{string.Join(';', baseStyle)}\"" : string.Empty;

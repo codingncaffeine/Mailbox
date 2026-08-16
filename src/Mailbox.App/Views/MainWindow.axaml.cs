@@ -586,6 +586,25 @@ public partial class MainWindow : Window
                 };
                 break;
 
+            // Signatures and Stationery on either tab, and the Font dialog behind Font….
+            case "signatures":
+            case "stationery":
+                Opened += async (_, _) =>
+                {
+                    CaptureNextWindow();
+                    var tab = Environment.GetEnvironmentVariable("MAILBOX_PEEK")?.ToLowerInvariant() == "stationery" ? 1 : 0;
+                    await new StationeryDialog(App.Signatures, App.Stationery, App.Accounts.All, App.Accounts.Default?.Account.Address, tab).ShowDialog(this);
+                };
+                break;
+
+            case "font":
+                Opened += async (_, _) =>
+                {
+                    CaptureNextWindow();
+                    await new FontDialog("Font", App.Stationery.Get(Mailbox.Core.Settings.StationeryUse.NewMessages), App.Fonts.InstalledFamilies).ShowDialog(this);
+                };
+                break;
+
             case "newfolder":
             case "folderprops":
             case "folderarchive":
