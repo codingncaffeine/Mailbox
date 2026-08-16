@@ -184,6 +184,23 @@ public class EmailHtmlTests
     /// every run is what makes composed mail several times the size of the message in it.
     /// </summary>
     [Fact]
+    public void TheStationeryFontAndColourAreTheBodysBaseStyle()
+    {
+        var document = new FlowDocument();
+        document.Blocks.Add(Para(Text("One")));
+
+        var html = EmailHtml.Serialize(document, new EmailHtmlOptions
+        {
+            BaseFontFamily = "Georgia",
+            BaseFontPoints = 12,
+            BaseColour = "#1F3864",
+        });
+
+        Assert.Contains("<body style=\"font-family:Georgia, Gelasio, serif;font-size:12pt;color:#1F3864\">",
+            html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TheFontIsStatedOnceAndAnUntouchedRunSaysNothing()
     {
         var document = new FlowDocument();

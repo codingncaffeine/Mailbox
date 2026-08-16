@@ -344,8 +344,11 @@ public sealed class OptionsWindow : Window
         switch (buttonLabel)
         {
             case "Signatures...":
-                _ = SignatureEditor.EditAsync(
-                    this, App.Accounts.Default?.Account.Address, _ => { });
+                _ = new StationeryDialog(App.Signatures, App.Stationery, App.Accounts.All, App.Accounts.Default?.Account.Address, tab: 0).ShowDialog(this);
+                break;
+
+            case "Stationery and Fonts...":
+                _ = new StationeryDialog(App.Signatures, App.Stationery, App.Accounts.All, App.Accounts.Default?.Account.Address, tab: 1).ShowDialog(this);
                 break;
 
             case "AutoArchive Settings...":
