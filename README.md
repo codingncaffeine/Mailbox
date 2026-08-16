@@ -42,6 +42,27 @@ dotnet test
 dotnet run --project src/Mailbox.App
 ```
 
+### Packaging
+
+One script publishes a self-contained build and packs it two ways: a tarball that runs from
+wherever it is extracted, and a `.deb` for Debian 13 and its relatives. `packaging/aur/PKGBUILD`
+repackages the tarball for Arch.
+
+```sh
+bash packaging/build-release.sh     # packaging/out/Mailbox-<ver>-linux-x64.tar.gz and mailbox_<ver>_amd64.deb
+bash packaging/test-deb.sh          # installs the .deb in a clean debian:trixie container (podman) and probes it
+```
+
+The test is part of every build: the reading pane's engine (WPE WebKit), the keyring tool and
+the notification tool are exactly the dependencies that are present on a development machine and
+missing on a clean one. It passes when the install resolves, no bundled library wants anything
+the package did not bring, and the binary gets as far as looking for a display.
+
+Runtime dependencies on the target: WPE WebKit (`libwpewebkit-2.0-1` / `wpewebkit`), libwpe and
+WPEBackend-fdo, X11 or Wayland, fontconfig; and, recommended, `secret-tool` (libsecret) for the
+keyring, `notify-send` (libnotify) for notifications, Hunspell dictionaries for spelling, and
+the metric-compatible fonts below.
+
 ### Fonts
 
 Mailbox renders received mail at the metrics the sender intended by substituting
