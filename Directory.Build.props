@@ -33,6 +33,7 @@
     <MailKitVersion>4.17.0</MailKitVersion>
     <SqliteVersion>10.0.11</SqliteVersion>
     <IcalNetVersion>5.2.3</IcalNetVersion>
+    <VCardsVersion>8.1.2</VCardsVersion>
   </PropertyGroup>
 
 </Project>
