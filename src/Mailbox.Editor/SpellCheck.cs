@@ -3,10 +3,27 @@ using WeCantSpell.Hunspell;
 
 namespace Mailbox.Editor;
 
-/// <summary>One word the dictionary does not know, and where it is.</summary>
+/// <summary>
+/// The Proofing page's switches, as the reference names them. All on by default, which is what
+/// the checker did before it could be told otherwise.
+/// </summary>
+/// <param name="IgnoreUppercase">A run of capitals is an acronym or a product name, and no dictionary has them all.</param>
+/// <param name="IgnoreWithNumbers">Anything carrying a digit is a code, a version or a measurement.</param>
+/// <param name="IgnoreAddresses">A word touching an @, a slash, a colon is part of an address, a URL or a path.</param>
+/// <param name="FlagRepeatedWords">"the the" is reported, as a word said twice.</param>
+public sealed record SpellCheckOptions(
+    bool IgnoreUppercase = true,
+    bool IgnoreWithNumbers = true,
+    bool IgnoreAddresses = true,
+    bool FlagRepeatedWords = true)
+{
+    public static SpellCheckOptions Default { get; } = new();
+}
+
+/// <summary>One word the dictionary does not know, and where it is — or a word said twice, when <see cref="IsRepeated"/>.</summary>
 /// <param name="Word">The word as written.</param>
 /// <param name="Offset">Where it starts in the text that was checked.</param>
-public sealed record Misspelling(string Word, int Offset);
+public sealed record Misspelling(string Word, int Offset, bool IsRepeated = false);
 
 /// <summary>
 /// Spelling, against the dictionaries this machine already has.
@@ -100,11 +117,17 @@ public sealed class SpellCheck
         }
     }
 
+    /// <summary>The Proofing switches this checker applies. Set by the host from its settings.</summary>
+    public SpellCheckOptions Options { get; set; } = SpellCheckOptions.Default;
+
+    /// <summary>The words the reader has taught it, for Custom Dictionaries to list.</summary>
+    public IReadOnlyCollection<string> PersonalWords => _personal.OrderBy(w => w, StringComparer.CurrentCultureIgnoreCase).ToList();
+
     /// <summary>Whether a word is spelled correctly, or is not a word worth checking.</summary>
     public bool IsCorrect(string word)
     {
         if (_words is null) return true;
-        if (!WorthChecking(word)) return true;
+        if (!WorthChecking(word, Options)) return true;
 
         return _personal.Contains(word) || _words.Check(word);
     }
@@ -122,6 +145,8 @@ public sealed class SpellCheck
 
         var found = new List<Misspelling>();
         var offset = 0;
+        string? previous = null;
+        var previousEnd = -1;
 
         while (offset < text.Length)
         {
@@ -132,9 +157,10 @@ public sealed class SpellCheck
             var start = offset;
 
             // An apostrophe inside a word is part of it — "don't" is one word, and splitting it
-            // reports "t" as a misspelling of nothing.
+            // reports "t" as a misspelling of nothing. So is a digit: "R2D2" and "3rd" are one
+            // word each, for the numbers switch to decide about, not two letters and a number.
             while (offset < text.Length
-                   && (char.IsLetter(text[offset])
+                   && (char.IsLetterOrDigit(text[offset])
                        || ((text[offset] is '\'' or '’') && offset + 1 < text.Length
                            && char.IsLetter(text[offset + 1]))))
             {
@@ -145,13 +171,47 @@ public sealed class SpellCheck
 
             // A word touching a break-free run of punctuation is probably an address or a URL:
             // look at what precedes and follows before deciding it is prose.
-            if (!IsPartOfSomethingElse(text, start, offset) && !IsCorrect(word))
+            var partOfSomethingElse = Options.IgnoreAddresses && IsPartOfSomethingElse(text, start, offset);
+            if (!partOfSomethingElse && !IsCorrect(word))
             {
                 found.Add(new Misspelling(word, start));
             }
+
+            // The same word twice in a row, with nothing but space between: "the the". Only
+            // real words — a repeated acronym or number is a list, not a slip.
+            if (Options.FlagRepeatedWords
+                && previous is not null
+                && string.Equals(previous, word, StringComparison.OrdinalIgnoreCase)
+                && text[previousEnd..start].All(char.IsWhiteSpace)
+                && WorthChecking(word, SpellCheckOptions.Default)
+                && !partOfSomethingElse)
+            {
+                found.Add(new Misspelling(word, start, IsRepeated: true));
+            }
+
+            previous = word;
+            previousEnd = offset;
         }
 
         return found;
+    }
+
+    /// <summary>Forgets a word the reader taught it, and rewrites the personal list without it.</summary>
+    public bool Remove(string word)
+    {
+        if (string.IsNullOrWhiteSpace(word) || !_personal.Remove(word.Trim())) return false;
+        if (_personalPath is null) return true;
+
+        try
+        {
+            File.WriteAllLines(_personalPath, _personal.OrderBy(w => w, StringComparer.Ordinal), Encoding.UTF8);
+        }
+        catch (Exception)
+        {
+            // Forgotten for this session even if the list cannot be rewritten.
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -320,15 +380,15 @@ public sealed class SpellCheck
     /// <summary>
     /// Whether a token is prose rather than something that merely looks like a word.
     /// </summary>
-    private static bool WorthChecking(string word)
+    private static bool WorthChecking(string word, SpellCheckOptions options)
     {
         if (word.Length < 2) return false;
 
         // A run of capitals is an acronym or a product name, and no dictionary has them all.
-        if (word.All(c => !char.IsLetter(c) || char.IsUpper(c))) return false;
+        if (options.IgnoreUppercase && word.All(c => !char.IsLetter(c) || char.IsUpper(c))) return false;
 
         // Anything carrying a digit is a code, a version or a measurement.
-        return !word.Any(char.IsDigit);
+        return !options.IgnoreWithNumbers || !word.Any(char.IsDigit);
     }
 
     /// <summary>

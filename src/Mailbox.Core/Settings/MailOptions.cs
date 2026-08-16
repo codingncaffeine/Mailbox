@@ -93,6 +93,18 @@ public sealed class MailOptions(SettingsStore settings)
 
     public bool CheckSpellingBeforeSend => _settings.GetBool(CheckSpellingBeforeSendKey, false);
 
+    // Editor Options › Proofing: the switches the checker applies. All on by default, as the
+    // reference ships them and as the checker behaved before it could be told otherwise.
+    public const string IgnoreUppercaseKey = "mail.spelling.ignoreuppercase";
+    public const string IgnoreNumbersKey = "mail.spelling.ignorenumbers";
+    public const string IgnoreAddressesKey = "mail.spelling.ignoreaddresses";
+    public const string FlagRepeatedKey = "mail.spelling.flagrepeated";
+
+    public bool SpellingIgnoresUppercase => _settings.GetBool(IgnoreUppercaseKey, true);
+    public bool SpellingIgnoresNumbers => _settings.GetBool(IgnoreNumbersKey, true);
+    public bool SpellingIgnoresAddresses => _settings.GetBool(IgnoreAddressesKey, true);
+    public bool SpellingFlagsRepeated => _settings.GetBool(FlagRepeatedKey, true);
+
     /// <summary>How often a message being written is saved to Drafts. Zero is never.</summary>
     public int AutosaveMinutes => Math.Clamp((int)_settings.GetNumber(AutosaveMinutesKey, 3), 0, 99);
 

@@ -347,6 +347,11 @@ public sealed class OptionsWindow : Window
                 _ = new StationeryDialog(App.Signatures, App.Stationery, App.Accounts.All, App.Accounts.Default?.Account.Address, tab: 0).ShowDialog(this);
                 break;
 
+            case "Editor Options...":
+            case "Spelling and Autocorrect...":
+                _ = new EditorOptionsDialog(App.MailOptions, App.Settings).ShowDialog(this);
+                break;
+
             case "Stationery and Fonts...":
                 _ = new StationeryDialog(App.Signatures, App.Stationery, App.Accounts.All, App.Accounts.Default?.Account.Address, tab: 1).ShowDialog(this);
                 break;

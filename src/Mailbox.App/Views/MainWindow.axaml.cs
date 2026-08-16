@@ -605,6 +605,14 @@ public partial class MainWindow : Window
                 };
                 break;
 
+            case "editoroptions":
+                Opened += async (_, _) =>
+                {
+                    CaptureNextWindow();
+                    await new EditorOptionsDialog(App.MailOptions, App.Settings).ShowDialog(this);
+                };
+                break;
+
             case "newfolder":
             case "folderprops":
             case "folderarchive":
