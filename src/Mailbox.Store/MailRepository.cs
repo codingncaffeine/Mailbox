@@ -1363,6 +1363,12 @@ public sealed class MailRepository(MailStore store)
             if (sent.After is { } a) where.Add($"m.sent_utc >= {P(a.ToUnixTimeSeconds())}");
             if (sent.Before is { } b) where.Add($"m.sent_utc < {P(b.ToUnixTimeSeconds())}");
         }
+        if (query.Due is { } due)
+        {
+            where.Add("m.follow_up_due IS NOT NULL");
+            if (due.After is { } a) where.Add($"m.follow_up_due >= {P(a.ToUnixTimeSeconds())}");
+            if (due.Before is { } b) where.Add($"m.follow_up_due < {P(b.ToUnixTimeSeconds())}");
+        }
 
         var clause = where.Count == 0 ? string.Empty : " AND " + string.Join(" AND ", where);
         var order = match.Count > 0 ? "ORDER BY bm25(messages_fts), m.received_utc DESC" : "ORDER BY m.received_utc DESC";
@@ -1829,6 +1835,45 @@ public sealed class MailRepository(MailStore store)
 
         if (_store.ScalarLong("SELECT count(*) FROM rules WHERE server_side = 1") > 0) MarkSieveStale();
     }
+
+    // ---- Views ---------------------------------------------------------------------------------
+    //
+    // A folder's current view is a JSON document on its row; the views a reader saves by name
+    // are rows of their own. The documents are Core's MailView; the store keeps them whole.
+
+    /// <summary>The folder's current view document, or null for the shipped default untouched.</summary>
+    public string? FolderView(long folderId) => _store.Query(
+        "SELECT view_json FROM folders WHERE id = $id", r => r.IsDBNull(0) ? null : r.GetString(0), ("$id", folderId)).FirstOrDefault();
+
+    /// <summary>Sets a folder's current view; null puts it back to the default.</summary>
+    public void SetFolderView(long folderId, string? json) => _store.Execute(
+        "UPDATE folders SET view_json = $json WHERE id = $id", ("$json", json), ("$id", folderId));
+
+    /// <summary>Every saved view, by name.</summary>
+    public IReadOnlyList<SavedView> Views() => _store.Query(
+        "SELECT id, name, definition FROM views ORDER BY name COLLATE NOCASE",
+        r => new SavedView(r.GetInt64(0), r.GetString(1), r.GetString(2)));
+
+    public SavedView? ViewNamed(string name) => _store.Query(
+        "SELECT id, name, definition FROM views WHERE name = $name COLLATE NOCASE",
+        r => new SavedView(r.GetInt64(0), r.GetString(1), r.GetString(2)), ("$name", name)).FirstOrDefault();
+
+    /// <summary>Saves a view under a name, replacing one of that name.</summary>
+    public SavedView SaveView(string name, string definition, DateTimeOffset now)
+    {
+        _store.Execute(
+            """
+            INSERT INTO views (name, definition, created_utc) VALUES ($name, $definition, $now)
+            ON CONFLICT(name) DO UPDATE SET definition = excluded.definition
+            """,
+            ("$name", name), ("$definition", definition), ("$now", now.ToUnixTimeSeconds()));
+        return ViewNamed(name)!;
+    }
+
+    public void RenameView(long id, string name) => _store.Execute(
+        "UPDATE views SET name = $name WHERE id = $id", ("$name", name), ("$id", id));
+
+    public void DeleteView(long id) => _store.Execute("DELETE FROM views WHERE id = $id", ("$id", id));
 
     // ---- Server-side rules (Sieve) ---------------------------------------------------------------
     //

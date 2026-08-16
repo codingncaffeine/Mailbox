@@ -30,6 +30,7 @@
     <Grid RowDefinitions="Auto,Auto,*,Auto" ColumnDefinitions="Auto,*">
         <Grid.Resources>
             <theming:TokenBrushConverter x:Key="TokenBrush" />
+            <theming:InkTokenConverter x:Key="InkBrush" />
         </Grid.Resources>
 
         <!--
@@ -448,8 +449,10 @@
 
             <GridSplitter Grid.Column="2" ResizeDirection="Columns" />
 
-            <!-- Message list -->
+            <!-- Message list. Its width is the token's while the reading pane is beside it, and
+                 the rest of the window when the pane is off — see FitListPane. -->
             <Border Grid.Column="3"
+                    Name="ListPane"
                     Width="{DynamicResource list.width.value}"
                     Background="{DynamicResource list.background.brush}">
                 <DockPanel>
@@ -537,36 +540,18 @@
                         </Grid>
                     </Border>
 
-                    <!-- Column headers. the reference application shows these even in the two-line compact
-                         view; the first four are icon-only glyph columns. -->
+                    <!-- Column headers, from the current view's columns. The reference shows them
+                         over the line layout — Single, Preview, and Compact in a wide list — and
+                         hides them over the compact card; the first four are icon-only glyph
+                         columns. Its left margin matches the row's unread bar and padding, so a
+                         header sits over the cell it names. -->
                     <Border DockPanel.Dock="Top"
                             Background="{DynamicResource list.header.background.brush}"
                             BorderThickness="0,1,0,1"
-                            BorderBrush="{DynamicResource border.subtle.brush}">
-                        <ItemsControl ItemsSource="{Binding Columns}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <StackPanel Orientation="Horizontal" />
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="vm:MessageColumn">
-                                    <Button Classes="flat"
-                                            Width="{Binding Width}"
-                                            Padding="4,3"
-                                            HorizontalContentAlignment="Left"
-                                            BorderThickness="0,0,1,0"
-                                            BorderBrush="{DynamicResource border.subtle.brush}"
-                                            Command="{Binding Sort}"
-                                            ToolTip.Tip="{Binding SortTip}">
-                                        <TextBlock Text="{Binding Title}"
-                                                   Classes="small"
-                                                   Foreground="{DynamicResource list.header.text.brush}"
-                                                   TextTrimming="CharacterEllipsis" />
-                                    </Button>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                            BorderBrush="{DynamicResource border.subtle.brush}"
+                            IsVisible="{Binding ShowColumnHeaders}"
+                            Padding="10,0,8,0">
+                        <views:ViewHeaderStrip Columns="{Binding Columns}" />
                     </Border>
 
                     <!--
@@ -684,7 +669,9 @@
                             </DataTemplate>
                             </views:RowTemplateSelector.Conversation>
 
-                            <!-- A message. -->
+                            <views:RowTemplateSelector.Message>
+                            <!-- A message in the line layout: the view's columns as cells, the
+                                 preview beneath when the view has one. -->
                             <DataTemplate x:DataType="vm:MessageRow">
                                 <Grid ColumnDefinitions="4,*"
                                       Classes="row"
@@ -694,62 +681,20 @@
                                                Fill="{DynamicResource list.row.unread.bar.brush}"
                                                IsVisible="{Binding IsUnread}" />
 
-                                    <!-- Two lines, laid out in the header columns: From,
-                                         Subject and Received on top, preview beneath. -->
                                     <Grid Grid.Column="1"
                                           Margin="{Binding Indent}"
-                                          RowDefinitions="Auto,Auto"
-                                          ColumnDefinitions="150,*,Auto,Auto,100">
-                                        <TextBlock Grid.Row="0" Grid.Column="0"
-                                                   Text="{Binding From}"
-                                                   Classes.unread="{Binding IsUnread}"
-                                                   FontWeight="{Binding SenderWeight}"
-                                                   TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Grid.Row="0" Grid.Column="1"
-                                                   Text="{Binding Subject}"
-                                                   Classes.unread="{Binding IsUnread}"
-                                                   FontWeight="{Binding SubjectWeight}"
-                                                   TextTrimming="CharacterEllipsis" />
-                                        <!-- Category strip: one swatch per category, before
-                                             the flag, as the reference lays them out. -->
-                                        <ItemsControl Grid.Row="0" Grid.Column="2"
-                                                      ItemsSource="{Binding CategoryTokens}"
-                                                      IsVisible="{Binding HasCategories}"
-                                                      Margin="0,0,6,0"
-                                                      VerticalAlignment="Center">
-                                            <ItemsControl.ItemsPanel>
-                                                <ItemsPanelTemplate>
-                                                    <StackPanel Orientation="Horizontal" Spacing="2" />
-                                                </ItemsPanelTemplate>
-                                            </ItemsControl.ItemsPanel>
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate x:DataType="x:String">
-                                                    <Border Width="10" Height="10"
-                                                            CornerRadius="2"
-                                                            Background="{Binding
-                                                                Converter={StaticResource TokenBrush}}" />
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-
-                                        <TextBlock Grid.Row="0" Grid.Column="3"
-                                                   Text="{Binding FlagGlyph}"
-                                                   Margin="0,0,6,0"
-                                                   Foreground="{DynamicResource status.danger.brush}" />
-                                        <TextBlock Grid.Row="0" Grid.Column="4"
-                                                   Name="RowDate"
-                                                   Text="{Binding ReceivedLabel}"
-                                                   Classes.unread="{Binding IsUnread}"
-                                                   Classes="small"
-                                                   HorizontalAlignment="Right"
-                                                   TextTrimming="CharacterEllipsis" />
+                                          RowDefinitions="Auto,Auto">
+                                        <!-- The cells, from the view's columns, matching the
+                                             header strip cell for cell. -->
+                                        <views:MessageCells Grid.Row="0"
+                                                            Columns="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).ViewColumns}" />
                                         <!--
-                                            Hover actions. They occupy the received column's
-                                            space rather than their own, so the row does not
-                                            reflow under the pointer — the reference swaps the
+                                            Hover actions. They sit over the row's right end
+                                            rather than in a column of their own, so the row does
+                                            not reflow under the pointer — the reference swaps the
                                             date for them rather than making room.
                                         -->
-                                        <StackPanel Grid.Row="0" Grid.Column="4"
+                                        <StackPanel Grid.Row="0"
                                                     Name="RowActions"
                                                     Orientation="Horizontal"
                                                     Spacing="2"
@@ -777,14 +722,16 @@
                                                     ToolTip.Tip="Mark read or unread" />
                                         </StackPanel>
 
-                                        <TextBlock Grid.Row="1" Grid.Column="0"
-                                                   Grid.ColumnSpan="4"
+                                        <TextBlock Grid.Row="1"
                                                    Text="{Binding Preview}"
                                                    Classes="small secondary"
                                                    TextTrimming="CharacterEllipsis"
-                                                   MaxLines="1" />
+                                                   TextWrapping="Wrap"
+                                                   Margin="0,0,110,0"
+                                                   IsVisible="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).ShowPreviewLine}"
+                                                   MaxLines="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).PreviewLines}" />
                                         <!-- Which folder a cross-folder search found this in. -->
-                                        <TextBlock Grid.Row="1" Grid.Column="4"
+                                        <TextBlock Grid.Row="1"
                                                    Text="{Binding FolderLabel}"
                                                    IsVisible="{Binding HasFolderLabel}"
                                                    Classes="small secondary"
@@ -793,6 +740,168 @@
                                     </Grid>
                                 </Grid>
                             </DataTemplate>
+                            </views:RowTemplateSelector.Message>
+
+                            <views:RowTemplateSelector.Card>
+                            <!-- A message as the compact card: sender and date, subject with its
+                                 categories and flag, the preview beneath — the reference's Compact
+                                 view in a list narrower than its threshold. -->
+                            <DataTemplate x:DataType="vm:MessageRow">
+                                <Grid ColumnDefinitions="4,*"
+                                      Classes="row"
+                                      Height="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).RowHeight}">
+                                    <Rectangle Grid.Column="0"
+                                               Fill="{DynamicResource list.row.unread.bar.brush}"
+                                               IsVisible="{Binding IsUnread}" />
+                                    <Grid Grid.Column="1"
+                                          Margin="{Binding Indent}"
+                                          RowDefinitions="Auto,Auto,*"
+                                          ColumnDefinitions="*,Auto">
+                                        <TextBlock Grid.Row="0" Grid.Column="0"
+                                                   Text="{Binding From}"
+                                                   Classes.unread="{Binding ShowAsUnread}"
+                                                   FontWeight="{Binding SenderWeight}"
+                                                   FontStyle="{Binding FormatStyle}"
+                                                   Foreground="{Binding InkToken, Converter={StaticResource InkBrush}}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Grid.Row="0" Grid.Column="1"
+                                                   Name="RowDate"
+                                                   Text="{Binding ReceivedLabel}"
+                                                   Classes.unread="{Binding ShowAsUnread}"
+                                                   Classes="small"
+                                                   Margin="6,0,0,0"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <StackPanel Grid.Row="0" Grid.Column="1"
+                                                    Name="RowActions"
+                                                    Orientation="Horizontal"
+                                                    Spacing="2"
+                                                    HorizontalAlignment="Right"
+                                                    IsVisible="False">
+                                            <Button Classes="flat rowaction"
+                                                    Tag="archive"
+                                                    Content="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).ArchiveGlyph}"
+                                                    FontFamily="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).IconFamily}"
+                                                    ToolTip.Tip="Archive" />
+                                            <Button Classes="flat rowaction"
+                                                    Tag="delete"
+                                                    Content="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).DeleteGlyph}"
+                                                    FontFamily="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).IconFamily}"
+                                                    ToolTip.Tip="Delete" />
+                                            <Button Classes="flat rowaction"
+                                                    Tag="flag"
+                                                    Content="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).FlagActionGlyph}"
+                                                    FontFamily="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).IconFamily}"
+                                                    ToolTip.Tip="Flag" />
+                                            <Button Classes="flat rowaction"
+                                                    Tag="read"
+                                                    Content="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).UnreadGlyph}"
+                                                    FontFamily="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).IconFamily}"
+                                                    ToolTip.Tip="Mark read or unread" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Row="1" Grid.Column="0"
+                                                   Text="{Binding Subject}"
+                                                   Classes.unread="{Binding ShowAsUnread}"
+                                                   FontWeight="{Binding SubjectWeight}"
+                                                   FontStyle="{Binding FormatStyle}"
+                                                   Foreground="{Binding InkToken, Converter={StaticResource InkBrush}}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <StackPanel Grid.Row="1" Grid.Column="1"
+                                                    Orientation="Horizontal"
+                                                    Spacing="4"
+                                                    Margin="6,0,0,0"
+                                                    VerticalAlignment="Center">
+                                            <ItemsControl ItemsSource="{Binding CategoryTokens}"
+                                                          IsVisible="{Binding HasCategories}"
+                                                          VerticalAlignment="Center">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <StackPanel Orientation="Horizontal" Spacing="2" />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="x:String">
+                                                        <Border Width="10" Height="10"
+                                                                CornerRadius="2"
+                                                                Background="{Binding
+                                                                    Converter={StaticResource TokenBrush}}" />
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                            <TextBlock Text="{Binding FlagGlyph}"
+                                                       Foreground="{DynamicResource status.danger.brush}" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Row="2" Grid.ColumnSpan="2"
+                                                   Text="{Binding Preview}"
+                                                   Classes="small secondary"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   TextWrapping="Wrap"
+                                                   IsVisible="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).ShowCardPreview}"
+                                                   MaxLines="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).PreviewLines}" />
+                                    </Grid>
+                                </Grid>
+                            </DataTemplate>
+                            </views:RowTemplateSelector.Card>
+
+                            <views:RowTemplateSelector.ConversationCard>
+                            <!-- A folded conversation as a card: the newest message's sender and
+                                 date, its subject with the count, the preview beneath. -->
+                            <DataTemplate x:DataType="vm:ConversationRow">
+                                <Grid ColumnDefinitions="4,*"
+                                      Classes="row"
+                                      Height="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).RowHeight}">
+                                    <Rectangle Grid.Column="0"
+                                               Fill="{DynamicResource list.row.unread.bar.brush}"
+                                               IsVisible="{Binding IsUnread}" />
+                                    <Grid Grid.Column="1"
+                                          Margin="6,3,8,3"
+                                          RowDefinitions="Auto,Auto,*"
+                                          ColumnDefinitions="Auto,*,Auto">
+                                        <TextBlock Grid.Row="0" Grid.Column="0"
+                                                   Text="{Binding Glyph}"
+                                                   Margin="0,0,4,0"
+                                                   Foreground="{DynamicResource text.secondary.brush}" />
+                                        <TextBlock Grid.Row="0" Grid.Column="1"
+                                                   Text="{Binding From}"
+                                                   Classes.unread="{Binding IsUnread}"
+                                                   FontWeight="{Binding SenderWeight}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Grid.Row="0" Grid.Column="2"
+                                                   Text="{Binding ReceivedLabel}"
+                                                   Classes.unread="{Binding IsUnread}"
+                                                   Classes="small"
+                                                   Margin="6,0,0,0"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Grid.Row="1" Grid.Column="1"
+                                                   Text="{Binding Subject}"
+                                                   Classes.unread="{Binding IsUnread}"
+                                                   FontWeight="{Binding SubjectWeight}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <StackPanel Grid.Row="1" Grid.Column="2"
+                                                    Orientation="Horizontal"
+                                                    Spacing="6"
+                                                    Margin="6,0,0,0"
+                                                    VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding SplitGlyph}"
+                                                       ToolTip.Tip="This conversation is filed in more than one folder"
+                                                       Foreground="{DynamicResource text.secondary.brush}" />
+                                            <Border Padding="5,0"
+                                                    CornerRadius="8"
+                                                    VerticalAlignment="Center"
+                                                    Background="{DynamicResource state.selected.brush}">
+                                                <TextBlock Text="{Binding CountLabel}" Classes="small" />
+                                            </Border>
+                                        </StackPanel>
+                                        <TextBlock Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2"
+                                                   Text="{Binding Preview}"
+                                                   Classes="small secondary"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   TextWrapping="Wrap"
+                                                   IsVisible="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).ShowCardPreview}"
+                                                   MaxLines="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).PreviewLines}" />
+                                    </Grid>
+                                </Grid>
+                            </DataTemplate>
+                            </views:RowTemplateSelector.ConversationCard>
                           </views:RowTemplateSelector>
                         </ListBox.ItemTemplate>
                     </ListBox>

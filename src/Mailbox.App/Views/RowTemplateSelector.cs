@@ -24,12 +24,20 @@ public sealed class RowTemplateSelector : IDataTemplate
 
     public IDataTemplate? Conversation { get; set; }
 
+    /// <summary>The compact card, for a row the shell has marked <see cref="MessageRow.IsCard"/>.</summary>
+    public IDataTemplate? Card { get; set; }
+
+    /// <summary>The compact card for a folded conversation.</summary>
+    public IDataTemplate? ConversationCard { get; set; }
+
     public bool Match(object? data) => data is MessageRow or GroupHeaderRow or ConversationRow;
 
     public Control? Build(object? data) => data switch
     {
         GroupHeaderRow => Header?.Build(data),
+        ConversationRow { IsCard: true } when ConversationCard is not null => ConversationCard.Build(data),
         ConversationRow => Conversation?.Build(data),
+        MessageRow { IsCard: true } when Card is not null => Card.Build(data),
         MessageRow => Message?.Build(data),
         _ => null,
     };

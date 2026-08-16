@@ -329,6 +329,15 @@
         <Setter Property="IsVisible" Value="True" />
     </Style>
 
+    <!-- The actions sit over the row's right end; they take the row's own ground so what is
+         under them does not show through, selected or not. -->
+    <Style Selector="StackPanel#RowActions">
+        <Setter Property="Background" Value="{DynamicResource list.row.background.brush}" />
+    </Style>
+    <Style Selector="ListBoxItem:selected StackPanel#RowActions">
+        <Setter Property="Background" Value="{DynamicResource list.row.selected.brush}" />
+    </Style>
+
     <Style Selector="ListBoxItem:pointerover TextBlock#RowDate">
         <Setter Property="IsVisible" Value="False" />
     </Style>
