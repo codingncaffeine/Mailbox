@@ -90,9 +90,10 @@ public static class RibbonMetrics
 
     /// <summary>
     /// Height of the group label strip at the bottom of the body. The label is top-aligned in
-    /// it, which puts its baseline on the body's 93rd row as measured — 7 rows above the bottom.
+    /// it, which puts its baseline on the body's 93rd row as measured — 7 rows above the bottom
+    /// — in Selawik, whose 12px line box sits its baseline 10 rows down.
     /// </summary>
-    public const double GroupLabelHeight = 18;
+    public const double GroupLabelHeight = 17;
 
     /// <summary>Vertical space available to items, above the group label.</summary>
     public const double ItemAreaHeight = BodyHeight - GroupLabelHeight;
