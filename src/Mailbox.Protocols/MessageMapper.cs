@@ -51,7 +51,21 @@ public static class MessageMapper
             },
             To = [.. message.To.Mailboxes.Select(m => m.Address.Trim().ToLowerInvariant()).Where(a => a.Length > 0)],
             Cc = [.. message.Cc.Mailboxes.Select(m => m.Address.Trim().ToLowerInvariant()).Where(a => a.Length > 0)],
+            Expires = Expiry(message),
         };
+    }
+
+    /// <summary>The message's own expiry — an Expires or Expiry-Date header that parses — or null.</summary>
+    private static DateTimeOffset? Expiry(MimeMessage message)
+    {
+        foreach (var name in (string[])["Expires", "Expiry-Date"])
+        {
+            var value = message.Headers[name];
+            if (string.IsNullOrWhiteSpace(value)) continue;
+            if (MimeKit.Utils.DateUtils.TryParse(value, out var when)) return when;
+        }
+
+        return null;
     }
 
     /// <summary>

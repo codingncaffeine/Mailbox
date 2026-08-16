@@ -177,6 +177,9 @@ public sealed record MessageSummary(
 
     /// <summary>The Cc addresses, lower-cased.</summary>
     public IReadOnlyList<string> Cc { get; init; } = [];
+
+    /// <summary>When the message says it expires (its Expires header), or null — what AutoArchive's "delete expired items" reads.</summary>
+    public DateTimeOffset? Expires { get; init; }
 }
 
 /// <summary>

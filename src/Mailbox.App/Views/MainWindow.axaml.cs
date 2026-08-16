@@ -161,6 +161,27 @@ public partial class MainWindow : Window
             }, DispatcherPriority.Background);
         }
 
+        // AutoArchive's turn, once the window is up and the shell has its accounts. Posted at
+        // background priority so the first paint is not behind a prompt.
+        Opened += (_, _) => Dispatcher.UIThread.Post(() =>
+        {
+            if (DataContext is ShellViewModel s) _ = AutoArchiveIfDueAsync(s);
+        }, DispatcherPriority.Background);
+
+        // Runs AutoArchive now, without the prompt: MAILBOX_AUTOARCHIVE=run — for reading the
+        // store back after.
+        if (Environment.GetEnvironmentVariable("MAILBOX_AUTOARCHIVE") == "run")
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(() =>
+            {
+                if (DataContext is not ShellViewModel s) return;
+                var outcome = Archiver.RunAll(App.Accounts.All, App.AutoArchive, DateTimeOffset.Now);
+                s.Refresh();
+                s.StatusRight = "AutoArchive: " + outcome.Summary;
+                Log.Info($"Harness: AutoArchive — {outcome.Summary}");
+            }, DispatcherPriority.Background);
+        }
+
         // Runs the reminder check now, as the minute timer would: MAILBOX_REMINDERS=check.
         if (Environment.GetEnvironmentVariable("MAILBOX_REMINDERS") == "check")
         {
@@ -452,6 +473,23 @@ public partial class MainWindow : Window
                     if (DataContext is not ShellViewModel s || s.SelectedMessage is not { } row) return;
                     CaptureNextWindow();
                     await new CustomFlagDialog(s.SummaryOf(row), reminderOn: true).ShowDialog(this);
+                };
+                break;
+
+            case "autoarchive":
+                Opened += async (_, _) =>
+                {
+                    CaptureNextWindow();
+                    await new AutoArchiveSettingsDialog(App.AutoArchive).ShowDialog(this);
+                };
+                break;
+
+            case "archive":
+                Opened += async (_, _) =>
+                {
+                    if (DataContext is not ShellViewModel s) return;
+                    CaptureNextWindow();
+                    await new ArchiveDialog(App.Accounts.All, App.AutoArchive, s.ViewAccount, s.ViewFolderId).ShowDialog(this);
                 };
                 break;
 
@@ -3411,6 +3449,39 @@ public partial class MainWindow : Window
         }
 
         e.Handled = true;
+    }
+
+    /// <summary>Runs a query across every mailbox — what Mailbox Cleanup's Find buttons hand over.</summary>
+    public void SearchEverywhere(string query)
+    {
+        if (DataContext is not ShellViewModel shell) return;
+        shell.Scope = ShellViewModel.SearchScope.AllMailboxes;
+        shell.SearchText = query;
+    }
+
+    /// <summary>
+    /// AutoArchive's turn, at start: when it is due — the interval has passed since the last
+    /// run — it asks first when the settings say to, then runs off the UI thread and says what
+    /// it did. Never in a capture run.
+    /// </summary>
+    private async Task AutoArchiveIfDueAsync(ShellViewModel shell)
+    {
+        if (WindowCapture.IsRequested) return;
+        var options = App.AutoArchive;
+        if (!options.Enabled || !Mailbox.Core.Archive.AutoArchive.IsDue(options.LastRun, options.EveryDays, DateTimeOffset.Now)) return;
+        if (App.Accounts.All.Count == 0) return;
+
+        if (options.Prompt)
+        {
+            var go = await Confirm.AskAsync(this, "AutoArchive",
+                "Would you like to AutoArchive your old items now?", "Yes", destructive: false);
+            if (!go) return;
+        }
+
+        var outcome = await Task.Run(() => Archiver.RunAll(App.Accounts.All, options, DateTimeOffset.Now));
+        options.LastRun = DateTimeOffset.Now;
+        shell.Refresh();
+        shell.StatusRight = "AutoArchive: " + outcome.Summary;
     }
 
     /// <summary>The list pane's width: the token's beside the reading pane, the rest of the window without it.</summary>

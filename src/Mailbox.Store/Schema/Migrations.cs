@@ -574,6 +574,17 @@ public static class Migrations
             created_utc   INTEGER NOT NULL
         );
         """,
+
+        // ---- 25: AutoArchive ------------------------------------------------------------------
+        //
+        // A message's own expiry — its Expires header, when it has one — so AutoArchive's
+        // "delete expired items" has something to go on; and a folder's own AutoArchive choice
+        // (Core's FolderArchivePolicy as JSON: off, the default settings, or its own), null for a
+        // folder that follows the default.
+        """
+        ALTER TABLE messages ADD COLUMN expires_utc INTEGER;
+        ALTER TABLE folders ADD COLUMN autoarchive_json TEXT;
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>

@@ -347,6 +347,10 @@ public sealed class OptionsWindow : Window
                 _ = SignatureEditor.EditAsync(
                     this, App.Accounts.Default?.Account.Address, _ => { });
                 break;
+
+            case "AutoArchive Settings...":
+                _ = new AutoArchiveSettingsDialog(App.AutoArchive).ShowDialog(this);
+                break;
         }
     }
 

@@ -58,9 +58,29 @@ internal static class BackstageActions
                 break;
 
             case "tools.cleanup":
-                await new MailboxCleanupDialog().ShowDialog(host.Owner);
+            {
+                var dialog = new MailboxCleanupDialog();
+                await dialog.ShowDialog(host.Owner);
+                if (dialog.SearchRequested is { } query && host.Owner is MainWindow window)
+                {
+                    host.Close();
+                    window.SearchEverywhere(query);
+                }
+
+                if (dialog.Report is { } said) host.Report(said);
                 host.Refresh();
                 break;
+            }
+
+            case "tools.archive":
+            {
+                var shell = host.Owner.DataContext as ViewModels.ShellViewModel;
+                var dialog = new ArchiveDialog(App.Accounts.All, App.AutoArchive, shell?.ViewAccount, shell?.ViewFolderId);
+                await dialog.ShowDialog(host.Owner);
+                if (dialog.Outcome is { } outcome) host.Report("Archive: " + outcome.Summary);
+                host.Refresh();
+                break;
+            }
 
             case "tools.recover":
                 await new RecoverDeletedItemsDialog().ShowDialog(host.Owner);
