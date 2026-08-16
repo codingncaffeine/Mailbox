@@ -266,4 +266,69 @@ public class ThemeFileTests
         while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Mailbox.slnx"))) dir = dir.Parent;
         return dir?.FullName ?? throw new InvalidOperationException("The repository root was not found above the test binary.");
     }
+
+    // ---- Accent derivation ---------------------------------------------------------------
+
+    [Theory]
+    [InlineData("#0F6CBD")]
+    [InlineData("#FFFFFF")]
+    [InlineData("#000000")]
+    [InlineData("#C00000")]
+    [InlineData("#00B050")]
+    public void OklchRoundTripsWithinAChannelStep(string hex)
+    {
+        var colour = Oklch.Parse(hex)!.Value;
+        var back = Oklch.Parse(colour.ToHex())!.Value;
+        Assert.Equal(colour.L, back.L, 3);
+        Assert.Equal(colour.C, back.C, 3);
+    }
+
+    [Fact]
+    public void DerivedShadesLandNearTheBuiltInsOwn()
+    {
+        // Colorful's brand ramp is the reference for the steps; the derivation should reproduce
+        // it within a few channel steps, and keep the hue.
+        var derived = AccentDerivation.From("#0F6CBD", darkTheme: false)!.Value;
+        static int Distance(string a, string b)
+        {
+            var (ra, ga, ba) = Oklch.Parse(a)!.Value.ToRgb();
+            var (rb, gb, bb) = Oklch.Parse(b)!.Value.ToRgb();
+            return Math.Abs(ra - rb) + Math.Abs(ga - gb) + Math.Abs(ba - bb);
+        }
+
+        Assert.True(Distance(derived.Dark, "#0C5595") < 40, $"dark derived as {derived.Dark}");
+        Assert.True(Distance(derived.Darker, "#0A4A82") < 40, $"darker derived as {derived.Darker}");
+        Assert.True(Distance(derived.Light, "#EFF6FC") < 40, $"light derived as {derived.Light}");
+        // The hue survives the round trip through sRGB within a couple of degrees.
+        Assert.InRange(Math.Abs(Oklch.Parse("#0F6CBD")!.Value.H - Oklch.Parse(derived.Dark)!.Value.H), 0, 3);
+    }
+
+    [Fact]
+    public void AFileThatSetsOnlyThePrimaryGetsAWholeAccent()
+    {
+        var library = new ThemeLibrary([FileTheme("crimson", "colorful", ("palette.brand.primary", "#C00000"))]);
+        var tokens = library.Build("crimson").Resolve();
+
+        Assert.Equal("#C00000", tokens.GetString("accent.rest"));
+        // Hover and pressed are darker reds now, not the base's blues; the tint is a pale red.
+        var hover = Oklch.Parse(tokens.GetString("accent.hover"))!.Value;
+        var pressed = Oklch.Parse(tokens.GetString("accent.pressed"))!.Value;
+        var subtle = Oklch.Parse(tokens.GetString("accent.subtle"))!.Value;
+        var primary = Oklch.Parse("#C00000")!.Value;
+        Assert.True(hover.L < primary.L && pressed.L < hover.L, "hover and pressed darken in turn");
+        Assert.True(subtle.L > 0.9, "the tint is pale");
+        Assert.InRange(Math.Abs(hover.H - primary.H), 0, 3);
+        Assert.NotEqual(OfficeThemes.Build(OfficeThemes.Colorful).Resolve().GetString("accent.hover"), tokens.GetString("accent.hover"));
+    }
+
+    [Fact]
+    public void AFileThatSetsTheShadesItselfIsLeftAlone()
+    {
+        var library = new ThemeLibrary([FileTheme("exact", "colorful",
+            ("palette.brand.primary", "#C00000"), ("palette.brand.dark", "#111111"))]);
+        var tokens = library.Build("exact").Resolve();
+        Assert.Equal("#111111", tokens.GetString("accent.hover"));
+        // The one it did not set is derived; the one it did is respected.
+        Assert.NotEqual(OfficeThemes.Build(OfficeThemes.Colorful).Resolve().GetString("accent.pressed"), tokens.GetString("accent.pressed"));
+    }
 }
