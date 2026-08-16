@@ -77,6 +77,7 @@
                 </Button>
 
                 <StackPanel Grid.Column="1"
+                            Name="QuickAccessTitleGroup"
                             Orientation="Horizontal"
                             VerticalAlignment="Center"
                             IsVisible="{Binding IsQuickAccessAbove}">
@@ -135,6 +136,7 @@
                     absolute and does not drift as the Quick Access Toolbar gains buttons.
                 -->
                 <Border Grid.Column="0" Grid.ColumnSpan="6"
+                        Name="TitleSearchHost"
                         IsVisible="{Binding ShowHeaderSearch}"
                         HorizontalAlignment="Left"
                         VerticalAlignment="Center"
@@ -372,10 +374,12 @@
                 CornerRadius="8,8,0,0"
                 ClipToBounds="True"
                 Background="{DynamicResource list.background.brush}">
-        <Grid Name="PaneGrid" ColumnDefinitions="Auto,Auto,1,Auto,1,*,Auto">
+        <!-- Three rows for the reading pane's Bottom placement: the list above, a splitter,
+             the pane below; on the Right the lower two rows hold nothing and are no height. -->
+        <Grid Name="PaneGrid" ColumnDefinitions="Auto,Auto,1,Auto,1,*,Auto" RowDefinitions="*,Auto,Auto">
 
             <!-- Navigation pane -->
-            <Border Grid.Column="1"
+            <Border Grid.Column="1" Grid.RowSpan="3"
                     IsVisible="{Binding NavVisible}"
                     Width="{DynamicResource nav.width.value}"
                     Background="{DynamicResource nav.background.brush}">
@@ -448,7 +452,7 @@
                 </DockPanel>
             </Border>
 
-            <GridSplitter Grid.Column="2" ResizeDirection="Columns" />
+            <GridSplitter Grid.Column="2" Grid.RowSpan="3" ResizeDirection="Columns" />
 
             <!-- Message list. Its width is the token's while the reading pane is beside it, and
                  the rest of the window when the pane is off — see FitListPane. -->
@@ -910,22 +914,27 @@
                 </DockPanel>
             </Border>
 
-            <GridSplitter Grid.Column="2" ResizeDirection="Columns" />
-
-            <!-- Message list -->
-
+            <!-- The reading pane's splitters: beside the list on the Right, under it at the
+                 Bottom. FitListPane shows the one the placement wants. -->
             <GridSplitter Grid.Column="4"
+                          Name="ReadingSplitter"
                           IsVisible="{Binding ReadingPaneVisible}"
                           ResizeDirection="Columns" />
+            <GridSplitter Grid.Row="1" Grid.Column="3" Grid.ColumnSpan="3"
+                          Name="ReadingSplitterBottom"
+                          Height="1"
+                          IsVisible="False"
+                          ResizeDirection="Rows" />
 
             <!-- Docked calendar. Takes the reading pane's right edge, exactly as the reference's
                  To-Do Bar calendar does, and carries a close button to undock. -->
-            <ContentControl Grid.Column="6"
+            <ContentControl Grid.Column="6" Grid.RowSpan="3"
                             Name="DockHost"
                             IsVisible="{Binding IsCalendarDocked}" />
 
             <!-- Reading pane -->
             <Border Grid.Column="5"
+                    Name="ReadingPane"
                     IsVisible="{Binding ReadingPaneVisible}"
                     Background="{DynamicResource reading.background.brush}">
               <Grid>

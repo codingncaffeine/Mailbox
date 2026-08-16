@@ -27,6 +27,7 @@ public static class OptionsPages
         public const string FirstDayOfWeek = "calendar.firstdayofweek";
         public const string ShowWeekNumbers = "calendar.showweeknumbers";
         public const string ShowReadingPane = "panes.showreadingpane";
+        public const string ReadingPaneAtBottom = "panes.readingpane.bottom";
     }
 
     private static IReadOnlyList<OptionsPage>? _all;

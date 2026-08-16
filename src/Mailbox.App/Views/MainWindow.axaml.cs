@@ -90,6 +90,7 @@ public partial class MainWindow : Window
         };
 
         WireQuickAccess(shell);
+        WireSearchBoxToListEdge();
         WireRail(shell);
         WireWindowMenu();
         WireToolbarCommands(shell);
@@ -2062,6 +2063,7 @@ public partial class MainWindow : Window
                 case "group-collapsed": shell.ToggleGroupCollapsed("Today"); break;
                 case "nav-collapsed": shell.ToggleNav.Execute(null); break;
                 case "no-reading": shell.HideReadingPane.Execute(null); break;
+                case "reading-bottom": shell.ReadingPaneAtBottom = true; shell.ReadingPaneVisible = true; break;
                 case "zoom-in": shell.ZoomIn.Execute(null); break;
                 case "zoom-out": shell.ZoomOut.Execute(null); break;
                 case "attachments": shell.Filter = ShellViewModel.ListFilter.HasAttachments; break;
@@ -2227,8 +2229,13 @@ public partial class MainWindow : Window
         Entry(folder, "Minimized", () => shell.NavCollapsed = true, shell.NavCollapsed);
 
         var reading = Sub("Reading Pane");
-        Entry(reading, "Right", () => shell.ReadingPaneVisible = true, shell.ReadingPaneVisible);
+        Entry(reading, "Right", () => { shell.ReadingPaneAtBottom = false; shell.ReadingPaneVisible = true; }, shell.ReadingPaneVisible && !shell.ReadingPaneAtBottom);
+        Entry(reading, "Bottom", () => { shell.ReadingPaneAtBottom = true; shell.ReadingPaneVisible = true; }, shell.ReadingPaneVisible && shell.ReadingPaneAtBottom);
         Entry(reading, "Off", () => shell.ReadingPaneVisible = false, !shell.ReadingPaneVisible);
+        reading.Items.Add(new Separator());
+        var options = new MenuItem { Header = "Options…" };
+        options.Click += async (_, _) => await new ReadingPaneOptionsDialog(App.MailOptions).ShowDialog(this);
+        reading.Items.Add(options);
 
         var todo = Sub("To-Do Bar");
         Entry(todo, "Calendar", () => { if (!shell.IsCalendarDocked) TogglePeek(); }, shell.IsCalendarDocked);
@@ -2414,6 +2421,38 @@ public partial class MainWindow : Window
     /// Puts the floating ribbon away when the click lands outside it and outside the tab strip
     /// that raised it. Tunnelled, so it runs before whatever was clicked handles the press.
     /// </summary>
+    /// <summary>
+    /// The title bar's search box lines up with the start of the message list — the app rail
+    /// plus the folder pane, as wide as the pane is right now. Its offset token is the default
+    /// widths' sum; dragging the splitter, or collapsing the pane, used to leave the box where
+    /// it was while the list moved, and the reference's box follows the list.
+    /// </summary>
+    private void WireSearchBoxToListEdge()
+    {
+        if (this.FindControl<Border>("TitleSearchHost") is not { } search
+            || this.FindControl<Border>("ListPane") is not { } list) return;
+
+        // Never over the Quick Access Toolbar, though: with the folder pane collapsed to the
+        // rail the list starts at the rail's edge, and the box stops short of the toolbar's
+        // last button instead of covering it.
+        var toolbar = this.FindControl<Control>("QuickAccessTitleGroup");
+
+        void Follow()
+        {
+            if (list.TranslatePoint(default, this) is not { } origin) return;
+            var left = Math.Round(origin.X);
+            if (toolbar is { IsVisible: true } && toolbar.TranslatePoint(new Point(toolbar.Bounds.Width, 0), this) is { } end)
+            {
+                left = Math.Max(left, Math.Round(end.X) + 12);
+            }
+
+            if (left <= 0 || Math.Abs(search.Margin.Left - left) < 0.5) return;
+            search.Margin = new Thickness(left, search.Margin.Top, search.Margin.Right, search.Margin.Bottom);
+        }
+
+        list.LayoutUpdated += (_, _) => Follow();
+    }
+
     /// <summary>
     /// Ctrl+E and F3: the cursor goes to whichever search box the layout is showing — the title
     /// bar's, or the one over the list in the Modern layout — with what is typed there selected,
@@ -3876,12 +3915,24 @@ public partial class MainWindow : Window
     }
 
     /// <summary>The list pane's width: the token's beside the reading pane, the rest of the window without it.</summary>
+    /// <summary>The height the reading pane opens at under the list; the splitter above it changes it from there.</summary>
+    private const double ReadingPaneBottomHeight = 320;
+
+    /// <summary>
+    /// Lays the list and the reading pane out for the pane's placement: beside the list at the
+    /// token's list width (Right), under a full-width list (Bottom), or the list alone (Off).
+    /// </summary>
     private void FitListPane(ShellViewModel shell)
     {
         if (this.FindControl<Grid>("PaneGrid") is not { } grid || this.FindControl<Border>("ListPane") is not { } pane) return;
-        if (grid.ColumnDefinitions.Count < 4) return;
+        if (grid.ColumnDefinitions.Count < 6 || grid.RowDefinitions.Count < 3) return;
+        var reading = this.FindControl<Border>("ReadingPane");
+        var beside = this.FindControl<GridSplitter>("ReadingSplitter");
+        var under = this.FindControl<GridSplitter>("ReadingSplitterBottom");
 
-        if (shell.ReadingPaneVisible)
+        var bottom = shell.ReadingPaneVisible && shell.ReadingPaneAtBottom;
+
+        if (shell.ReadingPaneVisible && !bottom)
         {
             grid.ColumnDefinitions[3].Width = GridLength.Auto;
             grid.ColumnDefinitions[5].Width = new GridLength(1, GridUnitType.Star);
@@ -3893,6 +3944,20 @@ public partial class MainWindow : Window
             grid.ColumnDefinitions[3].Width = new GridLength(1, GridUnitType.Star);
             grid.ColumnDefinitions[5].Width = GridLength.Auto;
         }
+
+        // Where the pane and its splitter go: column 5 of the first row beside the list, or the
+        // third row across the list's columns under it, with the row given its opening height.
+        Grid.SetColumnSpan(pane, bottom ? 3 : 1);
+        if (reading is not null)
+        {
+            Grid.SetRow(reading, bottom ? 2 : 0);
+            Grid.SetColumn(reading, bottom ? 3 : 5);
+            Grid.SetColumnSpan(reading, bottom ? 3 : 1);
+        }
+
+        grid.RowDefinitions[2].Height = bottom ? new GridLength(ReadingPaneBottomHeight) : GridLength.Auto;
+        if (beside is not null) beside.IsVisible = shell.ReadingPaneVisible && !bottom;
+        if (under is not null) under.IsVisible = bottom;
     }
 
     /// <summary>
@@ -3916,7 +3981,7 @@ public partial class MainWindow : Window
         FitListPane(shell);
         shell.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(ShellViewModel.ReadingPaneVisible)) FitListPane(shell);
+            if (e.PropertyName is nameof(ShellViewModel.ReadingPaneVisible) or nameof(ShellViewModel.ReadingPaneAtBottom)) FitListPane(shell);
         };
 
         // The action buttons. Found by walking up from what was clicked, because the button
