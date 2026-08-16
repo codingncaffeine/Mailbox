@@ -22,6 +22,7 @@
     <ProjectReference Include="..\..\src\Mailbox.Security\Mailbox.Security.csproj" />
     <ProjectReference Include="..\..\src\Mailbox.Editor\Mailbox.Editor.csproj" />
     <ProjectReference Include="..\..\src\Mailbox.Controls.Ribbon\Mailbox.Controls.Ribbon.csproj" />
+    <ProjectReference Include="..\..\src\Mailbox.Scheduling\Mailbox.Scheduling.csproj" />
   </ItemGroup>
 
 </Project>
