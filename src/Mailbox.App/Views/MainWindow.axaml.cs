@@ -174,7 +174,7 @@ public partial class MainWindow : Window
         }
 
         // A folder operation over the posed folder, for reading the store back:
-        // MAILBOX_FOLDER_OP=new:<name> | rename:<name> | delete | markread | empty |
+        // MAILBOX_FOLDER_OP=new:<name> | rename:<name> | delete | markread | empty | favourite |
         // move:<folder name part, or "top"> | copy:<folder name part, or "top"> — the destination
         // being another folder of the same account.
         if (Environment.GetEnvironmentVariable("MAILBOX_FOLDER_OP") is { Length: > 0 } op)
@@ -193,6 +193,10 @@ public partial class MainWindow : Window
                     case "delete": await manager.DeleteAsync(ConnectionFor(where.Account), where.Folder); break;
                     case "markread": s.MarkFolderRead(where.Account, where.Folder.Id); break;
                     case "empty": s.EmptyFolder(where.Account, where.Folder.Id); break;
+                    case "favourite":
+                        s.ToggleFavourite(where.Account, where.Folder);
+                        Log.Info($"Harness: “{where.Folder.Name}” is {(s.IsFavourite(where.Account, where.Folder) ? "now" : "no longer")} a favourite: {App.Settings.GetString(Mailbox.Core.Folders.Favourites.Key)}");
+                        break;
                     case "move":
                     case "copy":
                     {
@@ -1579,6 +1583,13 @@ public partial class MainWindow : Window
         }
 
         flyout.Items.Add(new Separator());
+        Entry(shell.IsFavourite(account, folder) ? "Remove from Favourites" : "Show in Favourites", () =>
+        {
+            shell.ToggleFavourite(account, folder);
+            return Task.CompletedTask;
+        });
+
+        flyout.Items.Add(new Separator());
         Entry("Properties…", () => FolderPropertiesAsync(shell, account, folder));
     }
 
@@ -1614,7 +1625,12 @@ public partial class MainWindow : Window
 
         try
         {
+            var all = account.Mail.Folders(account.Account.Id);
+            var oldPath = ShellViewModel.FolderPath(all, folder);
             await Task.Run(() => new FolderManager(account.Mail).RenameAsync(ConnectionFor(account), folder, name.Trim()));
+            // A favourite keeps its place under its new name.
+            var renamed = account.Mail.GetFolder(folder.Id);
+            if (renamed is not null) App.Favourites.Repath(account.Account.Address, oldPath, ShellViewModel.FolderPath(account.Mail.Folders(account.Account.Id), renamed));
             shell.SelectFolder(account, folder.Id);
             shell.StatusRight = $"Folder renamed to “{name.Trim()}”.";
         }
@@ -1673,7 +1689,13 @@ public partial class MainWindow : Window
 
         try
         {
+            var oldPath = ShellViewModel.FolderPath(account.Mail.Folders(account.Account.Id), folder);
             var moved = await Task.Run(() => new FolderManager(account.Mail).MoveAsync(ConnectionFor(account), folder, chosen.Folder?.Id));
+            if (moved && account.Mail.GetFolder(folder.Id) is { } now)
+            {
+                App.Favourites.Repath(account.Account.Address, oldPath, ShellViewModel.FolderPath(account.Mail.Folders(account.Account.Id), now));
+            }
+
             shell.Refresh();
             if (moved) shell.SelectFolder(account, folder.Id);
             shell.StatusRight = moved

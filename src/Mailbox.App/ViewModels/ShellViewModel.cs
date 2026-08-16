@@ -45,6 +45,12 @@ public enum FolderNodeKind
 
     /// <summary>One search folder — a saved query, listed under the heading.</summary>
     SearchFolder,
+
+    /// <summary>The "Favourites" heading at the top of the pane.</summary>
+    FavouritesHeading,
+
+    /// <summary>A folder listed under Favourites — the same folder as its row in the tree below.</summary>
+    Favourite,
 }
 
 public sealed class FolderNode(string name, int depth, int unread, bool bold = false, FolderNodeKind kind = FolderNodeKind.Folder)
@@ -684,6 +690,35 @@ public sealed partial class ShellViewModel : ObservableObject
         var own = accounts.Select(a => a.Account.Address).ToList();
         var now = DateTimeOffset.UtcNow;
 
+        // Favourites first, as the reference lists them: a heading, then each favourite folder
+        // by name with its unread count — a second row for a folder that is also in its
+        // account's tree below. Seeded once, on a fresh profile, with the default account's
+        // Inbox, Sent Items and Deleted Items.
+        var favourites = App.Favourites;
+        if (!favourites.IsSeeded && (_accounts.Default ?? accounts[0]) is { } primary)
+        {
+            var seed = new[] { FolderRole.Inbox, FolderRole.Sent, FolderRole.Deleted }
+                .Select(role => primary.Mail.FolderWithRole(primary.Account.Id, role))
+                .Where(f => f is not null)
+                .Select(f => FolderPath(primary.Mail.Folders(primary.Account.Id), f!))
+                .ToList();
+            favourites.SeedIfFresh(primary.Account.Address, seed);
+        }
+
+        Folders.Add(new FolderNode("Favourites", 0, 0, bold: true, kind: FolderNodeKind.FavouritesHeading));
+        foreach (var favourite in favourites.All)
+        {
+            var account = accounts.FirstOrDefault(a => string.Equals(a.Account.Address, favourite.Address, StringComparison.OrdinalIgnoreCase));
+            if (account is null) continue;
+            var all = account.Mail.Folders(account.Account.Id);
+            var folder = all.FirstOrDefault(f => FolderPath(all, f) == favourite.Path);
+            if (folder is null) continue;
+
+            var node = new FolderNode(folder.Name, 1, folder.Unread, kind: FolderNodeKind.Favourite);
+            _folderIds[node] = (account, folder.Id, folder.Role);
+            Folders.Add(node);
+        }
+
         foreach (var account in accounts)
         {
             Folders.Add(new FolderNode(account.Account.Address, 0, 0, bold: true));
@@ -992,11 +1027,48 @@ public sealed partial class ShellViewModel : ObservableObject
     {
         if (_accounts is null) return;
 
-        var selected = SelectedFolder;
+        var previous = Remember(SelectedFolder);
         LoadFromStore();
-        SelectedFolder = selected is null
+        SelectedFolder = previous is null
             ? Folders.FirstOrDefault(f => _folderIds.ContainsKey(f))
-            : Folders.FirstOrDefault(f => f.Name == selected.Name) ?? SelectedFolder;
+            : SameNodeAs(previous.Value) ?? SelectedFolder;
+    }
+
+    /// <summary>
+    /// What a node stood for, remembered across a rebuild that throws every node away: which
+    /// folder of which account, or which search folder, and whether it was the row under
+    /// Favourites or the one in the tree — plus its name, for a heading that stands for nothing.
+    /// </summary>
+    private (string? Address, long? FolderId, long? SearchId, FolderNodeKind Kind, string Name)? Remember(FolderNode? node)
+    {
+        if (node is null) return null;
+        var where = _folderIds.TryGetValue(node, out var f) ? f : default;
+        var search = _searchFolderIds.TryGetValue(node, out var s) ? s.Folder.Id : (long?)null;
+        return (where.Account?.Account.Address, where.Account is null ? null : where.FolderId, search, node.Kind, node.Name);
+    }
+
+    /// <summary>
+    /// The node in the rebuilt pane that stands for what a remembered one did. By identity, not
+    /// by name: two accounts each have an Inbox, and a favourite folder is listed twice — the
+    /// same folder is looked for first with the same kind, then any kind, and a heading by name.
+    /// </summary>
+    private FolderNode? SameNodeAs((string? Address, long? FolderId, long? SearchId, FolderNodeKind Kind, string Name) previous)
+    {
+        if (previous.FolderId is { } folderId && previous.Address is { } address)
+        {
+            var candidates = _folderIds
+                .Where(kv => kv.Value.FolderId == folderId && string.Equals(kv.Value.Account.Account.Address, address, StringComparison.OrdinalIgnoreCase))
+                .Select(kv => kv.Key)
+                .ToList();
+            return candidates.FirstOrDefault(n => n.Kind == previous.Kind) ?? candidates.FirstOrDefault();
+        }
+
+        if (previous.SearchId is { } searchId)
+        {
+            return _searchFolderIds.FirstOrDefault(kv => kv.Value.Folder.Id == searchId).Key;
+        }
+
+        return Folders.FirstOrDefault(f => f.Kind == previous.Kind && f.Name == previous.Name);
     }
 
     /// <summary>The reference application puts search above the message list, not in the title bar.</summary>
@@ -1217,11 +1289,46 @@ public sealed partial class ShellViewModel : ObservableObject
             ? (where.Account, folder)
             : null;
 
-    /// <summary>Selects the node standing for a store folder, after the pane has been rebuilt.</summary>
+    /// <summary>
+    /// Selects the node standing for a store folder, after the pane has been rebuilt — the row
+    /// in the account's tree rather than the one under Favourites, when the folder has both.
+    /// </summary>
     public void SelectFolder(OpenAccount account, long folderId)
     {
         Refresh();
-        SelectedFolder = _folderIds.FirstOrDefault(kv => kv.Value.FolderId == folderId && kv.Value.Account.Account.Address == account.Account.Address).Key ?? SelectedFolder;
+        var candidates = _folderIds
+            .Where(kv => kv.Value.FolderId == folderId && kv.Value.Account.Account.Address == account.Account.Address)
+            .Select(kv => kv.Key)
+            .ToList();
+        SelectedFolder = candidates.FirstOrDefault(n => n.Kind != FolderNodeKind.Favourite) ?? candidates.FirstOrDefault() ?? SelectedFolder;
+    }
+
+    /// <summary>A folder's names from the top of its account, joined by "/" — how Favourites name it.</summary>
+    public static string FolderPath(IReadOnlyList<Folder> all, Folder folder)
+    {
+        var names = new List<string> { folder.Name };
+        var parent = folder.ParentId;
+        var guard = 0;
+        while (parent is { } id && all.FirstOrDefault(f => f.Id == id) is { } up && guard++ < 64)
+        {
+            names.Insert(0, up.Name);
+            parent = up.ParentId;
+        }
+
+        return string.Join('/', names);
+    }
+
+    /// <summary>Whether a folder is listed under Favourites.</summary>
+    public bool IsFavourite(OpenAccount account, Folder folder)
+        => App.Favourites.Contains(account.Account.Address, FolderPath(account.Mail.Folders(account.Account.Id), folder));
+
+    /// <summary>Show in Favourites / Remove from Favourites.</summary>
+    public void ToggleFavourite(OpenAccount account, Folder folder)
+    {
+        var path = FolderPath(account.Mail.Folders(account.Account.Id), folder);
+        if (App.Favourites.Contains(account.Account.Address, path)) App.Favourites.Remove(account.Account.Address, path);
+        else App.Favourites.Add(account.Account.Address, path);
+        SelectFolder(account, folder.Id);
     }
 
     /// <summary>Mark All as Read: every message of a folder, at once.</summary>
@@ -2506,13 +2613,13 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>Re-reads the folder pane's unread counts after something changed.</summary>
     private void RefreshCounts()
     {
-        var selected = SelectedFolder?.Name;
+        var previous = Remember(SelectedFolder);
         if (_accounts is null || !LoadFromStore(selectFirst: false)) { Rebuild(); return; }
 
         // The pane was rebuilt with fresh counts; the same folder stays selected in it — by
         // the field, not the setter, so the list is not reloaded from the store and whatever is
         // selected in it stays selected. Callers keep Messages themselves.
-        if (selected is not null && Folders.FirstOrDefault(f => f.Name == selected) is { } node && !ReferenceEquals(node, _selectedFolder))
+        if (previous is { } was && SameNodeAs(was) is { } node && !ReferenceEquals(node, _selectedFolder))
         {
             _selectedFolder = node;
             Raise(nameof(SelectedFolder));
