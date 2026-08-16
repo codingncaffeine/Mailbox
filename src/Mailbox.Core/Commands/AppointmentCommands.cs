@@ -198,7 +198,11 @@ public static class AppointmentCommands
         InDefaultLayout = false,
     };
 
+    /// <summary>Every command this class declares, stamped as the appointment window's.</summary>
     public static IEnumerable<MailboxCommand> All =>
+        Declared.Select(c => c with { Surface = CommandSurface.Appointment });
+
+    private static IEnumerable<MailboxCommand> Declared =>
     [
         SaveAndClose, Send, Delete, CopyToMyCalendar, Forward,
         InviteAttendees, ResponseOptions, ShowAs, Reminder, MakeRecurring,

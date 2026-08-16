@@ -325,6 +325,12 @@ public sealed class ComposeSurface : UserControl
     /// content or an inline strip — the compose window used to override the Window's OnKeyDown,
     /// which an embedded control has no equivalent of.
     /// </summary>
+    /// <remarks>
+    /// Those three first, because two of them answer to a setting and the third closes rather
+    /// than commands. Everything else goes through the key map, asked for this window's own
+    /// commands — Ctrl+B, Ctrl+K, F7 — so a shortcut rebound in Customize Keyboard is rebound
+    /// here too, and a plain keystroke stays the reader typing.
+    /// </remarks>
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
@@ -349,7 +355,10 @@ public sealed class ComposeSurface : UserControl
                 break;
 
             default:
-                return;
+                if (Keystroke.Of(e) is not { } chord || Keystroke.IsTyping(chord)) return;
+                if (App.Keys.CommandFor(chord, CommandSurface.Compose) is not { } id) return;
+                Invoke(id);
+                break;
         }
 
         e.Handled = true;

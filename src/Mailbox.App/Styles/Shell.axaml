@@ -48,6 +48,53 @@
         <Setter Property="Background" Value="{DynamicResource state.pressed.brush}" />
     </Style>
 
+    <!--
+        Every button on the ribbon, in every window that has one. The reference lights the button
+        under the pointer with a rounded fill and no line round it; a line appears only on a split
+        button, whose two halves have to be told apart, and on a button whose menu is open.
+
+        These rules exist because the buttons no longer set their own Background in code: a local
+        value beats every style setter, which is why the bar had no hover state at all.
+    -->
+    <Style Selector="Button.ribbonbutton">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+
+    <Style Selector="Button.ribbonbutton:pointerover">
+        <Setter Property="Background" Value="{DynamicResource ribbon.button.hover.brush}" />
+    </Style>
+
+    <Style Selector="Button.ribbonbutton:pressed">
+        <Setter Property="Background" Value="{DynamicResource ribbon.button.open.brush}" />
+    </Style>
+
+    <Style Selector="Button.ribbonbutton:disabled">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+
+    <!--
+        A split button's two halves: one box round both, a divider between them, and only the half
+        under the pointer filled. The container carries the line; each half carries its own fill.
+    -->
+    <Style Selector="Border.ribbonsplit">
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="4" />
+    </Style>
+
+    <Style Selector="Border.ribbonsplit.hovered">
+        <Setter Property="BorderBrush" Value="{DynamicResource ribbon.button.split.border.brush}" />
+    </Style>
+
+    <Style Selector="Border.ribbonsplitdivider">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+
+    <Style Selector="Border.ribbonsplitdivider.hovered">
+        <Setter Property="Background" Value="{DynamicResource ribbon.button.split.border.brush}" />
+    </Style>
+
     <Style Selector="Button:disabled">
         <Setter Property="Foreground" Value="{DynamicResource text.disabled.brush}" />
     </Style>
@@ -190,14 +237,23 @@
         <Setter Property="Background" Value="{DynamicResource state.hover.brush}" />
     </Style>
 
+    <!--
+        A screentip is the desktop's, not the theme's. The reference draws it as a light box in
+        every theme — measured #F0F0F0 on Dark Gray, where nothing else in the window is — for the
+        same reason Account Settings is light everywhere: it is an OS tooltip, and the OS does not
+        know which Office theme is on. So it takes the systemdialog palette rather than the
+        content one.
+    -->
     <Style Selector="ToolTip">
-        <Setter Property="Background" Value="{DynamicResource surface.overlay.brush}" />
-        <Setter Property="Foreground" Value="{DynamicResource text.primary.brush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource border.strong.brush}" />
+        <Setter Property="Background" Value="{DynamicResource systemdialog.background.brush}" />
+        <Setter Property="Foreground" Value="{DynamicResource systemdialog.foreground.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource systemdialog.tooltip.border.brush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="0" />
         <Setter Property="Padding" Value="8,6" />
         <Setter Property="MaxWidth" Value="280" />
+        <Setter Property="FontFamily" Value="{DynamicResource ui.fontfamily}" />
+        <Setter Property="FontSize" Value="{DynamicResource type.ui.size.value}" />
     </Style>
 
     <!-- =============================== Scrollbars ============================= -->

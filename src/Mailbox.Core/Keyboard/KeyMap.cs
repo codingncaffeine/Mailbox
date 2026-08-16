@@ -76,6 +76,14 @@ public sealed record Chord(ChordModifiers Modifiers, string Key)
         "down" => "Down",
         "left" => "Left",
         "right" => "Right",
+
+        // The punctuation keys as they are written down, so "Ctrl+." and "Alt+-" read back as
+        // the names the windowing layer gives them.
+        "?" => "OemQuestion",
+        "." => "OemPeriod",
+        "," => "OemComma",
+        "-" => "OemMinus",
+        "=" => "OemPlus",
         var digit when digit.Length == 1 && char.IsDigit(digit[0]) => "D" + digit,
         var letter when letter.Length == 1 && char.IsLetter(letter[0]) => letter.ToUpperInvariant(),
         var f when f.Length is 2 or 3 && f[0] == 'f' && int.TryParse(f[1..], out _) => f.ToUpperInvariant(),
@@ -90,6 +98,7 @@ public sealed record Chord(ChordModifiers Modifiers, string Key)
         "OemMinus" => "-",
         "OemComma" => ",",
         "OemPeriod" => ".",
+        "OemQuestion" => "?",
         _ => key,
     };
 }
@@ -138,19 +147,80 @@ public sealed class KeyMap
     /// only then the shipped "also" chords (<see cref="MailboxCommand.AlsoGestures"/>), so a chord
     /// the reader has given to some command is that command's whatever else shipped with it.
     /// </remarks>
-    public CommandId? CommandFor(Chord chord)
+    public CommandId? CommandFor(Chord chord) => CommandFor(chord, null);
+
+    /// <summary>
+    /// The command a chord runs with a module open — the open module's own before the ones every
+    /// module shares, and never another module's.
+    /// </summary>
+    /// <remarks>
+    /// One key means different things in different modules: Delete throws away a message in Mail
+    /// and an appointment in Calendar, Ctrl+N writes a message in one and books an appointment in
+    /// the other. Rather than a table of exceptions, each of those is an ordinary command scoped
+    /// to its module, and this picks between them: a command scoped to the open module first, then
+    /// one scoped to every module, and one belonging to a different module not at all — pressing
+    /// Ctrl+R in the calendar should do nothing, not reach for a message that is not there.
+    /// <para>
+    /// Passing null asks the question without a module, which is what the shortcut editor wants:
+    /// every chord in the catalogue, whichever module owns it.
+    /// </para>
+    /// </remarks>
+    public CommandId? CommandFor(Chord chord, MailboxModule? module)
     {
         ArgumentNullException.ThrowIfNull(chord);
-        foreach (var command in _catalog.All)
+        var scope = module?.AsScope() ?? ModuleScope.None;
+
+        // Asking with a module is the shell asking, and the shell cannot run the compose or
+        // appointment window's commands: Ctrl+U marks a message unread here whatever it does in
+        // an editor.
+        bool Here(MailboxCommand c) => scope == ModuleScope.None || c.Surface == CommandSurface.Shell;
+
+        // Two passes — own shortcuts, then the shipped "also" chords — each asked twice: the
+        // module's own commands, then the ones every module shares.
+        foreach (var also in (bool[])[false, true])
         {
-            if (GestureFor(command.Id) is { } gesture && gesture == chord) return command.Id;
+            if (Match(chord, also, c => Here(c) && scope != ModuleScope.None && c.Scope != ModuleScope.Any && c.Scope.HasFlag(scope)) is { } own) return own;
+            if (Match(chord, also, c => Here(c) && (scope == ModuleScope.None || c.Scope == ModuleScope.Any)) is { } shared) return shared;
         }
 
+        return null;
+    }
+
+    /// <summary>
+    /// The command a chord runs in a window of its own — a compose or an appointment window.
+    /// </summary>
+    /// <remarks>
+    /// Those windows have no module and no list; what they have is their own set of commands, and
+    /// their keys are the shell's to know nothing about. Asking this way is what lets Ctrl+U
+    /// underline in one window and mark a message unread in the other.
+    /// </remarks>
+    public CommandId? CommandFor(Chord chord, CommandSurface surface)
+    {
+        ArgumentNullException.ThrowIfNull(chord);
+
+        foreach (var also in (bool[])[false, true])
+        {
+            if (Match(chord, also, c => c.Surface == surface) is { } found) return found;
+        }
+
+        return null;
+    }
+
+    private CommandId? Match(Chord chord, bool also, Func<MailboxCommand, bool> wanted)
+    {
         foreach (var command in _catalog.All)
         {
-            foreach (var also in command.AlsoGestures)
+            if (!wanted(command)) continue;
+
+            if (!also)
             {
-                if (Chord.Parse(also) is { } gesture && gesture == chord) return command.Id;
+                if (GestureFor(command.Id) is { } gesture && gesture == chord) return command.Id;
+                continue;
+            }
+
+            foreach (var text in command.AlsoGestures)
+            {
+                if (Chord.Parse(text) is { } gesture && gesture == chord) return command.Id;
             }
         }
 
