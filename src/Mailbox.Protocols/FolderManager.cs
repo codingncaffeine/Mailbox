@@ -77,6 +77,84 @@ public sealed class FolderManager(MailRepository repository)
         _repository.RenameFolder(folder.Id, trimmed, null);
     }
 
+    /// <summary>
+    /// Puts a folder under another, or at the top when <paramref name="newParentId"/> is null,
+    /// keeping its name; the folders under it come along. On IMAP the server renames the tree
+    /// first. Returns false when the move is refused — into itself, or under one of its own.
+    /// </summary>
+    public async Task<bool> MoveAsync(AccountConnection? connection, Folder folder, long? newParentId, CancellationToken cancellation = default)
+    {
+        ArgumentNullException.ThrowIfNull(folder);
+        if (newParentId == folder.ParentId) return true;
+
+        for (var up = newParentId; up is { } id;)
+        {
+            if (id == folder.Id) return false;
+            up = _repository.GetFolder(id)?.ParentId;
+        }
+
+        var parent = newParentId is { } pid ? _repository.GetFolder(pid) : null;
+
+        if (connection is { Protocol: MailProtocol.Imap } && folder.ImapPath is { } path)
+        {
+            var session = SessionFactory?.Invoke() ?? new MailKitImapSession();
+            try
+            {
+                await session.ConnectAsync(connection.Incoming, cancellation);
+                await session.AuthenticateAsync(connection.Incoming, cancellation);
+                var moved = await session.MoveFolderAsync(path, parent?.ImapPath, cancellation);
+                var done = _repository.MoveFolder(folder.Id, parent?.Id, moved.Path);
+                Log.Info($"Folder \"{path}\" moved to \"{moved.Path}\" on {connection.Address}.");
+                return done;
+            }
+            finally
+            {
+                await Quietly(session, cancellation);
+            }
+        }
+
+        return _repository.MoveFolder(folder.Id, parent?.Id, null);
+    }
+
+    /// <summary>
+    /// Copies a folder — its mail and the folders under it — under another folder, or to the
+    /// top when <paramref name="newParentId"/> is null. A copy is a new folder with the same
+    /// name and new rows over the same bytes; on IMAP each new folder is created on the server
+    /// first and each copied message is journalled to be appended there.
+    /// </summary>
+    /// <returns>The copy of the folder itself.</returns>
+    public async Task<Folder> CopyAsync(AccountConnection? connection, long accountId, Folder folder, long? newParentId, CancellationToken cancellation = default)
+    {
+        ArgumentNullException.ThrowIfNull(folder);
+
+        // Copying a folder into itself would copy the copy; refuse the same way a move does.
+        for (var up = newParentId; up is { } id;)
+        {
+            if (id == folder.Id) throw new InvalidOperationException("A folder cannot be copied into itself.");
+            up = _repository.GetFolder(id)?.ParentId;
+        }
+
+        Folder? made = null;
+        var all = _repository.Folders(accountId);
+
+        async Task CopyTree(Folder source, long? intoParent)
+        {
+            var copy = await CreateAsync(connection, accountId, source.Name, intoParent, cancellation);
+            made ??= copy;
+
+            var ids = _repository.Messages(source.Id, int.MaxValue).Select(m => m.Id).ToList();
+            if (ids.Count > 0) _repository.CopyMessages(ids, copy.Id);
+
+            foreach (var child in all.Where(f => f.ParentId == source.Id).OrderBy(f => f.Ordinal).ThenBy(f => f.Id))
+            {
+                await CopyTree(child, copy.Id);
+            }
+        }
+
+        await CopyTree(folder, newParentId);
+        return made!;
+    }
+
     /// <summary>Deletes a folder, its subfolders and their mail. On IMAP the server deletes first.</summary>
     public async Task DeleteAsync(AccountConnection? connection, Folder folder, CancellationToken cancellation = default)
     {

@@ -122,6 +122,34 @@ internal sealed class FakeImap : IImapSession
         return Task.FromResult(new RemoteFolder(newPath, newName, parent, FolderRole.None, true, false));
     }
 
+    public Task<RemoteFolder> MoveFolderAsync(string path, string? newParentPath, CancellationToken c)
+    {
+        var slash = path.LastIndexOf('/');
+        var name = slash > 0 ? path[(slash + 1)..] : path;
+        var newPath = string.IsNullOrEmpty(newParentPath) ? name : newParentPath + "/" + name;
+
+        ServerFolder Moved(ServerFolder from, string to)
+        {
+            var moved = new ServerFolder(to, from.Role) { IsView = from.IsView, Selectable = from.Selectable, UidValidity = from.UidValidity, NextUid = from.NextUid };
+            moved.Messages.AddRange(from.Messages);
+            return moved;
+        }
+
+        var folder = _folders[path];
+        _folders.Remove(path);
+        _folders[newPath] = Moved(folder, newPath);
+
+        foreach (var child in _folders.Keys.Where(k => k.StartsWith(path + "/", StringComparison.Ordinal)).ToList())
+        {
+            var to = newPath + child[path.Length..];
+            var moved = Moved(_folders[child], to);
+            _folders.Remove(child);
+            _folders[to] = moved;
+        }
+
+        return Task.FromResult(new RemoteFolder(newPath, name, string.IsNullOrEmpty(newParentPath) ? null : newParentPath, FolderRole.None, true, false));
+    }
+
     public Task DeleteFolderAsync(string path, CancellationToken c)
     {
         _folders.Remove(path);

@@ -360,6 +360,19 @@ public static class MailCommands
         InDefaultLayout = false,
     };
 
+    /// <summary>Ctrl+Y in the reference's main window: the Go to Folder dialog over every account's tree.</summary>
+    public static readonly MailboxCommand GoToFolder = new()
+    {
+        Id = new("nav.folder"),
+        Label = "Go to Folder…",
+        Description = "Choose a folder to open, from any account.",
+        Icon = "folder",
+        Category = "Go To",
+        Scope = ModuleScope.Mail,
+        DefaultGesture = "Ctrl+Y",
+        InDefaultLayout = false,
+    };
+
     public static readonly MailboxCommand GoToInbox = new()
     {
         Id = new("nav.inbox"),
@@ -652,7 +665,7 @@ public static class MailCommands
         Ignore, CleanUp, Junk, Delete, Archive,
         BlockSender, NeverBlockSender, NeverBlockDomain, NeverBlockGroup, NotJunk, JunkOptions,
         CleanUpConversation, CleanUpFolder, CleanUpFolderAndSubfolders,
-        MarkAsRead, MarkAsUnread, PermanentDelete, GoToInbox, GoToOutbox,
+        MarkAsRead, MarkAsUnread, PermanentDelete, GoToFolder, GoToInbox, GoToOutbox,
         Reply, ReplyAll, Forward, Meeting, MoreRespond,
         MoveTo, Rules, QuickSteps,
         Unread, Categorize, FollowUp,

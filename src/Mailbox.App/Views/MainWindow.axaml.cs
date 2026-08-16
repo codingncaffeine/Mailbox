@@ -174,7 +174,9 @@ public partial class MainWindow : Window
         }
 
         // A folder operation over the posed folder, for reading the store back:
-        // MAILBOX_FOLDER_OP=new:<name> | rename:<name> | delete | markread | empty.
+        // MAILBOX_FOLDER_OP=new:<name> | rename:<name> | delete | markread | empty |
+        // move:<folder name part, or "top"> | copy:<folder name part, or "top"> — the destination
+        // being another folder of the same account.
         if (Environment.GetEnvironmentVariable("MAILBOX_FOLDER_OP") is { Length: > 0 } op)
         {
             Opened += (_, _) => Dispatcher.UIThread.Post(async () =>
@@ -191,6 +193,29 @@ public partial class MainWindow : Window
                     case "delete": await manager.DeleteAsync(ConnectionFor(where.Account), where.Folder); break;
                     case "markread": s.MarkFolderRead(where.Account, where.Folder.Id); break;
                     case "empty": s.EmptyFolder(where.Account, where.Folder.Id); break;
+                    case "move":
+                    case "copy":
+                    {
+                        long? destination = null;
+                        if (!string.Equals(arg, "top", StringComparison.OrdinalIgnoreCase))
+                        {
+                            destination = where.Account.Mail.Folders(where.Account.Account.Id)
+                                .FirstOrDefault(f => f.Id != where.Folder.Id && f.Name.Contains(arg, StringComparison.OrdinalIgnoreCase))?.Id;
+                            if (destination is null) { Log.Warn($"Harness: no folder named like '{arg}'."); break; }
+                        }
+
+                        if (verb == "move")
+                        {
+                            var moved = await manager.MoveAsync(ConnectionFor(where.Account), where.Folder, destination);
+                            Log.Info($"Harness: move {(moved ? "done" : "refused")}.");
+                        }
+                        else
+                        {
+                            var made = await manager.CopyAsync(ConnectionFor(where.Account), where.Account.Account.Id, where.Folder, destination);
+                            Log.Info($"Harness: copied as folder {made.Id} “{made.Name}” under {made.ParentId?.ToString() ?? "the top"}.");
+                        }
+                        break;
+                    }
                 }
 
                 s.Refresh();
@@ -533,18 +558,24 @@ public partial class MainWindow : Window
             case "newfolder":
             case "folderprops":
             case "folderarchive":
-                Opened += async (_, _) =>
+            case "gotofolder":
+            case "movefolder":
+                // After the folder pose, which is posted at normal priority: these dialogs are
+                // about the selected folder, and MAILBOX_FOLDER has to have had its say first.
+                CaptureNextWindow();
+                Opened += (_, _) => Dispatcher.UIThread.Post(async () =>
                 {
                     if (DataContext is not ShellViewModel s || s.SelectedFolder is not { } node || s.FolderOf(node) is not { } where) return;
-                    CaptureNextWindow();
                     Window dialog = Environment.GetEnvironmentVariable("MAILBOX_PEEK")?.ToLowerInvariant() switch
                     {
                         "newfolder" => new NewFolderDialog(where.Account, where.Folder.Id),
                         "folderarchive" => new FolderPropertiesDialog(where.Account, where.Folder, startTab: 1),
+                        "gotofolder" => FolderPicker("Go to Folder", null, (where.Account, where.Folder.Id), allowRoot: false),
+                        "movefolder" => FolderPicker("Move Folder", "Move the selected folder to the folder:", (where.Account, where.Folder.ParentId), allowRoot: true, exclude: (where.Account, where.Folder.Id)),
                         _ => new FolderPropertiesDialog(where.Account, where.Folder),
                     };
                     await dialog.ShowDialog(this);
-                };
+                }, DispatcherPriority.Background);
                 break;
 
             case "archive":
@@ -1526,6 +1557,8 @@ public partial class MainWindow : Window
         var ordinary = folder.Role == FolderRole.None;
         Entry("New Folder…", () => NewFolderAsync(shell, account, folder.Id));
         Entry("Rename Folder", () => RenameFolderAsync(shell, account, folder), ordinary);
+        Entry("Copy Folder…", () => CopyFolderAsync(shell, account, folder));
+        Entry("Move Folder…", () => MoveFolderAsync(shell, account, folder), ordinary);
         Entry("Delete Folder", () => DeleteFolderAsync(shell, account, folder), ordinary);
         flyout.Items.Add(new Separator());
         Entry("Mark All as Read", () =>
@@ -1589,6 +1622,96 @@ public partial class MainWindow : Window
         {
             Log.Warn($"Rename Folder failed: {ex.Message}");
             await Confirm.AskAsync(this, "Rename Folder", $"The folder could not be renamed: {ex.Message}", "OK", destructive: false);
+        }
+    }
+
+    /// <summary>The picker every folder dialog is, with New… making folders the way New Folder does — on the server first for IMAP.</summary>
+    private FolderPickerDialog FolderPicker(string title, string? prompt, (OpenAccount, long?)? preselect, bool allowRoot, (OpenAccount, long)? exclude = null)
+    {
+        var dialog = new FolderPickerDialog(title, prompt, App.Accounts.All, preselect, allowRoot, exclude)
+        {
+            MakeFolder = async (account, name, parent) =>
+            {
+                try
+                {
+                    return await Task.Run(() => new FolderManager(account.Mail).CreateAsync(ConnectionFor(account), account.Account.Id, name, parent));
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    Log.Warn($"New Folder failed: {ex.Message}");
+                    return null;
+                }
+            },
+        };
+        return dialog;
+    }
+
+    /// <summary>Ctrl+Y: choose a folder from any account and open it.</summary>
+    private async Task GoToFolderAsync(ShellViewModel shell)
+    {
+        var current = shell.SelectedFolder is { } node ? shell.FolderOf(node) : null;
+        var dialog = FolderPicker("Go to Folder", null, current is { } c ? (c.Account, c.Folder.Id) : null, allowRoot: false);
+        await dialog.ShowDialog(this);
+        if (dialog.Result is not { Folder: { } folder } chosen) return;
+
+        shell.SelectFolder(chosen.Account, folder.Id);
+    }
+
+    /// <summary>Move Folder…: under another folder of the same account, or to its top; the tree comes along.</summary>
+    private async Task MoveFolderAsync(ShellViewModel shell, OpenAccount account, Folder folder)
+    {
+        var dialog = FolderPicker("Move Folder", $"Move the selected folder to the folder:",
+            (account, folder.ParentId), allowRoot: true, exclude: (account, folder.Id));
+        await dialog.ShowDialog(this);
+        if (dialog.Result is not { } chosen) return;
+
+        if (!string.Equals(chosen.Account.Account.Address, account.Account.Address, StringComparison.OrdinalIgnoreCase))
+        {
+            await Confirm.AskAsync(this, "Move Folder", "A folder can be moved within its own account. To put its mail in another account, move the messages.", "OK", destructive: false);
+            return;
+        }
+
+        try
+        {
+            var moved = await Task.Run(() => new FolderManager(account.Mail).MoveAsync(ConnectionFor(account), folder, chosen.Folder?.Id));
+            shell.Refresh();
+            if (moved) shell.SelectFolder(account, folder.Id);
+            shell.StatusRight = moved
+                ? $"Folder “{folder.Name}” moved to {chosen.Folder?.Name ?? account.Account.Address}."
+                : $"“{folder.Name}” cannot be moved into itself.";
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            Log.Warn($"Move Folder failed: {ex.Message}");
+            await Confirm.AskAsync(this, "Move Folder", $"The folder could not be moved: {ex.Message}", "OK", destructive: false);
+        }
+    }
+
+    /// <summary>Copy Folder…: a new folder of the same name and contents, subfolders included, under the chosen one.</summary>
+    private async Task CopyFolderAsync(ShellViewModel shell, OpenAccount account, Folder folder)
+    {
+        var dialog = FolderPicker("Copy Folder", $"Copy the selected folder to the folder:",
+            (account, folder.ParentId), allowRoot: true, exclude: (account, folder.Id));
+        await dialog.ShowDialog(this);
+        if (dialog.Result is not { } chosen) return;
+
+        if (!string.Equals(chosen.Account.Account.Address, account.Account.Address, StringComparison.OrdinalIgnoreCase))
+        {
+            await Confirm.AskAsync(this, "Copy Folder", "A folder can be copied within its own account. To put its mail in another account, copy the messages.", "OK", destructive: false);
+            return;
+        }
+
+        try
+        {
+            var made = await Task.Run(() => new FolderManager(account.Mail).CopyAsync(ConnectionFor(account), account.Account.Id, folder, chosen.Folder?.Id));
+            shell.Refresh();
+            shell.SelectFolder(account, made.Id);
+            shell.StatusRight = $"Folder “{folder.Name}” copied to {chosen.Folder?.Name ?? account.Account.Address}.";
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            Log.Warn($"Copy Folder failed: {ex.Message}");
+            await Confirm.AskAsync(this, "Copy Folder", $"The folder could not be copied: {ex.Message}", "OK", destructive: false);
         }
     }
 
@@ -2314,6 +2437,7 @@ public partial class MainWindow : Window
         if (id == MailCommands.WorkOffline.Id) { ToggleWorkOffline(shell); return; }
         if (id == ViewCommands.Refresh.Id) { shell.Refresh(); return; }
         if (id == MailCommands.Search.Id) { FocusSearchBox(shell); return; }
+        if (id == MailCommands.GoToFolder.Id) { _ = GoToFolderAsync(shell); return; }
         if (id == MailCommands.GoToInbox.Id) { shell.GoTo(FolderRole.Inbox); return; }
         if (id == MailCommands.GoToOutbox.Id) { shell.GoTo(FolderRole.Outbox); return; }
         if (id == MailCommands.PermanentDelete.Id) { _ = ConfirmPermanentDeleteAsync(shell, SelectedRows()); return; }

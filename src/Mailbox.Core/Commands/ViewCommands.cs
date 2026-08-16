@@ -240,6 +240,8 @@ public static class ViewCommands
     };
 
     // ---- Shell -------------------------------------------------------------------------
+    // No shell chord: in the reference's main window Ctrl+Y is Go to Folder, and Redo's Ctrl+Y
+    // is the editor's own, inside a message.
     public static readonly MailboxCommand Redo = new()
     {
         Id = new("app.redo"),
@@ -247,7 +249,6 @@ public static class ViewCommands
         Description = "Repeat the action that was just undone.",
         Icon = "redo",
         Category = "Actions",
-        DefaultGesture = "Ctrl+Y",
     };
 
     public static readonly MailboxCommand Apps = new()

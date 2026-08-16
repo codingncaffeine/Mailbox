@@ -80,6 +80,155 @@ public sealed class NewFolderDialog : Window
 }
 
 /// <summary>
+/// One folder out of every account's tree — the reference's Go to Folder, Move Folder and Copy
+/// Folder dialogs are this list under three titles, with New… beside OK and Cancel.
+/// </summary>
+/// <remarks>
+/// A flat list indented by depth rather than a tree control, as Create New Folder's is, so the
+/// dialog surface paints it. An account's own row stands for its top level: allowed as a place
+/// to move or copy a folder to, and never as a place to go.
+/// </remarks>
+public sealed class FolderPickerDialog : Window
+{
+    /// <summary>What was chosen when OK was pressed: the account, and the folder or null for its top level.</summary>
+    public (OpenAccount Account, Folder? Folder)? Result { get; private set; }
+
+    private readonly IReadOnlyList<OpenAccount> _accounts;
+    private readonly ListBox _list;
+    private readonly bool _allowRoot;
+    private readonly long? _exclude;
+    private readonly string? _excludeAddress;
+    private List<(OpenAccount Account, Folder? Folder, int Depth)> _rows = [];
+
+    /// <param name="prompt">The line over the list — "Move the selected folder to the folder:" — or null for none.</param>
+    /// <param name="allowRoot">Whether an account's own row can be chosen, as a destination can be and a place to go cannot.</param>
+    /// <param name="exclude">A folder to leave out with everything under it: the one being moved or copied.</param>
+    public FolderPickerDialog(
+        string title, string? prompt, IReadOnlyList<OpenAccount> accounts,
+        (OpenAccount Account, long? FolderId)? preselect, bool allowRoot,
+        (OpenAccount Account, long FolderId)? exclude = null)
+    {
+        _accounts = accounts;
+        _allowRoot = allowRoot;
+        _exclude = exclude?.FolderId;
+        _excludeAddress = exclude?.Account.Account.Address;
+
+        Title = title;
+        Width = 420;
+        Height = 480;
+        CanResize = false;
+        WindowStartupLocation = WindowStartupLocation.CenterOwner;
+
+        // The list fills the dialog: 400 rows' worth without a prompt over it, 374 with one.
+        _list = ViewDialogKit.SurfaceList(272, prompt is { Length: > 0 } ? 374 : 400);
+        _list.ItemTemplate = new FuncDataTemplate<object>((item, _) =>
+        {
+            // The template is asked about a null item as the list settles; that row is nothing.
+            if (item is not ValueTuple<OpenAccount, Folder?, int> row) return new TextBlock();
+            var text = ViewDialogKit.SurfaceText(row.Item2?.Name ?? row.Item1.Account.Address);
+            text.Margin = new Thickness(row.Item3 * 16, 0, 0, 0);
+            if (row.Item2 is null) text.FontWeight = Avalonia.Media.FontWeight.SemiBold;
+            return text;
+        });
+        Fill(preselect);
+
+        var ok = ViewDialogKit.Ok(() =>
+        {
+            if (Chosen() is not { } chosen) return;
+            Result = chosen;
+            Close();
+        });
+        _list.SelectionChanged += (_, _) => ok.IsEnabled = Chosen() is not null;
+        _list.DoubleTapped += (_, _) => { if (Chosen() is { } chosen) { Result = chosen; Close(); } };
+        ok.IsEnabled = Chosen() is not null;
+
+        var make = new Button { Content = "New…", Width = 74 };
+        make.Click += async (_, _) => await NewFolderAsync();
+
+        var buttons = new StackPanel { Spacing = 8, Margin = new Thickness(12, 0, 0, 0) };
+        buttons.Children.Add(ok);
+        buttons.Children.Add(ViewDialogKit.Cancel(this));
+        buttons.Children.Add(make);
+
+        var columns = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto") };
+        Grid.SetColumn(_list, 0);
+        columns.Children.Add(_list);
+        Grid.SetColumn(buttons, 1);
+        columns.Children.Add(buttons);
+
+        var body = new StackPanel { Margin = new Thickness(18), Spacing = 8 };
+        if (prompt is { Length: > 0 }) body.Children.Add(ViewDialogKit.Label(prompt));
+        body.Children.Add(columns);
+
+        DialogChrome.Apply(this, body);
+        ViewDialogKit.Bind(this, BackgroundProperty, "dialog.background.brush");
+        Opened += (_, _) => _list.Focus();
+    }
+
+    private (OpenAccount Account, Folder? Folder)? Chosen()
+    {
+        if (_list.SelectedIndex < 0 || _list.SelectedIndex >= _rows.Count) return null;
+        var row = _rows[_list.SelectedIndex];
+        if (row.Folder is null && !_allowRoot) return null;
+        return (row.Account, row.Folder);
+    }
+
+    /// <summary>Every account and its folders in tree order, the excluded subtree left out.</summary>
+    private void Fill((OpenAccount Account, long? FolderId)? select)
+    {
+        var rows = new List<(OpenAccount Account, Folder? Folder, int Depth)>();
+        foreach (var account in _accounts)
+        {
+            rows.Add((account, null, 0));
+            var folders = account.Mail.Folders(account.Account.Id);
+            var excluding = string.Equals(account.Account.Address, _excludeAddress, StringComparison.OrdinalIgnoreCase);
+
+            void Add(long? parent, int depth)
+            {
+                foreach (var folder in folders.Where(f => f.ParentId == parent).OrderBy(f => f.Ordinal).ThenBy(f => f.Name))
+                {
+                    if (excluding && folder.Id == _exclude) continue;
+                    rows.Add((account, folder, depth));
+                    Add(folder.Id, depth + 1);
+                }
+            }
+
+            Add(null, 1);
+        }
+
+        _rows = rows;
+        _list.ItemsSource = rows.Cast<object>().ToList();
+
+        var index = select is { } wanted
+            ? rows.FindIndex(r =>
+                string.Equals(r.Account.Account.Address, wanted.Account.Account.Address, StringComparison.OrdinalIgnoreCase)
+                && r.Folder?.Id == wanted.FolderId)
+            : -1;
+        _list.SelectedIndex = index >= 0 ? index : 0;
+        if (index >= 0) _list.ScrollIntoView(index);
+    }
+
+    /// <summary>New…: a folder under whatever is selected, made through the same dialog New Folder uses, then chosen.</summary>
+    private async Task NewFolderAsync()
+    {
+        if (_list.SelectedIndex < 0 || _list.SelectedIndex >= _rows.Count) return;
+        var row = _rows[_list.SelectedIndex];
+
+        var dialog = new NewFolderDialog(row.Account, row.Folder?.Id);
+        await dialog.ShowDialog(this);
+        if (dialog.Result is not { } wanted) return;
+
+        var made = await MakeFolder(row.Account, wanted.Name, wanted.ParentId);
+        if (made is null) return;
+        Fill((row.Account, made.Id));
+    }
+
+    /// <summary>How a folder is made from here; the shell supplies it, because the server call is its business.</summary>
+    public Func<OpenAccount, string, long?, Task<Folder?>> MakeFolder { get; set; } =
+        (account, name, parent) => Task.FromResult<Folder?>(account.Mail.AddFolder(account.Account.Id, name, FolderRole.None, parent));
+}
+
+/// <summary>
 /// Folder Properties: General — the name, what it is, where it is, how much is in it — and
 /// AutoArchive, the folder's own choice.
 /// </summary>
