@@ -82,6 +82,12 @@ public interface IImapSession : IDisposable
     /// <summary>Renames a folder in place; the folders under it move with it. Returns it as it is now.</summary>
     Task<RemoteFolder> RenameFolderAsync(string path, string newName, CancellationToken cancellation);
 
+    /// <summary>
+    /// Puts a folder under another, or at the top of the account's own namespace when the parent
+    /// is null, keeping its name; the folders under it move with it. Returns it as it is now.
+    /// </summary>
+    Task<RemoteFolder> MoveFolderAsync(string path, string? newParentPath, CancellationToken cancellation);
+
     /// <summary>Deletes a folder and what it holds — the folders under it too.</summary>
     Task DeleteFolderAsync(string path, CancellationToken cancellation);
 
@@ -253,6 +259,18 @@ public sealed class MailKitImapSession : IImapSession
         var parent = folder.ParentFolder ?? _client.GetFolder(_client.PersonalNamespaces[0]);
         await folder.RenameAsync(parent, newName, cancellation);
         var parentPath = folder.ParentFolder is { FullName.Length: > 0 } up ? up.FullName : null;
+        return new RemoteFolder(folder.FullName, folder.Name, parentPath, FolderRole.None, true, false);
+    }
+
+    public async Task<RemoteFolder> MoveFolderAsync(string path, string? newParentPath, CancellationToken cancellation)
+    {
+        var folder = await _client.GetFolderAsync(path, cancellation);
+        var parent = newParentPath is { Length: > 0 } up
+            ? await _client.GetFolderAsync(up, cancellation)
+            : _client.GetFolder(_client.PersonalNamespaces[0]);
+        // RENAME with a new parent is how IMAP moves a folder; MailKit spells it the same way.
+        await folder.RenameAsync(parent, folder.Name, cancellation);
+        var parentPath = folder.ParentFolder is { FullName.Length: > 0 } now ? now.FullName : null;
         return new RemoteFolder(folder.FullName, folder.Name, parentPath, FolderRole.None, true, false);
     }
 

@@ -44,6 +44,13 @@ public sealed class ReadingPaneBody : UserControl
         Margin = new Thickness(20, 16),
     };
 
+    /// <summary>
+    /// The one scroller the fallback text lives in. It used to be made anew on every showing,
+    /// and a control put into a second ScrollViewer while the first still lists it as its child
+    /// throws "already has a visual parent" — the second empty folder selected in a row did it.
+    /// </summary>
+    private readonly ScrollViewer _fallbackHost;
+
     private NativeWebView? _web;
     private MimeMessage? _message;
     private DkimResult? _verified;
@@ -57,6 +64,7 @@ public sealed class ReadingPaneBody : UserControl
     {
         _themes = themes;
         _mail = mail;
+        _fallbackHost = new ScrollViewer { Content = _fallback };
 
         var root = new DockPanel();
         DockPanel.SetDock(_bars, Dock.Top);
@@ -226,7 +234,7 @@ public sealed class ReadingPaneBody : UserControl
             // No engine on this machine. Say so once, in the log, and render text.
             Log.Warn("No web engine is available; the reading pane will render text only.", ex);
             _web = null;
-            return new ScrollViewer { Content = _fallback };
+            return _fallbackHost;
         }
     }
 
@@ -350,7 +358,7 @@ public sealed class ReadingPaneBody : UserControl
         catch (Exception ex)
         {
             Log.Warn("The web engine would not load the message; showing text instead.", ex);
-            _surface.Content = new ScrollViewer { Content = _fallback };
+            _surface.Content = _fallbackHost;
             _web = null;
             ShowText(_message?.TextBody ?? _fallbackText);
         }
@@ -362,7 +370,7 @@ public sealed class ReadingPaneBody : UserControl
         _fallback.FontSize = MessageFontSize;
         Bind(_fallback, TextBlock.ForegroundProperty, "reading.infobar.text.brush");
 
-        if (_web is not null) _surface.Content = new ScrollViewer { Content = _fallback };
+        if (_web is not null && !ReferenceEquals(_surface.Content, _fallbackHost)) _surface.Content = _fallbackHost;
     }
 
     /// <summary>

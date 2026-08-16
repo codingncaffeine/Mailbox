@@ -157,6 +157,46 @@ public sealed class MailRepository(MailStore store)
         });
     }
 
+    /// <summary>
+    /// Puts a folder under another parent, or at the top, keeping its name; the folders under
+    /// it come along. With a server name, the tree is re-pathed the way <see cref="RenameFolder"/>
+    /// re-paths it — the server has already renamed the tree, or is about to.
+    /// </summary>
+    /// <returns>False when the move would put a folder inside itself, or the folder is unknown.</returns>
+    public bool MoveFolder(long folderId, long? newParentId, string? newImapPath)
+    {
+        return _store.InTransaction(() =>
+        {
+            var before = GetFolder(folderId);
+            if (before is null) return false;
+
+            // Not into itself, nor into anything under it.
+            for (var up = newParentId; up is { } id;)
+            {
+                if (id == folderId) return false;
+                up = GetFolder(id)?.ParentId;
+            }
+
+            _store.Execute("UPDATE folders SET parent_id = $parent, imap_path = $path WHERE id = $id",
+                ("$parent", newParentId), ("$path", newImapPath ?? before.ImapPath), ("$id", folderId));
+
+            if (before.ImapPath is { } oldPath && newImapPath is { } newPath && oldPath != newPath)
+            {
+                foreach (var child in _store.Query(
+                             "SELECT id, imap_path FROM folders WHERE account_id = $account AND imap_path LIKE $prefix || '%'",
+                             r => (Id: r.GetInt64(0), Path: r.GetString(1)),
+                             ("$account", before.AccountId), ("$prefix", oldPath + "/")))
+                {
+                    _store.Execute("UPDATE folders SET imap_path = $path WHERE id = $id",
+                        ("$path", newPath + child.Path[oldPath.Length..]), ("$id", child.Id));
+                }
+            }
+
+            MarkSieveStale();
+            return true;
+        });
+    }
+
     /// <summary>Removes a folder, the folders under it, and everything in all of them.</summary>
     public void RemoveFolderTree(long folderId)
     {
