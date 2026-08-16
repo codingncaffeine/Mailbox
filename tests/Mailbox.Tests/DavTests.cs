@@ -335,6 +335,167 @@ public class DavTests
         Assert.Null(multi.SyncToken);
     }
 
+    // ---- A conflict, from the refusal to the answer ---------------------------------------------
+
+    /// <summary>
+    /// Sets up the case the whole conflict path exists for: an appointment edited here while
+    /// somebody else edited it there, so the queued write is refused on its ETag.
+    /// </summary>
+    private static async Task<(CalDavSync Sync, DavConflict Conflict, PimItem Item, string Href)> Clash(
+        FakeDavServer server, DavClient client, PimRepository repository, Collection calendar, CancellationToken cancellationToken)
+    {
+        var href = server.Publish("clash.ics", Vevent("clash@test", "Review"));
+        var sync = new CalDavSync(client, repository);
+        await sync.SyncAsync(calendar, cancellationToken);
+
+        var item = repository.Items(calendar.Id).Single();
+        var mine = PimEventCodec.FromItem(item) with { Summary = "Review moved here" };
+        repository.UpdateItem(PimEventCodec.ToItem(mine, calendar.Id, item));
+        repository.Queue(calendar.Id, item.Id, "put");
+
+        // And there, behind this machine's back, which is what moves the tag.
+        server.Publish("clash.ics", Vevent("clash@test", "Review moved there"));
+
+        var refused = await sync.SyncAsync(repository.Collection(calendar.Id)!, cancellationToken);
+        return (sync, Assert.Single(refused.Conflicts), item, href);
+    }
+
+    /// <summary>
+    /// The refusal itself: both copies come back with the report, and neither side has moved.
+    /// </summary>
+    [Fact]
+    public async Task ARefusedWriteReportsBothCopiesAndOverwritesNeither()
+    {
+        using var server = new FakeDavServer();
+        using var client = new DavClient(handler: server);
+        var (store, repository, calendar) = Fresh(server);
+        using var _ = store;
+
+        var (_, conflict, item, href) = await Clash(server, client, repository, calendar, TestContext.Current.CancellationToken);
+
+        Assert.Equal(item.Id, conflict.ItemId);
+        Assert.Equal(calendar.Id, conflict.CollectionId);
+        Assert.Contains("Review moved there", conflict.ServerPayload!, StringComparison.Ordinal);
+        Assert.NotNull(conflict.ServerEtag);
+
+        // The server still has its own copy, and this machine still has its own — the pull that
+        // follows the refused push must not settle the argument by overwriting the local edit.
+        Assert.Contains("Review moved there", server.PayloadOf(href), StringComparison.Ordinal);
+        Assert.Equal("Review moved here", repository.Item(item.Id)!.Summary);
+        Assert.Equal(1, Assert.Single(repository.Queued(calendar.Id)).Attempts);
+    }
+
+    /// <summary>
+    /// Keeping the local copy sends it again carrying the tag the server actually holds, which is
+    /// the only thing that lets the second attempt through the precondition that stopped the first.
+    /// </summary>
+    [Fact]
+    public async Task KeepingTheLocalCopySendsItAgainCarryingTheServersTag()
+    {
+        using var server = new FakeDavServer();
+        using var client = new DavClient(handler: server);
+        var (store, repository, calendar) = Fresh(server);
+        using var _ = store;
+
+        var (sync, conflict, item, href) = await Clash(server, client, repository, calendar, TestContext.Current.CancellationToken);
+
+        Assert.True(CalDavSync.KeepLocal(repository, conflict));
+        Assert.Equal(conflict.ServerEtag, repository.Item(item.Id)!.Etag);
+        var requeued = Assert.Single(repository.Queued(calendar.Id));
+        Assert.Equal(0, requeued.Attempts);
+        Assert.Null(requeued.LastError);
+
+        var result = await sync.SyncAsync(repository.Collection(calendar.Id)!, TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, result.Pushed);
+        Assert.Empty(result.Conflicts);
+        Assert.Contains("Review moved here", server.PayloadOf(href), StringComparison.Ordinal);
+        Assert.Empty(repository.Queued(calendar.Id));
+    }
+
+    /// <summary>Keeping the server's copy writes it here and takes the refused change off the queue.</summary>
+    [Fact]
+    public async Task KeepingTheServersCopyWritesItHereAndClearsTheQueue()
+    {
+        using var server = new FakeDavServer();
+        using var client = new DavClient(handler: server);
+        var (store, repository, calendar) = Fresh(server);
+        using var _ = store;
+
+        var (sync, conflict, item, href) = await Clash(server, client, repository, calendar, TestContext.Current.CancellationToken);
+
+        Assert.True(CalDavSync.KeepServer(repository, conflict));
+
+        var kept = repository.Item(item.Id)!;
+        Assert.Equal("Review moved there", kept.Summary);
+        Assert.Equal(PimSyncState.Synced, kept.SyncState);
+        Assert.Equal(conflict.ServerEtag, kept.Etag);
+        Assert.Empty(repository.Queued(calendar.Id));
+
+        // Nothing more to say to the server, and its copy is untouched.
+        var result = await sync.SyncAsync(repository.Collection(calendar.Id)!, TestContext.Current.CancellationToken);
+        Assert.Equal(0, result.Pushed);
+        Assert.Contains("Review moved there", server.PayloadOf(href), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An unanswered conflict is asked about again rather than quietly dropped or retried into a
+    /// loop of its own: it stays queued, and the next run reports it once more.
+    /// </summary>
+    [Fact]
+    public async Task AConflictNobodyAnsweredIsStillWaitingAfterTheNextSync()
+    {
+        using var server = new FakeDavServer();
+        using var client = new DavClient(handler: server);
+        var (store, repository, calendar) = Fresh(server);
+        using var _ = store;
+
+        var (sync, _, item, _) = await Clash(server, client, repository, calendar, TestContext.Current.CancellationToken);
+
+        var again = await sync.SyncAsync(repository.Collection(calendar.Id)!, TestContext.Current.CancellationToken);
+
+        Assert.Single(again.Conflicts);
+        Assert.Equal("Review moved here", repository.Item(item.Id)!.Summary);
+        Assert.Equal(2, Assert.Single(repository.Queued(calendar.Id)).Attempts);
+    }
+
+    /// <summary>
+    /// A deletion the server refuses is a conflict with a copy to show as well: the reader is
+    /// choosing between "gone" and whatever the server now holds.
+    /// </summary>
+    [Fact]
+    public async Task ARefusedDeleteCarriesTheServersCopyToo()
+    {
+        using var server = new FakeDavServer();
+        var href = server.Publish("gone.ics", Vevent("gone@test", "Standup"));
+        using var client = new DavClient(handler: server);
+        var (store, repository, calendar) = Fresh(server);
+        using var _ = store;
+        var sync = new CalDavSync(client, repository);
+        await sync.SyncAsync(calendar, TestContext.Current.CancellationToken);
+
+        var item = repository.Items(calendar.Id).Single();
+        repository.SetSyncState(item.Id, PimSyncState.Deleted);
+        repository.Queue(calendar.Id, item.Id, "delete");
+
+        // Somebody else edited it before the delete went up, so the tag the delete carries is no
+        // longer the one the server holds.
+        server.Publish("gone.ics", Vevent("gone@test", "Standup, at the new time"));
+
+        var result = await sync.SyncAsync(repository.Collection(calendar.Id)!, TestContext.Current.CancellationToken);
+
+        var conflict = Assert.Single(result.Conflicts);
+        Assert.True(conflict.LocalDelete);
+        Assert.Equal("Standup", conflict.Summary);
+        Assert.Contains("Standup", conflict.ServerPayload!, StringComparison.Ordinal);
+        Assert.True(server.Has(href));
+
+        // Keeping the server's copy brings the row back rather than leaving it marked deleted.
+        Assert.True(CalDavSync.KeepServer(repository, conflict));
+        Assert.Equal(PimSyncState.Synced, repository.Item(item.Id)!.SyncState);
+        Assert.Empty(repository.Queued(calendar.Id));
+    }
+
     [Fact]
     public void ATimeRangeFilterIsWrittenAsRfc5545Stamps()
     {

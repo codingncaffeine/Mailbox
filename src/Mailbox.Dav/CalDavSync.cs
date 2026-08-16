@@ -21,8 +21,24 @@ public sealed record DavSyncResult(int Pulled, int Removed, int Pushed, IReadOnl
 /// Reported rather than resolved. RFC 4791's ETag precondition exists so that a client can tell
 /// the difference between "my change went" and "someone else's did", and a sync that quietly
 /// picks a winner is how a calendar loses an appointment nobody noticed writing.
+/// <para>
+/// Both copies travel with the report — the server's payload and the tag it is filed under — so
+/// the reader can be shown the two and asked, and so whichever answer comes back can be carried
+/// out without a second round trip. <see cref="CalDavSync.KeepLocal"/> and
+/// <see cref="CalDavSync.KeepServer"/> are the two answers.
+/// </para>
 /// </remarks>
-public sealed record DavConflict(long ItemId, string Href, string Summary, string? ServerPayload);
+/// <param name="ServerEtag">What the server's copy is filed under, which is the precondition a
+/// "keep mine" has to carry or it would be refused all over again.</param>
+/// <param name="LocalDelete">True when the change the server refused was a deletion.</param>
+public sealed record DavConflict(
+    long ItemId,
+    long CollectionId,
+    string Href,
+    string Summary,
+    string? ServerPayload,
+    string? ServerEtag,
+    bool LocalDelete = false);
 
 /// <summary>
 /// The sync engine: pull what the server has, push what this machine has, and never let either
@@ -96,7 +112,13 @@ public sealed class CalDavSync(DavClient client, PimRepository repository)
                 }
                 else if (response.Conflict)
                 {
-                    conflicts.Add(new DavConflict(change.ItemId ?? 0, gone, string.Empty, null));
+                    // The server's copy is fetched here too, so a refused delete is a choice
+                    // between two things the reader can see rather than a bare complaint.
+                    var theirs = await _client.GetAsync(url, cancellationToken).ConfigureAwait(false);
+                    var local = change.ItemId is { } deleting ? _repository.Item(deleting) : null;
+                    conflicts.Add(new DavConflict(
+                        change.ItemId ?? 0, collection.Id, gone, local?.Summary ?? string.Empty,
+                        theirs.Ok ? theirs.Body : null, theirs.Etag, LocalDelete: true));
                     _repository.QueueFailed(change.Id, "The calendar changed on the server.");
                 }
                 else
@@ -139,7 +161,9 @@ public sealed class CalDavSync(DavClient client, PimRepository repository)
             else if (write.Conflict)
             {
                 var server = await _client.GetAsync(target, cancellationToken).ConfigureAwait(false);
-                conflicts.Add(new DavConflict(item.Id, href, item.Summary, server.Ok ? server.Body : null));
+                conflicts.Add(new DavConflict(
+                    item.Id, collection.Id, href, item.Summary,
+                    server.Ok ? server.Body : null, server.Etag));
                 _repository.QueueFailed(change.Id, "This appointment changed on the server as well.");
             }
             else
@@ -282,11 +306,22 @@ public sealed class CalDavSync(DavClient client, PimRepository repository)
         return written;
     }
 
+    internal int Store(Collection collection, string href, string? etag, string payload)
+        => Store(_repository, collection.Id, href, etag, payload);
+
     /// <summary>
     /// Writes one server payload into the store: a VCALENDAR may hold a series' master and its
     /// overrides together, and each becomes its own row under the same UID.
     /// </summary>
-    internal int Store(Collection collection, string href, string? etag, string payload)
+    /// <remarks>
+    /// Static over the repository because settling a conflict writes the server's copy through
+    /// exactly this path, and that happens long after the sync that found the conflict has gone.
+    /// </remarks>
+    /// <param name="overLocalChanges">
+    /// False for a pull, which must leave a row whose own change has not gone up yet alone; true
+    /// only when the reader has chosen the server's copy over it.
+    /// </param>
+    internal static int Store(PimRepository repository, long collectionId, string href, string? etag, string payload, bool overLocalChanges = false)
     {
         IReadOnlyList<CalendarEvent> events;
         try
@@ -300,7 +335,7 @@ public sealed class CalDavSync(DavClient client, PimRepository repository)
 
         if (events.Count == 0) return 0;
 
-        var existing = _repository.ItemsByUid(collection.Id, events[0].Uid);
+        var existing = repository.ItemsByUid(collectionId, events[0].Uid);
         var written = 0;
 
         foreach (var calendarEvent in events)
@@ -310,7 +345,13 @@ public sealed class CalDavSync(DavClient client, PimRepository repository)
                 && (!calendarEvent.IsOverride
                     || string.Equals(i.RecurrenceId, ICalendarCodec.RecurrenceIdText(calendarEvent.RecurrenceId!), StringComparison.Ordinal)));
 
-            var row = PimEventCodec.ToItem(calendarEvent, collection.Id, match, PimSyncState.Synced) with
+            // A row whose own change has not reached the server is the thing a conflict is about.
+            // Writing the server's copy over it here would settle that conflict by losing the
+            // edit — silently, in the same run that reported it — so the pull leaves it be and
+            // the reader is asked instead.
+            if (!overLocalChanges && match is { SyncState: not PimSyncState.Synced }) continue;
+
+            var row = PimEventCodec.ToItem(calendarEvent, collectionId, match, PimSyncState.Synced) with
             {
                 DavHref = href,
                 Etag = etag,
@@ -320,19 +361,86 @@ public sealed class CalDavSync(DavClient client, PimRepository repository)
                 RawPayload = events.Count == 1 ? payload : ICalendarCodec.Serialize(calendarEvent),
             };
 
-            if (match is null) _repository.AddItem(row);
-            else _repository.UpdateItem(row);
+            if (match is null) repository.AddItem(row);
+            else repository.UpdateItem(row);
             written++;
         }
 
-        // An override the server has dropped goes with it.
-        foreach (var orphan in existing.Where(i => i.IsOverride && !events.Any(e =>
+        // An override the server has dropped goes with it — unless it is one made here that the
+        // server has not been told about yet, which is not dropped but unsent.
+        foreach (var orphan in existing.Where(i => i.IsOverride
+                     && (overLocalChanges || i.SyncState == PimSyncState.Synced)
+                     && !events.Any(e =>
                      e.IsOverride && string.Equals(i.RecurrenceId, ICalendarCodec.RecurrenceIdText(e.RecurrenceId!), StringComparison.Ordinal))))
         {
-            _repository.DeleteItem(orphan.Id);
+            repository.DeleteItem(orphan.Id);
         }
 
         return written;
+    }
+
+    // ---- Settling a conflict -------------------------------------------------------------------
+
+    /// <summary>
+    /// Keep what this machine has: the change goes back on the queue carrying the server's own
+    /// tag, so the next push satisfies the precondition instead of tripping over it again.
+    /// </summary>
+    /// <remarks>
+    /// The tag is the whole mechanism. Re-queueing without it sends the same stale
+    /// <c>If-Match</c> and earns the same 412 — the change would sit in the queue for ever
+    /// looking as though it were about to go. Writing the server's tag onto the row is not a
+    /// claim that the row matches the server; it is a statement that this copy is the one that
+    /// knowingly replaces it.
+    /// </remarks>
+    /// <returns>False when the row has since gone, so there is nothing to keep.</returns>
+    public static bool KeepLocal(PimRepository repository, DavConflict conflict)
+    {
+        ArgumentNullException.ThrowIfNull(repository);
+        ArgumentNullException.ThrowIfNull(conflict);
+
+        // No row left here means there is nothing local to keep — the answer to that conflict is
+        // the server's copy or nothing at all.
+        if (conflict.ItemId <= 0 || repository.Item(conflict.ItemId) is not { } item) return false;
+
+        var op = conflict.LocalDelete ? "delete" : "put";
+        repository.SetSyncState(
+            item.Id,
+            conflict.LocalDelete ? PimSyncState.Deleted : PimSyncState.Modified,
+            conflict.ServerEtag ?? item.Etag,
+            conflict.Href);
+
+        Drop(repository, conflict, op);
+        repository.Queue(conflict.CollectionId, item.Id, op, conflict.Href);
+        return true;
+    }
+
+    /// <summary>
+    /// Keep what the server has: its copy is written here, over whatever was in its place, and
+    /// the refused change leaves the queue.
+    /// </summary>
+    /// <returns>False when the server's copy could not be read, so there is nothing to keep.</returns>
+    public static bool KeepServer(PimRepository repository, DavConflict conflict)
+    {
+        ArgumentNullException.ThrowIfNull(repository);
+        ArgumentNullException.ThrowIfNull(conflict);
+
+        if (conflict.ServerPayload is not { Length: > 0 } payload) return false;
+        if (Store(repository, conflict.CollectionId, conflict.Href, conflict.ServerEtag, payload, overLocalChanges: true) == 0) return false;
+
+        Drop(repository, conflict, conflict.LocalDelete ? "delete" : "put");
+        return true;
+    }
+
+    /// <summary>Takes the refused change off the queue.</summary>
+    private static void Drop(PimRepository repository, DavConflict conflict, string op)
+    {
+        foreach (var queued in repository.Queued(conflict.CollectionId))
+        {
+            if (string.Equals(queued.Op, op, StringComparison.Ordinal) && queued.ItemId == conflict.ItemId)
+            {
+                repository.Dequeue(queued.Id);
+            }
+        }
     }
 
     /// <summary>

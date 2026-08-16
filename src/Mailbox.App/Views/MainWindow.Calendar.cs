@@ -10,6 +10,7 @@ using Mailbox.Controls.Calendar;
 using Mailbox.Core.Commands;
 using Mailbox.Core.Diagnostics;
 using Mailbox.Core.Ribbon;
+using Mailbox.Dav;
 using Mailbox.Scheduling;
 using Mailbox.Store.Pim;
 using Mailbox.Theming.Icons;
@@ -611,9 +612,9 @@ public partial class MainWindow
     /// Runs the DAV engine over every calendar with a server behind it, and says what came of it.
     /// </summary>
     /// <remarks>
-    /// A conflict is reported rather than resolved: the reference refetches, shows what the
-    /// server has, and lets the reader choose. That prompt is what §20 records as outstanding;
-    /// what is not outstanding is that nothing has been overwritten.
+    /// A conflict is never resolved by the engine: it refetches, and the reader is shown both
+    /// copies and asked. Nothing is overwritten before the answer, and an unanswered conflict
+    /// stays queued rather than being dropped.
     /// </remarks>
     internal async Task SyncCalendarsAsync(ShellViewModel shell, CancellationToken cancellationToken)
     {
@@ -627,9 +628,7 @@ public partial class MainWindow
 
             if (report.Conflicts.Count > 0)
             {
-                shell.StatusRight = report.Conflicts.Count == 1
-                    ? $"“{report.Conflicts[0].Summary}” changed on the server as well and was not sent."
-                    : $"{report.Conflicts.Count} appointments changed on the server as well and were not sent.";
+                await ResolveConflictsAsync(shell, report.Conflicts);
             }
             else if (report.DidAnything)
             {
@@ -645,6 +644,37 @@ public partial class MainWindow
             Log.Warn("The calendars could not be synchronised.", ex);
             shell.StatusRight = "The calendars could not be reached.";
         }
+    }
+
+    /// <summary>
+    /// Puts the refused writes to the reader: both copies of each, and which to keep.
+    /// </summary>
+    /// <remarks>
+    /// Straight after the sync that found them, because that is when the two copies are in hand —
+    /// asking later would mean fetching the server's copy again, by which time it may have moved
+    /// once more. Whatever is not answered stays queued and is asked about again next time.
+    /// </remarks>
+    private async Task ResolveConflictsAsync(ShellViewModel shell, IReadOnlyList<DavConflict> conflicts)
+    {
+        var settled = await CalendarConflictDialog.AskAsync(this, App.Pim, conflicts);
+        var kept = settled.Count(c => c.Value != ConflictChoice.Later);
+
+        foreach (var (item, choice) in settled)
+        {
+            Log.Info($"Calendar conflict: item {item} settled as {choice}.");
+        }
+
+        AfterStoreChange(shell);
+
+        shell.StatusRight = kept switch
+        {
+            0 when conflicts.Count == 1 => $"“{conflicts[0].Summary}” changed on the server as well and is still waiting.",
+            0 => $"{conflicts.Count} appointments changed on the server as well and are still waiting.",
+            _ when kept == conflicts.Count => kept == 1
+                ? "The conflict was settled; the change goes on the next send/receive."
+                : $"{kept} conflicts settled; the changes go on the next send/receive.",
+            _ => $"{kept} of {conflicts.Count} conflicts settled; the rest are still waiting.",
+        };
     }
 
     /// <summary>
@@ -804,6 +834,17 @@ public partial class MainWindow
                 return;
             }
 
+            // A 412 is the one thing a live server will not produce on demand, so the pose is
+            // built from real rows: the store's own copies against the same appointments as
+            // another client would have left them. The plural opens the list the dialog grows
+            // when more than one write was refused.
+            case "conflict":
+            case "conflicts":
+            {
+                await ResolveConflictsAsync(shell, PosedConflicts(which == "conflicts" ? 3 : 1));
+                return;
+            }
+
             default:
             {
                 var meeting = which == "newmeeting";
@@ -811,6 +852,44 @@ public partial class MainWindow
                 return;
             }
         }
+    }
+
+    /// <summary>
+    /// The conflicts the harness poses: the calendar's first appointments, each against a copy of
+    /// itself that somebody else moved an hour later.
+    /// </summary>
+    /// <remarks>
+    /// Both copies are real — the local one is read out of the store and the server's is
+    /// serialized from it — so the dialog is photographed showing what it would really show. The
+    /// server's own last-changed time is pinned to the module's today for the same reason every
+    /// other calendar pose is: a photograph of a moving number is not a measurement.
+    /// </remarks>
+    private IReadOnlyList<DavConflict> PosedConflicts(int count)
+    {
+        var calendar = App.Pim.DefaultCalendar();
+        var rows = App.Pim.Items(calendar.Id).Where(i => !i.IsOverride).Take(count).ToList();
+        if (rows.Count == 0) return [new DavConflict(0, calendar.Id, "posed.ics", string.Empty, null, null)];
+
+        var changed = CalendarToday.ToDateTime(new TimeOnly(9, 12));
+        var when = new DateTimeOffset(changed, TimeZoneInfo.Local.GetUtcOffset(changed));
+
+        return rows.Select(row =>
+        {
+            var mine = PimEventCodec.FromItem(row);
+            var theirs = mine with
+            {
+                Summary = mine.Summary + " (moved)",
+                Location = mine.Location.Length > 0 ? mine.Location : "Meeting room 2",
+                Start = mine.Start.Add(TimeSpan.FromHours(1)),
+                End = mine.End.Add(TimeSpan.FromHours(1)),
+                Sequence = mine.Sequence + 1,
+                LastModified = when,
+            };
+
+            return new DavConflict(
+                row.Id, calendar.Id, row.DavHref ?? row.Uid + ".ics", row.Summary,
+                ICalendarCodec.SerializeCalendar([theirs]), "etag-server-2");
+        }).ToList();
     }
 
     /// <summary>

@@ -537,6 +537,8 @@ public partial class MainWindow : Window
             case "recurrence":
             case "editscope":
             case "gotodate":
+            case "conflict":
+            case "conflicts":
                 Opened += (_, _) => Dispatcher.UIThread.Post(
                     () =>
                     {
