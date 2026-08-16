@@ -756,14 +756,43 @@ public sealed class AccountSettingsDialog : Window
             Columns = [new ClassicColumn("Name", 282), new ClassicColumn("Type", 281)],
         };
 
+        // What the People module has: the local address books, and the ones a CardDAV account
+        // brought. The type column says which, as the reference's does for its own kinds.
+        void Fill()
+        {
+            list.SetRows(
+            [
+                .. App.Contacts.AddressBooks().Select(book => new ClassicRow(
+                    [book.DisplayName, book.DavUrl is { Length: > 0 } ? "CardDAV" : "Mailbox Address Book"],
+                    Tag: book.Id)),
+            ]);
+        }
+
+        Fill();
+
         var change = ToolButton("change", "Change...", () => Task.CompletedTask);
-        var remove = ToolButton("remove", "Remove", () => { });
+        var remove = ToolButton("remove", "Remove", () =>
+        {
+            if (list.SelectedRow?.Tag is not long id || App.Contacts.AddressBooks().Count <= 1) return;
+            App.Contacts.Repository.RemoveCollection(id);
+            Changed = true;
+            Fill();
+        });
+
         change.IsEnabled = false;
+        list.SelectionChanged += (_, _) => remove.IsEnabled = list.SelectedRow is not null && App.Contacts.AddressBooks().Count > 1;
         remove.IsEnabled = false;
 
         var toolbar = Toolbar(
-            ToolButton("book", "New...", () => Later("Address Books",
-                "Directories and address books arrive with the People module. Nothing was added.")),
+            ToolButton("book", "New...", async () =>
+            {
+                var name = await Prompt.AskAsync(this, "New Address Book", "Name:", "Contacts");
+                if (string.IsNullOrWhiteSpace(name)) return;
+
+                App.Contacts.Repository.AddCollection(Mailbox.Store.Pim.CollectionKind.Contacts, name.Trim());
+                Changed = true;
+                Fill();
+            }),
             change, remove);
 
         return Page(toolbar, list, null);
