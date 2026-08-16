@@ -153,8 +153,24 @@ public sealed class RibbonView : ContentControl
             field = value;
             CloseFloatingBody();
             Rebuild();
+            DisplayModeChanged?.Invoke(this, EventArgs.Empty);
         }
     } = RibbonDisplayMode.Simplified;
+
+    /// <summary>
+    /// The layout the ribbon shows, or would show if it were not collapsed to its tabs — never
+    /// <see cref="RibbonDisplayMode.Collapsed"/>. With <see cref="DisplayMode"/> this is the
+    /// whole of the state a host remembers across launches: the menu's two choices, layout and
+    /// show, and a collapsed ribbon comes back in the layout it was collapsed from.
+    /// </summary>
+    public RibbonDisplayMode ExpandedMode => _expandedMode;
+
+    /// <summary>
+    /// Raised after <see cref="DisplayMode"/> changes — from the chevron's menu or by code — so
+    /// the host can remember the choice. A host that sets the opening mode first and subscribes
+    /// second hears only the reader's changes, which is what it wants to write down.
+    /// </summary>
+    public event EventHandler? DisplayModeChanged;
 
     private RibbonDisplayMode _expandedMode = RibbonDisplayMode.Simplified;
     private bool _isFloating;
@@ -227,15 +243,6 @@ public sealed class RibbonView : ContentControl
     /// <summary>The tabs currently in the strip: every ordinary one, plus any active set.</summary>
     private IEnumerable<RibbonTab> VisibleTabs =>
         ContextualTabs.Visible(_layout.Tabs, _contextualGroups);
-
-    /// <summary>Cycles Simplified → Classic → Collapsed, as the chevron at the bar's end does.</summary>
-    public void CycleDisplayMode()
-        => DisplayMode = DisplayMode switch
-        {
-            RibbonDisplayMode.Simplified => RibbonDisplayMode.Classic,
-            RibbonDisplayMode.Classic => RibbonDisplayMode.Collapsed,
-            _ => RibbonDisplayMode.Simplified,
-        };
 
     public string ActiveTabId
     {
@@ -551,7 +558,8 @@ public sealed class RibbonView : ContentControl
 
     /// <summary>
     /// The Simplified ribbon: one row of icon-and-label commands with vertical rules between
-    /// clusters, an overflow menu, and the display-mode chevron pinned to the right.
+    /// clusters, an overflow menu after the last of them, and the display-mode chevron in the
+    /// panel's bottom-right corner.
     /// </summary>
     private Control BuildSimplifiedRow(RibbonTab tab)
     {
@@ -607,51 +615,113 @@ public sealed class RibbonView : ContentControl
             start = i + 1;
         }
 
-        // Overflow, then the chevron that switches Simplified / Classic / Collapsed. The overflow
+        // The "…" follows the last cluster, behind a rule, the way the reference's does: right
+        // after the content when the bar has slack, at the right end when the bar is full. Its
         // menu is built when it opens, so it lists what the bar pushed off at this width on top
         // of what the row never had.
-        var trailing = new StackPanel
+        var tail = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        var tailRule = BuildInlineSeparator();
+        tail.Children.Add(tailRule);
+
         var overflow = BuildGlyphButton("more", "More commands", 16, () => { });
         var overflowMenu = new MenuFlyout { Placement = PlacementMode.BottomEdgeAlignedRight };
         overflowMenu.Opening += (_, _) => FillOverflowMenu(overflowMenu, tab, strip.Overflowed);
         overflow.Flyout = overflowMenu;
-        trailing.Children.Add(overflow);
-
-        var chevron = BuildGlyphButton("chevron-down", "Ribbon Display Options", 14, () => { });
-        chevron.HorizontalAlignment = HorizontalAlignment.Right;
-        chevron.Flyout = BuildDisplayOptionsMenu();
-        _displayOptions = chevron;
-        trailing.Children.Add(chevron);
-
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+        tail.Children.Add(overflow);
 
         // The panel takes what the column gives it and decides what to show; nothing scrolls
         // and nothing is clipped, which is the point of it.
         strip.HorizontalAlignment = HorizontalAlignment.Left;
-        Grid.SetColumn(strip, 0);
-        grid.Children.Add(strip);
+        var flow = new RowWithTailPanel(strip, tail, tailRule)
+        {
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(RibbonMetrics.SimplifiedRowInset, 0, RibbonMetrics.DisplayOptionsGap, 0),
+        };
 
-        Grid.SetColumn(trailing, 1);
-        grid.Children.Add(trailing);
+        return BuildPanel(flow, RibbonMetrics.SimplifiedHeight, clip: false);
+    }
 
-        // The panel is rounded and inset, so the chrome shows at its corners; a bottom border
-        // would cut across that curve, and the drop shadow already separates it from the
-        // workspace below.
+    /// <summary>
+    /// The rounded ribbon panel around either layout's content, with the Ribbon Display Options
+    /// chevron in its bottom-right corner.
+    /// </summary>
+    /// <remarks>
+    /// The chevron is what this panel is for. It used to be part of the Simplified row alone, so
+    /// choosing Classic Ribbon from its menu built a body with no chevron and no way back — the
+    /// menu that switches layouts had gone with the layout it was on. Both bodies come through
+    /// here now, and the collapsed ribbon's floating body with them, so the menu is at the corner
+    /// of whatever ribbon is showing.
+    /// <para>
+    /// The panel is rounded and inset, so the chrome shows at its corners; a bottom border would
+    /// cut across that curve, and the drop shadow already separates it from the workspace below.
+    /// </para>
+    /// </remarks>
+    private Control BuildPanel(Control content, double height, bool clip)
+    {
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+
+        Grid.SetColumn(content, 0);
+        grid.Children.Add(content);
+
+        var chevron = BuildDisplayOptionsChevron();
+        Grid.SetColumn(chevron, 1);
+        grid.Children.Add(chevron);
+
         var host = new Border
         {
-            Height = RibbonMetrics.SimplifiedHeight,
-            Padding = new Thickness(RibbonMetrics.SimplifiedRowInset, 0),
+            Height = height,
             Child = grid,
+            ClipToBounds = clip,
             CornerRadius = new CornerRadius(RibbonMetrics.BodyCornerRadius),
             BoxShadow = BoxShadows.Parse("0 1 3 0 #94000000"),
             Margin = new Thickness(0, 0, RibbonMetrics.BodyRightInset, RibbonMetrics.BodyBottomGap),
         };
         Bind(host, Border.BackgroundProperty, "ribbon.background.brush");
         return host;
+    }
+
+    /// <summary>
+    /// The chevron that opens the Ribbon Display Options menu, boxed so that flush in the panel's
+    /// bottom-right corner its ink lands where the reference's does — the centre 14px in from the
+    /// panel's right edge and 13px up from its bottom, measured, in both layouts. The mark itself
+    /// is <see cref="ChevronMark"/>, drawn to the reference's pixels.
+    /// </summary>
+    private Button BuildDisplayOptionsChevron()
+    {
+        // At (9,10) in the 28×26 box, the mark's centre pixel is the fourteenth column from the
+        // box's right edge and the thirteenth row from its bottom.
+        var mark = new ChevronMark
+        {
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(9, 10, 0, 0),
+        };
+        Bind(mark, ChevronMark.StrokeProperty, "text.primary.brush");
+
+        var chevron = new Button
+        {
+            Content = mark,
+            Width = RibbonMetrics.DisplayOptionsWidth,
+            Height = RibbonMetrics.DisplayOptionsHeight,
+            Padding = default,
+            MinWidth = 0,
+            MinHeight = 0,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            HorizontalContentAlignment = HorizontalAlignment.Left,
+            VerticalContentAlignment = VerticalAlignment.Top,
+            BorderThickness = default,
+            Background = Brushes.Transparent,
+            Flyout = BuildDisplayOptionsMenu(),
+        };
+        ToolTip.SetTip(chevron, "Ribbon Display Options");
+
+        _displayOptions = chevron;
+        return chevron;
     }
 
     /// <summary>
@@ -932,16 +1002,7 @@ public sealed class RibbonView : ContentControl
     }
 
     /// <summary>
-    /// The Ribbon Display Options menu behind the chevron: a Ribbon Layout section choosing
-    /// Classic or Simplified, then a Show Ribbon section. Ticks mark the active choice.
-    /// </summary>
-    /// <summary>
-    /// The commands this tab owns that its row has no room for, plus everything the default
-    /// layout leaves out entirely. Empty is a real answer — a tab whose row already shows
-    /// everything gets a disabled note rather than a menu that opens onto nothing.
-    /// </summary>
-    /// <summary>
-    /// The "…" menu at the bar's end: what the bar pushed off at this width, then what the row
+    /// The "…" menu after the row: what the bar pushed off at this width, then what the row
     /// never had.
     /// </summary>
     /// <remarks>
@@ -968,6 +1029,11 @@ public sealed class RibbonView : ContentControl
         }
     }
 
+    /// <summary>
+    /// The commands this tab owns that its row has no room for, plus everything the default
+    /// layout leaves out entirely. Empty is a real answer — a tab whose row already shows
+    /// everything gets a disabled note rather than a menu that opens onto nothing.
+    /// </summary>
     private MenuFlyout BuildOverflowMenu(RibbonTab tab)
     {
         var shown = (_layout.SimplifiedRows.TryGetValue(tab.Id, out var row) ? row : [])
@@ -1019,6 +1085,10 @@ public sealed class RibbonView : ContentControl
         return item;
     }
 
+    /// <summary>
+    /// The Ribbon Display Options menu behind the chevron: a Ribbon Layout section choosing
+    /// Classic or Simplified, then a Show Ribbon section. Ticks mark the active choice.
+    /// </summary>
     private MenuFlyout BuildDisplayOptionsMenu()
     {
         var flyout = new MenuFlyout { Placement = PlacementMode.BottomEdgeAlignedRight };
@@ -1031,12 +1101,14 @@ public sealed class RibbonView : ContentControl
         flyout.Items.Add(new MenuItem { Header = "Full-screen mode" });
         flyout.Items.Add(ModeItem("Show tabs only", RibbonDisplayMode.Collapsed));
 
+        // Back to the layout the ribbon was collapsed from, not to the default one: a reader
+        // who collapsed the classic ribbon and asks for it back is asking for the classic ribbon.
         var always = new MenuItem
         {
             Header = "Always show Ribbon",
             Icon = DisplayMode != RibbonDisplayMode.Collapsed ? Tick() : null,
         };
-        always.Click += (_, _) => DisplayMode = RibbonDisplayMode.Simplified;
+        always.Click += (_, _) => DisplayMode = _expandedMode;
         flyout.Items.Add(always);
 
         var quickAccess = new MenuItem
@@ -1146,19 +1218,10 @@ public sealed class RibbonView : ContentControl
         };
 
         // Same rounded, inset panel as the Simplified row — the classic ribbon is taller, not
-        // shaped differently. Clipped because the panel is what used to sit in a ScrollViewer:
-        // without it, a group that will not fit paints straight through the rounded corner.
-        var host = new Border
-        {
-            Height = RibbonMetrics.BodyHeight,
-            Child = groups,
-            ClipToBounds = true,
-            CornerRadius = new CornerRadius(RibbonMetrics.BodyCornerRadius),
-            BoxShadow = BoxShadows.Parse("0 1 3 0 #94000000"),
-            Margin = new Thickness(0, 0, RibbonMetrics.BodyRightInset, RibbonMetrics.BodyBottomGap),
-        };
-        Bind(host, Border.BackgroundProperty, "ribbon.background.brush");
-        return host;
+        // shaped differently — with the display-options chevron in the same corner. Clipped
+        // because the panel is what used to sit in a ScrollViewer: without it, a group that will
+        // not fit paints straight through the rounded corner.
+        return BuildPanel(groups, RibbonMetrics.BodyHeight, clip: true);
     }
 
     private Control BuildGroupSeparator()

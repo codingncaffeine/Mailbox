@@ -21,6 +21,10 @@ internal static class Program
             App.Instance = new Mailbox.Core.SingleInstance();
             if (App.Instance.TryHandOff(args)) return 0;
         }
+        else
+        {
+            Theming.WindowCapture.PinLayoutScale();
+        }
 
         try
         {

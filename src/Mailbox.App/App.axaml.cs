@@ -45,6 +45,12 @@ public partial class App : Application
     /// </remarks>
     public static QuickAccessLayout QuickAccess { get; private set; } = null!;
 
+    /// <summary>
+    /// Which ribbon each window opens with — Simplified or Classic, always shown or tabs only —
+    /// remembered per window kind, as the reference remembers it.
+    /// </summary>
+    public static RibbonDisplaySettings RibbonDisplay { get; private set; } = null!;
+
     /// <summary>Which accounts are checked together, and when.</summary>
     public static SendReceiveGroups Groups { get; private set; } = null!;
 
@@ -370,6 +376,7 @@ public partial class App : Application
         RegisterQuickSteps();
         QuickSteps.Changed += (_, _) => RegisterQuickSteps();
         QuickAccess = new QuickAccessLayout(Settings, DefaultRibbonLayouts.Mail.QuickAccess);
+        RibbonDisplay = new RibbonDisplaySettings(Settings);
         Groups = new SendReceiveGroups(Settings);
         Signatures = new Signatures(Settings);
         UndoSend = new UndoSend(Settings);
@@ -433,6 +440,13 @@ public partial class App : Application
             // Read off the window rather than the request, so a run that asked for one backend
             // and got another is recorded as what it is.
             Log.Info(WindowingBackend.Describe(window));
+
+            // The scale a window opens at is not always the one it settles at: on X11 the
+            // screen's Xft.dpi is applied once the window is mapped, and 100 there means 1.0417 —
+            // everything four percent larger than a 100% reference, and worth knowing before
+            // judging fidelity by eye. Logged at open and again whenever it changes.
+            Log.Info($"Scaling: {window.RenderScaling:0.####}");
+            window.ScalingChanged += (_, _) => Log.Info($"Scaling: {window.RenderScaling:0.####}");
 
             // A mailto: link or --compose on the command line opens a compose window once the
             // shell is up — Mailbox acting as the system mail client on a cold start. The harness
