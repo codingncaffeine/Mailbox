@@ -286,8 +286,19 @@ public sealed class RibbonView : ContentControl
             if (string.Equals(_activeTabId, value, StringComparison.OrdinalIgnoreCase)) return;
             _activeTabId = value;
             Rebuild();
+            ActiveTabChanged?.Invoke(this, _activeTabId);
         }
     }
+
+    /// <summary>
+    /// Which tab is showing has changed.
+    /// </summary>
+    /// <remarks>
+    /// A host that puts something different under the bar per tab needs to know — the appointment
+    /// window's Scheduling Assistant and Tracking are the form's own workspace replaced, not more
+    /// buttons above it.
+    /// </remarks>
+    public event EventHandler<string>? ActiveTabChanged;
 
     // ----------------------------------------------------------------------------------
     // Composition

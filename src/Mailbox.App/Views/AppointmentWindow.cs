@@ -8,6 +8,8 @@ using Mailbox.App.Theming;
 using Mailbox.Controls.Ribbon;
 using Mailbox.Core.Commands;
 using Mailbox.Core.Ribbon;
+using Mailbox.Controls.Calendar;
+using Mailbox.Core.Diagnostics;
 using Mailbox.Scheduling;
 using Mailbox.Store.Pim;
 using Mailbox.Theming.Icons;
@@ -26,6 +28,8 @@ public sealed class AppointmentWindow : Window
 {
     private readonly AppointmentSurface _surface;
     private readonly RibbonView _ribbon;
+    private readonly Grid _workspace = new();
+    private readonly bool _meeting;
     private TextBlock _caption = null!;
 
     /// <summary>Set when the window was closed with Save &amp; Close, Send or Delete.</summary>
@@ -40,6 +44,7 @@ public sealed class AppointmentWindow : Window
     {
         ArgumentNullException.ThrowIfNull(catalog);
         _surface = new AppointmentSurface(appointment, calendars, collectionId, meeting);
+        _meeting = meeting;
 
         Title = _surface.Title;
         Width = 1000;
@@ -66,6 +71,10 @@ public sealed class AppointmentWindow : Window
         };
         _ribbon.FloatingBodyChanged += (_, e) => ShowFloatingRibbon(e.Body);
 
+        // Scheduling Assistant and Tracking replace the form rather than adding buttons over it,
+        // which is what the reference's own Show group does.
+        _ribbon.ActiveTabChanged += (_, tab) => ShowWorkspaceFor(tab);
+
         _surface.TitleChanged += (_, _) =>
         {
             Title = _surface.Title;
@@ -86,6 +95,12 @@ public sealed class AppointmentWindow : Window
         if (meeting) _surface.InfoBar = "You haven't sent this meeting invitation yet.";
 
         Content = BuildRoot();
+
+        // The harness cannot click a tab, and two of them replace the whole workspace.
+        if (Environment.GetEnvironmentVariable("MAILBOX_APPOINTMENT_TAB") is { Length: > 0 } posed)
+        {
+            Opened += (_, _) => SelectTab(posed.Trim().ToLowerInvariant());
+        }
         // Escape gives up, and everything else goes through the key map asked for this window's
         // own commands — Alt+S saves and closes, Ctrl+Enter sends — so a rebound shortcut is
         // rebound here too and a plain keystroke stays the reader typing.
@@ -111,6 +126,91 @@ public sealed class AppointmentWindow : Window
 
     /// <summary>Selects a ribbon tab by id. Used by the fidelity harness, which cannot click.</summary>
     public void SelectTab(string tabId) => _ribbon.ActiveTabId = tabId;
+
+    /// <summary>
+    /// Puts the right thing under the bar for the tab that is showing: the form, the free/busy
+    /// grid, or the tracking table.
+    /// </summary>
+    /// <remarks>
+    /// The form is kept rather than rebuilt — it holds everything typed so far, and a reader who
+    /// looks at the Scheduling Assistant and comes back has not lost their subject line.
+    /// </remarks>
+    private void ShowWorkspaceFor(string tab)
+    {
+        var body = tab switch
+        {
+            "scheduling" => SchedulingAssistant(),
+            "tracking" when _meeting => new TrackingView(_surface.Current()),
+            _ => (Control)_surface,
+        };
+
+        if (_workspace.Children.Count > 0 && ReferenceEquals(_workspace.Children[0], body)) return;
+
+        // Re-parenting needs the child out of its old panel first, and the float layer stays on
+        // top whatever is under it.
+        _workspace.Children.Clear();
+        _workspace.Children.Add(body);
+        if (_floatLayer is not null) _workspace.Children.Add(_floatLayer);
+    }
+
+    /// <summary>
+    /// The free/busy grid for this meeting: the organizer's own day in full, and a row per
+    /// attendee saying what is known of theirs — which, without a free/busy service, is nothing.
+    /// </summary>
+    private Control SchedulingAssistant()
+    {
+        var meeting = _surface.Current();
+        var day = DateOnly.FromDateTime(meeting.Start.Wall);
+
+        var mine = new List<(DateTime Start, DateTime End)>();
+        try
+        {
+            var source = new CalendarSource(App.Pim);
+            var from = new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), TimeZoneInfo.Local.GetUtcOffset(day.ToDateTime(TimeOnly.MinValue))).ToUniversalTime();
+            var to = from.AddDays(1);
+            mine.AddRange(source
+                .Between(from, to)
+                .Where(e => e.Busy != BusyStatus.Free && e.Occurrence.Event.Uid != meeting.Uid)
+                .Select(e => (e.StartWall, e.EndWall)));
+        }
+        catch (Microsoft.Data.Sqlite.SqliteException ex)
+        {
+            Log.Warn("The calendar could not be read for the Scheduling Assistant.", ex);
+        }
+
+        var rows = new List<FreeBusyRow>
+        {
+            new(
+                App.Settings.GetString(Mailbox.App.Options.OptionsPages.Keys.UserName) is { Length: > 0 } me ? me : "You",
+                meeting.Organizer,
+                IsOrganizer: true,
+                Known: true,
+                mine),
+        };
+
+        rows.AddRange(meeting.Attendees.Select(a => new FreeBusyRow(
+            a.Name.Length > 0 ? a.Name : a.Address,
+            a.Address,
+            IsOrganizer: false,
+            // Free/busy for somebody else wants a service this application does not have and
+            // will not invent; the reference says the same thing about anyone outside its own
+            // organization.
+            Known: false,
+            [])));
+
+        var view = new FreeBusyView
+        {
+            Day = day,
+            Rows = rows,
+            MeetingStart = meeting.Start.Wall,
+            MeetingEnd = meeting.End.Wall,
+            From = new TimeOnly(Math.Min(8, meeting.Start.Wall.Hour), 0),
+            To = new TimeOnly(Math.Max(18, Math.Min(23, meeting.End.Wall.Hour + 1)), 0),
+        };
+
+        view.MeetingMoved += (_, when) => _surface.MoveTo(when.Start, when.End);
+        return view;
+    }
 
     /// <summary>
     /// The two pickers on the bar show a value, so the bar has to be rebuilt when one changes.
@@ -163,11 +263,10 @@ public sealed class AppointmentWindow : Window
         DockPanel.SetDock(ribbonHost, Dock.Top);
         root.Children.Add(ribbonHost);
 
-        var workspace = new Grid();
-        workspace.Children.Add(_surface);
+        _workspace.Children.Add(_surface);
         _floatLayer = new Canvas { IsHitTestVisible = true, ZIndex = 1 };
-        workspace.Children.Add(_floatLayer);
-        root.Children.Add(workspace);
+        _workspace.Children.Add(_floatLayer);
+        root.Children.Add(_workspace);
 
         layered.Children.Add(root);
         return WindowFrame.Rounded(layered);

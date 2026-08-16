@@ -21,10 +21,20 @@ namespace Mailbox.App;
 /// judges it junk. On an IMAP account that move is journalled to the server like any other.
 /// </para>
 /// </remarks>
-public sealed class JunkService(MailOptions options) : IArrivalHandler
+public sealed class JunkService(MailOptions options, Mailbox.Contacts.ContactBook? contacts = null) : IArrivalHandler
 {
     private readonly JunkFilter _filter = new();
     private readonly MailOptions _options = options;
+
+    /// <summary>
+    /// The address book, which the dialog's "Also trust email from my Contacts" reads.
+    /// </summary>
+    /// <remarks>
+    /// Optional so the filter can be judged on its own in a test: a corpus and a set of lists are
+    /// what it is about, and an address book is a fourth thing that either trusts a sender or
+    /// does not.
+    /// </remarks>
+    private readonly Mailbox.Contacts.ContactBook? _contacts = contacts;
 
     /// <summary>Turns the dialog's 0..3 into a level.</summary>
     public static FilterLevel LevelFrom(int index) => index switch
@@ -63,7 +73,9 @@ public sealed class JunkService(MailOptions options) : IArrivalHandler
         }
 
         var recipients = message.To.Mailboxes.Concat(message.Cc.Mailboxes).Select(m => m.Address).ToList();
-        var isSafe = (from.Length > 0 && mail.IsSafeSender(from)) || mail.IsSafeRecipient(recipients);
+        var isSafe = (from.Length > 0 && mail.IsSafeSender(from))
+                     || mail.IsSafeRecipient(recipients)
+                     || IsContact(from);
 
         return _filter.Judge(
             Level,
@@ -71,6 +83,31 @@ public sealed class JunkService(MailOptions options) : IArrivalHandler
             new JunkCorpus(mail),
             isSafe: isSafe,
             isBlocked: from.Length > 0 && mail.IsBlockedSender(from));
+    }
+
+    /// <summary>
+    /// Whether the sender is somebody in the address book, when the dialog says that is enough
+    /// to clear them.
+    /// </summary>
+    /// <remarks>
+    /// The option has been in the dialog since the junk work landed and did nothing, there being
+    /// no contacts to trust. It does now: a message from somebody in the address book is not
+    /// junk, whatever the corpus makes of its words.
+    /// </remarks>
+    private bool IsContact(string from)
+    {
+        if (from.Length == 0 || !_options.TrustContacts || _contacts is not { } book) return false;
+
+        try
+        {
+            return book.WithAddress(from).Count > 0;
+        }
+        catch (Microsoft.Data.Sqlite.SqliteException)
+        {
+            // A judgement is made on every arriving message; an unreadable address book is a
+            // reason to fall back on the lists, not to stop collecting mail.
+            return false;
+        }
     }
 
     /// <summary>Whether an arriving message should be filed as junk.</summary>

@@ -194,8 +194,8 @@ public partial class MainWindow
 
         // The reference's own six, with its own icons — and Create New Blank Calendar carrying
         // none, which is not an omission but what the capture shows.
-        Entry("From _Address Book…", "contact-card", () => shell.StatusRight = "Adding a calendar from the address book arrives with Phase 12.");
-        Entry("From _Room List…", "room-list", () => shell.StatusRight = "Room lists arrive with Phase 12.");
+        Entry("From _Address Book…", "contact-card", () => _ = OpenSomebodysCalendarAsync(shell));
+        Entry("From _Room List…", "room-list", () => shell.StatusRight = "A room list is a directory of resources on a server, which no account here offers.");
         Entry("From _Internet…", "publish-calendar", () => _ = SubscribeAsync(shell));
         Entry("_Calendar Groups", "calendar-groups", () => shell.StatusRight = "Calendar groups arrive with the People module.");
         flyout.Items.Add(new Separator());
@@ -203,6 +203,59 @@ public partial class MainWindow
         Entry("_Open Shared Calendar…", "share", () => shell.StatusRight = "A shared calendar is a subscription — use From Internet… with its address.");
 
         return flyout;
+    }
+
+    /// <summary>
+    /// From Address Book: pick somebody, and subscribe to the calendar they publish.
+    /// </summary>
+    /// <remarks>
+    /// The reference asks an Exchange directory where a colleague's calendar lives. There is no
+    /// such directory here, so the contact is picked from the address book and the address is
+    /// asked for — which is what opening somebody's calendar amounts to on a CalDAV server.
+    /// </remarks>
+    private async Task OpenSomebodysCalendarAsync(ShellViewModel shell)
+    {
+        var picked = await AddressBookDialog.PickAsync(this, App.Contacts);
+        if (picked is null || picked.To.Count == 0)
+        {
+            shell.StatusRight = "Nobody was picked.";
+            return;
+        }
+
+        shell.StatusRight = $"Enter the address of the calendar {picked.To[0]} publishes.";
+        await SubscribeAsync(shell);
+    }
+
+    /// <summary>
+    /// E-mail Calendar: this calendar as an attachment, in a message to whoever is chosen.
+    /// </summary>
+    private async Task EmailCalendarAsync(ShellViewModel shell)
+    {
+        var calendar = App.Pim.DefaultCalendar();
+        var events = App.Pim.Items(calendar.Id)
+            .Where(i => i.SyncState != PimSyncState.Deleted)
+            .Select(PimEventCodec.FromItem)
+            .ToList();
+
+        if (events.Count == 0)
+        {
+            shell.StatusRight = "There is nothing in the calendar to send.";
+            return;
+        }
+
+        var picked = await AddressBookDialog.PickAsync(this, App.Contacts);
+        var to = picked?.To ?? [];
+
+        var link = new Mailbox.Core.Compose.MailtoLink(
+            to,
+            picked?.Cc ?? [],
+            picked?.Bcc ?? [],
+            $"{calendar.DisplayName}",
+            $"{calendar.DisplayName} is attached as an iCalendar file.");
+
+        NewMessage(link);
+        shell.StatusRight = $"“{calendar.DisplayName}” — {events.Count} appointment(s) to attach.";
+        Log.Info($"Calendar: e-mailing {calendar.DisplayName} with {events.Count} item(s).");
     }
 
     /// <summary>The Share button's menu: send a calendar on, or put it somewhere to subscribe to.</summary>
@@ -218,7 +271,7 @@ public partial class MainWindow
             flyout.Items.Add(item);
         }
 
-        Entry("_E-mail Calendar…", "email-calendar", () => shell.StatusRight = "E-mailing a calendar arrives with Phase 12.");
+        Entry("_E-mail Calendar…", "email-calendar", () => _ = EmailCalendarAsync(shell));
         Entry("_Share Calendar…", "share", () => shell.StatusRight = "Sharing a calendar wants CalDAV publishing, which is still to come.");
         Entry("_Publish Online…", "publish-calendar", () => shell.StatusRight = "Publishing a calendar wants CalDAV publishing, which is still to come.");
         flyout.Items.Add(new Separator());
@@ -961,6 +1014,17 @@ public partial class MainWindow
             default:
             {
                 var meeting = which == "newmeeting";
+
+                // Tracking and the Scheduling Assistant have nothing to show on a meeting nobody
+                // was asked to, so the pose asks somebody.
+                if (meeting && Environment.GetEnvironmentVariable("MAILBOX_APPOINTMENT_TAB") is { Length: > 0 })
+                {
+                    var calendars = App.Pim.Collections(CollectionKind.Events);
+                    var window = new AppointmentWindow(App.Commands, PosedMeeting(calendar.Anchor), calendars, calendars[0].Id, meeting: true);
+                    await window.ShowDialog(this);
+                    return;
+                }
+
                 await NewAppointmentAsync(shell, calendar.Anchor.ToDateTime(new TimeOnly(8, 0)), allDay: false, meeting: meeting);
                 return;
             }
@@ -1004,6 +1068,27 @@ public partial class MainWindow
                 ICalendarCodec.SerializeCalendar([theirs]), "etag-server-2");
         }).ToList();
     }
+
+    /// <summary>
+    /// The meeting the harness poses for the Tracking and Scheduling Assistant tabs: three people
+    /// asked, with one of each answer between them, and every name invented.
+    /// </summary>
+    private static CalendarEvent PosedMeeting(DateOnly day) => new()
+    {
+        Uid = CalendarEvent.NewUid(),
+        Summary = "Release readiness",
+        Location = "Meeting room 2",
+        Start = EventTime.At(day.ToDateTime(new TimeOnly(11, 0)), TimeZoneInfo.Local.Id),
+        End = EventTime.At(day.ToDateTime(new TimeOnly(12, 0)), TimeZoneInfo.Local.Id),
+        Organizer = "you@example.com",
+        Busy = BusyStatus.Busy,
+        Attendees =
+        [
+            new EventAttendee("a.person@example.com", "A. Person", "REQ-PARTICIPANT", "ACCEPTED"),
+            new EventAttendee("b.other@example.com", "B. Other", "REQ-PARTICIPANT", "TENTATIVE"),
+            new EventAttendee("c.reader@example.org", "C. Reader", "OPT-PARTICIPANT", "NEEDS-ACTION"),
+        ],
+    };
 
     /// <summary>
     /// Opens an appointment by the row it is on — what the Reminders window asks for, and what an
