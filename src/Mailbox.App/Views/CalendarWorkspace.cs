@@ -2,6 +2,7 @@ using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Controls.Primitives.PopupPositioning;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
@@ -53,6 +54,7 @@ public sealed class CalendarWorkspace : Border
     private readonly Panel _viewHost = new();
     private readonly TextBlock _title = new();
     private readonly TextBlock _pickerLabel = new();
+    private readonly TextBlock _pickerGlyph = new();
     private readonly StackPanel _calendarList = new();
     private readonly Border _navPane;
 
@@ -292,15 +294,11 @@ public sealed class CalendarWorkspace : Border
         };
 
         var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
-        var glyph = new TextBlock
-        {
-            Text = IconGlyphs.GetOrEmpty("month-view", 20),
-            FontFamily = IconFont.Family,
-            FontSize = 17,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        glyph[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("calendar.toolbar.text.brush");
-        row.Children.Add(glyph);
+        _pickerGlyph.FontFamily = IconFont.Family;
+        _pickerGlyph.FontSize = 17;
+        _pickerGlyph.VerticalAlignment = VerticalAlignment.Center;
+        _pickerGlyph[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("calendar.toolbar.text.brush");
+        row.Children.Add(_pickerGlyph);
 
         _pickerLabel.FontSize = 15;
         _pickerLabel.VerticalAlignment = VerticalAlignment.Center;
@@ -318,11 +316,13 @@ public sealed class CalendarWorkspace : Border
         row.Children.Add(chevron);
         button.Content = row;
 
-        var menu = new MenuFlyout();
+        // Left-aligned under the button, as every dropdown in the reference is, and each entry
+        // carrying the same icon the ribbon draws that arrangement with.
+        var menu = new MenuFlyout { Placement = PlacementMode.BottomEdgeAlignedLeft };
         foreach (var kind in (CalendarViewKind[])[CalendarViewKind.Day, CalendarViewKind.WorkWeek, CalendarViewKind.Week, CalendarViewKind.Month, CalendarViewKind.Schedule])
         {
             var choice = kind;
-            var item = new MenuItem { Header = Label(kind) };
+            var item = new MenuItem { Header = Label(kind), Icon = ViewIcon(kind) };
             item.Click += (_, _) => SetView(choice);
             menu.Items.Add(item);
         }
@@ -541,6 +541,7 @@ public sealed class CalendarWorkspace : Border
         ShowView();
         _title.Text = TitleText();
         _pickerLabel.Text = Label(_kind);
+        _pickerGlyph.Text = IconGlyphs.GetOrEmpty(IconFor(_kind), 20);
     }
 
     /// <summary>
@@ -648,6 +649,30 @@ public sealed class CalendarWorkspace : Border
             ? $"{first.ToString("MMMM d", CultureInfo.CurrentCulture)} – {last.Day.ToString(CultureInfo.CurrentCulture)}, {last.Year.ToString(CultureInfo.CurrentCulture)}"
             : $"{first.ToString("MMMM d", CultureInfo.CurrentCulture)} – {last.ToString("MMMM d, yyyy", CultureInfo.CurrentCulture)}";
     }
+
+    /// <summary>The icon the ribbon draws an arrangement with, so the picker's menu agrees with it.</summary>
+    private static Control ViewIcon(CalendarViewKind kind)
+    {
+        var glyph = new TextBlock
+        {
+            Text = IconGlyphs.GetOrEmpty(IconFor(kind), 16),
+            FontFamily = IconFont.Family,
+            FontSize = 15,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        glyph[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("text.primary.brush");
+        return glyph;
+    }
+
+    private static string IconFor(CalendarViewKind kind) => kind switch
+    {
+        CalendarViewKind.Day => "day-view",
+        CalendarViewKind.WorkWeek => "work-week",
+        CalendarViewKind.Week => "week-view",
+        CalendarViewKind.Schedule => "schedule-view",
+        _ => "month-view",
+    };
 
     internal static string Label(CalendarViewKind kind) => kind switch
     {

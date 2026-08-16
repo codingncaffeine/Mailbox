@@ -516,6 +516,15 @@ public partial class MainWindow : Window
         {
             case "calendar": Opened += (_, _) => TogglePeek(); break;
 
+            // A flyout is a separate surface and never appears in a capture, so this one is
+            // checked by reading back where it hangs and what it holds. No CaptureNextWindow:
+            // a menu is not a window and waiting for one would time the run out.
+            case "addmenu":
+                Opened += (_, _) => Dispatcher.UIThread.Post(
+                    () => _ = ShowCalendarPeekAsync("addmenu"),
+                    DispatcherPriority.Background);
+                break;
+
             // The calendar module's own windows. Each opens over the shell, so the harness
             // photographs the next window rather than this one.
             case "appointment":

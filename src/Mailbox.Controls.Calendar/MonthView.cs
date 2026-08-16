@@ -228,7 +228,11 @@ public sealed class MonthView : CalendarSurface
         {
             var date = FirstDay.AddDays(i);
             var name = date.ToString("dddd", Culture);
-            var face = date == Today ? BoldFace : Face;
+
+            // The weekday today falls on, not the date in the first row — the header names a
+            // column, and comparing it to today only matched when the grid happened to start on
+            // today's own date.
+            var face = date.DayOfWeek == Today.DayOfWeek ? BoldFace : Face;
             if (Measure(name, DayTextSize, face) > columns[i] - (DayInset * 2)) name = date.ToString("ddd", Culture);
             DrawAt(context, Ink(name, DayTextSize, ink, face), columnX[i] + DayInset, top + HeaderBaseline);
         }

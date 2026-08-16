@@ -166,6 +166,8 @@
     "reading.infobar.text": "{palette.neutral.primary}",
     "reading.infobar.warning.background": "#FFF4CE",
     "ribbon.background": "#FFFFFF",
+    "ribbon.button.open": "{palette.neutral.light}",
+    "ribbon.button.open.border": "{palette.neutral.tertiary}",
     "ribbon.gallery.background": "{ribbon.background}",
     "ribbon.gallery.border": "{palette.neutral.tertiary}",
     "ribbon.group.label": "{palette.neutral.secondary}",

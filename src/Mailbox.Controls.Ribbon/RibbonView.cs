@@ -876,6 +876,81 @@ public sealed class RibbonView : ContentControl
         return flyout;
     }
 
+    /// <summary>
+    /// The control a command is drawn as on the bar right now, for a menu that has to hang off
+    /// its own button.
+    /// </summary>
+    /// <remarks>
+    /// One command has several controls — a group is built at all three collapse variants — so the
+    /// one that matters is the one actually on screen.
+    /// </remarks>
+    public Control? ControlFor(CommandId id)
+        => _itemControls.TryGetValue(id, out var built)
+            ? built.FirstOrDefault(c => c.IsEffectivelyVisible) ?? built.FirstOrDefault()
+            : null;
+
+    /// <summary>
+    /// Opens a menu under the button that asked for it: its bottom edge, its left edge, and the
+    /// button held in its open state while the menu is up.
+    /// </summary>
+    /// <remarks>
+    /// The reference lines a dropdown's menu up with the button it came from and draws a box
+    /// round that button while it is open, which is how a menu says which button it belongs to.
+    /// Showing at the pointer instead put the menu wherever the cursor was — and in a capture
+    /// run, where there is no pointer at all, in the corner of the window.
+    /// </remarks>
+    public void OpenMenuUnder(CommandId id, MenuFlyout menu, Control? fallback = null)
+    {
+        ArgumentNullException.ThrowIfNull(menu);
+
+        var anchor = ControlFor(id) ?? fallback ?? this;
+        menu.Placement = PlacementMode.BottomEdgeAlignedLeft;
+
+        var boxed = Box(anchor);
+        menu.Closed += OnClosed;
+        menu.ShowAt(anchor);
+
+        void OnClosed(object? sender, EventArgs e)
+        {
+            boxed?.Invoke();
+            menu.Closed -= OnClosed;
+        }
+    }
+
+    /// <summary>
+    /// Draws the open box round a button and hands back what puts it away.
+    /// </summary>
+    /// <remarks>
+    /// Set here rather than through a style class, because a local value beats every style setter
+    /// and these buttons set their own rest state locally — a <c>.menuopen</c> rule would simply
+    /// never win. The padding gives back what the border takes so the label does not step sideways
+    /// as the menu opens.
+    /// </remarks>
+    private Action? Box(Control anchor)
+    {
+        if (anchor is not Button button) return null;
+
+        var background = button.Background;
+        var borderBrush = button.BorderBrush;
+        var thickness = button.BorderThickness;
+        var padding = button.Padding;
+
+        if (this.TryFindResource("ribbon.button.open.brush", out var fill) && fill is IBrush face) button.Background = face;
+        if (this.TryFindResource("ribbon.button.open.border.brush", out var edge) && edge is IBrush line) button.BorderBrush = line;
+        button.BorderThickness = new Thickness(1);
+        button.Padding = new Thickness(
+            Math.Max(0, padding.Left - 1), Math.Max(0, padding.Top - 1),
+            Math.Max(0, padding.Right - 1), Math.Max(0, padding.Bottom - 1));
+
+        return () =>
+        {
+            button.Background = background;
+            button.BorderBrush = borderBrush;
+            button.BorderThickness = thickness;
+            button.Padding = padding;
+        };
+    }
+
     /// <summary>One command can have several controls; Alt traversal takes whichever is shown.</summary>
     private void Record(CommandId id, Control control)
     {
