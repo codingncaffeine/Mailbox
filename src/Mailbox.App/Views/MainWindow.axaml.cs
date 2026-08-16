@@ -494,6 +494,15 @@ public partial class MainWindow : Window
             case "docked": Opened += (_, _) => DockPeek(); break;
             case "backstage": Opened += (_, _) => ShowBackstage(); break;
 
+            // The bar's "…": what it lists at this width, which a capture cannot show.
+            case "overflow":
+                Opened += (_, _) => Dispatcher.UIThread.Post(() =>
+                {
+                    var items = _ribbon?.OpenOverflowMenu() ?? [];
+                    Log.Info($"Harness: the \u2026 menu holds {items.Count}: {string.Join(" | ", items)}");
+                }, DispatcherPriority.Background);
+                break;
+
             // Opens the ribbon's display-options menu, so a capture can check a popup's colours.
             case "menu":
                 Opened += async (_, _) =>
@@ -951,6 +960,16 @@ public partial class MainWindow : Window
                         compose.PoseTyping(typed);
                         var (open, offered) = compose.ToLineCompletion;
                         Console.WriteLine($"Auto-complete on To for \"{typed}\": open={open}, offered={offered}");
+                    }, DispatcherPriority.Background);
+                }
+
+                // What the compose bar's "…" lists at this width, which a capture cannot show.
+                if (Environment.GetEnvironmentVariable("MAILBOX_PEEK")?.ToLowerInvariant() == "overflow")
+                {
+                    compose.Opened += (_, _) => Dispatcher.UIThread.Post(() =>
+                    {
+                        var items = compose.OverflowMenu();
+                        Log.Info($"Harness: the compose \u2026 menu holds {items.Count}: {string.Join(" | ", items)}");
                     }, DispatcherPriority.Background);
                 }
 
