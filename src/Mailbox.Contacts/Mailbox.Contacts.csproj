@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Contacts: the People module's domain — a person or a group as the application thinks of one,
+    and the vCard text it is kept and exchanged as. FolkerKinzel.VCards (MIT) reads and writes
+    vCard 2.1, 3.0 and 4.0; what is ours is the shape above it (§9): one contact record whatever
+    version it arrived in, the file-as and display-name rules the reference files people by, and
+    a distribution list as a group of members that survives a round trip through any of them.
+  -->
+
+  <ItemGroup>
+    <PackageReference Include="FolkerKinzel.VCards" Version="$(VCardsVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Mailbox.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mailbox.Core\Mailbox.Core.csproj" />
+    <ProjectReference Include="..\Mailbox.Store\Mailbox.Store.csproj" />
+  </ItemGroup>
+
+</Project>
