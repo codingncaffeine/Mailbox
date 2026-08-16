@@ -101,6 +101,7 @@ public partial class MainWindow
         workspace.Changed += (_, _) => shell.ModuleStatusLeft = workspace.Status;
         workspace.NewRequested += (_, when) => _ = NewAppointmentAsync(shell, when.Start, when.AllDay);
         workspace.EntryOpened += (_, entry) => _ = OpenAppointmentAsync(shell, entry);
+        workspace.EntryMoved += (_, move) => MoveAppointment(shell, move);
         _calendar = workspace;
         return workspace;
     }
@@ -552,6 +553,84 @@ public partial class MainWindow
 
         shell.StatusRight = $"“{Named(result.Event)}” saved.";
         AfterStoreChange(shell);
+    }
+
+    /// <summary>
+    /// Writes what a drag came to: the appointment at its new time, or with its new length.
+    /// </summary>
+    /// <remarks>
+    /// One occurrence of a series dragged is that occurrence overridden, and nothing is asked
+    /// first — unlike opening one, where the question is real. The gesture has already named
+    /// which occurrence it means (that chip) and where it means it to go (there); moving the
+    /// whole series to a Thursday in August is not a thing the drag could have been asking for.
+    /// <para>
+    /// A read-only calendar's items are not draggable at all, so refusing here is the belt to the
+    /// view's braces: an entry can outlive its collection's permissions in a stale view.
+    /// </para>
+    /// </remarks>
+    internal void MoveAppointment(ShellViewModel shell, EntryMove move)
+    {
+        var entry = move.Entry;
+        if (entry.IsReadOnly)
+        {
+            shell.StatusRight = $"“{entry.CollectionName}” is read-only.";
+            return;
+        }
+
+        if (App.Pim.Item(entry.ItemId) is not { } stored)
+        {
+            shell.StatusRight = "That appointment is no longer in the calendar.";
+            AfterStoreChange(shell);
+            return;
+        }
+
+        var master = PimEventCodec.FromItem(stored);
+        var zone = master.Start.TzId ?? TimeZoneInfo.Local.Id;
+        var start = move.AllDay ? EventTime.Date(DateOnly.FromDateTime(move.Start)) : EventTime.At(move.Start, zone);
+        var end = move.AllDay ? EventTime.Date(DateOnly.FromDateTime(move.End)) : EventTime.At(move.End, zone);
+
+        var occurrence = entry.Occurrence.IsPartOfSeries && !master.IsOverride;
+        var edited = (occurrence ? SeriesEditor.OverrideFor(master, entry.Occurrence) : master) with
+        {
+            Start = start,
+            End = end,
+            Sequence = master.Sequence + 1,
+            LastModified = DateTimeOffset.UtcNow,
+        };
+
+        // An override is a sibling row of its master, never a replacement for it.
+        var written = SaveAppointment(edited, occurrence ? null : stored, stored.CollectionId);
+
+        var name = Named(master);
+        shell.StatusRight = move.Resized
+            ? $"“{name}” now runs {Span(move)}."
+            : $"“{name}” moved to {Moment(move)}.";
+        Log.Info($"Calendar: item {written.Id} {(move.Resized ? "resized" : "moved")} to {start.ToLocalText()}–{end.ToLocalText()}{(occurrence ? ", as an override" : string.Empty)}.");
+        AfterStoreChange(shell);
+    }
+
+    /// <summary>What a moved appointment's new time reads as on the status bar.</summary>
+    private static string Moment(EntryMove move) => move.AllDay
+        ? move.Start.ToString("dddd d MMMM", CultureInfo.CurrentCulture)
+        : move.Start.ToString("dddd d MMMM, HH:mm", CultureInfo.CurrentCulture);
+
+    private static string Span(EntryMove move)
+    {
+        if (move.AllDay)
+        {
+            var days = Math.Max(1, (move.End - move.Start).Days);
+            return days == 1 ? "for the day" : $"for {days.ToString(CultureInfo.CurrentCulture)} days";
+        }
+
+        var length = move.End - move.Start;
+        var hours = (int)length.TotalHours;
+        var minutes = length.Minutes;
+        return (hours, minutes) switch
+        {
+            (0, _) => $"{minutes.ToString(CultureInfo.CurrentCulture)} minutes",
+            (_, 0) => hours == 1 ? "an hour" : $"{hours.ToString(CultureInfo.CurrentCulture)} hours",
+            _ => $"{hours.ToString(CultureInfo.CurrentCulture)}h {minutes.ToString(CultureInfo.CurrentCulture)}m",
+        };
     }
 
     private async Task DeleteSelectedAppointmentAsync(ShellViewModel shell)

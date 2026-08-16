@@ -48,9 +48,19 @@ public sealed class TimeGridView : CalendarSurface
     /// <summary>The scroll gutter down the right-hand edge, as the month view has.</summary>
     private const double GutterWidth = 17;
 
-    private readonly List<(Rect Box, CalendarEntry Entry)> _entryHits = [];
+    private readonly List<(Rect Box, CalendarEntry Entry, bool Banded)> _entryHits = [];
     private readonly List<(Rect Box, DateOnly Day, TimeOnly? At)> _slotHits = [];
     private Rect _gutter;
+
+    // What the last render laid out, which is what a drag reads to turn a point into a day and
+    // a time. Kept rather than recomputed so the two cannot disagree by a pixel.
+    private IReadOnlyList<DateOnly> _laidOut = [];
+    private int[] _columnWidths = [];
+    private double[] _columnX = [];
+    private double _bandTop;
+    private double _bandBottom;
+    private double _gridTop;
+    private ChipDrag? _drag;
 
     public TimeGridView()
     {
@@ -251,10 +261,18 @@ public sealed class TimeGridView : CalendarSurface
         Fill(context, new Rect(0, bandTop + bandHeight, width, 1), gridLine);
 
         var gridTop = bandTop + bandHeight + 1;
+        _laidOut = days;
+        _columnWidths = columns;
+        _columnX = columnX;
+        _bandTop = bandTop;
+        _bandBottom = bandTop + bandHeight;
+        _gridTop = gridTop;
+
         DrawGrid(context, days, columns, columnX, gridTop, width, gridLine);
 
         _gutter = new Rect(width, 0, GutterWidth, Bounds.Height);
         DrawGutter(context, _gutter, gridTop);
+        DrawGhost(context, width);
     }
 
     private void DrawHeader(DrawingContext context, IReadOnlyList<DateOnly> days, int[] columns, double[] columnX)
@@ -321,7 +339,7 @@ public sealed class TimeGridView : CalendarSurface
             var box = new Rect(left + 1, top + 2 + (bar.Lane * (laneHeight + 1)), Math.Max(0, right - left - 2), laneHeight);
             var lines = Wrap(bar.Item.Summary, box.Width - ChipTextInset - 2, 1, ChipTextSize);
             DrawChip(context, box, Palette.Chip(bar.Item.Colour, bar.Item.Busy), lines, ReferenceEquals(bar.Item, SelectedEntry));
-            _entryHits.Add((box, bar.Item));
+            _entryHits.Add((box, bar.Item, true));
         }
 
         return height;
@@ -450,7 +468,7 @@ public sealed class TimeGridView : CalendarSurface
             }
 
             DrawChip(context, box, Palette.Chip(entry.Colour, entry.Busy), lines, ReferenceEquals(entry, SelectedEntry), boldFirstLine: true);
-            _entryHits.Add((box, entry));
+            _entryHits.Add((box, entry, false));
         }
     }
 
@@ -500,7 +518,111 @@ public sealed class TimeGridView : CalendarSurface
         Fill(context, new Rect(track.X + 1, track.Y + Math.Clamp(offset, 0, track.Height - thumbHeight), track.Width - 2, thumbHeight), mark);
     }
 
+    /// <summary>
+    /// The chip a drag is proposing, drawn where it would land while the original stays where it
+    /// is — so the two can be compared, which is the whole point of showing it.
+    /// </summary>
+    private void DrawGhost(DrawingContext context, double width)
+    {
+        if (_drag is not { Live: true } drag || !drag.Moved) return;
+        if (GhostBox(drag) is not { } box) return;
+
+        var entry = drag.Entry;
+        var lines = Wrap(entry.Summary, box.Width - ChipTextInset - 2, Math.Max(1, (int)((box.Height - ChipPadding) / ChipLineHeight)), ChipTextSize, SemiBoldFace);
+        using var clip = context.PushClip(new Rect(0, _bandTop, width, Bounds.Height - _bandTop));
+        using var fade = context.PushOpacity(0.65);
+        DrawChip(context, box, Palette.Chip(entry.Colour, entry.Busy), lines, selected: true, boldFirstLine: true);
+    }
+
+    /// <summary>Where the ghost goes: the band for an all-day proposal, the grid for a timed one.</summary>
+    private Rect? GhostBox(ChipDrag drag)
+    {
+        var first = ColumnOf(DateOnly.FromDateTime(drag.Start));
+        if (first < 0) return null;
+
+        if (drag.AllDay)
+        {
+            var lastDay = DateOnly.FromDateTime(drag.End.AddTicks(-1));
+            var last = Math.Clamp(ColumnOf(lastDay) is var found and >= 0 ? found : _laidOut.Count - 1, first, _laidOut.Count - 1);
+            var left = _columnX[first];
+            var right = _columnX[last] + _columnWidths[last];
+            return new Rect(left + 1, _bandTop + 2, Math.Max(12, right - left - 2), ChipHeight(1));
+        }
+
+        var dayStart = drag.Start.Date;
+        var top = _gridTop + (((drag.Start - dayStart).TotalMinutes - ScrollMinutes) / SlotMinutes * SlotHeight);
+        var bottom = _gridTop + (((drag.End - dayStart).TotalMinutes - ScrollMinutes) / SlotMinutes * SlotHeight);
+        return new Rect(
+            _columnX[first] + 1,
+            top,
+            Math.Max(12, _columnWidths[first] - 2),
+            Math.Max(ChipHeight(1), bottom - top - 1));
+    }
+
+    // ---- Where things were drawn ---------------------------------------------------------------
+
+    /// <summary>
+    /// The box an appointment was last drawn in, or null when it is not on show.
+    /// </summary>
+    /// <remarks>
+    /// What hit-testing already knows, said out loud: the harness cannot click, so a drag is
+    /// pressed at real coordinates read from here rather than at coordinates guessed from the
+    /// geometry — a pose that guessed would prove the guess and not the view.
+    /// </remarks>
+    public Rect? BoxOf(CalendarEntry entry)
+    {
+        for (var i = _entryHits.Count - 1; i >= 0; i--)
+        {
+            if (ReferenceEquals(_entryHits[i].Entry, entry)) return _entryHits[i].Box;
+        }
+
+        return null;
+    }
+
+    /// <summary>The point a day and a time of day sit at, or null when that day is not on show.</summary>
+    public Point? PointAt(DateOnly day, TimeSpan at, bool allDay = false)
+    {
+        var column = ColumnOf(day);
+        if (column < 0) return null;
+
+        var x = _columnX[column] + (_columnWidths[column] / 2);
+        return allDay
+            ? new Point(x, _bandTop + ((_bandBottom - _bandTop) / 2))
+            : new Point(x, _gridTop + ((at.TotalMinutes - ScrollMinutes) / SlotMinutes * SlotHeight));
+    }
+
     // ---- Input -----------------------------------------------------------------------------
+
+    /// <summary>The column a date is in, or -1 when it is not on show.</summary>
+    private int ColumnOf(DateOnly date)
+    {
+        for (var i = 0; i < _laidOut.Count; i++)
+        {
+            if (_laidOut[i] == date) return i;
+        }
+
+        return -1;
+    }
+
+    /// <summary>The column a point is over, clamped to the ones there are.</summary>
+    private int ColumnAt(double x)
+    {
+        if (_laidOut.Count == 0) return -1;
+        for (var i = 0; i < _laidOut.Count; i++)
+        {
+            if (x < _columnX[i] + _columnWidths[i]) return i;
+        }
+
+        return _laidOut.Count - 1;
+    }
+
+    /// <summary>The moment a height in the grid stands for, snapped to the time scale.</summary>
+    private TimeSpan TimeAt(double y)
+    {
+        var minutes = ScrollMinutes + ((y - _gridTop) / SlotHeight * SlotMinutes);
+        var snapped = Math.Round(minutes / SlotMinutes) * SlotMinutes;
+        return TimeSpan.FromMinutes(Math.Clamp(snapped, 0, (24 * 60) - SlotMinutes));
+    }
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
@@ -509,11 +631,28 @@ public sealed class TimeGridView : CalendarSurface
 
         for (var i = _entryHits.Count - 1; i >= 0; i--)
         {
-            if (!_entryHits[i].Box.Contains(point)) continue;
-            var entry = _entryHits[i].Entry;
+            var (box, entry, banded) = _entryHits[i];
+            if (!box.Contains(point)) continue;
             SelectedEntry = entry;
             EntrySelected?.Invoke(this, entry);
             if (e.ClickCount >= 2) EntryActivated?.Invoke(this, entry);
+            else if (ChipDrag.CanDrag(entry) && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            {
+                // Held, not yet dragged: the same press still selects, and only the pointer
+                // leaving the threshold turns it into a move.
+                _drag = new ChipDrag
+                {
+                    Entry = entry,
+                    Grip = ChipDrag.GripAt(box, point, horizontal: banded),
+                    Origin = point,
+                    Box = box,
+                    Start = entry.StartWall,
+                    End = entry.EndWall,
+                    AllDay = entry.AllDay,
+                };
+                e.Pointer.Capture(this);
+            }
+
             e.Handled = true;
             return;
         }
@@ -529,6 +668,159 @@ public sealed class TimeGridView : CalendarSurface
             return;
         }
     }
+
+    protected override void OnPointerMoved(PointerEventArgs e)
+    {
+        base.OnPointerMoved(e);
+        var point = e.GetPosition(this);
+
+        if (_drag is not { } drag)
+        {
+            ShowGripCursor(point);
+            return;
+        }
+
+        if (!drag.Live)
+        {
+            var far = Math.Abs(point.X - drag.Origin.X) > ChipDrag.Threshold
+                      || Math.Abs(point.Y - drag.Origin.Y) > ChipDrag.Threshold;
+            if (!far) return;
+            drag.Live = true;
+            Cursor = new Cursor(drag.Grip == DragGrip.Move ? StandardCursorType.SizeAll : GripCursor(drag.Grip, drag.Entry.AllDay));
+        }
+
+        Propose(drag, point);
+        InvalidateVisual();
+        e.Handled = true;
+    }
+
+    protected override void OnPointerReleased(PointerReleasedEventArgs e)
+    {
+        base.OnPointerReleased(e);
+        var drag = _drag;
+        _drag = null;
+        Cursor = Cursor.Default;
+        if (drag is null) return;
+
+        e.Pointer.Capture(null);
+        if (!drag.Live) return;
+
+        InvalidateVisual();
+        if (!drag.Moved) return;
+
+        RaiseMoved(new EntryMove(drag.Entry, drag.Start, drag.End, drag.AllDay)
+        {
+            Resized = drag.Grip != DragGrip.Move,
+        });
+        e.Handled = true;
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.Key != Key.Escape || _drag is null) return;
+
+        // A drag let go of: nothing is written and the chip is where it was.
+        _drag = null;
+        Cursor = Cursor.Default;
+        InvalidateVisual();
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Where the drag now proposes to leave the appointment. A move keeps its length and the
+    /// grab's own offset inside it; an edge moves only that end, and never past the other.
+    /// </summary>
+    /// <remarks>
+    /// Read off the pointer each time rather than accumulated, so a drag that wanders and comes
+    /// back proposes exactly what it did before — an accumulated delta drifts by whatever the
+    /// snapping rounded away on each step.
+    /// </remarks>
+    private void Propose(ChipDrag drag, Point point)
+    {
+        var column = ColumnAt(point.X);
+        if (column < 0) return;
+
+        var day = _laidOut[column];
+        var entry = drag.Entry;
+        var least = TimeSpan.FromMinutes(SlotMinutes);
+        var overBand = point.Y >= _bandTop && point.Y <= _bandBottom;
+
+        if (drag.Grip == DragGrip.Move)
+        {
+            // Whole days in the band, and an all-day item stays one wherever it is let go: the
+            // band is where the reference keeps them, and dropping one on a Wednesday means
+            // Wednesday, not Wednesday at whatever hour the pointer was over.
+            if (overBand || entry.AllDay)
+            {
+                var origin = DateOnly.FromDateTime(entry.StartWall);
+                var grabbed = ColumnAt(drag.Origin.X);
+                var lead = entry.AllDay && grabbed >= 0 ? Math.Max(0, _laidOut[grabbed].DayNumber - origin.DayNumber) : 0;
+                var first = day.AddDays(-lead);
+                var length = entry.AllDay
+                    ? Math.Max(1, DateOnly.FromDateTime(entry.EndWall).DayNumber - origin.DayNumber)
+                    : 1;
+
+                drag.AllDay = true;
+                drag.Start = first.ToDateTime(TimeOnly.MinValue);
+                drag.End = first.AddDays(length).ToDateTime(TimeOnly.MinValue);
+                return;
+            }
+
+            var at = TimeAt(point.Y - (drag.Origin.Y - drag.Box.Y));
+            drag.AllDay = false;
+            drag.Start = day.ToDateTime(TimeOnly.MinValue) + at;
+            drag.End = drag.Start + (entry.EndWall - entry.StartWall);
+            return;
+        }
+
+        if (entry.AllDay)
+        {
+            // An all-day run's edges move by whole days, and the run never turns inside out.
+            var first = DateOnly.FromDateTime(entry.StartWall);
+            var last = DateOnly.FromDateTime(entry.EndWall.AddTicks(-1));
+            if (drag.Grip == DragGrip.Start) first = day <= last ? day : last;
+            else last = day >= first ? day : first;
+
+            drag.Start = first.ToDateTime(TimeOnly.MinValue);
+            drag.End = last.AddDays(1).ToDateTime(TimeOnly.MinValue);
+            return;
+        }
+
+        // A timed edge stays on its own day: dragging the bottom of Tuesday's meeting into
+        // Wednesday's column lengthens it, it does not move it.
+        var edge = entry.StartWall.Date + TimeAt(point.Y);
+        if (drag.Grip == DragGrip.Start)
+        {
+            drag.Start = edge <= entry.EndWall - least ? edge : entry.EndWall - least;
+            drag.End = entry.EndWall;
+        }
+        else
+        {
+            drag.Start = entry.StartWall;
+            drag.End = edge >= entry.StartWall + least ? edge : entry.StartWall + least;
+        }
+    }
+
+    /// <summary>The pointer over an edge says so, as every resizable thing on the desktop does.</summary>
+    private void ShowGripCursor(Point point)
+    {
+        for (var i = _entryHits.Count - 1; i >= 0; i--)
+        {
+            var (box, entry, banded) = _entryHits[i];
+            if (!box.Contains(point)) continue;
+            var grip = ChipDrag.CanDrag(entry) ? ChipDrag.GripAt(box, point, horizontal: banded) : DragGrip.Move;
+            Cursor = grip == DragGrip.Move ? Cursor.Default : new Cursor(GripCursor(grip, banded));
+            return;
+        }
+
+        Cursor = Cursor.Default;
+    }
+
+    private static StandardCursorType GripCursor(DragGrip grip, bool horizontal)
+        => horizontal
+            ? (grip == DragGrip.Start ? StandardCursorType.LeftSide : StandardCursorType.RightSide)
+            : (grip == DragGrip.Start ? StandardCursorType.TopSide : StandardCursorType.BottomSide);
 
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
     {

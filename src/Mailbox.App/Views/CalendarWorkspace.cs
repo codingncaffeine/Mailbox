@@ -119,12 +119,25 @@ public sealed class CalendarWorkspace : Border
     /// <summary>What the status bar says: the reference counts the items the view is showing.</summary>
     public string Status => $"Items: {_entries.Count}";
 
+    /// <summary>What the view is showing, in start order.</summary>
+    public IReadOnlyList<CalendarEntry> Entries => _entries;
+
+    /// <summary>The month grid, when it is the one on show.</summary>
+    internal MonthView? Month => _kind == CalendarViewKind.Month ? _month : null;
+
+    /// <summary>The day, work week or week grid, when one of them is on show.</summary>
+    internal TimeGridView? TimeGrid
+        => _kind is CalendarViewKind.Day or CalendarViewKind.WorkWeek or CalendarViewKind.Week ? _timeGrid : null;
+
     public event EventHandler? Changed;
 
     /// <summary>A double click on empty time, or the New Appointment command with a day chosen.</summary>
     public event EventHandler<(DateTime Start, bool AllDay)>? NewRequested;
 
     public event EventHandler<CalendarEntry>? EntryOpened;
+
+    /// <summary>An appointment dragged to another time, or an edge of one dragged to a new length.</summary>
+    public event EventHandler<EntryMove>? EntryMoved;
 
     // ---- The left-hand pane ------------------------------------------------------------------
 
@@ -396,6 +409,13 @@ public sealed class CalendarWorkspace : Border
 
         _schedule.EntrySelected += (_, entry) => SelectedEntry = entry;
         _schedule.EntryActivated += (_, entry) => EntryOpened?.Invoke(this, entry);
+
+        // A drag means the same thing in whichever view it happened, so both hand it on through
+        // one event rather than each being wired to its own handler. Schedule View is left out:
+        // its second axis is which calendar a row belongs to, so a drag down it means moving an
+        // appointment to another calendar, which is a different operation from changing when it is.
+        _month.EntryMoved += (_, move) => EntryMoved?.Invoke(this, move);
+        _timeGrid.EntryMoved += (_, move) => EntryMoved?.Invoke(this, move);
     }
 
     // ---- Moving about -------------------------------------------------------------------------
