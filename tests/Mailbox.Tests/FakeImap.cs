@@ -86,10 +86,47 @@ internal sealed class FakeImap : IImapSession
         => Task.FromResult<IReadOnlyList<RemoteFolder>>(
             [.. _folders.Values.Select(f => new RemoteFolder(f.Path, f.Name, f.ParentPath, f.Role, f.Selectable, f.IsView))]);
 
-    public Task<RemoteFolder> CreateFolderAsync(string name, CancellationToken c)
+    public Task<RemoteFolder> CreateFolderAsync(string name, CancellationToken c, string? parentPath = null)
     {
-        var folder = Folder(name);
-        return Task.FromResult(new RemoteFolder(folder.Path, folder.Name, null, FolderRole.None, true, false));
+        var path = parentPath is { Length: > 0 } ? parentPath + "/" + name : name;
+        var folder = Folder(path);
+        return Task.FromResult(new RemoteFolder(folder.Path, name, parentPath is { Length: > 0 } ? parentPath : null, FolderRole.None, true, false));
+    }
+
+    public Task<RemoteFolder> RenameFolderAsync(string path, string newName, CancellationToken c)
+    {
+        var slash = path.LastIndexOf('/');
+        var parent = slash > 0 ? path[..slash] : null;
+        var newPath = parent is null ? newName : parent + "/" + newName;
+
+        ServerFolder Moved(ServerFolder from, string to)
+        {
+            var moved = new ServerFolder(to, from.Role) { IsView = from.IsView, Selectable = from.Selectable, UidValidity = from.UidValidity, NextUid = from.NextUid };
+            moved.Messages.AddRange(from.Messages);
+            return moved;
+        }
+
+        var folder = _folders[path];
+        _folders.Remove(path);
+        _folders[newPath] = Moved(folder, newPath);
+
+        // The folders under it move with it, as they do on a real server.
+        foreach (var child in _folders.Keys.Where(k => k.StartsWith(path + "/", StringComparison.Ordinal)).ToList())
+        {
+            var to = newPath + child[path.Length..];
+            var moved = Moved(_folders[child], to);
+            _folders.Remove(child);
+            _folders[to] = moved;
+        }
+
+        return Task.FromResult(new RemoteFolder(newPath, newName, parent, FolderRole.None, true, false));
+    }
+
+    public Task DeleteFolderAsync(string path, CancellationToken c)
+    {
+        _folders.Remove(path);
+        foreach (var child in _folders.Keys.Where(k => k.StartsWith(path + "/", StringComparison.Ordinal)).ToList()) _folders.Remove(child);
+        return Task.CompletedTask;
     }
 
     public Task<FolderState> OpenAsync(string path, CancellationToken c)

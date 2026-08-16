@@ -58,6 +58,10 @@ public sealed class MailOptions(SettingsStore settings)
     public const string CleanUpKeepFlaggedKey = "mail.cleanup.keepflagged";
     public const string CleanUpKeepSignedKey = "mail.cleanup.keepsigned";
     public const string CleanUpKeepModifiedKey = "mail.cleanup.keepmodified";
+    public const string CleanUpFolderKey = "mail.cleanup.folder";
+    public const string ReadingPaneMarkOnViewKey = "mail.readingpane.markonview";
+    public const string ReadingPaneMarkSecondsKey = "mail.readingpane.markseconds";
+    public const string ReadingPaneMarkOnChangeKey = "mail.readingpane.markonchange";
     public const string IgnoreConfirmKey = "mail.ignore.confirm";
     public const string DesktopAlertKey = "mail.arrival.alert";
     public const string RequestDeliveryReceiptKey = "mail.tracking.delivery";
@@ -221,6 +225,41 @@ public sealed class MailOptions(SettingsStore settings)
     }
 
     /// <summary>The Options page's Conversation Clean Up switches, as the clean-up reads them.</summary>
+    /// <summary>
+    /// "Cleaned-up items will go to this folder": a folder name — Deleted Items when empty —
+    /// resolved per account by name, since each account has its own folders.
+    /// </summary>
+    public string CleanUpFolder
+    {
+        get => _settings.GetString(CleanUpFolderKey);
+        set => _settings.Set(CleanUpFolderKey, value ?? string.Empty);
+    }
+
+    // ---- Reading Pane… ---------------------------------------------------------------------------
+    // The reference's defaults: read after a while in the pane is off, read when the selection
+    // moves on is on. Nothing was ever marked read by looking until these existed.
+
+    /// <summary>"Mark items as read when viewed in the Reading Pane".</summary>
+    public bool ReadingPaneMarkOnView
+    {
+        get => _settings.GetBool(ReadingPaneMarkOnViewKey, false);
+        set => _settings.Set(ReadingPaneMarkOnViewKey, value);
+    }
+
+    /// <summary>"Wait N seconds before marking item as read".</summary>
+    public int ReadingPaneMarkSeconds
+    {
+        get => Math.Clamp((int)_settings.GetNumber(ReadingPaneMarkSecondsKey, 5), 0, 999);
+        set => _settings.Set(ReadingPaneMarkSecondsKey, Math.Clamp(value, 0, 999));
+    }
+
+    /// <summary>"Mark item as read when selection changes".</summary>
+    public bool ReadingPaneMarkOnChange
+    {
+        get => _settings.GetBool(ReadingPaneMarkOnChangeKey, true);
+        set => _settings.Set(ReadingPaneMarkOnChangeKey, value);
+    }
+
     public Mailbox.Core.Conversations.CleanUpPolicy CleanUpPolicy => new()
     {
         KeepUnread = _settings.GetBool(CleanUpKeepUnreadKey, false),

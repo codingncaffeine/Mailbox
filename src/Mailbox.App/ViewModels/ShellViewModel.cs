@@ -1211,6 +1211,41 @@ public sealed partial class ShellViewModel : ObservableObject
         SelectedMessage = Messages.FirstOrDefault();
     }
 
+    /// <summary>The store folder an ordinary node stands for, for the pane's menu; null for headings and search folders.</summary>
+    public (OpenAccount Account, Folder Folder)? FolderOf(FolderNode node)
+        => _folderIds.TryGetValue(node, out var where) && where.Account.Mail.GetFolder(where.FolderId) is { } folder
+            ? (where.Account, folder)
+            : null;
+
+    /// <summary>Selects the node standing for a store folder, after the pane has been rebuilt.</summary>
+    public void SelectFolder(OpenAccount account, long folderId)
+    {
+        Refresh();
+        SelectedFolder = _folderIds.FirstOrDefault(kv => kv.Value.FolderId == folderId && kv.Value.Account.Account.Address == account.Account.Address).Key ?? SelectedFolder;
+    }
+
+    /// <summary>Mark All as Read: every message of a folder, at once.</summary>
+    public int MarkFolderRead(OpenAccount account, long folderId)
+    {
+        var ids = account.Mail.Messages(folderId, int.MaxValue).Where(m => !m.IsRead).Select(m => m.Id).ToList();
+        if (ids.Count == 0) return 0;
+        var count = account.Mail.SetRead(ids, read: true);
+        foreach (var row in Messages.Where(r => ids.Contains(r.Id))) row.IsUnread = false;
+        RefreshCounts();
+        Raise(nameof(StatusLeft));
+        return count;
+    }
+
+    /// <summary>Empty Folder / Delete All: everything in a folder, gone for good.</summary>
+    public int EmptyFolder(OpenAccount account, long folderId)
+    {
+        var ids = account.Mail.Messages(folderId, int.MaxValue).Select(m => m.Id).ToList();
+        if (ids.Count == 0) return 0;
+        var count = account.Mail.DeleteMessages(ids);
+        Refresh();
+        return count;
+    }
+
     /// <summary>The account a search-folder node belongs to, for the pane's menu; null for other nodes.</summary>
     public OpenAccount? SearchFolderAccount(FolderNode node)
         => _searchFolderRoots.TryGetValue(node, out var root) ? root
@@ -1419,7 +1454,12 @@ public sealed partial class ShellViewModel : ObservableObject
     public int CleanUp(IReadOnlyList<MessageRow> rows, bool wholeFolder, bool withSubfolders)
     {
         if (CurrentAccount is not { } account || CurrentMail is not { } mail) return 0;
-        if (mail.FolderWithRole(account.Account.Id, FolderRole.Deleted) is not { } deleted) return 0;
+
+        // Options › Mail's "Cleaned-up items will go to this folder", by name in this account; Deleted Items otherwise.
+        var wanted = App.MailOptions.CleanUpFolder;
+        var deleted = (wanted.Length > 0 ? mail.Folders(account.Account.Id).FirstOrDefault(f => string.Equals(f.Name, wanted, StringComparison.OrdinalIgnoreCase)) : null)
+                      ?? mail.FolderWithRole(account.Account.Id, FolderRole.Deleted);
+        if (deleted is null) return 0;
 
         var policy = App.MailOptions.CleanUpPolicy;
         var folders = new List<long>();
@@ -1468,7 +1508,7 @@ public sealed partial class ShellViewModel : ObservableObject
         RefreshCounts();
         StatusRight = doomed.Count == 0
             ? "No redundant messages were found."
-            : $"{Describe(doomed.Count)} moved to Deleted Items by Clean Up.";
+            : $"{Describe(doomed.Count)} moved to {deleted.Name} by Clean Up.";
         return doomed.Count;
     }
 

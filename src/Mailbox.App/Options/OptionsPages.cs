@@ -139,8 +139,7 @@ public static class OptionsPages
 
             new OptionSection("Conversation Clean Up",
             [
-                new BrowseRow("Cleaned-up items will go to this folder:"),
-                new NoteRow("Messages moved by Clean Up will go to their account's Deleted Items."),
+                new SlotRow("cleanupfolder"),
                 new CheckRow("When cleaning sub-folders, recreate the folder hierarchy in the destination folder"),
                 new CheckRow("Don't move unread messages") { Key = MailOptions.CleanUpKeepUnreadKey },
                 new CheckRow("Don't move categorized messages", true) { Key = MailOptions.CleanUpKeepCategorizedKey },

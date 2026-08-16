@@ -351,6 +351,10 @@ public sealed class OptionsWindow : Window
             case "AutoArchive Settings...":
                 _ = new AutoArchiveSettingsDialog(App.AutoArchive).ShowDialog(this);
                 break;
+
+            case "Reading Pane...":
+                _ = new ReadingPaneOptionsDialog(App.MailOptions).ShowDialog(this);
+                break;
         }
     }
 
@@ -393,6 +397,31 @@ public sealed class OptionsWindow : Window
         {
             autostart.Content = AutostartRows();
         }
+
+        if (renderer.Slots.TryGetValue("cleanupfolder", out var cleanupFolder))
+        {
+            cleanupFolder.Content = CleanUpFolderRow();
+        }
+    }
+
+    /// <summary>"Cleaned-up items will go to this folder": the name, and Browse… over the default account's folders.</summary>
+    private Control CleanUpFolderRow()
+    {
+        var caption = new TextBlock { Text = "Cleaned-up items will go to this folder:", VerticalAlignment = VerticalAlignment.Center, Width = 240 };
+        Bind(caption, TextBlock.ForegroundProperty, "dialog.foreground.brush");
+        var name = new TextBox { Width = 200, IsReadOnly = true, Text = App.MailOptions.CleanUpFolder is { Length: > 0 } chosen ? chosen : "Deleted Items" };
+        var browse = new Button { Content = "Browse…" };
+        browse.Click += async (_, _) =>
+        {
+            if (App.Accounts.Default is not { } account) return;
+            var folders = account.Mail.Folders(account.Account.Id).Where(f => f.Role != Mailbox.Store.FolderRole.Outbox).ToList();
+            var choices = folders.Select(f => new Choice(f.Name, f.Name)).ToList();
+            var picked = await Chooser.AskAsync(this, "Select Folder", "Cleaned-up items will go to:", choices, name.Text);
+            if (picked is null) return;
+            App.MailOptions.CleanUpFolder = picked == "Deleted Items" ? string.Empty : picked;
+            name.Text = picked;
+        };
+        return new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { caption, name, browse } };
     }
 
     /// <summary>

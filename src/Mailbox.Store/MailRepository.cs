@@ -125,6 +125,53 @@ public sealed class MailRepository(MailStore store)
         return removed;
     });
 
+    /// <summary>
+    /// Renames a folder here, and re-paths it and everything under it when it has a server
+    /// name — the server has already renamed the tree, or is about to.
+    /// </summary>
+    public void RenameFolder(long folderId, string name, string? newImapPath)
+    {
+        _store.InTransaction(() =>
+        {
+            var before = GetFolder(folderId);
+            if (before is null) return 0;
+
+            _store.Execute("UPDATE folders SET name = $name, imap_path = $path WHERE id = $id",
+                ("$name", name), ("$path", newImapPath ?? before.ImapPath), ("$id", folderId));
+
+            if (before.ImapPath is { } oldPath && newImapPath is { } newPath && oldPath != newPath)
+            {
+                foreach (var child in _store.Query(
+                             "SELECT id, imap_path FROM folders WHERE account_id = $account AND imap_path LIKE $prefix || '%'",
+                             r => (Id: r.GetInt64(0), Path: r.GetString(1)),
+                             ("$account", before.AccountId), ("$prefix", oldPath + "/")))
+                {
+                    _store.Execute("UPDATE folders SET imap_path = $path WHERE id = $id",
+                        ("$path", newPath + child.Path[oldPath.Length..]), ("$id", child.Id));
+                }
+
+                MarkSieveStale();
+            }
+
+            return 0;
+        });
+    }
+
+    /// <summary>Removes a folder, the folders under it, and everything in all of them.</summary>
+    public void RemoveFolderTree(long folderId)
+    {
+        _store.InTransaction(() =>
+        {
+            foreach (var child in _store.Query("SELECT id FROM folders WHERE parent_id = $id", r => r.GetInt64(0), ("$id", folderId)))
+            {
+                RemoveFolderTree(child);
+            }
+
+            RemoveFolder(folderId);
+            return 0;
+        });
+    }
+
     /// <summary>Removes a folder and everything in it. A server folder that has gone.</summary>
     public void RemoveFolder(long folderId) => _store.InTransaction(() =>
     {
