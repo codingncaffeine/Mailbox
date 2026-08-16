@@ -352,6 +352,15 @@ public class ThemeServiceTests
     [Theory]
     [InlineData(TokenKeys.Ribbon.TabUnderline, TokenKeys.Ribbon.TabStripBackground)]
     [InlineData(TokenKeys.Rail.Indicator, TokenKeys.Rail.Background)]
+    [InlineData(TokenKeys.RibbonIcon.Respond, TokenKeys.Ribbon.Background)]
+    [InlineData(TokenKeys.RibbonIcon.Forward, TokenKeys.Ribbon.Background)]
+    [InlineData(TokenKeys.RibbonIcon.Flag, TokenKeys.Ribbon.Background)]
+    [InlineData(TokenKeys.RibbonIcon.FlagOutline, TokenKeys.Ribbon.Background)]
+    [InlineData(TokenKeys.RibbonIcon.FlagPole, TokenKeys.Ribbon.Background)]
+    [InlineData(TokenKeys.RibbonIcon.SwatchBlue, TokenKeys.Ribbon.Background)]
+    [InlineData(TokenKeys.RibbonIcon.SwatchGrey, TokenKeys.Ribbon.Background)]
+    [InlineData(TokenKeys.RibbonIcon.SwatchGold, TokenKeys.Ribbon.Background)]
+    [InlineData(TokenKeys.RibbonIcon.SwatchGreen, TokenKeys.Ribbon.Background)]
     public void MarksAreAtLeastDistinctFromWhatSitsBehindThem(string mark, string ground)
     {
         foreach (var id in OfficeThemes.All)

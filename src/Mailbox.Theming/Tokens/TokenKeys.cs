@@ -116,6 +116,52 @@ public static class TokenKeys
         public const string TabStripHeight = "ribbon.tabstrip.height";
     }
 
+    /// <summary>
+    /// The ribbon's icons are not one colour.
+    /// </summary>
+    /// <remarks>
+    /// The reference draws them as polychrome artwork and gives each theme its own tint of it —
+    /// Reply and Reply All are magenta, Forward is blue, Follow Up is a red flag on a grey pole,
+    /// Categorize is four coloured swatches — and the tint is not a shade of the accent: it is
+    /// picked per theme so the artwork reads on that theme's ribbon. Every value here is
+    /// measured off the four theme captures, and Black inverts each pair, drawing the light
+    /// colour as the outline and the saturated one as the fill.
+    /// <para>
+    /// Only the commands whose artwork is coloured take these; the rest of the ribbon stays a
+    /// monochrome glyph in the accent or the text colour, as <c>NeutralIcon</c> decides.
+    /// </para>
+    /// </remarks>
+    public static class RibbonIcon
+    {
+        /// <summary>Reply and Reply All — the magenta arrows.</summary>
+        public const string Respond = "ribbon.icon.respond";
+
+        /// <summary>Forward's blue arrow, and the Apps grid.</summary>
+        public const string Forward = "ribbon.icon.forward";
+
+        /// <summary>The Follow Up flag: its cloth, its outline, and the pole under it.</summary>
+        public const string Flag = "ribbon.icon.flag";
+        public const string FlagOutline = "ribbon.icon.flag.outline";
+        public const string FlagPole = "ribbon.icon.flag.pole";
+
+        /// <summary>Categorize's four swatches, each a fill inside a 1px outline.</summary>
+        public const string SwatchBlue = "ribbon.icon.swatch.blue";
+        public const string SwatchBlueOutline = "ribbon.icon.swatch.blue.outline";
+        public const string SwatchGrey = "ribbon.icon.swatch.grey";
+        public const string SwatchGreyOutline = "ribbon.icon.swatch.grey.outline";
+        public const string SwatchGold = "ribbon.icon.swatch.gold";
+        public const string SwatchGoldOutline = "ribbon.icon.swatch.gold.outline";
+        public const string SwatchGreen = "ribbon.icon.swatch.green";
+        public const string SwatchGreenOutline = "ribbon.icon.swatch.green.outline";
+
+        public static readonly IReadOnlyList<string> All =
+        [
+            Respond, Forward, Flag, FlagOutline, FlagPole,
+            SwatchBlue, SwatchBlueOutline, SwatchGrey, SwatchGreyOutline,
+            SwatchGold, SwatchGoldOutline, SwatchGreen, SwatchGreenOutline,
+        ];
+    }
+
     public static class Backstage
     {
         /// <summary>The dark page rail down the left of the File view.</summary>
@@ -413,6 +459,7 @@ public static class TokenKeys
         Ribbon.TabSelected, Ribbon.TabUnderline, Ribbon.TabText, Ribbon.TabTextSelected, Ribbon.GroupLabel,
         Ribbon.GroupSeparator, Ribbon.GalleryBackground, Ribbon.GalleryBorder,
         Ribbon.Height, Ribbon.TabStripHeight,
+        .. RibbonIcon.All,
         Workspace.Inset,
         Compose.BodyBackground, Compose.BodyText,
         Compose.HeaderBackground, Compose.FieldRule,

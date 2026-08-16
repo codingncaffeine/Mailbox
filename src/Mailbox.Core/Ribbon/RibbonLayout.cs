@@ -97,6 +97,27 @@ public sealed record RibbonItem
     /// </summary>
     public bool ShowLabel { get; init; } = true;
 
+    /// <summary>
+    /// How long this entry's label survives on the Simplified bar as it narrows: the lowest
+    /// rank showing goes first, and the rightmost within a rank goes before the rest of it.
+    /// </summary>
+    /// <remarks>
+    /// The reference does not shed labels simply right to left. At 1447 it has taken the words
+    /// off Reply, Reply All, Forward, Categorize and Follow Up while Unread/Read and
+    /// Send/Receive All Folders — both further right — still read as words, and at a wider size
+    /// all of them do. So a label carries an order of its own, and this is it.
+    /// </remarks>
+    public int LabelRank { get; init; } = NormalLabelRank;
+
+    /// <summary>The label of an entry the bar sheds before the rest: the Respond and Tags words.</summary>
+    public const int SheddableLabelRank = 0;
+
+    /// <summary>What a label ranks when the layout says nothing.</summary>
+    public const int NormalLabelRank = 1;
+
+    /// <summary>The bar's first labelled entry, whose label goes last of all.</summary>
+    public const int PrimaryLabelRank = 2;
+
     /// <summary>Rendered greyed and unclickable, as Read Aloud is with nothing selected.</summary>
     public bool IsDisabled { get; init; }
 
@@ -127,6 +148,20 @@ public sealed record RibbonItem
 
     public static RibbonItem Small(CommandId command, RibbonItemKind kind = RibbonItemKind.Button)
         => new() { Command = command, Size = RibbonItemSize.Small, Kind = kind };
+
+    /// <summary>
+    /// Labelled, but the first to become an icon when the Simplified bar runs short of room —
+    /// which is every word on it except the primary command's and the three the reference keeps
+    /// longest.
+    /// </summary>
+    public static RibbonItem Sheddable(CommandId command, RibbonItemKind kind = RibbonItemKind.Button)
+        => new()
+        {
+            Command = command,
+            Size = RibbonItemSize.Small,
+            Kind = kind,
+            LabelRank = SheddableLabelRank,
+        };
 
     /// <summary>A small button showing its icon only.</summary>
     public static RibbonItem Glyph(CommandId command, RibbonItemKind kind = RibbonItemKind.Button)

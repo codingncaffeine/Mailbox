@@ -5,6 +5,7 @@ using Avalonia.Controls.Templates;
 using Avalonia.Data;
 using Avalonia.Data.Converters;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
@@ -156,6 +157,14 @@ public sealed class MessageCells : Grid
     public static readonly StyledProperty<IReadOnlyList<ViewColumn>?> ColumnsProperty =
         AvaloniaProperty.Register<MessageCells, IReadOnlyList<ViewColumn>?>(nameof(Columns));
 
+    /// <summary>
+    /// A single click landed on the Flag or Categories cell of a row — the reference's Quick
+    /// Click. Bubbles, so the shell hears it from the list rather than from every row.
+    /// </summary>
+    public static readonly RoutedEvent<QuickClickEventArgs> QuickClickEvent =
+        RoutedEvent.Register<MessageCells, QuickClickEventArgs>(
+            "QuickClick", RoutingStrategies.Bubble);
+
     public IReadOnlyList<ViewColumn>? Columns
     {
         get => GetValue(ColumnsProperty);
@@ -212,7 +221,7 @@ public sealed class MessageCells : Grid
                 return text;
             }
             case ViewFields.Flag:
-                return Glyph(nameof(MessageRow.FlagGlyph), "status.danger.brush");
+                return QuickClickable(Glyph(nameof(MessageRow.FlagGlyph), "status.danger.brush"), ViewFields.Flag);
             case ViewFields.Attachment:
             {
                 var text = new TextBlock { Text = "\U0001F4CE", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
@@ -243,7 +252,7 @@ public sealed class MessageCells : Grid
                 return text;
             }
             case ViewFields.Categories:
-                return CategoryStrip();
+                return QuickClickable(CategoryStrip(), ViewFields.Categories);
             case ViewFields.Folder:
             {
                 var text = Text(nameof(MessageRow.FolderLabel), nameof(MessageRow.SubjectWeight));
@@ -281,6 +290,31 @@ public sealed class MessageCells : Grid
         return text;
     }
 
+    /// <summary>
+    /// Wraps a cell so a click on it raises <see cref="QuickClickEvent"/>.
+    /// </summary>
+    /// <remarks>
+    /// A transparent background rather than none: a panel with no fill is not hit-tested, so the
+    /// clickable part would be the swatches themselves and the empty half of the cell — which is
+    /// most of it, and the part anyone would aim at — would do nothing. The row is left to
+    /// select itself as usual; the event is not handled, because a click here is a click on the
+    /// row as well.
+    /// </remarks>
+    private static Control QuickClickable(Control cell, string field)
+    {
+        var host = new Border { Child = cell, Background = Brushes.Transparent, Cursor = new Cursor(StandardCursorType.Hand) };
+
+        host.PointerPressed += (_, e) =>
+        {
+            if (!e.GetCurrentPoint(host).Properties.IsLeftButtonPressed) return;
+            if (host.DataContext is not MessageRow row) return;
+
+            host.RaiseEvent(new QuickClickEventArgs(QuickClickEvent, row, field));
+        };
+
+        return host;
+    }
+
     private static Control CategoryStrip()
     {
         var strip = new ItemsControl { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) };
@@ -294,4 +328,14 @@ public sealed class MessageCells : Grid
         });
         return strip;
     }
+}
+
+/// <summary>Which row's Flag or Categories cell was clicked.</summary>
+public sealed class QuickClickEventArgs(RoutedEvent routedEvent, MessageRow row, string field)
+    : RoutedEventArgs(routedEvent)
+{
+    public MessageRow Row { get; } = row;
+
+    /// <summary><see cref="ViewFields.Flag"/> or <see cref="ViewFields.Categories"/>.</summary>
+    public string Field { get; } = field;
 }

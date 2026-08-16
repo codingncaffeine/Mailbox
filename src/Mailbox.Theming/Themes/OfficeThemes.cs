@@ -351,6 +351,23 @@ public static class OfficeThemes
         t.Set(TokenKeys.Ribbon.GroupSeparator, "#858585");
         t.Set(TokenKeys.Ribbon.GalleryBorder, "#858585");
 
+        // The ribbon's coloured artwork, measured off home.png. Every value is darker than the
+        // light themes': the panel under it is #BDBDBD rather than white, and the reference
+        // deepens the artwork to keep it readable there rather than reusing one set.
+        t.Set(TokenKeys.RibbonIcon.Respond, "#91005A");
+        t.Set(TokenKeys.RibbonIcon.Forward, "#005BA1");
+        t.Set(TokenKeys.RibbonIcon.Flag, "#E37D80");
+        t.Set(TokenKeys.RibbonIcon.FlagOutline, "#751D1F");
+        t.Set(TokenKeys.RibbonIcon.FlagPole, "#4D4D4D");
+        t.Set(TokenKeys.RibbonIcon.SwatchBlue, "#A9D3F2");
+        t.Set(TokenKeys.RibbonIcon.SwatchBlueOutline, "#004377");
+        t.Set(TokenKeys.RibbonIcon.SwatchGrey, "#999999");
+        t.Set(TokenKeys.RibbonIcon.SwatchGreyOutline, "#292929");
+        t.Set(TokenKeys.RibbonIcon.SwatchGold, "#F2C661");
+        t.Set(TokenKeys.RibbonIcon.SwatchGoldOutline, "#463100");
+        t.Set(TokenKeys.RibbonIcon.SwatchGreen, "#54B054");
+        t.Set(TokenKeys.RibbonIcon.SwatchGreenOutline, "#094509");
+
         t.Set(TokenKeys.Nav.Background, "{palette.chrome.nav}");
         t.Set(TokenKeys.Nav.ItemText, "{palette.neutral.white}");
         t.Set(TokenKeys.Nav.ItemHover, "#1AFFFFFF");
@@ -505,6 +522,24 @@ public static class OfficeThemes
         t.Set(TokenKeys.Ribbon.GroupSeparator, "{palette.neutral.quaternary}");
         t.Set(TokenKeys.Ribbon.GalleryBackground, "{ribbon.background}");
         t.Set(TokenKeys.Ribbon.GalleryBorder, "{palette.neutral.tertiary}");
+
+        // The ribbon's coloured artwork, measured off the Black capture. Each pair is the light
+        // themes' the other way round: on a #292929 ribbon the reference draws the light colour
+        // as the outline and the saturated one as the fill, so the shape reads as a lit edge
+        // rather than a dark blob. Lifting the light values wholesale would not have found this.
+        t.Set(TokenKeys.RibbonIcon.Respond, "#D471D8");
+        t.Set(TokenKeys.RibbonIcon.Forward, "#3B9ADC");
+        t.Set(TokenKeys.RibbonIcon.Flag, "#D42314");
+        t.Set(TokenKeys.RibbonIcon.FlagOutline, "#F67780");
+        t.Set(TokenKeys.RibbonIcon.FlagPole, "#D4D4D4");
+        t.Set(TokenKeys.RibbonIcon.SwatchBlue, "#0063B1");
+        t.Set(TokenKeys.RibbonIcon.SwatchBlueOutline, "#83BEEC");
+        t.Set(TokenKeys.RibbonIcon.SwatchGrey, "#5E5E5E");
+        t.Set(TokenKeys.RibbonIcon.SwatchGreyOutline, "#989898");
+        t.Set(TokenKeys.RibbonIcon.SwatchGold, "#E39123");
+        t.Set(TokenKeys.RibbonIcon.SwatchGoldOutline, "#F8DB8F");
+        t.Set(TokenKeys.RibbonIcon.SwatchGreen, "#309048");
+        t.Set(TokenKeys.RibbonIcon.SwatchGreenOutline, "#A1DDAA");
 
         t.Set(TokenKeys.Nav.Background, "#141414");
         t.Set(TokenKeys.Nav.ItemText, "{palette.neutral.primary}");
@@ -671,6 +706,23 @@ public static class OfficeThemes
         // the relation measured in Dark Gray, where the line is #858585 on a #BDBDBD panel.
         t.Set(TokenKeys.Ribbon.GalleryBackground, "{ribbon.background}");
         t.Set(TokenKeys.Ribbon.GalleryBorder, "{palette.neutral.tertiary}");
+
+        // The ribbon's coloured artwork, measured off the Colorful and White captures — the two
+        // themes draw it identically, both having a white ribbon under it. Dark Gray darkens
+        // every value for its mid-grey ribbon and Black inverts each pair; both override below.
+        t.Set(TokenKeys.RibbonIcon.Respond, "#A846B2");
+        t.Set(TokenKeys.RibbonIcon.Forward, "#1E8BCD");
+        t.Set(TokenKeys.RibbonIcon.Flag, "#FF9198");
+        t.Set(TokenKeys.RibbonIcon.FlagOutline, "#D42314");
+        t.Set(TokenKeys.RibbonIcon.FlagPole, "#3A3A38");
+        t.Set(TokenKeys.RibbonIcon.SwatchBlue, "#83BEEC");
+        t.Set(TokenKeys.RibbonIcon.SwatchBlueOutline, "#0063B1");
+        t.Set(TokenKeys.RibbonIcon.SwatchGrey, "#C8C6C4");
+        t.Set(TokenKeys.RibbonIcon.SwatchGreyOutline, "#797774");
+        t.Set(TokenKeys.RibbonIcon.SwatchGold, "#F8DB8F");
+        t.Set(TokenKeys.RibbonIcon.SwatchGoldOutline, "#DE6C00");
+        t.Set(TokenKeys.RibbonIcon.SwatchGreen, "#A1DDAA");
+        t.Set(TokenKeys.RibbonIcon.SwatchGreenOutline, "#309048");
 
         t.Set(TokenKeys.Rail.Background, "{palette.neutral.lighter}");
         t.Set(TokenKeys.Rail.ItemText, "{palette.neutral.secondary}");

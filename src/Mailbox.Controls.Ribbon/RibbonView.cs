@@ -592,23 +592,29 @@ public sealed class RibbonView : ContentControl
                 if (item.Kind == RibbonItemKind.Overflow)
                 {
                     strip.Add(new SimplifiedEntry(
-                        BuildClusterOverflow(tab, cluster), null, null, false, clusterIndex, false));
+                        BuildClusterOverflow(tab, cluster), null, null, RibbonItem.NormalLabelRank, clusterIndex, false));
                     continue;
                 }
 
                 if (_catalog.TryGet(item.Command, out var command))
                 {
                     var control = BuildSimplifiedButton(command, item, out var label);
+
+                    // The first labelled entry is the bar's primary command, and its label goes
+                    // last of all — above whatever rank the layout asked for.
                     var primary = label is not null && !primaryClaimed;
                     if (primary) primaryClaimed = true;
 
-                    strip.Add(new SimplifiedEntry(control, label, command.Id, primary, clusterIndex, false));
+                    strip.Add(new SimplifiedEntry(
+                        control, label, command.Id,
+                        primary ? RibbonItem.PrimaryLabelRank : item.LabelRank,
+                        clusterIndex, false));
                 }
             }
 
             if (i < items.Count)
             {
-                strip.Add(new SimplifiedEntry(BuildInlineSeparator(), null, null, false, clusterIndex, true));
+                strip.Add(new SimplifiedEntry(BuildInlineSeparator(), null, null, RibbonItem.NormalLabelRank, clusterIndex, true));
             }
 
             cluster = [];
@@ -883,8 +889,7 @@ public sealed class RibbonView : ContentControl
         };
 
         row.Children.Add(BuildIcon(
-            command.Icon, RibbonMetrics.SimplifiedIconSize, 20, command.NeutralIcon,
-            RibbonMetrics.SimplifiedIconFontSize));
+            command, RibbonMetrics.SimplifiedIconSize, 20, RibbonMetrics.SimplifiedIconFontSize));
 
         // Icon-only is the reference's default for a formatting run — Bold, Italic, Underline
         // and the indent and list buttons carry no text at all, and labelling them turns one
@@ -944,8 +949,7 @@ public sealed class RibbonView : ContentControl
         if (item.Kind == RibbonItemKind.BoxedButton)
         {
             inner.Children.Add(BuildIcon(
-                command.Icon, RibbonMetrics.SimplifiedIconSize, 20, command.NeutralIcon,
-                RibbonMetrics.SimplifiedIconFontSize));
+                command, RibbonMetrics.SimplifiedIconSize, 20, RibbonMetrics.SimplifiedIconFontSize));
         }
 
         var text = new TextBlock
@@ -1568,8 +1572,7 @@ public sealed class RibbonView : ContentControl
             Spacing = 2,
         };
 
-        stack.Children.Add(BuildIcon(
-            command.Icon, RibbonMetrics.LargeIconSize, 32, command.NeutralIcon));
+        stack.Children.Add(BuildIcon(command, RibbonMetrics.LargeIconSize, 32));
 
         // Two lines at the reference's break, or one — decided here from measured widths rather
         // than by wrapping inside a fixed width, which broke a long word in the middle and put a
@@ -1641,8 +1644,7 @@ public sealed class RibbonView : ContentControl
             VerticalAlignment = VerticalAlignment.Center,
         };
 
-        row.Children.Add(BuildIcon(
-            command.Icon, RibbonMetrics.SmallIconSize, 16, command.NeutralIcon));
+        row.Children.Add(BuildIcon(command, RibbonMetrics.SmallIconSize, 16));
 
         // The reference's icon-only stacks — Ignore, Clean Up and Junk in the Delete group — are
         // icon-only because ShowLabel says so. Drawing the label anyway made every such stack
@@ -1683,9 +1685,36 @@ public sealed class RibbonView : ContentControl
     /// it explicitly: its glyphs are measured at 17px of ink in an 18px box, and the box stays at
     /// its measured width so the button pitch does not move while the glyph fills it.
     /// </param>
+    /// <summary>
+    /// A command's icon: its drawing when it has one, otherwise its glyph in its own tint.
+    /// </summary>
+    /// <remarks>
+    /// The reference's ribbon icons are polychrome artwork. Ours are a monochrome font, so a
+    /// command may name the token that tints its glyph — Reply and Reply All are magenta,
+    /// Forward is blue — and the two whose meaning <em>is</em> their colours, Categorize and
+    /// Follow Up, are drawn instead (<see cref="RibbonArtwork"/>).
+    /// </remarks>
+    private Control BuildIcon(
+        MailboxCommand command, double boxSize, int artworkSize, double? fontSize = null)
+    {
+        if (command.IconArtwork is { Length: > 0 } drawing)
+        {
+            return new Border
+            {
+                Width = boxSize,
+                Height = boxSize,
+                Child = new RibbonArtwork(drawing, boxSize),
+                HorizontalAlignment = HorizontalAlignment.Center,
+            };
+        }
+
+        return BuildIcon(command.Icon, boxSize, artworkSize, command.NeutralIcon, fontSize,
+            command.IconTint);
+    }
+
     private Control BuildIcon(
         string iconName, double boxSize, int artworkSize, bool neutral = false,
-        double? fontSize = null)
+        double? fontSize = null, string? tint = null)
     {
         var glyph = new TextBlock
         {
@@ -1697,7 +1726,9 @@ public sealed class RibbonView : ContentControl
             TextAlignment = TextAlignment.Center,
         };
         Bind(glyph, TextBlock.ForegroundProperty,
-            neutral ? "text.primary.brush" : "accent.rest.brush");
+            tint is { Length: > 0 } ? tint + ".brush"
+            : neutral ? "text.primary.brush"
+            : "accent.rest.brush");
 
         return new Border
         {

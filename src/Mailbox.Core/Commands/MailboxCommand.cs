@@ -33,6 +33,24 @@ public sealed record MailboxCommand
     /// </remarks>
     public bool NeutralIcon { get; init; }
 
+    /// <summary>
+    /// The token whose colour draws this command's icon, when it is not the accent's.
+    /// </summary>
+    /// <remarks>
+    /// The reference's ribbon icons are polychrome artwork, and a few of them carry a colour
+    /// that is nothing to do with the accent: Reply and Reply All are magenta, Forward is blue.
+    /// A ribbon that draws those in the accent like everything else is a different application,
+    /// which is the same observation <see cref="NeutralIcon"/> records for the formatting run.
+    /// Null leaves the choice to <see cref="NeutralIcon"/>.
+    /// </remarks>
+    public string? IconTint { get; init; }
+
+    /// <summary>
+    /// Names a drawing rather than a glyph, for the icons no monochrome font can carry: the
+    /// four coloured swatches of Categorize, and Follow Up's red flag.
+    /// </summary>
+    public string? IconArtwork { get; init; }
+
     public ModuleScope Scope { get; init; } = ModuleScope.Any;
 
     /// <summary>

@@ -83,9 +83,16 @@ public static class DefaultRibbonLayouts
         Simplified = new Dictionary<string, SimplifiedBar>
         {
             // Transcribed from home.png, with the cluster rules measured at x = 191, 341, 457,
-            // 596, 831, 1049, 1093 and 1289. Only New Email, Unread/Read and Send/Receive All
-            // Folders carry text; everything else is icon-only, which is why the row fits.
-            // Quick Steps is boxed and Search People is a real input, not a button.
+            // 596, 831, 1049, 1093 and 1289. Quick Steps is boxed and Search People is a real
+            // input, not a button.
+            //
+            // Which entries carry text is a decision the bar makes, not the layout: the
+            // reference shows a label wherever there is room and sheds them right to left when
+            // there is not — the Respond and Tags labels are on show in a wide window and gone
+            // by home.png's 1447, which is why this row was first transcribed as icon-only.
+            // SimplifiedRowPanel does the shedding, so what is asked for here is the full state.
+            // ShowLabel = false is reserved for entries the reference never labels at any
+            // width: a formatting run, and the glyph-only Delete and Move stacks.
             ["home"] = Bar(
                 Cluster("new", "New",
                     RibbonItem.Small(MailCommands.NewEmail.Id, RibbonItemKind.SplitButton)),
@@ -96,17 +103,17 @@ public static class DefaultRibbonLayouts
                     RibbonItem.Glyph(MailCommands.MoveTo.Id, RibbonItemKind.SplitButton)),
 
                 Cluster("respond", "Respond",
-                    RibbonItem.Glyph(MailCommands.Reply.Id),
-                    RibbonItem.Glyph(MailCommands.ReplyAll.Id),
-                    RibbonItem.Glyph(MailCommands.Forward.Id)),
+                    RibbonItem.Sheddable(MailCommands.Reply.Id),
+                    RibbonItem.Sheddable(MailCommands.ReplyAll.Id),
+                    RibbonItem.Sheddable(MailCommands.Forward.Id)),
 
                 Cluster("quicksteps", "Quick Steps",
                     RibbonItem.Boxed(ViewCommands.MoveToQuick.Id, QuickStepBoxWidth)),
 
                 Cluster("tags", "Tags",
                     RibbonItem.Small(MailCommands.Unread.Id),
-                    RibbonItem.Glyph(MailCommands.Categorize.Id, RibbonItemKind.DropDown),
-                    RibbonItem.Glyph(MailCommands.FollowUp.Id, RibbonItemKind.DropDown)),
+                    RibbonItem.Sheddable(MailCommands.Categorize.Id, RibbonItemKind.DropDown),
+                    RibbonItem.Sheddable(MailCommands.FollowUp.Id, RibbonItemKind.DropDown)),
 
                 Cluster("find", "Find",
                     RibbonItem.Field(ViewCommands.SearchPeople.Id, SearchPeopleWidth, "Search People"),
