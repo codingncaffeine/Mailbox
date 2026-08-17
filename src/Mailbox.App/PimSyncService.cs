@@ -1,6 +1,9 @@
 using Mailbox.Core.Diagnostics;
+using Mailbox.Core.Settings;
 using Mailbox.Dav;
+using Mailbox.Google;
 using Mailbox.Protocols;
+using Mailbox.Protocols.OAuth;
 using Mailbox.Store.Pim;
 
 namespace Mailbox.App;
@@ -9,6 +12,13 @@ namespace Mailbox.App;
 public sealed record CalendarSyncReport(int Collections, int Pulled, int Removed, int Pushed, IReadOnlyList<DavConflict> Conflicts)
 {
     public static readonly CalendarSyncReport Nothing = new(0, 0, 0, 0, []);
+
+    /// <summary>
+    /// Google Tasks' own conflicts, which are a different record because they are found a
+    /// different way: there is no precondition to refuse the write, so a collision is arithmetic
+    /// rather than a status code.
+    /// </summary>
+    public IReadOnlyList<GoogleConflict> GoogleConflicts { get; init; } = [];
 
     public bool DidAnything => Pulled + Removed + Pushed > 0;
 }
@@ -27,7 +37,11 @@ public sealed record CalendarSyncReport(int Collections, int Pulled, int Removed
 /// Nothing here writes a password anywhere.
 /// </para>
 /// </remarks>
-public sealed class PimSyncService(PimRepository repository, ICredentialStore secrets)
+public sealed class PimSyncService(
+    PimRepository repository,
+    ICredentialStore secrets,
+    OAuthAccounts? oauth = null,
+    SettingsStore? settings = null)
 {
     private readonly PimRepository _repository = repository ?? throw new ArgumentNullException(nameof(repository));
     private readonly ICredentialStore _secrets = secrets ?? throw new ArgumentNullException(nameof(secrets));
@@ -35,14 +49,22 @@ public sealed class PimSyncService(PimRepository repository, ICredentialStore se
     /// <summary>The keyring purpose a DAV password is filed under.</summary>
     public const string Purpose = "caldav";
 
+    /// <summary>Where a Google Tasks account's own client registration is kept (§5).</summary>
+    public static string ClientIdSetting(string account) => $"pim.google.{account}.client";
+
     /// <summary>Syncs every calendar that has a server behind it.</summary>
     public async Task<CalendarSyncReport> SyncAsync(CancellationToken cancellationToken = default)
     {
+        // Google Tasks is REST, not DAV. Handing one of its lists to the DAV engine would send a
+        // PROPFIND to a JSON API, so the two are told apart once, here, by the only thing that
+        // could tell them apart: the host in the URL.
+        var google = await SyncGoogleAsync(cancellationToken).ConfigureAwait(false);
+
         var collections = _repository.Collections()
-            .Where(c => c.DavUrl is { Length: > 0 })
+            .Where(c => c.DavUrl is { Length: > 0 } && !GoogleTasks.Owns(c))
             .GroupBy(c => c.Account, StringComparer.OrdinalIgnoreCase)
             .ToList();
-        if (collections.Count == 0) return CalendarSyncReport.Nothing;
+        if (collections.Count == 0) return google;
 
         var pulled = 0;
         var removed = 0;
@@ -86,13 +108,114 @@ public sealed class PimSyncService(PimRepository repository, ICredentialStore se
             }
         }
 
-        var report = new CalendarSyncReport(touched, pulled, removed, pushed, conflicts);
-        if (report.DidAnything || conflicts.Count > 0)
+        var report = new CalendarSyncReport(
+            touched + google.Collections,
+            pulled + google.Pulled,
+            removed + google.Removed,
+            pushed + google.Pushed,
+            conflicts)
         {
-            Log.Info($"Collections: {pulled} in, {removed} removed, {pushed} out, {conflicts.Count} conflict(s).");
+            GoogleConflicts = google.GoogleConflicts,
+        };
+
+        if (report.DidAnything || conflicts.Count > 0 || report.GoogleConflicts.Count > 0)
+        {
+            Log.Info(
+                $"Collections: {report.Pulled} in, {report.Removed} removed, {report.Pushed} out, "
+                + $"{conflicts.Count + report.GoogleConflicts.Count} conflict(s).");
         }
 
         return report;
+    }
+
+    /// <summary>
+    /// The Google Tasks half of a Send/Receive.
+    /// </summary>
+    /// <remarks>
+    /// Its own pass rather than a branch inside the DAV loop, because almost nothing is shared:
+    /// a different credential (a bearer, not a password), a different discovery (the account's
+    /// lists, re-read every poll so one made on a phone turns up), and a different idea of what
+    /// incremental means.
+    /// <para>
+    /// A refusal about the sign-in stops that account and nothing else — a Google account whose
+    /// consent was withdrawn should not take the calendars down with it.
+    /// </para>
+    /// </remarks>
+    private async Task<CalendarSyncReport> SyncGoogleAsync(CancellationToken cancellationToken)
+    {
+        if (oauth is null) return CalendarSyncReport.Nothing;
+
+        var accounts = _repository.Collections()
+            .Where(GoogleTasks.Owns)
+            .Select(c => c.Account)
+            .Where(a => a.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (accounts.Count == 0) return CalendarSyncReport.Nothing;
+
+        var pulled = 0;
+        var removed = 0;
+        var pushed = 0;
+        var touched = 0;
+        var conflicts = new List<GoogleConflict>();
+
+        foreach (var account in accounts)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var clientId = settings?.GetString(ClientIdSetting(account)) ?? string.Empty;
+            if (clientId.Length == 0)
+            {
+                // Google ships no registration and never will (§5), so an account with no client
+                // ID of its own cannot sign in at all. Said once, not once per list.
+                Log.Warn($"Google Tasks for {account} has no client ID; sign in again to set one.");
+                continue;
+            }
+
+            using var api = new GoogleTasksApi(
+                oauth.For(account, OAuthProviders.Google, clientId));
+
+            try
+            {
+                await GoogleTasks.RefreshListsAsync(api, _repository, account, cancellationToken).ConfigureAwait(false);
+
+                var lists = _repository.Collections()
+                    .Where(c => GoogleTasks.Owns(c) && string.Equals(c.Account, account, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                var sync = new GoogleTasksSync(api, _repository);
+
+                foreach (var list in lists)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var result = await sync.SyncAsync(list, cancellationToken).ConfigureAwait(false);
+                    pulled += result.Pulled;
+                    removed += result.Removed;
+                    pushed += result.Pushed;
+                    conflicts.AddRange(result.Conflicts);
+                    touched++;
+                }
+            }
+            catch (OAuthException ex)
+            {
+                Log.Warn($"Google Tasks for {account} could not sign in: {ex.Message}");
+            }
+            catch (GoogleApiException ex)
+            {
+                Log.Warn($"Google Tasks for {account} could not be synchronised: {ex.Message}");
+            }
+            catch (HttpRequestException ex)
+            {
+                Log.Warn($"Google Tasks for {account} could not be reached.", ex);
+            }
+            catch (TaskCanceledException)
+            {
+                throw;
+            }
+        }
+
+        return new CalendarSyncReport(touched, pulled, removed, pushed, []) { GoogleConflicts = conflicts };
     }
 
     /// <summary>

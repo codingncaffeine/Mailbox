@@ -152,6 +152,81 @@ public partial class MainWindow
         }
     }
 
+    /// <summary>
+    /// The harness's Google Tasks answer: a saved one applied as a poll would apply it.
+    /// </summary>
+    /// <remarks>
+    /// <c>MAILBOX_GOOGLE=&lt;path&gt;[|list name]</c>. The request half is HTTPS to somebody
+    /// else's API and a capture run has no business making it; the half that has to be provable is
+    /// what reaches the store — a task arriving, a tombstone removing one, and above all a merge
+    /// keeping the priority and the categories Google has never heard of.
+    /// <para>
+    /// A list is made if the named one is not there, so a run needs no posed store beyond the
+    /// ordinary one.
+    /// </para>
+    /// </remarks>
+    private void PoseGoogleTasks(string spec)
+    {
+        // This pose writes to the PIM store, and a capture run's PIM store is the machine's own
+        // unless MAILBOX_STORE says otherwise — the scratch settings and the in-memory keyring do
+        // not cover it. So it refuses rather than putting invented tasks in a real task list,
+        // which is exactly what it did once.
+        if (Environment.GetEnvironmentVariable("MAILBOX_STORE") is not { Length: > 0 })
+        {
+            Log.Warn("Harness: MAILBOX_GOOGLE writes to the store, so it wants MAILBOX_STORE posed as well.");
+            return;
+        }
+
+        var parts = spec.Split('|', 2, StringSplitOptions.TrimEntries);
+        var path = parts[0];
+        var name = parts.Length > 1 && parts[1].Length > 0 ? parts[1] : "My Tasks";
+
+        try
+        {
+            var tasks = Mailbox.Google.GoogleTask.ReadAll(File.ReadAllText(path));
+
+            var list = App.Pim.Collections().FirstOrDefault(
+                           c => Mailbox.Google.GoogleTasks.Owns(c)
+                                && string.Equals(c.DisplayName, name, StringComparison.OrdinalIgnoreCase))
+                       ?? App.Pim.AddCollection(
+                           Mailbox.Store.Pim.CollectionKind.Tasks, name, "#0078D4", "you@example.com",
+                           Mailbox.Google.GoogleTasks.UrlFor("list-1"));
+
+            // No API is built: what is exercised is the half of the sync that reads and writes,
+            // handed the answer a request would have brought back.
+            var (pulled, removed, conflicts, _) =
+                Mailbox.Google.GoogleTasksSync.Apply(App.Pim, list, tasks);
+
+            Log.Info(
+                $"Harness: Google Tasks — {tasks.Count} in the answer; {pulled} written, {removed} removed, "
+                + $"{conflicts.Count} conflict(s), into “{list.DisplayName}”.");
+
+            foreach (var conflict in conflicts)
+            {
+                Log.Info($"Harness: Google Tasks conflict — here “{conflict.Summary}”, there “{conflict.TheirTitle}”.");
+            }
+
+            foreach (var row in App.Pim.Items(list.Id))
+            {
+                var task = Mailbox.Scheduling.PimTodoCodec.FromItem(row);
+                Log.Info(
+                    $"Harness: Google task “{task.Summary}” — {(task.IsComplete ? "done" : "open")}, "
+                    + $"due {(task.Due is { } d ? d.Wall.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) : "none")}, "
+                    + $"priority {task.Urgency}, categories [{string.Join(", ", task.Categories)}], "
+                    + $"recurrence {task.Rrule ?? "none"}.");
+            }
+
+            // The module drew before this ran, so it is told to read the store again — the nav
+            // pane picks the new list up on its own and the list of tasks does not.
+            _taskModule?.Reload();
+            RefreshToDoTasks();
+        }
+        catch (Exception ex) when (ex is System.Text.Json.JsonException or IOException)
+        {
+            Log.Info($"Harness: the Google Tasks answer at {path} could not be read — {ex.Message}");
+        }
+    }
+
     /// <summary>Opens a folder by its account and name, which is what the summary page's links do.</summary>
     private void RevealFolder(ShellViewModel shell, string address, string folder)
     {
@@ -455,6 +530,9 @@ public partial class MainWindow
         if (window.Deleted)
         {
             App.PimSync.Remove(stored);
+            _taskModule?.Reload();
+            // The module drew before this ran, so it is told to read the store again — the nav
+            // pane picks the new list up on its own and the list of tasks does not.
             _taskModule?.Reload();
             RefreshToDoTasks();
             return;

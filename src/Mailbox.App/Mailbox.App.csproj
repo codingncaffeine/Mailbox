@@ -35,6 +35,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Mailbox.Core\Mailbox.Core.csproj" />
     <ProjectReference Include="..\Mailbox.Dav\Mailbox.Dav.csproj" />
+    <ProjectReference Include="..\Mailbox.Google\Mailbox.Google.csproj" />
     <ProjectReference Include="..\Mailbox.Theming\Mailbox.Theming.csproj" />
     <ProjectReference Include="..\Mailbox.Controls.Calendar\Mailbox.Controls.Calendar.csproj" />
     <ProjectReference Include="..\Mailbox.Controls.Journal\Mailbox.Controls.Journal.csproj" />
