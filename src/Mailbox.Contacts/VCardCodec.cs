@@ -111,6 +111,7 @@ public static class VCardCodec
             Photo = ReadPhoto(card),
             IsGroup = group,
             Members = group ? ReadMembers(card) : [],
+            Links = ReadLinks(card),
             LastModified = card.Updated?.Value ?? DateTimeOffset.UtcNow,
         };
     }
@@ -356,6 +357,15 @@ public static class VCardCodec
             builder.NonStandards.Add("X-MAILBOX-PRIVATE", "TRUE");
         }
 
+        // Written as a urn:uuid so it is a URI and not a name, which is the shape every other id
+        // in this codec takes.
+        foreach (var link in contact.Links.Where(l => l.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            builder.NonStandards.Add(
+                LinkKey,
+                link.StartsWith("urn:uuid:", StringComparison.OrdinalIgnoreCase) ? link : "urn:uuid:" + link);
+        }
+
         if (contact.Company.Length > 0 || contact.Department.Length > 0)
         {
             builder.Organizations.Add(contact.Company, contact.Department.Length > 0 ? [contact.Department] : null);
@@ -476,6 +486,35 @@ public static class VCardCodec
 
     /// <summary>Where a member's own name is kept, for somebody who is not a contact.</summary>
     internal const string MemberNameKey = "X-MAILBOX-MEMBER";
+
+    /// <summary>
+    /// Where a link to another card for the same person is kept.
+    /// </summary>
+    /// <remarks>
+    /// Our own property rather than RFC 6350's <c>RELATED</c>, and the reason is meaning rather
+    /// than convenience: <c>RELATED</c> has a vocabulary of relationships — spouse, colleague,
+    /// agent — and no member of it means "this is another card for the same person". Writing a
+    /// bare <c>RELATED</c> would say "these two are connected somehow", and **reading** somebody
+    /// else's as a same-person link would quietly merge two colleagues into one card. So this is
+    /// stated in a property that means only what it says, and nothing else is read as a link.
+    /// </remarks>
+    internal const string LinkKey = "X-MAILBOX-LINK";
+
+    private static IReadOnlyList<string> ReadLinks(VCard card)
+    {
+        var links = new List<string>();
+
+        foreach (var property in card.NonStandards?.Where(
+                     p => p is { IsEmpty: false }
+                          && string.Equals(p.Key, LinkKey, StringComparison.OrdinalIgnoreCase)) ?? [])
+        {
+            var value = property!.Value!.Trim();
+            if (value.StartsWith("urn:uuid:", StringComparison.OrdinalIgnoreCase)) value = value["urn:uuid:".Length..];
+            if (value.Length > 0 && !links.Contains(value, StringComparer.OrdinalIgnoreCase)) links.Add(value);
+        }
+
+        return links;
+    }
 
     /// <summary>How a member is written: by UID where there is one, by address where there is not.</summary>
     internal static string MemberUri(GroupMember member)

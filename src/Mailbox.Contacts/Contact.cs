@@ -182,6 +182,23 @@ public sealed record Contact
 
     public IReadOnlyList<GroupMember> Members { get; init; } = [];
 
+    /// <summary>
+    /// The UIDs of other cards that are the same person — the reference's Linked Contacts.
+    /// </summary>
+    /// <remarks>
+    /// A link rather than a merge, because two cards for one person are often deliberate: a
+    /// colleague's work card comes down from a company address book and their personal one does
+    /// not, and merging them would put a home number somewhere a server will overwrite it.
+    /// <para>
+    /// vCard has a property for exactly this — RFC 6350's <c>RELATED</c> with a
+    /// <c>urn:uuid:</c> URI — so a link written here survives a round trip through a CardDAV
+    /// server and means something to any other client that reads it. It is symmetric by
+    /// convention rather than by the format: both cards are written when a link is made, because
+    /// a link only one end knows about is one a reader can only see from one side.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<string> Links { get; init; } = [];
+
     public DateTimeOffset LastModified { get; init; } = DateTimeOffset.UtcNow;
 
     /// <summary>The first address, which is the one a message goes to unless another is chosen.</summary>
