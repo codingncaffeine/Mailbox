@@ -123,6 +123,9 @@ public partial class MainWindow : Window
         // Instant Search over the module on screen: the box searches what is in front of the
         // reader, which is what the reference's own does.
         shell.ModuleSearchRequested += (_, words) => SearchModule(shell, words);
+
+        // The summary page, which an account's heading in the folder pane opens.
+        shell.TodayRequested += (_, address) => ShowToday(shell, address);
         DataContext = shell;
 
         // The toasts stay with the notification server; what goes is the watch on their buttons.

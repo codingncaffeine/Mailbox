@@ -716,6 +716,7 @@ public sealed partial class ShellViewModel : ObservableObject
         if (accounts.Count == 0) return false;
 
         Folders.Clear();
+        _accountHeadings.Clear();
         _folderIds.Clear();
         _searchFolderIds.Clear();
         _searchFolderRoots.Clear();
@@ -754,7 +755,11 @@ public sealed partial class ShellViewModel : ObservableObject
 
         foreach (var account in accounts)
         {
-            Folders.Add(new FolderNode(account.Account.Address, 0, 0, bold: true));
+            // The account's own heading, which opens the summary page — where the reference puts
+            // it too. It is filed by address so the page knows whose day it is showing.
+            var heading = new FolderNode(account.Account.Address, 0, 0, bold: true);
+            _accountHeadings[heading] = account.Account.Address;
+            Folders.Add(heading);
 
             // IMAP folders nest, so the pane does too: a child sits one step in from its
             // parent. The account is depth 0, so a top-level folder is depth 1 as before, and
@@ -936,9 +941,66 @@ public sealed partial class ShellViewModel : ObservableObject
     };
 
     /// <summary>Loads a folder's mail into the list. Called when the selection changes.</summary>
+    /// <summary>Whose account a folder row belongs to, for a caller that has only its address.</summary>
+    public string FolderAddress(FolderNode node)
+        => _folderIds.TryGetValue(node, out var where) ? where.Account.Account.Address : string.Empty;
+
+    /// <summary>The account headings in the pane, and whose each one is.</summary>
+    private readonly Dictionary<FolderNode, string> _accountHeadings = [];
+
+    /// <summary>
+    /// Whether the summary page is what the pane's selection is asking for.
+    /// </summary>
+    /// <remarks>
+    /// An account's heading is not a folder and never was: selecting one used to fall out of
+    /// <c>LoadMessages</c> without doing anything at all. It opens the summary page now, which is
+    /// what the reference opens from the same row.
+    /// </remarks>
+    public bool IsTodayShowing
+    {
+        get;
+        private set
+        {
+            if (!Set(ref field, value)) return;
+            Raise(nameof(ShowsWorkspace));
+        }
+    }
+
+    /// <summary>Whose day the summary page is showing, or empty when it is not up.</summary>
+    public string TodayAccount { get; private set; } = string.Empty;
+
+    /// <summary>Raised when the summary page should be shown or taken away.</summary>
+    public event EventHandler<string>? TodayRequested;
+
+    /// <summary>
+    /// Whether the workspace host is covering the mail panes: a module other than Mail, or the
+    /// summary page, which lives in the same cell.
+    /// </summary>
+    public bool ShowsWorkspace => !IsMailModule || IsTodayShowing;
+
     private void LoadMessages(FolderNode? folder)
     {
         if (_accounts is null || folder is null) return;
+
+        // The account's heading: the summary page rather than a list of nothing.
+        if (_accountHeadings.TryGetValue(folder, out var whose))
+        {
+            Messages.Clear();
+            Rebuild();
+            SelectedMessage = null;
+            TodayAccount = whose;
+            IsTodayShowing = true;
+            TodayRequested?.Invoke(this, whose);
+            return;
+        }
+
+        if (IsTodayShowing)
+        {
+            IsTodayShowing = false;
+            TodayAccount = string.Empty;
+            TodayRequested?.Invoke(this, string.Empty);
+        }
+
 
         // A search folder: the saved query's results, each row saying which folder it is in.
         if (_searchFolderIds.TryGetValue(folder, out var search))
@@ -2928,6 +2990,7 @@ public sealed partial class ShellViewModel : ObservableObject
             foreach (var tab in Modules) tab.IsActive = tab.Module == value;
             Raise(nameof(IsMailModule));
             Raise(nameof(IsCalendarModule));
+            Raise(nameof(ShowsWorkspace));
             Raise(nameof(StatusLeft));
             Raise(nameof(ShowReadingPaneToggles));
         }

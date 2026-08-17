@@ -63,6 +63,59 @@ public partial class MainWindow
         return view;
     }
 
+    private TodayWorkspace? _today;
+
+    /// <summary>
+    /// The summary page: what an account's heading opens, and what takes it away again.
+    /// </summary>
+    /// <remarks>
+    /// It covers the list and the reading pane and leaves the folder pane alone: the page is
+    /// opened *from* that pane — an account's own heading is the row that shows it — and hiding the
+    /// row that was clicked would be odd. The reference's own is a page in the mail module rather
+    /// than a seventh module, and this is that.
+    /// </remarks>
+    private void ShowToday(ShellViewModel shell, string address)
+    {
+        var host = this.FindControl<ContentControl>("TodayHost")!;
+
+        if (address.Length == 0)
+        {
+            host.Content = null;
+            return;
+        }
+
+        // One account's day, because it is that account's heading that opened it.
+        if (_today is null)
+        {
+            _today = new TodayWorkspace(
+                App.Pim,
+                () =>
+                [
+                    .. App.Accounts.All.Where(a =>
+                        string.Equals(a.Account.Address, shell.TodayAccount, StringComparison.OrdinalIgnoreCase)),
+                ],
+                CalendarToday);
+
+            _today.FolderRequested += (_, ask) => RevealFolder(shell, ask.Address, ask.Folder);
+            _today.AppointmentRequested += (_, id) => _ = OpenAppointmentByIdAsync(shell, id);
+            _today.TaskRequested += (_, id) => _ = OpenTaskByIdAsync(shell, id);
+        }
+
+        _today.Reload();
+        host.Content = _today;
+        shell.ModuleStatusLeft = _today.Status;
+        Log.Info($"Today: showing {address} — {_today.Status}.");
+    }
+
+    /// <summary>Opens a folder by its account and name, which is what the summary page's links do.</summary>
+    private void RevealFolder(ShellViewModel shell, string address, string folder)
+    {
+        var node = shell.Folders.FirstOrDefault(f => f.Name == folder && shell.FolderAddress(f) == address);
+        if (node is null) return;
+
+        shell.SelectedFolder = node;
+    }
+
     /// <summary>
     /// Instant Search in whichever module is open — the fifth and sixth of the six §14 asks for.
     /// </summary>
