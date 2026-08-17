@@ -1311,6 +1311,35 @@ public partial class MainWindow : Window
                     tasks.Report(new PollProgress("you@example.com", 3, 8, "Downloading"));
                     tasks.Report(new PollProgress("other@example.com", 0, 0, "Sending"));
 
+                    // The states a run really ends in, which the mid-flight pose above never
+                    // reaches: MAILBOX_PROGRESS_STATE=finished shows the counts a completed run
+                    // leaves behind, and =failed shows what an account that could not be reached
+                    // looks like. Both are what a reader actually sees most of the time.
+                    switch (Environment.GetEnvironmentVariable("MAILBOX_PROGRESS_STATE"))
+                    {
+                        case "finished":
+                            tasks.Finish(new SendReceiveResult(
+                            [
+                                new AccountRunResult("you@example.com", 8, 2, null),
+                                new AccountRunResult("other@example.com", 3, 1, null),
+                            ]));
+                            break;
+
+                        case "failed":
+                            tasks.Finish(new SendReceiveResult(
+                            [
+                                new AccountRunResult("you@example.com", 8, 2, null),
+                                new AccountRunResult("other@example.com", 0, 0,
+                                    "The server could not be reached."),
+                            ]));
+                            break;
+                    }
+
+                    foreach (var task in tasks.Tasks)
+                    {
+                        Log.Info($"Harness: progress row — “{task.Name}” state {task.State}, detail “{task.Progress}”.");
+                    }
+
                     // The status bar's own indicator, posed with the same numbers the dialog is
                     // showing: it is the half a reader sees once the dialog has been told not to
                     // appear, so it wants photographing as much as the dialog does.

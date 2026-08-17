@@ -212,8 +212,27 @@ public sealed class SendReceiveProgressDialog : Window
         return band;
     }
 
+    /// <summary>
+    /// The table's three columns: a name that takes what is left, then two that fit their text.
+    /// </summary>
+    /// <remarks>
+    /// <c>Auto</c> with a floor rather than a fixed width, because the two right-hand columns hold
+    /// words whose length is not ours to decide — a longer translation, a larger interface font or
+    /// a fractional display scale, and text pinned at 104 pixels runs straight over the column
+    /// beside it. The floor keeps the headings lined up when the words happen to be short, and
+    /// every cell trims rather than overflowing, so the worst case is an ellipsis rather than two
+    /// words on top of each other.
+    /// </remarks>
     private static Grid ColumnGrid()
-        => new() { ColumnDefinitions = new ColumnDefinitions("*,104,88") };
+        => new()
+        {
+            ColumnDefinitions =
+            [
+                new ColumnDefinition(GridLength.Star),
+                new ColumnDefinition(GridLength.Auto) { MinWidth = 104 },
+                new ColumnDefinition(GridLength.Auto) { MinWidth = 88 },
+            ],
+        };
 
     private Control TaskRow(TransferTask task)
     {
@@ -250,6 +269,7 @@ public sealed class SendReceiveProgressDialog : Window
 
         var progress = new TextBlock
         {
+            TextTrimming = TextTrimming.CharacterEllipsis,
             Text = task.State switch
             {
                 TransferTaskState.Completed => "Completed",

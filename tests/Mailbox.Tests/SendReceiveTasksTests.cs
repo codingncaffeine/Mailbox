@@ -95,8 +95,14 @@ public class SendReceiveTasksTests
     /// A run reports one error per account rather than one per direction, so it lands on
     /// whichever half had not finished — which is what makes the table say where it broke.
     /// </summary>
+    /// <remarks>
+    /// And the half that never ran is not a success. This used to mark receiving Completed when
+    /// sending had failed, which said a receive had finished on an account the run never got a
+    /// connection to — and counted it towards "N of M Tasks have completed successfully", so a
+    /// run where nothing whatever worked still reported half its tasks as having.
+    /// </remarks>
     [Fact]
-    public void AFailureBeforeSendingFinishesIsASendingFailure()
+    public void AFailureBeforeSendingFinishesIsASendingFailureAndReceivingNeverRan()
     {
         var tasks = Two_Accounts();
         tasks.Report(new PollProgress(One, 0, 0, "Sending"));
@@ -106,7 +112,11 @@ public class SendReceiveTasksTests
         ]));
 
         Assert.Equal(TransferTaskState.Failed, tasks.Tasks[0].State);
-        Assert.Equal(TransferTaskState.Completed, tasks.Tasks[1].State);
+        Assert.Equal(TransferTaskState.Failed, tasks.Tasks[1].State);
+        Assert.Equal("Not run", tasks.Tasks[1].Progress);
+
+        // And it is not counted as a success, which is the number the reader is reading.
+        Assert.Equal(0, tasks.Succeeded);
         Assert.Equal([$"{One}: The server refused the password."], tasks.Errors);
     }
 

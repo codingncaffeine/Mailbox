@@ -138,15 +138,25 @@ public sealed class SendReceiveTasks
                 continue;
             }
 
-            // A run reports one error per account rather than one per direction, so the
-            // failure is attributed to whichever half had not finished — sending, if it never
-            // got past it.
-            var direction = _tasks[(account.Address, Sending)].State == TransferTaskState.Completed
-                ? Receiving
-                : Sending;
+            // A run reports one error per account rather than one per direction, so the failure
+            // is attributed to whichever half had not finished — sending, if it never got past it.
+            var sendingDone = _tasks[(account.Address, Sending)].State == TransferTaskState.Completed;
 
-            Complete(account.Address, direction == Sending ? Receiving : Sending);
-            Set(account.Address, direction, TransferTaskState.Failed, "Failed");
+            if (sendingDone)
+            {
+                // Sending got through and receiving is what failed. Sending keeps whatever it
+                // reported.
+                Set(account.Address, Receiving, TransferTaskState.Failed, "Failed");
+            }
+            else
+            {
+                // Sending failed, so receiving never ran — and a half that never ran did not
+                // succeed. Marking it Completed said a receive had finished when nothing had been
+                // received, and counted it towards "N of M Tasks have completed successfully".
+                Set(account.Address, Sending, TransferTaskState.Failed, "Failed");
+                Set(account.Address, Receiving, TransferTaskState.Failed, "Not run");
+            }
+
             _errors.Add($"{account.Address}: {account.Error}");
         }
 
