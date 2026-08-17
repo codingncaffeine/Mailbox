@@ -161,9 +161,17 @@ public sealed class SendReceiveProgressDialog : Window
 
         // Recycling off: a container re-filled in place is how a row ends up showing what the
         // last one said underneath what this one says.
+        //
+        // And the null: a data template is asked about a null item while a list is settling, so a
+        // template that reads the item's properties throws — from inside a layout pass, where
+        // nothing catches it and the row is left half-built, its first cells drawn and the rest
+        // never added. That is what the overlapping words were. Every refresh replaces the whole
+        // list, so it happened on every state change, and a hover rebuilt the row and cleared it.
         _table.ItemTemplate = new FuncDataTemplate<TransferTask>(
-            (task, _) => TaskRow(task), supportsRecycling: false);
-        _errors.ItemTemplate = new FuncDataTemplate<string>((text, _) => ErrorRow(text));
+            (task, _) => task is null ? new Control() : TaskRow(task), supportsRecycling: false);
+
+        _errors.ItemTemplate = new FuncDataTemplate<string>(
+            (text, _) => text is null ? new Control() : ErrorRow(text));
 
         var tabs = new TabControl
         {

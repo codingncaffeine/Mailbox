@@ -1305,10 +1305,11 @@ public partial class MainWindow : Window
             case "transferbar":
                 Opened += (_, _) =>
                 {
-                    var tasks = new SendReceiveTasks([Environment.GetEnvironmentVariable("MAILBOX_PROGRESS_ACCOUNT") ?? "you@example.com", "other@example.com"]);
-                    tasks.Report(new PollProgress(tasks.Tasks[0].Name.Split(" - ")[0], 0, 0, "Sending"));
-                    tasks.Report(new PollProgress("you@example.com", 0, 0, "Connecting"));
-                    tasks.Report(new PollProgress("you@example.com", 3, 8, "Downloading"));
+                    var first = Environment.GetEnvironmentVariable("MAILBOX_PROGRESS_ACCOUNT") ?? "you@example.com";
+                    var tasks = new SendReceiveTasks([first, "other@example.com"]);
+                    tasks.Report(new PollProgress(first, 0, 0, "Sending"));
+                    tasks.Report(new PollProgress(first, 0, 0, "Connecting"));
+                    tasks.Report(new PollProgress(first, 3, 8, "Downloading"));
                     tasks.Report(new PollProgress("other@example.com", 0, 0, "Sending"));
 
                     // The states a run really ends in, which the mid-flight pose above never
@@ -1365,7 +1366,19 @@ public partial class MainWindow : Window
                     }
 
                     CaptureNextWindow();
-                    new SendReceiveProgressDialog(tasks, App.Settings, () => { }).Show(this);
+                    var window = new SendReceiveProgressDialog(tasks, App.Settings, () => { });
+                    window.Show(this);
+
+                    // Refreshed through a state change, which is the sequence a real run puts it
+                    // through and the one the pose never did: a row that says Processing and then
+                    // says Completed is where stale text on a reused row shows up. Building the
+                    // states first and showing the window once cannot produce it.
+                    tasks.Report(new PollProgress(first, 0, 0, "Sending"));
+                    window.Refresh();
+                    tasks.Report(new PollProgress(first, 0, 0, "Connecting"));
+                    window.Refresh();
+                    tasks.Report(new PollProgress(first, 5, 9, "Downloading"));
+                    window.Refresh();
                 };
                 break;
         }
