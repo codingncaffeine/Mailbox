@@ -116,7 +116,13 @@ public sealed class TasksWorkspace : Border
     /// <summary>Reads the store again — after a write, or when a list is shown or hidden.</summary>
     public void Reload()
     {
-        _list.Rows = _book.Rows(Today, includeCompleted: _kind != TaskViewKind.Todo);
+        var rows = _book.Rows(Today, includeCompleted: _kind != TaskViewKind.Todo);
+
+        // Detailed is the same rows under every column a task has, which is the whole of what
+        // makes it a third view rather than the Simple List again — and a table is sorted by its
+        // column rather than banded, so what is finished stays on the date it was due.
+        _list.ShowColumns = _kind == TaskViewKind.Detailed;
+        _list.Rows = _kind == TaskViewKind.Detailed ? TaskBook.ByDueDate(rows) : rows;
         _list.ArrangedBy = _kind == TaskViewKind.Todo ? "Flag: Due Date" : "Due Date";
         Selected = _list.Selected;
         _navPane.Refresh();

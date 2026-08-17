@@ -91,6 +91,28 @@ public class TaskBookTests
     }
 
     [Fact]
+    public void ATableIsSortedByItsColumnRatherThanBanded()
+    {
+        var (store, repository, book, list) = Fresh();
+        using var _ = store;
+
+        Add(repository, list.Id, "Later on", Today.AddDays(60));
+        Add(repository, list.Id, "Undated", null);
+        Add(repository, list.Id, "Was due", Today.AddDays(-2), complete: true);
+        Add(repository, list.Id, "Due now", Today);
+
+        // The banded list puts what is finished at the foot, under a heading that says so.
+        var banded = book.Rows(Today, includeCompleted: true);
+        Assert.Equal(["Due now", "Later on", "Undated", "Was due"], banded.Select(r => r.Summary));
+
+        // The detailed view has no headings, so a ticked task stays on the date it was due —
+        // which for this one is before everything else on the list.
+        var table = TaskBook.ByDueDate(banded);
+        Assert.Equal(["Was due", "Due now", "Later on", "Undated"], table.Select(r => r.Summary));
+        Assert.True(table[0].IsComplete);
+    }
+
+    [Fact]
     public void WhatIsDoneIsLeftOutUntilItIsAskedFor()
     {
         var (store, repository, book, list) = Fresh();

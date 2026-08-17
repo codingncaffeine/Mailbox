@@ -250,6 +250,24 @@ public static class TodoCodec
         _ => "not-started",
     };
 
+    /// <summary>
+    /// The reference's own words for the five states, as its form and its Status column write
+    /// them.
+    /// </summary>
+    /// <remarks>
+    /// Here rather than in the window that first needed them: the task window, the detailed view
+    /// and anything else that shows a state should all write the same five words, and two lists of
+    /// them is how they stop agreeing.
+    /// </remarks>
+    public static string ProgressLabel(TaskProgress progress) => progress switch
+    {
+        TaskProgress.NotStarted => "Not Started",
+        TaskProgress.InProgress => "In Progress",
+        TaskProgress.Completed => "Completed",
+        TaskProgress.Waiting => "Waiting on someone else",
+        _ => "Deferred",
+    };
+
     /// <summary>The store's word back into a progress; anything unknown has not been started.</summary>
     public static TaskProgress ProgressFromWord(string? word) => word?.Trim().ToLowerInvariant() switch
     {
