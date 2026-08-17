@@ -27,10 +27,18 @@ public sealed record DueReminder
 
     public MessageSummary? Message { get; init; }
 
-    /// <summary>The appointment, or null for a flagged message.</summary>
+    /// <summary>The appointment, or null when this is a message or a task.</summary>
     public DueAppointment? Appointment { get; init; }
 
+    /// <summary>The task, or null when this is a message or an appointment.</summary>
+    public DueTask? Task { get; init; }
+
     public bool IsAppointment => Appointment is not null;
+
+    public bool IsTask => Task is not null;
+
+    /// <summary>A flagged message — which is what a reminder is when it is neither of the others.</summary>
+    public bool IsMessage => Message is not null;
 
     public static DueReminder ForMessage(OpenAccount account, MessageSummary message)
         => new() { Account = account, Message = message };
@@ -38,14 +46,18 @@ public sealed record DueReminder
     public static DueReminder ForAppointment(DueAppointment appointment)
         => new() { Appointment = appointment };
 
-    public string Subject => IsAppointment
-        ? (Appointment!.Summary.Length > 0 ? Appointment.Summary : "(no subject)")
-        : (Message!.Subject.Length > 0 ? Message.Subject : "(no subject)");
+    public static DueReminder ForTask(DueTask task)
+        => new() { Task = task };
+
+    public string Subject => Named(
+        IsAppointment ? Appointment!.Summary : IsTask ? Task!.Summary : Message!.Subject);
+
+    private static string Named(string subject) => subject.Length > 0 ? subject : "(no subject)";
 
     /// <summary>"Due in 2 hours", "Overdue by 15 minutes", "No due date" — the reference's column.</summary>
     public string DueIn(DateTimeOffset now)
     {
-        var when = IsAppointment ? Appointment!.StartsUtc : Message!.FollowUpDue;
+        var when = IsAppointment ? Appointment!.StartsUtc : IsTask ? Task!.DueUtc : Message!.FollowUpDue;
         if (when is not { } due) return "No due date";
 
         var span = due - now;
@@ -63,8 +75,8 @@ public sealed record DueReminder
 }
 
 /// <summary>
-/// The Reminders window (§9): one queue of what is due — flagged mail for now; appointments and
-/// tasks join it with their phases — with Dismiss, Dismiss All, Open Item and Snooze.
+/// The Reminders window (§9): one queue of what is due — flagged mail, appointments and tasks
+/// together — with Dismiss, Dismiss All, Open Item and Snooze.
 /// </summary>
 /// <remarks>
 /// One instance, kept while the shell runs and shown when something is due, so a second reminder
@@ -105,7 +117,9 @@ public sealed class RemindersWindow : Window
         ShowInTaskbar = true;
         Topmost = App.MailOptions.RemindersOnTop;
 
-        _list.ItemTemplate = new FuncDataTemplate<DueReminder>((item, _) => Row(item));
+        // A template is asked about a null item as the list settles — which is what dismissing the
+        // last reminder does — so it is pattern-matched rather than dereferenced.
+        _list.ItemTemplate = new FuncDataTemplate<DueReminder>((item, _) => item is { } due ? Row(due) : new Panel());
         Bind(_list, TemplatedControl.BackgroundProperty, "dialog.surface.brush");
         Bind(_list, TemplatedControl.BorderBrushProperty, "dialog.border.brush");
         Bind(_heading, TextBlock.ForegroundProperty, "dialog.foreground.brush");
@@ -161,10 +175,14 @@ public sealed class RemindersWindow : Window
     /// <summary>Asks the shell to open an appointment from the calendar.</summary>
     public event EventHandler<long>? OpenAppointmentRequested;
 
+    /// <summary>Asks the shell to open a task from the to-do list.</summary>
+    public event EventHandler<long>? OpenTaskRequested;
+
     private void Open(DueReminder? item)
     {
         if (item is null) return;
         if (item.Appointment is { } appointment) OpenAppointmentRequested?.Invoke(this, appointment.ItemId);
+        else if (item.Task is { } task) OpenTaskRequested?.Invoke(this, task.ItemId);
         else if (item.Account is { } account && item.Message is { } message) OpenRequested?.Invoke(this, (account.Account.Address, message.Id));
     }
 
@@ -172,7 +190,7 @@ public sealed class RemindersWindow : Window
     {
         var glyph = new TextBlock
         {
-            Text = IconGlyphs.GetOrEmpty(item.IsAppointment ? "calendar" : "flag", 16),
+            Text = IconGlyphs.GetOrEmpty(item.IsAppointment ? "calendar" : item.IsTask ? "todo-list" : "flag", 16),
             FontFamily = IconFont.Family,
             FontSize = 14,
             VerticalAlignment = VerticalAlignment.Center,
@@ -216,12 +234,26 @@ public sealed class RemindersWindow : Window
     /// <summary>What is on show, for a caller merging a new due item into it.</summary>
     public IReadOnlyList<DueReminder> Current => _due;
 
+    /// <summary>
+    /// The two buttons, as the harness presses them.
+    /// </summary>
+    /// <remarks>
+    /// The same two methods the buttons themselves call, over the items given, so what a pose
+    /// proves is what a reader would get — and what each did is read back out of the store the
+    /// item came from rather than out of this window.
+    /// </remarks>
+    internal void PressDismiss(IEnumerable<DueReminder> items) => Dismiss([.. items]);
+
+    internal void PressSnooze(IEnumerable<DueReminder> items, TimeSpan span) => Snooze([.. items], span);
+
     private List<DueReminder> Selected()
         => (_list.SelectedItems ?? new List<object>()).OfType<DueReminder>().ToList();
 
+    // Three kinds now, so each pass says which it means rather than taking "not an appointment"
+    // for a message — which is what it meant when there were two.
     private void Dismiss(List<DueReminder> items)
     {
-        foreach (var group in items.Where(i => !i.IsAppointment).GroupBy(i => i.Account!.Account.Address))
+        foreach (var group in items.Where(i => i.IsMessage).GroupBy(i => i.Account!.Account.Address))
         {
             group.First().Account!.Mail.SetReminder([.. group.Select(i => i.Message!.Id)], null);
         }
@@ -231,13 +263,18 @@ public sealed class RemindersWindow : Window
             AppointmentReminders.Dismiss(App.Pim, item.Appointment!);
         }
 
+        foreach (var item in items.Where(i => i.IsTask))
+        {
+            TaskReminders.Dismiss(App.Pim, item.Task!);
+        }
+
         Show([.. _due.Except(items)]);
     }
 
     private void Snooze(List<DueReminder> items, TimeSpan span)
     {
         var later = DateTimeOffset.UtcNow + span;
-        foreach (var group in items.Where(i => !i.IsAppointment).GroupBy(i => i.Account!.Account.Address))
+        foreach (var group in items.Where(i => i.IsMessage).GroupBy(i => i.Account!.Account.Address))
         {
             group.First().Account!.Mail.SetReminder([.. group.Select(i => i.Message!.Id)], later);
         }
@@ -245,6 +282,11 @@ public sealed class RemindersWindow : Window
         foreach (var item in items.Where(i => i.IsAppointment))
         {
             AppointmentReminders.Snooze(App.Pim, item.Appointment!, later);
+        }
+
+        foreach (var item in items.Where(i => i.IsTask))
+        {
+            TaskReminders.Snooze(App.Pim, item.Task!, later);
         }
 
         Show([.. _due.Except(items)]);

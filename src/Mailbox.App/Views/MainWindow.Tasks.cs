@@ -272,6 +272,34 @@ public partial class MainWindow
         shell.StatusRight = $"“{made.Summary}” added.";
     }
 
+    /// <summary>
+    /// Opens a task by its row in the store, which is what the Reminders window has to hand.
+    /// </summary>
+    /// <remarks>
+    /// It switches to the module first, as the calendar's own by-id opener does: a reminder that
+    /// opened a window over the mail would leave the reader nowhere when it was closed.
+    /// </remarks>
+    internal async Task OpenTaskByIdAsync(ShellViewModel shell, long itemId)
+    {
+        if (App.Pim.Item(itemId) is not { } stored) return;
+
+        SwitchModule(shell, MailboxModule.Tasks);
+        var window = new TaskWindow(PimTodoCodec.FromItem(stored));
+        await window.ShowDialog(this);
+
+        if (window.Deleted)
+        {
+            App.PimSync.Remove(stored);
+            _taskModule?.Reload();
+            RefreshToDoTasks();
+            return;
+        }
+
+        if (window.Result is not { } edited) return;
+        SaveTask(edited, stored, stored.CollectionId);
+        shell.StatusRight = $"“{edited.Summary}” saved.";
+    }
+
     /// <summary>Opens a task that is already on the list.</summary>
     private async Task OpenTaskAsync(ShellViewModel shell, TaskRow row)
     {
