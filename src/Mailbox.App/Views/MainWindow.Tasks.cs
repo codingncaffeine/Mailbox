@@ -107,6 +107,51 @@ public partial class MainWindow
         Log.Info($"Today: showing {address} — {_today.Status}.");
     }
 
+    /// <summary>
+    /// The harness's feed: a file parsed and delivered as a poll would deliver it.
+    /// </summary>
+    /// <remarks>
+    /// What a run has to be able to prove is that an entry becomes a message in its own folder,
+    /// unread, once — not that HTTP works, which is somebody else's software.
+    /// </remarks>
+    private void PoseFeed(ShellViewModel shell, string spec)
+    {
+        var parts = spec.Split('|', 2, StringSplitOptions.TrimEntries);
+        var path = parts[0];
+
+        if (App.Accounts.All.FirstOrDefault() is not { } account)
+        {
+            Log.Info("Harness: no account to deliver a feed into.");
+            return;
+        }
+
+        try
+        {
+            var channel = Mailbox.Core.Feeds.FeedParser.Parse(File.ReadAllText(path));
+            var name = parts.Length > 1 && parts[1].Length > 0 ? parts[1] : channel.Title;
+            var feed = App.Feeds.Add(path, name);
+
+            var delivered = Mailbox.Protocols.FeedReceiver.Deliver(account, feed, channel, DateTimeOffset.UtcNow);
+            shell.Refresh();
+
+            Log.Info($"Harness: feed “{channel.Title}” delivered {delivered} of {channel.Items.Count} item(s) "
+                + $"into {Mailbox.Protocols.FeedReceiver.RootFolder}/{name}.");
+
+            foreach (var folder in account.Mail.Folders(account.Account.Id).Where(f => f.Name == name))
+            {
+                foreach (var message in account.Mail.Messages(folder.Id))
+                {
+                    Log.Info($"Harness: feed item “{message.Subject}” from {message.FromName}, "
+                        + $"{(message.IsRead ? "read" : "unread")}.");
+                }
+            }
+        }
+        catch (Exception ex) when (ex is FormatException or IOException)
+        {
+            Log.Info($"Harness: the feed at {path} could not be read — {ex.Message}");
+        }
+    }
+
     /// <summary>Opens a folder by its account and name, which is what the summary page's links do.</summary>
     private void RevealFolder(ShellViewModel shell, string address, string folder)
     {

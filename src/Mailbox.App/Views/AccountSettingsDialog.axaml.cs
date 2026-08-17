@@ -644,10 +644,43 @@ public sealed class AccountSettingsDialog : Window
             Columns = [new ClassicColumn("Feed Name", 338), new ClassicColumn("Last Updated On", 245)],
         };
 
-        var change = ToolButton("change", "Change...", () => Task.CompletedTask);
-        var remove = ToolButton("remove", "Remove", () => { });
-        change.IsEnabled = false;
-        remove.IsEnabled = false;
+        void Fill()
+        {
+            list.SetRows(
+            [
+                .. App.Feeds.All.Select(f => new ClassicRow(
+                    [f.Name, f.LastChecked is { } when ? when.LocalDateTime.ToString("g", CultureInfo.CurrentCulture) : "(never)"],
+                    Tag: f.Url)),
+            ]);
+        }
+
+        Fill();
+
+        var change = ToolButton("change", "Change...", async () =>
+        {
+            if (list.SelectedRow?.Tag is not string url) return;
+            var named = await Prompt.AskAsync(this, "RSS Feed Options", "Feed Name:", list.SelectedRow.Cells[0]);
+            if (named is null) return;
+
+            App.Feeds.Rename(url, named);
+            Fill();
+        });
+
+        var remove = ToolButton("remove", "Remove", () =>
+        {
+            if (list.SelectedRow?.Tag is not string url) return;
+            App.Feeds.Remove(url);
+            Fill();
+        });
+
+        void Enable()
+        {
+            change.IsEnabled = list.SelectedRow is not null;
+            remove.IsEnabled = list.SelectedRow is not null;
+        }
+
+        list.SelectionChanged += (_, _) => Enable();
+        Enable();
 
         var toolbar = Toolbar(
             ToolButton("new", "New...", async () =>
@@ -657,10 +690,13 @@ public sealed class AccountSettingsDialog : Window
                     "Enter the location of the RSS Feed you want to add to Mailbox:",
                     "Example: http://www.example.com/feed/main.xml");
                 await dialog.ShowDialog(this);
-                if (dialog.Location is null) return;
-                await Later("RSS Feeds",
-                    "Feed subscriptions arrive with the RSS reader, in a later phase of Mailbox. "
-                    + "Nothing was added.");
+                if (dialog.Location is not { Length: > 0 } location) return;
+
+                // Named after its address until the first download, which is when the feed says
+                // what it is called — a subscription that could not be read still shows here.
+                var name = Uri.TryCreate(location, UriKind.Absolute, out var uri) ? uri.Host : location;
+                App.Feeds.Add(location, name);
+                Fill();
             }),
             change, remove);
 
@@ -673,9 +709,7 @@ public sealed class AccountSettingsDialog : Window
         {
             Children =
             {
-                At(Label("Selected RSS Feed delivers new items to the following location:"), 7, 9),
-                At(PushButton("Change Folder", () => Later("RSS Feeds",
-                    "Feed subscriptions arrive with the RSS reader, in a later phase of Mailbox."), width: 92), 9, 36),
+                At(Label("New items are delivered to a folder of their own under RSS Feeds."), 7, 9),
                 At(paragraph, 8, 73),
             },
         };
