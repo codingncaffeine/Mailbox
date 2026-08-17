@@ -1197,9 +1197,28 @@ public sealed partial class ShellViewModel : ObservableObject
     /// millisecond and the reference filters as you type. Results carry the folder they were
     /// found in, since a search across folders is only legible if each row says where it is.
     /// </remarks>
+    /// <summary>
+    /// A search while a module other than Mail is open, for the shell to hand to that module.
+    /// </summary>
+    /// <remarks>
+    /// The box searches whatever is on screen, which is what the reference's own Instant Search
+    /// does: in the calendar it finds appointments, in People it finds people. What each module
+    /// does with the words is the module's business, so this carries them and nothing else.
+    /// </remarks>
+    public event EventHandler<string>? ModuleSearchRequested;
+
     private void RunSearch()
     {
         if (_accounts is null) return;
+
+        // Only the mail module's list is this class's to fill. Everything else is a module with
+        // its own list, and its own idea of what a match is.
+        if (Module != MailboxModule.Mail)
+        {
+            IsSearching = _searchText.Trim().Length > 0;
+            ModuleSearchRequested?.Invoke(this, _searchText.Trim());
+            return;
+        }
 
         if (string.IsNullOrWhiteSpace(_searchText))
         {

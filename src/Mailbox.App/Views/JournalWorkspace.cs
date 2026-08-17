@@ -73,7 +73,7 @@ public sealed class JournalWorkspace : Border
     }
 
     /// <summary>What the status bar says: the reference counts what the view is showing.</summary>
-    public string Status => $"Items: {_view.Count}";
+    public string Status => Search.Length == 0 ? $"Items: {_view.Count}" : $"Items: {_view.Count} found";
 
     public IReadOnlyList<JournalRow> Rows => _view.Rows;
 
@@ -125,10 +125,30 @@ public sealed class JournalWorkspace : Border
     }
 
     /// <summary>Reads the store again — after a write, or when a journal is shown or hidden.</summary>
+    /// <summary>What Instant Search is looking for here, matched against the store's own index.</summary>
+    public string Search
+    {
+        get;
+        set
+        {
+            var wanted = value?.Trim() ?? string.Empty;
+            if (field == wanted) return;
+            field = wanted;
+            Reload();
+        }
+    } = string.Empty;
+
     public void Reload()
     {
         _view.Arrangement = _arrangement;
-        _view.Rows = _book.Rows(_arrangement, Today);
+        var rows = _book.Rows(_arrangement, Today);
+        if (Search.Length > 0)
+        {
+            var found = _repository.Search(Search).Select(i => i.Id).ToHashSet();
+            rows = [.. rows.Where(r => found.Contains(r.ItemId))];
+        }
+
+        _view.Rows = rows;
         Selected = _view.Selected;
         _navPane.Refresh();
         Changed?.Invoke(this, EventArgs.Empty);

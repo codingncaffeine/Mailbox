@@ -89,7 +89,7 @@ public sealed class TasksWorkspace : Border
     }
 
     /// <summary>What the status bar says: the reference counts what the view is showing.</summary>
-    public string Status => $"Items: {_list.Count}";
+    public string Status => Search.Length == 0 ? $"Items: {_list.Count}" : $"Items: {_list.Count} found";
 
     public IReadOnlyList<TaskRow> Rows => _list.Rows;
 
@@ -113,10 +113,36 @@ public sealed class TasksWorkspace : Border
         Reload();
     }
 
-    /// <summary>Reads the store again — after a write, or when a list is shown or hidden.</summary>
+    /// <summary>
+    /// What Instant Search is looking for in this module, or empty for everything.
+    /// </summary>
+    /// <remarks>
+    /// The words are matched against the store's own index (`pim_fts`), which is what makes this
+    /// the same search the other modules run rather than five different ideas of a match; the
+    /// flagged mail beside the tasks is matched on its subject, that being what a message's row
+    /// on this list is.
+    /// </remarks>
+    public string Search
+    {
+        get;
+        set
+        {
+            var wanted = value?.Trim() ?? string.Empty;
+            if (field == wanted) return;
+            field = wanted;
+            Reload();
+        }
+    } = string.Empty;
+
     public void Reload()
     {
         var rows = _book.Rows(Today, includeCompleted: _kind != TaskViewKind.Todo);
+        if (Search.Length > 0)
+        {
+            var found = _repository.Search(Search).Select(i => i.Id).ToHashSet();
+            rows = [.. rows.Where(r => (!r.IsMessage && found.Contains(r.ItemId))
+                                       || r.Summary.Contains(Search, StringComparison.OrdinalIgnoreCase))];
+        }
 
         // Detailed is the same rows under every column a task has, which is the whole of what
         // makes it a third view rather than the Simple List again — and a table is sorted by its

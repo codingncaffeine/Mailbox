@@ -119,6 +119,10 @@ public partial class MainWindow : Window
         };
         this.FindControl<ContentControl>("UndoSendHost")!.Content = _undoSend;
         WireSchedule(shell);
+
+        // Instant Search over the module on screen: the box searches what is in front of the
+        // reader, which is what the reference's own does.
+        shell.ModuleSearchRequested += (_, words) => SearchModule(shell, words);
         DataContext = shell;
 
         // The toasts stay with the notification server; what goes is the watch on their buttons.
