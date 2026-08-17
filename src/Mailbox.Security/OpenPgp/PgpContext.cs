@@ -71,6 +71,25 @@ public sealed class PgpContext : GnuPGContext
     /// <inheritdoc/>
     protected override string GetPasswordForKey(PgpSecretKey key) => _passphrase(key)!;
 
+    /// <summary>The secret key with that id, or null when this ring has not got it.</summary>
+    /// <remarks>
+    /// The library keeps this lookup to itself, and what needs it is the dialog that asks for a
+    /// passphrase: a <see cref="PassphraseRequest"/> names a key by id, and finding out whether an
+    /// answer opens it means having the key in hand. Asking before keeping anything is what stops a
+    /// mistyped passphrase being filed as a right one and failing at the send instead.
+    /// </remarks>
+    public PgpSecretKey? SecretKey(long keyId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return GetSecretKey(keyId, cancellationToken);
+        }
+        catch (PrivateKeyNotFoundException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>
     /// Opens one OpenPGP packet, and refuses to hand back anything that is not integrity-protected.
     /// </summary>
