@@ -106,6 +106,9 @@ public partial class App : Application
     /// <summary>The DAV engine over those collections, run with Send/Receive (§7.5).</summary>
     public static PimSyncService PimSync { get; private set; } = null!;
 
+    /// <summary>The one set of colour categories, and what keeps every store in step with it.</summary>
+    public static CategoryBook Categories { get; private set; } = null!;
+
     /// <summary>The Rules and Alerts wizard's rules, run on arrival and by Run Rules Now.</summary>
     public static RulesHandler Rules { get; private set; } = null!;
 
@@ -430,6 +433,13 @@ public partial class App : Application
         CalendarOptions = new CalendarOptions(Settings);
         PeopleOptions = new PeopleOptions(Settings);
         Contacts = new Mailbox.Contacts.ContactBook(Pim);
+
+        // One set of categories over every module (§9). The mail accounts keep a mirror of it so
+        // their own join tables have rows to point at; adopting on first run is what keeps mail
+        // that was already coloured coloured.
+        Categories = new CategoryBook(Pim, () => [.. Accounts.All.Select(a => a.Mail)]);
+        Categories.EnsureDefaults();
+
         AutoArchive = new Mailbox.Core.Archive.AutoArchiveOptions(Settings);
         QuickClick = new QuickClickSettings(Settings);
 

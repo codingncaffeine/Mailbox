@@ -187,6 +187,7 @@ public partial class MainWindow
         if (id == CalendarCommands.ScheduleView.Id) { WithCalendar(shell, c => c.SetView(CalendarViewKind.Schedule)); return true; }
         if (id == CalendarCommands.CalendarOptions.Id) { _ = ShowOptions("calendar"); return true; }
         if (id == CalendarCommands.OpenItem.Id) { OpenSelectedAppointment(shell); return true; }
+        if (id == CalendarCommands.Categorize.Id) { SwitchModule(shell, MailboxModule.Calendar); CategorizeAppointment(shell); return true; }
         if (id == CalendarCommands.DeleteItem.Id) { _ = DeleteSelectedAppointmentAsync(shell); return true; }
         if (id == CalendarCommands.OpenCalendar.Id) { ShowAddCalendarMenu(shell); return true; }
         if (id == CalendarCommands.Share.Id) { ShowShareCalendarMenu(shell); return true; }

@@ -111,6 +111,10 @@ public partial class MainWindow
                 shell.ModuleStatusLeft = tasks.Status;
                 return true;
 
+            case "tasks.categorize":
+                CategorizeTask(shell);
+                return true;
+
             case "tasks.reply":
             case "tasks.replyall":
             case "tasks.forward":

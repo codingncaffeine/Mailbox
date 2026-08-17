@@ -146,6 +146,29 @@ public static class PimMigrations
             bytes      BLOB NOT NULL
         );
         """,
+
+        // ---- 4: the colour categories -------------------------------------------------------
+        // One set across every module, which is what the reference has and what §9 asks for: a
+        // message, an appointment, a task, a note and a contact all take their colour from the
+        // same list. It lives here rather than in a mail store because this file is the one
+        // every module shares — a per-account list would give the same reader two of them.
+        //
+        // Items refer to a category by *name*, because that is what the standards carry:
+        // iCalendar's CATEGORIES and vCard's are lists of names, and a note written here has to
+        // arrive on another client saying what it says. The mail stores keep their own rows so
+        // their join table still has something to point at; those are a mirror of this table,
+        // kept in step by name.
+        """
+        CREATE TABLE categories (
+            id           INTEGER PRIMARY KEY,
+            name         TEXT    NOT NULL,
+            colour_token TEXT    NOT NULL,
+            shortcut     TEXT,
+            ordinal      INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE UNIQUE INDEX categories_name ON categories(name COLLATE NOCASE);
+        """,
     ];
 
     public static int Latest => Steps.Count;

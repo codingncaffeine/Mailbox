@@ -437,6 +437,84 @@ public sealed class PimRepository(PimStore store)
             ("$snoozed", snoozedUntil?.ToUnixTimeSeconds()),
             ("$id", id));
 
+    // ---- The colour categories ------------------------------------------------------------------
+
+    /// <summary>
+    /// The one set of colour categories, in the order the reader put them in.
+    /// </summary>
+    /// <remarks>
+    /// Here rather than in a mail store because every module shares this file and none shares
+    /// those: a per-account list would give one reader two of them (§9's "one colour category set
+    /// applying to every item type in every module"). Items name a category rather than pointing
+    /// at it, because that is what iCalendar and vCard carry.
+    /// </remarks>
+    public IReadOnlyList<Category> Categories() => _store.Query(
+        "SELECT id, name, colour_token, shortcut, ordinal FROM categories ORDER BY ordinal, id",
+        ReadCategory);
+
+    public Category? CategoryNamed(string name) => _store.Query(
+        "SELECT id, name, colour_token, shortcut, ordinal FROM categories WHERE name = $name COLLATE NOCASE",
+        ReadCategory,
+        ("$name", name)).FirstOrDefault();
+
+    /// <summary>Makes a category, or hands back the one that already has the name.</summary>
+    public Category AddCategory(string name, string colourToken, string? shortcut = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        return _store.InTransaction(() =>
+        {
+            if (CategoryNamed(name.Trim()) is { } existing) return existing;
+
+            _store.Execute(
+                """
+                INSERT INTO categories (name, colour_token, shortcut, ordinal)
+                VALUES ($name, $colour, $shortcut, (SELECT COALESCE(MAX(ordinal), -1) + 1 FROM categories))
+                """,
+                ("$name", name.Trim()), ("$colour", colourToken ?? string.Empty), ("$shortcut", shortcut));
+
+            return _store.Query(
+                "SELECT id, name, colour_token, shortcut, ordinal FROM categories WHERE id = $id",
+                ReadCategory,
+                ("$id", _store.LastInsertId)).First();
+        });
+    }
+
+    public void RenameCategory(long id, string name)
+        => _store.Execute("UPDATE categories SET name = $name WHERE id = $id", ("$name", name.Trim()), ("$id", id));
+
+    public void RecolourCategory(long id, string colourToken)
+        => _store.Execute("UPDATE categories SET colour_token = $colour WHERE id = $id", ("$colour", colourToken ?? string.Empty), ("$id", id));
+
+    /// <summary>Sets or clears a category's keyboard shortcut. Null clears it.</summary>
+    public void SetCategoryShortcut(long id, string? shortcut)
+        => _store.Execute("UPDATE categories SET shortcut = $shortcut WHERE id = $id", ("$shortcut", shortcut), ("$id", id));
+
+    public void DeleteCategory(long id)
+        => _store.Execute("DELETE FROM categories WHERE id = $id", ("$id", id));
+
+    /// <summary>
+    /// Every item carrying a category by that name, whichever module it belongs to.
+    /// </summary>
+    /// <remarks>
+    /// Matched against the derived column rather than the payload, and bounded by commas so that
+    /// "Blue" does not find "Blueprints": the column is written as a comma-separated list, so a
+    /// name is between two of them once the whole string is fenced with one at each end.
+    /// </remarks>
+    public IReadOnlyList<PimItem> ItemsWithCategory(string name)
+        => string.IsNullOrWhiteSpace(name)
+            ? []
+            : _store.Query(
+                ItemSelect + " WHERE ',' || replace(categories, ', ', ',') || ',' LIKE $pattern COLLATE NOCASE ORDER BY id",
+                ReadItem,
+                ("$pattern", "%," + name.Trim() + ",%"));
+
+    private static Category ReadCategory(SqliteDataReader r) => new(
+        r.GetInt64(0),
+        r.GetString(1),
+        r.GetString(2),
+        r.IsDBNull(3) ? null : r.GetString(3),
+        r.GetInt32(4));
+
     // ---- The offline queue --------------------------------------------------------------------
 
     /// <summary>One local change waiting to reach its server.</summary>
