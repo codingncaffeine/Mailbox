@@ -76,9 +76,15 @@ public class SeedHarness
 
             Invitation("Priya Raman", "priya@example.net", "work@example.net", SeedToday().AddDays(4)),
 
-            Forwarded());
+            Forwarded(),
+
+            // In the default account, so a capture that poses nothing but the store lands on the
+            // folder these are in — the crypto bars are the point of them and nothing else reaches
+            // those bars.
+            PgpSealed(), PgpSigned(), PgpUnprotected());
 
         SeedImap(stores, "imap@example.org");
+        SeedKeyring(Path.Combine(target, "openpgp"));
         SeedCalendar(Path.Combine(target, "pim.db"));
         SeedContacts(Path.Combine(target, "pim.db"));
         SeedTasks(Path.Combine(target, "pim.db"));
@@ -640,11 +646,100 @@ public class SeedHarness
         return message;
     }
 
-    private static MimeMessage Envelope(string name, string address, string subject)
+    /// <summary>
+    /// The keys a seeded run reads its OpenPGP mail with: the reader's own, secret half and all,
+    /// and the correspondent's public half.
+    /// </summary>
+    /// <remarks>
+    /// Beside <c>pim.db</c>, which is where the application looks when <c>MAILBOX_STORE</c> poses a
+    /// store — so a seed brings its own keys exactly as it brings its own calendar. They are
+    /// generated here and nowhere else: nothing in a seed may come off the machine's own keyring,
+    /// and a capture run without a posed store gets a throwaway instead of either.
+    /// </remarks>
+    private static void SeedKeyring(string directory)
+    {
+        if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        Directory.CreateDirectory(directory);
+
+        using var context = new Mailbox.Security.OpenPgp.PgpContext(directory, _ => PgpKeys.Passphrase);
+        context.Import(PgpKeys.Reader.Public, TestContext.Current.CancellationToken);
+        context.Import(PgpKeys.Reader.Secret, TestContext.Current.CancellationToken);
+        context.Import(PgpKeys.Sender.Public, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>Signed by its sender and sealed to the reader — the ordinary OpenPGP shape.</summary>
+    private static MimeMessage PgpSealed()
+    {
+        var message = Envelope("A. Person", PgpKeys.Sender.Address, "The quarterly figures", PgpKeys.Reader.Address);
+        message.Body = MimeKit.Cryptography.MultipartEncrypted.SignAndEncrypt(
+            Signing(),
+            PgpKeys.Sender.Signing,
+            MimeKit.Cryptography.DigestAlgorithm.Sha256,
+            [PgpKeys.Reader.Encryption],
+            new TextPart("plain")
+            {
+                Text = "Figures attached below rather than in the file — they are short enough.\n\n"
+                       + "Revenue is up 4% on the quarter and the variance on line 14 is a timing\n"
+                       + "difference rather than a real one.\n\nA.",
+            });
+
+        return message;
+    }
+
+    /// <summary>Signed and not encrypted, so the signature bar has a message of its own.</summary>
+    private static MimeMessage PgpSigned()
+    {
+        var message = Envelope("A. Person", PgpKeys.Sender.Address, "Signed: the release checklist", PgpKeys.Reader.Address);
+        message.Body = MimeKit.Cryptography.MultipartSigned.Create(
+            Signing(),
+            PgpKeys.Sender.Signing,
+            MimeKit.Cryptography.DigestAlgorithm.Sha256,
+            new TextPart("plain")
+            {
+                Text = "Everything on the checklist is ticked except the tag itself.\n\nA.",
+            });
+
+        return message;
+    }
+
+    /// <summary>
+    /// Encrypted with no modification detection code at all, which is the one §19 exists for.
+    /// </summary>
+    /// <remarks>
+    /// It decrypts. Nothing about it is malformed. What it has not got is anything showing it
+    /// arrived the way it was sent, so the reading pane refuses it and says so — and a seed is how
+    /// that refusal gets photographed instead of argued about.
+    /// </remarks>
+    private static MimeMessage PgpUnprotected()
+    {
+        var message = Envelope("A. Person", PgpKeys.Sender.Address, "Encrypted without integrity", PgpKeys.Reader.Address);
+        message.Body = PgpKeys.EncryptedBody(PgpKeys.Packet(
+            PgpKeys.Reader,
+            new TextPart("plain") { Text = "You should never see this line.\n" },
+            integrity: false));
+
+        return message;
+    }
+
+    /// <summary>
+    /// A context for writing the seed's mail with, thrown away after: it is the sender's side of
+    /// the conversation, and the sender's secret key is not something a reader's keyring holds.
+    /// </summary>
+    private static Mailbox.Security.OpenPgp.PgpContext Signing()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "mailbox-seed-signing-" + Guid.NewGuid().ToString("n")[..8]);
+        var context = new Mailbox.Security.OpenPgp.PgpContext(directory, _ => PgpKeys.Passphrase);
+        context.Import(PgpKeys.Sender.Public, TestContext.Current.CancellationToken);
+        context.Import(PgpKeys.Sender.Secret, TestContext.Current.CancellationToken);
+        context.Import(PgpKeys.Reader.Public, TestContext.Current.CancellationToken);
+        return context;
+    }
+
+    private static MimeMessage Envelope(string name, string address, string subject, string? to = null)
     {
         var message = new MimeMessage { Subject = subject };
         message.From.Add(new MailboxAddress(name, address));
-        message.To.Add(new MailboxAddress("You", "you@example.com"));
+        message.To.Add(new MailboxAddress("You", to ?? "you@example.com"));
         message.MessageId = MimeUtils.GenerateMessageId("example.com");
         return message;
     }

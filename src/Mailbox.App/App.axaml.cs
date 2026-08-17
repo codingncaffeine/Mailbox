@@ -109,6 +109,17 @@ public partial class App : Application
     /// Beside the accounts directory rather than under it, so a harness run that poses a mail
     /// seed gets that seed's calendar too and never touches the real one.
     /// </remarks>
+    /// <summary>
+    /// Where everything this application keeps lives — the directory holding <c>pim.db</c> and the
+    /// accounts, which a posed store moves along with everything else in it.
+    /// </summary>
+    /// <remarks>
+    /// Resolved once rather than worked out again by each caller: the key material sits here too,
+    /// and a store that follows <c>MAILBOX_STORE</c> while the keys do not is a run that reads the
+    /// reader's own keys to draw a seeded message.
+    /// </remarks>
+    public static string StoreDirectory { get; private set; } = string.Empty;
+
     public static PimStore PimFile { get; private set; } = null!;
 
     /// <summary>What the modules ask of the PIM store.</summary>
@@ -440,7 +451,9 @@ public partial class App : Application
         Accounts = new AccountStores(accountsDirectory, AccountOrder);
 
         // pim.db sits beside the accounts directory, so a posed store brings its own calendar.
-        PimFile = new PimStore(PimPathBeside(accountsDirectory));
+        var pimPath = PimPathBeside(accountsDirectory);
+        StoreDirectory = System.IO.Path.GetDirectoryName(pimPath)!;
+        PimFile = new PimStore(pimPath);
         Pim = new PimRepository(PimFile);
 
         // A capture run keeps its passwords in memory: it poses accounts that do not exist, and

@@ -4,6 +4,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Avalonia.LogicalTree;
 using Mailbox.App.Options;
 using Mailbox.Core.Ribbon;
 using Mailbox.Core.Settings;
@@ -261,6 +262,53 @@ public sealed class OptionsWindow : Window
             && double.TryParse(scroll, System.Globalization.CultureInfo.InvariantCulture, out var offset))
         {
             scroller.Loaded += (_, _) => scroller.Offset = new Vector(0, offset);
+        }
+
+        if (Environment.GetEnvironmentVariable("MAILBOX_OPTIONS_PRESS") is { Length: > 0 } press)
+        {
+            PressRows(content, renderer, press);
+        }
+    }
+
+    /// <summary>
+    /// Presses rows on the page that is up, and says what the settings hold afterwards.
+    /// </summary>
+    /// <param name="rows">
+    /// Comma-separated; each names part of a row's label, matched case-insensitively. A tick box is
+    /// toggled and a radio is chosen.
+    /// </param>
+    /// <remarks>
+    /// §20 lists a hundred-odd rows waiting on the feature behind them, and each becomes a claim the
+    /// day it is wired up. This is how that claim gets read back: press the row the reader would
+    /// press and print the key it wrote, rather than photographing a tick and calling it done. A
+    /// capture cannot click, so the press is raised here — on the control the renderer really made,
+    /// found by the label the reader really sees.
+    /// </remarks>
+    private static void PressRows(Control page, OptionsPageRenderer renderer, string rows)
+    {
+        foreach (var wanted in rows.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var control = page.GetLogicalDescendants()
+                .OfType<Avalonia.Controls.Primitives.ToggleButton>()
+                .FirstOrDefault(c => c.Content?.ToString()?.Contains(wanted, StringComparison.OrdinalIgnoreCase) == true);
+
+            if (control is null)
+            {
+                Mailbox.Core.Diagnostics.Log.Info($"Harness: no options row reads '{wanted}'.");
+                continue;
+            }
+
+            // A radio is chosen rather than toggled: unticking one answers nothing.
+            control.IsChecked = control is RadioButton || control.IsChecked != true;
+
+            // What it wrote, not what it looks like. A row whose key nothing reads yet is one of
+            // §20's hundred, and this says so rather than photographing a tick and calling it done.
+            var wrote = renderer.Keys.TryGetValue(control, out var key)
+                ? $"{key} = {App.Settings.Stored(key) ?? "(unset)"}"
+                : "nothing — the row carries no key";
+
+            Mailbox.Core.Diagnostics.Log.Info(
+                $"Harness: pressed '{control.Content}', now {(control.IsChecked == true ? "on" : "off")}, wrote {wrote}.");
         }
     }
 

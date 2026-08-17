@@ -22,6 +22,7 @@ public sealed class OptionsPageRenderer
     private const double IndentStep = 16;
 
     private readonly Dictionary<string, ContentControl> _slots = [];
+    private readonly Dictionary<Control, string> _keys = [];
     private readonly SettingsStore _settings;
 
     /// <summary>
@@ -40,9 +41,20 @@ public sealed class OptionsPageRenderer
     /// </summary>
     public IReadOnlyDictionary<string, ContentControl> Slots => _slots;
 
+    /// <summary>
+    /// The settings key behind each control that has one, for the harness to read a press back by.
+    /// </summary>
+    /// <remarks>
+    /// A row's key is worked out here and nowhere else — its own, or its label when it has not
+    /// declared one — so anything that wants to say what a press wrote has to ask rather than
+    /// guess. §20 turns on rows knowing which key each one is waiting for.
+    /// </remarks>
+    public IReadOnlyDictionary<Control, string> Keys => _keys;
+
     public Control Render(OptionsPage page)
     {
         _slots.Clear();
+        _keys.Clear();
         var stack = new StackPanel { Spacing = 0, Margin = new Thickness(0, 0, 10, 0) };
         stack.Children.Add(PageHeader(page.Icon, page.Description));
 
@@ -110,6 +122,7 @@ public sealed class OptionsPageRenderer
         if (key is not null)
         {
             box.IsCheckedChanged += (_, _) => _settings.Set(key, box.IsChecked == true);
+            _keys[box] = key;
         }
 
         Bind(box, Avalonia.Controls.Primitives.TemplatedControl.ForegroundProperty,
@@ -134,6 +147,7 @@ public sealed class OptionsPageRenderer
         {
             if (button.IsChecked == true) _settings.Set(key, row.Label);
         };
+        _keys[button] = key;
         Bind(button, Avalonia.Controls.Primitives.TemplatedControl.ForegroundProperty,
             "dialog.foreground.brush");
         return row.HasInfo ? WithInfo(button) : button;

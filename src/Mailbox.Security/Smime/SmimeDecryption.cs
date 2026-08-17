@@ -4,32 +4,6 @@ using MimeKit.Cryptography;
 
 namespace Mailbox.Security.Smime;
 
-/// <summary>What opening an encrypted message came to.</summary>
-public enum DecryptionState
-{
-    /// <summary>Nothing was encrypted. Most mail.</summary>
-    None,
-
-    /// <summary>Opened: what is shown is what was inside.</summary>
-    Opened,
-
-    /// <summary>Encrypted to somebody else, or to a key this machine has not got.</summary>
-    Locked,
-
-    /// <summary>Encrypted, and it would not open — malformed, or an algorithm this cannot do.</summary>
-    Failed,
-}
-
-/// <summary>What was inside, and what to say about it.</summary>
-/// <param name="Content">The decrypted entity, or null when there is nothing to show.</param>
-public sealed record DecryptionReport(DecryptionState State, MimeEntity? Content, string Detail)
-{
-    public static readonly DecryptionReport Unencrypted = new(DecryptionState.None, null, string.Empty);
-
-    /// <summary>True when there is decrypted content, which is rendered on its own terms.</summary>
-    public bool Opened => State == DecryptionState.Opened && Content is not null;
-}
-
 /// <summary>
 /// Opening an encrypted S/MIME message.
 /// </summary>

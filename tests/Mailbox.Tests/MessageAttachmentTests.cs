@@ -202,4 +202,65 @@ public class MessageAttachmentTests
     public void AnOrdinaryNameIsLeftAlone()
         => Assert.Equal("agenda.pdf",
             new Attachment("agenda.pdf", "application/pdf", 1, new MimePart()).SafeName);
+
+    // ---- How a message is sealed is not a thing in it ---------------------------------------
+
+    [Fact]
+    public void TheTwoPartsOfAnEncryptedMessageAreNotAttachments()
+    {
+        // Found by looking at a capture: an OpenPGP message drew two attachments, one 11 bytes of
+        // "Version: 1" and one of ciphertext, neither of which the reader can do anything with.
+        var message = new MimeMessage { Subject = "Sealed" };
+        message.From.Add(new MailboxAddress("A. Person", "a.person@example.com"));
+        message.Body = Encrypted();
+
+        Assert.Empty(MessageAttachments.List(message));
+    }
+
+    [Fact]
+    public void ADetachedSignatureIsNotAnAttachmentAndWhatItCoversStillIs()
+    {
+        // The signature part goes; the real attachment underneath it stays, which is the half a
+        // rule written as "skip everything in a signed part" would have got wrong.
+        var signed = new MimeKit.Cryptography.MultipartSigned();
+        signed.ContentType.Parameters["protocol"] = "application/pgp-signature";
+        signed.Add(new Multipart("mixed")
+        {
+            new TextPart("plain") { Text = "Here it is." },
+            File("agenda.pdf"),
+        });
+        signed.Add(new MimePart("application", "pgp-signature")
+        {
+            Content = new MimeContent(new MemoryStream("-----BEGIN PGP SIGNATURE-----"u8.ToArray())),
+            ContentDisposition = new ContentDisposition("attachment") { FileName = "signature.asc" },
+        });
+
+        var message = new MimeMessage { Subject = "Signed" };
+        message.From.Add(new MailboxAddress("A. Person", "a.person@example.com"));
+        message.Body = signed;
+
+        var listed = MessageAttachments.List(message);
+
+        Assert.Equal("agenda.pdf", Assert.Single(listed).Name);
+    }
+
+    private static MimeKit.Cryptography.MultipartEncrypted Encrypted()
+    {
+        var encrypted = new MimeKit.Cryptography.MultipartEncrypted();
+        encrypted.ContentType.Parameters["protocol"] = "application/pgp-encrypted";
+
+        encrypted.Add(new MimePart("application", "pgp-encrypted")
+        {
+            Content = new MimeContent(new MemoryStream("Version: 1\n"u8.ToArray())),
+            ContentDisposition = new ContentDisposition("attachment"),
+        });
+
+        encrypted.Add(new MimePart("application", "octet-stream")
+        {
+            Content = new MimeContent(new MemoryStream("-----BEGIN PGP MESSAGE-----"u8.ToArray())),
+            ContentDisposition = new ContentDisposition("attachment") { FileName = "encrypted.asc" },
+        });
+
+        return encrypted;
+    }
 }

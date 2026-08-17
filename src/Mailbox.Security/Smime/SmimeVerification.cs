@@ -6,43 +6,6 @@ using Org.BouncyCastle.X509;
 
 namespace Mailbox.Security.Smime;
 
-/// <summary>What checking a signature came to, in the terms the reading pane says it in.</summary>
-public enum SignatureState
-{
-    /// <summary>Nothing was signed. Most mail.</summary>
-    None,
-
-    /// <summary>Signed, checked, and everything held: the signer is who the message says sent it.</summary>
-    Valid,
-
-    /// <summary>
-    /// The maths held but the signer is not the sender, or the certificate is not for e-mail.
-    /// </summary>
-    /// <remarks>
-    /// Its own state on purpose. A client that folds this into "valid" is telling a reader that a
-    /// message from an impostor is signed by the person it names, which is the whole of the attack
-    /// (§19); one that folds it into "invalid" teaches them to ignore the word.
-    /// </remarks>
-    Mismatched,
-
-    /// <summary>Signed and it does not hold: the maths failed, or the chain would not build.</summary>
-    Invalid,
-
-    /// <summary>Signed in a way this cannot check — an algorithm or a shape it does not know.</summary>
-    Unknown,
-}
-
-/// <summary>What one signature came to, and why.</summary>
-/// <param name="Signer">Who the certificate says signed it, as an address.</param>
-/// <param name="Detail">One sentence a reader can act on. Empty when there is nothing to say.</param>
-public sealed record SignatureReport(SignatureState State, string Signer, string Detail)
-{
-    public static readonly SignatureReport Unsigned = new(SignatureState.None, string.Empty, string.Empty);
-
-    /// <summary>True only for a signature that passed every check there is.</summary>
-    public bool Trustworthy => State == SignatureState.Valid;
-}
-
 /// <summary>
 /// Checking an S/MIME signature, with the eight things §19 says a client must not get wrong.
 /// </summary>
@@ -73,14 +36,6 @@ public sealed record SignatureReport(SignatureState State, string Signer, string
 /// </remarks>
 public static class SmimeVerification
 {
-    /// <summary>How far a signature's own time may be from the message's before it is refused.</summary>
-    /// <remarks>
-    /// A day either way: clocks disagree, and a message may sit in a queue. What this stops is the
-    /// far-future or far-past value that pins a capability or picks a moment when a revoked
-    /// certificate was still good.
-    /// </remarks>
-    public static readonly TimeSpan SigningTimeTolerance = TimeSpan.FromDays(1);
-
     /// <summary>Whether the message's root is a signed part at all.</summary>
     public static bool IsSigned(MimeMessage message)
     {
@@ -138,7 +93,7 @@ public static class SmimeVerification
             }
 
             // §19: signingTime is the attacker's, and MimeKit builds the chain as of it.
-            if (!TimeAgrees(signature, message, out var timing))
+            if (!SigningTime.Agrees(signature.CreationDate, message, out var timing))
             {
                 return new SignatureReport(SignatureState.Invalid, who, timing);
             }
@@ -200,25 +155,6 @@ public static class SmimeVerification
 
         why = string.Empty;
         return true;
-    }
-
-    /// <summary>
-    /// Whether the signature's own claimed time is close enough to the message's to be believed.
-    /// </summary>
-    private static bool TimeAgrees(IDigitalSignature signature, MimeMessage message, out string why)
-    {
-        why = string.Empty;
-        if (signature.CreationDate == default) return true;
-
-        var claimed = signature.CreationDate.ToUniversalTime();
-        var sent = message.Date == default ? DateTimeOffset.UtcNow : message.Date.ToUniversalTime();
-
-        if ((claimed - sent).Duration() <= SigningTimeTolerance) return true;
-
-        why = "The time this message says it was signed — "
-              + claimed.ToString("u", CultureInfo.InvariantCulture)
-              + " — disagrees with the time it was sent.";
-        return false;
     }
 
     /// <summary>Whether the certificate says it is for e-mail at all (RFC 8550 §4.4.2).</summary>
