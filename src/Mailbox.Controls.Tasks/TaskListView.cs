@@ -34,6 +34,13 @@ public sealed class TaskListView : DrawnSurface
     /// <summary>Measured: the same heading the message list draws.</summary>
     public const double GroupHeight = 26;
 
+    /// <summary>The column header the detailed view puts where the arrangement bar goes.</summary>
+    /// <remarks>
+    /// The message list's own header height, since this is the same kind of row over the same kind
+    /// of columns and no capture of this view exists to say otherwise.
+    /// </remarks>
+    public const double HeaderHeight = 26;
+
     /// <summary>Measured: a task's own row.</summary>
     public const double RowHeight = 21;
 
@@ -43,6 +50,27 @@ public sealed class TaskListView : DrawnSurface
     private const double SubjectLeft = 28;
     private const double FlagColumn = 20;
     private const double TextSize = 12;
+
+    /// <summary>
+    /// The columns the detailed view draws, in the reference's own order and each with the width
+    /// it is given.
+    /// </summary>
+    /// <remarks>
+    /// Authored: no capture of this view exists, so the order is the reference's — priority, the
+    /// subject, then what it says about itself — and the widths are what the words in each need at
+    /// 12px, the subject taking whatever is left. The reference has an Attachment column here as
+    /// well; a task in this application carries no attachments yet, and a column that could never
+    /// have anything in it is worse than one that is not drawn (§20 lists it).
+    /// </remarks>
+    private static readonly (string Heading, double Width)[] Columns =
+    [
+        ("!", 20),
+        ("Subject", 0),
+        ("Status", 130),
+        ("Due Date", 110),
+        ("% Complete", 80),
+        ("Categories", 140),
+    ];
 
     private IReadOnlyList<TaskRow> _rows = [];
     private TaskRow? _selected;
@@ -82,6 +110,27 @@ public sealed class TaskListView : DrawnSurface
     /// <summary>What the arrangement bar says the list is arranged by.</summary>
     public string ArrangedBy { get; set; } = "Flag: Due Date";
 
+    /// <summary>
+    /// Whether the list is drawn as a table of columns — the reference's Detailed view.
+    /// </summary>
+    /// <remarks>
+    /// The same rows either way; what changes is that every column a task has is drawn instead of
+    /// its subject alone, and that the bands go, a table of columns being sorted rather than
+    /// grouped. The row that makes a task by being typed in stays, as it does in the reference's
+    /// own table views.
+    /// </remarks>
+    public bool ShowColumns
+    {
+        get;
+        set
+        {
+            if (field == value) return;
+            field = value;
+            _scroll = 0;
+            InvalidateVisual();
+        }
+    }
+
     /// <summary>What is in the new-task box, which is empty until somebody types in it.</summary>
     public string Typed => _typed;
 
@@ -108,6 +157,15 @@ public sealed class TaskListView : DrawnSurface
     private List<Entry> Lines()
     {
         var lines = new List<Entry>();
+
+        // A table is sorted, not grouped: the detailed view is one run of rows under its columns,
+        // and the bands belong to the two views that have no columns to say the same thing.
+        if (ShowColumns)
+        {
+            foreach (var row in _rows) lines.Add(new Entry(row.Band, row));
+            return lines;
+        }
+
         TaskBand? band = null;
         foreach (var row in _rows)
         {
@@ -137,7 +195,7 @@ public sealed class TaskListView : DrawnSurface
     {
         var width = Bounds.Width;
         var height = Bounds.Height > 0 ? Bounds.Height : double.MaxValue;
-        var y = ArrangeHeight + 1 + NewTaskHeight + 1;
+        var y = NewTaskTop + NewTaskHeight + 1;
         var lines = Lines();
 
         for (var i = _scroll; i < lines.Count && y < height; i++)
@@ -161,14 +219,132 @@ public sealed class TaskListView : DrawnSurface
 
         Fill(context, new Rect(0, 0, width, height), Colour(TokenKeys.List.Background));
 
-        DrawArrangement(context, width);
+        if (ShowColumns) DrawColumnHeader(context, width);
+        else DrawArrangement(context, width);
+
         DrawNewTask(context, width);
 
         foreach (var (line, box) in Placed())
         {
             if (line.IsHeading) DrawHeading(context, box, line.Band);
+            else if (ShowColumns) DrawDetailedRow(context, box, line.Row!);
             else DrawRow(context, box, line.Row!);
         }
+    }
+
+    /// <summary>
+    /// Where each column starts and how wide it is, for a list of this width.
+    /// </summary>
+    /// <remarks>
+    /// The subject takes what the others leave, and never less than a hundred pixels — a narrow
+    /// pane keeps the columns and lets the subject ellipsize, which is what a table does rather
+    /// than dropping columns nobody asked it to drop.
+    /// </remarks>
+    private static IEnumerable<(string Heading, Rect Box)> Slice(double width)
+    {
+        var fixedWidth = Columns.Sum(c => c.Width);
+        var subject = Math.Max(100, width - SubjectLeft - fixedWidth - 6);
+        var x = 0.0;
+
+        foreach (var (heading, given) in Columns)
+        {
+            var cell = given > 0 ? given : subject;
+            if (heading == "!") x = TickLeft + TickSize + 4;
+            yield return (heading, new Rect(x, 0, cell, 0));
+            x += cell + (heading == "!" ? 6 : 8);
+        }
+    }
+
+    /// <summary>The header the detailed view draws in the arrangement bar's place.</summary>
+    private void DrawColumnHeader(DrawingContext context, double width)
+    {
+        var box = new Rect(0, 0, width, HeaderHeight);
+        Fill(context, box, Colour(TokenKeys.List.HeaderBackground));
+        Fill(context, new Rect(0, box.Bottom - 1, width, 1), Colour(TokenKeys.Border.Subtle));
+
+        var ink = Colour(TokenKeys.List.HeaderText);
+        foreach (var (heading, cell) in Slice(width))
+        {
+            if (cell.X > width - 20) break;
+            DrawAt(context, Ink(Ellipsize(heading, cell.Width, 11), 11, ink), cell.X, 17);
+        }
+    }
+
+    /// <summary>
+    /// One row of the detailed view: the tick box, then a cell per column.
+    /// </summary>
+    /// <remarks>
+    /// The subject cell carries what the other views draw in the subject — the envelope of a
+    /// flagged message and who sent it — so a row still says which of the two things it is.
+    /// </remarks>
+    private void DrawDetailedRow(DrawingContext context, Rect box, TaskRow row)
+    {
+        var chosen = _selected is { } s && s.Key == row.Key;
+        Fill(context, box, Colour(chosen
+            ? TokenKeys.List.RowSelected
+            : _hover is { } h && h.Key == row.Key ? TokenKeys.List.RowHover : TokenKeys.List.RowBackground));
+
+        var ink = Colour(row.IsOverdue || row.Band == TaskBand.Today ? TokenKeys.List.OverdueText : TokenKeys.List.ReadText);
+        var quiet = Colour(TokenKeys.List.PreviewText);
+        var baseline = box.Y + 15;
+
+        DrawTick(context, TickBox(box), row.IsComplete);
+
+        var task = row.Task;
+        foreach (var (heading, cell) in Slice(box.Width))
+        {
+            if (cell.X > box.Right - 20) break;
+            var left = box.X + cell.X;
+
+            switch (heading)
+            {
+                case "!":
+                    // The reference's own marks: a red exclamation for high, a blue arrow for
+                    // low, and nothing at all for the normal that most tasks are.
+                    if (task.Urgency == TaskUrgency.High) DrawAt(context, Ink("!", TextSize, Colour(TokenKeys.List.OverdueText), BoldFace), left + 4, baseline);
+                    else if (task.Urgency == TaskUrgency.Low) DrawAt(context, Ink("↓", TextSize, quiet), left + 3, baseline);
+                    break;
+
+                case "Subject":
+                {
+                    var start = left;
+                    if (row.IsMessage)
+                    {
+                        DrawEnvelope(context, new Rect(start, box.Y + 5, 13, 10), quiet);
+                        start += 18;
+                    }
+
+                    var room = cell.Width - (start - left);
+                    var text = Ink(Ellipsize(row.Summary, room, TextSize), TextSize, ink);
+                    DrawAt(context, text, start, baseline);
+                    if (row.IsComplete) Fill(context, new Rect(start, box.Y + 11, text.Width, 1), ink);
+                    break;
+                }
+
+                case "Status":
+                    DrawAt(context, Ink(Ellipsize(TodoCodec.ProgressLabel(task.Progress), cell.Width, TextSize), TextSize, ink), left, baseline);
+                    break;
+
+                case "Due Date":
+                    DrawAt(context, Ink(Ellipsize(row.DueText(), cell.Width, TextSize), TextSize, ink), left, baseline);
+                    break;
+
+                case "% Complete":
+                    DrawAt(context, Ink($"{task.PercentComplete}%", TextSize, ink), left, baseline);
+                    break;
+
+                default:
+                    if (task.Categories.Count > 0)
+                    {
+                        DrawAt(context, Ink(Ellipsize(string.Join(", ", task.Categories), cell.Width, TextSize), TextSize, quiet), left, baseline);
+                    }
+
+                    break;
+            }
+        }
+
+        // The line under a row, which is what keeps a table of cells from reading as a block.
+        Fill(context, new Rect(box.X, box.Bottom - 1, box.Width, 1), Colour(TokenKeys.List.Separator));
     }
 
     /// <summary>
@@ -201,7 +377,7 @@ public sealed class TaskListView : DrawnSurface
     /// </summary>
     private void DrawNewTask(DrawingContext context, double width)
     {
-        var box = new Rect(0, ArrangeHeight + 1, width, NewTaskHeight);
+        var box = new Rect(0, NewTaskTop, width, NewTaskHeight);
         Fill(context, box, Colour(TokenKeys.List.RowBackground));
         var edge = Colour(_typing ? TokenKeys.Accent.Rest : TokenKeys.Border.Subtle);
         Fill(context, new Rect(box.X, box.Y, box.Width, 1), edge);
@@ -333,7 +509,7 @@ public sealed class TaskListView : DrawnSurface
 
         // The new-task box takes the keyboard when it is pressed, and gives it back when
         // anything else is.
-        _typing = point.Y >= ArrangeHeight && point.Y < ArrangeHeight + 1 + NewTaskHeight;
+        _typing = NewTaskBox.Contains(point);
 
         foreach (var (line, box) in Placed())
         {
@@ -484,6 +660,12 @@ public sealed class TaskListView : DrawnSurface
     /// <summary>The tick box of a row.</summary>
     public Rect? TickOf(string key) => BoxOf(key) is { } row ? TickBox(row) : null;
 
+    /// <summary>
+    /// Where the new-task row starts: under the arrangement bar, or under the columns when the
+    /// detailed view has drawn a header in its place.
+    /// </summary>
+    private double NewTaskTop => ShowColumns ? HeaderHeight : ArrangeHeight + 1;
+
     /// <summary>The new-task box, which a pose types into.</summary>
-    public Rect NewTaskBox => new(0, ArrangeHeight + 1, Bounds.Width, NewTaskHeight);
+    public Rect NewTaskBox => new(0, NewTaskTop, Bounds.Width, NewTaskHeight);
 }

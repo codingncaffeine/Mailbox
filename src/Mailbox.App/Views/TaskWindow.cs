@@ -176,15 +176,8 @@ public sealed class TaskWindow : Window
 
     private static T Chosen<T>(ComboBox box, T[] values) => values[Math.Clamp(box.SelectedIndex, 0, values.Length - 1)];
 
-    /// <summary>The reference's own words for the five states.</summary>
-    public static string Label(TaskProgress progress) => progress switch
-    {
-        TaskProgress.NotStarted => "Not Started",
-        TaskProgress.InProgress => "In Progress",
-        TaskProgress.Completed => "Completed",
-        TaskProgress.Waiting => "Waiting on someone else",
-        _ => "Deferred",
-    };
+    /// <summary>The reference's own words for the five states, which the detailed view shares.</summary>
+    public static string Label(TaskProgress progress) => TodoCodec.ProgressLabel(progress);
 
     private static void Place(Grid grid, int row, int column, string label, Control control, int span = 1)
     {

@@ -213,6 +213,26 @@ public sealed class TaskBook(PimRepository repository, Func<IReadOnlyList<(strin
         return TaskBand.Later;
     }
 
+    /// <summary>
+    /// The same rows in the order a table shows them: by due date, then by name.
+    /// </summary>
+    /// <remarks>
+    /// A grouped list bands what is finished at the foot, because a band is a heading and
+    /// "Completed" is one. A table has no headings — it has a sort column, and the reference's
+    /// detailed view sorts by the due date — so a task that was ticked stays where its date puts
+    /// it, struck through, rather than jumping to the bottom of the list under the pointer.
+    /// </remarks>
+    public static IReadOnlyList<TaskRow> ByDueDate(IEnumerable<TaskRow> rows)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+        return
+        [
+            .. rows
+                .OrderBy(r => r.Task.Due?.Wall ?? DateTime.MaxValue)
+                .ThenBy(r => r.Summary, StringComparer.CurrentCultureIgnoreCase),
+        ];
+    }
+
     /// <summary>What the list writes above a band.</summary>
     public static string Heading(TaskBand band) => band switch
     {
