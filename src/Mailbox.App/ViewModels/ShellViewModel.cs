@@ -51,6 +51,12 @@ public enum FolderNodeKind
 
     /// <summary>A folder listed under Favourites — the same folder as its row in the tree below.</summary>
     Favourite,
+
+    /// <summary>The "All Accounts" heading of the unified mailbox (§14), when it is switched on.</summary>
+    UnifiedRoot,
+
+    /// <summary>One of the unified mailbox's folders — every account's Inbox at once, and so on.</summary>
+    Unified,
 }
 
 public sealed class FolderNode(string name, int depth, int unread, bool bold = false, FolderNodeKind kind = FolderNodeKind.Folder)
@@ -177,6 +183,17 @@ public sealed class MessageRow(
 
     /// <summary>Which folder it is filed in, so a conversation can tell it spans two.</summary>
     public long FolderId { get; init; }
+
+    /// <summary>
+    /// Which account's store this row came out of, empty for a view that is one account's.
+    /// </summary>
+    /// <remarks>
+    /// Every store numbers its own rows from one, so an id alone does not say which store to act
+    /// on — the same trap the to-do list has with tasks and flagged mail. A list that draws two
+    /// accounts at once therefore has to carry the address on the row, and every command resolves
+    /// the store from it rather than from the folder on screen.
+    /// </remarks>
+    public string Address { get; init; } = string.Empty;
 
     /// <summary>
     /// The folder a search result was found in, shown on the row while searching across folders.
@@ -698,6 +715,38 @@ public sealed partial class ShellViewModel : ObservableObject
     /// </summary>
     private readonly Dictionary<FolderNode, (OpenAccount Account, long FolderId, FolderRole Role)> _folderIds = [];
 
+    /// <summary>Which role each unified folder gathers, when the unified mailbox is on.</summary>
+    private readonly Dictionary<FolderNode, FolderRole> _unifiedRoles = [];
+
+    /// <summary>
+    /// The folders the unified mailbox offers, in the reference's own order.
+    /// </summary>
+    /// <remarks>
+    /// The well-known roles and no others. A folder somebody made themselves is theirs and lives
+    /// in the account it belongs to; gathering two accounts' "Projects" folders because they share
+    /// a name would be guessing that they mean the same thing.
+    /// </remarks>
+    private static readonly FolderRole[] UnifiedRoles =
+    [
+        FolderRole.Inbox,
+        FolderRole.Drafts,
+        FolderRole.Sent,
+        FolderRole.Deleted,
+        FolderRole.Junk,
+        FolderRole.Archive,
+    ];
+
+    private static string UnifiedName(FolderRole role) => role switch
+    {
+        FolderRole.Inbox => "Inbox",
+        FolderRole.Drafts => "Drafts",
+        FolderRole.Sent => "Sent Items",
+        FolderRole.Deleted => "Deleted Items",
+        FolderRole.Junk => "Junk Email",
+        FolderRole.Archive => "Archive",
+        _ => role.ToString(),
+    };
+
     /// <summary>The search-folder nodes, and the saved query each stands for.</summary>
     private readonly Dictionary<FolderNode, (OpenAccount Account, SearchFolder Folder)> _searchFolderIds = [];
 
@@ -737,6 +786,26 @@ public sealed partial class ShellViewModel : ObservableObject
                 .Select(f => FolderPath(primary.Mail.Folders(primary.Account.Id), f!))
                 .ToList();
             favourites.SeedIfFresh(primary.Account.Address, seed);
+        }
+
+        // The unified mailbox, above everything, when it is on (§14). It is a way of reading the
+        // accounts rather than a place of its own: nothing is stored under it, and switching it
+        // off leaves every folder exactly where it was.
+        if (App.MailOptions.UnifiedMailbox && accounts.Count > 1)
+        {
+            Folders.Add(new FolderNode("All Accounts", 0, 0, bold: true, kind: FolderNodeKind.UnifiedRoot));
+
+            foreach (var role in UnifiedRoles)
+            {
+                var unread = accounts
+                    .Select(a => a.Mail.FolderWithRole(a.Account.Id, role))
+                    .Where(f => f is not null)
+                    .Sum(f => f!.Unread);
+
+                var node = new FolderNode(UnifiedName(role), 1, unread, kind: FolderNodeKind.Unified);
+                _unifiedRoles[node] = role;
+                Folders.Add(node);
+            }
         }
 
         Folders.Add(new FolderNode("Favourites", 0, 0, bold: true, kind: FolderNodeKind.FavouritesHeading));
@@ -1018,6 +1087,12 @@ public sealed partial class ShellViewModel : ObservableObject
             return;
         }
 
+        if (_unifiedRoles.TryGetValue(folder, out var unified))
+        {
+            LoadUnified(unified);
+            return;
+        }
+
         if (!_folderIds.TryGetValue(folder, out var where)) return;
 
         Messages.Clear();
@@ -1089,6 +1164,99 @@ public sealed partial class ShellViewModel : ObservableObject
                 row.CategoryNames = [.. assigned.Select(c => c.Name)];
             }
         }
+
+        Rebuild();
+        SelectedMessage = Messages.FirstOrDefault();
+    }
+
+    /// <summary>
+    /// One unified folder: every account's folder of that role, newest first.
+    /// </summary>
+    /// <remarks>
+    /// Merged here rather than in the store, because there is no "here" in the store to merge in:
+    /// each account is its own file (§4), and that is the property the whole design rests on. So
+    /// the view reads each and interleaves, and every row carries the address it came from — an id
+    /// alone says nothing when two stores both number their rows from one.
+    /// <para>
+    /// The row's To line shows which account it arrived at, which in this view is the one thing a
+    /// reader cannot work out from the message itself.
+    /// </para>
+    /// </remarks>
+    private void LoadUnified(FolderRole role)
+    {
+        Messages.Clear();
+        if (_accounts is null) return;
+
+        foreach (var account in _accounts.All)
+        {
+            if (account.Mail.FolderWithRole(account.Account.Id, role) is not { } folder) continue;
+
+            // Focused Inbox is a per-account setting and this view is not per-account, so the
+            // unified Inbox shows both halves. Filtering to one would hide mail from whichever
+            // accounts disagreed with the switch.
+            var summaries = ShowSnoozed
+                ? account.Mail.Snoozed(folder.Id)
+                : account.Mail.Messages(folder.Id);
+
+            var rows = new List<MessageRow>();
+
+            foreach (var summary in summaries)
+            {
+                var preview = summary.SnoozedUntil is { } until
+                    ? $"Snoozed until {SnoozeLabel(until)} — {summary.Preview}"
+                    : summary.Preview;
+
+                rows.Add(new MessageRow(
+                    summary.Id,
+                    summary.DisplayFrom,
+                    summary.Subject,
+                    preview,
+                    summary.Received,
+                    !summary.IsRead,
+                    $"To: {account.Account.Address}",
+                    summary.Preview)
+                {
+                    Address = account.Account.Address,
+                    SizeBytes = summary.SizeBytes,
+                    HasAttachment = summary.HasAttachment,
+                    IsFlagged = summary.IsFlagged,
+                    FollowUpComplete = summary.FollowUpComplete,
+                    FollowUpDue = summary.FollowUpDue,
+                    SnoozedUntil = summary.SnoozedUntil,
+                    Importance = summary.Importance,
+                    ThreadKey = Store.Lists.Arrangements.NormalisedSubject(summary.Subject),
+                    FolderId = summary.FolderId,
+
+                    // Which account a row came from is what this view exists to show, and it is
+                    // the one thing the message itself does not say.
+                    FolderLabel = account.Account.Address,
+                    FromAddress = summary.FromAddress,
+                    To = summary.To,
+                    Cc = summary.Cc,
+                    Sent = summary.Sent,
+                    HasReminder = summary.Reminder is not null,
+                });
+            }
+
+            // One query per account for its own categories, as a single folder does for its own.
+            var categories = account.Mail.CategoriesFor([.. rows.Select(r => r.Id)]);
+            foreach (var row in rows)
+            {
+                if (categories.TryGetValue(row.Id, out var assigned))
+                {
+                    row.CategoryTokens = [.. assigned.Select(c => c.ColourToken)];
+                    row.CategoryNames = [.. assigned.Select(c => c.Name)];
+                }
+            }
+
+            foreach (var row in rows) Messages.Add(row);
+        }
+
+        // Interleaved once at the end rather than merged as they arrive: the arrangement engine
+        // sorts what it is given, and this is only about the order the rows reach it in.
+        var ordered = Messages.OrderByDescending(m => m.Received).ToList();
+        Messages.Clear();
+        foreach (var row in ordered) Messages.Add(row);
 
         Rebuild();
         SelectedMessage = Messages.FirstOrDefault();
@@ -1336,6 +1504,10 @@ public sealed partial class ShellViewModel : ObservableObject
                     ThreadKey = Store.Lists.Arrangements.NormalisedSubject(summary.Subject),
                     FolderId = summary.FolderId,
                     FolderLabel = label,
+
+                    // A search over All Mailboxes draws two stores at once, so a row has to say
+                    // which one it came from — an id alone means a different message in each.
+                    Address = account.Account.Address,
                 });
             }
         }
@@ -1389,6 +1561,7 @@ public sealed partial class ShellViewModel : ObservableObject
                 ThreadKey = Store.Lists.Arrangements.NormalisedSubject(summary.Subject),
                 FolderId = summary.FolderId,
                 FolderLabel = names.GetValueOrDefault(summary.FolderId, string.Empty),
+                Address = account.Account.Address,
             });
         }
 
@@ -1488,19 +1661,35 @@ public sealed partial class ShellViewModel : ObservableObject
     private Dictionary<long, string> FolderNamesFor(OpenAccount account) =>
         account.Mail.Folders(account.Account.Id).ToDictionary(f => f.Id, f => f.Name);
 
-    /// <summary>Fills in the category swatches for whatever is currently in <see cref="Messages"/>.</summary>
+    /// <summary>
+    /// Fills in the category swatches for whatever is currently in <see cref="Messages"/>.
+    /// </summary>
+    /// <remarks>
+    /// Grouped by the account each row came from rather than by id. An id is only unique inside
+    /// one account's store — every store numbers its rows from one — so putting the visible rows
+    /// in a dictionary keyed by id **threw** the moment a search spanned two accounts, and before
+    /// that it would have painted one account's categories onto another's message.
+    /// </remarks>
     private void LoadCategoriesForVisible()
     {
-        // Group ids by account, because categories live in each account's own store.
-        var byId = Messages.ToDictionary(m => m.Id, m => m);
         foreach (var account in _accounts?.All ?? [])
         {
-            var mine = account.Mail.CategoriesFor([.. byId.Keys]);
-            foreach (var (id, assigned) in mine)
+            // A row with no address came from a view that is one account's, so it belongs to
+            // whichever account is asked — which is what the fallback in AccountFor says too.
+            var mine = Messages
+                .Where(m => m.Address.Length == 0
+                            || string.Equals(m.Address, account.Account.Address, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (mine.Count == 0) continue;
+
+            var assigned = account.Mail.CategoriesFor([.. mine.Select(m => m.Id)]);
+            foreach (var row in mine)
             {
-                if (byId.TryGetValue(id, out var row))
+                if (assigned.TryGetValue(row.Id, out var categories))
                 {
-                    row.CategoryTokens = [.. assigned.Select(c => c.ColourToken)];
+                    row.CategoryTokens = [.. categories.Select(c => c.ColourToken)];
+                    row.CategoryNames = [.. categories.Select(c => c.Name)];
                 }
             }
         }
@@ -1704,7 +1893,9 @@ public sealed partial class ShellViewModel : ObservableObject
     /// </summary>
     public void IgnoreConversation(IReadOnlyList<MessageRow> rows)
     {
-        if (rows.Count == 0 || Mail(rows) is not { } mail || CurrentAccount is not { } account) return;
+        if (Split(rows, group => IgnoreConversation(group))) return;
+
+        if (rows.Count == 0 || Mail(rows) is not { } mail || AccountOf(rows) is not { } account) return;
 
         var deleted = mail.FolderWithRole(account.Account.Id, FolderRole.Deleted);
         var inbox = mail.FolderWithRole(account.Account.Id, FolderRole.Inbox);
@@ -1744,7 +1935,7 @@ public sealed partial class ShellViewModel : ObservableObject
     /// </summary>
     public int CleanUp(IReadOnlyList<MessageRow> rows, bool wholeFolder, bool withSubfolders)
     {
-        if (CurrentAccount is not { } account || CurrentMail is not { } mail) return 0;
+        if (AccountOf(rows) is not { } account || account.Mail is not { } mail) return 0;
 
         // Options › Mail's "Cleaned-up items will go to this folder", by name in this account; Deleted Items otherwise.
         var wanted = App.MailOptions.CleanUpFolder;
@@ -1875,6 +2066,8 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>Move to Other / Move to Focused over the rows, with "always" remembering their senders.</summary>
     public void SetFocused(IReadOnlyList<MessageRow> rows, bool focused, bool always)
     {
+        if (Split(rows, group => SetFocused(group, focused, always))) return;
+
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
         mail.SetFocused([.. rows.Select(r => r.Id)], focused);
@@ -2192,6 +2385,8 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>Marks rows read or unread, in the store and on screen. Quiet leaves the status line alone — read by looking is not news.</summary>
     public void SetRead(IReadOnlyList<MessageRow> rows, bool read, bool quiet = false)
     {
+        if (Split(rows, group => SetRead(group, read, quiet))) return;
+
         if (rows.Count == 0) return;
 
         Mail(rows)?.SetRead([.. rows.Select(r => r.Id)], read);
@@ -2234,7 +2429,7 @@ public sealed partial class ShellViewModel : ObservableObject
     /// </remarks>
     public IReadOnlyList<FolderNode> FoldersOfSelection(IReadOnlyList<MessageRow> rows)
     {
-        if (rows.Count == 0 || CurrentAccount is not { } account) return [];
+        if (rows.Count == 0 || AccountOf(rows) is not { } account) return [];
 
         var here = SelectedFolder;
 
@@ -2285,6 +2480,8 @@ public sealed partial class ShellViewModel : ObservableObject
     /// </remarks>
     public void ToggleCategory(IReadOnlyList<MessageRow> rows, Category category)
     {
+        if (Split(rows, group => ToggleCategory(group, category))) return;
+
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
         if (Mirrored(mail, category) is not { } mirrored) return;
 
@@ -2310,6 +2507,8 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>Takes every category off the rows.</summary>
     public void ClearCategories(IReadOnlyList<MessageRow> rows)
     {
+        if (Split(rows, group => ClearCategories(group))) return;
+
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
         var ids = rows.Select(r => r.Id).ToList();
@@ -2321,6 +2520,8 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public void SetFlagged(IReadOnlyList<MessageRow> rows, bool flagged)
     {
+        if (Split(rows, group => SetFlagged(group, flagged))) return;
+
         if (rows.Count == 0) return;
 
         Mail(rows)?.SetFlagged([.. rows.Select(r => r.Id)], flagged);
@@ -2337,11 +2538,16 @@ public sealed partial class ShellViewModel : ObservableObject
     /// </summary>
     public void Delete(IReadOnlyList<MessageRow> rows, bool permanently)
     {
+        if (Split(rows, group => Delete(group, permanently))) return;
+
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
         var ids = rows.Select(r => r.Id).ToList();
-        var deleted = CurrentAccount?.Mail.FolderWithRole(
-            CurrentAccount.Account.Id, FolderRole.Deleted);
+        // The account's own Deleted Items — the rows', not the folder's on screen, which in a
+        // unified folder is nobody's.
+        var deleted = AccountOf(rows) is { } owner
+            ? owner.Mail.FolderWithRole(owner.Account.Id, FolderRole.Deleted)
+            : null;
 
         if (permanently || deleted is null || SelectedFolder?.Name == deleted.Name)
         {
@@ -2361,9 +2567,17 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>Moves rows into another folder of the same account.</summary>
     public void MoveTo(IReadOnlyList<MessageRow> rows, FolderRole role)
     {
+        if (Split(rows, group => MoveTo(group, role))) return;
+
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
-        if (CurrentAccount?.Mail.FolderWithRole(CurrentAccount.Account.Id, role)
-            is not { } target) return;
+
+        // The target folder belongs to the rows' own account, not to the folder on screen —
+        // which in a unified folder is nobody's.
+        if (AccountOf(rows) is not { } owner
+            || owner.Mail.FolderWithRole(owner.Account.Id, role) is not { } target)
+        {
+            return;
+        }
 
         mail.MoveMessages([.. rows.Select(r => r.Id)], target.Id);
         RemoveRows(rows);
@@ -2397,6 +2611,8 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>Copies rows into a folder of the same account; the originals stay where they are.</summary>
     public void CopyTo(IReadOnlyList<MessageRow> rows, Folder target)
     {
+        if (Split(rows, group => CopyTo(group, target))) return;
+
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
         var copied = mail.CopyMessages([.. rows.Select(r => r.Id)], target.Id);
@@ -2407,6 +2623,8 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>Sets the importance the list's column shows.</summary>
     public void SetImportance(IReadOnlyList<MessageRow> rows, int level)
     {
+        if (Split(rows, group => SetImportance(group, level))) return;
+
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
         mail.SetImportance([.. rows.Select(r => r.Id)], level);
@@ -2416,6 +2634,8 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>Puts named categories on the rows — the ones that exist; a name that does not is skipped.</summary>
     public void AssignCategories(IReadOnlyList<MessageRow> rows, IReadOnlyList<string> names)
     {
+        if (Split(rows, group => AssignCategories(group, names))) return;
+
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
         var ids = rows.Select(r => r.Id).ToList();
@@ -2527,6 +2747,8 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>Flags the selection for follow-up, with an optional due date. The reference's flag menu.</summary>
     public void FlagForFollowUp(IReadOnlyList<MessageRow> rows, DateTimeOffset? due)
     {
+        if (Split(rows, group => FlagForFollowUp(group, due))) return;
+
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
         mail.SetFollowUp([.. rows.Select(r => r.Id)], due);
@@ -2543,6 +2765,8 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>The Custom flag dialog's whole flag: what it says, its dates, and its reminder.</summary>
     public void SetCustomFlag(IReadOnlyList<MessageRow> rows, CustomFlag flag)
     {
+        if (Split(rows, group => SetCustomFlag(group, flag))) return;
+
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
         mail.SetCustomFollowUp([.. rows.Select(r => r.Id)], flag.Type, flag.Start, flag.Due, flag.Reminder);
@@ -2556,6 +2780,8 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>Marks the selection's follow-up complete: a check takes the flag's place.</summary>
     public void MarkFollowUpComplete(IReadOnlyList<MessageRow> rows)
     {
+        if (Split(rows, group => MarkFollowUpComplete(group))) return;
+
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
         mail.CompleteFollowUp([.. rows.Select(r => r.Id)]);
@@ -2567,6 +2793,8 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>Clears the selection's follow-up flag entirely.</summary>
     public void ClearFollowUpFlag(IReadOnlyList<MessageRow> rows)
     {
+        if (Split(rows, group => ClearFollowUpFlag(group))) return;
+
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
         mail.ClearFollowUp([.. rows.Select(r => r.Id)]);
@@ -2587,6 +2815,8 @@ public sealed partial class ShellViewModel : ObservableObject
     /// </remarks>
     public void MarkJunk(IReadOnlyList<MessageRow> rows)
     {
+        if (Split(rows, group => MarkJunk(group))) return;
+
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
         var notJunk = CurrentFolderRole == FolderRole.Junk;
@@ -2630,6 +2860,8 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>Hides the rows until <paramref name="until"/>. They leave the list at once.</summary>
     public void Snooze(IReadOnlyList<MessageRow> rows, DateTimeOffset until)
     {
+        if (Split(rows, group => Snooze(group, until))) return;
+
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
         mail.Snooze([.. rows.Select(r => r.Id)], until);
@@ -2644,6 +2876,8 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>Brings the rows back now, unread and at the top of the folder.</summary>
     public void Unsnooze(IReadOnlyList<MessageRow> rows)
     {
+        if (Split(rows, group => Unsnooze(group))) return;
+
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
         mail.Unsnooze([.. rows.Select(r => r.Id)], DateTimeOffset.UtcNow);
@@ -2703,6 +2937,8 @@ public sealed partial class ShellViewModel : ObservableObject
     /// </summary>
     public void BlockSenders(IReadOnlyList<MessageRow> rows)
     {
+        if (Split(rows, group => BlockSenders(group))) return;
+
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
         var now = DateTimeOffset.UtcNow;
@@ -2726,6 +2962,8 @@ public sealed partial class ShellViewModel : ObservableObject
     /// </summary>
     public void NeverBlockSenders(IReadOnlyList<MessageRow> rows, bool domain)
     {
+        if (Split(rows, group => NeverBlockSenders(group, domain))) return;
+
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
         var now = DateTimeOffset.UtcNow;
@@ -2752,6 +2990,8 @@ public sealed partial class ShellViewModel : ObservableObject
     /// </summary>
     public void NeverBlockRecipients(IReadOnlyList<MessageRow> rows)
     {
+        if (Split(rows, group => NeverBlockRecipients(group))) return;
+
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
         var now = DateTimeOffset.UtcNow;
@@ -2794,7 +3034,54 @@ public sealed partial class ShellViewModel : ObservableObject
     /// commands from pretending to act on mail that is not really there.
     /// </summary>
     private MailRepository? Mail(IReadOnlyList<MessageRow> rows)
-        => rows.Count == 0 ? null : CurrentAccount?.Mail;
+        => rows.Count == 0 ? null : AccountOf(rows)?.Mail;
+
+    /// <summary>
+    /// The account a row belongs to: its own where it says, the folder's otherwise.
+    /// </summary>
+    /// <remarks>
+    /// A row only carries an address in a view that draws more than one account — the unified
+    /// folders. Everywhere else the folder on screen is the answer and always was, which is why
+    /// an empty address falls back to it rather than being treated as a fault.
+    /// </remarks>
+    private OpenAccount? AccountFor(MessageRow row)
+        => row.Address.Length > 0
+            ? _accounts?.All.FirstOrDefault(
+                a => string.Equals(a.Account.Address, row.Address, StringComparison.OrdinalIgnoreCase))
+              ?? CurrentAccount
+            : CurrentAccount;
+
+    /// <summary>The one account a set of rows belongs to, or the first where they disagree.</summary>
+    private OpenAccount? AccountOf(IReadOnlyList<MessageRow> rows)
+        => rows.Count == 0 ? CurrentAccount : AccountFor(rows[0]);
+
+    /// <summary>
+    /// Splits a selection that spans accounts, running the command once per account.
+    /// </summary>
+    /// <remarks>
+    /// One line at the top of each command that acts on rows, and it is what makes the unified
+    /// folders safe: without it, deleting a mixed selection would take the first row's account and
+    /// hand it every id, and ids from another store would land on whatever those numbers happen to
+    /// mean there. Deleting the wrong mail is the worst thing this application could do.
+    /// <para>
+    /// The command's own body is left exactly as it was, and runs unchanged for the ordinary case
+    /// of one account — which is every selection outside a unified folder. Each group is one
+    /// account, so the recursion is one deep.
+    /// </para>
+    /// </remarks>
+    private bool Split(IReadOnlyList<MessageRow> rows, Action<IReadOnlyList<MessageRow>> command)
+    {
+        if (rows.Count < 2) return false;
+
+        var groups = rows
+            .GroupBy(r => AccountFor(r)?.Account.Address ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (groups.Count < 2) return false;
+
+        foreach (var group in groups) command([.. group]);
+        return true;
+    }
 
     /// <summary>
     /// The store behind what is on screen, for the reading pane.

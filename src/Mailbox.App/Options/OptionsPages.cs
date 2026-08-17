@@ -207,6 +207,20 @@ public static class OptionsPages
                     0, 300, 380),
             ]),
 
+            // An addition, not a transcription (§12): the reference has no unified inbox. It ships
+            // off because it restructures the folder pane rather than adding a command (§14), and
+            // it says what it does rather than being a word somebody has to try.
+            new OptionSection("All Accounts",
+            [
+                new CheckRow("Show an All Accounts folder combining every account's mail")
+                {
+                    Key = MailOptions.UnifiedMailboxKey,
+                },
+                new SubHeadingRow("Adds a root above your accounts holding one Inbox, Drafts, Sent "
+                                  + "Items, Deleted Items, Junk Email and Archive across all of "
+                                  + "them. Nothing moves; your accounts stay exactly as they are."),
+            ]),
+
             new OptionSection("Other",
             [
                 new CheckRow("Show Paste Options buttons", true),

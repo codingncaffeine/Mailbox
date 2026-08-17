@@ -39,6 +39,16 @@ public sealed class MailOptions(SettingsStore settings)
     public const string CommasSeparateRecipientsKey = "mail.send.commas";
     public const string AutomaticNameCheckingKey = "mail.send.checknames";
     public const string CtrlEnterSendsKey = "mail.send.ctrlenter";
+
+    /// <summary>
+    /// The unified mailbox: an "All Accounts" root at the top of the folder pane (§12, §14).
+    /// </summary>
+    /// <remarks>
+    /// Off by default and stays off until somebody says otherwise, because it restructures the
+    /// nav tree rather than adding a command — §14's rule that turning one of these on is a
+    /// decision rather than a discovery.
+    /// </remarks>
+    public const string UnifiedMailboxKey = "mail.unified.enabled";
     public const string UseAutoCompleteListKey = "mail.send.autocomplete";
     public const string OpenRepliesInNewWindowKey = "mail.reply.newwindow";
     public const string CloseOriginalOnReplyKey = "mail.reply.closeoriginal";
@@ -143,6 +153,9 @@ public sealed class MailOptions(SettingsStore settings)
     public bool AutomaticNameChecking => _settings.GetBool(AutomaticNameCheckingKey, true);
 
     public bool CtrlEnterSends => _settings.GetBool(CtrlEnterSendsKey, true);
+
+    /// <summary>Whether the folder pane opens with an "All Accounts" root. Off unless asked for.</summary>
+    public bool UnifiedMailbox => _settings.GetBool(UnifiedMailboxKey, false);
 
     /// <summary>
     /// Whether the To, Cc and Bcc lines offer names from the Auto-Complete List as they are
