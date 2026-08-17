@@ -810,6 +810,25 @@ public sealed class MailRepository(MailStore store)
         ReadMessage, ("$now", now.ToUnixTimeSeconds()));
 
     /// <summary>
+    /// Every message flagged for follow-up, which is what the to-do list holds beside the tasks.
+    /// </summary>
+    /// <remarks>
+    /// The reference's own To-Do List is tasks and flagged mail together, and this is the mail
+    /// half. Deleted messages are left out — a flag on something in the bin is not outstanding —
+    /// and a completed follow-up comes only when it is asked for, exactly as a finished task does.
+    /// </remarks>
+    public IReadOnlyList<MessageSummary> FlaggedMessages(bool includeComplete = false, int limit = 500)
+        => _store.Query(
+            "SELECT m.* FROM messages m JOIN folders f ON f.id = m.folder_id WHERE "
+            + (includeComplete
+                ? "(m.is_flagged = 1 OR m.follow_up_complete = 1)"
+                : "m.is_flagged = 1 AND m.follow_up_complete = 0")
+            + " AND f.role NOT IN ('outbox', 'deleted', 'junk')"
+            + " ORDER BY COALESCE(m.follow_up_due, m.received_utc) LIMIT $limit",
+            ReadMessage,
+            ("$limit", limit));
+
+    /// <summary>
     /// Moves messages between folders. On a synced account the move is journalled for the
     /// server as well, and the row gives up its server id until the server has said what the
     /// message is called where it now lives — UIDs belong to a folder, and the old one could

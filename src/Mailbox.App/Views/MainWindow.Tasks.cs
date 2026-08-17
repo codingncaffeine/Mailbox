@@ -29,14 +29,14 @@ public partial class MainWindow
     {
         if (_taskModule is not null) return _taskModule;
 
-        var workspace = new TasksWorkspace(App.Pim, CalendarToday)
+        var workspace = new TasksWorkspace(App.Pim, CalendarToday, App.Mailboxes)
         {
             IsNavVisible = shell.NavVisible,
         };
 
         workspace.Changed += (_, _) => shell.ModuleStatusLeft = workspace.Status;
-        workspace.TaskOpened += (_, row) => _ = OpenTaskAsync(shell, row);
-        workspace.TaskToggled += (_, row) => ToggleTask(shell, row);
+        workspace.TaskOpened += (_, row) => OpenToDo(shell, row);
+        workspace.TaskToggled += (_, row) => ToggleToDo(shell, row);
         workspace.TaskTyped += (_, text) => AddTypedTask(shell, text);
 
         _taskModule = workspace;
@@ -54,11 +54,11 @@ public partial class MainWindow
     private TaskListView BuildToDoTasks(ShellViewModel shell)
     {
         var view = new TaskListView();
-        var book = new TaskBook(App.Pim);
+        var book = new TaskBook(App.Pim, App.Mailboxes);
 
         view.Rows = book.Rows(CalendarToday);
-        view.TaskActivated += (_, row) => _ = OpenTaskAsync(shell, row);
-        view.TaskToggled += (_, row) => ToggleTask(shell, row);
+        view.TaskActivated += (_, row) => OpenToDo(shell, row);
+        view.TaskToggled += (_, row) => ToggleToDo(shell, row);
         view.TaskTyped += (_, text) => AddTypedTask(shell, text);
         return view;
     }
@@ -79,21 +79,24 @@ public partial class MainWindow
                 return true;
 
             case "tasks.open" when tasks.Selected is { } open:
-                _ = OpenTaskAsync(shell, open);
+                OpenToDo(shell, open);
                 return true;
 
             case "tasks.complete" when tasks.Selected is { } done:
-                ToggleTask(shell, done, complete: true);
+                ToggleToDo(shell, done, complete: true);
                 return true;
 
-            // Delete and Remove from List settle the same way here: the reference's difference
-            // between them is a flagged message, which is Phase 14's join.
+            // Delete deletes the thing; Remove from List takes it off the list without deleting
+            // it. The two differ only on a flagged message — a task is nothing but its own entry
+            // on the list, so removing one is deleting it.
             case "tasks.delete" when tasks.Selected is { } gone:
-                DeleteTask(shell, gone);
+                if (gone.IsMessage) DeleteFlaggedMessage(shell, gone);
+                else DeleteTask(shell, gone);
                 return true;
 
             case "tasks.remove" when tasks.Selected is { } removed:
-                DeleteTask(shell, removed);
+                if (removed.IsMessage) RemoveFlaggedMessage(shell, removed);
+                else DeleteTask(shell, removed);
                 return true;
 
             case "tasks.view.todo":
@@ -115,12 +118,21 @@ public partial class MainWindow
                 CategorizeTask(shell);
                 return true;
 
-            case "tasks.reply":
-            case "tasks.replyall":
-            case "tasks.forward":
-                // The reference's list holds flagged mail beside the tasks, which is the join
-                // Phase 14 makes. Saying so beats a button that appears to do nothing.
-                shell.StatusRight = "Replying to a flagged message arrives with Phase 14.";
+            // The reference's list holds flagged mail beside the tasks, and these three are what
+            // it is for: answering the message the flag is on.
+            case "tasks.reply" or "tasks.replyall" or "tasks.forward":
+                if (tasks.Selected is not { IsMessage: true } answered)
+                {
+                    shell.StatusRight = "Reply, Reply All and Forward act on a flagged message; select one.";
+                    return true;
+                }
+
+                RespondToFlaggedMessage(shell, answered, id.Value switch
+                {
+                    "tasks.reply" => Mailbox.Rendering.ReplyKind.Reply,
+                    "tasks.replyall" => Mailbox.Rendering.ReplyKind.ReplyAll,
+                    _ => Mailbox.Rendering.ReplyKind.Forward,
+                });
                 return true;
 
             case "tasks.new.email":
@@ -130,6 +142,22 @@ public partial class MainWindow
             default:
                 return false;
         }
+    }
+
+    // ---- A row is a task or a flagged message ---------------------------------------------------
+
+    /// <summary>Opening a row: the task window, or the message the flag is on.</summary>
+    private void OpenToDo(ShellViewModel shell, TaskRow row)
+    {
+        if (row.IsMessage) OpenFlaggedMessage(shell, row);
+        else _ = OpenTaskAsync(shell, row);
+    }
+
+    /// <summary>The tick box: finishing a task, or completing a message's follow-up.</summary>
+    private void ToggleToDo(ShellViewModel shell, TaskRow row, bool? complete = null)
+    {
+        if (row.IsMessage) ToggleFlaggedMessage(shell, row, complete);
+        else ToggleTask(shell, row, complete);
     }
 
     // ---- Writing -------------------------------------------------------------------------------
@@ -309,12 +337,28 @@ public partial class MainWindow
         if (spec.StartsWith("open:", StringComparison.OrdinalIgnoreCase))
         {
             CaptureNextWindow();
-            _ = OpenTaskAsync(shell, row);
+            OpenToDo(shell, row);
+            return;
+        }
+
+        // select: presses the row itself rather than its tick box, which is what a command
+        // pressed afterwards through MAILBOX_RUN acts on.
+        if (spec.StartsWith("select:", StringComparison.OrdinalIgnoreCase))
+        {
+            if (list.BoxOf(row.Key) is not { } line)
+            {
+                Log.Info($"Harness: “{row.Summary}” was not drawn — the list may not have laid out.");
+                return;
+            }
+
+            Press(list, new Avalonia.Point(line.Center.X, line.Center.Y));
+            Log.Info($"Harness: the list's selection is now “{list.Selected?.Summary ?? "—"}”"
+                + (list.Selected?.IsMessage == true ? " (a flagged message)." : "."));
             return;
         }
 
         // The tick box, pressed where the view really drew it rather than called directly.
-        if (list.TickOf(row.ItemId) is not { } box)
+        if (list.TickOf(row.Key) is not { } box)
         {
             Log.Info($"Harness: “{row.Summary}” has no tick box drawn — the list may not have laid out.");
             return;
@@ -322,12 +366,26 @@ public partial class MainWindow
 
         Press(list, box.Center);
 
-        if (App.Pim.Item(row.ItemId) is { } after)
+        // Read back out of whichever store the row belongs to: a flagged message is in its
+        // account's file and a task is in the PIM one, and the ids are not interchangeable.
+        if (row.Message is { } message)
         {
-            var task = PimTodoCodec.FromItem(after);
+            if (App.Accounts.Find(message.Account)?.Mail.GetMessage(message.MessageId) is { } after)
+            {
+                Log.Info($"Harness: “{after.Subject}” is now "
+                    + $"{(after.FollowUpComplete ? "complete" : after.IsFlagged ? "flagged" : "unflagged")}, "
+                    + $"due {after.FollowUpDue?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "—"}.");
+            }
+
+            return;
+        }
+
+        if (App.Pim.Item(row.ItemId) is { } written)
+        {
+            var task = PimTodoCodec.FromItem(written);
             Log.Info($"Harness: “{task.Summary}” is now {TodoCodec.ProgressWord(task.Progress)}, "
                 + $"{task.PercentComplete}%, completed {task.CompletedUtc?.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) ?? "—"}, "
-                + $"sync {after.SyncState}.");
+                + $"sync {written.SyncState}.");
         }
     }
 }

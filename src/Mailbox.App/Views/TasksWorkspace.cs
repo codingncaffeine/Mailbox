@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Mailbox.Controls.Tasks;
 using Mailbox.Scheduling;
+using Mailbox.Store;
 using Mailbox.Store.Pim;
 
 namespace Mailbox.App.Views;
@@ -37,10 +38,16 @@ public sealed class TasksWorkspace : Border
 
     private TaskViewKind _kind = TaskViewKind.Todo;
 
-    public TasksWorkspace(PimRepository repository, DateOnly today)
+    public TasksWorkspace(
+        PimRepository repository,
+        DateOnly today,
+        Func<IReadOnlyList<(string Address, MailRepository Mail)>>? mailboxes = null)
     {
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
-        _book = new TaskBook(repository);
+
+        // With the mail behind it the list holds the flagged messages too, which is what the
+        // reference's own To-Do List is: tasks and mail together.
+        _book = new TaskBook(repository, mailboxes);
         Today = today;
 
         // Bound rather than read: a resource read in a constructor is read before the

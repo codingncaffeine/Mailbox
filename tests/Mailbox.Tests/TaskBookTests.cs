@@ -1,3 +1,4 @@
+using Mailbox.Store;
 using Mailbox.Scheduling;
 using Mailbox.Store.Pim;
 
@@ -118,6 +119,114 @@ public class TaskBookTests
 
         // …unless it is named, which is how a view of one list works.
         Assert.Single(book.Rows(Today, collectionIds: [list.Id]));
+    }
+
+    // ---- The flagged mail beside the tasks -------------------------------------------------------
+
+    private static (MailStore Store, MailRepository Mail, Folder Inbox, long AccountId) Mailbox()
+    {
+        var store = MailStore.Transient();
+        var mail = new MailRepository(store);
+        var account = mail.AddAccount("you@example.com", "You", MailProtocol.Pop3);
+        mail.CreateStandardFolders(account.Id);
+        return (store, mail, mail.FolderWithRole(account.Id, FolderRole.Inbox)!, account.Id);
+    }
+
+    private static long Flag(MailRepository mail, Folder inbox, string subject, DateOnly? due, bool complete = false)
+    {
+        var id = mail.AddMessage(inbox.Id, new MessageSummary(
+            0, 0, subject, null, "Alice Chen", "alice@example.com", subject, "Preview",
+            null, DateTimeOffset.UnixEpoch, 100, false, false, false))!.Value;
+
+        mail.SetFollowUp([id], due is { } d ? new DateTimeOffset(d.ToDateTime(TimeOnly.MinValue)) : null);
+        if (complete) mail.CompleteFollowUp([id]);
+        return id;
+    }
+
+    [Fact]
+    public void FlaggedMailIsOnTheListBesideTheTasks()
+    {
+        var (pim, repository, _, list) = Fresh();
+        using var _p = pim;
+        var (store, mail, inbox, _) = Mailbox();
+        using var _m = store;
+
+        Add(repository, list.Id, "A task due today", Today);
+        Flag(mail, inbox, "A message due tomorrow", Today.AddDays(1));
+
+        var book = new TaskBook(repository, () => [("you@example.com", mail)]);
+        var rows = book.Rows(Today);
+
+        Assert.Equal(["A task due today", "A message due tomorrow"], rows.Select(r => r.Summary));
+        Assert.Equal([TaskBand.Today, TaskBand.Tomorrow], rows.Select(r => r.Band));
+
+        // The mail row knows what it stands for, and the two kinds of row are told apart by a
+        // key rather than by an id — the two stores number their rows separately.
+        var message = rows[1];
+        Assert.True(message.IsMessage);
+        Assert.Equal("Alice Chen", message.Message!.From);
+        Assert.StartsWith("m:you@example.com:", message.Key);
+        Assert.StartsWith("t:", rows[0].Key);
+        Assert.False(rows[0].IsMessage);
+    }
+
+    [Fact]
+    public void ALateFlagIsOverdueAsALateTaskIs()
+    {
+        var (pim, repository, _, _) = Fresh();
+        using var _p = pim;
+        var (store, mail, inbox, _) = Mailbox();
+        using var _m = store;
+
+        Flag(mail, inbox, "Was due last week", Today.AddDays(-7));
+
+        var row = Assert.Single(new TaskBook(repository, () => [("you@example.com", mail)]).Rows(Today));
+        Assert.True(row.IsOverdue);
+        Assert.Equal(TaskBand.Today, row.Band);
+    }
+
+    [Fact]
+    public void ACompletedFollowUpIsLeftOutUntilItIsAskedFor()
+    {
+        var (pim, repository, _, _) = Fresh();
+        using var _p = pim;
+        var (store, mail, inbox, _) = Mailbox();
+        using var _m = store;
+
+        Flag(mail, inbox, "Answered already", Today, complete: true);
+        var book = new TaskBook(repository, () => [("you@example.com", mail)]);
+
+        Assert.Empty(book.Rows(Today));
+
+        var all = Assert.Single(book.Rows(Today, includeCompleted: true));
+        Assert.True(all.IsComplete);
+        Assert.Equal(TaskBand.Completed, all.Band);
+    }
+
+    [Fact]
+    public void AFlagWithNoDateSitsWithTheUndatedTasks()
+    {
+        var (pim, repository, _, _) = Fresh();
+        using var _p = pim;
+        var (store, mail, inbox, _) = Mailbox();
+        using var _m = store;
+
+        Flag(mail, inbox, "Whenever", null);
+
+        var row = Assert.Single(new TaskBook(repository, () => [("you@example.com", mail)]).Rows(Today));
+        Assert.Equal(TaskBand.NoDate, row.Band);
+        Assert.False(row.IsOverdue);
+    }
+
+    [Fact]
+    public void WithNoMailBehindItTheListIsTasksAlone()
+    {
+        var (pim, repository, book, list) = Fresh();
+        using var _ = pim;
+
+        Add(repository, list.Id, "A task", Today);
+        Assert.Single(book.Rows(Today));
+        Assert.All(book.Rows(Today), r => Assert.False(r.IsMessage));
     }
 
     [Fact]

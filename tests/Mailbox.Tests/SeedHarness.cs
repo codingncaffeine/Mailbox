@@ -689,8 +689,24 @@ public class SeedHarness
             var summary = Mailbox.Protocols.MessageMapper.ToSummary(
                 message, Guid.NewGuid().ToString("n"), raw.Length, when);
 
-            account.Mail.AddMessage(inbox.Id, summary, raw);
+            var id = account.Mail.AddMessage(inbox.Id, summary, raw);
+
+            // A flag with a date on two of them, so the to-do list has the mail half of what the
+            // reference's own holds: one due today and one already late, which is the pair that
+            // shows the red as well as the band.
+            if (id is { } written && Flagged.TryGetValue(message.Subject ?? string.Empty, out var due))
+            {
+                account.Mail.SetFollowUp([written], SeedToday().AddDays(due).ToDateTime(TimeOnly.MinValue));
+            }
+
             when = when.AddMinutes(-37);
         }
     }
+
+    /// <summary>Which seeded subjects carry a follow-up flag, and how many days off it is due.</summary>
+    private static readonly Dictionary<string, int> Flagged = new(StringComparer.Ordinal)
+    {
+        ["Draft agenda attached"] = 0,
+        ["Re: Q3 numbers"] = -3,
+    };
 }

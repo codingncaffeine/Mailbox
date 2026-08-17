@@ -2461,7 +2461,7 @@ public partial class MainWindow : Window
     private void RefreshToDoTasks()
     {
         if ((this.FindControl<ContentControl>("DockHost")?.Content as ToDoBar)?.Tasks is not { } tasks) return;
-        tasks.Rows = new Mailbox.Scheduling.TaskBook(App.Pim).Rows(CalendarToday);
+        tasks.Rows = new Mailbox.Scheduling.TaskBook(App.Pim, App.Mailboxes).Rows(CalendarToday);
     }
 
     /// <summary>
