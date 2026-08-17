@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-
 namespace Mailbox.Protocols.OAuth;
 
 /// <summary>
@@ -17,8 +15,11 @@ namespace Mailbox.Protocols.OAuth;
 /// </remarks>
 public sealed class OAuthAccounts(ICredentialStore secrets) : IDisposable
 {
-    private readonly ConcurrentDictionary<string, OAuthTokenSource> _sources =
-        new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Held> _sources = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Lock _gate = new();
+
+    /// <summary>What is being kept, and which registration it belongs to.</summary>
+    private readonly record struct Held(string ProviderId, string ClientId, OAuthTokenSource Source);
 
     /// <summary>
     /// The source for an account, made on first use.
@@ -28,30 +29,45 @@ public sealed class OAuthAccounts(ICredentialStore secrets) : IDisposable
     /// source rather than being ignored, because the refresh token belonging to the old client
     /// will not be redeemed by the new one and the failure is otherwise silent until the next
     /// renewal.
+    /// <para>
+    /// A plain lock rather than a concurrent dictionary: replacing means disposing the one that
+    /// was there, and a factory a concurrent dictionary is free to run twice is the wrong place
+    /// for a side effect that cannot be taken back.
+    /// </para>
     /// </remarks>
     public OAuthTokenSource For(string address, OAuthProvider provider, string clientId)
     {
-        var wanted = new Signature(provider.Id, clientId);
-
-        return _sources.AddOrUpdate(
-            address,
-            _ => Make(address, provider, clientId),
-            (_, existing) =>
+        lock (_gate)
+        {
+            if (_sources.TryGetValue(address, out var held))
             {
-                if (Signatures.TryGetValue(address, out var held) && held == wanted) return existing;
+                if (held.ProviderId == provider.Id && held.ClientId == clientId) return held.Source;
+                held.Source.Dispose();
+            }
 
-                existing.Dispose();
-                return Make(address, provider, clientId);
-            });
+            var source = new OAuthTokenSource(provider, clientId, address, secrets);
+            _sources[address] = new Held(provider.Id, clientId, source);
+            return source;
+        }
     }
 
     /// <summary>Whether an account has a source in hand, without making one.</summary>
-    public bool Has(string address) => _sources.ContainsKey(address);
+    public bool Has(string address)
+    {
+        lock (_gate) return _sources.ContainsKey(address);
+    }
 
     /// <summary>Forgets an account's sign-in — the source and the saved refresh token both.</summary>
     public async Task ForgetAsync(string address, CancellationToken cancellation = default)
     {
-        if (_sources.TryRemove(address, out var source))
+        OAuthTokenSource? source;
+        lock (_gate)
+        {
+            source = _sources.TryGetValue(address, out var held) ? held.Source : null;
+            _sources.Remove(address);
+        }
+
+        if (source is not null)
         {
             await source.ForgetAsync(cancellation).ConfigureAwait(false);
             source.Dispose();
@@ -63,20 +79,12 @@ public sealed class OAuthAccounts(ICredentialStore secrets) : IDisposable
         await secrets.DeleteAsync(address, Credentials.OAuthRefresh, cancellation).ConfigureAwait(false);
     }
 
-    private readonly record struct Signature(string Provider, string ClientId);
-
-    private ConcurrentDictionary<string, Signature> Signatures { get; } =
-        new(StringComparer.OrdinalIgnoreCase);
-
-    private OAuthTokenSource Make(string address, OAuthProvider provider, string clientId)
-    {
-        Signatures[address] = new Signature(provider.Id, clientId);
-        return new OAuthTokenSource(provider, clientId, address, secrets);
-    }
-
     public void Dispose()
     {
-        foreach (var source in _sources.Values) source.Dispose();
-        _sources.Clear();
+        lock (_gate)
+        {
+            foreach (var held in _sources.Values) held.Source.Dispose();
+            _sources.Clear();
+        }
     }
 }
