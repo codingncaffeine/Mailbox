@@ -183,6 +183,12 @@ public static class Credentials
     public const string Incoming = "incoming";
     public const string Outgoing = "outgoing";
 
+    /// <summary>
+    /// An OAuth refresh token, which is one credential for the whole account rather than one per
+    /// direction: the same sign-in covers collecting and sending.
+    /// </summary>
+    public const string OAuthRefresh = "oauth-refresh";
+
     public static ICredentialStore Best()
     {
         var keyring = new SecretServiceStore();

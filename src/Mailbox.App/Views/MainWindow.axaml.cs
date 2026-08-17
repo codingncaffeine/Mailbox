@@ -795,6 +795,31 @@ public partial class MainWindow : Window
                 };
                 break;
 
+            // Adding an account, which is where a provider that no longer takes a password is
+            // told apart from one that does. MAILBOX_ACCOUNT_ACTION types an address, pastes a
+            // client ID and presses Sign in; a capture run has no browser to answer, so what the
+            // press logs is the authorization request it would have opened.
+            case "addaccount":
+                Opened += async (_, _) =>
+                {
+                    try
+                    {
+                        CaptureNextWindow();
+                        var wizard = new AccountWizard();
+                        if (Environment.GetEnvironmentVariable("MAILBOX_ACCOUNT_ACTION") is { Length: > 0 } actions)
+                        {
+                            wizard.Opened += async (_, _) => await wizard.HarnessAsync(actions);
+                        }
+
+                        await wizard.ShowDialog(this);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Warn("Harness: the add-account pose failed.", ex);
+                    }
+                };
+                break;
+
             // The subscription prompt behind New… on the Internet Calendars tab.
             case "subscription":
                 Opened += async (_, _) =>
@@ -2024,7 +2049,7 @@ public partial class MainWindow : Window
     /// <summary>The account's connection for a folder operation on the server — null for POP3, whose folders live here.</summary>
     private static AccountConnection? ConnectionFor(OpenAccount account)
         => account.Account.Protocol == MailProtocol.Imap
-            ? AccountSettings.Load(App.Settings, account.Account.Address)?.ToConnection(account.Account, App.Secrets)
+            ? AccountSettings.Load(App.Settings, account.Account.Address)?.ToConnection(account.Account, App.Secrets, App.OAuth)
             : null;
 
     private async Task NewFolderAsync(ShellViewModel shell, OpenAccount account, long? parentId)
@@ -5378,7 +5403,7 @@ public partial class MainWindow : Window
             if (settings is null) continue;
 
             targets.Add(new TransferTarget(
-                settings.ToConnection(open.Account, App.Secrets), open.Mail));
+                settings.ToConnection(open.Account, App.Secrets, App.OAuth), open.Mail));
         }
 
         return targets;

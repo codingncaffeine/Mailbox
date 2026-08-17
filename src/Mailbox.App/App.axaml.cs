@@ -10,6 +10,7 @@ using Mailbox.Core.Commands;
 using Mailbox.Core.Ribbon;
 using Mailbox.Core.Settings;
 using Mailbox.Protocols;
+using Mailbox.Protocols.OAuth;
 using Mailbox.Security;
 using Mailbox.Security.Dns;
 using Mailbox.Store;
@@ -220,6 +221,15 @@ public partial class App : Application
 
     /// <summary>Where passwords are kept. Never a file of our own.</summary>
     public static ICredentialStore Secrets { get; private set; } = null!;
+
+    /// <summary>
+    /// The accounts that sign in rather than hold a password, and their tokens.
+    /// </summary>
+    /// <remarks>
+    /// One per application rather than one per send/receive: an access token is good for about an
+    /// hour, and the point of keeping the source is not having to buy another one every poll.
+    /// </remarks>
+    public static OAuthAccounts OAuth { get; private set; } = null!;
 
     /// <summary>Keys under which the appearance choices persist.</summary>
     public const string ThemeSetting = "appearance.theme";
@@ -459,6 +469,7 @@ public partial class App : Application
         // A capture run keeps its passwords in memory: it poses accounts that do not exist, and
         // the keyring may be locked on a headless desktop, where asking it would wait forever.
         Secrets = WindowCapture.IsRequested ? new InMemoryCredentialStore() : Credentials.Best();
+        OAuth = new OAuthAccounts(Secrets);
         PimSync = new PimSyncService(Pim, Secrets);
         MailOptions = new MailOptions(Settings);
         CalendarOptions = new CalendarOptions(Settings);

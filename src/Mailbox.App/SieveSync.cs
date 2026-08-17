@@ -27,7 +27,7 @@ public static class SieveSync
 
     /// <summary>The ManageSieve server for an account, or null when there is none to speak of.</summary>
     public static ServerSettings? ServerFor(OpenAccount account)
-        => AccountSettings.Load(App.Settings, account.Account.Address)?.ToSieveServer(account.Account, App.Secrets);
+        => AccountSettings.Load(App.Settings, account.Account.Address)?.ToSieveServer(account.Account, App.Secrets, App.OAuth);
 
     // ---- What the server can do, remembered ------------------------------------------------------
 

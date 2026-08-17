@@ -4,8 +4,10 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Mailbox.App.Theming;
 using Mailbox.Core.Diagnostics;
 using Mailbox.Protocols;
+using Mailbox.Protocols.OAuth;
 using Mailbox.Store;
 
 namespace Mailbox.App.Views;
@@ -43,10 +45,23 @@ public sealed class AccountWizard : Window
     };
 
     private readonly Button _add;
+    private readonly Button _signIn = new() { Content = "Sign in…" };
+    private readonly TextBox _clientId = new() { Width = 320 };
+    private readonly TextBlock _signedIn = new() { TextWrapping = TextWrapping.Wrap, MaxWidth = 430 };
+    private Control _passwordRow = null!;
+    private Control _signInRow = null!;
+    private Control _clientIdRow = null!;
+
     private AutoconfigResult? _found;
+    private OAuthProvider? _provider;
+    private OAuthTokens? _tokens;
+    private CancellationTokenSource? _signingIn;
 
     /// <summary>The account created, or null when the window was dismissed.</summary>
     public Account? Created { get; private set; }
+
+    /// <summary>True when this account signs in through a browser rather than holding a password.</summary>
+    private bool SignsIn => _provider is not null;
 
     public AccountWizard()
     {
@@ -79,9 +94,12 @@ public sealed class AccountWizard : Window
         _address.TextChanged += (_, _) => AddressChanged();
         _password.TextChanged += (_, _) => UpdateAddButton();
         _protocol.SelectionChanged += (_, _) => AddressChanged();
+        _clientId.TextChanged += (_, _) => UpdateAddButton();
+        _signIn.Click += async (_, _) => await SignInAsync();
 
         Bind(_guidance, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
         Bind(_status, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
+        Bind(_signedIn, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
 
         DialogChrome.Apply(this, Layout(cancel));
         Bind(this, BackgroundProperty, "surface.ground.brush");
@@ -114,13 +132,26 @@ public sealed class AccountWizard : Window
             Children = { cancel, _add },
         };
 
+        _passwordRow = Labelled("Password", _password);
+        _signInRow = Labelled(string.Empty, _signIn);
+        _clientIdRow = Labelled("Client ID", _clientId);
+
+        // Both hidden until an address says which of the two this account is. Showing a password
+        // box beside a sign-in button asks the user to decide something the provider already has.
+        _signInRow.IsVisible = false;
+        _clientIdRow.IsVisible = false;
+        _signedIn.IsVisible = false;
+
         var fields = new StackPanel
         {
             Spacing = 10,
             Children =
             {
                 Labelled("Email address", _address),
-                Labelled("Password", _password),
+                _passwordRow,
+                _clientIdRow,
+                _signInRow,
+                _signedIn,
                 Labelled("Account type", _protocol),
                 _guidance,
                 _advanced,
@@ -199,11 +230,147 @@ public sealed class AccountWizard : Window
 
         // A guess is worth looking at; a known provider is not.
         _advanced.IsExpanded = !_found.IsKnownProvider;
+
+        ShowTheRightCredential(address);
     }
 
+    /// <summary>
+    /// A password box or a sign-in button, according to what the provider still accepts.
+    /// </summary>
+    /// <remarks>
+    /// Deciding this from the address is the point of the guidance in the first place: a
+    /// Microsoft account rejecting a password with "authentication failed" sends the user off to
+    /// check a password that was never wrong, and this is the wizard saying so before the attempt
+    /// rather than after (§5).
+    /// </remarks>
+    private void ShowTheRightCredential(string address)
+    {
+        var provider = _found?.Auth == AuthKind.OAuth2 ? OAuthProviders.ForMail(address) : null;
+
+        // Changing which account is being added throws away a sign-in for the previous one.
+        if (provider?.Id != _provider?.Id || _tokens is not null && !SignedInAs(address))
+        {
+            _tokens = null;
+            _signedIn.IsVisible = false;
+        }
+
+        _provider = provider;
+
+        _passwordRow.IsVisible = !SignsIn;
+        _signInRow.IsVisible = SignsIn;
+        _clientIdRow.IsVisible = SignsIn && provider is { WorksOutOfTheBox: false };
+
+        if (provider is not null)
+        {
+            _signIn.Content = $"Sign in with {provider.Name}…";
+
+            // Where there is no registration to sign in with, the guidance is the instructions
+            // for making one rather than the sentence about a browser opening.
+            if (!provider.WorksOutOfTheBox && provider.OwnClientGuidance is { } instructions)
+            {
+                _guidance.Text = instructions;
+            }
+        }
+
+        UpdateAddButton();
+    }
+
+    private bool SignedInAs(string address)
+        => string.Equals(_signedIn.Tag as string, address, StringComparison.OrdinalIgnoreCase);
+
     private void UpdateAddButton()
-        => _add.IsEnabled = Autoconfig.LooksLikeAnAddress(_address.Text ?? string.Empty)
-                            && (_password.Text ?? string.Empty).Length > 0;
+    {
+        var addressed = Autoconfig.LooksLikeAnAddress(_address.Text ?? string.Empty);
+
+        // Nothing to save until the sign-in has happened: an account added first and signed in
+        // afterwards would sit in the folder pane failing to collect, which is the state the
+        // wizard exists to avoid.
+        _add.IsEnabled = addressed && (SignsIn
+            ? _tokens is not null
+            : (_password.Text ?? string.Empty).Length > 0);
+
+        _signIn.IsEnabled = addressed && _signingIn is null
+                            && (_provider is not { WorksOutOfTheBox: false }
+                                || (_clientId.Text ?? string.Empty).Trim().Length > 0);
+    }
+
+    /// <summary>Which registration this sign-in uses: the provider's own, or the pasted one.</summary>
+    private string ClientIdInUse()
+    {
+        var typed = (_clientId.Text ?? string.Empty).Trim();
+        return typed.Length > 0 ? typed : _provider?.ClientId ?? string.Empty;
+    }
+
+    private async Task SignInAsync()
+    {
+        if (_provider is not { } provider) return;
+
+        var address = (_address.Text ?? string.Empty).Trim();
+        _signingIn = new CancellationTokenSource();
+        UpdateAddButton();
+        _status.Text = "Waiting for the browser…";
+
+        try
+        {
+            using var flow = new OAuthFlow(openBrowser: OpenBrowser);
+            _tokens = await flow.SignInAsync(provider, ClientIdInUse(), address, _signingIn.Token);
+
+            _signedIn.Tag = address;
+            _signedIn.Text = $"Signed in to {provider.Name}. Mailbox will keep this sign-in in "
+                             + $"{App.Secrets.Description}.";
+            _signedIn.IsVisible = true;
+            _status.Text = string.Empty;
+        }
+        catch (OperationCanceledException)
+        {
+            _status.Text = "The sign-in was stopped.";
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("The sign-in failed.", ex);
+            _status.Text = ex.Message;
+        }
+        finally
+        {
+            _signingIn?.Dispose();
+            _signingIn = null;
+            UpdateAddButton();
+        }
+    }
+
+    /// <summary>
+    /// Opens the browser — or, in a capture run, says where it would have sent one.
+    /// </summary>
+    /// <remarks>
+    /// A harness run has no browser and nobody to answer one, so a real sign-in would wait on the
+    /// loopback socket until it timed out. What can be checked without either is the request
+    /// itself: the URL is built by the flow, printed here, and then the wait is stopped. That is
+    /// the claim a capture run can make about this button — that pressing it produces a
+    /// well-formed authorization request — rather than a claim about a provider it cannot reach.
+    /// </remarks>
+    private void OpenBrowser(Uri url)
+    {
+        if (!WindowCapture.IsRequested)
+        {
+            try
+            {
+                using var process = System.Diagnostics.Process.Start(
+                    new System.Diagnostics.ProcessStartInfo("xdg-open", url.AbsoluteUri)
+                    {
+                        UseShellExecute = false,
+                    });
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"Could not open a browser for the sign-in: {ex.Message}");
+            }
+
+            return;
+        }
+
+        Log.Info($"Harness: sign-in — would open {url.AbsoluteUri}");
+        _signingIn?.Cancel();
+    }
 
     private async Task AddAsync()
     {
@@ -229,6 +396,12 @@ public sealed class AccountWizard : Window
                 IncomingPort = Port(_incomingPort.Text, 995),
                 OutgoingHost = (_outgoingHost.Text ?? string.Empty).Trim(),
                 OutgoingPort = Port(_outgoingPort.Text, 587),
+                Auth = SignsIn ? AuthKind.OAuth2 : _found?.Auth ?? AuthKind.Password,
+                OAuthProviderId = SignsIn ? _provider!.Id : string.Empty,
+
+                // Only when it is the user's own. Writing the shipped one down would freeze this
+                // account on whichever registration the build it was added by happened to carry.
+                OAuthClientId = SignsIn ? (_clientId.Text ?? string.Empty).Trim() : string.Empty,
             };
             settings.Save(App.Settings, address);
 
@@ -239,12 +412,22 @@ public sealed class AccountWizard : Window
             var probe = await new ServerProbe().CheckSendingAsync(
                 new ServerSettings(settings.OutgoingHost, settings.OutgoingPort));
 
-            var saved = await App.Secrets.SaveAsync(address, Credentials.Incoming, password);
-            if (!saved)
+            if (SignsIn && _tokens is { } tokens)
             {
-                _status.Text =
-                    $"The account was added, but the password could only be kept for " +
-                    $"{App.Secrets.Description}.";
+                // The refresh token goes to the keyring and the access token stays in the source,
+                // which is the same one every send/receive will ask — so the account is usable
+                // without a second round trip to the provider.
+                await App.OAuth.For(address, _provider!, ClientIdInUse()).AdoptAsync(tokens);
+            }
+            else
+            {
+                var saved = await App.Secrets.SaveAsync(address, Credentials.Incoming, password);
+                if (!saved)
+                {
+                    _status.Text =
+                        $"The account was added, but the password could only be kept for " +
+                        $"{App.Secrets.Description}.";
+                }
             }
 
             if (!probe.IsClear)
@@ -273,6 +456,99 @@ public sealed class AccountWizard : Window
             _status.Text = $"The account could not be added: {ex.Message}";
             _add.IsEnabled = true;
         }
+    }
+
+    /// <summary>
+    /// Poses and presses the wizard for a capture run.
+    /// </summary>
+    /// <remarks>
+    /// <c>address:</c> types one, which is what decides whether this is a password account or a
+    /// sign-in; <c>client:</c> pastes a registration; <c>signin</c> presses the button. What the
+    /// press produces is in the log rather than the picture — the authorization request itself,
+    /// or the refusal where there is nothing to sign in with.
+    /// </remarks>
+    internal async Task HarnessAsync(string actions)
+    {
+        foreach (var raw in actions.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            // A pass of the dispatcher between actions, because typing is noticed on the next one:
+            // setting Text raises TextChanged later, so pressing in the same call presses a button
+            // whose state still belongs to the empty box.
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(
+                () => { }, Avalonia.Threading.DispatcherPriority.Background);
+
+            var (action, argument) = raw.Split(':', 2) is [var a, var b] ? (a, b) : (raw, string.Empty);
+            switch (action.ToLowerInvariant())
+            {
+                case "address":
+                    _address.Text = argument;
+                    break;
+
+                case "password":
+                    _password.Text = argument;
+                    break;
+
+                case "client":
+                    _clientId.Text = argument;
+                    break;
+
+                case "add":
+                    if (!_add.IsEnabled)
+                    {
+                        Log.Info("Harness: add account — the button is off, so nothing was saved.");
+                        break;
+                    }
+
+                    _add.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+
+                    // Read back out of the settings rather than off the form: what matters is
+                    // what a later run will load, and the three new keys are the ones that decide
+                    // whether an account collects mail at all.
+                    await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(
+                        () => { }, Avalonia.Threading.DispatcherPriority.Background);
+
+                    var address = (_address.Text ?? string.Empty).Trim();
+                    if (AccountSettings.Load(App.Settings, address) is { } saved)
+                    {
+                        Log.Info(
+                            $"Harness: saved {address} — auth {saved.Auth}; "
+                            + $"provider {(saved.OAuthProviderId.Length > 0 ? saved.OAuthProviderId : "none")}; "
+                            + $"client {(saved.OAuthClientId.Length > 0 ? "pasted" : "none")}; "
+                            + $"incoming {saved.IncomingHost}:{saved.IncomingPort}; "
+                            + $"token source {(saved.Authentication.Source(address, App.OAuth) is null ? "none" : "held")}.");
+                    }
+                    else
+                    {
+                        Log.Warn($"Harness: nothing was saved for {address}.");
+                    }
+
+                    break;
+
+                case "signin":
+                    if (!_signIn.IsEnabled)
+                    {
+                        Log.Info(
+                            $"Harness: sign-in — the button is off. Provider: "
+                            + $"{_provider?.Name ?? "none"}; client ID: "
+                            + $"{(ClientIdInUse().Length > 0 ? "set" : "none")}.");
+                        break;
+                    }
+
+                    _signIn.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+                    break;
+
+                default:
+                    Log.Warn($"Harness: the account wizard has no action named {action}.");
+                    break;
+            }
+        }
+
+        Log.Info(
+            $"Harness: add account — {_address.Text}; "
+            + $"credential: {(SignsIn ? $"sign in with {_provider!.Name}" : "password")}; "
+            + $"password box {(_passwordRow.IsVisible ? "shown" : "hidden")}, "
+            + $"client ID box {(_clientIdRow.IsVisible ? "shown" : "hidden")}; "
+            + $"Add is {(_add.IsEnabled ? "on" : "off")}.");
     }
 
     private static int Port(string? text, int fallback)

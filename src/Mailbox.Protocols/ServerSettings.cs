@@ -1,4 +1,5 @@
 using MailKit.Security;
+using Mailbox.Protocols.OAuth;
 using Mailbox.Store;
 
 namespace Mailbox.Protocols;
@@ -11,6 +12,21 @@ public sealed record ServerSettings(
     string UserName = "",
     string Password = "")
 {
+    /// <summary>
+    /// Where to get a bearer token, for an account that signs in rather than holding a password.
+    /// Null for the ordinary case, which is most of them.
+    /// </summary>
+    /// <remarks>
+    /// A source rather than a token: an access token is good for about an hour, and a poll that
+    /// took one at the moment the account was loaded would present a stale one on any run that
+    /// had been up longer than that. Asking at authentication time is what makes the renewal
+    /// happen where it can be reported.
+    /// </remarks>
+    public IAccessTokenSource? Tokens { get; init; }
+
+    /// <summary>True when this server is reached with a token rather than a password.</summary>
+    public bool UsesOAuth => Tokens is not null;
+
     /// <summary>True once there is enough here to attempt a connection.</summary>
     public bool IsComplete => Host.Length > 0 && Port > 0;
 
