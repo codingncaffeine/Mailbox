@@ -137,7 +137,8 @@ public interface IImapSession : IDisposable
 /// <summary>MailKit behind the IMAP seam.</summary>
 public sealed class MailKitImapSession : IImapSession
 {
-    private readonly ImapClient _client = new();
+    private readonly ImapClient _client =
+        ProtocolDiagnostics.For("imap") is { } log ? new ImapClient(log) : new ImapClient();
     private IMailFolder? _open;
 
     public bool IsConnected => _client.IsConnected;

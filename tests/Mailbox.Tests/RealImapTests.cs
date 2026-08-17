@@ -29,6 +29,19 @@ namespace Mailbox.Tests;
 /// Skipped, not passed, when no server is named — a green test that did nothing is worse than no
 /// test at all.
 /// </remarks>
+/// <summary>
+/// The real-server tests share one mailbox, so they run one at a time.
+/// </summary>
+/// <remarks>
+/// Without this they race each other rather than testing anything: one class sends a message
+/// while another is counting what is on the server, and the count moves under it. A failure that
+/// means "two tests overlapped" is worse than no test, because somebody will go looking for it in
+/// the code under test.
+/// </remarks>
+[CollectionDefinition("real-server", DisableParallelization = true)]
+public sealed class RealServerCollection;
+
+[Collection("real-server")]
 public class RealImapTests
 {
     private static string? Host => Environment.GetEnvironmentVariable("MAILBOX_IMAP_HOST");
