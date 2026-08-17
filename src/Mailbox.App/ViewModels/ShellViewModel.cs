@@ -2152,6 +2152,11 @@ public sealed partial class ShellViewModel : ObservableObject
             _collapsed.Clear();
             Rebuild();
             Raise(nameof(ArrangementLabel));
+
+            // The header's arrow says which column the list is sorted by, so it goes stale the
+            // moment the arrangement changes unless the columns are built again — which is
+            // exactly what pressing a header does.
+            RebuildColumns();
             RememberSort();
         }
     } = Arrangement.Date;
@@ -2169,6 +2174,10 @@ public sealed partial class ShellViewModel : ObservableObject
             if (!Set(ref field, value)) return;
             Rebuild();
             Raise(nameof(SortGlyph));
+
+            // Which way the header's arrow points is this value, so the columns are built again
+            // for the same reason they are when the arrangement changes.
+            RebuildColumns();
             RememberSort();
         }
     } = true;
@@ -3212,7 +3221,26 @@ public sealed partial class ShellViewModel : ObservableObject
     /// A column and an arrangement are the same thing in the reference — clicking From groups
     /// by sender, it does not merely sort within the date groups.
     /// </summary>
+    /// <summary>True when the list is currently sorted by this column's field.</summary>
+    /// <remarks>
+    /// Asked by the header strip so the sorted column can be marked. It reads the same table
+    /// <see cref="SortBy"/> writes through, because a header that marked a different column from
+    /// the one a press would act on is worse than no mark at all.
+    /// </remarks>
+    public bool SortsBy(string column) => Wanted(column) == Arrangement;
+
     public void SortBy(string column)
+    {
+        if (Wanted(column) is not { } arrangement) return;
+
+        // Pressing the column the list is already sorted by reverses it, which is what every
+        // list with sortable headers does and what the reference's own arrow implies.
+        if (Arrangement == arrangement) SortDescending = !SortDescending;
+        else { Arrangement = arrangement; SortDescending = true; }
+    }
+
+    /// <summary>The arrangement a column sorts by, or null for one that does not sort.</summary>
+    private static Arrangement? Wanted(string column)
     {
         var wanted = column switch
         {
@@ -3228,10 +3256,7 @@ public sealed partial class ShellViewModel : ObservableObject
             _ => (Arrangement?)null,
         };
 
-        if (wanted is not { } arrangement) return;
-
-        if (Arrangement == arrangement) SortDescending = !SortDescending;
-        else { Arrangement = arrangement; SortDescending = true; }
+        return wanted;
     }
 
     // Glyphs for the buttons that appear on a row under the pointer.
@@ -3349,6 +3374,35 @@ public sealed partial class ShellViewModel : ObservableObject
         get;
         set { if (Set(ref field, value)) Raise(); }
     } = string.Empty;
+
+    /// <summary>
+    /// True while a send/receive is running, which is what puts the bar in the status bar.
+    /// </summary>
+    /// <remarks>
+    /// The reference shows "Send/Receive" and a progress bar at the right of the status bar for
+    /// exactly as long as the transfer takes, and nothing there at rest. It is the only indication
+    /// a reader gets when the progress dialog has been told not to appear, and without it a
+    /// send/receive that is quietly failing looks the same as one that never started.
+    /// </remarks>
+    public bool IsTransferring
+    {
+        get;
+        set { if (Set(ref field, value)) Raise(); }
+    }
+
+    /// <summary>How far the running send/receive has got, 0 to 1.</summary>
+    public double TransferProgress
+    {
+        get;
+        set { if (Set(ref field, value)) Raise(); }
+    }
+
+    /// <summary>What the bar's tooltip says: which account is being worked on.</summary>
+    public string TransferTip
+    {
+        get;
+        set { if (Set(ref field, value)) Raise(); }
+    } = "Send/Receive";
 }
 
 /// <summary>One header cell in the message list's column strip.</summary>
@@ -3364,6 +3418,16 @@ public sealed class MessageColumn(string field, string title, double width, bool
     public System.Windows.Input.ICommand? Sort { get; set; }
 
     public string SortTip { get; } = isGlyph ? string.Empty : $"Sort by {title}";
+
+    /// <summary>
+    /// The arrow drawn after the title when the list is sorted by this column, empty otherwise.
+    /// </summary>
+    /// <remarks>
+    /// The reference marks the sorted column and only the sorted column — its own capture shows
+    /// "Received ▼" and nothing on the rest. Without it a reader pressing a header sees the rows
+    /// move and has nothing to say which column they moved for, or which way round it is now.
+    /// </remarks>
+    public string SortMark { get; set; } = string.Empty;
 
     /// <summary>Icon-only columns render centred and unlabelled — importance, flag, attachment.</summary>
     public bool IsGlyph { get; } = isGlyph;

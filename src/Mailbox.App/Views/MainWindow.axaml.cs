@@ -545,6 +545,25 @@ public partial class MainWindow : Window
                 DispatcherPriority.Loaded);
         }
 
+        // Presses a column header, which a capture run cannot click: MAILBOX_SORT=<column>[,again]
+        // names one by its field or its title, and a second press is what reverses it. Logs what
+        // the list is sorted by afterwards and the order the rows actually came out in, a
+        // screenshot of a sorted list being no evidence that it was sorted.
+        if (Environment.GetEnvironmentVariable("MAILBOX_SORT") is { Length: > 0 } sortPose)
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(
+                () => PoseSort(sortPose),
+                DispatcherPriority.Loaded);
+        }
+
+        // The status bar's progress, pressed: the dialog again. Once "don't show this during
+        // Send/Receive" is ticked, this bar is the only way back to it, so it has to be a way
+        // back to it.
+        if (this.FindControl<Button>("TransferBar") is { } transferBar)
+        {
+            transferBar.Click += (_, _) => ShowProgressDialog(force: true);
+        }
+
         // Lets the fidelity harness capture the peek states, which a screenshot otherwise
         // cannot reach because they need a click.
         WireHarnessPeek();
@@ -560,6 +579,50 @@ public partial class MainWindow : Window
                 StringComparison.OrdinalIgnoreCase))
         {
             Opened += (_, _) => _ribbon.RevealCollapsedRibbon();
+        }
+    }
+
+    /// <summary>
+    /// Presses a column header and reads the ordering back.
+    /// </summary>
+    /// <remarks>
+    /// A header is a button and a capture run cannot press one, so the command behind it is
+    /// invoked exactly as the click would — through the column's own <c>Sort</c>, not by setting
+    /// the arrangement, or the test would prove the arrangement works rather than that the header
+    /// is wired to it.
+    /// </remarks>
+    private void PoseSort(string spec)
+    {
+        if (DataContext is not ShellViewModel shell) return;
+
+        foreach (var name in spec.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var column = shell.Columns.FirstOrDefault(
+                c => string.Equals(c.Field, name, StringComparison.OrdinalIgnoreCase)
+                     || string.Equals(c.Title, name, StringComparison.OrdinalIgnoreCase));
+
+            if (column?.Sort is not { } sort || !sort.CanExecute(null))
+            {
+                Log.Info($"Harness: sort — no column named “{name}” that sorts. "
+                         + $"Columns: {string.Join(", ", shell.Columns.Select(c => c.Field))}.");
+                continue;
+            }
+
+            sort.Execute(null);
+
+            var marked = shell.Columns.Where(c => c.SortMark.Length > 0).Select(c => c.Field + c.SortMark);
+            Log.Info(
+                $"Harness: sorted by “{name}” — arrangement {shell.Arrangement}, "
+                + $"{(shell.SortDescending ? "descending" : "ascending")}; marked: "
+                + $"{(marked.Any() ? string.Join(", ", marked) : "nothing")}.");
+
+            // VisibleRows, not Messages: Messages is the folder's mail as it was read and
+            // VisibleRows is what the list actually draws, arranged and grouped. Reading the
+            // former would report the store's order and call it the list's.
+            foreach (var row in shell.VisibleRows.OfType<MessageRow>().Take(8))
+            {
+                Log.Info($"Harness: sorted row — {row.Received:yyyy-MM-dd HH:mm}  {row.From}  “{row.Subject}”  {row.SizeBytes}B");
+            }
         }
     }
 
@@ -1239,6 +1302,7 @@ public partial class MainWindow : Window
             // A run posed mid-flight, since a real one on a scratch store finishes faster than
             // a capture can be taken. The addresses are invented, as all sample data is.
             case "progress":
+            case "transferbar":
                 Opened += (_, _) =>
                 {
                     var tasks = new SendReceiveTasks(["you@example.com", "other@example.com"]);
@@ -1246,6 +1310,30 @@ public partial class MainWindow : Window
                     tasks.Report(new PollProgress("you@example.com", 0, 0, "Connecting"));
                     tasks.Report(new PollProgress("you@example.com", 3, 8, "Downloading"));
                     tasks.Report(new PollProgress("other@example.com", 0, 0, "Sending"));
+
+                    // The status bar's own indicator, posed with the same numbers the dialog is
+                    // showing: it is the half a reader sees once the dialog has been told not to
+                    // appear, so it wants photographing as much as the dialog does.
+                    // MAILBOX_PEEK=transferbar poses it without the window over the top.
+                    if (DataContext is ShellViewModel bar)
+                    {
+                        bar.IsTransferring = true;
+                        bar.TransferProgress = tasks.Fraction;
+                        bar.TransferTip = $"Receiving you@example.com — {tasks.Succeeded + tasks.Failed} of {tasks.Total}";
+                        bar.StatusRight = "Receiving you@example.com…";
+
+                        Log.Info(
+                            $"Harness: send/receive — {tasks.Succeeded} of {tasks.Total} done, "
+                            + $"bar at {bar.TransferProgress:P0}, {tasks.Errors.Count} error(s).");
+                    }
+
+                    if (string.Equals(
+                            Environment.GetEnvironmentVariable("MAILBOX_PEEK"),
+                            "transferbar",
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        return;
+                    }
 
                     CaptureNextWindow();
                     new SendReceiveProgressDialog(tasks, App.Settings, () => { }).Show(this);
@@ -4608,11 +4696,23 @@ public partial class MainWindow : Window
         _cancellation = new CancellationTokenSource();
         ShowProgressDialog();
 
+        shell.IsTransferring = true;
+        shell.TransferProgress = 0;
+        shell.TransferTip = "Send/Receive in progress";
+
         void OnProgress(object? _, PollProgress p) => Dispatcher.UIThread.Post(() =>
         {
             shell.StatusRight = $"{p.Stage} {p.Account}…";
             _tasks?.Report(p);
             _progress?.Refresh();
+
+            // The status bar's own bar, which is all a reader sees once the dialog has been told
+            // not to appear.
+            if (_tasks is { } running)
+            {
+                shell.TransferProgress = running.Fraction;
+                shell.TransferTip = $"{p.Stage} {p.Account} — {running.Succeeded + running.Failed} of {running.Total}";
+            }
         });
 
         App.Transfer.Progress += OnProgress;
@@ -4668,6 +4768,12 @@ public partial class MainWindow : Window
         {
             App.Transfer.Progress -= OnProgress;
             _transferring = false;
+
+            // The bar goes with the transfer it was reporting on, whether that ended in success,
+            // failure or a cancellation — a status bar still showing progress for something that
+            // stopped is worse than one showing nothing.
+            shell.IsTransferring = false;
+            shell.TransferProgress = 0;
 
             _progress?.Refresh();
 
