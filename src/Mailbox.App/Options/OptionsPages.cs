@@ -501,8 +501,10 @@ public static class OptionsPages
             [
                 new SubHeadingRow("Encryption is built in and starts switched off, because each " +
                                   "needs key material before it can do anything."),
-                new CheckRow("Enable S/MIME"),
-                new CheckRow("Enable OpenPGP"),
+                // Keyed explicitly, because code reads this one: a row keyed by its own label
+                // loses its value the day the label is reworded.
+                new CheckRow("Enable S/MIME") { Key = SecurityOptions.SmimeKey },
+                new CheckRow("Enable OpenPGP") { Key = SecurityOptions.OpenPgpKey },
                 new CheckRow("Encrypt the local store with a master password"),
             ]),
 

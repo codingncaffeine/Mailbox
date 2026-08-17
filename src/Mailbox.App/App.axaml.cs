@@ -58,6 +58,9 @@ public partial class App : Application
     /// <summary>The favourite contacts, which is what the To-Do Bar's People section holds.</summary>
     public static Mailbox.Core.People.ContactFavourites ContactFavourites { get; private set; } = null!;
 
+    /// <summary>The Trust Center's crypto switches. Both start off, per §14.</summary>
+    public static SecurityOptions Security { get; private set; } = null!;
+
     /// <summary>The RSS subscriptions, and the reader that delivers them into mail folders.</summary>
     public static Mailbox.Core.Feeds.FeedSubscriptions Feeds { get; private set; } = null!;
 
@@ -525,6 +528,7 @@ public partial class App : Application
         RibbonDisplay = new RibbonDisplaySettings(Settings);
         Favourites = new Mailbox.Core.Folders.Favourites(Settings);
         ContactFavourites = new Mailbox.Core.People.ContactFavourites(Settings);
+        Security = new SecurityOptions(Settings);
         Feeds = new Mailbox.Core.Feeds.FeedSubscriptions(Settings);
         FeedReader = new Mailbox.Protocols.FeedReceiver(Feeds);
         Stationery = new StationeryFonts(Settings);
