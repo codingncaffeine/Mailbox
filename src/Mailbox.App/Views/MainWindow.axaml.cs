@@ -605,7 +605,13 @@ public partial class MainWindow : Window
                     () =>
                     {
                         CaptureNextWindow();
-                        _ = ShowPeoplePeekAsync(Environment.GetEnvironmentVariable("MAILBOX_PEEK")!.ToLowerInvariant());
+
+                        // Logged rather than dropped: a pose is a fire-and-forget task, and one
+                        // that throws leaves a run with no window, no error and nothing to grep.
+                        _ = ShowPeoplePeekAsync(Environment.GetEnvironmentVariable("MAILBOX_PEEK")!.ToLowerInvariant())
+                            .ContinueWith(
+                                t => Log.Warn("The People pose failed.", t.Exception!),
+                                TaskContinuationOptions.OnlyOnFaulted);
                     },
                     DispatcherPriority.Background);
                 break;

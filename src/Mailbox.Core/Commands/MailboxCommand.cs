@@ -19,6 +19,9 @@ public enum CommandSurface
 
     /// <summary>The appointment and meeting window.</summary>
     Appointment,
+
+    /// <summary>The contact window, which opens one person or one group.</summary>
+    Contact,
 }
 
 /// <summary>

@@ -504,6 +504,7 @@ public partial class App : Application
         Commands.RegisterRange(ComposeCommands.All);
         Commands.RegisterRange(CalendarCommands.All);
         Commands.RegisterRange(AppointmentCommands.All);
+        Commands.RegisterRange(ContactCommands.All);
         Commands.RegisterRange(PeopleCommands.All);
         Commands.RegisterRange(TaskCommands.All);
         Commands.RegisterRange(NoteCommands.All);
