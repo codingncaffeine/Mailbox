@@ -513,6 +513,17 @@ public partial class MainWindow : Window
                 DispatcherPriority.Loaded);
         }
 
+        // Delivers a Google Tasks answer from a file: MAILBOX_GOOGLE=<path>[|list name]. Same
+        // reasoning as the feed above — the poll is HTTPS to somebody else's API, and what has to
+        // be provable is the half that touches the store: what a merge keeps, and what a tombstone
+        // removes.
+        if (Environment.GetEnvironmentVariable("MAILBOX_GOOGLE") is { Length: > 0 } googlePose)
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(
+                () => PoseGoogleTasks(googlePose),
+                DispatcherPriority.Loaded);
+        }
+
         // Lets the fidelity harness capture the peek states, which a screenshot otherwise
         // cannot reach because they need a click.
         WireHarnessPeek();

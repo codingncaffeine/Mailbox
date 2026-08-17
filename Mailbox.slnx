@@ -12,6 +12,7 @@
     <Project Path="src/Mailbox.Core/Mailbox.Core.csproj" />
     <Project Path="src/Mailbox.Dav/Mailbox.Dav.csproj" />
     <Project Path="src/Mailbox.Editor/Mailbox.Editor.csproj" />
+    <Project Path="src/Mailbox.Google/Mailbox.Google.csproj" />
     <Project Path="src/Mailbox.Junk/Mailbox.Junk.csproj" />
     <Project Path="src/Mailbox.Protocols/Mailbox.Protocols.csproj" />
     <Project Path="src/Mailbox.Rendering/Mailbox.Rendering.csproj" />

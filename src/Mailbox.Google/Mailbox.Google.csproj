@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Google Tasks (§5, §9). The only vendor-specific code path in the project, and it has an
+    assembly of its own so that it is one grep rather than a scatter: everything that knows a
+    particular company's API is in here, and nothing else references it except the sync service
+    that runs it.
+
+    It earns its place because Google exposes calendar over CalDAV and contacts over CardDAV, and
+    deliberately does not expose tasks over anything — the API is REST, it is OAuth-only, and the
+    target audience uses it.
+
+    Not the official client library: it is a generated surface over the whole of Google's API
+    estate with an auth stack of its own, and what is needed here is five requests and a bearer
+    token this application already knows how to get.
+  -->
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Mailbox.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mailbox.Core\Mailbox.Core.csproj" />
+    <ProjectReference Include="..\Mailbox.Protocols\Mailbox.Protocols.csproj" />
+    <ProjectReference Include="..\Mailbox.Scheduling\Mailbox.Scheduling.csproj" />
+    <ProjectReference Include="..\Mailbox.Store\Mailbox.Store.csproj" />
+  </ItemGroup>
+
+</Project>

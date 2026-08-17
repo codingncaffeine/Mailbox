@@ -470,7 +470,7 @@ public partial class App : Application
         // the keyring may be locked on a headless desktop, where asking it would wait forever.
         Secrets = WindowCapture.IsRequested ? new InMemoryCredentialStore() : Credentials.Best();
         OAuth = new OAuthAccounts(Secrets);
-        PimSync = new PimSyncService(Pim, Secrets);
+        PimSync = new PimSyncService(Pim, Secrets, OAuth, Settings);
         MailOptions = new MailOptions(Settings);
         CalendarOptions = new CalendarOptions(Settings);
         PeopleOptions = new PeopleOptions(Settings);
