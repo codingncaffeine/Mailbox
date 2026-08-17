@@ -512,7 +512,16 @@ public partial class MainWindow
     // ---- The appointment window ---------------------------------------------------------------
 
     /// <summary>A blank appointment on a day, opened for editing and written if it is kept.</summary>
-    private async Task NewAppointmentAsync(ShellViewModel shell, DateTime start, bool allDay, bool meeting = false)
+    /// <param name="asked">
+    /// Who to invite, for a meeting started from somewhere that already knows — the People
+    /// module's Meeting button hands the contact over this way.
+    /// </param>
+    private async Task NewAppointmentAsync(
+        ShellViewModel shell,
+        DateTime start,
+        bool allDay,
+        bool meeting = false,
+        IReadOnlyList<string>? asked = null)
     {
         var zone = TimeZoneInfo.Local.Id;
         var fresh = new CalendarEvent
@@ -522,6 +531,9 @@ public partial class MainWindow
             End = allDay ? EventTime.Date(DateOnly.FromDateTime(start).AddDays(1)) : EventTime.At(start.AddMinutes(30), zone),
             Busy = BusyStatus.Busy,
             ReminderMinutes = App.CalendarOptions.DefaultReminderMinutes,
+            Attendees = asked is { Count: > 0 }
+                ? [.. asked.Select(a => new EventAttendee(a, string.Empty, "REQ-PARTICIPANT", "NEEDS-ACTION", true))]
+                : [],
         };
 
         var calendars = App.Pim.Collections(CollectionKind.Events);

@@ -79,13 +79,52 @@ public sealed class PeopleWorkspace : Border
 
         _list.ContactSelected += (_, row) => Show(row);
         _list.ContactActivated += (_, row) => ContactOpened?.Invoke(this, row);
+        _list.ContactMenuRequested += (_, row) => ContactMenuRequested?.Invoke(this, row);
         _list.EmptySpaceActivated += (_, _) => NewRequested?.Invoke(this, EventArgs.Empty);
 
         Reload();
     }
 
     /// <summary>What the status bar says: the reference counts what the view is showing.</summary>
-    public string Status => $"Items: {_rows.Count}";
+    public string Status => Search.Length == 0
+        ? $"Items: {_rows.Count}"
+        : $"Items: {_list.Rows.Count} of {_rows.Count}";
+
+    /// <summary>
+    /// What the Search People box is looking for, or empty for everybody.
+    /// </summary>
+    /// <remarks>
+    /// It matches a name, a company or an address — the three things somebody is looked up by —
+    /// and the list is what shows the answer, as the reference's own box narrows its list rather
+    /// than opening a second one.
+    /// </remarks>
+    public string Search
+    {
+        get;
+        set
+        {
+            var wanted = value?.Trim() ?? string.Empty;
+            if (field == wanted) return;
+            field = wanted;
+            _list.Rows = Filtered();
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    } = string.Empty;
+
+    private IReadOnlyList<ContactRow> Filtered()
+    {
+        if (Search.Length == 0) return _rows;
+
+        return
+        [
+            .. _rows.Where(r =>
+                Has(r.Contact.Named()) || Has(r.Contact.FiledAs(FileAsOrders.FromIndex(_options.FileAsIndex)))
+                || Has(r.Contact.Company) || r.Contact.Emails.Any(e => Has(e.Address))
+                || r.Contact.Phones.Any(p => Has(p.Number))),
+        ];
+
+        bool Has(string? text) => text is { Length: > 0 } && text.Contains(Search, StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>Whether the navigation pane is showing, which the shell's own toggle drives.</summary>
     public bool IsNavVisible
@@ -96,12 +135,18 @@ public sealed class PeopleWorkspace : Border
 
     public ContactRow? Selected => _list.Selected;
 
-    /// <summary>The rows on show, for a harness pose that needs to name one.</summary>
-    public IReadOnlyList<ContactRow> Rows => _rows;
+    /// <summary>The rows on show — what the search left, when one is running.</summary>
+    public IReadOnlyList<ContactRow> Rows => _list.Rows;
+
+    /// <summary>Everybody in the shown address books, search or no search.</summary>
+    public IReadOnlyList<ContactRow> Total => _rows;
 
     public event EventHandler? Changed;
 
     public event EventHandler<ContactRow>? ContactOpened;
+
+    /// <summary>A right-click on somebody, which the shell answers with the reference's menu.</summary>
+    public event EventHandler<ContactRow>? ContactMenuRequested;
 
     /// <summary>A double click on the empty list, which the reference invites in so many words.</summary>
     public event EventHandler? NewRequested;
@@ -215,7 +260,7 @@ public sealed class PeopleWorkspace : Border
 
         _list.Order = FileAsOrders.FromIndex(_options.FileAsIndex);
         _list.ShowIndex = _options.ShowIndex;
-        _list.Rows = _rows;
+        _list.Rows = Filtered();
 
         RefreshBooks();
 

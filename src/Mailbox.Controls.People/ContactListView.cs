@@ -134,6 +134,9 @@ public sealed class ContactListView : DrawnSurface
     public event EventHandler<ContactRow>? ContactSelected;
     public event EventHandler<ContactRow>? ContactActivated;
 
+    /// <summary>A right-click on somebody: the row is picked, and its menu is asked for.</summary>
+    public event EventHandler<ContactRow>? ContactMenuRequested;
+
     /// <summary>A double click on nothing: the reference's own "double-click here" invitation.</summary>
     public event EventHandler? EmptySpaceActivated;
 
@@ -309,6 +312,24 @@ public sealed class ContactListView : DrawnSurface
     {
         base.OnPointerPressed(e);
         var point = e.GetPosition(this);
+
+        // The right button picks the row under it and asks for its menu — which is where the
+        // reference puts Add to Favourites, in so many words: "right-click a person anywhere to
+        // add them to your favourites".
+        if (e.GetCurrentPoint(this).Properties.IsRightButtonPressed)
+        {
+            foreach (var (box, row) in _rowHits)
+            {
+                if (!box.Contains(point)) continue;
+                Selected = row;
+                ContactSelected?.Invoke(this, row);
+                ContactMenuRequested?.Invoke(this, row);
+                e.Handled = true;
+                return;
+            }
+
+            return;
+        }
 
         foreach (var (box, letter) in _indexHits)
         {
