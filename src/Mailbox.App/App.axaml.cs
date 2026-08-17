@@ -482,6 +482,12 @@ public partial class App : Application
         Secrets = WindowCapture.IsRequested ? new InMemoryCredentialStore() : Credentials.Best();
         OAuth = new OAuthAccounts(Secrets);
         Trust = new CertificateTrust(Settings);
+
+        // The wire logs go beside the application log, under state rather than in a temporary
+        // directory: a protocol log is the reader's own mail, and /tmp is world-readable on a
+        // shared machine. Off unless MAILBOX_PROTOCOL_LOG says otherwise.
+        ProtocolDiagnostics.Directory = System.IO.Path.Combine(
+            System.IO.Path.GetDirectoryName(Log.LogDirectory()) ?? Log.LogDirectory(), "protocol");
         PimSync = new PimSyncService(Pim, Secrets, OAuth, Settings);
         MailOptions = new MailOptions(Settings);
         CalendarOptions = new CalendarOptions(Settings);

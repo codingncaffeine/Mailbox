@@ -98,7 +98,16 @@ public sealed class SmtpSender(MailRepository repository)
                 await client.AuthenticateAsync(account.Outgoing, cancellation);
             }
 
-            await client.SendAsync(message, cancellation);
+            var accepted = await client.SendAsync(message, cancellation);
+
+            // What the server said as it took the message, which is the only evidence submission
+            // ever leaves. A submission server's 250 usually carries a queue identifier, and that
+            // identifier is what a postmaster needs when a message was accepted here and arrived
+            // nowhere — a question this end otherwise cannot answer at all.
+            Log.Info(
+                $"Sent “{message.Subject}” to {string.Join(", ", message.To.Mailboxes.Select(m => m.Address))} "
+                + $"via {account.Outgoing.Host}:{account.Outgoing.Port}; the server said: {Tidy(accepted)}");
+
             return SendResult.Ok();
         }
         catch (OperationCanceledException)
@@ -116,6 +125,23 @@ public sealed class SmtpSender(MailRepository repository)
             client.Dispose();
         }
     }
+
+    /// <summary>
+    /// The server's acceptance on one line, which is where a queue identifier lives.
+    /// </summary>
+    /// <remarks>
+    /// Some servers answer with several lines and some with none at all. Control characters are
+    /// stripped because this is text from another program going into a log, and a newline in it
+    /// would forge an entry.
+    /// </remarks>
+    private static string Tidy(string? response)
+    {
+        if (string.IsNullOrWhiteSpace(response)) return "nothing at all";
+
+        var clean = new string([.. response.Where(c => !char.IsControl(c) || c == ' ')]).Trim();
+        return clean.Length > 200 ? clean[..200] + "…" : clean;
+    }
+
 
     /// <summary>
     /// Whether an exception means "never" or "not now". Anything unrecognised is treated as

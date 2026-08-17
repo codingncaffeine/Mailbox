@@ -54,7 +54,16 @@ public interface ISmtpSession : IDisposable
 
     Task AuthenticateAsync(ServerSettings server, CancellationToken cancellation);
 
-    Task SendAsync(MimeMessage message, CancellationToken cancellation);
+    /// <summary>
+    /// Submits a message, and hands back what the server said as it accepted it.
+    /// </summary>
+    /// <remarks>
+    /// The response is returned rather than discarded because it is the only evidence a sender
+    /// ever gets: a submission server's <c>250</c> usually carries a queue identifier, and that
+    /// identifier is the thing to quote when a message was accepted here and never arrived
+    /// anywhere. Thrown away, the whole question becomes unanswerable from this end.
+    /// </remarks>
+    Task<string> SendAsync(MimeMessage message, CancellationToken cancellation);
 
     Task DisconnectAsync(CancellationToken cancellation);
 }
@@ -62,7 +71,8 @@ public interface ISmtpSession : IDisposable
 /// <summary>MailKit behind the POP3 seam.</summary>
 public sealed class MailKitPop3Session : IPop3Session
 {
-    private readonly Pop3Client _client = new();
+    private readonly Pop3Client _client =
+        ProtocolDiagnostics.For("pop3") is { } log ? new Pop3Client(log) : new Pop3Client();
 
     public bool IsConnected => _client.IsConnected;
 
@@ -95,7 +105,8 @@ public sealed class MailKitPop3Session : IPop3Session
 /// <summary>MailKit behind the SMTP seam.</summary>
 public sealed class MailKitSmtpSession : ISmtpSession
 {
-    private readonly SmtpClient _client = new();
+    private readonly SmtpClient _client =
+        ProtocolDiagnostics.For("smtp") is { } log ? new SmtpClient(log) : new SmtpClient();
 
     public bool IsConnected => _client.IsConnected;
 
@@ -110,7 +121,7 @@ public sealed class MailKitSmtpSession : ISmtpSession
     public Task AuthenticateAsync(ServerSettings server, CancellationToken cancellation)
         => SaslAuthentication.AuthenticateAsync(_client, server, cancellation);
 
-    public Task SendAsync(MimeMessage message, CancellationToken cancellation)
+    public Task<string> SendAsync(MimeMessage message, CancellationToken cancellation)
         => _client.SendAsync(message, cancellation);
 
     public Task DisconnectAsync(CancellationToken cancellation)

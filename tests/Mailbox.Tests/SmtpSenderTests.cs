@@ -37,11 +37,13 @@ internal sealed class FakeSmtp : ISmtpSession
         return Task.CompletedTask;
     }
 
-    public Task SendAsync(MimeMessage message, CancellationToken c)
+    public Task<string> SendAsync(MimeMessage message, CancellationToken c)
     {
         if (Failures.Count > 0) throw Failures.Dequeue();
         Sent.Add(message);
-        return Task.CompletedTask;
+
+        // What a submission server's 250 looks like: an acknowledgement with a queue id in it.
+        return Task.FromResult($"2.0.0 Ok: queued as FAKE{Sent.Count:D4}");
     }
 
     public Task DisconnectAsync(CancellationToken c)
