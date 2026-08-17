@@ -144,7 +144,15 @@ public sealed class SendReceiveService(
             error = SmtpSender.Classify(ex).Error;
         }
 
-        var progress = new Progress<PollProgress>(p => Progress?.Invoke(this, p));
+        // A relay of our own rather than System.Progress<T>, which posts each report to the
+        // captured synchronization context — or, where there is none, to the thread pool. That
+        // makes every report asynchronous and unordered: some arrive after the operation that
+        // produced them has finished, which reads as reports going missing.
+        //
+        // Nothing here wants that. The one subscriber that matters marshals to the UI thread
+        // itself (MainWindow's own handler does), so posting buys it nothing and costs the caller
+        // any guarantee about when a report has been delivered.
+        var progress = new SynchronousProgress<PollProgress>(p => Progress?.Invoke(this, p));
 
         // IMAP has folders and flags on the server; POP3 has neither, so it is the receiver that
         // downloads the inbox and the store that keeps everything else. The store being
@@ -175,4 +183,24 @@ public sealed class SendReceiveService(
             Arrived = poll.Arrived,
         };
     }
+}
+
+/// <summary>
+/// Progress delivered where and when it is reported, rather than posted somewhere else.
+/// </summary>
+/// <remarks>
+/// <see cref="Progress{T}"/> exists to move a report onto the UI thread, which is the right thing
+/// when the subscriber cannot marshal for itself. Here the subscriber can and does, so all the
+/// posting achieves is to make delivery asynchronous and unordered — a report can arrive after the
+/// operation that produced it has returned, and two can arrive out of order, both of which read as
+/// a defect somewhere else entirely.
+/// <para>
+/// The handler therefore runs on whichever thread reported, and a subscriber that touches the UI
+/// is responsible for getting itself there. That is the arrangement the application already had;
+/// this only stops pretending otherwise.
+/// </para>
+/// </remarks>
+internal sealed class SynchronousProgress<T>(Action<T> handler) : IProgress<T>
+{
+    public void Report(T value) => handler(value);
 }
