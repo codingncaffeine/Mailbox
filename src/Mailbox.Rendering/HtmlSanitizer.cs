@@ -205,7 +205,7 @@ internal sealed class HtmlSanitizer(ResourceMap resources, RenderOptions options
     {
         _inStyle = false;
 
-        var css = CssScrubber.Scrub(_style.ToString(), url => Resolve(url, BlockedResourceKind.Style));
+        var css = CssScrubber.Scrub(_style.ToString(), url => Resolve(url, BlockedResourceKind.Style), options.Isolated);
         if (css.Trim().Length == 0) return;
 
         // Written back as a stylesheet rather than folded into the elements: keeping the
@@ -224,7 +224,7 @@ internal sealed class HtmlSanitizer(ResourceMap resources, RenderOptions options
 
         if (string.Equals(name, "style", StringComparison.OrdinalIgnoreCase))
         {
-            var css = CssScrubber.Scrub(value, url => Resolve(url, BlockedResourceKind.Style));
+            var css = CssScrubber.Scrub(value, url => Resolve(url, BlockedResourceKind.Style), options.Isolated);
             if (css.Trim().Length > 0) Write("style", css);
             return;
         }
