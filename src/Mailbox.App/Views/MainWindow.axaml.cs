@@ -1168,6 +1168,15 @@ public partial class MainWindow : Window
                     }, DispatcherPriority.Background);
                 }
 
+                // Presses Sign and Encrypt before the send, so what those two buttons do to a real
+                // message can be read off the wire form rather than off a handler's name. Wants a
+                // posed store to have any keys at all — see the seed's own ring.
+                if (Environment.GetEnvironmentVariable("MAILBOX_COMPOSE_SEAL") is { Length: > 0 } seal)
+                {
+                    compose.Opened += (_, _) => Dispatcher.UIThread.Post(
+                        () => compose.PressProtection(seal), DispatcherPriority.Loaded);
+                }
+
                 // Presses Send on a posed message, so what the window actually builds can be
                 // read back out of the outbox and checked as MIME. Undo Send's hold keeps it
                 // there long enough. The only way to audit the Send button is to press it.

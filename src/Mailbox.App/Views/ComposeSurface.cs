@@ -20,6 +20,7 @@ using Mailbox.Core.Diagnostics;
 using Mailbox.Core.Ribbon;
 using Mailbox.Core.Settings;
 using Mailbox.Protocols;
+using Mailbox.Security;
 using Mailbox.Store;
 using Mailbox.Theming.Fonts;
 using Mailbox.Theming.Icons;
@@ -147,6 +148,17 @@ public sealed class ComposeSurface : UserControl
     private MessageImportance _importance = MessageImportance.Normal;
     private bool _wantsReadReceipt;
     private bool _wantsDeliveryReceipt;
+
+    /// <summary>
+    /// Whether this message is signed, sealed, both or neither when it goes.
+    /// </summary>
+    /// <remarks>
+    /// Per message, from the two buttons on the Options tab — not a setting, because the reference's
+    /// are per message and because signing everything and encrypting nothing are both reasonable
+    /// habits that only the writer knows they have. Which algorithm carries it is not asked here;
+    /// see <see cref="MessageProtection"/> for why that is the application's decision.
+    /// </remarks>
+    private Protection _protection = Protection.None;
     private DateTimeOffset? _notBefore;
     private string? _replyTo;
     private bool _sent;
@@ -556,6 +568,30 @@ public sealed class ComposeSurface : UserControl
 
     /// <summary>Presses Send, for the harness.</summary>
     public void PressSend() => Invoke(ComposeCommands.Send.Id);
+
+    /// <summary>
+    /// Presses Sign, Encrypt or both, for the harness — through the dispatcher, as a pointer would.
+    /// </summary>
+    /// <remarks>
+    /// Pressed rather than assigned: what is being checked is that the buttons do it, and setting
+    /// the field directly would pass over a bar whose entries were wired to nothing.
+    /// </remarks>
+    public void PressProtection(string what)
+    {
+        if (what.Contains("sign", StringComparison.OrdinalIgnoreCase)
+            || what.Contains("both", StringComparison.OrdinalIgnoreCase))
+        {
+            Invoke(ComposeCommands.Sign.Id);
+        }
+
+        if (what.Contains("encrypt", StringComparison.OrdinalIgnoreCase)
+            || what.Contains("both", StringComparison.OrdinalIgnoreCase))
+        {
+            Invoke(ComposeCommands.Encrypt.Id);
+        }
+
+        Log.Info($"Harness: protection — the buttons leave this message {_protection}.");
+    }
 
     /// <summary>Poses the optional address fields, so a capture can show them.</summary>
     public void ShowOptionalFields()
@@ -1189,6 +1225,9 @@ public sealed class ComposeSurface : UserControl
             Report($"Read receipt {(_wantsReadReceipt ? "requested" : "not requested")}.");
             return true;
         }
+
+        if (id == ComposeCommands.Sign.Id) { Want(Protection.Sign, "signed"); return true; }
+        if (id == ComposeCommands.Encrypt.Id) { Want(Protection.Encrypt, "encrypted"); return true; }
 
         if (id == ComposeCommands.WordCount.Id) { _ = ShowWordCountAsync(); return true; }
         if (id == ComposeCommands.Zoom.Id) { StepZoom(); return true; }
@@ -2166,6 +2205,11 @@ public sealed class ComposeSurface : UserControl
             return;
         }
 
+        // Signed and sealed here and nowhere else: immediately before it goes, over the message as
+        // it will actually be sent, once the writer has decided to send it (§19). A refusal stops
+        // the send with the message intact rather than sending it in the clear.
+        if (!await ProtectAsync(message)) return;
+
         try
         {
             var sender = new SmtpSender(account.Mail);
@@ -2211,6 +2255,94 @@ public sealed class ComposeSurface : UserControl
         {
             Report($"Could not queue the message: {ex.Message}");
         }
+    }
+
+    // ----------------------------------------------------------------------------------
+    // Signing and encrypting (Phase 15)
+    // ----------------------------------------------------------------------------------
+
+    /// <summary>Puts one of the two buttons down or up, and says what it now means.</summary>
+    private void Want(Protection what, string word)
+    {
+        // Neither algorithm switched on means nothing to do it with, and a button that goes down
+        // over an empty Trust Center is a promise the send would have to break (§14).
+        if (!App.Security.Smime && !App.Security.OpenPgp)
+        {
+            Report("Turn on S/MIME or OpenPGP under File · Options · Trust Center first.");
+            return;
+        }
+
+        _protection ^= what;
+        _dirty = true;
+
+        Report(_protection.HasFlag(what)
+            ? $"This message will be {word}."
+            : $"This message will not be {word}.");
+    }
+
+    /// <summary>
+    /// Applies what the two buttons asked for, and says why if it cannot. False stops the send.
+    /// </summary>
+    /// <remarks>
+    /// A locked key is the one refusal worth acting on rather than reporting: the material is here
+    /// and nobody has said what opens it, so the reader is asked and the whole thing runs again —
+    /// exactly once, because a second refusal after a passphrase that was accepted is not about the
+    /// passphrase.
+    /// </remarks>
+    private async Task<bool> ProtectAsync(MimeMessage message)
+    {
+        if (_protection == Protection.None) return true;
+
+        // So the list of keys to ask about is this attempt's own rather than a previous send's.
+        CryptoStores.Passphrases.Clear();
+
+        var report = await Task.Run(() => Protect(message, draft: false));
+
+        if (report.State == ProtectionState.Locked && await UnlockAsync())
+        {
+            report = await Task.Run(() => Protect(message, draft: false));
+        }
+
+        // What the message actually became, which is the only way to check the claim: a shape here
+        // is what the reading pane will be handed at the other end.
+        Log.Info(
+            $"Harness: protection — asked for {_protection}, came to {report.State} "
+            + $"(body {message.Body?.ContentType.MimeType ?? "none"}). {report.Detail}");
+
+        if (report.MaySend) return true;
+
+        Report(report.Detail);
+        return false;
+    }
+
+    /// <summary>
+    /// Opens both stores, applies what was asked for, and closes them again.
+    /// </summary>
+    /// <remarks>
+    /// Off the UI thread for a send — signing is a public-key operation over the whole message and
+    /// the attachments go through it. A null store is an algorithm the reader has not turned on,
+    /// which is a different answer from one that has no keys.
+    /// </remarks>
+    private ProtectionReport Protect(MimeMessage message, bool draft)
+    {
+        using var certificates = CryptoStores.CertificatesIfEnabled();
+        using var keys = CryptoStores.KeyRingIfEnabled();
+
+        return draft
+            ? MessageProtection.ApplyToDraft(message, _protection, certificates, keys)
+            : MessageProtection.Apply(message, _protection, certificates, keys);
+    }
+
+    /// <summary>Asks for whatever the last attempt could not open. False if the reader declines.</summary>
+    private async Task<bool> UnlockAsync()
+    {
+        var wanted = CryptoStores.Passphrases.Wanted;
+        if (wanted.Count == 0) return false;
+
+        using var keys = CryptoStores.KeyRingIfEnabled();
+        if (keys is null) return false;
+
+        return await PassphraseDialog.UnlockAsync(Host, keys, CryptoStores.Passphrases, wanted);
     }
 
     private async Task<MimeMessage> BuildMessageAsync(OpenAccount account)
@@ -2347,6 +2479,18 @@ public sealed class ComposeSurface : UserControl
             }
 
             var message = BuildMessageAsync(account).GetAwaiter().GetResult();
+
+            // A draft is never signed and is encrypted to its author alone (§19) — the recipient
+            // fields are the part a mailto: link gets to choose, and a signature is a statement made
+            // when somebody decides to send something, not every few minutes by an autosave. A draft
+            // that cannot be encrypted is not saved in the clear instead: the writer is told, and
+            // what they typed stays in the window where they can still see it.
+            var report = Protect(message, draft: true);
+            if (!report.MaySend)
+            {
+                Report(report.Detail);
+                return;
+            }
 
             using var buffer = new MemoryStream();
             message.WriteTo(buffer);
