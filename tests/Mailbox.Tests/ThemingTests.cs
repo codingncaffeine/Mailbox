@@ -111,6 +111,29 @@ public class OfficeThemeTests
             $"Theme '{themeId}' is missing: {string.Join(", ", missing)}");
     }
 
+    /// <summary>
+    /// One flag, everywhere it is drawn.
+    /// </summary>
+    /// <remarks>
+    /// The ribbon's Follow Up icon, the message list's flag column and the to-do list's rows all
+    /// take the same three values, because the reference draws one flag and this drew three reds
+    /// before: the icon's own, the overdue red and the danger red. The icon tokens are references
+    /// to the tag family now, so this is what stops them being separated again.
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(AllThemes))]
+    public void TheFlagIsOneColourInEveryTheme(string themeId)
+    {
+        var resolved = OfficeThemes.Build(themeId).Resolve();
+
+        Assert.Equal(resolved.GetColor(TokenKeys.Tags.Flag), resolved.GetColor(TokenKeys.RibbonIcon.Flag));
+        Assert.Equal(resolved.GetColor(TokenKeys.Tags.FlagOutline), resolved.GetColor(TokenKeys.RibbonIcon.FlagOutline));
+        Assert.Equal(resolved.GetColor(TokenKeys.Tags.FlagPole), resolved.GetColor(TokenKeys.RibbonIcon.FlagPole));
+
+        // And the pair is a pair: a cloth the same colour as its outline is not a flag.
+        Assert.NotEqual(resolved.GetColor(TokenKeys.Tags.Flag), resolved.GetColor(TokenKeys.Tags.FlagOutline));
+    }
+
     [Theory]
     [MemberData(nameof(AllThemes))]
     public void EveryColourTokenParses(string themeId)

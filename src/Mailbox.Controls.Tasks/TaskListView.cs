@@ -235,7 +235,7 @@ public sealed class TaskListView : DrawnSurface
         context.DrawLine(pen, new Point(centre.X - 4, centre.Y - 2), centre);
         context.DrawLine(pen, centre, new Point(centre.X + 4, centre.Y - 2));
 
-        DrawFlag(context, new Rect(box.X + 22, box.Y + 7, 11, 12), Colour(TokenKeys.List.OverdueText));
+        DrawFlag(context, new Rect(box.X + 22, box.Y + 7, 11, 12));
         DrawAt(context, Ink(TaskBook.Heading(band), TextSize, ink, SemiBoldFace), box.X + 40, box.Y + 17);
     }
 
@@ -278,7 +278,7 @@ public sealed class TaskListView : DrawnSurface
             Fill(context, new Rect(left, box.Y + 11, text.Width, 1), ink);
         }
 
-        DrawFlag(context, new Rect(box.Right - 17, box.Y + 4, 11, 12), Colour(TokenKeys.List.OverdueText));
+        DrawFlag(context, new Rect(box.Right - 17, box.Y + 4, 11, 12));
     }
 
     /// <summary>The envelope a flagged message's row carries: a rectangle with its flap creased.</summary>
@@ -305,23 +305,22 @@ public sealed class TaskListView : DrawnSurface
         context.DrawLine(pen, new Point(box.Center.X - 0.5, box.Bottom - 3), new Point(box.Right - 2.5, box.Y + 2.5));
     }
 
-    /// <summary>The follow-up flag, drawn rather than glyphed so it is the colour it means.</summary>
-    private void DrawFlag(DrawingContext context, Rect box, Color colour)
+    /// <summary>
+    /// The follow-up flag: a cloth inside a 1px outline, on a pole.
+    /// </summary>
+    /// <remarks>
+    /// The application's one flag (`tags.flag`), which is also what the ribbon's Follow Up button
+    /// draws — the reference's own to-do list carries the same three colours its icon does, so a
+    /// second red here would be a second red nowhere in the reference.
+    /// </remarks>
+    private void DrawFlag(DrawingContext context, Rect box)
     {
-        var pole = Colour(TokenKeys.List.PreviewText);
-        Fill(context, new Rect(box.X, box.Y, 1, box.Height), pole);
+        // The pole runs the whole height, the cloth hanging from its top as the reference's does.
+        Fill(context, new Rect(box.X, box.Y, 1, box.Height), Colour(TokenKeys.Tags.FlagPole));
 
-        var cloth = new StreamGeometry();
-        using (var draw = cloth.Open())
-        {
-            draw.BeginFigure(new Point(box.X + 1, box.Y), isFilled: true);
-            draw.LineTo(new Point(box.Right, box.Y + 2));
-            draw.LineTo(new Point(box.Right, box.Y + 7));
-            draw.LineTo(new Point(box.X + 1, box.Y + 5));
-            draw.EndFigure(true);
-        }
-
-        context.DrawGeometry(Brush(colour), null, cloth);
+        var panel = new Rect(box.X, box.Y, Math.Min(7, box.Width), Math.Min(9, box.Height));
+        Fill(context, panel, Colour(TokenKeys.Tags.FlagOutline));
+        Fill(context, panel.Deflate(1), Colour(TokenKeys.Tags.Flag));
     }
 
     // ---- Input -----------------------------------------------------------------------------

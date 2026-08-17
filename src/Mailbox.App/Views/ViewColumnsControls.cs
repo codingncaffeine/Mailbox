@@ -221,7 +221,9 @@ public sealed class MessageCells : Grid
                 return text;
             }
             case ViewFields.Flag:
-                return QuickClickable(Glyph(nameof(MessageRow.FlagGlyph), "status.danger.brush"), ViewFields.Flag);
+                // The application's one flag colour, the same the ribbon's button and the to-do
+                // list draw: a glyph takes the outline, the saturated half of the pair.
+                return QuickClickable(Glyph(nameof(MessageRow.FlagGlyph), "tags.flag.outline.brush"), ViewFields.Flag);
             case ViewFields.Attachment:
             {
                 var text = new TextBlock { Text = "\U0001F4CE", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };

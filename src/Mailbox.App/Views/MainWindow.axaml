@@ -839,8 +839,12 @@
                                                     </DataTemplate>
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>
+                                            <!-- The application's one flag colour. A glyph can
+                                                 carry one, so it takes the outline — the
+                                                 saturated half of the pair, which is what reads
+                                                 as the flag against a row. -->
                                             <TextBlock Text="{Binding FlagGlyph}"
-                                                       Foreground="{DynamicResource status.danger.brush}" />
+                                                       Foreground="{DynamicResource tags.flag.outline.brush}" />
                                         </StackPanel>
                                         <TextBlock Grid.Row="2" Grid.ColumnSpan="2"
                                                    Text="{Binding Preview}"
