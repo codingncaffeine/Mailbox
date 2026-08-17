@@ -109,6 +109,13 @@ public partial class App : Application
     /// <summary>The one set of colour categories, and what keeps every store in step with it.</summary>
     public static CategoryBook Categories { get; private set; } = null!;
 
+    /// <summary>
+    /// Every open account's store with the address it belongs to, for the things that read across
+    /// all of them — the to-do list's flagged mail, and the categories' mirrors.
+    /// </summary>
+    public static IReadOnlyList<(string Address, MailRepository Mail)> Mailboxes()
+        => [.. Accounts.All.Select(a => (a.Account.Address, a.Mail))];
+
     /// <summary>The Rules and Alerts wizard's rules, run on arrival and by Run Rules Now.</summary>
     public static RulesHandler Rules { get; private set; } = null!;
 

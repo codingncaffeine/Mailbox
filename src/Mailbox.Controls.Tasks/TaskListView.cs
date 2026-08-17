@@ -63,7 +63,7 @@ public sealed class TaskListView : DrawnSurface
         set
         {
             _rows = value ?? [];
-            if (_selected is { } chosen) _selected = _rows.FirstOrDefault(r => r.ItemId == chosen.ItemId);
+            if (_selected is { } chosen) _selected = _rows.FirstOrDefault(r => r.Key == chosen.Key);
             _scroll = Math.Clamp(_scroll, 0, Math.Max(0, Lines().Count - 1));
             InvalidateVisual();
         }
@@ -241,28 +241,53 @@ public sealed class TaskListView : DrawnSurface
 
     private void DrawRow(DrawingContext context, Rect box, TaskRow row)
     {
-        var chosen = _selected is { } s && s.ItemId == row.ItemId;
+        var chosen = _selected is { } s && s.Key == row.Key;
         Fill(context, box, Colour(chosen
             ? TokenKeys.List.RowSelected
-            : _hover is { } h && h.ItemId == row.ItemId ? TokenKeys.List.RowHover : TokenKeys.List.RowBackground));
+            : _hover is { } h && h.Key == row.Key ? TokenKeys.List.RowHover : TokenKeys.List.RowBackground));
 
         var ink = Colour(row.IsOverdue || row.Band == TaskBand.Today ? TokenKeys.List.OverdueText : TokenKeys.List.ReadText);
 
         DrawTick(context, TickBox(box), row.IsComplete);
 
-        var room = box.Width - SubjectLeft - FlagColumn - 6;
+        // A flagged message wears an envelope where a task wears nothing, which is what tells the
+        // two apart on a list that otherwise treats them alike — and who sent it after the
+        // subject, as the reference writes it.
+        var left = box.X + SubjectLeft;
+        if (row.Message is { } message)
+        {
+            DrawEnvelope(context, new Rect(left, box.Y + 5, 13, 10), Colour(TokenKeys.List.PreviewText));
+            left += 18;
+        }
+
+        var room = box.Right - left - FlagColumn - 6;
         var subject = Ellipsize(row.Summary, room, TextSize);
-        DrawAt(context, Ink(subject, TextSize, ink), box.X + SubjectLeft, box.Y + 15);
+        var text = Ink(subject, TextSize, ink);
+        DrawAt(context, text, left, box.Y + 15);
+
+        if (row.Message is { } from && room - text.Width > 60)
+        {
+            var who = Ellipsize(from.From, room - text.Width - 12, TextSize);
+            DrawAt(context, Ink(who, TextSize, Colour(TokenKeys.List.PreviewText)), left + text.Width + 8, box.Y + 15);
+        }
 
         // A finished task is struck through, which is the one thing about a done row the list
         // says without being asked.
         if (row.IsComplete)
         {
-            var width = Measure(subject, TextSize);
-            Fill(context, new Rect(box.X + SubjectLeft, box.Y + 11, width, 1), ink);
+            Fill(context, new Rect(left, box.Y + 11, text.Width, 1), ink);
         }
 
         DrawFlag(context, new Rect(box.Right - 17, box.Y + 4, 11, 12), Colour(TokenKeys.List.OverdueText));
+    }
+
+    /// <summary>The envelope a flagged message's row carries: a rectangle with its flap creased.</summary>
+    private void DrawEnvelope(DrawingContext context, Rect box, Color colour)
+    {
+        var pen = new Pen(Brush(colour), 1);
+        context.DrawRectangle(null, pen, box);
+        context.DrawLine(pen, box.TopLeft, new Point(box.Center.X, box.Center.Y));
+        context.DrawLine(pen, new Point(box.Center.X, box.Center.Y), box.TopRight);
     }
 
     /// <summary>The completion box: empty, or ticked once the task is done.</summary>
@@ -346,7 +371,7 @@ public sealed class TaskListView : DrawnSurface
             break;
         }
 
-        if (over?.ItemId == _hover?.ItemId) return;
+        if (over?.Key == _hover?.Key) return;
         _hover = over;
         InvalidateVisual();
     }
@@ -407,7 +432,7 @@ public sealed class TaskListView : DrawnSurface
             return;
         }
 
-        var index = _selected is { } chosen ? _rows.ToList().FindIndex(r => r.ItemId == chosen.ItemId) : -1;
+        var index = _selected is { } chosen ? _rows.ToList().FindIndex(r => r.Key == chosen.Key) : -1;
         switch (e.Key)
         {
             case Key.Down when _rows.Count > 0:
@@ -442,19 +467,23 @@ public sealed class TaskListView : DrawnSurface
         TaskSelected?.Invoke(this, _rows[index]);
     }
 
-    /// <summary>Where a task's row goes, which is what a harness pose presses.</summary>
-    public Rect? BoxOf(long itemId)
+    /// <summary>Where a row goes, which is what a harness pose presses.</summary>
+    /// <remarks>
+    /// By <see cref="TaskRow.Key"/> rather than by id: the list holds tasks and flagged messages
+    /// together and the two are numbered by different stores, so an id alone names two rows.
+    /// </remarks>
+    public Rect? BoxOf(string key)
     {
         foreach (var (line, box) in Placed())
         {
-            if (line.Row is { } row && row.ItemId == itemId) return box;
+            if (line.Row is { } row && row.Key == key) return box;
         }
 
         return null;
     }
 
-    /// <summary>The tick box of a task's row.</summary>
-    public Rect? TickOf(long itemId) => BoxOf(itemId) is { } row ? TickBox(row) : null;
+    /// <summary>The tick box of a row.</summary>
+    public Rect? TickOf(string key) => BoxOf(key) is { } row ? TickBox(row) : null;
 
     /// <summary>The new-task box, which a pose types into.</summary>
     public Rect NewTaskBox => new(0, ArrangeHeight + 1, Bounds.Width, NewTaskHeight);

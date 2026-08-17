@@ -1,4 +1,5 @@
 using System.Globalization;
+using Mailbox.Store;
 using Mailbox.Store.Pim;
 
 namespace Mailbox.Scheduling;
@@ -25,7 +26,21 @@ public enum TaskBand
     Completed,
 }
 
-/// <summary>One line of the task list: the row it came from and everything drawing it needs.</summary>
+/// <summary>
+/// The message a to-do row stands for, when the row is flagged mail rather than a task.
+/// </summary>
+/// <param name="Account">Which account's store it is in — every account has its own file.</param>
+/// <param name="MessageId">Its row there.</param>
+/// <param name="From">Who sent it, which is what the reference writes beside the subject.</param>
+public sealed record FlaggedMessage(string Account, long MessageId, string From);
+
+/// <summary>One line of the to-do list: the row it came from and everything drawing it needs.</summary>
+/// <remarks>
+/// A task or a flagged message, because the reference's own To-Do List holds both and treats them
+/// alike — the same bands, the same tick box, the same red for what is late. A message is carried
+/// as a <see cref="TaskItem"/> whose summary is the subject and whose due date is the flag's,
+/// which is what lets one list draw two things without knowing about either store.
+/// </remarks>
 public sealed record TaskRow
 {
     public required long ItemId { get; init; }
@@ -36,9 +51,20 @@ public sealed record TaskRow
     /// <summary>Late and not done, which the reference draws in red.</summary>
     public required bool IsOverdue { get; init; }
 
+    /// <summary>Set when this row is a flagged message rather than a task of its own.</summary>
+    public FlaggedMessage? Message { get; init; }
+
+    public bool IsMessage => Message is not null;
+
     public string Summary => Task.Summary.Length > 0 ? Task.Summary : "(No subject)";
 
     public bool IsComplete => Task.IsComplete;
+
+    /// <summary>
+    /// What tells two rows apart, since a task and a message are numbered by different stores and
+    /// their ids collide as readily as not.
+    /// </summary>
+    public string Key => Message is { } message ? $"m:{message.Account}:{message.MessageId}" : $"t:{ItemId}";
 
     /// <summary>The due date as the list writes it, or nothing at all for a task with no date.</summary>
     public string DueText(IFormatProvider? culture = null)
@@ -53,9 +79,19 @@ public sealed record TaskRow
 /// rows built from the columns, the whole VTODO parsed only when one is opened. Writing stays
 /// with the shell, which owns the queue a change has to join.
 /// </remarks>
-public sealed class TaskBook(PimRepository repository)
+public sealed class TaskBook(PimRepository repository, Func<IReadOnlyList<(string Address, MailRepository Mail)>>? mailboxes = null)
 {
     private readonly PimRepository _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+
+    /// <summary>
+    /// Where the flagged mail comes from, when the list is showing any.
+    /// </summary>
+    /// <remarks>
+    /// A function rather than a list, because accounts are opened and closed while the
+    /// application runs; and optional, because the reading half is worth having on its own —
+    /// the seed and the tests use a book with no mail behind it at all.
+    /// </remarks>
+    private readonly Func<IReadOnlyList<(string Address, MailRepository Mail)>>? _mailboxes = mailboxes;
 
     /// <summary>The task lists, in the order the navigation pane shows them.</summary>
     public IReadOnlyList<Collection> Lists() => _repository.Collections(CollectionKind.Tasks);
@@ -100,8 +136,53 @@ public sealed class TaskBook(PimRepository repository)
             }
         }
 
+        rows.AddRange(FlaggedMail(today, includeCompleted));
         rows.Sort(Compare);
         return rows;
+    }
+
+    /// <summary>
+    /// The flagged mail the reference lists beside the tasks, one row a message.
+    /// </summary>
+    /// <remarks>
+    /// A flagged message is a to-do with somebody else's words in it: its subject is what the row
+    /// says, its follow-up date is when it is due, and marking it complete is what the reference's
+    /// own tick does — so it is carried as a task rather than as a second kind of thing, and only
+    /// what acts on a row needs to know which it is.
+    /// </remarks>
+    private IEnumerable<TaskRow> FlaggedMail(DateOnly today, bool includeCompleted)
+    {
+        if (_mailboxes is null) yield break;
+
+        foreach (var (address, mail) in _mailboxes())
+        {
+            foreach (var message in mail.FlaggedMessages(includeCompleted))
+            {
+                var complete = message.FollowUpComplete;
+                var due = message.FollowUpDue?.LocalDateTime;
+
+                var task = new TaskItem
+                {
+                    Uid = $"message-{message.Id}@mailbox",
+                    Summary = message.Subject.Length > 0 ? message.Subject : "(No subject)",
+                    Due = due is { } when ? EventTime.Date(DateOnly.FromDateTime(when)) : null,
+                    Progress = complete ? TaskProgress.Completed : TaskProgress.NotStarted,
+                    PercentComplete = complete ? 100 : 0,
+                    CompletedUtc = complete ? message.Received : null,
+                    LastModified = message.Received,
+                };
+
+                yield return new TaskRow
+                {
+                    ItemId = message.Id,
+                    CollectionId = 0,
+                    Task = task,
+                    Band = BandOf(task, today),
+                    IsOverdue = !complete && task.Due is { } date && Date(date) < today,
+                    Message = new FlaggedMessage(address, message.Id, message.DisplayFrom),
+                };
+            }
+        }
     }
 
     /// <summary>The whole task, parsed, which is what opening one wants.</summary>
