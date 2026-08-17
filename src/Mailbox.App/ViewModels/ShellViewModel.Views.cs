@@ -162,7 +162,16 @@ public sealed partial class ShellViewModel
         foreach (var (id, header, width, isGlyph, sortField) in CurrentView.HeaderColumns())
         {
             var column = new MessageColumn(id, header, width, isGlyph);
-            if (sortField is { } field) column.Sort = new RelayCommand(() => SortBy(field));
+            if (sortField is { } field)
+            {
+                column.Sort = new RelayCommand(() => SortBy(field));
+
+                // Marked only when the list really is sorted by it, and marked with which way
+                // round: pressing the sorted column again reverses it, so the arrow is the only
+                // thing that says what pressing it will do next.
+                if (!isGlyph && SortsBy(field)) column.SortMark = SortDescending ? " ▾" : " ▴";
+            }
+
             columns.Add(column);
         }
 

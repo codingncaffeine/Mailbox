@@ -1056,7 +1056,7 @@
         <Border Grid.Row="3" Grid.ColumnSpan="2"
                 Background="{DynamicResource statusbar.background.brush}"
                 Height="{DynamicResource statusbar.height.value}">
-            <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="10,0">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="10,0">
                 <TextBlock Grid.Column="0"
                            Text="{Binding StatusLeft}"
                            VerticalAlignment="Center"
@@ -1070,8 +1070,34 @@
                            Foreground="{DynamicResource statusbar.foreground.brush}"
                            FontSize="{DynamicResource type.ui.size.small.value}" />
 
+                <!-- Send/Receive, for as long as one is running and no longer. The reference
+                     puts it here, between whatever the status bar is saying and the view
+                     controls; at rest there is nothing. It is the only indication a reader gets
+                     once the progress dialog has been told not to appear, which is why pressing
+                     it brings that dialog back. -->
+                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6"
+                            Margin="0,0,14,0"
+                            VerticalAlignment="Center"
+                            IsVisible="{Binding IsTransferring}">
+                    <TextBlock Text="Send/Receive"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource statusbar.foreground.brush}"
+                               FontSize="{DynamicResource type.ui.size.small.value}" />
+                    <Button Name="TransferBar"
+                            Classes="flat"
+                            Padding="0"
+                            VerticalAlignment="Center"
+                            ToolTip.Tip="{Binding TransferTip}">
+                        <ProgressBar Width="130"
+                                     Height="10"
+                                     Minimum="0"
+                                     Maximum="1"
+                                     Value="{Binding TransferProgress}" />
+                    </Button>
+                </StackPanel>
+
                 <!-- Layout toggles, then the zoom control, as the reference application parks them. -->
-                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="2"
+                <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="2"
                             VerticalAlignment="Center">
                     <Button Classes="flat"
                             Margin="2,0"

@@ -65,7 +65,7 @@ public sealed class ViewHeaderStrip : Grid
             var column = columns[i];
             var text = new TextBlock
             {
-                Text = column.Title,
+                Text = column.Title + column.SortMark,
                 TextTrimming = column.IsGlyph ? TextTrimming.None : TextTrimming.CharacterEllipsis,
                 HorizontalAlignment = column.IsGlyph ? HorizontalAlignment.Center : HorizontalAlignment.Left,
             };
