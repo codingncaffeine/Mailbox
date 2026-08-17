@@ -9,6 +9,22 @@ using Mailbox.Theming.Tokens;
 namespace Mailbox.Controls.People;
 
 /// <summary>
+/// The five arrangements the Current View group offers, in the reference's own order.
+/// </summary>
+/// <remarks>
+/// People is the one with a capture and the one the module opens in; the other four are authored
+/// from what each is for — two grids of cards and two tables — and say so where they are drawn.
+/// </remarks>
+public enum ContactArrangement
+{
+    People,
+    BusinessCard,
+    Card,
+    Phone,
+    List,
+}
+
+/// <summary>
 /// The People module's list: everybody in the shown address books, filed in order, with the
 /// alphabet index down its left-hand side.
 /// </summary>
@@ -58,6 +74,20 @@ public sealed class ContactListView : DrawnSurface
     private const double NameTextSize = 15;
     private const double RowsTop = 26;
     private const double Gutter = 22;
+
+    /// <summary>
+    /// Authored: the card views' tile, and the table views' rows.
+    /// </summary>
+    /// <remarks>
+    /// The reference has five arrangements and a capture of one, so the other four are built from
+    /// what each is for: a card is a tile with a coloured edge, and a table row is the People
+    /// view's own row without the disc to make room for.
+    /// </remarks>
+    private const double CardWidth = 232;
+    private const double CardHeight = 72;
+    private const double CardGap = 8;
+    private const double TableRowHeight = 24;
+    private const double TableHeaderHeight = 26;
 
     /// <summary>Measured: two centred lines, 13px apart, the first 22px below the top.</summary>
     private const double EmptyTextSize = 12;
@@ -152,6 +182,19 @@ public sealed class ContactListView : DrawnSurface
     /// <summary>How a contact files, which the Options page's order decides.</summary>
     public FileAsOrder Order { get; set; } = FileAsOrder.LastFirst;
 
+    /// <summary>Which of the Current View group's five arrangements is showing.</summary>
+    public ContactArrangement Arrangement
+    {
+        get;
+        set
+        {
+            if (field == value) return;
+            field = value;
+            _scroll = 0;
+            InvalidateVisual();
+        }
+    }
+
     public event EventHandler<ContactRow>? ContactSelected;
     public event EventHandler<ContactRow>? ContactActivated;
 
@@ -186,7 +229,179 @@ public sealed class ContactListView : DrawnSurface
             return;
         }
 
-        DrawRows(context, new Rect(left, 0, width - left, height));
+        var area = new Rect(left, 0, width - left, height);
+        switch (Arrangement)
+        {
+            case ContactArrangement.BusinessCard:
+            case ContactArrangement.Card:
+                DrawCards(context, area, Arrangement == ContactArrangement.BusinessCard);
+                break;
+
+            case ContactArrangement.Phone:
+            case ContactArrangement.List:
+                DrawTable(context, area, Arrangement == ContactArrangement.List);
+                break;
+
+            default:
+                DrawRows(context, area);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Business Card and Card: the contacts as tiles rather than a list.
+    /// </summary>
+    /// <remarks>
+    /// Authored — the reference's own capture shows the People view and nothing else — from what
+    /// its two card views are: a grid of small cards, the business one carrying the disc and the
+    /// plain one the words alone. What is borrowed is measured: the disc, the row's own type
+    /// sizes and the hairline between rows.
+    /// </remarks>
+    private void DrawCards(DrawingContext context, Rect area, bool withDisc)
+    {
+        var ink = Ink(TokenKeys.List.HeaderText, TokenKeys.Peek.PopText);
+        var onBand = Ink(TokenKeys.List.ReadText, TokenKeys.Peek.PopText);
+        var quiet = Ink(TokenKeys.List.PreviewText, TokenKeys.Peek.PopTextDim);
+        var line = Ink(TokenKeys.List.Separator, TokenKeys.Peek.PopFrame);
+        var selected = Ink(TokenKeys.List.RowSelected, TokenKeys.Peek.PopHover);
+
+        var columns = Math.Max(1, (int)((area.Width - CardGap) / (CardWidth + CardGap)));
+        var x = area.X + CardGap;
+        var y = area.Y + CardGap;
+
+        for (var i = _scroll; i < _rows.Count; i++)
+        {
+            if (y + CardHeight > area.Bottom) break;
+
+            var row = _rows[i];
+            var box = new Rect(x, y, CardWidth, CardHeight);
+            var chosen = _selected is { } picked && picked.Id == row.Id;
+
+            Fill(context, box, chosen ? selected : Ink(TokenKeys.List.RowBackground, TokenKeys.Peek.PopBackground));
+            Fill(context, new Rect(box.X, box.Y, 3, box.Height), Colour(TokenKeys.People.Avatar));
+
+            var textLeft = box.X + 12;
+            if (withDisc)
+            {
+                DrawAvatar(context, row, new Rect(box.X + 10, box.Y + 10, 28, 28));
+                textLeft = box.X + 46;
+            }
+
+            var contact = row.Contact;
+            var room = box.Right - textLeft - 8;
+            var ready = chosen ? onBand : ink;
+
+            DrawAt(context, Ink(Ellipsize(contact.Named(), room, 13), 13, ready, SemiBoldFace), textLeft, box.Y + 22);
+
+            var second = string.Join(", ", new[] { contact.JobTitle, contact.Company }.Where(p => p.Length > 0));
+            if (second.Length > 0) DrawAt(context, Ink(Ellipsize(second, room, 11), 11, chosen ? quiet : ready), textLeft, box.Y + 38);
+
+            var third = contact.PrimaryEmail is { Length: > 0 } mail ? mail : contact.Phones.FirstOrDefault()?.Number ?? string.Empty;
+            if (third.Length > 0) DrawAt(context, Ink(Ellipsize(third, room, 11), 11, chosen ? quiet : ready), textLeft, box.Y + 54);
+
+            Fill(context, new Rect(box.X, box.Bottom - 1, box.Width, 1), line);
+            _rowHits.Add((box, row));
+
+            x += CardWidth + CardGap;
+            if (x + CardWidth <= area.Right) continue;
+
+            x = area.X + CardGap;
+            y += CardHeight + CardGap;
+        }
+    }
+
+    /// <summary>
+    /// Phone and List: the contacts as a table, the second grouped by company.
+    /// </summary>
+    /// <remarks>
+    /// Authored, for the same reason the cards are: the reference has these views and no capture
+    /// of them. The columns are the ones each view is named for — Phone shows the numbers, List
+    /// shows who works where — and the row is the People view's own 56 halved, a table row
+    /// carrying one line rather than a disc.
+    /// </remarks>
+    private void DrawTable(DrawingContext context, Rect area, bool grouped)
+    {
+        var ink = Ink(TokenKeys.List.HeaderText, TokenKeys.Peek.PopText);
+        var onBand = Ink(TokenKeys.List.ReadText, TokenKeys.Peek.PopText);
+        var quiet = Ink(TokenKeys.List.PreviewText, TokenKeys.Peek.PopTextDim);
+        var line = Ink(TokenKeys.List.Separator, TokenKeys.Peek.PopFrame);
+        var selected = Ink(TokenKeys.List.RowSelected, TokenKeys.Peek.PopHover);
+
+        (string Heading, double Width)[] columns = grouped
+            ? [("Full Name", 0), ("Job title", 150), ("Business Phone", 140), ("E-mail", 200)]
+            : [("Full Name", 0), ("Company", 160), ("Business Phone", 140), ("Mobile Phone", 140)];
+
+        // The header, then the rows under it.
+        var y = area.Y;
+        Fill(context, new Rect(area.X, y, area.Width, TableHeaderHeight), Colour(TokenKeys.List.HeaderBackground));
+        foreach (var (heading, cell) in Slice(columns, area))
+        {
+            DrawAt(context, Ink(heading, 11, ink), cell.X, y + 17);
+        }
+
+        Fill(context, new Rect(area.X, y + TableHeaderHeight - 1, area.Width, 1), line);
+        y += TableHeaderHeight;
+
+        var company = string.Empty;
+        for (var i = _scroll; i < _rows.Count && y < area.Bottom; i++)
+        {
+            var row = _rows[i];
+            var contact = row.Contact;
+
+            if (grouped && !string.Equals(company, contact.Company, StringComparison.OrdinalIgnoreCase))
+            {
+                company = contact.Company;
+                var band = new Rect(area.X, y, area.Width, TableRowHeight);
+                Fill(context, band, Colour(TokenKeys.List.GroupHeaderBackground));
+                DrawAt(
+                    context,
+                    Ink(company.Length > 0 ? company : "(no company)", 12, Colour(TokenKeys.List.GroupHeaderText), SemiBoldFace),
+                    area.X + 8,
+                    y + 16);
+                y += TableRowHeight;
+                if (y >= area.Bottom) break;
+            }
+
+            var box = new Rect(area.X, y, area.Width, TableRowHeight);
+            var chosen = _selected is { } picked && picked.Id == row.Id;
+            if (chosen) Fill(context, box, selected);
+
+            var ready = chosen ? onBand : ink;
+            foreach (var (heading, cell) in Slice(columns, area))
+            {
+                var text = heading switch
+                {
+                    "Full Name" => contact.Named(),
+                    "Company" => contact.Company,
+                    "Job title" => contact.JobTitle,
+                    "Business Phone" => contact.Phones.FirstOrDefault(p => p.Kind == PhoneKind.Business)?.Number ?? string.Empty,
+                    "Mobile Phone" => contact.Phones.FirstOrDefault(p => p.Kind == PhoneKind.Mobile)?.Number ?? string.Empty,
+                    _ => contact.PrimaryEmail,
+                };
+
+                if (text.Length == 0) continue;
+                DrawAt(context, Ink(Ellipsize(text, cell.Width - 8, 12), 12, heading == "Full Name" ? ready : chosen ? quiet : ready), cell.X, y + 16);
+            }
+
+            Fill(context, new Rect(box.X, box.Bottom - 1, box.Width, 1), line);
+            _rowHits.Add((box, row));
+            y += TableRowHeight;
+        }
+    }
+
+    /// <summary>Where each column of a table starts, the first taking what the others leave.</summary>
+    private static IEnumerable<(string Heading, Rect Box)> Slice((string Heading, double Width)[] columns, Rect area)
+    {
+        var fixedWidth = columns.Sum(c => c.Width);
+        var first = Math.Max(120, area.Width - fixedWidth - 16);
+        var x = area.X + 8;
+
+        foreach (var (heading, given) in columns)
+        {
+            var cell = given > 0 ? given : first;
+            yield return (heading, new Rect(x, area.Y, cell, 0));
+            x += cell;
+        }
     }
 
     /// <summary>
