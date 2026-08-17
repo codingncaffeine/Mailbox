@@ -1628,8 +1628,53 @@ public sealed partial class ShellViewModel : ObservableObject
     public MessageRow? SelectedMessage
     {
         get => _selectedMessage;
-        set => Set(ref _selectedMessage, value);
+        set
+        {
+            // A new message is drawn from its row until the pane says otherwise, which it does when
+            // the message turns out to carry its own header fields (RFC 9788). Cleared here so the
+            // last protected subject does not head the next message — and cleared <em>before</em>
+            // the change is announced, because announcing it is what makes the pane open the
+            // message, and the pane's own answer comes back inside this call. Clearing afterwards
+            // threw that answer away, which is what a header protected message being drawn as
+            // "[...]" looked like.
+            // The same row again is not a new message, and the list re-asserts its selection as it
+            // lays out: clearing on that pass threw away what the pane had already found, and the
+            // pane never runs again because nothing changed.
+            if (ReferenceEquals(_selectedMessage, value)) return;
+
+            _readingSubject = null;
+            _readingFrom = null;
+
+            Set(ref _selectedMessage, value);
+        }
     }
+
+    /// <summary>
+    /// What the reading pane's header draws, which is not always what the list row says.
+    /// </summary>
+    /// <remarks>
+    /// The list holds what arrived, and for an encrypted message what arrived says <c>[...]</c> where
+    /// its subject should be — that being the point of header protection. The pane opens the message
+    /// and knows better, so it hands back what it found and these are what the header binds to. The
+    /// row is left alone: it is what the folder holds, and nothing has changed about that.
+    /// </remarks>
+    public string ReadingSubject => _readingSubject ?? SelectedMessage?.Subject ?? string.Empty;
+
+    /// <summary>The sender the pane's header draws. See <see cref="ReadingSubject"/>.</summary>
+    public string ReadingFrom => _readingFrom ?? SelectedMessage?.From ?? string.Empty;
+
+    /// <summary>Draws the pane's header from a message's own protected header fields, or from its row.</summary>
+    public void ReadFrom(string? subject, string? from)
+    {
+        _readingSubject = subject;
+        _readingFrom = from;
+
+        Raise(nameof(ReadingSubject));
+        Raise(nameof(ReadingFrom));
+    }
+
+    private string? _readingSubject;
+    private string? _readingFrom;
 
     public string SelectedFolderName => SelectedFolder?.Name ?? "Inbox";
 

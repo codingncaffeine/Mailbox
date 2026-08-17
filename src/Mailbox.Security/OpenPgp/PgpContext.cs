@@ -90,6 +90,27 @@ public sealed class PgpContext : GnuPGContext
         }
     }
 
+    /// <summary>The secret key that would sign for that address, or null when the ring has none.</summary>
+    /// <remarks>
+    /// The library keeps this lookup protected as well. What needs it is the harness: the passphrase
+    /// dialog is the one surface a capture run cannot reach by itself, because reaching it means an
+    /// operation meeting a key that will not open, and a run that could arrange that would be a run
+    /// with a locked key in its own store.
+    /// </remarks>
+    public PgpSecretKey? SigningKey(MailboxAddress who, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(who);
+
+        try
+        {
+            return GetSigningKey(who, cancellationToken);
+        }
+        catch (Exception ex) when (ex is PrivateKeyNotFoundException or PublicKeyNotFoundException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>
     /// Opens one OpenPGP packet, and refuses to hand back anything that is not integrity-protected.
     /// </summary>

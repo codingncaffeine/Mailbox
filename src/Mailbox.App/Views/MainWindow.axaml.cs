@@ -744,6 +744,40 @@ public partial class MainWindow : Window
                 };
                 break;
 
+            // The passphrase prompt, which is the one surface a run cannot reach on its own: getting
+            // there means an operation meeting a key that will not open, and the seed's key opens on
+            // an empty passphrase because nothing could have answered otherwise. So the request is
+            // built from a key the posed ring really holds and the dialog is asked directly — the
+            // picture is the point, and it had never been taken.
+            case "passphrase":
+                Opened += async (_, _) =>
+                {
+                    try
+                    {
+                        using var keys = CryptoStores.KeyRing();
+                        var who = new MimeKit.MailboxAddress(
+                            string.Empty,
+                            (DataContext as ShellViewModel)?.CurrentAddress ?? "work@example.net");
+
+                        if (keys.SigningKey(who) is not { } key)
+                        {
+                            Log.Warn($"Harness: no OpenPGP key for {who.Address} — pose a seeded store.");
+                            return;
+                        }
+
+                        CaptureNextWindow();
+                        await PassphraseDialog.UnlockAsync(
+                            this, keys, CryptoStores.Passphrases,
+                            [Mailbox.Security.OpenPgp.PassphraseVault.RequestFor(key)]);
+                    }
+                    catch (Exception ex)
+                    {
+                        // A pose that throws leaves no window, no error and no capture. Say so.
+                        Log.Warn("Harness: the passphrase pose failed.", ex);
+                    }
+                };
+                break;
+
             // The dialogs behind the Backstage's menus, which otherwise take three clicks to
             // reach and so have never been photographed.
             // MAILBOX_ACCOUNTS_TAB poses one of its tabs, by index or name;
@@ -1743,6 +1777,12 @@ public partial class MainWindow : Window
         // An answered invitation is two things: a write into the calendar, which the bar has
         // already done, and a message to the organizer, which only the shell can queue.
         _reading.InvitationAnswered += (_, answer) => SendInvitationReply(shell, answer);
+
+        // The pane is the only thing that has opened the message, so it is the only thing that
+        // knows whether the subject over it is the message's own or the placeholder an encrypted
+        // one leaves outside itself. See RFC 9788 §4 and ShellViewModel.ReadingSubject.
+        var pane = _reading;
+        pane.HeaderChanged += (_, _) => shell.ReadFrom(pane.HeaderSubject, pane.HeaderFrom);
 
         shell.PropertyChanged += (_, e) =>
         {
@@ -3217,6 +3257,14 @@ public partial class MainWindow : Window
             return;
         }
 
+        // RFC 9788 §4.4.4 and §6.2, both MUSTs: a reply to a message that carried its own header
+        // fields is addressed from those and from nothing outside them. The attack is a replay with
+        // an extra address added to the outer Cc — answer that and the conversation is encrypted to
+        // whoever added it. The body stays the envelope's, because a reply must not carry decrypted
+        // content out in the clear (§19).
+        var covered = ReferenceEquals(original, _openMessage) ? _reading?.Protected : null;
+        if (covered is not null) original = HeaderProtection.Addressed(original, covered, original.Body);
+
         var styleIndex = kind == ReplyKind.Forward
             ? App.MailOptions.ForwardStyleIndex
             : App.MailOptions.ReplyStyleIndex;
@@ -3240,21 +3288,27 @@ public partial class MainWindow : Window
         // is already open — a reply to a reply — reuses the strip rather than stacking a second.
         if (App.MailOptions.OpenRepliesInNewWindow)
         {
-            OpenReplyWindow(shell, draft, kind, address);
+            OpenReplyWindow(shell, draft, kind, address, covered?.ConfidentialFields ?? []);
         }
         else
         {
-            OpenInlineReply(shell, draft, kind, address);
+            OpenInlineReply(shell, draft, kind, address, covered?.ConfidentialFields ?? []);
         }
     }
 
-    private void OpenReplyWindow(ShellViewModel shell, ReplyDraft draft, ReplyKind kind, string? address)
+    private void OpenReplyWindow(
+        ShellViewModel shell,
+        ReplyDraft draft,
+        ReplyKind kind,
+        string? address,
+        IReadOnlyList<string> confidential)
     {
         var compose = new ComposeWindow(App.Commands, App.Accounts, App.Contacts);
 
         if (address is { Length: > 0 }) compose.SendFromAccount(address);
 
         compose.Prefill(draft, kind);
+        compose.Answering(confidential);
         compose.Queued += (_, e) => OnQueued(e);
         compose.Closed += (_, _) => shell.Refresh();
 
@@ -3282,7 +3336,12 @@ public partial class MainWindow : Window
     /// List, all of it. What differs is the chrome: no title bar, a strip of its own for Pop Out
     /// and Discard, and the shell's ribbon rather than a window's.
     /// </remarks>
-    private void OpenInlineReply(ShellViewModel shell, ReplyDraft draft, ReplyKind kind, string? address)
+    private void OpenInlineReply(
+        ShellViewModel shell,
+        ReplyDraft draft,
+        ReplyKind kind,
+        string? address,
+        IReadOnlyList<string> confidential)
     {
         // A reply already open — a reply to a reply, or Forward pressed twice — is dismissed
         // first, so there is one inline surface at a time rather than a stack nobody asked for.
@@ -3291,6 +3350,7 @@ public partial class MainWindow : Window
         var surface = new ComposeSurface(App.Commands, App.Accounts, App.Contacts);
         if (address is { Length: > 0 }) surface.SendFromAccount(address);
         surface.Prefill(draft, kind);
+        surface.Answering(confidential);
 
         // Every handler is guarded against a surface that has since been popped out into a
         // window: the window re-subscribes for itself, and these must go quiet rather than

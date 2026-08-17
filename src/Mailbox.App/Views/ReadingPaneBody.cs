@@ -58,6 +58,10 @@ public sealed class ReadingPaneBody : UserControl
     private DkimResult? _verified;
     private string _fallbackText = string.Empty;
     private RenderedMessage? _rendered;
+
+    /// <summary>The sender as a header field writes it, once the pane has settled which one to draw.</summary>
+    private string? _fromLine;
+
     private RemoteImagePolicy _policy = RemoteImagePolicy.Block;
     private IReadOnlyDictionary<string, string> _inlined =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -173,6 +177,24 @@ public sealed class ReadingPaneBody : UserControl
     /// </remarks>
     public MimeMessage? Carried { get; private set; }
 
+    /// <summary>
+    /// The header fields the message carried inside its own cryptography, or null when it carried none.
+    /// </summary>
+    /// <remarks>
+    /// RFC 9788. What the shell draws its header from, and what a reply is addressed off — see
+    /// <see cref="HeaderSubject"/> and <see cref="HeaderFrom"/>.
+    /// </remarks>
+    public ProtectedHeaders? Protected { get; private set; }
+
+    /// <summary>The subject the pane's header should draw, or null to use the list row's.</summary>
+    public string? HeaderSubject { get; private set; }
+
+    /// <summary>The sender the pane's header should draw, or null to use the list row's.</summary>
+    public string? HeaderFrom { get; private set; }
+
+    /// <summary>Raised when the pane has settled what its header should say. The shell draws it.</summary>
+    public event EventHandler? HeaderChanged;
+
     private void Refresh()
     {
         _bars.Children.Clear();
@@ -181,6 +203,10 @@ public sealed class ReadingPaneBody : UserControl
         {
             _rendered = null;
             Carried = null;
+            Protected = null;
+            HeaderSubject = null;
+            HeaderFrom = null;
+            HeaderChanged?.Invoke(this, EventArgs.Empty);
             ShowText(_fallbackText);
             return;
         }
@@ -194,7 +220,21 @@ public sealed class ReadingPaneBody : UserControl
         // the outer document's own stylesheet — what comes out is rendered *instead of* the message
         // it arrived in, never inside it.
         var opened = Decrypted(_message);
-        var carrier = opened.Opened ? AsMessage(_message, opened.Content!) : _message;
+
+        // The header fields a protected message carries a copy of inside itself (RFC 9788). Read
+        // before anything is drawn, because what the pane's header says is one of the things they
+        // decide — and what is rendered too, the payload being where the body is as well.
+        Protected = Covered(_message, opened);
+
+        // §4.5.3, a MUST: the copy of the hidden fields that an encrypted message writes into its
+        // own body, for a client that could not read them anywhere else, is not drawn by a client
+        // that can. The HTML half's is dropped by the sanitizer; this is the text half's.
+        if (opened.Opened && Protected is not null) HeaderProtection.HideLegacyDisplay(Protected.Rendered);
+
+        var carrier = opened.Opened
+            ? AsMessage(_message, Protected?.Rendered ?? opened.Content!, Protected)
+            : _message;
+
         Carried = carrier;
 
         // The signature, when the reader has asked for either kind of crypto at all. Crypto ships
@@ -208,6 +248,12 @@ public sealed class ReadingPaneBody : UserControl
 
         if (signature.State != SignatureState.None) _bars.Children.Add(SignatureBar(signature));
 
+        // Which From the header draws, and whether the two of them disagree — a question that cannot
+        // be answered until the signature has been, because a signature bound to the address inside
+        // is what makes it worth believing over the one the transport checked (§4.4).
+        var spoofed = Protected is { } covered && covered.FromMismatch(_message) && !Bound(signature, covered);
+        Settle(spoofed);
+
         // What the crypto came to, for a harness run to read back. A bar can be photographed, but
         // what it says is a claim about the store and the keyring rather than about the picture —
         // and a refusal draws no content at all, which a capture cannot tell from an empty message.
@@ -218,6 +264,8 @@ public sealed class ReadingPaneBody : UserControl
                 + (signature.Signer.Length > 0 ? $" by {signature.Signer}" : string.Empty)
                 + $"; renders {(opened.Opened ? "the decrypted content, isolated" : "the message as it arrived")}."
                 + string.Concat(new[] { opened.Detail, signature.Detail }.Where(d => d.Length > 0).Select(d => " " + d)));
+
+            LogHeaders(signature, spoofed);
         }
 
         // An invitation is the one bar that goes above the trust strip in the reference: it is
@@ -238,6 +286,10 @@ public sealed class ReadingPaneBody : UserControl
             _invitation = null;
         }
 
+        // Above everything, invitation included: this is the one warning that says the message may
+        // not be from who it says it is, and §4.4.2 asks for it to read like a phishing warning.
+        if (spoofed) _bars.Children.Insert(0, MismatchBar());
+
         var disableLinks = _suspectedJunk && App.MailOptions.DisableLinksInJunk;
 
         if (opened.State != DecryptionState.None) _bars.Children.Add(EncryptionBar(opened));
@@ -246,9 +298,10 @@ public sealed class ReadingPaneBody : UserControl
         {
             Style = Style(),
             Inlined = _inlined,
-            PrintHeader = Memo(_message),
+            PrintHeader = Memo(carrier),
             DisableLinks = disableLinks,
             Isolated = opened.Opened,
+            HideLegacyDisplay = opened.Opened && Protected is not null,
         };
 
         // `carrier` is the decrypted message when there was one, and the message itself otherwise —
@@ -474,12 +527,17 @@ public sealed class ReadingPaneBody : UserControl
     /// <remarks>
     /// Built here because the engine cannot see the pane's own header — that is Avalonia chrome,
     /// and printing without this produces a page of body text with nothing saying who sent it.
+    /// <para>
+    /// The sender and the subject are whatever the pane itself settled on, protected header fields
+    /// included: a printed copy that disagreed with the window it was printed from would be the
+    /// worse of the two to have on paper.
+    /// </para>
     /// </remarks>
-    private static PrintHeader Memo(MimeMessage message) => new(
-        message.From.ToString(),
+    private PrintHeader Memo(MimeMessage message) => new(
+        _fromLine ?? message.From.ToString(),
         message.Date.ToLocalTime().ToString("dddd, d MMMM yyyy HH:mm"),
         message.To.ToString(),
-        message.Subject ?? string.Empty)
+        HeaderSubject ?? message.Subject ?? string.Empty)
     {
         Cc = message.Cc.Count > 0 ? message.Cc.ToString() : null,
     };
@@ -591,15 +649,98 @@ public sealed class ReadingPaneBody : UserControl
     /// <remarks>
     /// A message rather than a bare entity because the renderer picks a body part out of a
     /// message — and a message of its own rather than the original with its body swapped, so
-    /// nothing of the outer document can reach what was inside. The headers a reader sees are
-    /// still the envelope's; only the body is the plaintext's.
+    /// nothing of the outer document can reach what was inside.
+    /// <para>
+    /// The header fields are the protected ones where the message carried its own and the envelope's
+    /// where it did not, which is what RFC 9788 §4 asks for and what makes a reply to one of these
+    /// go to the right people. A reply is built from this message, so this is the one place that
+    /// decision has to be made.
+    /// </para>
     /// </remarks>
-    private static MimeMessage AsMessage(MimeMessage envelope, MimeEntity content)
+    private static MimeMessage AsMessage(
+        MimeMessage envelope, MimeEntity content, ProtectedHeaders? covered)
+        => HeaderProtection.Addressed(envelope, covered, content);
+
+    /// <summary>
+    /// The header fields inside the cryptography, when the reader has asked for cryptography at all.
+    /// </summary>
+    /// <remarks>
+    /// Switched off means switched off (§14): nothing has checked a signature, so a copy of a subject
+    /// taken out of a body nobody verified is worth less than the one the list already shows.
+    /// </remarks>
+    private static ProtectedHeaders? Covered(MimeMessage message, DecryptionReport opened)
     {
-        var message = new MimeMessage { Subject = envelope.Subject ?? string.Empty, Date = envelope.Date, Body = content };
-        foreach (var from in envelope.From) message.From.Add(from);
-        foreach (var to in envelope.To) message.To.Add(to);
-        return message;
+        if (!App.Security.Smime && !App.Security.OpenPgp) return null;
+
+        var content = opened.Opened ? opened.Content : message.Body;
+        return content is null ? null : HeaderProtection.Read(message, content, opened.Opened);
+    }
+
+    /// <summary>Settles what the pane's own header should say, and tells the shell to draw it.</summary>
+    private void Settle(bool spoofed)
+    {
+        if (Protected is not { } covered || _message is null)
+        {
+            HeaderSubject = null;
+            HeaderFrom = null;
+            _fromLine = null;
+            HeaderChanged?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
+        HeaderSubject = covered.Value("Subject");
+
+        // §4.4.3: where the two disagree and nothing binds a signature to the address inside, what
+        // gets drawn is the address the transport authenticated. The protected one is the attacker's
+        // half in that case, and drawing it would make header protection a way to dress up a spoof.
+        _fromLine = (spoofed ? null : covered.Value("From")) ?? _message.From.ToString();
+        HeaderFrom = Display(_fromLine);
+
+        HeaderChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>A sender as the pane's header writes it: the name they chose, or their address.</summary>
+    private static string Display(string value)
+        => InternetAddressList.TryParse(value, out var list)
+            && list.Mailboxes.FirstOrDefault() is { } who
+            ? (who.Name is { Length: > 0 } name ? name : who.Address)
+            : value;
+
+    /// <summary>
+    /// Whether a signature vouches for the address inside the message.
+    /// </summary>
+    /// <remarks>
+    /// §4.4.1.2 defines the opposite — "no valid and correctly bound signature" — as no signature, a
+    /// broken one, or a valid one the reader sees no binding between and the protected From. This
+    /// application's verifiers only ever report <see cref="SignatureState.Valid"/> for a signature
+    /// whose certificate or key names the address it claims, so the binding is a comparison of two
+    /// addresses rather than a second trust decision.
+    /// </remarks>
+    private static bool Bound(SignatureReport signature, ProtectedHeaders covered)
+    {
+        if (signature.State != SignatureState.Valid) return false;
+        if (covered.Value("From") is not { } inner) return false;
+
+        return InternetAddressList.TryParse(inner, out var list)
+            && list.Mailboxes.Any(
+                m => string.Equals(m.Address, signature.Signer, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>What a harness run reads back about the header fields, there being no bar for most of it.</summary>
+    private void LogHeaders(SignatureReport signature, bool spoofed)
+    {
+        if (Protected is not { } covered) return;
+
+        var held = signature.State == SignatureState.Valid;
+        var confidential = covered.ConfidentialFields;
+
+        Log.Info(
+            $"Harness: header protection — {covered.Intent}"
+            + (covered.Stated ? " (stated)" : " (inferred from the message's shape)")
+            + $", subject \"{covered.Value("Subject")}\" is {covered.ProtectionOf("Subject", held)}"
+            + $", {covered.Fields.Count} fields carried, "
+            + (confidential.Count > 0 ? "kept back: " + string.Join(", ", confidential) : "none kept back")
+            + (spoofed ? "; the From inside does not match the envelope's and nothing binds it." : "."));
     }
 
     /// <summary>The bar over an encrypted message, in the four states opening one comes to.</summary>
@@ -684,6 +825,47 @@ public sealed class ReadingPaneBody : UserControl
         if (await PassphraseDialog.UnlockAsync(owner, keys, CryptoStores.Passphrases, wanted)) Refresh();
     }
 
+
+    /// <summary>
+    /// The bar over a message whose two From fields disagree.
+    /// </summary>
+    /// <remarks>
+    /// RFC 9788 §4.4.2 asks for a warning comparable to the one a client gives about phishing, and
+    /// for both addresses to be shown, which is why this names them rather than saying that
+    /// something is wrong. §10.1 is the attack it is about: a message whose protected From says one
+    /// person and whose envelope — the part the transport authenticated with DKIM or SPF — says
+    /// another. Without this, header protection would be a way to make a spoof look better than an
+    /// ordinary one, and the address drawn above is deliberately the transport's for the same reason.
+    /// </remarks>
+    private Control MismatchBar()
+    {
+        var bar = Bar("reading.infobar.warning.background.brush");
+
+        var inside = Protected?.Value("From") ?? string.Empty;
+        var outside = _message?.From.ToString() ?? string.Empty;
+
+        var text = new TextBlock
+        {
+            Text = "This message says inside itself that it is from " + inside
+                   + ", and arrived saying it is from " + outside
+                   + ". Nothing proves which is true, so Mailbox shows the second.",
+            TextWrapping = TextWrapping.Wrap,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        Bind(text, TextBlock.ForegroundProperty, "reading.infobar.text.brush");
+        Grid.SetColumn(text, 1);
+
+        var glyph = Glyph("warning");
+        Grid.SetColumn(glyph, 0);
+
+        var grid = Row();
+        grid.Children.Add(glyph);
+        grid.Children.Add(text);
+
+        bar.Child = grid;
+        return bar;
+    }
 
     /// <summary>
     /// The line the reference draws over a signed message, in the four states §19 asks for.

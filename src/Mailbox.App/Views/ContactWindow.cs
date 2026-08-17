@@ -189,11 +189,13 @@ public sealed class ContactWindow : Window
         var text = new SelectableTextBlock
         {
             Text = VCardCodec.Serialize(contact),
-            FontFamily = new FontFamily("monospace"),
             FontSize = 12,
             Margin = new Thickness(29, 16, 16, 16),
         };
 
+        // The theme's monospaced family, not a name in this file: asked for by a bare name a family
+        // skips the metric-compatible substitution, and a bundled one is never found at all.
+        text[!TextBlock.FontFamilyProperty] = new DynamicResourceExtension("mono.fontfamily");
         text[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("compose.header.text.brush");
         return Page(new ScrollViewer { Content = text });
     }

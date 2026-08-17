@@ -131,6 +131,9 @@ public sealed class ComposeWindow : Window
     /// <summary>Opens on a reply or a forward.</summary>
     public void Prefill(ReplyDraft draft, ReplyKind kind) => _surface.Prefill(draft, kind);
 
+    /// <summary>Which header fields the answered message kept back. See <see cref="ComposeSurface.Answering"/>.</summary>
+    public void Answering(IReadOnlyList<string> confidential) => _surface.Answering(confidential);
+
     /// <summary>Opens a draft for more writing.</summary>
     public void EditDraft(long messageId, MimeMessage message) => _surface.EditDraft(messageId, message);
 

@@ -72,7 +72,7 @@ public sealed class PassphraseVault
             if (key.IsPrivateKeyEmpty) return null;
             if (Opens(key, string.Empty)) return string.Empty;
 
-            _wanted[id] = new PassphraseRequest(id, AddressOf(key), FingerprintOf(key));
+            _wanted[id] = RequestFor(key);
             return null;
         }
     }
@@ -126,6 +126,18 @@ public sealed class PassphraseVault
             _once.Clear();
             _wanted.Clear();
         }
+    }
+
+    /// <summary>What a dialog needs in order to ask about one key, as the vault records it itself.</summary>
+    /// <remarks>
+    /// Public so that a caller with a key in hand can ask about it without waiting for an operation to
+    /// refuse first — which is what the harness does, a locked key being the one state no capture run
+    /// can arrive at on its own.
+    /// </remarks>
+    public static PassphraseRequest RequestFor(PgpSecretKey key)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        return new PassphraseRequest(key.KeyId, AddressOf(key), FingerprintOf(key));
     }
 
     /// <summary>Whether that passphrase opens that key, asked before anything is kept.</summary>

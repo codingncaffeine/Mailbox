@@ -16,6 +16,12 @@ namespace Mailbox.Security;
 /// everybody involved. Where both do, S/MIME goes first: it is the reference's own, and a
 /// correspondent with both is likelier to be reading in a client that prefers it.
 /// <para>
+/// <b>Every protected message carries its own header fields</b> (RFC 9788, see
+/// <see cref="HeaderProtection"/>): they go inside the signature, and an encrypted message's subject
+/// is replaced on the outside by <c>[...]</c> rather than announced to everything that touches it.
+/// That closes the last of §19's eight blockers.
+/// </para>
+/// <para>
 /// Nothing here is reachable unless the reader turned the algorithm on in the Trust Center (§14) —
 /// a context is null when its switch is off, and two nulls mean nothing is offered at all.
 /// </para>
@@ -65,6 +71,12 @@ public static class MessageProtection
     /// A draft with neither toggle down is stored as it always was. A draft the writer marked
     /// Encrypt is stored encrypted — being able to read one's own drafts back is what makes that
     /// worth doing at all.
+    /// <para>
+    /// An encrypted draft is header-protected like any other encrypted message, so the Drafts folder
+    /// shows it as <c>[...]</c> until it is opened. That is the point rather than a side effect: a
+    /// draft is encrypted because it is going to sit in a folder on somebody else's computer, and a
+    /// subject left in the clear there is the part of it that gets read.
+    /// </para>
     /// </remarks>
     public static ProtectionReport ApplyToDraft(
         MimeMessage message,
@@ -123,6 +135,13 @@ public static class MessageProtection
     }
 
     /// <summary>Builds the protected body and, only if that worked, puts it on the message.</summary>
+    /// <remarks>
+    /// Header protection goes on first, because the whole of it is that the header fields are
+    /// <em>inside</em> what gets signed and encrypted rather than beside it. What the outer header
+    /// section has to become is applied last, for the same reason the payload is a copy: this can
+    /// still refuse, and a message reduced by an attempt that failed is one whose subject has been
+    /// replaced by <c>[...]</c> with nothing to make up for it.
+    /// </remarks>
     private static ProtectionReport Run(
         MimeMessage message,
         Candidate candidate,
@@ -132,18 +151,21 @@ public static class MessageProtection
         Protection want,
         CancellationToken cancellationToken)
     {
+        var plan = HeaderProtection.Cover(message, body, want.HasFlag(Protection.Encrypt));
+
         var report = candidate.Context switch
         {
             SecureMimeContext certificates =>
-                SmimeProtection.Apply(body, sender, recipients, want, certificates, cancellationToken),
+                SmimeProtection.Apply(plan.Payload, sender, recipients, want, certificates, cancellationToken),
             PgpContext keys =>
-                PgpProtection.Apply(body, sender, recipients, want, keys, cancellationToken),
+                PgpProtection.Apply(plan.Payload, sender, recipients, want, keys, cancellationToken),
             _ => ProtectionReport.Unprotected,
         };
 
         if (report is { State: ProtectionState.Applied, Body: { } protectedBody })
         {
             message.Body = protectedBody;
+            plan.ApplyTo(message);
         }
 
         return report;

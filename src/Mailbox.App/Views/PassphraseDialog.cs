@@ -74,15 +74,18 @@ public static class PassphraseDialog
         Bind(caption, TextBlock.ForegroundProperty, "dialog.foreground.brush");
 
         // The fingerprint, because it is the part a reader who checks anything checks — an address
-        // is what an attacker can also write on a key.
+        // is what an attacker can also write on a key. Monospaced so the groups line up, from the
+        // theme's own family rather than from a name in this file: a family asked for by its bare
+        // name skips both the theme and the metric-compatible substitution, and one Mailbox bundles
+        // is not found at all.
         var fingerprint = new TextBlock
         {
             Text = request.Fingerprint,
-            FontFamily = new FontFamily("monospace"),
-            FontSize = 12,
             TextWrapping = TextWrapping.Wrap,
             MaxWidth = 380,
         };
+        Bind(fingerprint, TextBlock.FontFamilyProperty, "mono.fontfamily");
+        Bind(fingerprint, TextBlock.FontSizeProperty, "type.ui.size.small.value");
         Bind(fingerprint, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
 
         var input = new TextBox

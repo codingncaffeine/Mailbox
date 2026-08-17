@@ -70,6 +70,22 @@ public sealed record RenderOptions
     /// </remarks>
     public bool Isolated { get; init; }
 
+    /// <summary>
+    /// Whether this document is a cryptographic payload, and so may carry a legacy display element.
+    /// </summary>
+    /// <remarks>
+    /// RFC 9788 §4.5.3: an encrypted message may hold a copy of the header fields its composer kept
+    /// off the outside, written into the body so that a client which cannot read them where they
+    /// belong still shows them somewhere. This one can read them, so the copy must not be drawn.
+    /// <para>
+    /// It is a flag rather than something read off the part itself, because the same markup in
+    /// ordinary mail means nothing: honouring it there would be a way for anybody to hide the first
+    /// paragraph of a message from the person reading it. What turns it on is having opened an
+    /// encryption layer to get at this document at all.
+    /// </para>
+    /// </remarks>
+    public bool HideLegacyDisplay { get; init; }
+
     /// <summary>What a printed copy shows above the message, or null for no print header.</summary>
     public PrintHeader? PrintHeader { get; init; }
 
