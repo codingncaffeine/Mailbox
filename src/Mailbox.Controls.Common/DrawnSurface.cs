@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using Mailbox.Theming.Fonts;
+using Mailbox.Theming.Tokens;
 
 namespace Mailbox.Controls.Common;
 
@@ -26,6 +27,8 @@ public abstract class DrawnSurface : Control
 {
     private readonly Dictionary<Color, ImmutableSolidColorBrush> _brushes = [];
     private readonly Dictionary<(string Text, double Size, int Weight), double> _widths = [];
+    private readonly Dictionary<string, Color> _colours = [];
+    private readonly Dictionary<string, double> _numbers = [];
     private Typeface? _typeface;
     private Typeface? _bold;
     private Typeface? _semibold;
@@ -39,6 +42,8 @@ public abstract class DrawnSurface : Control
             _bold = null;
             _semibold = null;
             _widths.Clear();
+            _colours.Clear();
+            _numbers.Clear();
             OnPaletteChanged();
             InvalidateVisual();
         };
@@ -63,6 +68,38 @@ public abstract class DrawnSurface : Control
         if (this.TryFindResource("ui.fontfamily", out var found) && found is FontFamily family) return family;
         return BundledFonts.FamilyFor("Segoe UI");
     }
+
+    // ---- The palette -------------------------------------------------------------------------
+
+    /// <summary>
+    /// A token's colour, read from the same resource dictionary <c>{DynamicResource}</c> reads and
+    /// cached until the theme moves.
+    /// </summary>
+    /// <remarks>
+    /// Here rather than in each view because every drawn view needs it and three had grown their
+    /// own copy. A token a theme has not defined draws magenta on purpose: a view that silently
+    /// fell back to a sensible colour would hide the gap the coverage gate exists to catch.
+    /// </remarks>
+    protected Color Colour(string key)
+    {
+        if (_colours.TryGetValue(key, out var cached)) return cached;
+        var colour = this.TryFindResource(key + ".color", out var found) && found is Color resolved ? resolved : Colors.Magenta;
+        _colours[key] = colour;
+        return colour;
+    }
+
+    /// <summary>A token that is a number rather than a colour — how far a mix goes, how tall a row is.</summary>
+    protected double Number(string key, double fallback)
+    {
+        if (_numbers.TryGetValue(key, out var cached)) return cached;
+        var value = this.TryFindResource(key + ".value", out var found) && found is double resolved ? resolved : fallback;
+        _numbers[key] = value;
+        return value;
+    }
+
+    /// <summary>Mixes a colour toward a ground: 0 is the colour itself, 1 the ground.</summary>
+    protected static Color Mix(Color colour, Color ground, double amount)
+        => Blend.Toward(colour, ground, amount);
 
     /// <summary>A cached brush for a colour, so a render pass allocates none.</summary>
     protected IBrush Brush(Color colour)

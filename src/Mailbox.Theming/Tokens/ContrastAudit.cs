@@ -75,6 +75,14 @@ public static class ContrastAudit
         (TokenKeys.Peek.PopText, TokenKeys.Peek.PopBackground),
         (TokenKeys.Peek.PopTextDim, TokenKeys.Peek.PopBackground),
         (TokenKeys.Peek.PopTodayText, TokenKeys.Peek.PopToday),
+
+        // A note's face is a colour mixed toward its ground, so the ground is the end of that
+        // mix and the honest thing to hold the ink against: what passes here passes on every
+        // note, whatever category it carries.
+        (TokenKeys.Notes.Text, TokenKeys.Notes.Ground),
+        (TokenKeys.Notes.TextDim, TokenKeys.Notes.Ground),
+        (TokenKeys.Journal.HeaderText, TokenKeys.Journal.HeaderBackground),
+        (TokenKeys.Journal.EntryText, TokenKeys.Journal.EntryGround),
     ];
 
     /// <summary>Every pair below the ratio, in the order of <see cref="Pairs"/>. Empty is a pass.</summary>

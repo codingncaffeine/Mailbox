@@ -137,6 +137,9 @@ WANTED = {
     "new-note": "note_add",
     "note-list": "document_bullet_list",
     "journal-entry": "notepad",
+    "notes-icons": "grid",
+    "last-seven-days": "history",
+    "journal-timeline": "timeline",
 
     # ---- People module (Phase 12) -------------------------------------------------------
     "contact-group": "people_team",

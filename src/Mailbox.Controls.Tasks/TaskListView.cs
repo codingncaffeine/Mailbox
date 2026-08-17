@@ -44,7 +44,6 @@ public sealed class TaskListView : DrawnSurface
     private const double FlagColumn = 20;
     private const double TextSize = 12;
 
-    private readonly Dictionary<string, Color> _colours = [];
     private IReadOnlyList<TaskRow> _rows = [];
     private TaskRow? _selected;
     private TaskRow? _hover;
@@ -299,16 +298,6 @@ public sealed class TaskListView : DrawnSurface
 
         context.DrawGeometry(Brush(colour), null, cloth);
     }
-
-    private Color Colour(string key)
-    {
-        if (_colours.TryGetValue(key, out var cached)) return cached;
-        var colour = this.TryFindResource(key + ".color", out var found) && found is Color resolved ? resolved : Colors.Magenta;
-        _colours[key] = colour;
-        return colour;
-    }
-
-    protected override void OnPaletteChanged() => _colours.Clear();
 
     // ---- Input -----------------------------------------------------------------------------
 

@@ -49,7 +49,6 @@ public sealed class ContactListView : DrawnSurface
     private const double EmptyFirstBaseline = 22;
     private const double EmptyLineHeight = 13;
 
-    private readonly Dictionary<string, Color> _colours = [];
     private readonly List<(Rect Box, ContactRow Row)> _rowHits = [];
     private readonly List<(Rect Box, char Letter)> _indexHits = [];
 
@@ -262,20 +261,6 @@ public sealed class ContactListView : DrawnSurface
             ? $"{char.ToUpperInvariant(parts[0][0])}{char.ToUpperInvariant(parts[^1][0])}"
             : char.ToUpperInvariant(named[0]).ToString();
     }
-
-    /// <summary>
-    /// A token's colour, resolved once and kept until the theme moves — a lookup per row per
-    /// frame is what the calendar's palette exists to avoid.
-    /// </summary>
-    private Color Colour(string key)
-    {
-        if (_colours.TryGetValue(key, out var cached)) return cached;
-        var colour = this.TryFindResource(key + ".color", out var found) && found is Color resolved ? resolved : Colors.Magenta;
-        _colours[key] = colour;
-        return colour;
-    }
-
-    protected override void OnPaletteChanged() => _colours.Clear();
 
     // ---- Input ---------------------------------------------------------------------------------
 

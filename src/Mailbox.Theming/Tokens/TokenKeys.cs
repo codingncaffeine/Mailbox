@@ -595,6 +595,82 @@ public static class TokenKeys
         public static readonly IReadOnlyList<string> All = [.. Docked, .. Floating];
     }
 
+    /// <summary>
+    /// The Notes module: the sticky squares, and what colours one.
+    /// </summary>
+    /// <remarks>
+    /// A note's own colour is data rather than a token — it is the colour of the category on it,
+    /// as a chip's is the colour of its calendar — so what the theme states is the ground that
+    /// colour is tinted toward, how far it goes, and the ink and lines drawn over the result. A
+    /// note with no category takes <see cref="Default"/>, which is the reference's yellow.
+    /// </remarks>
+    public static class Notes
+    {
+        /// <summary>
+        /// The wall the squares are pinned to. Content rather than chrome, so it is light in Dark
+        /// Gray as the month grid is — the notes are what the module holds, not what frames it.
+        /// </summary>
+        public const string Background = "notes.background";
+        /// <summary>The colour of a note that has no category: the reference's yellow.</summary>
+        public const string Default = "notes.default";
+        /// <summary>What a note's colour is tinted toward for its face.</summary>
+        public const string Ground = "notes.ground";
+        /// <summary>How far toward the ground the face goes: 0 is the colour itself, 1 the ground.</summary>
+        public const string Tint = "notes.tint";
+        /// <summary>The corner the reference folds up, which is the face over a darker ground.</summary>
+        public const string FoldGround = "notes.fold.ground";
+        /// <summary>How far the fold moves toward that ground.</summary>
+        public const string FoldTint = "notes.fold.tint";
+        /// <summary>The line round a square.</summary>
+        public const string Edge = "notes.edge";
+        /// <summary>The title written on one.</summary>
+        public const string Text = "notes.text";
+        /// <summary>The date under it, and the contents line beside it in the list.</summary>
+        public const string TextDim = "notes.text.dim";
+        /// <summary>The frame round the square the pointer chose.</summary>
+        public const string Selected = "notes.selected";
+
+        public static readonly IReadOnlyList<string> All =
+            [Background, Default, Ground, Tint, FoldGround, FoldTint, Edge, Text, TextDim, Selected];
+    }
+
+    /// <summary>
+    /// The Journal module: the timeline's bands and an entry hung on one.
+    /// </summary>
+    /// <remarks>
+    /// Its own family rather than the calendar's, even though both draw days across the top: the
+    /// two are different modules and a theme should be able to move one without the other. What
+    /// they do share — the ground, the rules — comes from the semantic tokens both already use.
+    /// </remarks>
+    public static class Journal
+    {
+        /// <summary>
+        /// The ground the timeline's columns are drawn on. Content rather than chrome, as the
+        /// month grid is, so it stays light in Dark Gray.
+        /// </summary>
+        public const string Background = "journal.background";
+        /// <summary>The two heading rows across the top: the span, and the days inside it.</summary>
+        public const string HeaderBackground = "journal.header.background";
+        public const string HeaderText = "journal.header.text";
+        /// <summary>The line closing the headings, drawn lighter than the grid's own.</summary>
+        public const string HeaderLine = "journal.header.line";
+        /// <summary>The day divisions dropping down the view.</summary>
+        public const string GridLine = "journal.gridline";
+        /// <summary>Today's column, which the timeline shades as the month view shades its cell.</summary>
+        public const string TodayFill = "journal.today.fill";
+        /// <summary>The ground an entry's own colour is tinted toward, and how far.</summary>
+        public const string EntryGround = "journal.entry.ground";
+        public const string EntryTint = "journal.entry.tint";
+        public const string EntryText = "journal.entry.text";
+        public const string EntryBorder = "journal.entry.border";
+
+        public static readonly IReadOnlyList<string> All =
+        [
+            Background, HeaderBackground, HeaderText, HeaderLine, GridLine, TodayFill,
+            EntryGround, EntryTint, EntryText, EntryBorder,
+        ];
+    }
+
     public static class Typography
     {
         public const string UiFamily = "type.ui.family";
@@ -663,6 +739,8 @@ public static class TokenKeys
         Calendar.NavigatorBackground, Calendar.NavigatorText,
         Calendar.NavigatorRange, Calendar.NavigatorRangeText, Calendar.NavigatorToday,
         .. Peek.All,
+        .. Notes.All,
+        .. Journal.All,
         Typography.UiFamily, Typography.UiSize, Typography.UiSizeSmall, Typography.UiSizeLarge,
         Typography.ContentFamily, Typography.ContentSize, Typography.MonoFamily,
     ];

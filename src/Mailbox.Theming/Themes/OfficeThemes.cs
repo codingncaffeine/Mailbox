@@ -373,6 +373,27 @@ public static class OfficeThemes
         t.Set(TokenKeys.Peek.TextDim, "#F0F0F0");
         t.Set(TokenKeys.Peek.Hatch, "#C7C6C4");
 
+        // The notes and the timeline are content, so they stay light inside this theme's dark
+        // chrome exactly as the month grid does — and against the same #F4F4F4 the chips are
+        // tinted toward, which is where this theme's nine points of difference live.
+        t.Set(TokenKeys.Notes.Background, "#D2D0CE");
+        t.Set(TokenKeys.Notes.Ground, "#F4F4F4");
+        t.Set(TokenKeys.Notes.FoldGround, "#323130");
+        t.Set(TokenKeys.Notes.Edge, "#A19F9D");
+        t.Set(TokenKeys.Notes.Text, "#000000");
+        t.Set(TokenKeys.Notes.TextDim, "#323130");
+        t.Set(TokenKeys.Notes.Selected, "#0078D4");
+
+        t.Set(TokenKeys.Journal.Background, "#D2D0CE");
+        t.Set(TokenKeys.Journal.HeaderBackground, "#A19F9D");
+        t.Set(TokenKeys.Journal.HeaderText, "#000000");
+        t.Set(TokenKeys.Journal.HeaderLine, "#3B3A39");
+        t.Set(TokenKeys.Journal.GridLine, "#323130");
+        t.Set(TokenKeys.Journal.TodayFill, "#C6C4C2");
+        t.Set(TokenKeys.Journal.EntryGround, "#F4F4F4");
+        t.Set(TokenKeys.Journal.EntryText, "#000000");
+        t.Set(TokenKeys.Journal.EntryBorder, "#A19F9D");
+
         t.Set(TokenKeys.TitleBar.Background, "{palette.chrome.titlebar}");
         t.Set(TokenKeys.TitleBar.Foreground, "{palette.neutral.white}");
         t.Set(TokenKeys.TitleBar.Search, "#BDBDBD");
@@ -718,6 +739,32 @@ public static class OfficeThemes
         t.Set(TokenKeys.Peek.TextDim, "#E1DFDD");
         t.Set(TokenKeys.Peek.Hatch, "#2D3236");
 
+        // A note here is a dark square holding its colour, on the same terms the chips are: the
+        // face is the colour taken half the way to near-black rather than most of the way to
+        // white, and the fold lifts toward the light instead of dropping toward the dark, which
+        // is the same inversion the ribbon's swatches make.
+        t.Set(TokenKeys.Notes.Background, "#323130");
+        t.Set(TokenKeys.Notes.Default, "{category.yellow}");
+        t.Set(TokenKeys.Notes.Ground, "#060608");
+        t.Set(TokenKeys.Notes.Tint, "0.5");
+        t.Set(TokenKeys.Notes.FoldGround, "#FFFFFF");
+        t.Set(TokenKeys.Notes.FoldTint, "0.18");
+        t.Set(TokenKeys.Notes.Edge, "#5A5A5A");
+        t.Set(TokenKeys.Notes.Text, "#FAF9F8");
+        t.Set(TokenKeys.Notes.TextDim, "#A6A6A6");
+        t.Set(TokenKeys.Notes.Selected, "{palette.brand.primary}");
+
+        t.Set(TokenKeys.Journal.Background, "#323130");
+        t.Set(TokenKeys.Journal.HeaderBackground, "#1B1B1B");
+        t.Set(TokenKeys.Journal.HeaderText, "#E1DFDD");
+        t.Set(TokenKeys.Journal.HeaderLine, "#000000");
+        t.Set(TokenKeys.Journal.GridLine, "#000000");
+        t.Set(TokenKeys.Journal.TodayFill, "#3B3A39");
+        t.Set(TokenKeys.Journal.EntryGround, "#060608");
+        t.Set(TokenKeys.Journal.EntryTint, "0.5");
+        t.Set(TokenKeys.Journal.EntryText, "#FAF9F8");
+        t.Set(TokenKeys.Journal.EntryBorder, "#5A5A5A");
+
         return t;
     }
 
@@ -988,5 +1035,33 @@ public static class OfficeThemes
         t.Set(TokenKeys.Peek.Text, "#444444");
         t.Set(TokenKeys.Peek.TextDim, "#666666");
         t.Set(TokenKeys.Peek.Hatch, "#D5D4D2");
+
+        // The Notes wall. A note's face is its category's colour taken most of the way to white,
+        // which is what makes the reference's yellow square pale rather than saturated; the fold
+        // is the same face taken a short way the other way, so it reads as a shadow of itself and
+        // not as a second colour.
+        t.Set(TokenKeys.Notes.Background, "{palette.neutral.white}");
+        t.Set(TokenKeys.Notes.Default, "{category.yellow}");
+        t.Set(TokenKeys.Notes.Ground, "{palette.neutral.white}");
+        t.Set(TokenKeys.Notes.Tint, "0.72");
+        t.Set(TokenKeys.Notes.FoldGround, "{palette.neutral.primary}");
+        t.Set(TokenKeys.Notes.FoldTint, "0.18");
+        t.Set(TokenKeys.Notes.Edge, "#C8C6C4");
+        t.Set(TokenKeys.Notes.Text, "{palette.neutral.primary}");
+        t.Set(TokenKeys.Notes.TextDim, "{palette.neutral.secondary}");
+        t.Set(TokenKeys.Notes.Selected, "{palette.brand.primary}");
+
+        // The Journal timeline. Its headings are the calendar's roles read against the list, and
+        // an entry is tinted as a chip is — the same maths, its own family.
+        t.Set(TokenKeys.Journal.Background, "{palette.neutral.white}");
+        t.Set(TokenKeys.Journal.HeaderBackground, "{palette.neutral.lighter}");
+        t.Set(TokenKeys.Journal.HeaderText, "#3B3A39");
+        t.Set(TokenKeys.Journal.HeaderLine, "{palette.neutral.light}");
+        t.Set(TokenKeys.Journal.GridLine, "#D2D0CE");
+        t.Set(TokenKeys.Journal.TodayFill, "#FAF9F8");
+        t.Set(TokenKeys.Journal.EntryGround, "{palette.neutral.white}");
+        t.Set(TokenKeys.Journal.EntryTint, "0.8");
+        t.Set(TokenKeys.Journal.EntryText, "{palette.neutral.primary}");
+        t.Set(TokenKeys.Journal.EntryBorder, "#C8C6C4");
     }
 }

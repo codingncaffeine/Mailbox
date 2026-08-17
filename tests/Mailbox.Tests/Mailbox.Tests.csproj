@@ -23,6 +23,8 @@
     <ProjectReference Include="..\..\src\Mailbox.Editor\Mailbox.Editor.csproj" />
     <ProjectReference Include="..\..\src\Mailbox.Contacts\Mailbox.Contacts.csproj" />
     <ProjectReference Include="..\..\src\Mailbox.Controls.Calendar\Mailbox.Controls.Calendar.csproj" />
+    <ProjectReference Include="..\..\src\Mailbox.Controls.Journal\Mailbox.Controls.Journal.csproj" />
+    <ProjectReference Include="..\..\src\Mailbox.Controls.Notes\Mailbox.Controls.Notes.csproj" />
     <ProjectReference Include="..\..\src\Mailbox.Controls.People\Mailbox.Controls.People.csproj" />
     <ProjectReference Include="..\..\src\Mailbox.Controls.Ribbon\Mailbox.Controls.Ribbon.csproj" />
     <ProjectReference Include="..\..\src\Mailbox.Dav\Mailbox.Dav.csproj" />
