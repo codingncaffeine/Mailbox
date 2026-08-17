@@ -474,6 +474,7 @@ public partial class MainWindow
         // edit made with the network down is a longer queue, not a lost edit (§7.5).
         App.PimSync.QueuePut(written);
         _calendar?.Reload();
+        RefreshPeeks();
         return written;
 
         PimItem Store(PimItem item)
@@ -937,6 +938,81 @@ public partial class MainWindow
         calendar.SetView(dialog.View);
         calendar.GoTo(chosen);
         shell.ModuleStatusLeft = calendar.Status;
+    }
+
+    // ------------------------------------------------------------------------------------
+    // The peek: the miniature calendar the rail's icon opens, and the pane it docks into
+    // ------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Builds a peek in either state and keeps it fed from the store.
+    /// </summary>
+    /// <remarks>
+    /// The view draws and this reads: a control that reached into the repository itself could
+    /// not be drawn in a test, and both states want the same wiring — which is the reason they
+    /// are one control and one builder rather than two of each.
+    /// </remarks>
+    private PeekView BuildPeek(ShellViewModel shell, bool docked)
+    {
+        // A peek opens on today, or on the day a pose names — the same variable the module
+        // reads, so one run photographs both showing the same date.
+        var opensOn = Environment.GetEnvironmentVariable("MAILBOX_CALENDAR_DATE") is { Length: > 0 } posed
+            && DateOnly.TryParseExact(posed, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day)
+                ? day
+                : CalendarToday;
+
+        var view = new PeekView(docked)
+        {
+            Today = CalendarToday,
+            Anchor = opensOn,
+            Selected = opensOn,
+            FirstDayOfWeek = (DayOfWeek)(int)App.Settings.GetNumber(OptionsPages.Keys.FirstDayOfWeek, 0),
+            ShowWeekNumbers = App.Settings.GetBool(OptionsPages.Keys.ShowWeekNumbers),
+        };
+
+        view.Stepped += (_, direction) => view.Anchor = view.Anchor.AddMonths(direction);
+
+        view.DayPicked += (_, day) =>
+        {
+            // A day in the month either side is picked as readily as one in it, and the grid
+            // follows rather than making it be found again.
+            if (day.Month != view.Anchor.Month || day.Year != view.Anchor.Year) view.Anchor = day;
+            view.Selected = day;
+            FillPeek(view);
+        };
+
+        view.EntryActivated += (_, entry) => _ = OpenAppointmentAsync(shell, entry);
+        view.CornerPressed += (_, _) =>
+        {
+            if (docked) UndockPeek();
+            else DockPeek();
+        };
+
+        FillPeek(view);
+        return view;
+    }
+
+    /// <summary>The selected day's appointments, on every calendar the navigation pane is showing.</summary>
+    private static void FillPeek(PeekView view)
+    {
+        var day = view.Selected;
+        var entries = new CalendarSource(App.Pim).Between(
+            Instant(day.ToDateTime(TimeOnly.MinValue)),
+            Instant(day.AddDays(1).ToDateTime(TimeOnly.MinValue)));
+
+        view.Entries = entries;
+        Log.Info($"Peek: {day:yyyy-MM-dd} holds {view.Agenda.Count} — "
+            + string.Join(" | ", view.Agenda.Select(r => $"{r.Time} {r.Subject}")));
+    }
+
+    /// <summary>
+    /// Puts the day an appointment was written on back in front of whichever peeks are open, so
+    /// a new appointment shows up in them the way it does in the module.
+    /// </summary>
+    private void RefreshPeeks()
+    {
+        if (_floatingPeek is { } floating) FillPeek(floating);
+        if (this.FindControl<ContentControl>("DockHost")?.Content is PeekView docked) FillPeek(docked);
     }
 
     /// <summary>

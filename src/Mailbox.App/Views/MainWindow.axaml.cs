@@ -11,6 +11,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Mailbox.App.Theming;
 using Mailbox.App.ViewModels;
+using Mailbox.Controls.Calendar;
 using Mailbox.Controls.Ribbon;
 using Mailbox.Core.Diagnostics;
 using Mailbox.Core;
@@ -237,6 +238,18 @@ public partial class MainWindow : Window
                 () =>
                 {
                     if (DataContext is ShellViewModel s) PoseCalendarDrag(s, drag);
+                },
+                DispatcherPriority.Background);
+        }
+
+        // The peek's own buttons, pressed the same way. After the peek pose has opened one, and
+        // after it has drawn, since what a press aims at is where the view really put it.
+        if (Environment.GetEnvironmentVariable("MAILBOX_PEEK_PRESS") is { Length: > 0 } press)
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(
+                () =>
+                {
+                    if (DataContext is ShellViewModel s) PoseCalendarPeekPress(s, press);
                 },
                 DispatcherPriority.Background);
         }
@@ -2167,7 +2180,7 @@ public partial class MainWindow : Window
     // Calendar peek and dock
     // ------------------------------------------------------------------------------------
 
-    private CalendarPeek? _floatingPeek;
+    private PeekView? _floatingPeek;
 
     /// <summary>
     /// Gives each rail module a command. Mail and Calendar switch the window over; the rest say
@@ -2183,32 +2196,116 @@ public partial class MainWindow : Window
         foreach (var tab in shell.Modules)
         {
             var module = tab.Module;
-            tab.Activate = new RelayCommand(() => SwitchModule(shell, module));
+            tab.Activate = new RelayCommand(() =>
+            {
+                ClosePeek();
+                SwitchModule(shell, module);
+            });
         }
+    }
+
+    /// <summary>
+    /// The dwell before a hover over the rail's Calendar icon opens the peek, and the grace after
+    /// the pointer leaves it — long enough to cross the gap between the icon and the peek.
+    /// </summary>
+    private static readonly TimeSpan PeekDwell = TimeSpan.FromMilliseconds(400);
+    private static readonly TimeSpan PeekGrace = TimeSpan.FromMilliseconds(250);
+
+    private DispatcherTimer? _peekTimer;
+
+    /// <summary>
+    /// Pointer over a rail icon. Only Calendar has a peek; the rest arrive with their modules.
+    /// </summary>
+    private void RailPointerEntered(object? sender, PointerEventArgs e)
+    {
+        if (sender is not Control { DataContext: ModuleTab tab } || tab.Module != MailboxModule.Calendar) return;
+        if (DataContext is ShellViewModel { IsCalendarDocked: true }) return;
+        SchedulePeek(PeekDwell, open: true);
+    }
+
+    private void RailPointerExited(object? sender, PointerEventArgs e)
+    {
+        if (sender is not Control { DataContext: ModuleTab tab } || tab.Module != MailboxModule.Calendar) return;
+        SchedulePeek(PeekGrace, open: false);
+    }
+
+    /// <summary>
+    /// Opens or closes the peek after a pause, replacing whatever was already waiting. One timer
+    /// for both: crossing from the icon to the peek and back is a stream of these, and a second
+    /// timer would let an old close fire under a new open.
+    /// </summary>
+    private void SchedulePeek(TimeSpan after, bool open)
+    {
+        _peekTimer?.Stop();
+        _peekTimer = new DispatcherTimer { Interval = after };
+        _peekTimer.Tick += (s, _) =>
+        {
+            ((DispatcherTimer)s!).Stop();
+            if (open) OpenPeek();
+            else ClosePeek();
+        };
+        _peekTimer.Start();
     }
 
     private void TogglePeek()
     {
-        if (_floatingPeek is not null)
+        if (_floatingPeek is not null) ClosePeek();
+        else OpenPeek();
+    }
+
+    private void OpenPeek()
+    {
+        if (_floatingPeek is not null) return;
+        if (DataContext is not ShellViewModel shell || shell.IsCalendarDocked) return;
+
+        var peek = BuildPeek(shell, docked: false);
+
+        // Anchored just right of the rail, level with the icon that opened it — the position
+        // the reference application uses so the peek reads as belonging to that module. Its own
+        // height often exceeds what is above the icon, so it is held inside the layer.
+        var layer = this.FindControl<Canvas>("PeekLayer")!;
+        Canvas.SetLeft(peek, PeekGap);
+        Canvas.SetTop(peek, PeekTop(layer));
+
+        // The pointer crossing into the peek is what keeps it open, and leaving it is what
+        // closes it — the icon's own exit fires as soon as the gap is crossed.
+        peek.PointerEntered += (_, _) => _peekTimer?.Stop();
+        peek.PointerExited += (_, _) => SchedulePeek(PeekGrace, open: false);
+
+        layer.Children.Add(peek);
+        _floatingPeek = peek;
+    }
+
+    /// <summary>What separates the peek from the rail, measured off the reference.</summary>
+    private const double PeekGap = 6;
+
+    /// <summary>
+    /// Where the peek's top goes: level with the bottom of the Calendar icon, which in this
+    /// window is above the layer itself, so in practice it is held against the layer's top.
+    /// </summary>
+    private double PeekTop(Canvas layer)
+    {
+        var icon = RailButton(MailboxModule.Calendar);
+        var bottom = icon?.TranslatePoint(new Point(0, icon.Bounds.Height), layer)?.Y ?? 0;
+        var room = layer.Bounds.Height > 0 ? layer.Bounds.Height : Bounds.Height;
+        var height = PeekLayout.PopupHeight + (2 * (PeekLayout.FrameY + PeekLayout.Outline));
+        return Math.Max(0, Math.Min(bottom, room - height));
+    }
+
+    /// <summary>The rail's button for a module, which the hover and the anchor both want.</summary>
+    private Control? RailButton(MailboxModule module)
+    {
+        foreach (var button in this.GetVisualDescendants().OfType<Button>())
         {
-            ClosePeek();
-            return;
+            if (button.DataContext is ModuleTab tab && tab.Module == module) return button;
         }
 
-        var peek = new CalendarPeek(DateTime.Now, docked: false);
-        peek.DockRequested += (_, _) => DockPeek();
-
-        // Anchored just right of the rail, near the icon that opened it — the position
-        // the reference application uses so the peek reads as belonging to that module.
-        Canvas.SetLeft(peek, 52);
-        Canvas.SetTop(peek, 8);
-
-        this.FindControl<Canvas>("PeekLayer")!.Children.Add(peek);
-        _floatingPeek = peek;
+        return null;
     }
 
     private void ClosePeek()
     {
+        _peekTimer?.Stop();
         if (_floatingPeek is null) return;
         this.FindControl<Canvas>("PeekLayer")!.Children.Remove(_floatingPeek);
         _floatingPeek = null;
@@ -2257,10 +2354,7 @@ public partial class MainWindow : Window
         ClosePeek();
         if (DataContext is not ShellViewModel shell) return;
 
-        var docked = new CalendarPeek(DateTime.Now, docked: true);
-        docked.CloseRequested += (_, _) => UndockPeek();
-
-        this.FindControl<ContentControl>("DockHost")!.Content = docked;
+        this.FindControl<ContentControl>("DockHost")!.Content = BuildPeek(shell, docked: true);
         shell.IsCalendarDocked = true;
     }
 
@@ -2474,8 +2568,10 @@ public partial class MainWindow : Window
         options.Click += async (_, _) => await new ReadingPaneOptionsDialog(App.MailOptions).ShowDialog(this);
         reading.Items.Add(options);
 
+        // To-Do Bar · Calendar is the docked pane, not the popup: the menu's own tick reads
+        // "is the calendar docked", and it did not use to be what the entry set.
         var todo = Sub("To-Do Bar");
-        Entry(todo, "Calendar", () => { if (!shell.IsCalendarDocked) TogglePeek(); }, shell.IsCalendarDocked);
+        Entry(todo, "Calendar", () => { if (!shell.IsCalendarDocked) DockPeek(); }, shell.IsCalendarDocked);
         Entry(todo, "Off", () => { if (shell.IsCalendarDocked) UndockPeek(); }, !shell.IsCalendarDocked);
 
         flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
@@ -2626,8 +2722,31 @@ public partial class MainWindow : Window
         if (Environment.GetEnvironmentVariable("MAILBOX_HOVER") is { Length: > 0 } hovered)
         {
             // A pointer is the one thing a capture run does not have, so the state is posed.
-            // "ribbon:<command-id>" reaches the bar; anything else is a caption button.
-            if (hovered.StartsWith("ribbon:", StringComparison.OrdinalIgnoreCase))
+            // "ribbon:<command-id>" reaches the bar, "rail:<module>" the rail — which is how
+            // the hover that opens the peek is exercised — and anything else is a caption button.
+            if (hovered.StartsWith("rail:", StringComparison.OrdinalIgnoreCase))
+            {
+                var name = hovered["rail:".Length..].Trim();
+                Opened += (_, _) => Dispatcher.UIThread.Post(
+                    () =>
+                    {
+                        if (!Enum.TryParse<MailboxModule>(name, ignoreCase: true, out var module))
+                        {
+                            Log.Info($"Harness: {name} is not a module.");
+                            return;
+                        }
+
+                        // Through the same handler the pointer reaches, dwell and all: a peek
+                        // that only ever opened from a direct call would prove nothing about
+                        // what a hover does.
+                        RailPointerEntered(RailButton(module), new PointerEventArgs(
+                            PointerEnteredEvent, this, new Pointer(0, PointerType.Mouse, true),
+                            null, default, 0, new PointerPointProperties(), KeyModifiers.None));
+                        Log.Info($"Harness: hovering the rail's {module} icon.");
+                    },
+                    DispatcherPriority.Loaded);
+            }
+            else if (hovered.StartsWith("ribbon:", StringComparison.OrdinalIgnoreCase))
             {
                 var id = new CommandId(hovered["ribbon:".Length..].Trim());
                 Opened += (_, _) => Dispatcher.UIThread.Post(
@@ -2726,7 +2845,13 @@ public partial class MainWindow : Window
 
     private void OnWindowPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (_floatingRibbon is null || e.Source is not Visual source) return;
+        if (e.Source is not Visual source) return;
+
+        // A click anywhere but inside the peek dismisses it, the rail's own icon included —
+        // that one switches module and the peek would be left hanging over the new one.
+        if (_floatingPeek is { } peek && !IsWithin(source, peek)) ClosePeek();
+
+        if (_floatingRibbon is null) return;
         if (IsWithin(source, _floatingRibbon) || IsWithin(source, _ribbon)) return;
 
         _ribbon.CloseFloatingBody();

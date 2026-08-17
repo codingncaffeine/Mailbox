@@ -350,11 +350,16 @@
                                     VerticalAlignment="Center"
                                     IsVisible="{Binding IsActive}"
                                     Background="{DynamicResource rail.indicator.brush}" />
+                            <!-- Hovering Calendar opens its peek; pressing it switches module.
+                                 The handler asks the row which module it is, a template having
+                                 no way to wire one icon and not the others. -->
                             <Button Width="40" Height="40"
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Center"
                                     Command="{Binding Activate}"
                                     Classes.active="{Binding IsActive}"
+                                    PointerEntered="RailPointerEntered"
+                                    PointerExited="RailPointerExited"
                                     ToolTip.Tip="{Binding Tip}">
                                 <TextBlock Text="{Binding RailGlyph}"
                                            FontFamily="{Binding IconFamily}"

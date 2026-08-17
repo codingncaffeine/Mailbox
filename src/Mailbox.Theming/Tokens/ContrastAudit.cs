@@ -63,6 +63,18 @@ public static class ContrastAudit
         (TokenKeys.Calendar.NavigatorText, TokenKeys.Calendar.NavigatorBackground),
         (TokenKeys.Calendar.NavigatorRangeText, TokenKeys.Calendar.NavigatorRange),
         (TokenKeys.Calendar.TodayText, TokenKeys.Calendar.NavigatorToday),
+        (TokenKeys.Peek.Day, TokenKeys.Peek.Background),
+        (TokenKeys.Peek.DayOther, TokenKeys.Peek.Background),
+        (TokenKeys.Peek.Title, TokenKeys.Peek.Background),
+        (TokenKeys.Peek.Text, TokenKeys.Peek.Background),
+        (TokenKeys.Peek.TextDim, TokenKeys.Peek.Background),
+        (TokenKeys.Peek.TodayText, TokenKeys.Peek.Today),
+        (TokenKeys.Peek.PopDay, TokenKeys.Peek.PopBackground),
+        (TokenKeys.Peek.PopDayOther, TokenKeys.Peek.PopBackground),
+        (TokenKeys.Peek.PopTitle, TokenKeys.Peek.PopBackground),
+        (TokenKeys.Peek.PopText, TokenKeys.Peek.PopBackground),
+        (TokenKeys.Peek.PopTextDim, TokenKeys.Peek.PopBackground),
+        (TokenKeys.Peek.PopTodayText, TokenKeys.Peek.PopToday),
     ];
 
     /// <summary>Every pair below the ratio, in the order of <see cref="Pairs"/>. Empty is a pass.</summary>

@@ -134,7 +134,7 @@ public abstract class CalendarSurface : DrawnSurface
     }
 
     /// <summary>The Tentative stripe: 3px diagonals on an 8px pitch, measured off the capture.</summary>
-    private void DrawHatch(DrawingContext context, Rect bar, Color colour)
+    protected void DrawHatch(DrawingContext context, Rect bar, Color colour)
     {
         using var _ = context.PushClip(bar);
         var pen = new Pen(Palette.Brush(colour), 3);
