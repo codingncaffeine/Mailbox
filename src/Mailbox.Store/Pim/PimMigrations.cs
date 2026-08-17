@@ -181,6 +181,19 @@ public static class PimMigrations
         """
         ALTER TABLE pim_items ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0;
         """,
+
+        // ---- 6: the flag on an item ----------------------------------------------------------
+        // The reference flags a contact the way it flags a message, and puts both on the same
+        // to-do list. A vCard has nothing to say about a flag — when somebody means to ring a
+        // person back is this reader's business and not the card's — so it lives beside the card
+        // rather than in it, which is the call the folder pane's Favourites section makes too.
+        //
+        // Two columns rather than one, for the reason mail's are two: a flag that has been dealt
+        // with is not the same as no flag, and the list draws the difference.
+        """
+        ALTER TABLE pim_items ADD COLUMN follow_up_due      INTEGER;
+        ALTER TABLE pim_items ADD COLUMN follow_up_complete INTEGER NOT NULL DEFAULT 0;
+        """,
     ];
 
     public static int Latest => Steps.Count;

@@ -153,6 +153,33 @@ public sealed record Contact
     /// <summary>KIND:group — a distribution list rather than a person.</summary>
     public bool IsGroup { get; init; }
 
+    /// <summary>
+    /// Kept to oneself when the address book is shared, which is the reference's Private button.
+    /// </summary>
+    /// <remarks>
+    /// vCard 3.0 has a CLASS property for exactly this and vCard 4.0 dropped it, so the card says
+    /// so both ways: <c>CLASS:PRIVATE</c> where the version has one, and
+    /// <c>X-MAILBOX-PRIVATE:TRUE</c> beside it — a client that knows neither is not misled, and a
+    /// card that comes back from a server still says what it said.
+    /// </remarks>
+    public bool IsPrivate { get; init; }
+
+    /// <summary>
+    /// The follow-up flag on a card: when it is due, and whether it has been dealt with.
+    /// </summary>
+    /// <remarks>
+    /// The reference flags a contact as it flags a message, and puts it on the same to-do list.
+    /// A vCard has nothing to say about a flag — it is this reader's own business and not the
+    /// card's — so it is kept in the store beside the card (pim.db step 6) rather than written
+    /// into it, which is the call the folder pane's Favourites section makes too.
+    /// </remarks>
+    public DateTimeOffset? FollowUpDue { get; init; }
+
+    public bool FollowUpComplete { get; init; }
+
+    /// <summary>True while the flag is still asking to be dealt with.</summary>
+    public bool IsFlagged => FollowUpDue is not null && !FollowUpComplete;
+
     public IReadOnlyList<GroupMember> Members { get; init; } = [];
 
     public DateTimeOffset LastModified { get; init; } = DateTimeOffset.UtcNow;

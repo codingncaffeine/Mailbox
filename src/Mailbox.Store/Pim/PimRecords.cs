@@ -92,6 +92,17 @@ public sealed record PimItem
     /// </remarks>
     public bool IsPrivate { get; init; }
 
+    /// <summary>
+    /// The follow-up flag: when it falls due, and whether it has been dealt with.
+    /// </summary>
+    /// <remarks>
+    /// Beside the item rather than inside its text, because a flag is the reader's own business:
+    /// a shared calendar or address book should not learn when somebody meant to ring back.
+    /// </remarks>
+    public DateTimeOffset? FollowUpDue { get; init; }
+
+    public bool FollowUpComplete { get; init; }
+
     public DateTimeOffset LastModified { get; init; }
     public PimSyncState SyncState { get; init; } = PimSyncState.Synced;
     public string? DavHref { get; init; }

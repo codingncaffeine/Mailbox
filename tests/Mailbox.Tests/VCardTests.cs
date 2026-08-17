@@ -339,4 +339,30 @@ public class VCardTests
         Assert.True(GroupMembers.Parse("not an address").IsEmpty);
         Assert.True(GroupMembers.Parse(null).IsEmpty);
     }
+
+    [Fact]
+    public void APrivateContactSaysSoBothWaysAndComesBackPrivate()
+    {
+        var contact = new Contact { Uid = "u@mailbox", DisplayName = "A. Person", IsPrivate = true };
+
+        // 3.0 has CLASS and 4.0 does not, so the card carries the X- property beside it and a
+        // reader of either version gets the same answer.
+        foreach (var version in new[] { VCardVersion.V3, VCardVersion.V4 })
+        {
+            var text = VCardCodec.Serialize(contact, version);
+            Assert.Contains("X-MAILBOX-PRIVATE", text, StringComparison.Ordinal);
+            Assert.True(VCardCodec.Parse(text).Single().IsPrivate);
+        }
+
+        Assert.Contains("CLASS:PRIVATE", VCardCodec.Serialize(contact, VCardVersion.V3), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnOrdinaryContactSaysNothingAboutBeingPrivate()
+    {
+        var text = VCardCodec.Serialize(new Contact { Uid = "u@mailbox", DisplayName = "A. Person" });
+
+        Assert.DoesNotContain("PRIVATE", text, StringComparison.Ordinal);
+        Assert.False(VCardCodec.Parse(text).Single().IsPrivate);
+    }
 }

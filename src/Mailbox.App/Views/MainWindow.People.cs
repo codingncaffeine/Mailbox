@@ -76,6 +76,8 @@ public partial class MainWindow
         if (id == PeopleCommands.ForwardContact.Id) { ForwardContact(shell); return true; }
         if (id == PeopleCommands.MeetContact.Id) { MeetContact(shell); return true; }
         if (id == ViewCommands.SearchPeople.Id) { _ = SearchPeopleAsync(shell); return true; }
+        if (id == PeopleCommands.Private.Id) { PrivateContact(shell); return true; }
+        if (id == PeopleCommands.FollowUp.Id) { FlagContact(shell); return true; }
 
         // The views, the tags and the rest are placed and say what they wait for, as the
         // calendar's unfinished buttons do (§20).
@@ -141,6 +143,78 @@ public partial class MainWindow
 
         view.ContactActivated += (_, row) => _ = OpenContactAsync(shell, row);
         return view;
+    }
+
+    /// <summary>
+    /// Private on a contact: kept to oneself when the address book is shared.
+    /// </summary>
+    /// <remarks>
+    /// Into the card, because a card is what travels: vCard 3.0's CLASS where the version has it,
+    /// and <c>X-MAILBOX-PRIVATE</c> beside it for 4.0, which dropped the property. The store keeps
+    /// a column of it too, so a list can draw the mark without parsing every card.
+    /// </remarks>
+    private void PrivateContact(ShellViewModel shell)
+    {
+        var people = EnsurePeople(shell);
+        if (people.Selected is not { } row || App.Pim.Item(row.Id) is not { } stored)
+        {
+            shell.StatusRight = "Select a contact first.";
+            return;
+        }
+
+        var contact = App.Contacts.Full(row.Id) ?? row.Contact;
+        var now = !contact.IsPrivate;
+
+        SaveContactRow(shell, contact with { IsPrivate = now, LastModified = DateTimeOffset.UtcNow }, stored);
+
+        shell.StatusRight = now ? $"{contact.Named()} is private." : $"{contact.Named()} is no longer private.";
+        Log.Info($"People: contact {row.Id} is {(now ? "private" : "not private")}.");
+    }
+
+    /// <summary>
+    /// Follow Up on a contact: the same flag menu the to-do list opens, over the same dates.
+    /// </summary>
+    /// <remarks>
+    /// The flag is kept beside the card rather than in it (see <c>Contact.FollowUpDue</c>): when
+    /// somebody means to ring a person back is their own business and not the address book's.
+    /// </remarks>
+    private void FlagContact(ShellViewModel shell)
+    {
+        var people = EnsurePeople(shell);
+        if (people.Selected is not { } row || App.Pim.Item(row.Id) is not { } stored)
+        {
+            shell.StatusRight = "Select a contact first.";
+            return;
+        }
+
+        var contact = App.Contacts.Full(row.Id) ?? row.Contact;
+
+        ShowFlagMenu(
+            contact.Named(),
+            contact.FollowUpDue,
+            due =>
+            {
+                SaveContactRow(shell, contact with { FollowUpDue = due, FollowUpComplete = false }, stored);
+                shell.StatusRight = due is { } when
+                    ? $"{contact.Named()} is flagged, due {when.LocalDateTime:d}."
+                    : $"The flag is off {contact.Named()}.";
+                Log.Info($"People: contact {row.Id} due {due?.LocalDateTime.ToString("yyyy-MM-dd") ?? "—"}.");
+            },
+            () =>
+            {
+                SaveContactRow(shell, contact with { FollowUpComplete = true }, stored);
+                shell.StatusRight = $"{contact.Named()} marked complete.";
+                Log.Info($"People: contact {row.Id} follow-up complete.");
+            });
+    }
+
+    /// <summary>Writes a contact over its own row, queues it, and shows it again.</summary>
+    private void SaveContactRow(ShellViewModel shell, Contact contact, PimItem stored)
+    {
+        App.PimSync.QueuePut(App.Contacts.Save(contact, stored.CollectionId, stored));
+        var people = EnsurePeople(shell);
+        people.Reload();
+        people.Select(stored.Id);
     }
 
     /// <summary>
@@ -396,11 +470,6 @@ public partial class MainWindow
         if (id == PeopleCommands.MailMerge.Id) return "Mail merge arrives with Phase 16.";
         if (id == PeopleCommands.ShareContacts.Id) return "Sharing an address book wants CardDAV publishing, which is still to come.";
         if (id == PeopleCommands.OpenSharedContacts.Id) return "A shared address book is a CardDAV account — add one in Account Settings.";
-        if (id == PeopleCommands.FollowUp.Id || id == PeopleCommands.Private.Id)
-        {
-            return "Flagging a contact and marking one private arrive with the module's actions.";
-        }
-
         if (id == PeopleCommands.NewItems.Id) return "New Items arrives with the rest of the modules.";
         return null;
     }

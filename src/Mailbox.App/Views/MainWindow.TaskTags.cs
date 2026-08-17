@@ -104,6 +104,70 @@ public partial class MainWindow
         flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
     }
 
+    /// <summary>
+    /// The flag menu over anything that can carry a flag, in the reference's own order.
+    /// </summary>
+    /// <remarks>
+    /// One menu built once, as the Categorize menu is: what differs between a task, a message and
+    /// a contact is what the flag is written into, and that is the caller's business. What comes
+    /// back is the due date the reader chose — or null for No Date and Clear Flag — and
+    /// <paramref name="complete"/> for Mark Complete.
+    /// </remarks>
+    private void ShowFlagMenu(
+        string subject,
+        DateTimeOffset? current,
+        Action<DateTimeOffset?> apply,
+        Action complete)
+    {
+        var now = FlagClock;
+
+        if (Environment.GetEnvironmentVariable("MAILBOX_FLAG")?.Trim() is { Length: > 0 } posed)
+        {
+            switch (posed.Replace(" ", string.Empty).ToLowerInvariant())
+            {
+                case "complete": complete(); break;
+                case "clear" or "nodate": apply(null); break;
+                case "today": apply(QuickClickSettings.DueDate(QuickFlag.Today, now)); break;
+                case "tomorrow": apply(QuickClickSettings.DueDate(QuickFlag.Tomorrow, now)); break;
+                case "thisweek": apply(QuickClickSettings.DueDate(QuickFlag.ThisWeek, now)); break;
+                case "nextweek": apply(QuickClickSettings.DueDate(QuickFlag.NextWeek, now)); break;
+                default:
+                    Log.Info($"Harness: “{posed}” is not on the flag menu — say today, tomorrow, thisweek, nextweek, nodate, complete or clear.");
+                    break;
+            }
+
+            return;
+        }
+
+        var flyout = new MenuFlyout();
+
+        void Preset(QuickFlag flag)
+        {
+            var item = new MenuItem { Header = QuickClickSettings.Label(flag), Icon = FlagArtwork() };
+            item.Click += (_, _) => apply(QuickClickSettings.DueDate(flag, now));
+            flyout.Items.Add(item);
+        }
+
+        Preset(QuickFlag.Today);
+        Preset(QuickFlag.Tomorrow);
+        Preset(QuickFlag.ThisWeek);
+        Preset(QuickFlag.NextWeek);
+        Preset(QuickFlag.NoDate);
+
+        flyout.Items.Add(new Separator());
+
+        var done = new MenuItem { Header = "Mark Complete", Icon = Tick() };
+        done.Click += (_, _) => complete();
+        flyout.Items.Add(done);
+
+        var clear = new MenuItem { Header = "Clear Flag", IsEnabled = current is not null };
+        clear.Click += (_, _) => apply(null);
+        flyout.Items.Add(clear);
+
+        Log.Info($"Flag: “{subject}” is due {current?.LocalDateTime.ToString("yyyy-MM-dd") ?? "—"}.");
+        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+    }
+
     /// <summary>The harness's press of one entry on the flag menu.</summary>
     private void PressFlagEntry(ShellViewModel shell, TaskRow row, string spec, DateTimeOffset now)
     {

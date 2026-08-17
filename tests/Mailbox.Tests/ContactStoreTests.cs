@@ -217,4 +217,34 @@ public class ContactStoreTests
         Assert.Equal("Example Ltd.", row.Contact.Company);
         Assert.Equal("A. Person", book.Full(written.Id)!.DisplayName);
     }
+
+    [Fact]
+    public void AFlagOnAContactIsKeptBesideTheCardRatherThanInIt()
+    {
+        using var store = PimStore.Transient();
+        var repository = new PimRepository(store);
+        var book = new ContactBook(repository);
+        var address = repository.AddCollection(CollectionKind.Contacts, "Contacts");
+
+        var due = new DateTimeOffset(2026, 8, 28, 16, 0, 0, TimeSpan.Zero);
+        var saved = book.Save(
+            new Contact { Uid = "u@mailbox", DisplayName = "A. Person", FollowUpDue = due },
+            address.Id);
+
+        Assert.Equal(due, repository.Item(saved.Id)!.FollowUpDue);
+        Assert.False(repository.Item(saved.Id)!.FollowUpComplete);
+
+        // Not in the card: when somebody means to ring a person back is not the address book's
+        // business, and a shared book should not learn it.
+        Assert.DoesNotContain("2026-08-28", repository.Item(saved.Id)!.RawPayload, StringComparison.Ordinal);
+
+        var back = book.Full(saved.Id)!;
+        Assert.Equal(due, back.FollowUpDue);
+        Assert.True(back.IsFlagged);
+
+        // Dealt with is not the same as never flagged, which is why there are two columns.
+        var done = book.Save(back with { FollowUpComplete = true }, address.Id, repository.Item(saved.Id));
+        Assert.True(repository.Item(done.Id)!.FollowUpComplete);
+        Assert.False(book.Full(done.Id)!.IsFlagged);
+    }
 }
