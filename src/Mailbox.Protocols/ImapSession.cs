@@ -1,4 +1,5 @@
 using MailKit;
+using Mailbox.Core.Diagnostics;
 using MailKit.Net.Imap;
 using MailKit.Search;
 using MimeKit;
@@ -291,6 +292,33 @@ public sealed class MailKitImapSession : IImapSession
         if (!folder.IsOpen || folder.Access != FolderAccess.ReadWrite)
         {
             await folder.OpenAsync(FolderAccess.ReadWrite, cancellation);
+        }
+        else
+        {
+            // Already selected, and the library will not send a second SELECT for a folder it
+            // believes is open — so UIDNEXT and HIGHESTMODSEQ would still be whatever the first
+            // one reported, however long ago. The count keeps itself current from the untagged
+            // EXISTS the server volunteers; those two do not, and a state that is half fresh is
+            // worse than one that is plainly stale because nothing about it looks wrong.
+            //
+            // Found against a real server: appending a message left UIDNEXT where it was while
+            // the count moved. Nothing decides anything on UIDNEXT today, but it is written into
+            // the store as a fact, and the obvious use for it — "has anything arrived?" — would
+            // have been quietly wrong from the first day somebody wrote it.
+            try
+            {
+                await folder.StatusAsync(
+                    StatusItems.UidValidity | StatusItems.UidNext | StatusItems.HighestModSeq | StatusItems.Count,
+                    cancellation);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // RFC 3501 says a client SHOULD NOT ask a server about the mailbox it has
+                // selected, and a server within its rights to refuse leaves the numbers as they
+                // were. Said out loud rather than silently, because it means the state below is
+                // as of the last select.
+                Log.Info($"“{path}” would not answer STATUS while selected, so its state is as of the last select: {ex.Message}");
+            }
         }
 
         _open = folder;
