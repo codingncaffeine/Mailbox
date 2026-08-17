@@ -41,41 +41,39 @@ public static class PeopleRibbonLayout
 
         Simplified = new Dictionary<string, SimplifiedBar>
         {
+            // Read off the reference's own bar at 1679 wide, which shows New Contact ⌄, Delete,
+            // Move ⌄, Share Contacts ⌄, Categorize ⌄, Follow Up ⌄, Private, the Search People box
+            // and the address book — all of them labelled — and nothing else. Communicate,
+            // Current View and Forward are not on its Simplified row at all: they are in the
+            // Classic tab and so in the "…", which is where its own bar keeps them. Putting them
+            // here instead cost every other label, the bar shedding words to make room for icons
+            // the reference never shows.
+            //
+            // Send to OneNote sits between Move and Share Contacts there. It reaches a service
+            // that is out of scope, and a button that cannot do what it says is worse than one
+            // that is absent — the same call the mail bar made.
             ["home"] = Bar(
                 Cluster("new", "New",
-                    RibbonItem.Small(PeopleCommands.NewContact.Id),
-                    RibbonItem.Small(PeopleCommands.NewContactGroup.Id, RibbonItemKind.SplitButton)
+                    RibbonItem.Small(PeopleCommands.NewContact.Id, RibbonItemKind.SplitButton)
                         with { ChevronCommand = PeopleCommands.NewItems.Id }),
 
                 Cluster("delete", "Delete",
                     RibbonItem.Small(PeopleCommands.Delete.Id)),
 
-                Cluster("communicate", "Communicate",
-                    RibbonItem.Sheddable(PeopleCommands.EmailContact.Id),
-                    RibbonItem.Sheddable(PeopleCommands.MeetContact.Id),
-                    RibbonItem.Small(PeopleCommands.MoreCommunicate.Id, RibbonItemKind.DropDown)),
-
-                Cluster("view", "Current View",
-                    RibbonItem.Sheddable(PeopleCommands.PeopleView.Id),
-                    RibbonItem.Sheddable(PeopleCommands.BusinessCardView.Id),
-                    RibbonItem.Sheddable(PeopleCommands.CardView.Id),
-                    RibbonItem.Sheddable(PeopleCommands.PhoneView.Id),
-                    RibbonItem.Sheddable(PeopleCommands.ListView.Id)),
-
                 Cluster("actions", "Actions",
                     RibbonItem.Sheddable(PeopleCommands.MoveTo.Id, RibbonItemKind.DropDown),
-                    RibbonItem.Sheddable(PeopleCommands.ShareContacts.Id, RibbonItemKind.DropDown),
-                    RibbonItem.Sheddable(PeopleCommands.ForwardContact.Id)),
+                    RibbonItem.Sheddable(PeopleCommands.ShareContacts.Id, RibbonItemKind.DropDown)),
 
                 Cluster("tags", "Tags",
                     RibbonItem.Sheddable(PeopleCommands.Categorize.Id, RibbonItemKind.DropDown),
                     RibbonItem.Sheddable(PeopleCommands.FollowUp.Id, RibbonItemKind.DropDown),
-                    RibbonItem.Sheddable(PeopleCommands.Private.Id),
-                    RibbonItem.Sheddable(PeopleCommands.Favourite.Id)),
+                    RibbonItem.Sheddable(PeopleCommands.Private.Id)),
 
+                // The address book is an icon with no label beside the box, as the reference
+                // draws it — the box says what the pair is for.
                 Cluster("find", "Find",
                     RibbonItem.Field(ViewCommands.SearchPeople.Id, SearchPeopleWidth, "Search People"),
-                    RibbonItem.Small(MailCommands.AddressBook.Id))),
+                    RibbonItem.Glyph(MailCommands.AddressBook.Id))),
 
             // Send/Receive is the mail module's tab unchanged: it is about accounts, not about
             // what is on screen.

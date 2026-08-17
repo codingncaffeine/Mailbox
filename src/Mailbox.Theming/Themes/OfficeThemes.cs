@@ -446,6 +446,10 @@ public static class OfficeThemes
         // row's flag is this cloth inside this outline on this pole, pixel for pixel.
         Flag(t, "#E37D80", "#751D1F", "#4D4D4D");
 
+        // Measured off the People module: the card is lighter than the mail reading pane here,
+        // and the disc a person is drawn as is a saturated blue rather than the account disc's.
+        PeopleSurfaces(t, "#F0F0F0", "#262626", "#8F8F8F", "#D2D2D2", "#0078D4", "#106EBE");
+
         t.Set(TokenKeys.Nav.Background, "{palette.chrome.nav}");
         t.Set(TokenKeys.Nav.ItemText, "{palette.neutral.white}");
         t.Set(TokenKeys.Nav.ItemHover, "#1AFFFFFF");
@@ -627,6 +631,10 @@ public static class OfficeThemes
         // Inverted like every other pair here, and inverted everywhere at once now that the list
         // and the bar draw the same flag.
         Flag(t, "#D42314", "#F67780", "#D4D4D4");
+
+        // Derived: the card is this theme's own raised surface, and the disc takes the lighter
+        // blue everything else here does, a saturated one being unreadable on near-black.
+        PeopleSurfaces(t, "{surface.raised}", "{text.primary}", "{text.secondary}", "{border.subtle}", "#4DA3F0", "{accent.rest}");
 
         t.Set(TokenKeys.Nav.Background, "#141414");
         t.Set(TokenKeys.Nav.ItemText, "{palette.neutral.primary}");
@@ -902,6 +910,27 @@ public static class OfficeThemes
         t.Set(TokenKeys.RibbonIcon.FlagPole, "{tags.flag.pole}");
     }
 
+    /// <summary>
+    /// The People module's own surfaces, in the one place a theme states them.
+    /// </summary>
+    /// <remarks>
+    /// Measured off the reference's People module in Dark Gray — a #F0F0F0 card, a #0078D4 disc
+    /// with white initials, a #8F8F8F label over a #D2D2D2 rule and a #106EBE line under the open
+    /// tab. The other three themes have no capture of this module, so their values are derived
+    /// from the same relationships: the card is the theme's lightest content panel, the disc keeps
+    /// its saturated blue, and the rule is a shade off the card.
+    /// </remarks>
+    private static void PeopleSurfaces(TokenSet t, string card, string text, string subtle, string rule, string avatar, string tab)
+    {
+        t.Set(TokenKeys.People.CardBackground, card);
+        t.Set(TokenKeys.People.CardText, text);
+        t.Set(TokenKeys.People.CardSubtle, subtle);
+        t.Set(TokenKeys.People.CardRule, rule);
+        t.Set(TokenKeys.People.Avatar, avatar);
+        t.Set(TokenKeys.People.AvatarText, "#FFFFFF");
+        t.Set(TokenKeys.People.CardTab, tab);
+    }
+
     private static void LightChrome(TokenSet t)
     {
         t.Set(TokenKeys.Ribbon.Background, "{palette.neutral.white}");
@@ -933,6 +962,10 @@ public static class OfficeThemes
         t.Set(TokenKeys.RibbonIcon.SwatchGreenOutline, "#309048");
 
         Flag(t, "#FF9198", "#D42314", "#3A3A38");
+
+        // Derived: on a white content pane the card is the pane itself, and the rest keeps the
+        // relationships Dark Gray was measured at.
+        PeopleSurfaces(t, "{palette.neutral.white}", "{text.primary}", "{palette.neutral.secondary}", "{palette.neutral.light}", "#0078D4", "#106EBE");
 
         t.Set(TokenKeys.Rail.Background, "{palette.neutral.lighter}");
         t.Set(TokenKeys.Rail.ItemText, "{palette.neutral.secondary}");

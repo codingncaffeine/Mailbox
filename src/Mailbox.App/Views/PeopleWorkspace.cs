@@ -67,8 +67,10 @@ public sealed class PeopleWorkspace : Border
         Grid.SetColumn(divider, 2);
         grid.Children.Add(divider);
 
+        // The card's own panel, which is lighter than the mail module's reading pane — measured
+        // #F0F0F0 against its #D4D4D4 in Dark Gray, and its own token family since.
         var pane = new Border { Margin = new Thickness(1, 0, 0, 0) };
-        pane[!BackgroundProperty] = new DynamicResourceExtension("reading.background.brush");
+        pane[!BackgroundProperty] = new DynamicResourceExtension("people.card.background.brush");
         pane.Child = _cardScroll;
         Grid.SetColumn(pane, 2);
         grid.Children.Add(pane);
@@ -256,7 +258,7 @@ public sealed class PeopleWorkspace : Border
             _card.Children.Add(Line(where, subtle: true, size: 14));
         }
 
-        _card.Children.Add(Gap());
+        _card.Children.Add(TabStrip());
 
         if (contact.IsGroup)
         {
@@ -298,58 +300,154 @@ public sealed class PeopleWorkspace : Border
 
         if (contact.Categories.Count > 0) _card.Children.Add(Field("Categories", string.Join(", ", contact.Categories)));
 
+        // The reference's card always has a Notes section, and invites one where there is none:
+        // "Add your own notes here" under a pencil, over a rule.
+        _card.Children.Add(Gap());
+        _card.Children.Add(Section("Notes"));
+
         if (contact.Notes.Length > 0)
         {
-            _card.Children.Add(Gap());
-            _card.Children.Add(Section("Notes"));
             _card.Children.Add(Line(contact.Notes, subtle: false));
         }
+        else
+        {
+            var invite = new Button
+            {
+                Classes = { "flat" },
+                Padding = new Thickness(0, 4, 0, 4),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Content = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 8,
+                    Children =
+                    {
+                        Glyph("edit"),
+                        new TextBlock { Text = "Add your own notes here", VerticalAlignment = VerticalAlignment.Center },
+                    },
+                },
+            };
+
+            invite[!Avalonia.Controls.Primitives.TemplatedControl.ForegroundProperty] = new DynamicResourceExtension("people.card.text.brush");
+            invite.Click += (_, _) => ContactOpened?.Invoke(this, row);
+            _card.Children.Add(invite);
+        }
+
+        var rule = new Border { Height = 1, Margin = new Thickness(0, 8, 0, 0) };
+        rule[!BackgroundProperty] = new DynamicResourceExtension("people.card.rule.brush");
+        _card.Children.Add(rule);
     }
 
-    /// <summary>The head of the card: the photograph, or the initials in its place, and the name.</summary>
+    /// <summary>One of the icon font's glyphs, for the card's own small marks.</summary>
+    private static Control Glyph(string name)
+    {
+        var text = new TextBlock
+        {
+            Text = Mailbox.Theming.Icons.IconGlyphs.GetOrEmpty(name, 16),
+            FontFamily = Mailbox.Theming.Icons.IconFont.Family,
+            FontSize = 14,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        text[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("people.card.subtle.brush");
+        return text;
+    }
+
+    /// <summary>
+    /// The head of the card: the photograph, or the initials in its place, and the name.
+    /// </summary>
+    /// <remarks>
+    /// Measured off the reference's own card: a 72px disc 20 in from the panel's edge and 24 down,
+    /// the name at 22px beside it, and the ellipsis under the name that its own card draws. The
+    /// disc is the People family's blue with white initials, not the account disc's darker one.
+    /// </remarks>
     private Control Heading(Contact contact)
     {
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 14, Margin = new Thickness(0, 0, 0, 8) };
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 21, Margin = new Thickness(0, 0, 0, 10) };
 
         var badge = new Border
         {
-            Width = 56,
-            Height = 56,
-            CornerRadius = new CornerRadius(28),
+            Width = DiscSize,
+            Height = DiscSize,
+            CornerRadius = new CornerRadius(DiscSize / 2),
             ClipToBounds = true,
             VerticalAlignment = VerticalAlignment.Top,
         };
-        badge[!BackgroundProperty] = new DynamicResourceExtension("accent.subtle.brush");
+        badge[!BackgroundProperty] = new DynamicResourceExtension("people.avatar.brush");
 
         if (_options.ShowPhotographs && Photograph(contact) is { } photo)
         {
-            badge.Child = new Image { Source = photo, Stretch = Stretch.UniformToFill, Width = 56, Height = 56 };
+            badge.Child = new Image { Source = photo, Stretch = Stretch.UniformToFill, Width = DiscSize, Height = DiscSize };
         }
         else
         {
             var initials = new TextBlock
             {
                 Text = ContactInitials(contact),
-                FontSize = 20,
+                FontSize = 26,
                 FontWeight = FontWeight.SemiBold,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
             };
-            initials[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("text.primary.brush");
+            initials[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("people.avatar.text.brush");
             badge.Child = initials;
         }
 
         row.Children.Add(badge);
 
-        var names = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Spacing = 2 };
-        var title = new TextBlock { Text = contact.Named(), FontSize = 22, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap };
-        title[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("text.primary.brush");
+        var names = new StackPanel { VerticalAlignment = VerticalAlignment.Top, Spacing = 2, Margin = new Thickness(0, 8, 0, 0) };
+        var title = new TextBlock { Text = contact.Named(), FontSize = 22, TextWrapping = TextWrapping.Wrap };
+        title[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("people.card.text.brush");
         names.Children.Add(title);
 
         if (contact.NickName.Length > 0) names.Children.Add(Line($"“{contact.NickName}”", subtle: true));
+
+        // The reference draws an ellipsis under the name: everything the card can do that is not
+        // one of the buttons above it.
+        var more = new Button
+        {
+            Content = "⋯",
+            Classes = { "flat" },
+            Padding = new Thickness(2, 0, 2, 0),
+            HorizontalAlignment = HorizontalAlignment.Left,
+        };
+        more[!Avalonia.Controls.Primitives.TemplatedControl.ForegroundProperty] = new DynamicResourceExtension("people.card.text.brush");
+        more.Click += (_, _) => MoreRequested?.Invoke(this, EventArgs.Empty);
+        names.Children.Add(more);
+
         row.Children.Add(names);
 
         return row;
+    }
+
+    /// <summary>Measured: the card's own disc is 72 across.</summary>
+    private const double DiscSize = 72;
+
+    /// <summary>The ellipsis under the name, which the shell answers with the card's own menu.</summary>
+    public event EventHandler? MoreRequested;
+
+    /// <summary>
+    /// The strip under the head: the reference's one tab, its accent line, and the rule across.
+    /// </summary>
+    /// <remarks>
+    /// Measured: the open tab carries a 2px line in the accent and the strip is closed by a 1px
+    /// rule the width of the card. One tab, because the reference draws one — the others it shows
+    /// for a linked contact are Phase 12's linked contacts, and unbuilt.
+    /// </remarks>
+    private Control TabStrip()
+    {
+        var label = new TextBlock { Text = "Contact", FontSize = 14, Margin = new Thickness(0, 0, 0, 6) };
+        label[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("people.card.text.brush");
+
+        var underline = new Border { Height = 2 };
+        underline[!BackgroundProperty] = new DynamicResourceExtension("people.card.tab.brush");
+
+        var tab = new StackPanel { HorizontalAlignment = HorizontalAlignment.Left, Children = { label, underline } };
+
+        var rule = new Border { Height = 1, Margin = new Thickness(0, -1, 0, 10) };
+        rule[!BackgroundProperty] = new DynamicResourceExtension("people.card.rule.brush");
+
+        return new StackPanel { Margin = new Thickness(0, 4, 0, 0), Children = { tab, rule } };
     }
 
     /// <summary>A contact's photograph as a bitmap, or null when there is none to draw.</summary>
@@ -392,8 +490,8 @@ public sealed class PeopleWorkspace : Border
 
     private Control Section(string text)
     {
-        var block = new TextBlock { Text = text, FontSize = 13, FontWeight = FontWeight.SemiBold, Margin = new Thickness(0, 6, 0, 4) };
-        block[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("text.secondary.brush");
+        var block = new TextBlock { Text = text, FontSize = 13, Margin = new Thickness(0, 6, 0, 4) };
+        block[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("people.card.subtle.brush");
         return block;
     }
 
@@ -403,11 +501,11 @@ public sealed class PeopleWorkspace : Border
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("120,*"), Margin = new Thickness(0, 3, 0, 3) };
 
         var name = new TextBlock { Text = label, FontSize = 14, VerticalAlignment = VerticalAlignment.Top };
-        name[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("text.secondary.brush");
+        name[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("people.card.subtle.brush");
         grid.Children.Add(name);
 
         var text = new SelectableTextBlock { Text = value, FontSize = 14, TextWrapping = TextWrapping.Wrap };
-        text[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("text.primary.brush");
+        text[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("people.card.text.brush");
         Grid.SetColumn(text, 1);
         grid.Children.Add(text);
         return grid;
@@ -416,7 +514,7 @@ public sealed class PeopleWorkspace : Border
     private Control Line(string text, bool subtle, double size = 14)
     {
         var block = new TextBlock { Text = text, FontSize = size, TextWrapping = TextWrapping.Wrap };
-        block[!TextBlock.ForegroundProperty] = new DynamicResourceExtension(subtle ? "text.secondary.brush" : "text.primary.brush");
+        block[!TextBlock.ForegroundProperty] = new DynamicResourceExtension(subtle ? "people.card.subtle.brush" : "people.card.text.brush");
         return block;
     }
 

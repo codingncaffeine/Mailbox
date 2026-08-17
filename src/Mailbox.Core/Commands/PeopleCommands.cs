@@ -288,7 +288,7 @@ public static class PeopleCommands
         Label = "Follow Up",
         Description = "Flag the selected contact for follow-up.",
         Icon = "follow-up",
-        IconArtwork = "follow-up",
+        IconArtwork = "followup",
         Category = "Tags",
         Scope = ModuleScope.People,
         KeyTip = "U",
