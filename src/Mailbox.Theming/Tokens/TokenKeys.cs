@@ -274,6 +274,12 @@ public static class TokenKeys
         public const string GroupHeaderHeight = "list.group.header.height";
         public const string Separator = "list.separator";
         public const string Width = "list.width";
+
+        /// <summary>
+        /// A task that is due today or already late, which the reference's to-do list draws in
+        /// red — the same red as the flag beside it.
+        /// </summary>
+        public const string OverdueText = "list.overdue.text";
     }
 
     public static class Reading
@@ -636,7 +642,7 @@ public static class TokenKeys
         List.RowHeight, List.RowHeightCompact, List.RowHover, List.RowSelected,
         List.UnreadBar, List.UnreadBarWidth, List.UnreadText, List.ReadText, List.PreviewText,
         List.GroupHeaderBackground, List.GroupHeaderText, List.GroupHeaderHeight,
-        List.Separator, List.Width,
+        List.Separator, List.Width, List.OverdueText,
         Reading.Background, Reading.HeaderBackground, Reading.InfoBarBackground,
         Reading.InfoBarText, Reading.InfoBarWarningBackground,
         StatusBar.Background, StatusBar.Foreground, StatusBar.Height, StatusBar.Slider,

@@ -144,6 +144,7 @@
     "list.group.header.text": "{palette.neutral.white}",
     "list.header.background": "{palette.content.pane}",
     "list.header.text": "{palette.neutral.white}",
+    "list.overdue.text": "#B60319",
     "list.row.background": "{palette.content.row}",
     "list.row.height": "44",
     "list.row.height.compact": "22",
