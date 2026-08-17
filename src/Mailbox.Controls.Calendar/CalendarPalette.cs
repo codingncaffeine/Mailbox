@@ -133,14 +133,7 @@ public sealed class CalendarPalette
 
     /// <summary>Mixes toward a ground: 0 is the colour itself, 1 the ground.</summary>
     public static Color Mix(Color colour, Color ground, double amount)
-    {
-        var t = Math.Clamp(amount, 0, 1);
-        return Color.FromArgb(
-            255,
-            (byte)Math.Round(colour.R + ((ground.R - colour.R) * t)),
-            (byte)Math.Round(colour.G + ((ground.G - colour.G) * t)),
-            (byte)Math.Round(colour.B + ((ground.B - colour.B) * t)));
-    }
+        => Blend.Toward(colour, ground, amount);
 }
 
 /// <summary>What a chip is painted with, once its Show As has been read.</summary>

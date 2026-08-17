@@ -82,6 +82,7 @@ public class SeedHarness
         SeedCalendar(Path.Combine(target, "pim.db"));
         SeedContacts(Path.Combine(target, "pim.db"));
         SeedTasks(Path.Combine(target, "pim.db"));
+        SeedNotesAndJournal(Path.Combine(target, "pim.db"));
     }
 
     /// <summary>
@@ -235,6 +236,73 @@ public class SeedHarness
         Add("Plan the offsite", today.AddDays(28));
         Add("Think about the newsletter", null);
         Add("File the receipts", today.AddDays(-6), TaskProgress.Completed, 100);
+    }
+
+    /// <summary>
+    /// Notes and journal entries to look at, in the same <c>pim.db</c> as everything else.
+    /// </summary>
+    /// <remarks>
+    /// One pass for both because they are one component in one kind of collection, split by what
+    /// each says it is: a note says nothing, and an entry names the sort of thing it was.
+    /// <para>
+    /// Shaped to reach what the two modules only draw for certain items: notes in four of the
+    /// theme's six colours and one with no category at all, one note older than a week so that
+    /// Last 7 Days is a different list from Icons, a note with several lines so the wall has a
+    /// title to shorten and the rows have something to preview, entries of four types so the
+    /// Entry List has more than one heading, and two calls so the Phone Calls view is not one row.
+    /// Every subject, name and number is invented.
+    /// </para>
+    /// </remarks>
+    private static void SeedNotesAndJournal(string path)
+    {
+        var today = SeedToday();
+        var zone = TimeZoneInfo.Local.Id;
+
+        using var store = new PimStore(path);
+        var pim = new PimRepository(store);
+        var notes = pim.AddCollection(CollectionKind.Journal, "Notes", "#F2C811").Id;
+        var journal = pim.AddCollection(CollectionKind.Journal, "Journal", "#8764B8").Id;
+
+        void Note(string body, DateOnly on, TimeOnly at, params string[] categories)
+            => pim.AddItem(PimJournalCodec.ToItem(
+                new JournalEntry
+                {
+                    Uid = JournalEntry.NewUid(),
+                    When = EventTime.At(on.ToDateTime(at), zone),
+                    Categories = categories,
+                    LastModified = DateTimeOffset.UtcNow,
+                }.WithBody(body),
+                notes));
+
+        void Entry(string subject, string type, DateOnly on, TimeOnly at, TimeSpan? took, string contact = "", string body = "", params string[] categories)
+            => pim.AddItem(PimJournalCodec.ToItem(
+                new JournalEntry
+                {
+                    Uid = JournalEntry.NewUid(),
+                    Summary = subject,
+                    Description = body,
+                    EntryType = type,
+                    When = EventTime.At(on.ToDateTime(at), zone),
+                    Duration = took,
+                    Contacts = contact.Length > 0 ? [contact] : [],
+                    Categories = categories,
+                    LastModified = DateTimeOffset.UtcNow,
+                },
+                journal));
+
+        Note("Wi-Fi in the studio\nssid: studio-guest, and the key is taped inside the cupboard door.", today, new TimeOnly(9, 20));
+        Note("Newsletter ideas\n— a short piece on metric-compatible fonts\n— what the reading pane is for", today, new TimeOnly(11, 5), "Blue Category");
+        Note("Shopping\nmilk, bread, coffee, and something for Sunday", today.AddDays(-1), new TimeOnly(18, 40), "Green Category");
+        Note("Ring the plumber back — Tuesday after four", today.AddDays(-2), new TimeOnly(8, 15), "Red Category");
+        Note("Reading list\nThe one A. Person kept going on about, and the sequel.", today.AddDays(-12), new TimeOnly(21, 0), "Purple Category");
+
+        Entry("A. Person about the release", "Phone call", today, new TimeOnly(10, 0), TimeSpan.FromMinutes(45), "A. Person",
+            "Agreed to cut the release once the last two are in.");
+        Entry("Design review", "Meeting", today, new TimeOnly(14, 0), TimeSpan.FromHours(1), "Sam Reyes", categories: ["Green Category"]);
+        Entry("Drafted the quarterly numbers", "Document", today.AddDays(-1), new TimeOnly(9, 30), TimeSpan.FromHours(2), categories: ["Orange Category"]);
+        Entry("Sent the agenda round", "E-mail Message", today.AddDays(-2), new TimeOnly(16, 45), null, "Priya Raman");
+        Entry("Priya Raman about the font substitution", "Phone call", today.AddDays(-3), new TimeOnly(11, 15), TimeSpan.FromMinutes(15), "Priya Raman");
+        Entry("Offsite planning", "Meeting", today.AddDays(-9), new TimeOnly(13, 0), TimeSpan.FromHours(3));
     }
 
     /// <summary>

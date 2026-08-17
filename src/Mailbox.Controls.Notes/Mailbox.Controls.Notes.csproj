@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The Notes module's view (§9). Drawn, as the other four modules' views are: a wall of notes is
+    a hundred squares of four rectangles each, and a control per square is a control per square.
+
+    One control for both of the module's shapes — the wall and the rows — rather than two, for the
+    reason the time grid draws Day, Work Week and Week: they share the selection, the hit testing
+    and the palette, and what differs is where a note is put and what of it is written.
+  -->
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Mailbox.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mailbox.Controls.Common\Mailbox.Controls.Common.csproj" />
+    <ProjectReference Include="..\Mailbox.Core\Mailbox.Core.csproj" />
+    <ProjectReference Include="..\Mailbox.Scheduling\Mailbox.Scheduling.csproj" />
+    <ProjectReference Include="..\Mailbox.Theming\Mailbox.Theming.csproj" />
+  </ItemGroup>
+
+</Project>

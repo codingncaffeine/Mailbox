@@ -37,6 +37,8 @@
     <ProjectReference Include="..\Mailbox.Dav\Mailbox.Dav.csproj" />
     <ProjectReference Include="..\Mailbox.Theming\Mailbox.Theming.csproj" />
     <ProjectReference Include="..\Mailbox.Controls.Calendar\Mailbox.Controls.Calendar.csproj" />
+    <ProjectReference Include="..\Mailbox.Controls.Journal\Mailbox.Controls.Journal.csproj" />
+    <ProjectReference Include="..\Mailbox.Controls.Notes\Mailbox.Controls.Notes.csproj" />
     <ProjectReference Include="..\Mailbox.Controls.People\Mailbox.Controls.People.csproj" />
     <ProjectReference Include="..\Mailbox.Controls.Ribbon\Mailbox.Controls.Ribbon.csproj" />
     <ProjectReference Include="..\Mailbox.Controls.Tasks\Mailbox.Controls.Tasks.csproj" />

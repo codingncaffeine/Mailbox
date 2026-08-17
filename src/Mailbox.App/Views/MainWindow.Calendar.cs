@@ -57,16 +57,13 @@ public partial class MainWindow
     /// </summary>
     private void SwitchModule(ShellViewModel shell, MailboxModule module)
     {
-        if (module is not (MailboxModule.Mail or MailboxModule.Calendar or MailboxModule.People or MailboxModule.Tasks))
+        if (module is not (MailboxModule.Mail or MailboxModule.Calendar or MailboxModule.People
+            or MailboxModule.Tasks or MailboxModule.Notes or MailboxModule.Journal))
         {
-            // The remaining two are whole modules further on, and a button that says which phase
-            // brings it is better than one that does nothing.
-            shell.StatusRight = module switch
-            {
-                MailboxModule.Notes or MailboxModule.Journal
-                    => $"{module} arrives with the rest of Phase 13.",
-                _ => $"{module} is Phase 14, with the rest of the shell.",
-            };
+            // Folders and Shortcuts are the rest of the navigation pane rather than modules of
+            // their own, and a button that says which phase brings it is better than one that
+            // does nothing.
+            shell.StatusRight = $"{module} is Phase 14, with the rest of the shell.";
             return;
         }
 
@@ -100,6 +97,24 @@ public partial class MainWindow
                 var workspace = EnsureTasks(shell);
                 host.Content = workspace;
                 _ribbon.Layout = TasksRibbon();
+                shell.ModuleStatusLeft = workspace.Status;
+                break;
+            }
+
+            case MailboxModule.Notes:
+            {
+                var workspace = EnsureNotes(shell);
+                host.Content = workspace;
+                _ribbon.Layout = NotesRibbon();
+                shell.ModuleStatusLeft = workspace.Status;
+                break;
+            }
+
+            case MailboxModule.Journal:
+            {
+                var workspace = EnsureJournal(shell);
+                host.Content = workspace;
+                _ribbon.Layout = JournalRibbon();
                 shell.ModuleStatusLeft = workspace.Status;
                 break;
             }
@@ -1233,6 +1248,8 @@ public partial class MainWindow
                 });
 
                 if (shell.Module == MailboxModule.Tasks) PoseTasks(shell);
+                if (shell.Module == MailboxModule.Notes) PoseNotes(shell);
+                if (shell.Module == MailboxModule.Journal) PoseJournal(shell);
 
                 if (shell.Module == MailboxModule.People)
                 {

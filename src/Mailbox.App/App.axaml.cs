@@ -486,6 +486,8 @@ public partial class App : Application
         Commands.RegisterRange(AppointmentCommands.All);
         Commands.RegisterRange(PeopleCommands.All);
         Commands.RegisterRange(TaskCommands.All);
+        Commands.RegisterRange(NoteCommands.All);
+        Commands.RegisterRange(JournalCommands.All);
         Keys = new Mailbox.Core.Keyboard.KeyMap(Settings, Commands);
         Mailbox.Controls.Ribbon.RibbonView.GestureLookup = command => Keys.GestureFor(command.Id)?.Display;
 
