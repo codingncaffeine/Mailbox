@@ -384,6 +384,14 @@
              the pane below; on the Right the lower two rows hold nothing and are no height. -->
         <Grid Name="PaneGrid" ColumnDefinitions="Auto,Auto,1,Auto,1,*,Auto" RowDefinitions="*,Auto,Auto">
 
+            <!-- The summary page. It takes the list and the reading pane and leaves the folder
+                 pane where it is, because it is opened *from* that pane: the account's own
+                 heading is what shows it, and hiding the row that was clicked would be odd. -->
+            <ContentControl Grid.Column="3" Grid.ColumnSpan="4" Grid.RowSpan="3"
+                            Name="TodayHost"
+                            ZIndex="5"
+                            IsVisible="{Binding IsTodayShowing}" />
+
             <!-- Navigation pane -->
             <Border Grid.Column="1" Grid.RowSpan="3"
                     IsVisible="{Binding NavVisible}"
