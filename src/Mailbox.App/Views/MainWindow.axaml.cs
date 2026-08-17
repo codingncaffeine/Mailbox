@@ -301,9 +301,9 @@ public partial class MainWindow : Window
                 var manager = new FolderManager(where.Account.Mail);
                 switch (verb)
                 {
-                    case "new": await manager.CreateAsync(ConnectionFor(where.Account), where.Account.Account.Id, arg, where.Folder.Id); break;
-                    case "rename": await manager.RenameAsync(ConnectionFor(where.Account), where.Folder, arg); break;
-                    case "delete": await manager.DeleteAsync(ConnectionFor(where.Account), where.Folder); break;
+                    case "new": await manager.CreateAsync(await ConnectionForAsync(where.Account), where.Account.Account.Id, arg, where.Folder.Id); break;
+                    case "rename": await manager.RenameAsync(await ConnectionForAsync(where.Account), where.Folder, arg); break;
+                    case "delete": await manager.DeleteAsync(await ConnectionForAsync(where.Account), where.Folder); break;
                     case "markread": s.MarkFolderRead(where.Account, where.Folder.Id); break;
                     case "empty": s.EmptyFolder(where.Account, where.Folder.Id); break;
                     case "favourite":
@@ -323,12 +323,12 @@ public partial class MainWindow : Window
 
                         if (verb == "move")
                         {
-                            var moved = await manager.MoveAsync(ConnectionFor(where.Account), where.Folder, destination);
+                            var moved = await manager.MoveAsync(await ConnectionForAsync(where.Account), where.Folder, destination);
                             Log.Info($"Harness: move {(moved ? "done" : "refused")}.");
                         }
                         else
                         {
-                            var made = await manager.CopyAsync(ConnectionFor(where.Account), where.Account.Account.Id, where.Folder, destination);
+                            var made = await manager.CopyAsync(await ConnectionForAsync(where.Account), where.Account.Account.Id, where.Folder, destination);
                             Log.Info($"Harness: copied as folder {made.Id} “{made.Name}” under {made.ParentId?.ToString() ?? "the top"}.");
                         }
                         break;
@@ -2219,9 +2219,11 @@ public partial class MainWindow : Window
     }
 
     /// <summary>The account's connection for a folder operation on the server — null for POP3, whose folders live here.</summary>
-    private static AccountConnection? ConnectionFor(OpenAccount account)
+    /// <remarks>Asynchronous because reading the password is: see <see cref="AccountSettings.ToConnectionAsync"/>.</remarks>
+    private static async Task<AccountConnection?> ConnectionForAsync(OpenAccount account)
         => account.Account.Protocol == MailProtocol.Imap
-            ? AccountSettings.Load(App.Settings, account.Account.Address)?.ToConnection(account.Account, App.Secrets, App.OAuth)
+           && AccountSettings.Load(App.Settings, account.Account.Address) is { } settings
+            ? await settings.ToConnectionAsync(account.Account, App.Secrets, App.OAuth).ConfigureAwait(true)
             : null;
 
     private async Task NewFolderAsync(ShellViewModel shell, OpenAccount account, long? parentId)
@@ -2232,7 +2234,7 @@ public partial class MainWindow : Window
 
         try
         {
-            var made = await Task.Run(() => new FolderManager(account.Mail).CreateAsync(ConnectionFor(account), account.Account.Id, wanted.Name, wanted.ParentId));
+            var made = await Task.Run(async () => await new FolderManager(account.Mail).CreateAsync(await ConnectionForAsync(account), account.Account.Id, wanted.Name, wanted.ParentId));
             shell.SelectFolder(account, made.Id);
             shell.StatusRight = $"Folder “{made.Name}” created.";
         }
@@ -2252,7 +2254,7 @@ public partial class MainWindow : Window
         {
             var all = account.Mail.Folders(account.Account.Id);
             var oldPath = ShellViewModel.FolderPath(all, folder);
-            await Task.Run(() => new FolderManager(account.Mail).RenameAsync(ConnectionFor(account), folder, name.Trim()));
+            await Task.Run(async () => await new FolderManager(account.Mail).RenameAsync(await ConnectionForAsync(account), folder, name.Trim()));
             // A favourite keeps its place under its new name.
             var renamed = account.Mail.GetFolder(folder.Id);
             if (renamed is not null) App.Favourites.Repath(account.Account.Address, oldPath, ShellViewModel.FolderPath(account.Mail.Folders(account.Account.Id), renamed));
@@ -2275,7 +2277,7 @@ public partial class MainWindow : Window
             {
                 try
                 {
-                    return await Task.Run(() => new FolderManager(account.Mail).CreateAsync(ConnectionFor(account), account.Account.Id, name, parent));
+                    return await Task.Run(async () => await new FolderManager(account.Mail).CreateAsync(await ConnectionForAsync(account), account.Account.Id, name, parent));
                 }
                 catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
@@ -2315,7 +2317,7 @@ public partial class MainWindow : Window
         try
         {
             var oldPath = ShellViewModel.FolderPath(account.Mail.Folders(account.Account.Id), folder);
-            var moved = await Task.Run(() => new FolderManager(account.Mail).MoveAsync(ConnectionFor(account), folder, chosen.Folder?.Id));
+            var moved = await Task.Run(async () => await new FolderManager(account.Mail).MoveAsync(await ConnectionForAsync(account), folder, chosen.Folder?.Id));
             if (moved && account.Mail.GetFolder(folder.Id) is { } now)
             {
                 App.Favourites.Repath(account.Account.Address, oldPath, ShellViewModel.FolderPath(account.Mail.Folders(account.Account.Id), now));
@@ -2350,7 +2352,7 @@ public partial class MainWindow : Window
 
         try
         {
-            var made = await Task.Run(() => new FolderManager(account.Mail).CopyAsync(ConnectionFor(account), account.Account.Id, folder, chosen.Folder?.Id));
+            var made = await Task.Run(async () => await new FolderManager(account.Mail).CopyAsync(await ConnectionForAsync(account), account.Account.Id, folder, chosen.Folder?.Id));
             shell.Refresh();
             shell.SelectFolder(account, made.Id);
             shell.StatusRight = $"Folder “{folder.Name}” copied to {chosen.Folder?.Name ?? account.Account.Address}.";
@@ -2370,7 +2372,7 @@ public partial class MainWindow : Window
 
         try
         {
-            await Task.Run(() => new FolderManager(account.Mail).DeleteAsync(ConnectionFor(account), folder));
+            await Task.Run(async () => await new FolderManager(account.Mail).DeleteAsync(await ConnectionForAsync(account), folder));
             shell.Refresh();
             shell.StatusRight = $"Folder “{folder.Name}” deleted.";
         }
@@ -2403,7 +2405,7 @@ public partial class MainWindow : Window
 
         if (dialog.NewName is { } name && name != folder.Name)
         {
-            await Task.Run(() => new FolderManager(account.Mail).RenameAsync(ConnectionFor(account), folder, name));
+            await Task.Run(async () => await new FolderManager(account.Mail).RenameAsync(await ConnectionForAsync(account), folder, name));
             shell.SelectFolder(account, folder.Id);
         }
     }
@@ -3373,7 +3375,7 @@ public partial class MainWindow : Window
         Log.Debug($"Command invoked: {command.Id}");
 
         if (id == MailCommands.SendReceiveAll.Id) { _ = SendReceiveAsync(shell); return; }
-        if (id == MailCommands.WorkOffline.Id) { ToggleWorkOffline(shell); return; }
+        if (id == MailCommands.WorkOffline.Id) { _ = ToggleWorkOfflineAsync(shell); return; }
         if (id == ViewCommands.Refresh.Id) { shell.Refresh(); return; }
         if (id == MailCommands.Search.Id) { FocusSearchBox(shell); return; }
         if (id == MailCommands.GoToFolder.Id) { _ = GoToFolderAsync(shell); return; }
@@ -4589,9 +4591,9 @@ public partial class MainWindow : Window
         // A capture run poses accounts; none of them has a server to watch.
         if (WindowCapture.IsRequested) return;
 
-        Opened += (_, _) =>
+        Opened += async (_, _) =>
         {
-            foreach (var target in AccountConnections()
+            foreach (var target in (await AccountConnectionsAsync())
                          .Where(t => t.Connection.Protocol == MailProtocol.Imap))
             {
                 var watcher = new ImapIdleWatcher(target.Connection);
@@ -4681,7 +4683,7 @@ public partial class MainWindow : Window
     {
         if (_transferring) return;
 
-        var accounts = InGroup(AccountConnections(), group);
+        var accounts = InGroup(await AccountConnectionsAsync(), group);
         if (accounts.Count == 0)
         {
             shell.StatusRight = group is null
@@ -5572,9 +5574,9 @@ public partial class MainWindow : Window
         if (confirmed) shell.Delete(rows, permanently: true);
     }
 
-    private void ToggleWorkOffline(ShellViewModel shell)
+    private async Task ToggleWorkOfflineAsync(ShellViewModel shell)
     {
-        App.Transfer.SetWorkOffline(!App.Transfer.WorkOffline, AccountConnections());
+        App.Transfer.SetWorkOffline(!App.Transfer.WorkOffline, await AccountConnectionsAsync());
         shell.StatusRight = App.Transfer.WorkOffline ? "Working offline." : "Working online.";
     }
 
@@ -5583,7 +5585,16 @@ public partial class MainWindow : Window
     /// password out of the keyring as late as possible. An account whose servers were never
     /// filled in is skipped rather than attempted against an empty hostname.
     /// </summary>
-    private static List<TransferTarget> AccountConnections()
+    /// <summary>
+    /// Every account's connection, passwords and all.
+    /// </summary>
+    /// <remarks>
+    /// Asynchronous, and awaited rather than blocked on, because this is where the application
+    /// froze: pressing Send/Receive read each account's password out of the keyring from the UI
+    /// thread, and the continuation of that read needed the UI thread to run on. Neither could
+    /// move, there was no timeout, and the only way out was killing the process.
+    /// </remarks>
+    private static async Task<List<TransferTarget>> AccountConnectionsAsync(CancellationToken cancellation = default)
     {
         var targets = new List<TransferTarget>();
 
@@ -5593,7 +5604,9 @@ public partial class MainWindow : Window
             if (settings is null) continue;
 
             targets.Add(new TransferTarget(
-                settings.ToConnection(open.Account, App.Secrets, App.OAuth), open.Mail));
+                await settings.ToConnectionAsync(open.Account, App.Secrets, App.OAuth, cancellation)
+                    .ConfigureAwait(true),
+                open.Mail));
         }
 
         return targets;
