@@ -508,6 +508,17 @@ public static class OptionsPages
                 new CheckRow("Encrypt the local store with a master password"),
             ]),
 
+            // The keys themselves. Until this page existed the ring was whatever another tool had
+            // put there and nothing in the application would say so, which made "this message
+            // will not encrypt" a sentence with no visible cause.
+            new OptionSection("Keys",
+            [
+                new SubHeadingRow("Mailbox keeps its own keyring, beside your data rather than in "
+                                  + "GnuPG's — the library cannot read GnuPG's own format. Import "
+                                  + "brings a copy across; nothing is moved or changed there."),
+                new SlotRow("keys"),
+            ]),
+
             new OptionSection("Automatic download",
             [
                 new CheckRow("Don't download pictures automatically in messages", true),

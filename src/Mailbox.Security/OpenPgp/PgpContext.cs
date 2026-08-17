@@ -71,6 +71,83 @@ public sealed class PgpContext : GnuPGContext
     /// <inheritdoc/>
     protected override string GetPasswordForKey(PgpSecretKey key) => _passphrase(key)!;
 
+    /// <summary>
+    /// The rings themselves, for the page that lists what is here.
+    /// </summary>
+    /// <remarks>
+    /// The library keeps both enumerations protected, as it does the key lookups above — reasonable
+    /// for a class whose job is to encrypt, and not enough for an application that has to tell a
+    /// reader why a message will not encrypt. Reading a ring is not a cryptographic operation and
+    /// asks for no passphrase.
+    /// </remarks>
+    public IEnumerable<PgpPublicKeyRing> PublicRings() => EnumeratePublicKeyRings();
+
+    /// <inheritdoc cref="PublicRings"/>
+    public IEnumerable<PgpSecretKeyRing> SecretRings() => EnumerateSecretKeyRings();
+
+    /// <summary>
+    /// Takes keys from a stream into this ring, and says how many arrived.
+    /// </summary>
+    /// <remarks>
+    /// Both halves, because the two are imported by different calls and a reader moving from GnuPG
+    /// means both. Counted by reading the ring before and after rather than by trusting the
+    /// stream's contents: a file may hold keys already here, and "imported 4" for four keys that
+    /// were already there is a lie the reader will act on.
+    /// </remarks>
+    public (int Public, int Secret) Take(Stream keys, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(keys);
+
+        var publicBefore = PublicRings().Count();
+        var secretBefore = SecretRings().Count();
+
+        // Read once into bytes, and each pass gets a stream of its own: the library's import
+        // closes the stream it is handed, so the second pass would otherwise be reading a closed
+        // one.
+        using var buffer = new MemoryStream();
+        keys.CopyTo(buffer);
+        var bytes = buffer.ToArray();
+
+        // Walked ring by ring rather than parsed into a bundle of one kind, and not through the
+        // library's stream import — which wraps the stream in an `ArmoredInputStream` and so takes
+        // armoured public keys and nothing else. Two reasons for the walk: `gpg --export` writes
+        // binary while a key saved from a web page is armoured, and `GetDecoderStream` reads
+        // either; and a file may hold both kinds at once, where asking for a bundle of one kind
+        // throws on meeting the other and takes the whole import down with it.
+        try
+        {
+            using var raw = new MemoryStream(bytes);
+            using var decoded = Org.BouncyCastle.Bcpg.OpenPgp.PgpUtilities.GetDecoderStream(raw);
+            var objects = new PgpObjectFactory(decoded);
+
+            while (objects.NextPgpObject() is { } found)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                switch (found)
+                {
+                    case PgpPublicKeyRing keyRing:
+                        Import(keyRing, cancellationToken);
+                        break;
+                    case PgpSecretKeyRing secretRing:
+                        Import(secretRing, cancellationToken);
+                        break;
+                    default:
+                        // Anything else in the file is not a key and is none of our business.
+                        break;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // A file that is not a keyring at all lands here, which is a thing a reader can
+            // choose by mistake and not a failure worth a stack trace.
+            Log.Info($"That file did not read as a keyring: {ex.Message}");
+        }
+
+        return (PublicRings().Count() - publicBefore, SecretRings().Count() - secretBefore);
+    }
+
     /// <summary>The secret key with that id, or null when this ring has not got it.</summary>
     /// <remarks>
     /// The library keeps this lookup to itself, and what needs it is the dialog that asks for a
