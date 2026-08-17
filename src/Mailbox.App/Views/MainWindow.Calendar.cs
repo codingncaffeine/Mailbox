@@ -1036,7 +1036,7 @@ public partial class MainWindow
     private void RefreshPeeks()
     {
         if (_floatingPeek is { } floating) FillPeek(floating);
-        if (this.FindControl<ContentControl>("DockHost")?.Content is PeekView docked) FillPeek(docked);
+        if (DockedPeek is { } docked) FillPeek(docked);
     }
 
     /// <summary>

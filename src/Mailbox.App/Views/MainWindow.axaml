@@ -932,11 +932,11 @@
                           IsVisible="False"
                           ResizeDirection="Rows" />
 
-            <!-- Docked calendar. Takes the reading pane's right edge, exactly as the reference's
-                 To-Do Bar calendar does, and carries a close button to undock. -->
+            <!-- The To-Do Bar. Takes the reading pane's right edge, exactly as the reference's
+                 does, and holds whichever of its sections are switched on. -->
             <ContentControl Grid.Column="6" Grid.RowSpan="3"
                             Name="DockHost"
-                            IsVisible="{Binding IsCalendarDocked}" />
+                            IsVisible="{Binding IsToDoBarVisible}" />
 
             <!-- Reading pane -->
             <Border Grid.Column="5"
