@@ -116,6 +116,100 @@ public sealed class ContactBook(PimRepository repository)
         }
     }
 
+    /// <summary>
+    /// The other cards for this person — the ones this card's own links name.
+    /// </summary>
+    /// <remarks>
+    /// This card's links and not a search for cards that name it, which would be the other half of
+    /// the same question. <see cref="Link"/> writes both ends, so for anything made here the two
+    /// answers are the same; catching the case where another client wrote only one end would mean
+    /// **parsing every card in the book** on every open, the links living in the vCard text rather
+    /// than in a column, and that is the wrong price for a rare shape.
+    /// </remarks>
+    public IReadOnlyList<ContactRow> Linked(long id)
+    {
+        if (Full(id) is not { Links.Count: > 0 } contact) return [];
+
+        return
+        [
+            .. Rows()
+                .Where(other => other.Id != id
+                                && contact.Links.Contains(other.Contact.Uid, StringComparer.OrdinalIgnoreCase))
+                .OrderBy(other => other.Named(), StringComparer.CurrentCultureIgnoreCase),
+        ];
+    }
+
+    /// <summary>
+    /// Links two cards as the same person, writing both ends.
+    /// </summary>
+    /// <remarks>
+    /// Both, because a link only one card knows about is one the reader can only see from one
+    /// side — and because a card that goes to a server and comes back keeps what it was written
+    /// with, not what something else says about it.
+    /// </remarks>
+    public bool Link(long id, long otherId)
+    {
+        if (id == otherId) return false;
+        if (Row(id) is not { } mine || Row(otherId) is not { } theirs) return false;
+        if (Full(id) is not { } here || Full(otherId) is not { } there) return false;
+
+        var changed = false;
+
+        if (!here.Links.Contains(there.Uid, StringComparer.OrdinalIgnoreCase))
+        {
+            Save(here with { Links = [.. here.Links, there.Uid] }, mine.CollectionId, _repository.Item(id));
+            changed = true;
+        }
+
+        if (!there.Links.Contains(here.Uid, StringComparer.OrdinalIgnoreCase))
+        {
+            Save(there with { Links = [.. there.Links, here.Uid] }, theirs.CollectionId, _repository.Item(otherId));
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    /// <summary>Takes a link off, both ends again.</summary>
+    public bool Unlink(long id, long otherId)
+    {
+        if (Row(id) is not { } mine || Row(otherId) is not { } theirs) return false;
+        if (Full(id) is not { } here || Full(otherId) is not { } there) return false;
+
+        var changed = false;
+
+        if (here.Links.Contains(there.Uid, StringComparer.OrdinalIgnoreCase))
+        {
+            Save(
+                here with { Links = [.. here.Links.Where(l => !string.Equals(l, there.Uid, StringComparison.OrdinalIgnoreCase))] },
+                mine.CollectionId,
+                _repository.Item(id));
+            changed = true;
+        }
+
+        if (there.Links.Contains(here.Uid, StringComparer.OrdinalIgnoreCase))
+        {
+            Save(
+                there with { Links = [.. there.Links.Where(l => !string.Equals(l, here.Uid, StringComparison.OrdinalIgnoreCase))] },
+                theirs.CollectionId,
+                _repository.Item(otherId));
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    /// <summary>
+    /// Cards that may already be this person, for the prompt on save.
+    /// </summary>
+    /// <remarks>
+    /// Over every address book rather than the one being written to: a duplicate in another book
+    /// is still a duplicate, and the reason somebody has two is usually that the second came from
+    /// somewhere else.
+    /// </remarks>
+    public IReadOnlyList<DuplicateMatch> Duplicates(Contact candidate, long? ignoreId = null)
+        => ContactDuplicates.Find(candidate, Rows(), ignoreId);
+
     private ContactRow Row(PimItem item, IReadOnlyDictionary<long, Collection> books)
     {
         var contact = PimContactCodec.FromColumns(item);
