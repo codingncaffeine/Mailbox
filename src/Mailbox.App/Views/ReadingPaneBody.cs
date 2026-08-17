@@ -9,6 +9,7 @@ using Mailbox.Core.Diagnostics;
 using Mailbox.Rendering;
 using RenderOptions = Mailbox.Rendering.RenderOptions;
 using Mailbox.Security;
+using Mailbox.Security.Smime;
 using Mailbox.Store;
 using Mailbox.Theming;
 using Mailbox.Theming.Icons;
@@ -174,6 +175,13 @@ public sealed class ReadingPaneBody : UserControl
 
         var trust = SenderTrust.Evaluate(_message, FamiliarDomains(), _verified);
         if (trust.Warnings.Count > 0) _bars.Children.Add(TrustBar(trust));
+
+        // The signature, when the reader has asked for S/MIME at all. Crypto ships off (§14), and
+        // a bar that says "signed" over a check nobody made would be worse than no bar.
+        if (SignatureOf(_message) is { State: not SignatureState.None } signature)
+        {
+            _bars.Children.Add(SignatureBar(signature));
+        }
 
         // An invitation is the one bar that goes above the trust strip in the reference: it is
         // what the message is, not a caveat about it.
@@ -443,6 +451,102 @@ public sealed class ReadingPaneBody : UserControl
         MessageFontSize);
 
     // ---- The bars ----------------------------------------------------------------------------
+
+    /// <summary>
+    /// What checking this message's signature came to, or nothing when S/MIME is switched off.
+    /// </summary>
+    /// <remarks>
+    /// The store is the machine's own: a certificate is trusted because this machine trusts it,
+    /// never because the message carried it (§19). Nothing is imported here at all.
+    /// </remarks>
+    private static SignatureReport SignatureOf(MimeMessage message)
+    {
+        if (!App.Security.Smime || !SmimeVerification.IsSigned(message)) return SignatureReport.Unsigned;
+
+        try
+        {
+            using var context = CertificateStore();
+            return SmimeVerification.Verify(message, context);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Data.Common.DbException)
+        {
+            // No certificate store to check against is not a verdict about the message.
+            Log.Warn("The certificate store could not be opened.", ex);
+            return new SignatureReport(SignatureState.Unknown, string.Empty, "The certificate store could not be opened.");
+        }
+    }
+
+    /// <summary>
+    /// The machine's certificate store — or a throwaway one under the harness.
+    /// </summary>
+    /// <remarks>
+    /// Beside the application's own data rather than in the library's default home directory, for
+    /// the reason the mail stores are: what this application keeps is in one place a reader can
+    /// find, back up and delete. A capture run gets a temporary store instead, because a run that
+    /// photographs the window has no business touching key material — the same rule that keeps it
+    /// off the keyring.
+    /// </remarks>
+    private static MimeKit.Cryptography.SecureMimeContext CertificateStore()
+    {
+        if (Mailbox.App.Theming.WindowCapture.IsRequested)
+        {
+            return new MimeKit.Cryptography.TemporarySecureMimeContext();
+        }
+
+        var directory = Path.GetDirectoryName(Mailbox.Store.Pim.PimStore.DefaultPath())!;
+        Directory.CreateDirectory(directory);
+        return new MimeKit.Cryptography.DefaultSecureMimeContext(Path.Combine(directory, "certificates.db"));
+    }
+
+    /// <summary>
+    /// The line the reference draws over a signed message, in the four states §19 asks for.
+    /// </summary>
+    /// <remarks>
+    /// A mismatch is not folded into either of the other two: it is the attack, and it reads as
+    /// its own sentence. Nothing here offers a way to see the content "anyway" — Thunderbird's
+    /// wording is the model, and a button that dismisses the warning is the bug it warns about.
+    /// </remarks>
+    private Control SignatureBar(SignatureReport signature)
+    {
+        var alarm = signature.State is SignatureState.Invalid or SignatureState.Mismatched;
+        var bar = Bar(alarm ? "reading.infobar.warning.background.brush" : "reading.infobar.background.brush");
+
+        var headline = signature.State switch
+        {
+            SignatureState.Valid => $"Signed by {signature.Signer}.",
+            SignatureState.Mismatched => "This message is signed by somebody other than its sender.",
+            SignatureState.Invalid => "This message's signature does not hold.",
+            _ => "This message is signed in a way Mailbox cannot check.",
+        };
+
+        var text = new TextBlock
+        {
+            Text = headline,
+            TextWrapping = TextWrapping.Wrap,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        Bind(text, TextBlock.ForegroundProperty, "reading.infobar.text.brush");
+        Grid.SetColumn(text, 1);
+
+        var glyph = Glyph(alarm ? "warning" : signature.State == SignatureState.Valid ? "shield" : "info");
+        Grid.SetColumn(glyph, 0);
+
+        var grid = Row();
+        grid.Children.Add(glyph);
+        grid.Children.Add(text);
+
+        if (signature.Detail.Length > 0)
+        {
+            var details = BarButton("Details");
+            details.Click += async (_, _) => await ExplainAsync("About this signature", signature.Detail);
+            Grid.SetColumn(details, 2);
+            grid.Children.Add(details);
+        }
+
+        bar.Child = grid;
+        return bar;
+    }
 
     private Control TrustBar(SenderTrust trust)
     {
