@@ -55,6 +55,9 @@ public partial class App : Application
     /// <summary>The Favourites section at the top of the folder pane: which folders, in what order.</summary>
     public static Mailbox.Core.Folders.Favourites Favourites { get; private set; } = null!;
 
+    /// <summary>The favourite contacts, which is what the To-Do Bar's People section holds.</summary>
+    public static Mailbox.Core.People.ContactFavourites ContactFavourites { get; private set; } = null!;
+
     /// <summary>Personal Stationery: the fonts new mail, replies and plain text are written in.</summary>
     public static StationeryFonts Stationery { get; private set; } = null!;
 
@@ -515,6 +518,7 @@ public partial class App : Application
         QuickAccess = new QuickAccessLayout(Settings, DefaultRibbonLayouts.Mail.QuickAccess);
         RibbonDisplay = new RibbonDisplaySettings(Settings);
         Favourites = new Mailbox.Core.Folders.Favourites(Settings);
+        ContactFavourites = new Mailbox.Core.People.ContactFavourites(Settings);
         Stationery = new StationeryFonts(Settings);
         Groups = new SendReceiveGroups(Settings);
         Signatures = new Signatures(Settings);

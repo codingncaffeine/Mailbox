@@ -70,7 +70,8 @@ public static class PeopleRibbonLayout
                 Cluster("tags", "Tags",
                     RibbonItem.Sheddable(PeopleCommands.Categorize.Id, RibbonItemKind.DropDown),
                     RibbonItem.Sheddable(PeopleCommands.FollowUp.Id, RibbonItemKind.DropDown),
-                    RibbonItem.Sheddable(PeopleCommands.Private.Id)),
+                    RibbonItem.Sheddable(PeopleCommands.Private.Id),
+                    RibbonItem.Sheddable(PeopleCommands.Favourite.Id)),
 
                 Cluster("find", "Find",
                     RibbonItem.Field(ViewCommands.SearchPeople.Id, SearchPeopleWidth, "Search People"),
@@ -208,6 +209,7 @@ public static class PeopleRibbonLayout
                             RibbonItem.Large(PeopleCommands.Categorize.Id, RibbonItemKind.DropDown),
                             RibbonItem.Large(PeopleCommands.FollowUp.Id, RibbonItemKind.DropDown),
                             RibbonItem.Large(PeopleCommands.Private.Id),
+                            RibbonItem.Large(PeopleCommands.Favourite.Id),
                         ],
                     },
 

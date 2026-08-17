@@ -307,6 +307,26 @@ public static class PeopleCommands
         RequiresSelection = true,
     };
 
+    /// <summary>
+    /// Add to Favourites, which is what fills the To-Do Bar's People section.
+    /// </summary>
+    /// <remarks>
+    /// One command rather than two, because it is one gesture: a contact is in the short list or
+    /// it is not, and the bar says which. The list is this reader's own preference and is not
+    /// written into the card — see <c>ContactFavourites</c>.
+    /// </remarks>
+    public static readonly MailboxCommand Favourite = new()
+    {
+        Id = new("people.favourite"),
+        Label = "Add to Favourites",
+        Description = "Keep the contact in the To-Do Bar's People section.",
+        Icon = "star",
+        Category = "Tags",
+        Scope = ModuleScope.People,
+        KeyTip = "AF",
+        RequiresSelection = true,
+    };
+
     // The Find cluster's Search People box is ViewCommands.SearchPeople, which every module's
     // bar carries — the box searches the address book from wherever the reader is, so one
     // command rather than one per module.
@@ -318,6 +338,6 @@ public static class PeopleCommands
         PeopleView, BusinessCardView, CardView, PhoneView, ListView,
         MoveTo, MailMerge, ForwardContact, ShareContacts, OpenSharedContacts,
         NewAddressBook, DeleteAddressBook,
-        Categorize, FollowUp, Private,
+        Categorize, FollowUp, Private, Favourite,
     ];
 }

@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Mailbox.Controls.Calendar;
+using Mailbox.Controls.People;
 using Mailbox.Controls.Tasks;
 using Mailbox.Scheduling;
 
@@ -24,8 +25,8 @@ namespace Mailbox.App.Views;
 /// with.
 /// </para>
 /// <para>
-/// The People section the reference offers is the third: it lists favourite contacts, which is a
-/// list this application does not keep yet. Its menu entry says so rather than being absent.
+/// The People section is the third, and the same again: the module's own <c>ContactListView</c>
+/// over the favourite contacts, with its alphabet index off — a short list has no Ws to reach.
 /// </para>
 /// </remarks>
 internal sealed class ToDoBar : Border
@@ -37,44 +38,55 @@ internal sealed class ToDoBar : Border
     /// </summary>
     private const int AppointmentsShown = 3;
 
+    /// <summary>
+    /// How tall the People section is when it is sharing the pane with the tasks.
+    /// </summary>
+    /// <remarks>
+    /// Authored, no capture of the section existing: room for about five favourites, which is
+    /// what the reference's own short list holds before it scrolls.
+    /// </remarks>
+    private const double PeopleHeight = 5 * 30;
+
     private readonly Grid _grid = new();
 
-    public ToDoBar(PeekView? peek, TaskListView? tasks)
+    public ToDoBar(PeekView? peek, TaskListView? tasks, ContactListView? people = null)
     {
         Peek = peek;
         Tasks = tasks;
+        People = people;
 
         this[!BackgroundProperty] = new DynamicResourceExtension("peek.background.brush");
         Width = PeekLayout.DockedWidth + PeekLayout.DividerWidth;
 
-        // The calendar first and the tasks under it, which is the order the reference stacks
-        // them in and the order its menu lists them.
-        var calendarRow = peek is null ? "0" : tasks is null ? "*" : CalendarHeight(peek).ToString(Culture);
-        _grid.RowDefinitions = new RowDefinitions($"{calendarRow},*");
+        // The calendar first, the tasks under it and the people under those, which is the order
+        // the reference stacks them in and the order its menu lists them. Whatever is on takes
+        // the room the ones above it leave; with only one on, it takes the pane.
+        var calendarRow = peek is null ? "0" : tasks is null && people is null ? "*" : CalendarHeight(peek).ToString(Culture);
+        var peopleRow = people is null ? "0" : tasks is null ? "*" : PeopleHeight.ToString(Culture);
+        _grid.RowDefinitions = new RowDefinitions($"{calendarRow},*,{peopleRow}");
 
-        if (peek is not null)
-        {
-            Grid.SetRow(peek, 0);
-            _grid.Children.Add(peek);
-        }
-
-        if (tasks is not null)
-        {
-            Grid.SetRow(tasks, 1);
-            _grid.Children.Add(tasks);
-
-            // The line between the two sections, which is the same hairline the peek rules under
-            // its own grid rather than a second idea about how a divider looks.
-            if (peek is not null)
-            {
-                var rule = new Border { Height = 1, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top };
-                rule[!BackgroundProperty] = new DynamicResourceExtension("peek.divider.brush");
-                Grid.SetRow(rule, 1);
-                _grid.Children.Add(rule);
-            }
-        }
+        Place(peek, 0, ruled: false);
+        Place(tasks, 1, ruled: peek is not null);
+        Place(people, 2, ruled: peek is not null || tasks is not null);
 
         Child = _grid;
+    }
+
+    /// <summary>Puts one section in its row, with the hairline that separates it from the one above.</summary>
+    private void Place(Control? section, int row, bool ruled)
+    {
+        if (section is null) return;
+
+        Grid.SetRow(section, row);
+        _grid.Children.Add(section);
+        if (!ruled) return;
+
+        // The same hairline the peek rules under its own grid, rather than a second idea about
+        // how a divider looks.
+        var rule = new Border { Height = 1, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top };
+        rule[!BackgroundProperty] = new DynamicResourceExtension("peek.divider.brush");
+        Grid.SetRow(rule, row);
+        _grid.Children.Add(rule);
     }
 
     /// <summary>The calendar section, when it is on.</summary>
@@ -82,6 +94,9 @@ internal sealed class ToDoBar : Border
 
     /// <summary>The tasks section, when it is on.</summary>
     public TaskListView? Tasks { get; }
+
+    /// <summary>The People section — the favourite contacts — when it is on.</summary>
+    public ContactListView? People { get; }
 
     private static System.Globalization.CultureInfo Culture => System.Globalization.CultureInfo.InvariantCulture;
 
