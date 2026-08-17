@@ -44,6 +44,26 @@ public partial class MainWindow
     }
 
     /// <summary>
+    /// The To-Do Bar's tasks section: the same drawn list the module shows, over the same rows.
+    /// </summary>
+    /// <remarks>
+    /// The list itself rather than something like it, which is the whole point of the pane — the
+    /// tick box, the row that makes a task by being typed in and the bands all come with it, and
+    /// a second implementation of them would be a second thing to keep right.
+    /// </remarks>
+    private TaskListView BuildToDoTasks(ShellViewModel shell)
+    {
+        var view = new TaskListView();
+        var book = new TaskBook(App.Pim);
+
+        view.Rows = book.Rows(CalendarToday);
+        view.TaskActivated += (_, row) => _ = OpenTaskAsync(shell, row);
+        view.TaskToggled += (_, row) => ToggleTask(shell, row);
+        view.TaskTyped += (_, text) => AddTypedTask(shell, text);
+        return view;
+    }
+
+    /// <summary>
     /// The Tasks module's commands. Returns false for anything it does not own, so the shell's
     /// own list carries on.
     /// </summary>
@@ -126,6 +146,7 @@ public partial class MainWindow
 
         App.PimSync.QueuePut(written);
         _taskModule?.Reload();
+        RefreshToDoTasks();
         return written;
 
         PimItem Store(PimItem item)
@@ -177,6 +198,7 @@ public partial class MainWindow
         // delete made offline still reaches the server.
         App.PimSync.Remove(item);
         _taskModule?.Reload();
+        RefreshToDoTasks();
 
         shell.StatusRight = $"“{item.Summary}” deleted.";
         Log.Info($"Task {item.Id} deleted.");
@@ -248,16 +270,17 @@ public partial class MainWindow
 
         if (Environment.GetEnvironmentVariable("MAILBOX_TASK_PRESS") is { Length: > 0 } press)
         {
-            PressTask(shell, tasks, press.Trim());
+            PressTask(shell, tasks.List, press.Trim());
         }
     }
 
     /// <summary>
-    /// Presses one thing in the to-do list: <c>tick:part of a subject</c> ticks that task's box,
+    /// Presses one thing in a to-do list — the module's, or the To-Do Bar's, which is the same
+    /// control over the same rows: <c>tick:part of a subject</c> ticks that task's box,
     /// <c>open:…</c> opens it, and <c>type:some words</c> types into the row at the top and
     /// presses Enter. The store is read back afterwards, which is the claim.
     /// </summary>
-    private void PressTask(ShellViewModel shell, TasksWorkspace tasks, string spec)
+    private void PressTask(ShellViewModel shell, TaskListView list, string spec)
     {
         // The window's own layout, not the list's: a control lays out inside its parent, and
         // the module has only just been put in one — a list of zero width hits nothing.
@@ -267,12 +290,12 @@ public partial class MainWindow
         {
             var text = spec["type:".Length..].Trim();
             AddTypedTask(shell, text);
-            Log.Info($"Harness: the list now holds {tasks.Rows.Count}.");
+            Log.Info($"Harness: the list now holds {list.Rows.Count}.");
             return;
         }
 
         var wanted = spec.Contains(':', StringComparison.Ordinal) ? spec[(spec.IndexOf(':', StringComparison.Ordinal) + 1)..].Trim() : spec;
-        var row = tasks.Rows.FirstOrDefault(r => r.Summary.Contains(wanted, StringComparison.OrdinalIgnoreCase));
+        var row = list.Rows.FirstOrDefault(r => r.Summary.Contains(wanted, StringComparison.OrdinalIgnoreCase));
         if (row is null)
         {
             Log.Info($"Harness: no task matching “{wanted}” is on the list.");
@@ -287,13 +310,13 @@ public partial class MainWindow
         }
 
         // The tick box, pressed where the view really drew it rather than called directly.
-        if (tasks.List.TickOf(row.ItemId) is not { } box)
+        if (list.TickOf(row.ItemId) is not { } box)
         {
             Log.Info($"Harness: “{row.Summary}” has no tick box drawn — the list may not have laid out.");
             return;
         }
 
-        Press(tasks.List, box.Center);
+        Press(list, box.Center);
 
         if (App.Pim.Item(row.ItemId) is { } after)
         {

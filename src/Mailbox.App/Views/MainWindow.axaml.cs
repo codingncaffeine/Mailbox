@@ -599,6 +599,28 @@ public partial class MainWindow : Window
                     _ => { });
                 break;
             case "docked": Opened += (_, _) => DockPeek(); break;
+
+            // The whole To-Do Bar: both sections at once, which is the arrangement that decides
+            // how tall the calendar half is and so the one worth photographing.
+            case "todobar":
+                Opened += (_, _) =>
+                {
+                    if (DataContext is not ShellViewModel bar) return;
+                    bar.AreTasksDocked = true;
+                    DockPeek();
+                    LogToDoBar(bar);
+                };
+                break;
+
+            // The tasks section alone, which is what the reference's own menu allows.
+            case "todotasks":
+                Opened += (_, _) =>
+                {
+                    if (DataContext is not ShellViewModel bar) return;
+                    ShowToDoTasks(bar, true);
+                    LogToDoBar(bar);
+                };
+                break;
             case "backstage": Opened += (_, _) => ShowBackstage(); break;
 
             // The bar's "…": what it lists at this width, which a capture cannot show.
@@ -2346,23 +2368,95 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// The little corner button: the floating peek becomes a docked panel down the right edge,
-    /// where it takes the reading pane's place until closed.
+    /// The little corner button, and View · To-Do Bar · Calendar: the floating peek becomes the
+    /// bar's calendar section down the right edge, where it takes the reading pane's place.
     /// </summary>
     private void DockPeek()
     {
         ClosePeek();
         if (DataContext is not ShellViewModel shell) return;
 
-        this.FindControl<ContentControl>("DockHost")!.Content = BuildPeek(shell, docked: true);
         shell.IsCalendarDocked = true;
+        RebuildToDoBar(shell);
     }
 
     private void UndockPeek()
     {
         if (DataContext is not ShellViewModel shell) return;
-        this.FindControl<ContentControl>("DockHost")!.Content = null;
         shell.IsCalendarDocked = false;
+        RebuildToDoBar(shell);
+    }
+
+    /// <summary>View · To-Do Bar · Tasks, which is the bar's other section.</summary>
+    private void ShowToDoTasks(ShellViewModel shell, bool showing)
+    {
+        shell.AreTasksDocked = showing;
+        RebuildToDoBar(shell);
+    }
+
+    /// <summary>
+    /// Puts the bar's sections back in the pane, or takes the pane away when none is left.
+    /// </summary>
+    /// <remarks>
+    /// Rebuilt rather than shown and hidden, because how tall the calendar section is depends on
+    /// whether it is sharing the pane with the tasks — a section that stayed as it was would
+    /// keep the whole height it had when it was alone.
+    /// </remarks>
+    private void RebuildToDoBar(ShellViewModel shell)
+    {
+        var host = this.FindControl<ContentControl>("DockHost")!;
+        if (!shell.IsToDoBarVisible)
+        {
+            host.Content = null;
+            return;
+        }
+
+        host.Content = new ToDoBar(
+            shell.IsCalendarDocked ? BuildPeek(shell, docked: true) : null,
+            shell.AreTasksDocked ? BuildToDoTasks(shell) : null);
+    }
+
+    /// <summary>The To-Do Bar's calendar section, when it is showing.</summary>
+    private PeekView? DockedPeek => (this.FindControl<ContentControl>("DockHost")?.Content as ToDoBar)?.Peek;
+
+    /// <summary>
+    /// What the bar is holding, which is the only way to check a pane made of two drawn views.
+    /// </summary>
+    private void LogToDoBar(ShellViewModel shell)
+    {
+        if (this.FindControl<ContentControl>("DockHost")?.Content is not ToDoBar bar)
+        {
+            Log.Info("Harness: the To-Do Bar is off.");
+            return;
+        }
+
+        Log.Info($"Harness: To-Do Bar — calendar {(shell.IsCalendarDocked ? "on" : "off")}, "
+            + $"tasks {(shell.AreTasksDocked ? "on" : "off")}; "
+            + $"{bar.Peek?.Agenda.Count ?? 0} appointment(s), {bar.Tasks?.Rows.Count ?? 0} task(s).");
+
+        foreach (var row in bar.Peek?.Agenda ?? [])
+        {
+            Log.Info($"Harness: To-Do Bar appointment {row.Time} {row.Subject}.");
+        }
+
+        foreach (var row in bar.Tasks?.Rows ?? [])
+        {
+            Log.Info($"Harness: To-Do Bar task “{row.Summary}” — {Mailbox.Scheduling.TaskBook.Heading(row.Band)}.");
+        }
+
+        // The bar's own list takes the same press the module's does, which is what proves the
+        // pane writes rather than only draws.
+        if (bar.Tasks is { } list && Environment.GetEnvironmentVariable("MAILBOX_TASK_PRESS") is { Length: > 0 } press)
+        {
+            PressTask(shell, list, press.Trim());
+        }
+    }
+
+    /// <summary>Reads the store again into the bar's tasks section, after a write anywhere.</summary>
+    private void RefreshToDoTasks()
+    {
+        if ((this.FindControl<ContentControl>("DockHost")?.Content as ToDoBar)?.Tasks is not { } tasks) return;
+        tasks.Rows = new Mailbox.Scheduling.TaskBook(App.Pim).Rows(CalendarToday);
     }
 
     /// <summary>
@@ -2569,10 +2663,18 @@ public partial class MainWindow : Window
         reading.Items.Add(options);
 
         // To-Do Bar · Calendar is the docked pane, not the popup: the menu's own tick reads
-        // "is the calendar docked", and it did not use to be what the entry set.
+        // "is the calendar docked", and it did not use to be what the entry set. Each entry is a
+        // section of the bar and switches only itself, as the reference's own three do.
         var todo = Sub("To-Do Bar");
-        Entry(todo, "Calendar", () => { if (!shell.IsCalendarDocked) DockPeek(); }, shell.IsCalendarDocked);
-        Entry(todo, "Off", () => { if (shell.IsCalendarDocked) UndockPeek(); }, !shell.IsCalendarDocked);
+        Entry(todo, "Calendar", () => { if (shell.IsCalendarDocked) UndockPeek(); else DockPeek(); }, shell.IsCalendarDocked);
+        Entry(todo, "Tasks", () => ShowToDoTasks(shell, !shell.AreTasksDocked), shell.AreTasksDocked);
+        Entry(todo, "People", () => shell.StatusRight = "The People section lists favourite contacts, which arrives with Phase 14.", false);
+        Entry(todo, "Off", () =>
+        {
+            shell.AreTasksDocked = false;
+            if (shell.IsCalendarDocked) UndockPeek();
+            else RebuildToDoBar(shell);
+        }, !shell.IsToDoBarVisible);
 
         flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
     }

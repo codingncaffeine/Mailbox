@@ -656,14 +656,27 @@ public sealed partial class ShellViewModel : ObservableObject
     public ObservableCollection<QuickAccessButton> CommandBar { get; } = [];
 
     /// <summary>
-    /// True once the calendar peek has been docked to the right edge, where it takes the
-    /// reading pane's place until closed.
+    /// True once the calendar peek has been docked to the right edge, where it is the To-Do
+    /// Bar's first section and takes the reading pane's place until closed.
     /// </summary>
     public bool IsCalendarDocked
     {
         get;
-        set { if (Set(ref field, value)) Raise(); }
+        set { if (Set(ref field, value)) { Raise(); Raise(nameof(IsToDoBarVisible)); } }
     }
+
+    /// <summary>True when the To-Do Bar is showing its tasks section.</summary>
+    public bool AreTasksDocked
+    {
+        get;
+        set { if (Set(ref field, value)) { Raise(); Raise(nameof(IsToDoBarVisible)); } }
+    }
+
+    /// <summary>
+    /// Whether the To-Do Bar is on at all, which is what the pane itself is bound to: it is on
+    /// when any of its sections is, and off when the menu's Off turns them all off.
+    /// </summary>
+    public bool IsToDoBarVisible => IsCalendarDocked || AreTasksDocked;
     public ObservableCollection<FolderNode> Folders { get; }
     public ObservableCollection<MessageRow> Messages { get; }
 

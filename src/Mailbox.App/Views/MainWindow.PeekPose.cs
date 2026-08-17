@@ -26,8 +26,7 @@ public partial class MainWindow
     /// </summary>
     internal void PoseCalendarPeekPress(ShellViewModel shell, string spec)
     {
-        var peek = _floatingPeek
-            ?? this.FindControl<ContentControl>("DockHost")?.Content as PeekView;
+        var peek = _floatingPeek ?? DockedPeek;
         if (peek is null)
         {
             Log.Info("Harness: no peek is open — pose MAILBOX_PEEK=calendar or =docked as well.");
