@@ -66,6 +66,7 @@ public sealed class CalendarPalette
         TokenKeys.Calendar.NavigatorBackground, TokenKeys.Calendar.NavigatorText,
         TokenKeys.Calendar.NavigatorRange, TokenKeys.Calendar.NavigatorRangeText,
         TokenKeys.Calendar.NavigatorToday,
+        .. TokenKeys.Peek.All,
         TokenKeys.Nav.Background, TokenKeys.Nav.ItemSelected, TokenKeys.Nav.ItemText,
         TokenKeys.List.Background, TokenKeys.Border.Subtle, TokenKeys.Border.Strong,
         TokenKeys.Surface.Sunken, TokenKeys.State.Hover, TokenKeys.Accent.Rest,

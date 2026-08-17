@@ -519,6 +519,76 @@ public static class TokenKeys
         public const string NavigatorToday = "calendar.navigator.today";
     }
 
+    /// <summary>
+    /// The calendar peek: the miniature month and day's agenda the rail's Calendar icon opens,
+    /// and the same content pinned down the right-hand edge beside the mail.
+    /// </summary>
+    /// <remarks>
+    /// Two sets, because the reference draws the two states in two different palettes and the
+    /// capture of it says so plainly: the docked pane is the application's and follows the
+    /// theme — light grid on white, #F3F2F1 on #666666 in Dark Gray — while the floating one is
+    /// a desktop popup and keeps the desktop's own light colours whatever the theme is, exactly
+    /// as Account Settings does. The <c>pop</c> half is therefore the same in all four built-ins,
+    /// and a theme file may still override any of it.
+    /// </remarks>
+    public static class Peek
+    {
+        /// <summary>The docked pane's ground: the list's own, which it sits beside.</summary>
+        public const string Background = "peek.background";
+        /// <summary>The line down its left edge, which is all that separates it from the list.</summary>
+        public const string Divider = "peek.divider";
+        /// <summary>The month's name and the row of weekday letters.</summary>
+        public const string Title = "peek.title";
+        /// <summary>A day of the month on show.</summary>
+        public const string Day = "peek.day";
+        /// <summary>A day belonging to the month either side of it.</summary>
+        public const string DayOther = "peek.day.other";
+        public const string Today = "peek.today";
+        public const string TodayText = "peek.today.text";
+        /// <summary>A day cell under the pointer.</summary>
+        public const string Hover = "peek.hover";
+        /// <summary>The line under the grid, and the lighter row above it that gives it depth.</summary>
+        public const string Rule = "peek.rule";
+        public const string RuleSoft = "peek.rule.soft";
+        /// <summary>The agenda's day name, times and subjects.</summary>
+        public const string Text = "peek.text";
+        /// <summary>The second line of an agenda entry — where it is, or who called it.</summary>
+        public const string TextDim = "peek.text.dim";
+        /// <summary>The ground a Tentative entry's diagonals are drawn over.</summary>
+        public const string Hatch = "peek.hatch";
+
+        /// <summary>The floating popup's ground.</summary>
+        public const string PopBackground = "peek.pop.background";
+        /// <summary>The broad light frame round the popup, and the hairline round that.</summary>
+        public const string PopFrame = "peek.pop.frame";
+        public const string PopOutline = "peek.pop.outline";
+        public const string PopTitle = "peek.pop.title";
+        public const string PopDay = "peek.pop.day";
+        public const string PopDayOther = "peek.pop.day.other";
+        public const string PopToday = "peek.pop.today";
+        public const string PopTodayText = "peek.pop.today.text";
+        public const string PopHover = "peek.pop.hover";
+        public const string PopText = "peek.pop.text";
+        public const string PopTextDim = "peek.pop.text.dim";
+        public const string PopHatch = "peek.pop.hatch";
+
+        /// <summary>The docked half, which every theme states for itself.</summary>
+        public static readonly IReadOnlyList<string> Docked =
+        [
+            Background, Divider, Title, Day, DayOther, Today, TodayText, Hover,
+            Rule, RuleSoft, Text, TextDim, Hatch,
+        ];
+
+        /// <summary>The floating half, which the desktop states and every theme repeats.</summary>
+        public static readonly IReadOnlyList<string> Floating =
+        [
+            PopBackground, PopFrame, PopOutline, PopTitle, PopDay, PopDayOther,
+            PopToday, PopTodayText, PopHover, PopText, PopTextDim, PopHatch,
+        ];
+
+        public static readonly IReadOnlyList<string> All = [.. Docked, .. Floating];
+    }
+
     public static class Typography
     {
         public const string UiFamily = "type.ui.family";
@@ -586,6 +656,7 @@ public static class TokenKeys
         Calendar.ChipEdgeGround, Calendar.ChipEdgeSoft, Calendar.ChipEdgeStrong, Calendar.OutOfOffice,
         Calendar.NavigatorBackground, Calendar.NavigatorText,
         Calendar.NavigatorRange, Calendar.NavigatorRangeText, Calendar.NavigatorToday,
+        .. Peek.All,
         Typography.UiFamily, Typography.UiSize, Typography.UiSizeSmall, Typography.UiSizeLarge,
         Typography.ContentFamily, Typography.ContentSize, Typography.MonoFamily,
     ];

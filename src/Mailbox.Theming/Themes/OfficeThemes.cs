@@ -143,6 +143,7 @@ public static class OfficeThemes
         LightSemantics(t);
         LightChrome(t);
         SystemDialogPalette(t);
+        PeekPopupPalette(t);
 
         // The title bar alone carries the hue. The tab strip below it is light, which is what
         // an earlier guess got wrong — it had the blue running down through the tab strip.
@@ -210,6 +211,7 @@ public static class OfficeThemes
         LightSemantics(t);
         LightChrome(t);
         SystemDialogPalette(t);
+        PeekPopupPalette(t);
 
         // Not actually white: the title bar is the same pale blue-grey as the tab strip, and
         // only the ribbon and the content behind it are truly white.
@@ -300,6 +302,7 @@ public static class OfficeThemes
         LightSemantics(t);
         LightChrome(t);
         SystemDialogPalette(t);
+        PeekPopupPalette(t);
 
         // Content sits light inside dark chrome.
         t.Set(TokenKeys.Surface.Ground, "{palette.content.row}");
@@ -351,6 +354,24 @@ public static class OfficeThemes
         t.Set(TokenKeys.Calendar.NavigatorRange, "#0067B0");
         t.Set(TokenKeys.Calendar.NavigatorRangeText, "#FFFFFF");
         t.Set(TokenKeys.Calendar.NavigatorToday, "#0072C6");
+
+        // The docked peek, measured off the capture of it: the list's own #666666 ground with
+        // only a #444444 line dividing the two, #F3F3F3 for the month's name and the weekday
+        // letters, #F3F2F1 for its days and #E1DFDD for the days either side, and one ink for
+        // the whole agenda where the light drawing dims its second line.
+        t.Set(TokenKeys.Peek.Background, "#666666");
+        t.Set(TokenKeys.Peek.Divider, "#444444");
+        t.Set(TokenKeys.Peek.Title, "#F3F3F3");
+        t.Set(TokenKeys.Peek.Day, "#F3F2F1");
+        t.Set(TokenKeys.Peek.DayOther, "#E1DFDD");
+        t.Set(TokenKeys.Peek.Today, "#0072C6");
+        t.Set(TokenKeys.Peek.TodayText, "#FFFFFF");
+        t.Set(TokenKeys.Peek.Hover, "#757575");
+        t.Set(TokenKeys.Peek.Rule, "#000000");
+        t.Set(TokenKeys.Peek.RuleSoft, "#444444");
+        t.Set(TokenKeys.Peek.Text, "#F0F0F0");
+        t.Set(TokenKeys.Peek.TextDim, "#F0F0F0");
+        t.Set(TokenKeys.Peek.Hatch, "#C7C6C4");
 
         t.Set(TokenKeys.TitleBar.Background, "{palette.chrome.titlebar}");
         t.Set(TokenKeys.TitleBar.Foreground, "{palette.neutral.white}");
@@ -491,6 +512,7 @@ public static class OfficeThemes
         t.Set("palette.sunken", "#171717");
 
         SystemDialogPalette(t);
+        PeekPopupPalette(t);
 
         // Semantics — dark. Deliberately authored rather than inverted from the light set:
         // a naive inversion produces muddy hover states and unreadable disabled text.
@@ -676,6 +698,23 @@ public static class OfficeThemes
         t.Set(TokenKeys.Calendar.NavigatorRangeText, "#F1F1F1");
         t.Set(TokenKeys.Calendar.NavigatorToday, "#0072C6");
 
+        // The docked peek, on Black's own dark list rather than Dark Gray's mid grey. No
+        // capture of it exists; this is the Dark Gray drawing carried over to this theme's
+        // grid colours, the way the calendar's own views are.
+        t.Set(TokenKeys.Peek.Background, "#262626");
+        t.Set(TokenKeys.Peek.Divider, "#000000");
+        t.Set(TokenKeys.Peek.Title, "#E1DFDD");
+        t.Set(TokenKeys.Peek.Day, "#E1DFDD");
+        t.Set(TokenKeys.Peek.DayOther, "#A19F9D");
+        t.Set(TokenKeys.Peek.Today, "#0072C6");
+        t.Set(TokenKeys.Peek.TodayText, "#FFFFFF");
+        t.Set(TokenKeys.Peek.Hover, "#383838");
+        t.Set(TokenKeys.Peek.Rule, "#000000");
+        t.Set(TokenKeys.Peek.RuleSoft, "#383838");
+        t.Set(TokenKeys.Peek.Text, "#E1DFDD");
+        t.Set(TokenKeys.Peek.TextDim, "#E1DFDD");
+        t.Set(TokenKeys.Peek.Hatch, "#2D3236");
+
         return t;
     }
 
@@ -728,6 +767,33 @@ public static class OfficeThemes
         t.Set(TokenKeys.SystemDialog.IconGreen, "#4CB050");
         t.Set(TokenKeys.SystemDialog.IconBlue, "#6088D0");
         t.Set(TokenKeys.SystemDialog.IconBlueDark, "#3058B0");
+    }
+
+    // ------------------------------------------------------------------------------------
+    // The floating calendar peek, which is a desktop popup rather than part of the window:
+    // the capture of it over the Dark Gray shell is light, so these are the desktop's own
+    // colours and every built-in carries the same ones. All measured off that capture — the
+    // #F0F0F0 ground inside a 5px #BDBDBD frame and a black hairline, #666666 for the month's
+    // name, the weekday letters and the days either side of it, #444444 for the month's own
+    // days and for the agenda, and #0072C6 behind today.
+    // ------------------------------------------------------------------------------------
+    private static void PeekPopupPalette(TokenSet t)
+    {
+        t.Set(TokenKeys.Peek.PopBackground, "#F0F0F0");
+        t.Set(TokenKeys.Peek.PopFrame, "#BDBDBD");
+        t.Set(TokenKeys.Peek.PopOutline, "#000000");
+        t.Set(TokenKeys.Peek.PopTitle, "#666666");
+        t.Set(TokenKeys.Peek.PopDay, "#444444");
+        t.Set(TokenKeys.Peek.PopDayOther, "#666666");
+        t.Set(TokenKeys.Peek.PopToday, "#0072C6");
+        t.Set(TokenKeys.Peek.PopTodayText, "#FFFFFF");
+        t.Set(TokenKeys.Peek.PopText, "#444444");
+        t.Set(TokenKeys.Peek.PopTextDim, "#666666");
+        t.Set(TokenKeys.Peek.PopHatch, "#D5D4D2");
+
+        // The one the capture cannot show, a still picture having no pointer in it: the
+        // desktop's own hover, which is what the dialogs of the same palette use.
+        t.Set(TokenKeys.Peek.PopHover, "#E5F1FB");
     }
 
     // ------------------------------------------------------------------------------------
@@ -901,5 +967,22 @@ public static class OfficeThemes
         t.Set(TokenKeys.Calendar.NavigatorRange, "#DEECF9");
         t.Set(TokenKeys.Calendar.NavigatorRangeText, "#3B3A39");
         t.Set(TokenKeys.Calendar.NavigatorToday, "#0072C6");
+
+        // The docked peek on a white list. The capture of it is Dark Gray, so these are the
+        // same roles read off the floating popup — which is the reference's own light drawing
+        // of this content — against the list rather than against #F0F0F0.
+        t.Set(TokenKeys.Peek.Background, "{palette.neutral.white}");
+        t.Set(TokenKeys.Peek.Divider, "{palette.neutral.quaternary}");
+        t.Set(TokenKeys.Peek.Title, "#666666");
+        t.Set(TokenKeys.Peek.Day, "#444444");
+        t.Set(TokenKeys.Peek.DayOther, "#666666");
+        t.Set(TokenKeys.Peek.Today, "#0072C6");
+        t.Set(TokenKeys.Peek.TodayText, "#FFFFFF");
+        t.Set(TokenKeys.Peek.Hover, "{palette.neutral.light}");
+        t.Set(TokenKeys.Peek.Rule, "{palette.neutral.quaternary}");
+        t.Set(TokenKeys.Peek.RuleSoft, "{palette.neutral.lighter}");
+        t.Set(TokenKeys.Peek.Text, "#444444");
+        t.Set(TokenKeys.Peek.TextDim, "#666666");
+        t.Set(TokenKeys.Peek.Hatch, "#D5D4D2");
     }
 }
