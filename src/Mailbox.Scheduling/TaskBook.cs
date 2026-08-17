@@ -119,6 +119,11 @@ public sealed class TaskBook(PimRepository repository, Func<IReadOnlyList<(strin
 
             foreach (var item in _repository.Items(list.Id))
             {
+                // A delete on a server-backed list keeps the row, marks it and queues it, so that
+                // a delete made offline still reaches the server. It is gone as far as the reader
+                // is concerned from the moment they said so.
+                if (item.SyncState == PimSyncState.Deleted) continue;
+
                 // From the columns, not the text: a list of five hundred tasks would otherwise
                 // parse five hundred VTODOs to draw five hundred lines.
                 var task = PimTodoCodec.FromColumns(item);

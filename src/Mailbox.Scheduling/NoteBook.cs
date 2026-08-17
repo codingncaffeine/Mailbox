@@ -101,6 +101,11 @@ public sealed class NoteBook(PimRepository repository)
 
             foreach (var item in _repository.Items(list.Id))
             {
+                // A delete on a server-backed folder keeps the row, marks it and queues it, so
+                // that a delete made offline still reaches the server. It is off the wall as far
+                // as the reader is concerned from the moment they said so.
+                if (item.SyncState == PimSyncState.Deleted) continue;
+
                 // From the columns, not the text: a wall of five hundred notes would otherwise
                 // parse five hundred VJOURNALs to draw five hundred squares.
                 var entry = PimJournalCodec.FromColumns(item);

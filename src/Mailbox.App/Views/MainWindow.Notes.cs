@@ -1,4 +1,5 @@
 using System.Globalization;
+using Avalonia.Controls;
 using Mailbox.App.ViewModels;
 using Mailbox.Controls.Notes;
 using Mailbox.Core.Commands;
@@ -90,7 +91,7 @@ public partial class MainWindow
                 return true;
 
             case "notes.moveto":
-                shell.StatusRight = "Moving a note between folders arrives with the folder list this module shares with Journal.";
+                MoveNote(shell);
                 return true;
 
             default:
@@ -123,6 +124,71 @@ public partial class MainWindow
             App.Pim.UpdateItem(item);
             return item;
         }
+    }
+
+    /// <summary>
+    /// Move: the folders this module shares with Journal, in a menu under the button.
+    /// </summary>
+    /// <remarks>
+    /// A note and a journal entry are one component in one kind of collection, so the folders on
+    /// offer are every one of them — which is also why the entry is on the Notes bar and the move
+    /// refreshes both modules.
+    /// <para>
+    /// The move itself is <see cref="PimSyncService.Move"/>, which is a delete there and a create
+    /// here rather than a change of column, because that is what a move is to a server.
+    /// </para>
+    /// </remarks>
+    private void MoveNote(ShellViewModel shell)
+    {
+        var notes = EnsureNotes(shell);
+        if (notes.Selected is not { } row || App.Pim.Item(row.ItemId) is not { } item)
+        {
+            shell.StatusRight = "Select a note first.";
+            return;
+        }
+
+        var folders = App.Pim.Collections(CollectionKind.Journal).Where(f => f.Id != item.CollectionId).ToList();
+        if (folders.Count == 0)
+        {
+            shell.StatusRight = "There is nowhere else to keep a note: this is the only folder.";
+            return;
+        }
+
+        // A menu is a surface no capture can show, so the harness names the folder instead and
+        // the store is read back — the same bargain the Categorize menu makes.
+        if (Environment.GetEnvironmentVariable("MAILBOX_MOVE")?.Trim() is { Length: > 0 } posed)
+        {
+            if (folders.FirstOrDefault(f => f.DisplayName.Contains(posed, StringComparison.OrdinalIgnoreCase)) is not { } wanted)
+            {
+                Log.Info($"Harness: no folder matching “{posed}” to move “{row.Title}” to.");
+                return;
+            }
+
+            MoveNoteTo(shell, item, wanted);
+            return;
+        }
+
+        var flyout = new MenuFlyout();
+        foreach (var folder in folders)
+        {
+            var entry = new MenuItem { Header = folder.DisplayName };
+            var chosen = folder;
+            entry.Click += (_, _) => MoveNoteTo(shell, item, chosen);
+            flyout.Items.Add(entry);
+        }
+
+        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+    }
+
+    private void MoveNoteTo(ShellViewModel shell, PimItem item, Collection folder)
+    {
+        var moved = App.PimSync.Move(item, folder.Id);
+        _noteModule?.Reload();
+        _journalModule?.Reload();
+
+        shell.StatusRight = $"“{item.Summary}” moved to {folder.DisplayName}.";
+        Log.Info($"Note {item.Id} moved to {folder.DisplayName} as {moved.Id}; "
+            + $"the old row is {(App.Pim.Item(item.Id) is { } old ? old.SyncState.ToString() : "gone")}.");
     }
 
     private void DeleteNote(ShellViewModel shell, NoteRow row)
