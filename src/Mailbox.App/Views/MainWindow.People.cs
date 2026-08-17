@@ -146,6 +146,136 @@ public partial class MainWindow
     }
 
     /// <summary>
+    /// What the Contact window asks the shell for: a message to this person, the address book,
+    /// the vCard, and the map.
+    /// </summary>
+    /// <remarks>
+    /// The window knows about one contact and nothing else — no accounts, no compose window, no
+    /// desktop — so anything that reaches past the form comes back here, which is the same seam
+    /// the compose window's own commands go through.
+    /// </remarks>
+    private void WireContactWindow(ShellViewModel shell, ContactWindow window)
+    {
+        window.ShellCommandRequested += (_, id) =>
+        {
+            if (id == ContactCommands.Email.Id)
+            {
+                var contact = window.Surface.Current();
+                if (contact.PrimaryEmail is { Length: > 0 } address)
+                {
+                    NewMessage(new Mailbox.Core.Compose.MailtoLink([address], [], [], string.Empty, string.Empty));
+                }
+
+                return;
+            }
+
+            if (id == ContactCommands.AddressBook.Id) { _ = ShowAddressBookAsync(shell); return; }
+            if (id == ContactCommands.CheckNames.Id) { CheckContactNames(shell, window); return; }
+            if (id == ContactCommands.Forward.Id) { ForwardCard(shell, window.Surface.Current()); return; }
+            if (id == ContactCommands.BusinessCard.Id)
+            {
+                shell.StatusRight = "The card is drawn beside the form; designing one is Phase 16.";
+                return;
+            }
+
+            if (id == ContactCommands.Picture.Id) { _ = ChoosePictureAsync(shell, window); return; }
+        };
+
+        window.MapRequested += (_, address) =>
+        {
+            if (address.Trim().Length == 0)
+            {
+                shell.StatusRight = "There is no address to map.";
+                return;
+            }
+
+            // The desktop's own map, which on Linux is whatever answers a geo: URI — the same
+            // xdg-open the reading pane hands a link to.
+            var uri = "geo:0,0?q=" + Uri.EscapeDataString(address.Replace('\n', ' ').Trim());
+            try
+            {
+                using var process = new System.Diagnostics.Process
+                {
+                    StartInfo = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "xdg-open",
+                        ArgumentList = { uri },
+                        UseShellExecute = false,
+                    },
+                };
+
+                process.Start();
+                shell.StatusRight = "Asked the desktop to map that address.";
+            }
+            catch (Exception ex)
+            {
+                shell.StatusRight = "Nothing on this desktop answers a map request.";
+                Log.Warn("Could not open a map.", ex);
+            }
+
+            Log.Info($"People: asked the desktop for {uri}.");
+        };
+    }
+
+    /// <summary>Check Names on the form: what the address book knows about who has been typed.</summary>
+    private void CheckContactNames(ShellViewModel shell, ContactWindow window)
+    {
+        var contact = window.Surface.Current();
+        var typed = contact.Named();
+        if (typed.Length == 0)
+        {
+            shell.StatusRight = "Type a name first.";
+            return;
+        }
+
+        var matches = App.Contacts.Matching(typed, 5);
+        shell.StatusRight = matches.Count switch
+        {
+            0 => $"Nobody in the address book matches “{typed}”.",
+            1 => $"“{typed}” is {matches[0].Named()}.",
+            _ => $"{matches.Count} people match “{typed}”.",
+        };
+
+        Log.Info($"People: Check Names on “{typed}” matched {matches.Count}.");
+    }
+
+    /// <summary>Picture: a photograph off the disk, or the one there taken away.</summary>
+    private async Task ChoosePictureAsync(ShellViewModel shell, ContactWindow window)
+    {
+        if (window.Surface.HasPhoto)
+        {
+            window.Surface.SetPhoto(null);
+            shell.StatusRight = "The photograph has been removed.";
+            return;
+        }
+
+        var files = await StorageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
+        {
+            Title = "Contact Picture",
+            AllowMultiple = false,
+            FileTypeFilter = [Avalonia.Platform.Storage.FilePickerFileTypes.ImageAll],
+        });
+
+        if (files.Count == 0) return;
+
+        await using var stream = await files[0].OpenReadAsync();
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer);
+
+        window.Surface.SetPhoto(new ContactPhoto(buffer.ToArray(), MediaTypeOf(files[0].Name)));
+        shell.StatusRight = $"{files[0].Name} is the contact's picture.";
+    }
+
+    private static string MediaTypeOf(string name)
+        => Path.GetExtension(name).ToLowerInvariant() switch
+        {
+            ".png" => "image/png",
+            ".gif" => "image/gif",
+            ".webp" => "image/webp",
+            _ => "image/jpeg",
+        };
+
+    /// <summary>
     /// Private on a contact: kept to oneself when the address book is shared.
     /// </summary>
     /// <remarks>
@@ -399,7 +529,12 @@ public partial class MainWindow
             return;
         }
 
-        var contact = App.Contacts.Full(row.Id) ?? row.Contact;
+        ForwardCard(shell, App.Contacts.Full(row.Id) ?? row.Contact);
+    }
+
+    /// <summary>The vCard on a message, whether it came from the list or from the window.</summary>
+    private void ForwardCard(ShellViewModel shell, Contact contact)
+    {
         var card = VCardCodec.Serialize(contact);
         var named = contact.Named() is { Length: > 0 } who ? who : "Contact";
         var name = new string([.. named.Where(c => !Path.GetInvalidFileNameChars().Contains(c))]) + ".vcf";
@@ -420,7 +555,7 @@ public partial class MainWindow
 
         NewMessage(draft, Mailbox.Rendering.ReplyKind.Forward);
         shell.StatusRight = $"“{contact.Named()}” ready to send.";
-        Log.Info($"People: forwarding contact {row.Id} as {name} ({card.Length} bytes of vCard).");
+        Log.Info($"People: forwarding “{contact.Named()}” as {name} ({card.Length} bytes of vCard).");
     }
 
     /// <summary>
@@ -489,8 +624,13 @@ public partial class MainWindow
         };
 
         var window = new ContactWindow(App.Commands, fresh, App.Contacts.AddressBooks(), book.Id);
+        WireContactWindow(shell, window);
         await window.ShowDialog(this);
-        if (window.Result is not { Deleted: false } result) return;
+        if (window.Result is not { Deleted: false } result)
+        {
+            if (window.Another) _ = NewContactAsync(shell, group);
+            return;
+        }
 
         var written = App.Contacts.Save(result.Contact, result.CollectionId);
         App.PimSync.QueuePut(written);
@@ -515,6 +655,7 @@ public partial class MainWindow
 
         var contact = App.Contacts.Full(row.Id) ?? row.Contact;
         var window = new ContactWindow(App.Commands, contact, App.Contacts.AddressBooks(), row.CollectionId);
+        WireContactWindow(shell, window);
         await window.ShowDialog(this);
         if (window.Result is not { } result) return;
 
