@@ -63,7 +63,17 @@ public static class Autoconfig
         MailProtocolKind Protocol,
         AuthKind Auth,
         string? Guidance = null,
-        params string[] Domains);
+        params string[] Domains)
+    {
+        /// <summary>
+        /// The POP3 host, for a provider whose IMAP host is not it. Empty means "guess", which
+        /// is right for most of them and wrong for the few whose two services are named
+        /// differently.
+        /// </summary>
+        public string PopIncoming { get; init; } = string.Empty;
+
+        public int PopPort { get; init; } = 995;
+    }
 
     /// <summary>
     /// The providers worth knowing by heart. Ordered so the common ones are found first; the
@@ -76,13 +86,18 @@ public static class Autoconfig
             "Gmail no longer accepts your ordinary password. With two-step verification on, "
             + "create an App Password at myaccount.google.com/apppasswords and use that here. "
             + "IMAP or POP also has to be switched on in Gmail's own settings.",
-            "gmail.com", "googlemail.com"),
+            "gmail.com", "googlemail.com") { PopIncoming = "pop.gmail.com" },
 
         new("outlook.office365.com", 993, "smtp.office365.com", 587, MailProtocolKind.Imap,
             AuthKind.OAuth2,
             "Microsoft accounts sign in through a browser. Mailbox will open one when you "
             + "continue.",
-            "outlook.com", "hotmail.com", "live.com", "msn.com"),
+            "outlook.com", "hotmail.com", "live.com", "msn.com")
+        {
+            // Both services are on the same host here, so a POP3 account gets a name that
+            // resolves rather than the "pop.<domain>" the guess would invent.
+            PopIncoming = "outlook.office365.com",
+        },
 
         new("imap.mail.yahoo.com", 993, "smtp.mail.yahoo.com", 465, MailProtocolKind.Imap,
             AuthKind.AppPassword,
@@ -128,16 +143,26 @@ public static class Autoconfig
 
         if (provider is null) return Guess(address, domain, prefer);
 
-        // A known provider's IMAP host is not its POP host, and only a couple differ predictably,
-        // so asking for POP where the table holds IMAP falls back to guessing rather than
-        // inventing a hostname that will fail at connect time.
+        // A known provider's IMAP host is not always its POP host. The ones whose POP name is
+        // documented and stable carry it; for the rest, asking for POP where the table holds IMAP
+        // falls back to guessing rather than inventing a hostname that will fail at connect time.
         if (prefer == MailProtocolKind.Pop3 && provider.Protocol == MailProtocolKind.Imap)
         {
-            return Guess(address, domain, prefer) with
+            if (provider.PopIncoming.Length == 0)
             {
-                Auth = provider.Auth,
-                Guidance = provider.Guidance,
-                IsKnownProvider = false,
+                return Guess(address, domain, prefer) with
+                {
+                    Auth = provider.Auth,
+                    Guidance = provider.Guidance,
+                    IsKnownProvider = false,
+                };
+            }
+
+            provider = provider with
+            {
+                Incoming = provider.PopIncoming,
+                IncomingPort = provider.PopPort,
+                Protocol = MailProtocolKind.Pop3,
             };
         }
 

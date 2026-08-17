@@ -83,14 +83,46 @@ public class AutoconfigTests
     /// answer is a guess flagged as one, not an invented hostname presented as known.
     /// </summary>
     [Fact]
-    public void AskingAKnownProviderForPopFallsBackToAGuessButKeepsTheGuidance()
+    public void AProviderWhosePopHostIsKnownGivesItRatherThanAGuess()
     {
         var found = Autoconfig.ForAddress("someone@gmail.com", MailProtocolKind.Pop3);
 
-        Assert.False(found.IsKnownProvider);
+        Assert.True(found.IsKnownProvider);
         Assert.Equal("pop.gmail.com", found.Incoming.Host);
+        Assert.Equal(995, found.Incoming.Port);
+        Assert.Equal(MailProtocolKind.Pop3, found.Protocol);
         Assert.Equal(AuthKind.AppPassword, found.Auth);
         Assert.Contains("App Password", found.Guidance);
+    }
+
+    /// <summary>
+    /// Both of Microsoft's services are on the one host, and the conventional guess —
+    /// <c>pop.outlook.com</c> — resolves to nothing at all. An account added on the default
+    /// protocol would otherwise be pointed at a server that does not exist.
+    /// </summary>
+    [Fact]
+    public void OutlookOverPopIsTheSameHostAsOverImap()
+    {
+        var found = Autoconfig.ForAddress("someone@outlook.com", MailProtocolKind.Pop3);
+
+        Assert.True(found.IsKnownProvider);
+        Assert.Equal("outlook.office365.com", found.Incoming.Host);
+        Assert.Equal("smtp.office365.com", found.Outgoing.Host);
+        Assert.Equal(AuthKind.OAuth2, found.Auth);
+    }
+
+    /// <summary>
+    /// The rest still guess, which is the honest answer: inventing a hostname that fails at
+    /// connect time is worse than saying these are a guess and opening the server settings.
+    /// </summary>
+    [Fact]
+    public void AProviderWhosePopHostIsNotKnownStillGuessesAndSaysSo()
+    {
+        var found = Autoconfig.ForAddress("someone@yahoo.com", MailProtocolKind.Pop3);
+
+        Assert.False(found.IsKnownProvider);
+        Assert.Equal("pop.yahoo.com", found.Incoming.Host);
+        Assert.Equal(AuthKind.AppPassword, found.Auth);
     }
 
     [Theory]

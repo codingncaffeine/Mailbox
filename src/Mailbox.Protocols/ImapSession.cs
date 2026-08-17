@@ -160,7 +160,7 @@ public sealed class MailKitImapSession : IImapSession
         => _client.ConnectAsync(server.Host, server.Port, server.Security, cancellation);
 
     public Task AuthenticateAsync(ServerSettings server, CancellationToken cancellation)
-        => _client.AuthenticateAsync(server.UserName, server.Password, cancellation);
+        => OAuth.SaslAuthentication.AuthenticateAsync(_client, server, cancellation);
 
     public Task DisconnectAsync(CancellationToken cancellation)
         => _client.DisconnectAsync(true, cancellation);

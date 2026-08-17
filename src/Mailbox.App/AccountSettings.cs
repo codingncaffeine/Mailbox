@@ -1,6 +1,7 @@
 using MailKit.Security;
 using Mailbox.Core.Settings;
 using Mailbox.Protocols;
+using Mailbox.Protocols.OAuth;
 using Mailbox.Store;
 
 namespace Mailbox.App;
@@ -51,6 +52,30 @@ public sealed record AccountSettings(
     public long? DeliveryFolderId { get; init; }
 
     /// <summary>
+    /// How this account proves who it is. A password unless the provider stopped accepting one.
+    /// </summary>
+    /// <remarks>
+    /// Persisted rather than worked out from the address each time. Autoconfig's answer is a
+    /// guess about a domain, and an account signed in with a client the user registered is not a
+    /// guess — nor is a domain that moved to OAuth after the account was added, which has to keep
+    /// working with the password it already has until someone signs in.
+    /// </remarks>
+    public AuthKind Auth { get; init; } = AuthKind.Password;
+
+    /// <summary>Which authorization server this account signs in to, when it does.</summary>
+    public string OAuthProviderId { get; init; } = string.Empty;
+
+    /// <summary>
+    /// The client registration used to sign in — empty for the provider's own.
+    /// </summary>
+    /// <remarks>
+    /// In the settings file, not the keyring. A native application's client ID is an identifier
+    /// that travels in a URL the browser shows; treating it as a secret would only make it harder
+    /// for the person who pasted it to check what they pasted.
+    /// </remarks>
+    public string OAuthClientId { get; init; } = string.Empty;
+
+    /// <summary>
     /// Settings key off the address, not the row id. A row id belongs to one store file, and
     /// the point of a file per account is that it can be restored or copied — after which the
     /// id may differ but the address does not.
@@ -85,6 +110,9 @@ public sealed record AccountSettings(
             DeliveryFolderId = settings.Has(Key(accountKey, "delivery.folder"))
                 ? (long)settings.GetNumber(Key(accountKey, "delivery.folder"))
                 : null,
+            Auth = (AuthKind)(int)settings.GetNumber(Key(accountKey, "auth"), (int)AuthKind.Password),
+            OAuthProviderId = settings.GetString(Key(accountKey, "oauth.provider")),
+            OAuthClientId = settings.GetString(Key(accountKey, "oauth.client")),
         };
     }
 
@@ -106,6 +134,9 @@ public sealed record AccountSettings(
         settings.Set(Key(accountKey, "sieve.port"), SievePort);
         if (DeliveryFolderId is { } folder) settings.Set(Key(accountKey, "delivery.folder"), folder);
         else settings.Remove(Key(accountKey, "delivery.folder"));
+        settings.Set(Key(accountKey, "auth"), (int)Auth);
+        settings.Set(Key(accountKey, "oauth.provider"), OAuthProviderId);
+        settings.Set(Key(accountKey, "oauth.client"), OAuthClientId);
     }
 
     /// <summary>
@@ -113,7 +144,8 @@ public sealed record AccountSettings(
     /// account names another, port 4190, STARTTLS required, and the incoming credentials. Null
     /// for a POP3 account, which has no server-side rules.
     /// </summary>
-    public ServerSettings? ToSieveServer(Account account, ICredentialStore secrets)
+    public ServerSettings? ToSieveServer(Account account, ICredentialStore secrets,
+        OAuthAccounts? oauth = null)
     {
         if (account.Protocol != MailProtocol.Imap) return null;
 
@@ -122,29 +154,47 @@ public sealed record AccountSettings(
 
         var password = secrets.LoadAsync(account.Address, Credentials.Incoming).GetAwaiter().GetResult() ?? string.Empty;
         return new ServerSettings(host, SievePort > 0 ? SievePort : 4190, SecureSocketOptions.StartTls,
-            IncomingUser.Length > 0 ? IncomingUser : account.Address, password);
+            IncomingUser.Length > 0 ? IncomingUser : account.Address, password)
+        {
+            Tokens = TokensFor(account.Address, oauth),
+        };
     }
 
     /// <summary>
     /// Builds what the transfer service needs, fetching passwords from the keyring at the last
     /// moment. They are held for the length of one send/receive and no longer.
     /// </summary>
-    public AccountConnection ToConnection(Account account, ICredentialStore secrets)
+    public AccountConnection ToConnection(Account account, ICredentialStore secrets,
+        OAuthAccounts? oauth = null)
     {
-        var incomingPassword = secrets
-            .LoadAsync(account.Address, Credentials.Incoming).GetAwaiter().GetResult() ?? string.Empty;
+        var tokens = TokensFor(account.Address, oauth);
 
-        var outgoingPassword = secrets
-            .LoadAsync(account.Address, Credentials.Outgoing).GetAwaiter().GetResult()
-            ?? incomingPassword;
+        // Not read at all for an account that signs in. Loading them anyway would put a prompt
+        // in front of a locked keyring for a password that is not there and would not be used.
+        var incomingPassword = tokens is not null
+            ? string.Empty
+            : secrets.LoadAsync(account.Address, Credentials.Incoming).GetAwaiter().GetResult() ?? string.Empty;
+
+        var outgoingPassword = tokens is not null
+            ? string.Empty
+            : secrets.LoadAsync(account.Address, Credentials.Outgoing).GetAwaiter().GetResult()
+              ?? incomingPassword;
 
         return new AccountConnection(
             account.Id,
             account.Address,
             new ServerSettings(IncomingHost, IncomingPort, IncomingSecurity,
-                IncomingUser.Length > 0 ? IncomingUser : account.Address, incomingPassword),
+                IncomingUser.Length > 0 ? IncomingUser : account.Address, incomingPassword)
+            {
+                Tokens = tokens,
+            },
             new ServerSettings(OutgoingHost, OutgoingPort, OutgoingSecurity,
-                OutgoingUser, outgoingPassword))
+                OutgoingUser, outgoingPassword)
+            {
+                // The same sign-in covers both directions: one consent, one refresh token, and
+                // both scopes were asked for together.
+                Tokens = tokens,
+            })
         {
             // The account's own protocol decides which collector runs. Everything else is
             // shared: one send path, one outbox, one store.
@@ -159,10 +209,22 @@ public sealed record AccountSettings(
         };
     }
 
+    /// <summary>How this account authenticates, with the rule about what wins (see the type).</summary>
+    public AccountAuth Authentication => new(Auth, OAuthProviderId, OAuthClientId);
+
+    private IAccessTokenSource? TokensFor(string address, OAuthAccounts? oauth)
+        => Authentication.Source(address, oauth);
+
     /// <summary>Turns an autoconfig guess into something storable.</summary>
     public static AccountSettings From(AutoconfigResult found) => new(
         found.Incoming.Host, found.Incoming.Port, found.Incoming.Security,
         found.Incoming.UserName,
         found.Outgoing.Host, found.Outgoing.Port, found.Outgoing.Security,
-        found.Outgoing.UserName);
+        found.Outgoing.UserName)
+    {
+        Auth = found.Auth,
+        OAuthProviderId = found.Auth == AuthKind.OAuth2
+            ? OAuthProviders.ForMail(found.Incoming.UserName)?.Id ?? string.Empty
+            : string.Empty,
+    };
 }

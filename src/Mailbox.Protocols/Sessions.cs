@@ -1,5 +1,6 @@
 using MailKit.Net.Pop3;
 using MailKit.Net.Smtp;
+using Mailbox.Protocols.OAuth;
 using MimeKit;
 
 namespace Mailbox.Protocols;
@@ -71,7 +72,7 @@ public sealed class MailKitPop3Session : IPop3Session
         => _client.ConnectAsync(server.Host, server.Port, server.Security, cancellation);
 
     public Task AuthenticateAsync(ServerSettings server, CancellationToken cancellation)
-        => _client.AuthenticateAsync(server.UserName, server.Password, cancellation);
+        => SaslAuthentication.AuthenticateAsync(_client, server, cancellation);
 
     public Task<IList<string>> GetUidsAsync(CancellationToken cancellation)
         => _client.GetMessageUidsAsync(cancellation);
@@ -101,7 +102,7 @@ public sealed class MailKitSmtpSession : ISmtpSession
         => _client.ConnectAsync(server.Host, server.Port, server.Security, cancellation);
 
     public Task AuthenticateAsync(ServerSettings server, CancellationToken cancellation)
-        => _client.AuthenticateAsync(server.UserName, server.Password, cancellation);
+        => SaslAuthentication.AuthenticateAsync(_client, server, cancellation);
 
     public Task SendAsync(MimeMessage message, CancellationToken cancellation)
         => _client.SendAsync(message, cancellation);
