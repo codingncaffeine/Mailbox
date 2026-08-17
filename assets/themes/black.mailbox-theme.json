@@ -136,6 +136,7 @@
     "list.group.header.text": "{palette.brand.primary}",
     "list.header.background": "{palette.raised}",
     "list.header.text": "{palette.neutral.secondary}",
+    "list.overdue.text": "#F1707A",
     "list.row.background": "#262626",
     "list.row.height": "44",
     "list.row.height.compact": "22",

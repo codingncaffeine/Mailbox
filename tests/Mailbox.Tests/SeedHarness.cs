@@ -81,6 +81,7 @@ public class SeedHarness
         SeedImap(stores, "imap@example.org");
         SeedCalendar(Path.Combine(target, "pim.db"));
         SeedContacts(Path.Combine(target, "pim.db"));
+        SeedTasks(Path.Combine(target, "pim.db"));
     }
 
     /// <summary>
@@ -196,6 +197,44 @@ public class SeedHarness
             DayOfWeek.Friday => "FR",
             _ => "SA",
         };
+    }
+
+    /// <summary>
+    /// A to-do list to look at, in the same <c>pim.db</c> the calendar and the address book are in.
+    /// </summary>
+    /// <remarks>
+    /// Shaped to reach every band the list draws: one already late, one due today, one tomorrow,
+    /// one later this week and one next month, plus one with no date at all and one already
+    /// finished — so a capture shows the headings, the red of a late row, and the tick.
+    /// </remarks>
+    private static void SeedTasks(string path)
+    {
+        var today = SeedToday();
+        using var store = new PimStore(path);
+        var pim = new PimRepository(store);
+        var list = pim.AddCollection(CollectionKind.Tasks, "Tasks", "#0078D4").Id;
+
+        void Add(string summary, DateOnly? due, TaskProgress progress = TaskProgress.NotStarted, int percent = 0, TaskUrgency urgency = TaskUrgency.Normal)
+            => pim.AddItem(PimTodoCodec.ToItem(
+                new TaskItem
+                {
+                    Uid = TaskItem.NewUid(),
+                    Summary = summary,
+                    Due = due is { } d ? EventTime.Date(d) : null,
+                    Progress = progress,
+                    PercentComplete = percent,
+                    Urgency = urgency,
+                    LastModified = DateTimeOffset.UtcNow,
+                },
+                list));
+
+        Add("Send the quarterly numbers", today.AddDays(-2), TaskProgress.InProgress, 40, TaskUrgency.High);
+        Add("Book the meeting room", today);
+        Add("Read the draft agenda", today.AddDays(1));
+        Add("Renew the domain", today.AddDays(4));
+        Add("Plan the offsite", today.AddDays(28));
+        Add("Think about the newsletter", null);
+        Add("File the receipts", today.AddDays(-6), TaskProgress.Completed, 100);
     }
 
     /// <summary>

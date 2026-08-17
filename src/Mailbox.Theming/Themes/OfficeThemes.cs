@@ -453,6 +453,7 @@ public static class OfficeThemes
         t.Set(TokenKeys.List.GroupHeaderBackground, "{palette.content.groupheader}");
         t.Set(TokenKeys.List.GroupHeaderText, "{palette.neutral.white}");
         t.Set(TokenKeys.List.Separator, "{palette.neutral.quaternary}");
+        t.Set(TokenKeys.List.OverdueText, "#B60319");   // measured off the to-do list
 
         // Measured off the compose capture: the header is the same #666666 pane the message
         // list sits in, and the body is white — a document, not a pane. This is the one place
@@ -623,6 +624,8 @@ public static class OfficeThemes
         t.Set(TokenKeys.List.GroupHeaderBackground, "{palette.raised}");
         t.Set(TokenKeys.List.GroupHeaderText, "{palette.brand.primary}");
         t.Set(TokenKeys.List.Separator, "{palette.neutral.light}");
+        // Black draws its rows dark, so the measured red is lifted the way its categories are.
+        t.Set(TokenKeys.List.OverdueText, "#F1707A");
 
         // Black is the one theme where a white page would be wrong.
         t.Set(TokenKeys.Compose.BodyBackground, "{palette.raised}");
@@ -893,6 +896,7 @@ public static class OfficeThemes
         t.Set(TokenKeys.List.GroupHeaderBackground, "{palette.neutral.lighter}");
         t.Set(TokenKeys.List.GroupHeaderText, "{palette.brand.primary}");
         t.Set(TokenKeys.List.Separator, "{palette.neutral.light}");
+        t.Set(TokenKeys.List.OverdueText, "#B60319");   // measured off the to-do list
 
         // Compose: the body is a document page, not a pane, so it is white wherever the
         // theme is light. Its header is the darker strip the address fields sit on.

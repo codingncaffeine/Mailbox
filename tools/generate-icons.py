@@ -127,6 +127,17 @@ WANTED = {
     "daily-task-list": "task_list_square_ltr",
     "room-list": "conference_room",
 
+    # ---- Tasks, Notes and Journal (Phase 13) --------------------------------------------
+    "remove-from-list": "dismiss",
+    "task-detailed": "apps_list_detail",
+    "task-simple-list": "text_bullet_list",
+    "todo-list": "task_list_ltr",
+    "assign-task": "person_arrow_right",
+    "status-report": "mail_arrow_up",
+    "new-note": "note_add",
+    "note-list": "document_bullet_list",
+    "journal-entry": "notepad",
+
     # ---- People module (Phase 12) -------------------------------------------------------
     "contact-group": "people_team",
     "open-item": "open",

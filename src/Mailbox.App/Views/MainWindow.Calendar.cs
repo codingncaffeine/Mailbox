@@ -57,14 +57,14 @@ public partial class MainWindow
     /// </summary>
     private void SwitchModule(ShellViewModel shell, MailboxModule module)
     {
-        if (module is not (MailboxModule.Mail or MailboxModule.Calendar or MailboxModule.People))
+        if (module is not (MailboxModule.Mail or MailboxModule.Calendar or MailboxModule.People or MailboxModule.Tasks))
         {
-            // The remaining three are whole modules in Part IV, and a button that says which
-            // phase brings it is better than one that does nothing.
+            // The remaining two are whole modules further on, and a button that says which phase
+            // brings it is better than one that does nothing.
             shell.StatusRight = module switch
             {
-                MailboxModule.Tasks or MailboxModule.Notes or MailboxModule.Journal
-                    => $"{module} arrives with Phase 13.",
+                MailboxModule.Notes or MailboxModule.Journal
+                    => $"{module} arrives with the rest of Phase 13.",
                 _ => $"{module} is Phase 14, with the rest of the shell.",
             };
             return;
@@ -91,6 +91,15 @@ public partial class MainWindow
                 var workspace = EnsurePeople(shell);
                 host.Content = workspace;
                 _ribbon.Layout = PeopleRibbon();
+                shell.ModuleStatusLeft = workspace.Status;
+                break;
+            }
+
+            case MailboxModule.Tasks:
+            {
+                var workspace = EnsureTasks(shell);
+                host.Content = workspace;
+                _ribbon.Layout = TasksRibbon();
                 shell.ModuleStatusLeft = workspace.Status;
                 break;
             }
@@ -1222,6 +1231,8 @@ public partial class MainWindow
                     "journal" => MailboxModule.Journal,
                     _ => MailboxModule.Mail,
                 });
+
+                if (shell.Module == MailboxModule.Tasks) PoseTasks(shell);
 
                 if (shell.Module == MailboxModule.People)
                 {

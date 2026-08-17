@@ -2927,6 +2927,7 @@ public partial class MainWindow : Window
 
         if (RunCalendarCommand(shell, id)) return;
         if (RunPeopleCommand(shell, id)) return;
+        if (RunTaskCommand(shell, id)) return;
         if (RunOverSelection(shell, id)) return;
         if (RunViewCommand(shell, id)) return;
 
