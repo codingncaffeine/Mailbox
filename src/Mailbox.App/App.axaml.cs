@@ -13,6 +13,7 @@ using Mailbox.Protocols;
 using Mailbox.Protocols.OAuth;
 using Mailbox.Security;
 using Mailbox.Security.Dns;
+using Mailbox.Security.Tls;
 using Mailbox.Store;
 using Mailbox.Store.Pim;
 using Mailbox.Theming.Themes;
@@ -221,6 +222,16 @@ public partial class App : Application
 
     /// <summary>Where passwords are kept. Never a file of our own.</summary>
     public static ICredentialStore Secrets { get; private set; } = null!;
+
+    /// <summary>
+    /// Which server certificates the reader has agreed to.
+    /// </summary>
+    /// <remarks>
+    /// One for the application, over the settings file, because a decision about a server is
+    /// about the server rather than about the account that happened to reach it first — two
+    /// accounts on one host ask once between them.
+    /// </remarks>
+    public static CertificateTrust Trust { get; private set; } = null!;
 
     /// <summary>
     /// The accounts that sign in rather than hold a password, and their tokens.
@@ -470,6 +481,7 @@ public partial class App : Application
         // the keyring may be locked on a headless desktop, where asking it would wait forever.
         Secrets = WindowCapture.IsRequested ? new InMemoryCredentialStore() : Credentials.Best();
         OAuth = new OAuthAccounts(Secrets);
+        Trust = new CertificateTrust(Settings);
         PimSync = new PimSyncService(Pim, Secrets, OAuth, Settings);
         MailOptions = new MailOptions(Settings);
         CalendarOptions = new CalendarOptions(Settings);

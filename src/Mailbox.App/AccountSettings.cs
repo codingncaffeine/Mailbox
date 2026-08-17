@@ -157,6 +157,7 @@ public sealed record AccountSettings(
             IncomingUser.Length > 0 ? IncomingUser : account.Address, password)
         {
             Tokens = TokensFor(account.Address, oauth),
+            Trust = App.Trust,
         };
     }
 
@@ -187,6 +188,7 @@ public sealed record AccountSettings(
                 IncomingUser.Length > 0 ? IncomingUser : account.Address, incomingPassword)
             {
                 Tokens = tokens,
+                Trust = App.Trust,
             },
             new ServerSettings(OutgoingHost, OutgoingPort, OutgoingSecurity,
                 OutgoingUser, outgoingPassword)
@@ -194,6 +196,7 @@ public sealed record AccountSettings(
                 // The same sign-in covers both directions: one consent, one refresh token, and
                 // both scopes were asked for together.
                 Tokens = tokens,
+                Trust = App.Trust,
             })
         {
             // The account's own protocol decides which collector runs. Everything else is

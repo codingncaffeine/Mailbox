@@ -158,7 +158,10 @@ public sealed class MailKitImapSession : IImapSession
     public event EventHandler? FolderChanged;
 
     public Task ConnectAsync(ServerSettings server, CancellationToken cancellation)
-        => _client.ConnectAsync(server.Host, server.Port, server.Security, cancellation);
+    {
+        OAuth.SaslAuthentication.UseTrust(_client, server);
+        return _client.ConnectAsync(server.Host, server.Port, server.Security, cancellation);
+    }
 
     public Task AuthenticateAsync(ServerSettings server, CancellationToken cancellation)
         => OAuth.SaslAuthentication.AuthenticateAsync(_client, server, cancellation);

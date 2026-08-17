@@ -533,6 +533,16 @@ public static class OptionsPages
                 new SlotRow("keys"),
             ]),
 
+            // Where a decision made in a dialog can be found again and taken back. A trust
+            // decision a reader cannot review or revoke is not one they really made.
+            new OptionSection("Server certificates",
+            [
+                new SubHeadingRow("Servers whose certificate Mailbox could not verify, and that "
+                                  + "you chose to trust anyway. Each covers one certificate: if a "
+                                  + "server presents a different one, you will be asked again."),
+                new SlotRow("certificates"),
+            ]),
+
             new OptionSection("Automatic download",
             [
                 new CheckRow("Don't download pictures automatically in messages", true),

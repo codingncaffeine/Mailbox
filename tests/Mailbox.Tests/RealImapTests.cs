@@ -395,4 +395,66 @@ public class RealImapTests
             session.Dispose();
         }
     }
+
+    // ---- Certificates ----
+
+    /// <summary>
+    /// A host whose certificate is for somebody else: refused, explained, and then allowed once
+    /// the reader has agreed to that certificate in particular.
+    /// </summary>
+    /// <remarks>
+    /// <c>MAILBOX_IMAP_MISMATCH_HOST</c> names a host that resolves to the same server but is not
+    /// on its certificate — which is what shared hosting looks like everywhere, the certificate
+    /// carrying the hosting company's own name while the customer's domain is pointed at it.
+    /// Nothing on this machine can manufacture that, which is why it needs a real one.
+    /// <para>
+    /// It pins into a settings file of its own and throws it away, so a run leaves no standing
+    /// decision behind on the machine that ran it.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ACertificateForAnotherNameIsRefusedUntilItIsAgreedTo()
+    {
+        var mismatched = Environment.GetEnvironmentVariable("MAILBOX_IMAP_MISMATCH_HOST");
+        Assert.SkipUnless(
+            mismatched is { Length: > 0 },
+            "Set MAILBOX_IMAP_MISMATCH_HOST to a name pointing at the server but absent from its certificate.");
+
+        var directory = Directory.CreateTempSubdirectory("mailbox-trust-").FullName;
+        var settings = new Mailbox.Core.Settings.SettingsStore(Path.Combine(directory, "settings.json"));
+        var trust = new Mailbox.Security.Tls.CertificateTrust(settings);
+
+        var server = Server with { Host = mismatched!, Trust = trust };
+
+        // Refused, and it is the certificate that is refused rather than the connection failing
+        // with nothing to show for it.
+        using (var first = new MailKitImapSession())
+        {
+            await Assert.ThrowsAnyAsync<Exception>(() => first.ConnectAsync(server, Stop));
+        }
+
+        var refusal = trust.RefusalFor(mismatched!, server.Port);
+        Assert.NotNull(refusal);
+        Assert.True(refusal.Faults.HasFlag(Mailbox.Security.Tls.CertificateFault.NameMismatch));
+        Assert.Equal(64, refusal.Certificate.Fingerprint.Length);
+
+        TestContext.Current.TestOutputHelper?.WriteLine(
+            $"Refused {mismatched}: certificate is {refusal.Certificate.CommonName}, "
+            + $"names {refusal.Certificate.NamesLine}");
+        foreach (var problem in refusal.Problems) TestContext.Current.TestOutputHelper?.WriteLine($"  {problem}");
+
+        // Agreed to, and now it connects — a real handshake against a real server, allowed by the
+        // reader's own decision rather than by the check being switched off.
+        trust.Pin(refusal);
+
+        using (var second = new MailKitImapSession())
+        {
+            await second.ConnectAsync(server, Stop);
+            await second.AuthenticateAsync(server, Stop);
+            Assert.True(second.IsConnected);
+            await second.DisconnectAsync(Stop);
+        }
+
+        Directory.Delete(directory, true);
+    }
 }
