@@ -190,6 +190,82 @@ public class PimRepositoryTests
     }
 
     [Fact]
+    public void MovingAnItemLocallyIsADeleteAndACreate()
+    {
+        var (store, repo) = Fresh();
+        using var _ = store;
+        var from = repo.AddCollection(CollectionKind.Events, "Work");
+        var to = repo.AddCollection(CollectionKind.Events, "Home");
+
+        var item = repo.AddItem(Event(from.Id, "m", "Dentist", Now, TimeSpan.FromHours(1)));
+        var moved = repo.MoveItem(item, to.Id);
+
+        Assert.NotEqual(item.Id, moved.Id);
+        Assert.Equal(to.Id, moved.CollectionId);
+        Assert.Equal("Dentist", moved.Summary);
+
+        // Nothing left behind, and nothing queued: neither collection has a server to tell.
+        Assert.Null(repo.Item(item.Id));
+        Assert.Empty(repo.Queued());
+    }
+
+    [Fact]
+    public void MovingOffAServerLeavesADeleteToPushAndACreateToMake()
+    {
+        var (store, repo) = Fresh();
+        using var _ = store;
+        var from = repo.AddCollection(CollectionKind.Events, "Server", "#0078D4", "you@example.net", "https://dav.example.net/cal/");
+        var to = repo.AddCollection(CollectionKind.Events, "Local");
+
+        var item = repo.AddItem(Event(from.Id, "m", "Dentist", Now, TimeSpan.FromHours(1)) with
+        {
+            DavHref = "/cal/dentist.ics",
+            Etag = "\"1\"",
+            SyncState = PimSyncState.Synced,
+        });
+
+        var moved = repo.MoveItem(item, to.Id);
+
+        // The old row is kept, marked and queued — the resource is still on the server until the
+        // push says otherwise, and the queue reads its href off this row.
+        var left = repo.Item(item.Id);
+        Assert.Equal(PimSyncState.Deleted, left!.SyncState);
+        Assert.Equal("/cal/dentist.ics", left.DavHref);
+
+        var queued = Assert.Single(repo.Queued());
+        Assert.Equal("delete", queued.Op);
+        Assert.Equal(item.Id, queued.ItemId);
+
+        // The new row carries neither address nor tag, which is what makes a sync create it.
+        Assert.Null(moved.DavHref);
+        Assert.Null(moved.Etag);
+        Assert.Equal(PimSyncState.New, moved.SyncState);
+    }
+
+    [Fact]
+    public void ASeriesMovesWithItsOverrides()
+    {
+        var (store, repo) = Fresh();
+        using var _ = store;
+        var from = repo.AddCollection(CollectionKind.Events, "Work");
+        var to = repo.AddCollection(CollectionKind.Events, "Home");
+
+        var master = repo.AddItem(Event(from.Id, "s", "Standup", Now, TimeSpan.FromMinutes(15), rrule: "FREQ=DAILY"));
+        repo.AddItem(Event(from.Id, "s", "Standup (moved)", Now.AddDays(1), TimeSpan.FromMinutes(15)) with
+        {
+            IsOverride = true,
+            RecurrenceId = Now.AddDays(1).ToString("yyyyMMdd'T'HHmmss'Z'"),
+        });
+
+        repo.MoveItem(master, to.Id);
+
+        // One resource on a server is one family here, so both rows travel together.
+        Assert.Empty(repo.Items(from.Id));
+        Assert.Equal(2, repo.Items(to.Id).Count);
+        Assert.Equal(2, repo.ItemsByUid(to.Id, "s").Count);
+    }
+
+    [Fact]
     public void RemovingACollectionRemovesItsItems()
     {
         var (store, repo) = Fresh();

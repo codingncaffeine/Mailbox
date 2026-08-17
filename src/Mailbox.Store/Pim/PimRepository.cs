@@ -214,6 +214,72 @@ public sealed class PimRepository(PimStore store)
             return removed;
         });
 
+    /// <summary>
+    /// Moves an item into another collection, and hands back the row it now is.
+    /// </summary>
+    /// <remarks>
+    /// <b>A move is a delete there and a create here, not a change of column.</b> An item on a
+    /// server lives at an href inside its own collection, and the queue reads that href off the
+    /// row when it comes to push: rewriting <c>collection_id</c> in place would leave the resource
+    /// where it was and leave the delete that should have removed it with no address to send. So
+    /// the old row goes the way any delete goes — deleted outright on a local collection, kept and
+    /// marked and queued where a server has to be told — and a new row is written into the
+    /// destination with no href or tag of its own, which is what makes the sync create it there.
+    /// <para>
+    /// A repeating item's overrides travel with their master, for the same reason they are PUT
+    /// with it: one resource on the server, a family here.
+    /// </para>
+    /// <para>
+    /// What is carried is the row and its own text, which is the truth. Rows derived from that
+    /// text and hung off the item's id — attendees, a contact's addresses, a photograph — are not,
+    /// so this is for the kinds that keep none: notes, journal entries and tasks.
+    /// </para>
+    /// </remarks>
+    public PimItem MoveItem(PimItem item, long toCollectionId)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        if (item.CollectionId == toCollectionId) return item;
+
+        var family = item.IsOverride || item.Rrule is not { Length: > 0 }
+            ? [item]
+            : ItemsByUid(item.CollectionId, item.Uid);
+
+        var remote = Collection(toCollectionId)?.DavUrl is { Length: > 0 };
+        var leaving = Collection(item.CollectionId)?.DavUrl is { Length: > 0 };
+
+        return _store.InTransaction(() =>
+        {
+            PimItem? moved = null;
+            foreach (var member in family)
+            {
+                var made = AddItem(member with
+                {
+                    Id = 0,
+                    CollectionId = toCollectionId,
+                    DavHref = null,
+                    Etag = null,
+                    SyncState = PimSyncState.New,
+                });
+
+                if (remote) Queue(toCollectionId, made.Id, "put");
+
+                if (leaving)
+                {
+                    SetSyncState(member.Id, PimSyncState.Deleted);
+                    Queue(member.CollectionId, member.Id, "delete");
+                }
+                else
+                {
+                    DeleteItem(member.Id);
+                }
+
+                moved ??= made;
+            }
+
+            return moved ?? item;
+        });
+    }
+
     /// <summary>Full-text search over summaries, descriptions, locations and attendees, best first.</summary>
     public IReadOnlyList<PimItem> Search(string query, int limit = 200)
     {

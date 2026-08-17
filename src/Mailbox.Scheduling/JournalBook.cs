@@ -109,6 +109,10 @@ public sealed class JournalBook(PimRepository repository)
 
             foreach (var item in _repository.Items(list.Id))
             {
+                // Deleted on a server-backed folder means kept, marked and queued — and off the
+                // timeline from the moment the reader said so (`NoteBook` reads the same rule).
+                if (item.SyncState == PimSyncState.Deleted) continue;
+
                 var entry = PimJournalCodec.FromColumns(item);
                 if (entry.IsNote) continue;
 

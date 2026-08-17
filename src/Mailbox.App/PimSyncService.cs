@@ -122,6 +122,19 @@ public sealed class PimSyncService(PimRepository repository, ICredentialStore se
         _repository.Queue(item.CollectionId, item.Id, "delete");
     }
 
+    /// <summary>
+    /// Moves an item to another collection, and hands back the row it now is.
+    /// </summary>
+    /// <remarks>
+    /// The store does the work (<see cref="PimRepository.MoveItem"/>); it is offered here because
+    /// this is where the rest of the application asks for anything that has to reach a server.
+    /// </remarks>
+    public PimItem Move(PimItem item, long toCollectionId)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        return _repository.MoveItem(item, toCollectionId);
+    }
+
     private bool IsRemote(long collectionId)
         => _repository.Collection(collectionId)?.DavUrl is { Length: > 0 };
 }
