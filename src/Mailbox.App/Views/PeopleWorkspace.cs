@@ -36,6 +36,9 @@ public sealed class PeopleWorkspace : Border
     private readonly StackPanel _card = new() { Margin = new Thickness(24, 20, 24, 20), Spacing = 2 };
     private readonly ScrollViewer _cardScroll;
     private readonly Border _navPane;
+    private Grid _grid = null!;
+    private Border _cardPane = null!;
+    private Border _divider = null!;
 
     private IReadOnlyList<ContactRow> _rows = [];
 
@@ -56,7 +59,8 @@ public sealed class PeopleWorkspace : Border
             HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
         };
 
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions($"Auto,{ListWidth.ToString(CultureInfo.InvariantCulture)},*") };
+        _grid = new Grid { ColumnDefinitions = new ColumnDefinitions($"Auto,{ListWidth.ToString(CultureInfo.InvariantCulture)},*") };
+        var grid = _grid;
         grid.Children.Add(_navPane);
 
         Grid.SetColumn(_list, 1);
@@ -69,11 +73,13 @@ public sealed class PeopleWorkspace : Border
 
         // The card's own panel, which is lighter than the mail module's reading pane — measured
         // #F0F0F0 against its #D4D4D4 in Dark Gray, and its own token family since.
-        var pane = new Border { Margin = new Thickness(1, 0, 0, 0) };
-        pane[!BackgroundProperty] = new DynamicResourceExtension("people.card.background.brush");
-        pane.Child = _cardScroll;
-        Grid.SetColumn(pane, 2);
-        grid.Children.Add(pane);
+        _cardPane = new Border { Margin = new Thickness(1, 0, 0, 0) };
+        _cardPane[!BackgroundProperty] = new DynamicResourceExtension("people.card.background.brush");
+        _cardPane.Child = _cardScroll;
+        Grid.SetColumn(_cardPane, 2);
+        grid.Children.Add(_cardPane);
+
+        _divider = divider;
 
         Child = grid;
 
@@ -124,6 +130,35 @@ public sealed class PeopleWorkspace : Border
         ];
 
         bool Has(string? text) => text is { Length: > 0 } && text.Contains(Search, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Which of the Current View group's five arrangements the module is showing.
+    /// </summary>
+    /// <remarks>
+    /// The list draws all five: People is the one with a capture, and the other four are what the
+    /// reference's own group offers — two grids of cards and two tables.
+    /// </remarks>
+    public ContactArrangement Arrangement
+    {
+        get => _list.Arrangement;
+        set
+        {
+            _list.Arrangement = value;
+
+            // The People view is a list beside a card; the other four are the whole window, which
+            // is what the reference gives them — a table of numbers in a 306px column would be a
+            // table of one column.
+            var people = value == ContactArrangement.People;
+            _cardPane.IsVisible = people;
+            _divider.IsVisible = people;
+            // Both columns, not just the list's: a hidden pane in a star column still takes half
+            // the window, and the table came out the width it had before.
+            _grid.ColumnDefinitions[1].Width = people ? new GridLength(ListWidth) : new GridLength(1, GridUnitType.Star);
+            _grid.ColumnDefinitions[2].Width = people ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     /// <summary>Whether the navigation pane is showing, which the shell's own toggle drives.</summary>

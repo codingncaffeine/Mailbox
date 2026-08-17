@@ -79,6 +79,19 @@ public partial class MainWindow
         if (id == PeopleCommands.Private.Id) { PrivateContact(shell); return true; }
         if (id == PeopleCommands.FollowUp.Id) { FlagContact(shell); return true; }
 
+        // The Current View group: five arrangements over the same rows.
+        if (ArrangementFor(id) is { } arrangement)
+        {
+            SwitchModule(shell, MailboxModule.People);
+            var people = EnsurePeople(shell);
+            people.Arrangement = arrangement;
+            shell.ModuleStatusLeft = people.Status;
+            shell.StatusRight = $"{arrangement} view.";
+            Log.Info($"People: showing the {arrangement} arrangement.");
+            return true;
+        }
+
+
         // The views, the tags and the rest are placed and say what they wait for, as the
         // calendar's unfinished buttons do (§20).
         if (WaitingPeopleCommand(id) is { } waiting)
@@ -591,16 +604,20 @@ public partial class MainWindow
         Log.Info($"People: meeting with {string.Join(", ", asked)}.");
     }
 
+    /// <summary>Which arrangement a Current View button asks for, or null for anything else.</summary>
+    private static ContactArrangement? ArrangementFor(CommandId id)
+    {
+        if (id == PeopleCommands.PeopleView.Id) return ContactArrangement.People;
+        if (id == PeopleCommands.BusinessCardView.Id) return ContactArrangement.BusinessCard;
+        if (id == PeopleCommands.CardView.Id) return ContactArrangement.Card;
+        if (id == PeopleCommands.PhoneView.Id) return ContactArrangement.Phone;
+        if (id == PeopleCommands.ListView.Id) return ContactArrangement.List;
+        return null;
+    }
+
     /// <summary>What a People button that is placed but not yet live says when pressed.</summary>
     private static string? WaitingPeopleCommand(CommandId id)
     {
-        if (id == PeopleCommands.BusinessCardView.Id || id == PeopleCommands.CardView.Id
-            || id == PeopleCommands.PhoneView.Id || id == PeopleCommands.ListView.Id)
-        {
-            return "The People list is the People view; the card, phone and list arrangements come with the module's other views.";
-        }
-
-        if (id == PeopleCommands.PeopleView.Id) return "This is the People view.";
         if (id == PeopleCommands.MoreCommunicate.Id) return "The other ways to reach somebody arrive with the module's actions.";
         if (id == PeopleCommands.MailMerge.Id) return "Mail merge arrives with Phase 16.";
         if (id == PeopleCommands.ShareContacts.Id) return "Sharing an address book wants CardDAV publishing, which is still to come.";
