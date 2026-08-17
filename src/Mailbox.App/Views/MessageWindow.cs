@@ -24,6 +24,18 @@ public sealed class MessageWindow : Window
     private readonly ReadingPaneBody _body;
     private readonly AttachmentStrip _attachments = new();
 
+    /// <summary>
+    /// The two lines the pane can correct, held so it can.
+    /// </summary>
+    /// <remarks>
+    /// A message that carried its own header fields inside its cryptography says <c>[...]</c> where
+    /// its subject should be on the outside, and the pane is the only thing that has opened it — so
+    /// the header here is drawn from the envelope and then told better. Without this the window
+    /// disagreed with the body inside it (RFC 9788 §4).
+    /// </remarks>
+    private readonly TextBlock _subject;
+    private readonly TextBlock _from;
+
     public MessageWindow(
         ThemeService themes, Func<MailRepository?> mail, MimeMessage message, byte[]? raw,
         DkimResult? verified = null)
@@ -37,6 +49,9 @@ public sealed class MessageWindow : Window
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
         _body = new ReadingPaneBody(themes, mail);
+        _subject = Line(18, "text.primary.brush");
+        _from = Line(null, "text.primary.brush");
+        _from.FontWeight = FontWeight.SemiBold;
 
         var root = new DockPanel();
 
@@ -51,32 +66,45 @@ public sealed class MessageWindow : Window
 
         DialogChrome.Apply(this, root);
 
+        // Wired before the message is shown, because the pane answers about the header inside Show.
+        _body.HeaderChanged += (_, _) => Correct();
+
         _attachments.Show(message);
         _body.Show(message, message.TextBody ?? string.Empty, verified);
         _ = _body.ApplySenderPolicyAsync();
+    }
+
+    /// <summary>Takes the pane's word for the subject and the sender, when it has one.</summary>
+    private void Correct()
+    {
+        if (_body.HeaderSubject is { } subject)
+        {
+            _subject.Text = subject;
+            Title = string.IsNullOrWhiteSpace(subject) ? "(no subject)" : subject;
+        }
+
+        if (_body.HeaderFrom is { } from) _from.Text = from;
+    }
+
+    private static TextBlock Line(double? size, string ink)
+    {
+        var line = new TextBlock { TextWrapping = TextWrapping.Wrap };
+        if (size is { } points) line.FontSize = points;
+
+        Bind(line, TextBlock.ForegroundProperty, ink);
+        return line;
     }
 
     private Control Header(MimeMessage message, byte[]? raw)
     {
         var stack = new StackPanel { Spacing = 3 };
 
-        var subject = new TextBlock
-        {
-            Text = message.Subject ?? string.Empty,
-            FontSize = 18,
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 0, 0, 6),
-        };
-        Bind(subject, TextBlock.ForegroundProperty, "text.primary.brush");
-        stack.Children.Add(subject);
+        _subject.Text = message.Subject ?? string.Empty;
+        _subject.Margin = new Thickness(0, 0, 0, 6);
+        stack.Children.Add(_subject);
 
-        var from = new TextBlock
-        {
-            Text = message.From.ToString(),
-            FontWeight = FontWeight.SemiBold,
-        };
-        Bind(from, TextBlock.ForegroundProperty, "text.primary.brush");
-        stack.Children.Add(from);
+        _from.Text = message.From.ToString();
+        stack.Children.Add(_from);
 
         var to = new TextBlock { Text = "To: " + message.To };
         Bind(to, TextBlock.ForegroundProperty, "text.secondary.brush");
