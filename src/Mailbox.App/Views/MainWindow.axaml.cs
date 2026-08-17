@@ -1305,8 +1305,8 @@ public partial class MainWindow : Window
             case "transferbar":
                 Opened += (_, _) =>
                 {
-                    var tasks = new SendReceiveTasks(["you@example.com", "other@example.com"]);
-                    tasks.Report(new PollProgress("you@example.com", 0, 0, "Sending"));
+                    var tasks = new SendReceiveTasks([Environment.GetEnvironmentVariable("MAILBOX_PROGRESS_ACCOUNT") ?? "you@example.com", "other@example.com"]);
+                    tasks.Report(new PollProgress(tasks.Tasks[0].Name.Split(" - ")[0], 0, 0, "Sending"));
                     tasks.Report(new PollProgress("you@example.com", 0, 0, "Connecting"));
                     tasks.Report(new PollProgress("you@example.com", 3, 8, "Downloading"));
                     tasks.Report(new PollProgress("other@example.com", 0, 0, "Sending"));

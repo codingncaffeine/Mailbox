@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Templates;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
@@ -36,7 +37,21 @@ public sealed class SendReceiveProgressDialog : Window
     private readonly TextBlock _headline = new();
     private readonly TextBlock _current = new();
     private readonly Grid _bar = new() { ColumnDefinitions = new ColumnDefinitions("0*,1*") };
-    private readonly ListBox _table = new() { Height = TableHeight };
+    /// <summary>
+    /// The table of tasks.
+    /// </summary>
+    /// <remarks>
+    /// Horizontal scrolling off, which is what actually constrains a row's width. A list that may
+    /// scroll sideways measures its items at infinite width, so a star column sizes to its content
+    /// instead of to what is left and no amount of trimming or clipping inside the row applies —
+    /// a long address simply draws through the Progress column and over whatever it says. The
+    /// message list guards the same trap the same way.
+    /// </remarks>
+    private readonly ListBox _table = new()
+    {
+        Height = TableHeight,
+        [ScrollViewer.HorizontalScrollBarVisibilityProperty] = ScrollBarVisibility.Disabled,
+    };
     private readonly ListBox _errors = new() { Height = TableHeight };
     private readonly Button _cancel;
     private readonly StackPanel _details = new();
@@ -144,7 +159,10 @@ public sealed class SendReceiveProgressDialog : Window
     {
         _details.Spacing = 6;
 
-        _table.ItemTemplate = new FuncDataTemplate<TransferTask>((task, _) => TaskRow(task));
+        // Recycling off: a container re-filled in place is how a row ends up showing what the
+        // last one said underneath what this one says.
+        _table.ItemTemplate = new FuncDataTemplate<TransferTask>(
+            (task, _) => TaskRow(task), supportsRecycling: false);
         _errors.ItemTemplate = new FuncDataTemplate<string>((text, _) => ErrorRow(text));
 
         var tabs = new TabControl
@@ -238,11 +256,19 @@ public sealed class SendReceiveProgressDialog : Window
     {
         var grid = ColumnGrid();
 
-        var name = new StackPanel
+        // Belt and braces: a cell that somehow still wants more room than it has is cut off at
+        // its own edge rather than allowed to draw over its neighbour. Two words on top of each
+        // other is the one outcome a progress table must never produce, whatever else is wrong.
+        grid.ClipToBounds = true;
+
+        // A Grid rather than a horizontal StackPanel, which measures its children at infinite
+        // width — a TextBlock inside one never trims however it is configured, it simply draws
+        // past the end of its column and over whatever is in the next one.
+        var name = new Grid
         {
-            Orientation = Orientation.Horizontal,
-            Spacing = 6,
+            ColumnDefinitions = [new ColumnDefinition(GridLength.Auto), new ColumnDefinition(GridLength.Star)],
             Margin = new Thickness(4, 1),
+            ClipToBounds = true,
         };
 
         var marker = new TextBlock
@@ -255,14 +281,18 @@ public sealed class SendReceiveProgressDialog : Window
         };
         Bind(marker, TextBlock.ForegroundProperty,
             task.State == TransferTaskState.Failed ? "status.danger.brush" : "status.success.brush");
+        marker.Margin = new Thickness(0, 0, 6, 0);
+        Grid.SetColumn(marker, 0);
         name.Children.Add(marker);
 
-        name.Children.Add(new TextBlock
+        var label = new TextBlock
         {
             Text = task.Name,
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
-        });
+        };
+        Grid.SetColumn(label, 1);
+        name.Children.Add(label);
 
         Grid.SetColumn(name, 0);
         grid.Children.Add(name);
