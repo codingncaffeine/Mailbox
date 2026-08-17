@@ -912,11 +912,16 @@ public partial class MainWindow : Window
             case "categories":
                 Opened += async (_, _) =>
                 {
-                    if (DataContext is not ShellViewModel shell
-                        || shell.CurrentAccountForCategories() is not { } account) return;
+                    // An operation instead of the dialog when one is posed: the dialog asks for a
+                    // name behind a prompt, and a prompt blocks a capture run.
+                    if (Environment.GetEnvironmentVariable("MAILBOX_CATEGORY_OP") is { Length: > 0 } op)
+                    {
+                        PoseCategoryOp(op);
+                        return;
+                    }
 
                     CaptureNextWindow();
-                    await new ColorCategoriesDialog(account.Mail, account.Account.Id).ShowDialog(this);
+                    await new ColorCategoriesDialog(App.Categories, RewriteCategoryOnItems).ShowDialog(this);
                 };
                 break;
 
@@ -3643,13 +3648,7 @@ public partial class MainWindow : Window
 
         // Create, rename, recolour, shortcut and delete — the reference puts the way in here.
         var all = new MenuItem { Header = "All Categories…", Icon = CategorizeArtwork() };
-        all.Click += (_, _) =>
-        {
-            if (shell.CurrentAccountForCategories() is { } account)
-            {
-                _ = new ColorCategoriesDialog(account.Mail, account.Account.Id).ShowDialog(this);
-            }
-        };
+        all.Click += (_, _) => _ = new ColorCategoriesDialog(App.Categories, RewriteCategoryOnItems).ShowDialog(this);
         flyout.Items.Add(all);
 
         var quick = new MenuItem { Header = "Set Quick Click…" };

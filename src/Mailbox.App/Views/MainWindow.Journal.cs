@@ -115,7 +115,7 @@ public partial class MainWindow
                 return true;
 
             case "journal.categorize":
-                shell.StatusRight = "Categories are one set across the modules, which arrives with Phase 14 — an entry's own window sets its category meanwhile.";
+                CategorizeJournalEntry(shell);
                 return true;
 
             default:

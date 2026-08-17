@@ -66,6 +66,7 @@ public partial class MainWindow
         if (id == PeopleCommands.EmailContact.Id) { EmailSelectedContact(shell); return true; }
         if (id == MailCommands.AddressBook.Id) { _ = ShowAddressBookAsync(shell); return true; }
         if (id == PeopleCommands.NewAddressBook.Id) { _ = NewAddressBookAsync(shell); return true; }
+        if (id == PeopleCommands.Categorize.Id) { CategorizeContact(shell); return true; }
         if (id == PeopleCommands.DeleteAddressBook.Id) { _ = DeleteAddressBookAsync(shell); return true; }
 
         // The views, the tags and the rest are placed and say what they wait for, as the
@@ -97,9 +98,9 @@ public partial class MainWindow
         if (id == PeopleCommands.ForwardContact.Id) return "Forwarding a contact as a vCard arrives with the module's actions.";
         if (id == PeopleCommands.ShareContacts.Id) return "Sharing an address book wants CardDAV publishing, which is still to come.";
         if (id == PeopleCommands.OpenSharedContacts.Id) return "A shared address book is a CardDAV account — add one in Account Settings.";
-        if (id == PeopleCommands.Categorize.Id || id == PeopleCommands.FollowUp.Id || id == PeopleCommands.Private.Id)
+        if (id == PeopleCommands.FollowUp.Id || id == PeopleCommands.Private.Id)
         {
-            return "Tagging a contact arrives with the shared categories.";
+            return "Flagging a contact and marking one private arrive with the module's actions.";
         }
 
         if (id == PeopleCommands.NewItems.Id) return "New Items arrives with the rest of the modules.";

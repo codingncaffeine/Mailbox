@@ -2115,7 +2115,22 @@ public sealed partial class ShellViewModel : ObservableObject
     }
 
     /// <summary>The categories this account defines, for the Categorize menu.</summary>
-    public IReadOnlyList<Category> Categories() => CurrentMail?.Categories() ?? [];
+    /// <summary>
+    /// The one set, which is what every module's Categorize menu lists.
+    /// </summary>
+    /// <remarks>
+    /// The set rather than the open account's own rows: the categories are one list across the
+    /// modules and across the accounts (§9), and a reader with two accounts should not be shown
+    /// two lists. The account's rows are the mirror this is assigned <em>through</em> — matched
+    /// by name in <see cref="Mirrored"/> — and a name the mirror has not got is put there rather
+    /// than refused, so a category made while an account was closed still works on it.
+    /// </remarks>
+    public IReadOnlyList<Category> Categories() => App.Categories.All();
+
+    /// <summary>The open account's own row for a category, made if this account has never seen it.</summary>
+    private static Category? Mirrored(MailRepository mail, Category category)
+        => mail.Categories().FirstOrDefault(c => string.Equals(c.Name, category.Name, StringComparison.OrdinalIgnoreCase))
+           ?? mail.AddCategory(category.Name, category.ColourToken, category.Shortcut);
 
     /// <summary>Whether every one of these rows carries the category, for the menu's tick.</summary>
     public bool AllHave(IReadOnlyList<MessageRow> rows, Category category)
@@ -2123,7 +2138,8 @@ public sealed partial class ShellViewModel : ObservableObject
         if (rows.Count == 0 || CurrentMail is not { } mail) return false;
 
         var assigned = mail.CategoriesFor([.. rows.Select(r => r.Id)]);
-        return rows.All(r => assigned.TryGetValue(r.Id, out var list) && list.Any(c => c.Id == category.Id));
+        return rows.All(r => assigned.TryGetValue(r.Id, out var list)
+            && list.Any(c => string.Equals(c.Name, category.Name, StringComparison.OrdinalIgnoreCase)));
     }
 
     /// <summary>
@@ -2137,12 +2153,13 @@ public sealed partial class ShellViewModel : ObservableObject
     public void ToggleCategory(IReadOnlyList<MessageRow> rows, Category category)
     {
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
+        if (Mirrored(mail, category) is not { } mirrored) return;
 
         var ids = rows.Select(r => r.Id).ToList();
         var remove = AllHave(rows, category);
 
-        if (remove) mail.Unassign(ids, category.Id);
-        else mail.Assign(ids, category.Id);
+        if (remove) mail.Unassign(ids, mirrored.Id);
+        else mail.Assign(ids, mirrored.Id);
 
         var assigned = mail.CategoriesFor(ids);
         foreach (var row in rows)

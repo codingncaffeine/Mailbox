@@ -83,11 +83,10 @@ public partial class MainWindow
                 ForwardNote(shell, sent);
                 return true;
 
+            // The colour of a note is the colour of the category on it, so this is also how a
+            // note is recoloured.
             case "notes.categorize":
-                // The colour of a note is the colour of the category on it, and the categories
-                // are one set across the modules — which is Phase 14. Until then a note is
-                // recoloured on its own window, and saying so beats a menu of nothing.
-                shell.StatusRight = "Categories are one set across the modules, which arrives with Phase 14 — a note's own window sets its category meanwhile.";
+                CategorizeNote(shell);
                 return true;
 
             case "notes.moveto":
