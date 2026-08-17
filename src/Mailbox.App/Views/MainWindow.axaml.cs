@@ -610,13 +610,14 @@ public partial class MainWindow : Window
                 break;
             case "docked": Opened += (_, _) => DockPeek(); break;
 
-            // The whole To-Do Bar: both sections at once, which is the arrangement that decides
+            // The whole To-Do Bar: every section at once, which is the arrangement that decides
             // how tall the calendar half is and so the one worth photographing.
             case "todobar":
                 Opened += (_, _) =>
                 {
                     if (DataContext is not ShellViewModel bar) return;
                     bar.AreTasksDocked = true;
+                    bar.ArePeopleDocked = true;
                     DockPeek();
                     LogToDoBar(bar);
                 };
@@ -628,6 +629,17 @@ public partial class MainWindow : Window
                 {
                     if (DataContext is not ShellViewModel bar) return;
                     ShowToDoTasks(bar, true);
+                    LogToDoBar(bar);
+                };
+                break;
+
+            // The People section alone: the favourite contacts, which is the third thing the
+            // reference's menu switches on its own.
+            case "todopeople":
+                Opened += (_, _) =>
+                {
+                    if (DataContext is not ShellViewModel bar) return;
+                    ShowToDoPeople(bar, true);
                     LogToDoBar(bar);
                 };
                 break;
@@ -2428,7 +2440,15 @@ public partial class MainWindow : Window
 
         host.Content = new ToDoBar(
             shell.IsCalendarDocked ? BuildPeek(shell, docked: true) : null,
-            shell.AreTasksDocked ? BuildToDoTasks(shell) : null);
+            shell.AreTasksDocked ? BuildToDoTasks(shell) : null,
+            shell.ArePeopleDocked ? BuildToDoPeople(shell) : null);
+    }
+
+    /// <summary>View · To-Do Bar · People, which is the bar's third section.</summary>
+    private void ShowToDoPeople(ShellViewModel shell, bool showing)
+    {
+        shell.ArePeopleDocked = showing;
+        RebuildToDoBar(shell);
     }
 
     /// <summary>The To-Do Bar's calendar section, when it is showing.</summary>
@@ -2446,8 +2466,15 @@ public partial class MainWindow : Window
         }
 
         Log.Info($"Harness: To-Do Bar — calendar {(shell.IsCalendarDocked ? "on" : "off")}, "
-            + $"tasks {(shell.AreTasksDocked ? "on" : "off")}; "
-            + $"{bar.Peek?.Agenda.Count ?? 0} appointment(s), {bar.Tasks?.Rows.Count ?? 0} task(s).");
+            + $"tasks {(shell.AreTasksDocked ? "on" : "off")}, "
+            + $"people {(shell.ArePeopleDocked ? "on" : "off")}; "
+            + $"{bar.Peek?.Agenda.Count ?? 0} appointment(s), {bar.Tasks?.Rows.Count ?? 0} task(s), "
+            + $"{bar.People?.Rows.Count ?? 0} favourite(s).");
+
+        foreach (var row in bar.People?.Rows ?? [])
+        {
+            Log.Info($"Harness: To-Do Bar favourite {row.Named()}.");
+        }
 
         foreach (var row in bar.Peek?.Agenda ?? [])
         {
@@ -2683,10 +2710,11 @@ public partial class MainWindow : Window
         var todo = Sub("To-Do Bar");
         Entry(todo, "Calendar", () => { if (shell.IsCalendarDocked) UndockPeek(); else DockPeek(); }, shell.IsCalendarDocked);
         Entry(todo, "Tasks", () => ShowToDoTasks(shell, !shell.AreTasksDocked), shell.AreTasksDocked);
-        Entry(todo, "People", () => shell.StatusRight = "The People section lists favourite contacts, which arrives with Phase 14.", false);
+        Entry(todo, "People", () => ShowToDoPeople(shell, !shell.ArePeopleDocked), shell.ArePeopleDocked);
         Entry(todo, "Off", () =>
         {
             shell.AreTasksDocked = false;
+            shell.ArePeopleDocked = false;
             if (shell.IsCalendarDocked) UndockPeek();
             else RebuildToDoBar(shell);
         }, !shell.IsToDoBarVisible);

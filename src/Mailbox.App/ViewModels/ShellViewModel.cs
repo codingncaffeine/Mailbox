@@ -672,11 +672,18 @@ public sealed partial class ShellViewModel : ObservableObject
         set { if (Set(ref field, value)) { Raise(); Raise(nameof(IsToDoBarVisible)); } }
     }
 
+    /// <summary>True when the To-Do Bar is showing its People section — the favourite contacts.</summary>
+    public bool ArePeopleDocked
+    {
+        get;
+        set { if (Set(ref field, value)) { Raise(); Raise(nameof(IsToDoBarVisible)); } }
+    }
+
     /// <summary>
     /// Whether the To-Do Bar is on at all, which is what the pane itself is bound to: it is on
     /// when any of its sections is, and off when the menu's Off turns them all off.
     /// </summary>
-    public bool IsToDoBarVisible => IsCalendarDocked || AreTasksDocked;
+    public bool IsToDoBarVisible => IsCalendarDocked || AreTasksDocked || ArePeopleDocked;
     public ObservableCollection<FolderNode> Folders { get; }
     public ObservableCollection<MessageRow> Messages { get; }
 

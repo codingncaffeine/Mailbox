@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Threading;
 using Mailbox.App.ViewModels;
 using Mailbox.Contacts;
+using Mailbox.Controls.People;
 using Mailbox.Core.Commands;
 using Mailbox.Core.Diagnostics;
 using Mailbox.Core.Ribbon;
@@ -68,6 +69,7 @@ public partial class MainWindow
         if (id == PeopleCommands.NewAddressBook.Id) { _ = NewAddressBookAsync(shell); return true; }
         if (id == PeopleCommands.Categorize.Id) { CategorizeContact(shell); return true; }
         if (id == PeopleCommands.DeleteAddressBook.Id) { _ = DeleteAddressBookAsync(shell); return true; }
+        if (id == PeopleCommands.Favourite.Id) { FavouriteContact(shell); return true; }
 
         // The views, the tags and the rest are placed and say what they wait for, as the
         // calendar's unfinished buttons do (§20).
@@ -79,6 +81,60 @@ public partial class MainWindow
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Add to Favourites, and take one out again: the short list the To-Do Bar's People section
+    /// shows.
+    /// </summary>
+    /// <remarks>
+    /// Kept by the card's UID rather than by its row, and in this reader's settings rather than in
+    /// the card — a vCard has no way to say "a favourite of mine", and an invented property would
+    /// write one reader's short list into everybody else's address book.
+    /// </remarks>
+    private void FavouriteContact(ShellViewModel shell)
+    {
+        var people = EnsurePeople(shell);
+        if (people.Selected is not { } row)
+        {
+            shell.StatusRight = "Select a contact first.";
+            return;
+        }
+
+        var favourite = App.ContactFavourites.Toggle(row.Contact.Uid);
+        RebuildToDoBar(shell);
+
+        shell.StatusRight = favourite
+            ? $"{row.Named()} is in Favourites."
+            : $"{row.Named()} is out of Favourites.";
+        Log.Info($"Favourites: {row.Named()} ({row.Contact.Uid}) is {(favourite ? "in" : "out")}; "
+            + $"the list holds {App.ContactFavourites.All.Count}.");
+    }
+
+    /// <summary>
+    /// The To-Do Bar's People section: the favourites, drawn by the module's own list.
+    /// </summary>
+    /// <remarks>
+    /// The same <c>ContactListView</c> the module fills the window with, which is what makes this
+    /// a third line of composition rather than a third drawn list — with the alphabet index off,
+    /// a short list having no Ws to reach.
+    /// </remarks>
+    private ContactListView? BuildToDoPeople(ShellViewModel shell)
+    {
+        var favourites = App.ContactFavourites.All;
+        var view = new ContactListView
+        {
+            ShowIndex = false,
+            Order = FileAsOrders.FromIndex(App.PeopleOptions.FileAsIndex),
+            Rows = favourites.Count == 0
+                ? []
+                : [.. App.Contacts.Rows()
+                    .Where(r => App.ContactFavourites.Contains(r.Contact.Uid))
+                    .OrderBy(r => favourites.ToList().FindIndex(u => string.Equals(u, r.Contact.Uid, StringComparison.OrdinalIgnoreCase)))],
+        };
+
+        view.ContactActivated += (_, row) => _ = OpenContactAsync(shell, row);
+        return view;
     }
 
     /// <summary>What a People button that is placed but not yet live says when pressed.</summary>
@@ -343,6 +399,12 @@ public partial class MainWindow
     }
 
     /// <summary>Puts the People module on screen for a capture, with somebody picked.</summary>
+    /// <remarks>
+    /// At <see cref="DispatcherPriority.Loaded"/> — before Background, which is where
+    /// <c>MAILBOX_RUN</c> acts — for the reason the message list's posed selection is: a command
+    /// pressed on the selection has to find one. Posted at Background this said "Select a contact
+    /// first" and then selected somebody, which is a pose that proves nothing.
+    /// </remarks>
     private void ApplyPeoplePose(ShellViewModel shell)
     {
         if (Environment.GetEnvironmentVariable("MAILBOX_SELECT") is not { Length: > 0 } wanted) return;
@@ -358,6 +420,6 @@ public partial class MainWindow
                 people.Select(row.Id);
                 Log.Info($"Harness: People showing “{row.Named()}” of {people.Rows.Count.ToString(CultureInfo.InvariantCulture)}.");
             },
-            DispatcherPriority.Background);
+            DispatcherPriority.Loaded);
     }
 }
