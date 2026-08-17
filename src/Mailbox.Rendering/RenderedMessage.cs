@@ -57,6 +57,19 @@ public sealed record RenderOptions
 {
     public RenderStyle Style { get; init; } = RenderStyle.Plain;
 
+    /// <summary>
+    /// Whether this document holds decrypted content, and so gets a CSS context of its own.
+    /// </summary>
+    /// <remarks>
+    /// §19's second blocker, and CVE-2026-0818: decrypted plaintext was read out of a client
+    /// through the cascade rather than through a fetch. Two things follow, and both are here
+    /// rather than at the call site so that neither can be forgotten: the decrypted entity is
+    /// rendered <em>alone</em> — never spliced into the message it arrived in — and its stylesheet
+    /// refuses animations, transitions and style or container queries as well as the at-rules
+    /// every message's does.
+    /// </remarks>
+    public bool Isolated { get; init; }
+
     /// <summary>What a printed copy shows above the message, or null for no print header.</summary>
     public PrintHeader? PrintHeader { get; init; }
 

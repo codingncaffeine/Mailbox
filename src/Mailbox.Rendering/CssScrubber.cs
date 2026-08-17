@@ -35,6 +35,27 @@ internal static partial class CssScrubber
     /// </summary>
     private static readonly string[] ForbiddenAtRules = ["import", "font-face", "charset", "namespace"];
 
+    /// <summary>
+    /// What a document holding decrypted content refuses on top of the rest.
+    /// </summary>
+    /// <remarks>
+    /// §19's second blocker, and CVE-2026-0818: decrypted plaintext was read out of a message
+    /// through the cascade rather than through a fetch — CSS animations timed against the content,
+    /// and style and container queries that branch on it. None of the three is worth anything in
+    /// mail, and each is a side channel out of a document that holds a secret.
+    /// </remarks>
+    private static readonly string[] IsolatedAtRules = ["keyframes", "-webkit-keyframes", "container", "property", "scope"];
+
+    /// <summary>The properties that go with them: what animates, transitions or times.</summary>
+    private static readonly string[] IsolatedProperties =
+    [
+        "animation", "animation-name", "animation-duration", "animation-delay",
+        "animation-timing-function", "animation-iteration-count", "animation-direction",
+        "animation-fill-mode", "animation-play-state", "transition", "transition-property",
+        "transition-duration", "transition-delay", "transition-timing-function",
+        "container", "container-name", "container-type",
+    ];
+
     [GeneratedRegex(@"/\*.*?\*/", RegexOptions.Singleline)]
     private static partial Regex Comments { get; }
 
@@ -53,7 +74,11 @@ internal static partial class CssScrubber
     /// How a <c>url()</c> becomes something safe: the resolved URL, or null to drop the
     /// declaration's reference entirely.
     /// </param>
-    internal static string Scrub(string css, Func<string, string?> rewrite)
+    /// <param name="isolated">
+    /// True for a document that holds decrypted content, which refuses animations, transitions and
+    /// style or container queries as well — see <see cref="IsolatedAtRules"/>.
+    /// </param>
+    internal static string Scrub(string css, Func<string, string?> rewrite, bool isolated = false)
     {
         if (string.IsNullOrWhiteSpace(css)) return string.Empty;
 
@@ -62,6 +87,10 @@ internal static partial class CssScrubber
         // An at-rule that fetches takes its whole block with it, or its declarations would be
         // left loose in the sheet and applied to everything.
         foreach (var name in ForbiddenAtRules) text = RemoveAtRule(text, name);
+        if (isolated)
+        {
+            foreach (var name in IsolatedAtRules) text = RemoveAtRule(text, name);
+        }
 
         text = UrlFunction.Replace(text, match =>
         {
@@ -69,7 +98,7 @@ internal static partial class CssScrubber
             return resolved is null ? "none" : $"url('{resolved.Replace("'", "%27", StringComparison.Ordinal)}')";
         });
 
-        return RemoveForbiddenDeclarations(text);
+        return RemoveForbiddenDeclarations(text, isolated);
     }
 
     /// <summary>
@@ -140,7 +169,7 @@ internal static partial class CssScrubber
     /// <c>url()</c> would confuse it, but the <c>url()</c> pass has already run and a stray
     /// split can only ever drop more than intended, never keep something dangerous.
     /// </remarks>
-    private static string RemoveForbiddenDeclarations(string css)
+    private static string RemoveForbiddenDeclarations(string css, bool isolated = false)
     {
         var result = new StringBuilder(css.Length);
 
@@ -152,6 +181,10 @@ internal static partial class CssScrubber
                 continue;
             }
 
+            // In a document holding decrypted content, anything that animates or times is a way
+            // of reading it out one step at a time.
+            if (isolated && IsolatedProperties.Any(bad => NamesProperty(declaration, bad))) continue;
+
             // A value naming a script scheme is dropped whatever property it is on.
             if (UrlSafety.IsDangerousScheme(declaration)) continue;
 
@@ -160,5 +193,23 @@ internal static partial class CssScrubber
         }
 
         return result.ToString();
+    }
+
+    /// <summary>
+    /// Whether a declaration sets exactly this property.
+    /// </summary>
+    /// <remarks>
+    /// By its name rather than by a substring: "animation" appears inside "animation-name" and
+    /// inside a class called <c>no-animation</c>, and dropping a rule because its selector said
+    /// so would break mail that has nothing to do with any of this.
+    /// </remarks>
+    private static bool NamesProperty(string declaration, string property)
+    {
+        var colon = declaration.IndexOf(':', StringComparison.Ordinal);
+        if (colon < 0) return false;
+
+        var name = declaration[..colon];
+        var start = name.LastIndexOfAny(['{', '}', '\n']);
+        return string.Equals(name[(start + 1)..].Trim(), property, StringComparison.OrdinalIgnoreCase);
     }
 }

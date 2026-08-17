@@ -569,3 +569,51 @@ public class TablePrintTests
         Assert.Contains("Subject", html, StringComparison.Ordinal);
     }
 }
+
+/// <summary>
+/// The document a decrypted message is rendered into.
+/// </summary>
+public class IsolatedDocumentTests
+{
+    // ---- A document holding decrypted content -----------------------------------------------
+
+    /// <remarks>
+    /// §19's second blocker and CVE-2026-0818: decrypted plaintext was read out of a client
+    /// through the cascade rather than through a fetch. A document that holds a secret refuses
+    /// the constructs the attack is built out of.
+    /// </remarks>
+    [Theory]
+    [InlineData("<style>@keyframes leak{from{opacity:0}to{opacity:1}}</style>", "keyframes")]
+    [InlineData("<style>p{animation:leak 1s}</style>", "animation")]
+    [InlineData("<style>p{transition:opacity 2s}</style>", "transition")]
+    [InlineData("<style>@container (min-width:1px){p{color:red}}</style>", "container")]
+    [InlineData("<p style='animation:leak 1s'>x</p>", "animation")]
+    public void ADocumentHoldingDecryptedContentRefusesTheCascadeChannels(string html, string gone)
+    {
+        var isolated = MessageRenderer.RenderHtml(html, options: new RenderOptions { Isolated = true }).Html;
+
+        Assert.DoesNotContain(gone, isolated, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void AnOrdinaryMessageKeepsItsAnimations()
+    {
+        // The stricter rules are for the document with a secret in it. Ordinary marketing mail
+        // animates, and breaking it would be a cost paid by everybody for nothing.
+        var ordinary = MessageRenderer.RenderHtml("<style>p{animation:pulse 1s}</style>").Html;
+
+        Assert.Contains("animation", ordinary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ADeclarationIsNotDroppedBecauseItsSelectorSaysAnimation()
+    {
+        // By property name rather than by substring: a class called "no-animation" is not a
+        // declaration that animates, and mail that has nothing to do with this must not break.
+        var isolated = MessageRenderer.RenderHtml(
+            "<style>.no-animation{color:red}</style>",
+            options: new RenderOptions { Isolated = true }).Html;
+
+        Assert.Contains("color:red", isolated.Replace(" ", string.Empty, StringComparison.Ordinal), StringComparison.OrdinalIgnoreCase);
+    }
+}

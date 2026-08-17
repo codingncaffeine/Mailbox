@@ -203,14 +203,25 @@ public sealed class ReadingPaneBody : UserControl
 
         var disableLinks = _suspectedJunk && App.MailOptions.DisableLinksInJunk;
 
+        // An encrypted message is opened before anything is rendered, and what comes out is
+        // rendered *instead of* the message it arrived in — never inside it. See §19: the channel
+        // CVE-2026-0818 used was the cascade, so a decrypted part spliced into the outer document
+        // is readable by the outer document's own stylesheet.
+        var opened = Decrypted(_message);
+        if (opened.State != DecryptionState.None) _bars.Children.Add(EncryptionBar(opened));
+
         var options = new RenderOptions
         {
             Style = Style(),
             Inlined = _inlined,
             PrintHeader = Memo(_message),
             DisableLinks = disableLinks,
+            Isolated = opened.Opened,
         };
-        _rendered = MessageRenderer.Render(_message, options);
+
+        _rendered = opened.Opened
+            ? MessageRenderer.Render(AsMessage(_message, opened.Content!), options)
+            : MessageRenderer.Render(_message, options);
 
         if (disableLinks) _bars.Children.Add(JunkBar());
         if (_rendered.HasRemoteContent) _bars.Children.Add(RemoteImageBar(_rendered));
@@ -474,6 +485,73 @@ public sealed class ReadingPaneBody : UserControl
             Log.Warn("The certificate store could not be opened.", ex);
             return new SignatureReport(SignatureState.Unknown, string.Empty, "The certificate store could not be opened.");
         }
+    }
+
+    /// <summary>
+    /// Opens an encrypted message, when the reader has asked for S/MIME at all.
+    /// </summary>
+    private static DecryptionReport Decrypted(MimeMessage message)
+    {
+        if (!App.Security.Smime || !SmimeDecryption.IsEncrypted(message)) return DecryptionReport.Unencrypted;
+
+        try
+        {
+            using var context = CertificateStore();
+            return SmimeDecryption.Open(message, context);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Data.Common.DbException)
+        {
+            Log.Warn("The certificate store could not be opened.", ex);
+            return new DecryptionReport(DecryptionState.Failed, null, "The certificate store could not be opened.");
+        }
+    }
+
+    /// <summary>
+    /// The decrypted entity as a message of its own, which is what gets rendered.
+    /// </summary>
+    /// <remarks>
+    /// A message rather than a bare entity because the renderer picks a body part out of a
+    /// message — and a message of its own rather than the original with its body swapped, so
+    /// nothing of the outer document can reach what was inside. The headers a reader sees are
+    /// still the envelope's; only the body is the plaintext's.
+    /// </remarks>
+    private static MimeMessage AsMessage(MimeMessage envelope, MimeEntity content)
+    {
+        var message = new MimeMessage { Subject = envelope.Subject ?? string.Empty, Date = envelope.Date, Body = content };
+        foreach (var from in envelope.From) message.From.Add(from);
+        foreach (var to in envelope.To) message.To.Add(to);
+        return message;
+    }
+
+    /// <summary>The bar over an encrypted message, in the three states opening one comes to.</summary>
+    private Control EncryptionBar(DecryptionReport report)
+    {
+        var alarm = report.State is DecryptionState.Failed;
+        var bar = Bar(alarm ? "reading.infobar.warning.background.brush" : "reading.infobar.background.brush");
+
+        var text = new TextBlock
+        {
+            Text = report.State switch
+            {
+                DecryptionState.Opened => "This message was encrypted.",
+                DecryptionState.Locked => "This message is encrypted to a key this computer has not got.",
+                _ => "This message is encrypted and could not be opened.",
+            },
+            TextWrapping = TextWrapping.Wrap,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        Bind(text, TextBlock.ForegroundProperty, "reading.infobar.text.brush");
+        Grid.SetColumn(text, 1);
+
+        var glyph = Glyph(report.State == DecryptionState.Opened ? "shield" : "warning");
+        Grid.SetColumn(glyph, 0);
+
+        var grid = Row();
+        grid.Children.Add(glyph);
+        grid.Children.Add(text);
+        bar.Child = grid;
+        return bar;
     }
 
     /// <summary>
