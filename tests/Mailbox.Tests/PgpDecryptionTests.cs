@@ -147,6 +147,36 @@ public class PgpDecryptionTests : IDisposable
         Assert.False(PgpDecryption.IsEncrypted(arrived));
     }
 
+    [Fact]
+    public void AKeyThatIsHereAndShutIsToldApartFromOneThatIsNotHere()
+    {
+        // Both come back Locked, and only one of them is something a reader can do anything about.
+        // What tells them apart is the vault: it records every key it was asked for and had no
+        // answer to, which is what puts an Unlock button on the bar rather than a dead end.
+        var vault = new PassphraseVault();
+        using var shut = PgpKeys.Ring(Path.Combine(_root, "shut"), PgpKeys.Sender, vault.For);
+
+        var message = PgpKeys.Encrypted(PgpKeys.Sender, PgpKeys.Content());
+        var locked = PgpDecryption.Open(message, shut, TestContext.Current.CancellationToken);
+
+        Assert.Equal(DecryptionState.Locked, locked.State);
+        Assert.Null(locked.Content);
+        Assert.Equal(PgpKeys.Sender.Address, Assert.Single(vault.Wanted).Address);
+
+        // Answered, and the same message opens — which is the whole of what the button does.
+        vault.Remember(vault.Wanted[0].KeyId, PgpKeys.Passphrase);
+        var opened = PgpDecryption.Open(message, shut, TestContext.Current.CancellationToken);
+        Assert.True(opened.State == DecryptionState.Opened, opened.Detail);
+
+        // Whereas a message to somebody else asks for nothing, there being nothing to ask about.
+        vault.Clear();
+        using var stranger = PgpKeys.Ring(Path.Combine(_root, "stranger"), PgpKeys.Other, vault.For);
+        var absent = PgpDecryption.Open(message, stranger, TestContext.Current.CancellationToken);
+
+        Assert.Equal(DecryptionState.Locked, absent.State);
+        Assert.Empty(vault.Wanted);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true);

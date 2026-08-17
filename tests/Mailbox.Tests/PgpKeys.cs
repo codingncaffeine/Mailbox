@@ -21,8 +21,21 @@ namespace Mailbox.Tests;
 /// </remarks>
 internal static class PgpKeys
 {
-    /// <summary>What unlocks every secret key made here.</summary>
+    /// <summary>What unlocks every secret key made here that carries one.</summary>
     public const string Passphrase = "not-a-real-passphrase";
+
+    /// <summary>
+    /// What unlocks whichever key is being asked about.
+    /// </summary>
+    /// <remarks>
+    /// <b>An "unprotected" key here is locked with an empty passphrase, not with none</b> — handed
+    /// an empty character array, the ring generator still encrypts the secret half, and a caller
+    /// that offers the wrong string gets the same refusal a protected key would give. So a fixture
+    /// that answers one constant works for half the identities and quietly fails for the other half.
+    /// Answered by trying, which is what the application's own vault does.
+    /// </remarks>
+    public static string Answer(PgpSecretKey key)
+        => PassphraseVault.Opens(key, string.Empty) ? string.Empty : Passphrase;
 
     private static readonly Lazy<PgpIdentity> LazySender =
         new(() => Generate("A. Person", "a.person@example.com"), isThreadSafe: true);
@@ -59,6 +72,39 @@ internal static class PgpKeys
         {
             context.Import(identity.Public, TestContext.Current.CancellationToken);
             context.Import(identity.Secret, TestContext.Current.CancellationToken);
+        }
+
+        return context;
+    }
+
+    /// <summary>
+    /// One person's own keyring: their own key in full, and everybody else's public half.
+    /// </summary>
+    /// <remarks>
+    /// What a real ring holds, and the only shape that can tell the two sides of a message apart —
+    /// a directory holding both parties' secret keys will open anything and prove nothing about who
+    /// a message was really encrypted to.
+    /// </remarks>
+    /// <param name="passphrase">
+    /// What unlocks the secret key, or null for <see cref="Answer"/> — which is what the identities
+    /// here are actually locked with. Passing one of your own is how a test gets a context that
+    /// cannot open its own key (see <see cref="PassphraseVault"/>).
+    /// </param>
+    public static PgpContext Ring(
+        string directory,
+        PgpIdentity mine,
+        Func<PgpSecretKey, string?>? passphrase = null,
+        params PgpIdentity[] theirs)
+    {
+        Directory.CreateDirectory(directory);
+        var context = new PgpContext(directory, passphrase ?? Answer);
+
+        context.Import(mine.Public, TestContext.Current.CancellationToken);
+        context.Import(mine.Secret, TestContext.Current.CancellationToken);
+
+        foreach (var identity in theirs)
+        {
+            context.Import(identity.Public, TestContext.Current.CancellationToken);
         }
 
         return context;
@@ -202,10 +248,15 @@ internal static class PgpKeys
     }
 
     /// <param name="protect">
-    /// Whether the secret key carries a passphrase. The seed's reader does not, because nothing in
-    /// the application can ask for one yet — the Trust Center has no prompt — so a protected key
-    /// would make "could not unlock it" the only state a harness run could ever reach. The tests'
-    /// own keys do carry one, which is what exercises the provider.
+    /// Whether the secret key carries a passphrase worth the name. The seed's reader's does not,
+    /// because a capture run has nobody to answer the prompt that a protected key now raises — so a
+    /// seeded message would photograph as "could not unlock it" and nothing else. The tests' own
+    /// keys do carry one, which is what exercises the provider and the vault behind it.
+    /// <para>
+    /// <b>Not "no passphrase": an empty one.</b> Handed an empty character array the ring generator
+    /// still encrypts the secret half, so the key opens on <c>string.Empty</c> and refuses anything
+    /// else — see <see cref="Answer"/>, which is why a fixture cannot just name one constant.
+    /// </para>
     /// </param>
     private static PgpIdentity Generate(string name, string address, bool protect = true)
     {

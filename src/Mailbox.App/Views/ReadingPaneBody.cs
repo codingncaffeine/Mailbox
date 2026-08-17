@@ -513,7 +513,7 @@ public sealed class ReadingPaneBody : UserControl
         {
             try
             {
-                using var context = CertificateStore();
+                using var context = CryptoStores.Certificates();
                 return SmimeVerification.Verify(message, context);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Data.Common.DbException)
@@ -529,7 +529,7 @@ public sealed class ReadingPaneBody : UserControl
         {
             try
             {
-                using var context = KeyRing();
+                using var context = CryptoStores.KeyRing();
                 return PgpVerification.Verify(message, context);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -552,7 +552,7 @@ public sealed class ReadingPaneBody : UserControl
         {
             try
             {
-                using var context = CertificateStore();
+                using var context = CryptoStores.Certificates();
                 return SmimeDecryption.Open(message, context);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Data.Common.DbException)
@@ -567,7 +567,11 @@ public sealed class ReadingPaneBody : UserControl
         {
             try
             {
-                using var context = KeyRing();
+                // So whatever comes back wanting a passphrase is this message's own, and the bar
+                // does not offer to unlock a key the message before it needed.
+                CryptoStores.Passphrases.Clear();
+
+                using var context = CryptoStores.KeyRing();
                 return PgpDecryption.Open(message, context);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -610,11 +614,18 @@ public sealed class ReadingPaneBody : UserControl
         var alarm = report.State is DecryptionState.Failed or DecryptionState.Unprotected;
         var bar = Bar(alarm ? "reading.infobar.warning.background.brush" : "reading.infobar.background.brush");
 
+        // Locked is two situations wearing one state: the key is not here, or it is here and shut.
+        // Only the second is something the reader can do anything about, and the vault knows which —
+        // it records every key it was asked for and had no answer to.
+        var shut = report.State == DecryptionState.Locked && CryptoStores.Passphrases.Wanted.Count > 0;
+
         var text = new TextBlock
         {
             Text = report.State switch
             {
                 DecryptionState.Opened => "This message was encrypted.",
+                DecryptionState.Locked when shut =>
+                    "This message is encrypted to a key on this computer that is locked.",
                 DecryptionState.Locked => "This message is encrypted to a key this computer has not got.",
                 DecryptionState.Unprotected => "Mailbox will not show this message: nothing proves it "
                                                + "arrived the way it was sent.",
@@ -634,7 +645,17 @@ public sealed class ReadingPaneBody : UserControl
         grid.Children.Add(glyph);
         grid.Children.Add(text);
 
-        if (report.Detail.Length > 0)
+        // The one action a bar over an encrypted message offers, and only for the one state where
+        // there is anything to do. Nothing here ever offers to show content that did not open —
+        // Unprotected in particular has no way past it, that being the point of the state (§19).
+        if (shut)
+        {
+            var unlock = BarButton("Unlock");
+            unlock.Click += async (_, _) => await UnlockAsync();
+            Grid.SetColumn(unlock, 2);
+            grid.Children.Add(unlock);
+        }
+        else if (report.Detail.Length > 0)
         {
             var details = BarButton("Details");
             details.Click += async (_, _) => await ExplainAsync("About this message", report.Detail);
@@ -647,62 +668,22 @@ public sealed class ReadingPaneBody : UserControl
     }
 
     /// <summary>
-    /// The machine's certificate store — or a throwaway one under the harness.
+    /// Asks for the passphrase the last attempt wanted, and draws the message again if it is given.
     /// </summary>
     /// <remarks>
-    /// Beside the application's own data rather than in the library's default home directory, for
-    /// the reason the mail stores are: what this application keeps is in one place a reader can
-    /// find, back up and delete. A capture run gets a temporary store instead, because a run that
-    /// photographs the window has no business touching key material — the same rule that keeps it
-    /// off the keyring.
+    /// Drawn again rather than patched: the decision about what to render depends on what came out
+    /// of the packet, so the whole pass runs over the now-openable message rather than a decrypted
+    /// part being pushed into a view built for a refusal.
     /// </remarks>
-    private static MimeKit.Cryptography.SecureMimeContext CertificateStore()
+    private async Task UnlockAsync()
     {
-        if (Throwaway)
-        {
-            return new MimeKit.Cryptography.TemporarySecureMimeContext();
-        }
+        var wanted = CryptoStores.Passphrases.Wanted;
+        if (wanted.Count == 0 || TopLevel.GetTopLevel(this) is not Window owner) return;
 
-        Directory.CreateDirectory(App.StoreDirectory);
-        return new MimeKit.Cryptography.DefaultSecureMimeContext(
-            Path.Combine(App.StoreDirectory, "certificates.db"));
+        using var keys = CryptoStores.KeyRing();
+        if (await PassphraseDialog.UnlockAsync(owner, keys, CryptoStores.Passphrases, wanted)) Refresh();
     }
 
-    /// <summary>
-    /// Whether this run must not go near the reader's own key material.
-    /// </summary>
-    /// <remarks>
-    /// A capture run gets a throwaway store, for the reason it gets an in-memory credential store:
-    /// photographing a window is no reason to open a keyring. <b>Unless a store is posed</b> —
-    /// <c>MAILBOX_STORE</c> names a scratch directory that brings its own everything, keys
-    /// included, and that is how a claim about an encrypted message gets pressed and read back at
-    /// all. Without the exception the only provable state is "could not open it".
-    /// </remarks>
-    private static bool Throwaway
-        => Mailbox.App.Theming.WindowCapture.IsRequested
-           && Environment.GetEnvironmentVariable("MAILBOX_STORE") is not { Length: > 0 };
-
-    /// <summary>
-    /// The machine's OpenPGP keys — or an empty throwaway ring under the harness.
-    /// </summary>
-    /// <remarks>
-    /// Beside the certificate store, and for the same reasons: one place a reader can find, back up
-    /// and delete, and nothing a capture run has any business reading. Every message it fails to
-    /// open under the harness is one it is supposed to fail to open.
-    /// <para>
-    /// No passphrase is offered, so a key that has one will not unlock and the message reads as
-    /// locked rather than as broken. Asking for it is the Trust Center's, once there is one.
-    /// </para>
-    /// </remarks>
-    private static PgpContext KeyRing()
-    {
-        var directory = Throwaway
-            ? Path.Combine(Path.GetTempPath(), "mailbox-capture-keyring")
-            : Path.Combine(App.StoreDirectory, "openpgp");
-
-        Directory.CreateDirectory(directory);
-        return new PgpContext(directory);
-    }
 
     /// <summary>
     /// The line the reference draws over a signed message, in the four states §19 asks for.
