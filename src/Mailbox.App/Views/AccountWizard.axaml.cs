@@ -409,8 +409,24 @@ public sealed class AccountWizard : Window
             // switched off is still worth having for receiving, so this explains rather than
             // refuses. Without it the first send fails as "authentication failed" and sends the
             // user to check a password that was never wrong.
-            var probe = await new ServerProbe().CheckSendingAsync(
-                new ServerSettings(settings.OutgoingHost, settings.OutgoingPort));
+            //
+            // It is also the first thing here that meets a certificate, so it is where a server
+            // Mailbox cannot verify gets shown and asked about — the probe refuses, records what
+            // it refused, and this asks and tries once more.
+            var outgoing = new ServerSettings(settings.OutgoingHost, settings.OutgoingPort)
+            {
+                Trust = App.Trust,
+            };
+
+            var probe = await new ServerProbe().CheckSendingAsync(outgoing);
+
+            if (!probe.Reached
+                && App.Trust.RefusalFor(settings.OutgoingHost, settings.OutgoingPort) is { } refused
+                && await CertificateDialog.AskAsync(this, refused))
+            {
+                App.Trust.Pin(refused);
+                probe = await new ServerProbe().CheckSendingAsync(outgoing);
+            }
 
             if (SignsIn && _tokens is { } tokens)
             {

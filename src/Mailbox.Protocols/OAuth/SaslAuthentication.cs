@@ -15,6 +15,23 @@ namespace Mailbox.Protocols.OAuth;
 public static class SaslAuthentication
 {
     /// <summary>
+    /// Points a client at the reader's own certificate decisions before it connects.
+    /// </summary>
+    /// <remarks>
+    /// Set on the client rather than passed to Connect, because the callback has to be in place
+    /// before the handshake and there is no other moment. Where no trust store was handed in the
+    /// client keeps the platform's own judgement, which refuses anything it cannot vouch for —
+    /// the strict answer, and the right default.
+    /// </remarks>
+    public static void UseTrust(IMailService client, ServerSettings server)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+        if (server.Trust is not { } trust) return;
+
+        client.ServerCertificateValidationCallback = trust.For(server.Host, server.Port);
+    }
+
+    /// <summary>
     /// Authenticates a connected client: XOAUTH2 where the account signs in, a password
     /// otherwise.
     /// </summary>

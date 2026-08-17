@@ -852,6 +852,58 @@ public partial class MainWindow : Window
                 };
                 break;
 
+            // The certificate warning, which a run cannot otherwise reach: getting there means a
+            // server whose certificate does not match, and a capture run has no business going to
+            // the network to find one. The certificate is made here so the dialog has a real one
+            // to describe — a made-up record would photograph the layout and prove nothing about
+            // what it reads off a certificate.
+            case "certificate":
+                Opened += async (_, _) =>
+                {
+                    try
+                    {
+                        CaptureNextWindow();
+
+                        using var key = System.Security.Cryptography.RSA.Create(2048);
+                        var request = new System.Security.Cryptography.X509Certificates.CertificateRequest(
+                            "CN=d8.my-control-panel.com",
+                            key,
+                            System.Security.Cryptography.HashAlgorithmName.SHA256,
+                            System.Security.Cryptography.RSASignaturePadding.Pkcs1);
+
+                        var names = new System.Security.Cryptography.X509Certificates.SubjectAlternativeNameBuilder();
+                        names.AddDnsName("d8.my-control-panel.com");
+                        request.CertificateExtensions.Add(names.Build());
+
+                        using var certificate = request.CreateSelfSigned(
+                            DateTimeOffset.UtcNow.AddDays(-30), DateTimeOffset.UtcNow.AddDays(60));
+
+                        var facts = Mailbox.Security.Tls.CertificateFacts.Read(certificate);
+                        var fault = Environment.GetEnvironmentVariable("MAILBOX_CERT_FAULT") switch
+                        {
+                            "untrusted" => Mailbox.Security.Tls.CertificateFault.UntrustedRoot,
+                            "expired" => Mailbox.Security.Tls.CertificateFault.Expired,
+                            "both" => Mailbox.Security.Tls.CertificateFault.NameMismatch
+                                      | Mailbox.Security.Tls.CertificateFault.UntrustedRoot,
+                            _ => Mailbox.Security.Tls.CertificateFault.NameMismatch,
+                        };
+
+                        var refusal = new Mailbox.Security.Tls.CertificateRefusal(
+                            "mail.example.com", 993, facts, fault);
+
+                        Log.Info($"Harness: certificate — {string.Join(" ", refusal.Problems)} "
+                                 + $"name-only: {refusal.NameOnly}.");
+
+                        var agreed = await CertificateDialog.AskAsync(this, refusal);
+                        Log.Info($"Harness: certificate — the dialog came back {(agreed ? "trusted" : "declined")}.");
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Warn("Harness: the certificate pose failed.", ex);
+                    }
+                };
+                break;
+
             // The subscription prompt behind New… on the Internet Calendars tab.
             case "subscription":
                 Opened += async (_, _) =>

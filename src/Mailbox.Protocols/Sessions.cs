@@ -69,7 +69,10 @@ public sealed class MailKitPop3Session : IPop3Session
     public int Count => _client.Count;
 
     public Task ConnectAsync(ServerSettings server, CancellationToken cancellation)
-        => _client.ConnectAsync(server.Host, server.Port, server.Security, cancellation);
+    {
+        SaslAuthentication.UseTrust(_client, server);
+        return _client.ConnectAsync(server.Host, server.Port, server.Security, cancellation);
+    }
 
     public Task AuthenticateAsync(ServerSettings server, CancellationToken cancellation)
         => SaslAuthentication.AuthenticateAsync(_client, server, cancellation);
@@ -99,7 +102,10 @@ public sealed class MailKitSmtpSession : ISmtpSession
     public IReadOnlySet<string> AuthenticationMechanisms => _client.AuthenticationMechanisms;
 
     public Task ConnectAsync(ServerSettings server, CancellationToken cancellation)
-        => _client.ConnectAsync(server.Host, server.Port, server.Security, cancellation);
+    {
+        SaslAuthentication.UseTrust(_client, server);
+        return _client.ConnectAsync(server.Host, server.Port, server.Security, cancellation);
+    }
 
     public Task AuthenticateAsync(ServerSettings server, CancellationToken cancellation)
         => SaslAuthentication.AuthenticateAsync(_client, server, cancellation);

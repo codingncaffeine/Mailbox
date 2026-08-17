@@ -456,6 +456,11 @@ public sealed class OptionsWindow : Window
             keys.Content = KeyRingRows();
         }
 
+        if (renderer.Slots.TryGetValue("certificates", out var certificates))
+        {
+            certificates.Content = TrustedCertificateRows();
+        }
+
         if (renderer.Slots.TryGetValue("autostart", out var autostart))
         {
             autostart.Content = AutostartRows();
@@ -734,6 +739,73 @@ public sealed class OptionsWindow : Window
     }
 
     private static string Count(int n, string noun) => n == 1 ? $"1 {noun}" : $"{n} {noun}s";
+
+    /// <summary>
+    /// The certificates the reader has agreed to, and a way to take each back.
+    /// </summary>
+    /// <remarks>
+    /// The other half of what <see cref="CertificateDialog"/> promises: it tells the reader the
+    /// decision covers one certificate and can be reconsidered, and this is where reconsidering
+    /// happens. Without it, agreeing once in a dialog would be a decision with nowhere to look.
+    /// </remarks>
+    private Control TrustedCertificateRows()
+    {
+        var panel = new StackPanel { Spacing = 6 };
+
+        void Fill()
+        {
+            panel.Children.Clear();
+
+            var pins = App.Trust.Pins;
+            if (pins.Count == 0)
+            {
+                var none = new TextBlock { Text = "None. Every server so far has verified normally." };
+                Bind(none, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
+                panel.Children.Add(none);
+
+                if (WindowCapture.IsRequested) Log.Info("Harness: trusted certificates — none.");
+                return;
+            }
+
+            foreach (var (host, fingerprint) in pins.OrderBy(p => p.Host, StringComparer.Ordinal))
+            {
+                var name = new TextBlock { Text = host, Width = 250, TextTrimming = TextTrimming.CharacterEllipsis };
+                Bind(name, TextBlock.ForegroundProperty, "dialog.foreground.brush");
+
+                var print = new TextBlock
+                {
+                    Text = fingerprint.Length >= 16 ? fingerprint[..16] + "…" : fingerprint,
+                    VerticalAlignment = VerticalAlignment.Center,
+                };
+                Bind(print, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
+                Bind(print, TextBlock.FontFamilyProperty, "mono.fontfamily");
+
+                var forget = DialogButton("Forget", isDefault: false);
+                forget.Width = 80;
+                forget.Click += (_, _) =>
+                {
+                    App.Trust.Forget(host);
+                    Log.Info($"Trust Center: forgot the certificate pinned for {host}.");
+                    Fill();
+                };
+
+                panel.Children.Add(new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 8,
+                    Children = { name, print, forget },
+                });
+
+                if (WindowCapture.IsRequested)
+                {
+                    Log.Info($"Harness: trusted certificate — {host} pinned to {fingerprint[..16]}….");
+                }
+            }
+        }
+
+        Fill();
+        return panel;
+    }
 
     private Control AutostartRows()
     {

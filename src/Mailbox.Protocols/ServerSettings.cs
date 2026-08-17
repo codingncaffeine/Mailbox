@@ -1,5 +1,6 @@
 using MailKit.Security;
 using Mailbox.Protocols.OAuth;
+using Mailbox.Security.Tls;
 using Mailbox.Store;
 
 namespace Mailbox.Protocols;
@@ -26,6 +27,18 @@ public sealed record ServerSettings(
 
     /// <summary>True when this server is reached with a token rather than a password.</summary>
     public bool UsesOAuth => Tokens is not null;
+
+    /// <summary>
+    /// Which server certificates the reader has agreed to, or null to accept only what the
+    /// machine's own trust store vouches for.
+    /// </summary>
+    /// <remarks>
+    /// Null is the strict answer and the right default: a connection with no trust store behind it
+    /// refuses anything the platform will not vouch for, and says nothing about why. Handing one in
+    /// is what lets the refusal be **explained and then answered** — the certificate is recorded
+    /// rather than thrown away, so the caller can show it and ask.
+    /// </remarks>
+    public CertificateTrust? Trust { get; init; }
 
     /// <summary>True once there is enough here to attempt a connection.</summary>
     public bool IsComplete => Host.Length > 0 && Port > 0;
