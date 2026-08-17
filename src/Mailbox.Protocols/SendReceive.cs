@@ -75,7 +75,7 @@ public sealed class SendReceiveService(
 
     /// <summary>
     /// Nothing goes out and nothing is fetched while this is set, and queued mail is held
-    /// rather than attempted. Outlook's Work Offline.
+    /// rather than attempted. The reference's Work Offline.
     /// </summary>
     public bool WorkOffline { get; private set; }
 
