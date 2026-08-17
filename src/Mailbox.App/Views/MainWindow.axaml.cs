@@ -503,6 +503,16 @@ public partial class MainWindow : Window
                 DispatcherPriority.Loaded);
         }
 
+        // Delivers a feed from a file: MAILBOX_FEED=<path>[|name]. The poll itself is HTTP and a
+        // capture run has no business reaching the network, so what is posed is the half that has
+        // to be provable — an entry becoming a message in its own folder.
+        if (Environment.GetEnvironmentVariable("MAILBOX_FEED") is { Length: > 0 } feedPose)
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(
+                () => PoseFeed(shell, feedPose),
+                DispatcherPriority.Loaded);
+        }
+
         // Lets the fidelity harness capture the peek states, which a screenshot otherwise
         // cannot reach because they need a click.
         WireHarnessPeek();
@@ -4458,6 +4468,10 @@ public partial class MainWindow : Window
             // Send/Receive is one button in the reference and it covers the calendars too, so the
             // DAV engine runs on the same press (§7.5) rather than on a second one.
             await SyncCalendarsAsync(shell, _cancellation.Token);
+
+            // And the feeds, for the same reason: the reference checks a subscription once per
+            // download interval, which is this press.
+            await PollFeedsAsync(shell, _cancellation.Token);
         }
         catch (OperationCanceledException)
         {
@@ -4484,6 +4498,26 @@ public partial class MainWindow : Window
             _cancellation.Dispose();
             _cancellation = null;
         }
+    }
+
+    /// <summary>
+    /// The RSS feeds, read on the same press the mail is.
+    /// </summary>
+    /// <remarks>
+    /// Into the default account's tree, under RSS Feeds, one folder per subscription — where the
+    /// reference keeps them. What arrives is mail as far as everything downstream is concerned.
+    /// </remarks>
+    private async Task PollFeedsAsync(ShellViewModel shell, CancellationToken cancellation)
+    {
+        if (App.Feeds.All.Count == 0) return;
+        if (App.Accounts.All.FirstOrDefault() is not { } account) return;
+
+        var report = await App.FeedReader.PollAsync(account, DateTimeOffset.UtcNow, cancellation);
+        if (report.Delivered == 0 && report.Failed.Count == 0) return;
+
+        shell.Refresh();
+        shell.StatusRight = "Feeds: " + report.Summary;
+        Log.Info($"Feeds: {report.Summary}.");
     }
 
     /// <summary>
