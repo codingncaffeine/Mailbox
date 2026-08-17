@@ -56,6 +56,29 @@ public static class TokenKeys
         public const string Info = "status.info";
     }
 
+    /// <summary>
+    /// The follow-up flag, wherever it is drawn.
+    /// </summary>
+    /// <remarks>
+    /// One family, because the reference draws one flag: the same cloth, outline and pole appear
+    /// on the ribbon's Follow Up button, in the message list's flag column, and against every row
+    /// and heading of the to-do list. Measured off the reference's own icon — Dark Gray's
+    /// #E37D80 cloth inside a #751D1F outline on a #4D4D4D pole, and the same three read again
+    /// off its to-do list, which is what says these are one colour and not two that agree.
+    /// <para>
+    /// It is a tag rather than chrome: <c>ribbon.icon.flag</c> and its two now point here, so
+    /// changing the flag changes it everywhere and nothing can drift from anything else.
+    /// </para>
+    /// </remarks>
+    public static class Tags
+    {
+        public const string Flag = "tags.flag";
+        public const string FlagOutline = "tags.flag.outline";
+        public const string FlagPole = "tags.flag.pole";
+
+        public static readonly IReadOnlyList<string> All = [Flag, FlagOutline, FlagPole];
+    }
+
     public static class TitleBar
     {
         public const string Background = "titlebar.background";
@@ -694,6 +717,7 @@ public static class TokenKeys
         Border.Subtle, Border.Strong, Border.Focus,
         State.Hover, State.Selected, State.SelectedInactive, State.Pressed,
         Status.Success, Status.Warning, Status.Danger, Status.Info,
+        .. Tags.All,
         TitleBar.Background, TitleBar.Foreground, TitleBar.Search,
         TitleBar.SearchBorder, TitleBar.SearchText, TitleBar.Height,
         TitleBar.SearchWidth, TitleBar.SearchHeight, TitleBar.SearchOffset,

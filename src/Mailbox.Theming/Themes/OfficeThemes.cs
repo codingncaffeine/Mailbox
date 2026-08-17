@@ -433,9 +433,6 @@ public static class OfficeThemes
         t.Set(TokenKeys.RibbonIcon.Magenta, "#91005A");
         t.Set(TokenKeys.RibbonIcon.Blue, "#005BA1");
         t.Set(TokenKeys.RibbonIcon.Green, "#094509");
-        t.Set(TokenKeys.RibbonIcon.Flag, "#E37D80");
-        t.Set(TokenKeys.RibbonIcon.FlagOutline, "#751D1F");
-        t.Set(TokenKeys.RibbonIcon.FlagPole, "#4D4D4D");
         t.Set(TokenKeys.RibbonIcon.SwatchBlue, "#A9D3F2");
         t.Set(TokenKeys.RibbonIcon.SwatchBlueOutline, "#004377");
         t.Set(TokenKeys.RibbonIcon.SwatchGrey, "#999999");
@@ -444,6 +441,10 @@ public static class OfficeThemes
         t.Set(TokenKeys.RibbonIcon.SwatchGoldOutline, "#463100");
         t.Set(TokenKeys.RibbonIcon.SwatchGreen, "#54B054");
         t.Set(TokenKeys.RibbonIcon.SwatchGreenOutline, "#094509");
+
+        // The same three the to-do list's own rows are drawn in — read off tasks.png, where a
+        // row's flag is this cloth inside this outline on this pole, pixel for pixel.
+        Flag(t, "#E37D80", "#751D1F", "#4D4D4D");
 
         t.Set(TokenKeys.Nav.Background, "{palette.chrome.nav}");
         t.Set(TokenKeys.Nav.ItemText, "{palette.neutral.white}");
@@ -614,9 +615,6 @@ public static class OfficeThemes
         t.Set(TokenKeys.RibbonIcon.Magenta, "#D471D8");
         t.Set(TokenKeys.RibbonIcon.Blue, "#3B9ADC");
         t.Set(TokenKeys.RibbonIcon.Green, "#A1DDAA");
-        t.Set(TokenKeys.RibbonIcon.Flag, "#D42314");
-        t.Set(TokenKeys.RibbonIcon.FlagOutline, "#F67780");
-        t.Set(TokenKeys.RibbonIcon.FlagPole, "#D4D4D4");
         t.Set(TokenKeys.RibbonIcon.SwatchBlue, "#0063B1");
         t.Set(TokenKeys.RibbonIcon.SwatchBlueOutline, "#83BEEC");
         t.Set(TokenKeys.RibbonIcon.SwatchGrey, "#5E5E5E");
@@ -625,6 +623,10 @@ public static class OfficeThemes
         t.Set(TokenKeys.RibbonIcon.SwatchGoldOutline, "#F8DB8F");
         t.Set(TokenKeys.RibbonIcon.SwatchGreen, "#309048");
         t.Set(TokenKeys.RibbonIcon.SwatchGreenOutline, "#A1DDAA");
+
+        // Inverted like every other pair here, and inverted everywhere at once now that the list
+        // and the bar draw the same flag.
+        Flag(t, "#D42314", "#F67780", "#D4D4D4");
 
         t.Set(TokenKeys.Nav.Background, "#141414");
         t.Set(TokenKeys.Nav.ItemText, "{palette.neutral.primary}");
@@ -879,6 +881,27 @@ public static class OfficeThemes
         t.Set(TokenKeys.Status.Info, "{palette.brand.primary}");
     }
 
+    /// <summary>
+    /// The follow-up flag, in the one place a theme states it.
+    /// </summary>
+    /// <remarks>
+    /// The reference draws one flag and this application draws one too: the ribbon's icon points
+    /// at the same three values the message list's column and the to-do list's rows do, so the
+    /// only way to change the flag is to change it everywhere. Read off the reference's own
+    /// Follow Up icon per theme, and read again off its to-do list, whose rows carry Dark Gray's
+    /// #E37D80 cloth and #751D1F outline exactly as its ribbon does.
+    /// </remarks>
+    private static void Flag(TokenSet t, string cloth, string outline, string pole)
+    {
+        t.Set(TokenKeys.Tags.Flag, cloth);
+        t.Set(TokenKeys.Tags.FlagOutline, outline);
+        t.Set(TokenKeys.Tags.FlagPole, pole);
+
+        t.Set(TokenKeys.RibbonIcon.Flag, "{tags.flag}");
+        t.Set(TokenKeys.RibbonIcon.FlagOutline, "{tags.flag.outline}");
+        t.Set(TokenKeys.RibbonIcon.FlagPole, "{tags.flag.pole}");
+    }
+
     private static void LightChrome(TokenSet t)
     {
         t.Set(TokenKeys.Ribbon.Background, "{palette.neutral.white}");
@@ -900,9 +923,6 @@ public static class OfficeThemes
         t.Set(TokenKeys.RibbonIcon.Magenta, "#A846B2");
         t.Set(TokenKeys.RibbonIcon.Blue, "#1E8BCD");
         t.Set(TokenKeys.RibbonIcon.Green, "#309048");
-        t.Set(TokenKeys.RibbonIcon.Flag, "#FF9198");
-        t.Set(TokenKeys.RibbonIcon.FlagOutline, "#D42314");
-        t.Set(TokenKeys.RibbonIcon.FlagPole, "#3A3A38");
         t.Set(TokenKeys.RibbonIcon.SwatchBlue, "#83BEEC");
         t.Set(TokenKeys.RibbonIcon.SwatchBlueOutline, "#0063B1");
         t.Set(TokenKeys.RibbonIcon.SwatchGrey, "#C8C6C4");
@@ -911,6 +931,8 @@ public static class OfficeThemes
         t.Set(TokenKeys.RibbonIcon.SwatchGoldOutline, "#DE6C00");
         t.Set(TokenKeys.RibbonIcon.SwatchGreen, "#A1DDAA");
         t.Set(TokenKeys.RibbonIcon.SwatchGreenOutline, "#309048");
+
+        Flag(t, "#FF9198", "#D42314", "#3A3A38");
 
         t.Set(TokenKeys.Rail.Background, "{palette.neutral.lighter}");
         t.Set(TokenKeys.Rail.ItemText, "{palette.neutral.secondary}");
