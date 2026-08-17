@@ -107,6 +107,17 @@ public sealed class SettingsStore
     /// <summary>True when the key has been written; false means the caller's default applies.</summary>
     public bool Has(string key) => TryGet(key, out _);
 
+    /// <summary>
+    /// The value as it is stored, whatever its type — null for a key never written.
+    /// </summary>
+    /// <remarks>
+    /// For saying what a key holds without knowing what kind of thing it holds, which is what a
+    /// harness reading a press back needs: a tick writes a boolean, a radio a string and a spinner
+    /// a number, and asking <see cref="GetString"/> for the first of those quietly answers with the
+    /// caller's own fallback.
+    /// </remarks>
+    public string? Stored(string key) => TryGet(key, out var node) ? node.ToJsonString() : null;
+
     /// <summary>Forgets a key, so the caller's default applies again. Nothing happens for a key never written.</summary>
     public void Remove(string key)
     {

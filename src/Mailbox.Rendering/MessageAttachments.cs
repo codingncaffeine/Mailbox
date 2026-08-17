@@ -1,5 +1,6 @@
 using MimeKit;
 using MimeKit.Tnef;
+using MimeKit.Cryptography;
 
 namespace Mailbox.Rendering;
 
@@ -80,7 +81,7 @@ public sealed record Attachment(string Name, string MimeType, long Size, MimeEnt
 /// What a message has attached, including what it hid inside a <c>winmail.dat</c>.
 /// </summary>
 /// <remarks>
-/// TNEF is Exchange's own attachment format, and mail sent from an Outlook talking to an
+/// TNEF is Exchange's own attachment format, and mail sent from the reference talking to an
 /// Exchange server still arrives that way. To every other client the message looks like it has
 /// one useless attachment called <c>winmail.dat</c> containing the several real ones. Unpacking
 /// it here means the strip shows the attachments the sender actually sent — which is the whole
@@ -93,9 +94,12 @@ public static class MessageAttachments
         ArgumentNullException.ThrowIfNull(message);
 
         var found = new List<Attachment>();
+        var machinery = Machinery(message);
 
         foreach (var entity in message.BodyParts)
         {
+            if (machinery.Contains(entity)) continue;
+
             switch (entity)
             {
                 case TnefPart tnef:
@@ -118,6 +122,55 @@ public static class MessageAttachments
         }
 
         return found;
+    }
+
+    /// <summary>
+    /// The parts that are how a message is signed or sealed rather than anything in it.
+    /// </summary>
+    /// <remarks>
+    /// A <c>multipart/encrypted</c> is two parts, both of them plumbing: one saying the protocol is
+    /// version 1 and one holding the ciphertext. A <c>multipart/signed</c> is the message followed
+    /// by a detached signature. None of the four is a thing a reader attached, and offering the
+    /// ciphertext as <c>attachment.octet-stream</c> invites somebody to save the one file in the
+    /// message they can do nothing with.
+    /// <para>
+    /// Found by walking the tree rather than by content type, because the ciphertext part is an
+    /// ordinary <c>application/octet-stream</c> and only its place in a <c>multipart/encrypted</c>
+    /// says what it is. The signed part's <em>content</em> is walked on: its attachments are the
+    /// message's own, and they are exactly the ones the signature covers.
+    /// </para>
+    /// </remarks>
+    private static HashSet<MimeEntity> Machinery(MimeMessage message)
+    {
+        var skip = new HashSet<MimeEntity>();
+        if (message.Body is { } body) Walk(body);
+        return skip;
+
+        void Walk(MimeEntity entity)
+        {
+            switch (entity)
+            {
+                case MultipartEncrypted encrypted:
+                    foreach (var child in encrypted) skip.Add(child);
+                    break;
+
+                // S/MIME wraps the whole message in one part instead of two, and MimeKit names it
+                // smime.p7m — a file the reader can do nothing with either.
+                case ApplicationPkcs7Mime pkcs7:
+                    skip.Add(pkcs7);
+                    break;
+
+                // The first part is what was signed and the rest is the signature over it.
+                case MultipartSigned signed:
+                    for (var i = 1; i < signed.Count; i++) skip.Add(signed[i]);
+                    if (signed.Count > 0) Walk(signed[0]);
+                    break;
+
+                case Multipart multipart:
+                    foreach (var child in multipart) Walk(child);
+                    break;
+            }
+        }
     }
 
     /// <summary>

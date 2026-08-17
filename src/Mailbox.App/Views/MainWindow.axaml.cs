@@ -1818,9 +1818,11 @@ public partial class MainWindow : Window
         _openMessage = message;
         _openRaw = raw;
 
-        _attachments.Show(message);
+        // The pane first, then the strip from what the pane is showing: an encrypted message's
+        // attachments are inside it, and the envelope has none worth offering.
         _reading.Show(message, shell.SelectedMessage?.Body ?? string.Empty, Verified(shell),
             suspectedJunk: shell.CurrentFolderRole == FolderRole.Junk);
+        _attachments.Show(_reading.Carried);
         _ = _reading.ApplySenderPolicyAsync();
     }
 

@@ -9,6 +9,7 @@ using Mailbox.Core.Diagnostics;
 using Mailbox.Rendering;
 using RenderOptions = Mailbox.Rendering.RenderOptions;
 using Mailbox.Security;
+using Mailbox.Security.OpenPgp;
 using Mailbox.Security.Smime;
 using Mailbox.Store;
 using Mailbox.Theming;
@@ -162,6 +163,16 @@ public sealed class ReadingPaneBody : UserControl
     /// <summary>Raised when Accept, Tentative or Decline was pressed; the shell sends the reply.</summary>
     public event EventHandler<InvitationBar.Answer>? InvitationAnswered;
 
+    /// <summary>
+    /// The message whose parts are on screen — the decrypted one when there was one to open.
+    /// </summary>
+    /// <remarks>
+    /// What the attachment strip reads, so the two cannot disagree: the strip used to list the
+    /// envelope's parts, which for an encrypted message meant offering the ciphertext as a file to
+    /// save and never offering what was actually attached inside it.
+    /// </remarks>
+    public MimeMessage? Carried { get; private set; }
+
     private void Refresh()
     {
         _bars.Children.Clear();
@@ -169,6 +180,7 @@ public sealed class ReadingPaneBody : UserControl
         if (_message is null)
         {
             _rendered = null;
+            Carried = null;
             ShowText(_fallbackText);
             return;
         }
@@ -176,11 +188,36 @@ public sealed class ReadingPaneBody : UserControl
         var trust = SenderTrust.Evaluate(_message, FamiliarDomains(), _verified);
         if (trust.Warnings.Count > 0) _bars.Children.Add(TrustBar(trust));
 
-        // The signature, when the reader has asked for S/MIME at all. Crypto ships off (§14), and
-        // a bar that says "signed" over a check nobody made would be worse than no bar.
-        if (SignatureOf(_message) is { State: not SignatureState.None } signature)
+        // An encrypted message is opened before anything else is decided, because what gets checked
+        // and what gets rendered both depend on what was inside. See §19: the channel CVE-2026-0818
+        // used was the cascade, so a decrypted part spliced into the outer document is readable by
+        // the outer document's own stylesheet — what comes out is rendered *instead of* the message
+        // it arrived in, never inside it.
+        var opened = Decrypted(_message);
+        var carrier = opened.Opened ? AsMessage(_message, opened.Content!) : _message;
+        Carried = carrier;
+
+        // The signature, when the reader has asked for either kind of crypto at all. Crypto ships
+        // off (§14), and a bar that says "signed" over a check nobody made would be worse than no
+        // bar. A signature carried *inside* an encrypted packet is the packet's own — OpenPGP's
+        // ordinary shape — and one carried as a MIME layer is read off whichever message the reader
+        // is actually being shown.
+        var signature = opened.Signature is { State: not SignatureState.None } enclosed
+            ? enclosed
+            : SignatureOf(carrier);
+
+        if (signature.State != SignatureState.None) _bars.Children.Add(SignatureBar(signature));
+
+        // What the crypto came to, for a harness run to read back. A bar can be photographed, but
+        // what it says is a claim about the store and the keyring rather than about the picture —
+        // and a refusal draws no content at all, which a capture cannot tell from an empty message.
+        if (Mailbox.App.Theming.WindowCapture.IsRequested
+            && (opened.State != DecryptionState.None || signature.State != SignatureState.None))
         {
-            _bars.Children.Add(SignatureBar(signature));
+            Log.Info($"Harness: crypto — encryption {opened.State}, signature {signature.State}"
+                + (signature.Signer.Length > 0 ? $" by {signature.Signer}" : string.Empty)
+                + $"; renders {(opened.Opened ? "the decrypted content, isolated" : "the message as it arrived")}."
+                + string.Concat(new[] { opened.Detail, signature.Detail }.Where(d => d.Length > 0).Select(d => " " + d)));
         }
 
         // An invitation is the one bar that goes above the trust strip in the reference: it is
@@ -203,11 +240,6 @@ public sealed class ReadingPaneBody : UserControl
 
         var disableLinks = _suspectedJunk && App.MailOptions.DisableLinksInJunk;
 
-        // An encrypted message is opened before anything is rendered, and what comes out is
-        // rendered *instead of* the message it arrived in — never inside it. See §19: the channel
-        // CVE-2026-0818 used was the cascade, so a decrypted part spliced into the outer document
-        // is readable by the outer document's own stylesheet.
-        var opened = Decrypted(_message);
         if (opened.State != DecryptionState.None) _bars.Children.Add(EncryptionBar(opened));
 
         var options = new RenderOptions
@@ -219,9 +251,9 @@ public sealed class ReadingPaneBody : UserControl
             Isolated = opened.Opened,
         };
 
-        _rendered = opened.Opened
-            ? MessageRenderer.Render(AsMessage(_message, opened.Content!), options)
-            : MessageRenderer.Render(_message, options);
+        // `carrier` is the decrypted message when there was one, and the message itself otherwise —
+        // so a refusal renders the envelope and nothing that was inside it.
+        _rendered = MessageRenderer.Render(carrier, options);
 
         if (disableLinks) _bars.Children.Add(JunkBar());
         if (_rendered.HasRemoteContent) _bars.Children.Add(RemoteImageBar(_rendered));
@@ -464,46 +496,89 @@ public sealed class ReadingPaneBody : UserControl
     // ---- The bars ----------------------------------------------------------------------------
 
     /// <summary>
-    /// What checking this message's signature came to, or nothing when S/MIME is switched off.
+    /// What checking this message's signature came to, or nothing when both switches are off.
     /// </summary>
     /// <remarks>
-    /// The store is the machine's own: a certificate is trusted because this machine trusts it,
-    /// never because the message carried it (§19). Nothing is imported here at all.
+    /// The store is the machine's own, whichever kind: a key is trusted because this machine trusts
+    /// it, never because the message carried it (§19). Nothing is imported here at all.
+    /// <para>
+    /// The two are asked in turn rather than chosen between, because which one a message wants is
+    /// the message's own business — and each answers only for the shape it recognises, so a
+    /// <c>multipart/signed</c> naming the other's protocol falls straight through.
+    /// </para>
     /// </remarks>
     private static SignatureReport SignatureOf(MimeMessage message)
     {
-        if (!App.Security.Smime || !SmimeVerification.IsSigned(message)) return SignatureReport.Unsigned;
+        if (App.Security.Smime && SmimeVerification.IsSigned(message))
+        {
+            try
+            {
+                using var context = CertificateStore();
+                return SmimeVerification.Verify(message, context);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Data.Common.DbException)
+            {
+                // No certificate store to check against is not a verdict about the message.
+                Log.Warn("The certificate store could not be opened.", ex);
+                return new SignatureReport(
+                    SignatureState.Unknown, string.Empty, "The certificate store could not be opened.");
+            }
+        }
 
-        try
+        if (App.Security.OpenPgp && PgpVerification.IsSigned(message))
         {
-            using var context = CertificateStore();
-            return SmimeVerification.Verify(message, context);
+            try
+            {
+                using var context = KeyRing();
+                return PgpVerification.Verify(message, context);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Log.Warn("The OpenPGP keyring could not be opened.", ex);
+                return new SignatureReport(
+                    SignatureState.Unknown, string.Empty, "The OpenPGP keyring could not be opened.");
+            }
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Data.Common.DbException)
-        {
-            // No certificate store to check against is not a verdict about the message.
-            Log.Warn("The certificate store could not be opened.", ex);
-            return new SignatureReport(SignatureState.Unknown, string.Empty, "The certificate store could not be opened.");
-        }
+
+        return SignatureReport.Unsigned;
     }
 
     /// <summary>
-    /// Opens an encrypted message, when the reader has asked for S/MIME at all.
+    /// Opens an encrypted message, when the reader has asked for that kind of crypto at all.
     /// </summary>
     private static DecryptionReport Decrypted(MimeMessage message)
     {
-        if (!App.Security.Smime || !SmimeDecryption.IsEncrypted(message)) return DecryptionReport.Unencrypted;
+        if (App.Security.Smime && SmimeDecryption.IsEncrypted(message))
+        {
+            try
+            {
+                using var context = CertificateStore();
+                return SmimeDecryption.Open(message, context);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Data.Common.DbException)
+            {
+                Log.Warn("The certificate store could not be opened.", ex);
+                return new DecryptionReport(
+                    DecryptionState.Failed, null, "The certificate store could not be opened.");
+            }
+        }
 
-        try
+        if (App.Security.OpenPgp && PgpDecryption.IsEncrypted(message))
         {
-            using var context = CertificateStore();
-            return SmimeDecryption.Open(message, context);
+            try
+            {
+                using var context = KeyRing();
+                return PgpDecryption.Open(message, context);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Log.Warn("The OpenPGP keyring could not be opened.", ex);
+                return new DecryptionReport(
+                    DecryptionState.Failed, null, "The OpenPGP keyring could not be opened.");
+            }
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Data.Common.DbException)
-        {
-            Log.Warn("The certificate store could not be opened.", ex);
-            return new DecryptionReport(DecryptionState.Failed, null, "The certificate store could not be opened.");
-        }
+
+        return DecryptionReport.Unencrypted;
     }
 
     /// <summary>
@@ -523,10 +598,16 @@ public sealed class ReadingPaneBody : UserControl
         return message;
     }
 
-    /// <summary>The bar over an encrypted message, in the three states opening one comes to.</summary>
+    /// <summary>The bar over an encrypted message, in the four states opening one comes to.</summary>
+    /// <remarks>
+    /// <b>Unprotected has no way past it</b>, which is the point of the state. The content exists —
+    /// it decrypted — and it is not behind this bar, not behind a Details button and not behind a
+    /// warning a reader can dismiss: a "show it anyway" is the bug the warning is about, and
+    /// Thunderbird's wording is the model for saying so plainly (§19).
+    /// </remarks>
     private Control EncryptionBar(DecryptionReport report)
     {
-        var alarm = report.State is DecryptionState.Failed;
+        var alarm = report.State is DecryptionState.Failed or DecryptionState.Unprotected;
         var bar = Bar(alarm ? "reading.infobar.warning.background.brush" : "reading.infobar.background.brush");
 
         var text = new TextBlock
@@ -535,6 +616,8 @@ public sealed class ReadingPaneBody : UserControl
             {
                 DecryptionState.Opened => "This message was encrypted.",
                 DecryptionState.Locked => "This message is encrypted to a key this computer has not got.",
+                DecryptionState.Unprotected => "Mailbox will not show this message: nothing proves it "
+                                               + "arrived the way it was sent.",
                 _ => "This message is encrypted and could not be opened.",
             },
             TextWrapping = TextWrapping.Wrap,
@@ -550,6 +633,15 @@ public sealed class ReadingPaneBody : UserControl
         var grid = Row();
         grid.Children.Add(glyph);
         grid.Children.Add(text);
+
+        if (report.Detail.Length > 0)
+        {
+            var details = BarButton("Details");
+            details.Click += async (_, _) => await ExplainAsync("About this message", report.Detail);
+            Grid.SetColumn(details, 2);
+            grid.Children.Add(details);
+        }
+
         bar.Child = grid;
         return bar;
     }
@@ -566,14 +658,50 @@ public sealed class ReadingPaneBody : UserControl
     /// </remarks>
     private static MimeKit.Cryptography.SecureMimeContext CertificateStore()
     {
-        if (Mailbox.App.Theming.WindowCapture.IsRequested)
+        if (Throwaway)
         {
             return new MimeKit.Cryptography.TemporarySecureMimeContext();
         }
 
-        var directory = Path.GetDirectoryName(Mailbox.Store.Pim.PimStore.DefaultPath())!;
+        Directory.CreateDirectory(App.StoreDirectory);
+        return new MimeKit.Cryptography.DefaultSecureMimeContext(
+            Path.Combine(App.StoreDirectory, "certificates.db"));
+    }
+
+    /// <summary>
+    /// Whether this run must not go near the reader's own key material.
+    /// </summary>
+    /// <remarks>
+    /// A capture run gets a throwaway store, for the reason it gets an in-memory credential store:
+    /// photographing a window is no reason to open a keyring. <b>Unless a store is posed</b> —
+    /// <c>MAILBOX_STORE</c> names a scratch directory that brings its own everything, keys
+    /// included, and that is how a claim about an encrypted message gets pressed and read back at
+    /// all. Without the exception the only provable state is "could not open it".
+    /// </remarks>
+    private static bool Throwaway
+        => Mailbox.App.Theming.WindowCapture.IsRequested
+           && Environment.GetEnvironmentVariable("MAILBOX_STORE") is not { Length: > 0 };
+
+    /// <summary>
+    /// The machine's OpenPGP keys — or an empty throwaway ring under the harness.
+    /// </summary>
+    /// <remarks>
+    /// Beside the certificate store, and for the same reasons: one place a reader can find, back up
+    /// and delete, and nothing a capture run has any business reading. Every message it fails to
+    /// open under the harness is one it is supposed to fail to open.
+    /// <para>
+    /// No passphrase is offered, so a key that has one will not unlock and the message reads as
+    /// locked rather than as broken. Asking for it is the Trust Center's, once there is one.
+    /// </para>
+    /// </remarks>
+    private static PgpContext KeyRing()
+    {
+        var directory = Throwaway
+            ? Path.Combine(Path.GetTempPath(), "mailbox-capture-keyring")
+            : Path.Combine(App.StoreDirectory, "openpgp");
+
         Directory.CreateDirectory(directory);
-        return new MimeKit.Cryptography.DefaultSecureMimeContext(Path.Combine(directory, "certificates.db"));
+        return new PgpContext(directory);
     }
 
     /// <summary>
