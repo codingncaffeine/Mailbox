@@ -64,6 +64,73 @@ public partial class MainWindow
     }
 
     /// <summary>
+    /// Instant Search in whichever module is open — the fifth and sixth of the six §14 asks for.
+    /// </summary>
+    /// <remarks>
+    /// One index behind all of them: <c>pim_fts</c>, which every PIM item is written into as it is
+    /// saved and which nothing read until now. Each module narrows its own list to what the index
+    /// found, because a module's list is what the reference's own search narrows — it does not open
+    /// a seventh window to answer in.
+    /// <para>
+    /// The mail module is not here: its search is the message list's own, over its account's FTS5
+    /// index, and it has been since Phase 6.
+    /// </para>
+    /// </remarks>
+    private void SearchModule(ShellViewModel shell, string words)
+    {
+        switch (shell.Module)
+        {
+            case MailboxModule.People:
+            {
+                var people = EnsurePeople(shell);
+                people.Search = words;
+                shell.ModuleStatusLeft = people.Status;
+                break;
+            }
+
+            case MailboxModule.Tasks:
+            {
+                var tasks = EnsureTasks(shell);
+                tasks.Search = words;
+                shell.ModuleStatusLeft = tasks.Status;
+                break;
+            }
+
+            case MailboxModule.Notes:
+            {
+                var notes = EnsureNotes(shell);
+                notes.Search = words;
+                shell.ModuleStatusLeft = notes.Status;
+                break;
+            }
+
+            case MailboxModule.Journal:
+            {
+                var journal = EnsureJournal(shell);
+                journal.Search = words;
+                shell.ModuleStatusLeft = journal.Status;
+                break;
+            }
+
+            case MailboxModule.Calendar:
+            {
+                var calendar = EnsureCalendar(shell);
+                calendar.Search = words;
+                shell.ModuleStatusLeft = calendar.Status;
+                break;
+            }
+
+            default:
+                return;
+        }
+
+        shell.StatusRight = words.Length == 0
+            ? string.Empty
+            : $"{shell.ModuleStatusLeft} for “{words}”.";
+        Log.Info($"Search: {shell.Module} — “{words}” → {shell.ModuleStatusLeft}.");
+    }
+
+    /// <summary>
     /// The Tasks module's commands. Returns false for anything it does not own, so the shell's
     /// own list carries on.
     /// </summary>

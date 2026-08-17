@@ -117,7 +117,20 @@ public sealed class CalendarWorkspace : Border
     }
 
     /// <summary>What the status bar says: the reference counts the items the view is showing.</summary>
-    public string Status => $"Items: {_entries.Count}";
+    public string Status => Search.Length == 0 ? $"Items: {_entries.Count}" : $"Items: {_entries.Count} found";
+
+    /// <summary>What Instant Search is looking for here, matched against the store's own index.</summary>
+    public string Search
+    {
+        get;
+        set
+        {
+            var wanted = value?.Trim() ?? string.Empty;
+            if (field == wanted) return;
+            field = wanted;
+            Reload();
+        }
+    } = string.Empty;
 
     /// <summary>What the view is showing, in start order.</summary>
     public IReadOnlyList<CalendarEntry> Entries => _entries;
@@ -549,6 +562,17 @@ public sealed class CalendarWorkspace : Border
         try
         {
             _entries = _source.Between(from, to);
+
+            // Instant Search narrows what the grid draws to what the store's own index found,
+            // which is this module's answer to the box. **Divergence, stated:** the reference
+            // swaps the calendar for a list of results; a grid drawing only the matches keeps
+            // them where they are in time, which is the thing a calendar is for, and the status
+            // bar counts them.
+            if (Search.Length > 0)
+            {
+                var found = _repository.Search(Search).Select(i => i.Id).ToHashSet();
+                _entries = [.. _entries.Where(e => found.Contains(e.ItemId))];
+            }
         }
         catch (Microsoft.Data.Sqlite.SqliteException ex)
         {
