@@ -169,6 +169,18 @@ public static class PimMigrations
 
         CREATE UNIQUE INDEX categories_name ON categories(name COLLATE NOCASE);
         """,
+
+        // ---- 5: private items ----------------------------------------------------------------
+        // RFC 5545's CLASS, as a column. The raw text is still the truth — this is what a list
+        // reads, and a list draws its rows from the columns rather than parsing every item to
+        // find out whether one of them is private.
+        //
+        // A column rather than a per-kind one because CLASS belongs to every component the file
+        // holds: an appointment, a task and a journal entry all state it the same way, and a
+        // vCard's own privacy is the same idea under another name.
+        """
+        ALTER TABLE pim_items ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0;
+        """,
     ];
 
     public static int Latest => Steps.Count;

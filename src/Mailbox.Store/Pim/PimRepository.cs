@@ -87,7 +87,7 @@ public sealed class PimRepository(PimStore store)
                starts_utc, ends_utc, starts_local, ends_local, tz_id, all_day, status, priority, percent_complete,
                completed_utc, rrule, recurrence_id, is_override, sequence, organizer, busy, reminder_minutes,
                categories, last_modified, sync_state,
-               file_as, first_name, last_name, company, job_title, is_group
+               file_as, first_name, last_name, company, job_title, is_group, is_private
         FROM pim_items
         """;
 
@@ -148,13 +148,13 @@ public sealed class PimRepository(PimStore store)
                      starts_utc, ends_utc, starts_local, ends_local, tz_id, all_day, status, priority, percent_complete,
                      completed_utc, rrule, recurrence_id, is_override, sequence, organizer, busy, reminder_minutes,
                      categories, last_modified, sync_state,
-                     file_as, first_name, last_name, company, job_title, is_group)
+                     file_as, first_name, last_name, company, job_title, is_group, is_private)
                 VALUES
                     ($collection, $uid, $kind, $href, $etag, $raw, $summary, $description, $location,
                      $starts, $ends, $startsLocal, $endsLocal, $tz, $allDay, $status, $priority, $percent,
                      $completed, $rrule, $recurrenceId, $override, $sequence, $organizer, $busy, $reminder,
                      $categories, $modified, $sync,
-                     $fileAs, $firstName, $lastName, $company, $jobTitle, $isGroup)
+                     $fileAs, $firstName, $lastName, $company, $jobTitle, $isGroup, $isPrivate)
                 """,
                 Parameters(item));
             var id = _store.LastInsertId;
@@ -179,7 +179,7 @@ public sealed class PimRepository(PimStore store)
                     rrule = $rrule, recurrence_id = $recurrenceId, is_override = $override, sequence = $sequence, organizer = $organizer,
                     busy = $busy, reminder_minutes = $reminder, categories = $categories, last_modified = $modified, sync_state = $sync,
                     file_as = $fileAs, first_name = $firstName, last_name = $lastName, company = $company,
-                    job_title = $jobTitle, is_group = $isGroup
+                    job_title = $jobTitle, is_group = $isGroup, is_private = $isPrivate
                 WHERE id = $id
                 """,
                 [.. Parameters(item), ("$id", item.Id)]);
@@ -601,6 +601,7 @@ public sealed class PimRepository(PimStore store)
         ("$modified", item.LastModified.ToUnixTimeSeconds()), ("$sync", SyncText(item.SyncState)),
         ("$fileAs", item.FileAs), ("$firstName", item.FirstName), ("$lastName", item.LastName),
         ("$company", item.Company), ("$jobTitle", item.JobTitle), ("$isGroup", item.IsGroup ? 1 : 0),
+        ("$isPrivate", item.IsPrivate ? 1 : 0),
     ];
 
     private static PimItem ReadItem(SqliteDataReader r) => new()
@@ -641,6 +642,7 @@ public sealed class PimRepository(PimStore store)
         Company = r.GetString(33),
         JobTitle = r.GetString(34),
         IsGroup = r.GetInt32(35) != 0,
+        IsPrivate = r.GetInt32(36) != 0,
     };
 
     private static Collection ReadCollection(SqliteDataReader r) => new(

@@ -11,9 +11,9 @@ namespace Mailbox.App.Views;
 /// </summary>
 /// <remarks>
 /// <b>No capture of this window exists</b>, so its fields are the reference's own — subject,
-/// start and due dates, status, priority, percent complete, a reminder, categories and the notes
-/// underneath — in the order its form lists them, and the geometry is this application's dialog
-/// chrome rather than a measurement. The appointment window's measured form is what it should
+/// start and due dates, status, priority, percent complete, a reminder, categories, the Private
+/// tick its bar also carries, and the notes underneath — in the order its form lists them, and the
+/// geometry is this application's dialog chrome rather than a measurement. The appointment window's measured form is what it should
 /// eventually look like; a capture would settle it.
 /// <para>
 /// Status and percent complete are two views of the same thing, so they are kept in step here:
@@ -31,6 +31,7 @@ public sealed class TaskWindow : Window
     private readonly ComboBox _priority = new();
     private readonly NumericUpDown _percent = new() { Minimum = 0, Maximum = 100, Increment = 25, FormatString = "0'%'" };
     private readonly CheckBox _reminder = new() { Content = "Reminder" };
+    private readonly CheckBox _private = new() { Content = "Private" };
     private readonly TextBox _categories = new() { PlaceholderText = "Categories" };
     private readonly TextBox _notes = new() { AcceptsReturn = true, TextWrapping = Avalonia.Media.TextWrapping.Wrap, MinHeight = 120 };
 
@@ -58,6 +59,7 @@ public sealed class TaskWindow : Window
         _priority.SelectedIndex = Math.Max(0, Array.IndexOf(Urgencies, task.Urgency));
         _percent.Value = task.PercentComplete;
         _reminder.IsChecked = task.ReminderMinutes is not null;
+        _private.IsChecked = task.IsPrivate;
         _categories.Text = string.Join(", ", task.Categories);
         _notes.Text = task.Description;
 
@@ -91,7 +93,7 @@ public sealed class TaskWindow : Window
         var grid = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,*"),
-            RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto,Auto"),
+            RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto,Auto,Auto"),
         };
 
         Place(grid, 0, 0, "Subject:", _subject, span: 3);
@@ -102,6 +104,7 @@ public sealed class TaskWindow : Window
         Place(grid, 3, 0, "% Complete:", _percent);
         Place(grid, 3, 2, string.Empty, _reminder);
         Place(grid, 4, 0, "Categories:", _categories, span: 3);
+        Place(grid, 5, 2, string.Empty, _private);
 
         var save = new Button { Content = "Save & Close", Width = 110, IsDefault = true };
         save.Click += (_, _) =>
@@ -163,6 +166,7 @@ public sealed class TaskWindow : Window
             PercentComplete = complete ? 100 : percent,
             CompletedUtc = complete ? _original.CompletedUtc ?? DateTimeOffset.UtcNow : null,
             Urgency = Chosen(_priority, Urgencies),
+            IsPrivate = _private.IsChecked == true,
             ReminderMinutes = _reminder.IsChecked == true ? _original.ReminderMinutes ?? 0 : null,
             Categories = (_categories.Text ?? string.Empty)
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),

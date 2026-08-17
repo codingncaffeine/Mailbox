@@ -171,6 +171,25 @@ public class PimRepositoryTests
     }
 
     [Fact]
+    public void APrivateItemStaysPrivateThroughTheStore()
+    {
+        var (store, repo) = Fresh();
+        using var _ = store;
+        var calendar = repo.AddCollection(CollectionKind.Events, "Mine");
+
+        var kept = repo.AddItem(Event(calendar.Id, "p", "Nobody's business", Now, TimeSpan.FromHours(1)) with { IsPrivate = true });
+        Assert.True(repo.Item(kept.Id)!.IsPrivate);
+
+        // And it comes off again: the column is written on every update, not only when it is set.
+        repo.UpdateItem(kept with { IsPrivate = false });
+        Assert.False(repo.Item(kept.Id)!.IsPrivate);
+
+        // The default is public, which is what the standard's absent CLASS means.
+        var ordinary = repo.AddItem(Event(calendar.Id, "o", "Everybody's business", Now, TimeSpan.FromHours(1)));
+        Assert.False(repo.Item(ordinary.Id)!.IsPrivate);
+    }
+
+    [Fact]
     public void RemovingACollectionRemovesItsItems()
     {
         var (store, repo) = Fresh();
