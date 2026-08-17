@@ -364,14 +364,24 @@ public partial class MainWindow : Window
             }, DispatcherPriority.Background);
         }
 
-        // Runs the reminder check now, as the minute timer would: MAILBOX_REMINDERS=check.
-        if (Environment.GetEnvironmentVariable("MAILBOX_REMINDERS") == "check")
+        // Runs the reminder check now, as the minute timer would: MAILBOX_REMINDERS=check — and
+        // presses the window's own Dismiss or Snooze on everything it is holding with
+        // =dismiss / =snooze, since a button nobody has pressed is a claim nobody has tested.
+        if (Environment.GetEnvironmentVariable("MAILBOX_REMINDERS") is { Length: > 0 } reminders)
         {
             Opened += (_, _) => Dispatcher.UIThread.Post(() =>
             {
                 if (DataContext is not ShellViewModel s) return;
                 CheckReminders(s);
                 Log.Info($"Harness: reminders window {( _reminders?.IsVisible == true ? "shown with " + _reminders.Current.Count : "not shown")}.");
+
+                foreach (var item in _reminders?.Current ?? [])
+                {
+                    Log.Info($"Harness: reminder “{item.Subject}” — {item.DueIn(DateTimeOffset.Now)}, "
+                        + (item.IsAppointment ? "an appointment" : item.IsTask ? "a task" : "a flagged message") + ".");
+                }
+
+                PressReminders(reminders.Trim());
                 if (_reminders?.IsVisible == true) CaptureNextWindow();
             }, DispatcherPriority.Background);
         }
@@ -3544,11 +3554,22 @@ public partial class MainWindow : Window
             due.Add(DueReminder.ForAppointment(appointment));
         }
 
+        // And the tasks, on the same terms: one window over every module, one Dismiss All. A
+        // task's alarm hangs from its due date and does not stop when the date passes — an
+        // overdue task is what a reminder is for.
+        foreach (var task in Mailbox.Scheduling.TaskReminders.Due(App.Pim, now))
+        {
+            due.Add(DueReminder.ForTask(task));
+        }
+
         // Announced once per item per time: a snoozed reminder that comes round again is a new
         // announcement, and its key carries the time so it is.
-        var fresh = due.Where(d => _announced.Add(d.IsAppointment
-            ? ("calendar", d.Appointment!.ItemId ^ d.Appointment.StartsUtc.ToUnixTimeSeconds())
-            : (d.Account!.Account.Address, d.Message!.Id ^ (d.Message.Reminder?.ToUnixTimeSeconds() ?? 0)))).ToList();
+        var fresh = due.Where(d => _announced.Add(d switch
+        {
+            { IsAppointment: true } => ("calendar", d.Appointment!.ItemId ^ d.Appointment.StartsUtc.ToUnixTimeSeconds()),
+            { IsTask: true } => ("tasks", d.Task!.ItemId ^ d.Task.DueUtc.ToUnixTimeSeconds()),
+            _ => (d.Account!.Account.Address, d.Message!.Id ^ (d.Message.Reminder?.ToUnixTimeSeconds() ?? 0)),
+        })).ToList();
 
         if (due.Count == 0)
         {
@@ -3577,6 +3598,40 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Presses Dismiss or Snooze in the Reminders window and says what is left afterwards.
+    /// </summary>
+    /// <remarks>
+    /// The queue is asked again rather than the window: dismissing writes to whichever store the
+    /// item came from — a mail file, or the PIM one per occurrence — and it is that write, not the
+    /// list emptying, that has to be true.
+    /// </remarks>
+    private void PressReminders(string spec)
+    {
+        if (_reminders is not { } window || window.Current.Count == 0) return;
+
+        var held = window.Current.ToList();
+        switch (spec.ToLowerInvariant())
+        {
+            case "dismiss":
+                window.PressDismiss(held);
+                break;
+            case "snooze":
+                window.PressSnooze(held, TimeSpan.FromHours(1));
+                break;
+            default:
+                return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var appointments = Mailbox.Scheduling.AppointmentReminders.Due(App.Pim, now).Count;
+        var tasks = Mailbox.Scheduling.TaskReminders.Due(App.Pim, now).Count;
+        var mail = App.Accounts.All.Sum(a => a.Mail.DueReminders(now).Count);
+
+        Log.Info($"Harness: {spec} pressed on {held.Count}; the queue now holds "
+            + $"{mail} message(s), {appointments} appointment(s), {tasks} task(s).");
+    }
+
     private RemindersWindow NewRemindersWindow(ShellViewModel shell)
     {
         var window = new RemindersWindow();
@@ -3589,6 +3644,11 @@ public partial class MainWindow : Window
         {
             BringForward();
             _ = OpenAppointmentByIdAsync(shell, itemId);
+        };
+        window.OpenTaskRequested += (_, itemId) =>
+        {
+            BringForward();
+            _ = OpenTaskByIdAsync(shell, itemId);
         };
         Closed += (_, _) =>
         {

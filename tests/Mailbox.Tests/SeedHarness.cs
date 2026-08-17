@@ -215,7 +215,13 @@ public class SeedHarness
         var pim = new PimRepository(store);
         var list = pim.AddCollection(CollectionKind.Tasks, "Tasks", "#0078D4").Id;
 
-        void Add(string summary, DateOnly? due, TaskProgress progress = TaskProgress.NotStarted, int percent = 0, TaskUrgency urgency = TaskUrgency.Normal)
+        void Add(
+            string summary,
+            DateOnly? due,
+            TaskProgress progress = TaskProgress.NotStarted,
+            int percent = 0,
+            TaskUrgency urgency = TaskUrgency.Normal,
+            int? reminder = null)
             => pim.AddItem(PimTodoCodec.ToItem(
                 new TaskItem
                 {
@@ -225,11 +231,15 @@ public class SeedHarness
                     Progress = progress,
                     PercentComplete = percent,
                     Urgency = urgency,
+                    ReminderMinutes = reminder,
                     LastModified = DateTimeOffset.UtcNow,
                 },
                 list));
 
-        Add("Send the quarterly numbers", today.AddDays(-2), TaskProgress.InProgress, 40, TaskUrgency.High);
+        // The late one carries a reminder, so the Reminders window has a task to show: a task's
+        // alarm does not stop when its date passes, which is the difference worth being able to
+        // photograph.
+        Add("Send the quarterly numbers", today.AddDays(-2), TaskProgress.InProgress, 40, TaskUrgency.High, reminder: 15);
         Add("Book the meeting room", today);
         Add("Read the draft agenda", today.AddDays(1));
         Add("Renew the domain", today.AddDays(4));
