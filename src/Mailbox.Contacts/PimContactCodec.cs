@@ -56,6 +56,12 @@ public static class PimContactCodec
             Company = contact.Company,
             JobTitle = contact.JobTitle,
             IsGroup = contact.IsGroup,
+            IsPrivate = contact.IsPrivate,
+
+            // The flag is the reader's own and is not written into the card (see Contact).
+            FollowUpDue = contact.FollowUpDue,
+            FollowUpComplete = contact.FollowUpComplete,
+
             // A birthday is a date the calendar will want; kept as the row's own start so a
             // future birthday view has something to read without parsing every card. The time is
             // appended rather than formatted: a DateOnly refuses a format with a time in it.
@@ -76,7 +82,18 @@ public static class PimContactCodec
         try
         {
             var parsed = VCardCodec.Parse(item.RawPayload);
-            if (parsed.Count > 0) return parsed[0];
+
+            // The card is the truth for everything the card says. The follow-up flag is the one
+            // thing it does not say — it is kept beside the card on purpose — so it comes off the
+            // row, or reading a contact would quietly forget it every time.
+            if (parsed.Count > 0)
+            {
+                return parsed[0] with
+                {
+                    FollowUpDue = item.FollowUpDue,
+                    FollowUpComplete = item.FollowUpComplete,
+                };
+            }
         }
         catch (FormatException)
         {
@@ -102,6 +119,9 @@ public static class PimContactCodec
             JobTitle = item.JobTitle,
             Notes = item.Description,
             IsGroup = item.IsGroup,
+            IsPrivate = item.IsPrivate,
+            FollowUpDue = item.FollowUpDue,
+            FollowUpComplete = item.FollowUpComplete,
             Categories = item.Categories.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
             LastModified = item.LastModified,
         };

@@ -92,6 +92,10 @@ public static class VCardCodec
             Suffix = Part(name?.Suffixes),
             NickName = card.NickNames?.FirstOrDefault(n => n is { IsEmpty: false })?.Value?.FirstOrDefault() ?? string.Empty,
             FileAs = Extension(card, "X-MAILBOX-FILEAS") ?? Sorted(card),
+            // vCard 3.0 says it with CLASS and 4.0 has no such property, so a card written here
+            // says it both ways and one read here believes either.
+            IsPrivate = string.Equals(Extension(card, "X-MAILBOX-PRIVATE"), "TRUE", StringComparison.OrdinalIgnoreCase)
+                        || card.Access?.Value == FolkerKinzel.VCards.Enums.Access.Private,
             Company = organization?.Name ?? string.Empty,
             Department = organization?.Units is { Count: > 0 } units ? string.Join(", ", units) : string.Empty,
             JobTitle = Text(card.Titles),
@@ -345,6 +349,12 @@ public static class VCardCodec
 
         if (contact.NickName.Length > 0) builder.NickNames.Add(contact.NickName);
         if (contact.FileAs.Length > 0) builder.NonStandards.Add("X-MAILBOX-FILEAS", contact.FileAs);
+
+        if (contact.IsPrivate)
+        {
+            builder.Access.Set(FolkerKinzel.VCards.Enums.Access.Private);
+            builder.NonStandards.Add("X-MAILBOX-PRIVATE", "TRUE");
+        }
 
         if (contact.Company.Length > 0 || contact.Department.Length > 0)
         {
