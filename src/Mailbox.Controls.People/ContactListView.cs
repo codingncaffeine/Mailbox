@@ -28,21 +28,38 @@ namespace Mailbox.Controls.People;
 /// </remarks>
 public sealed class ContactListView : DrawnSurface
 {
-    /// <summary>The index column's width, and where its letters sit inside it.</summary>
-    private const double IndexWidth = 26;
-    private const double IndexInk = 17;
+    /// <summary>
+    /// The index column's width, and where its letters sit inside it.
+    /// </summary>
+    /// <remarks>
+    /// Measured off the reference's list: its pane starts at 293 and its rows at 332, with the
+    /// letters centred on 311 — so a 39px column with its ink 18 in.
+    /// </remarks>
+    private const double IndexWidth = 39;
+    private const double IndexInk = 18;
 
     /// <summary>Measured: the letters are 23px apart, the first baseline 25px down.</summary>
     private const double IndexStep = 23;
     private const double IndexFirstBaseline = 25;
     private const double IndexTextSize = 11;
 
-    /// <summary>Authored: no capture shows a row, this being an empty address book.</summary>
-    private const double RowHeight = 30;
-    private const double AvatarSize = 20;
+    /// <summary>
+    /// Measured off the reference's own list: a row is 56 tall closed by a hairline, its disc is
+    /// 36 across and 8 in, and the name starts 53 in with its baseline 33 down.
+    /// </summary>
+    /// <remarks>
+    /// The row band stops short of the pane's right edge by <see cref="Gutter"/>, which is where
+    /// the reference reserves its scrollbar, and the first row starts <see cref="RowsTop"/> below
+    /// the top — the same inset the index's first letter and the empty state are drawn at.
+    /// </remarks>
+    private const double RowHeight = 56;
+    private const double AvatarSize = 36;
     private const double AvatarLeft = 8;
-    private const double NameLeft = 36;
+    private const double NameLeft = 53;
+    private const double NameBaseline = 33;
     private const double NameTextSize = 15;
+    private const double RowsTop = 26;
+    private const double Gutter = 22;
 
     /// <summary>Measured: two centred lines, 13px apart, the first 22px below the top.</summary>
     private const double EmptyTextSize = 12;
@@ -54,6 +71,7 @@ public sealed class ContactListView : DrawnSurface
 
     private IReadOnlyList<ContactRow> _rows = [];
     private ContactRow? _selected;
+    private ContactRow? _hover;
     private int _scroll;
     private bool _showIndex = true;
 
@@ -148,23 +166,30 @@ public sealed class ContactListView : DrawnSurface
     }
 
     /// <summary>
-    /// The alphabet down the side: <c>123</c> for everything that does not start with a letter,
-    /// then A to Z, with a letter nobody files under drawn faintly rather than left out — the
-    /// index is a ruler, and a ruler with missing marks is not one.
+    /// The alphabet down the side: <c>123</c> for everything that does not file under a letter,
+    /// then a to z.
     /// </summary>
+    /// <remarks>
+    /// Lower case, and every letter drawn alike — which is what the reference does, and not what
+    /// this drew before: a letter nobody files under was dimmed, on the reasoning that a ruler
+    /// should say where its marks are. The reference's own index with one contact in it draws all
+    /// twenty-seven the same, so it does not.
+    /// <para>
+    /// The ink is the pane's rather than a row's: the index sits on the list's own background,
+    /// which is a dark panel in Dark Gray and a white one in the light themes.
+    /// </para>
+    /// </remarks>
     private void DrawIndex(DrawingContext context, double height)
     {
-        var present = _rows.Select(r => r.Contact.IndexLetter(Order)).ToHashSet();
-        var ink = Colour(TokenKeys.List.ReadText);
-        var faint = Colour(TokenKeys.Text.Disabled);
+        var ink = Colour(TokenKeys.List.HeaderText);
 
         var baseline = IndexFirstBaseline;
         foreach (var letter in Letters())
         {
             if (baseline > height) break;
 
-            var text = letter == '#' ? "123" : letter.ToString(Culture);
-            var run = Ink(text, IndexTextSize, present.Contains(letter) ? ink : faint);
+            var text = letter == '#' ? "123" : char.ToLowerInvariant(letter).ToString(Culture);
+            var run = Ink(text, IndexTextSize, ink);
             DrawAt(context, run, IndexInk - (run.Width / 2), baseline);
             _indexHits.Add((new Rect(0, baseline - IndexStep + 6, IndexWidth, IndexStep), letter));
             baseline += IndexStep;
@@ -183,7 +208,8 @@ public sealed class ContactListView : DrawnSurface
     /// </summary>
     private void DrawEmpty(DrawingContext context, Rect area)
     {
-        var ink = Colour(TokenKeys.List.ReadText);
+        // On the pane, so the pane's ink — the same the index and an unbanded row take.
+        var ink = Colour(TokenKeys.List.HeaderText);
         string[] lines = ["We didn't find anything to show here.", "Double-click here to create a new Contact."];
 
         var baseline = area.Y + EmptyFirstBaseline;
@@ -195,33 +221,47 @@ public sealed class ContactListView : DrawnSurface
         }
     }
 
+    /// <remarks>
+    /// A row has no fill of its own: the reference draws its contacts straight on the list's pane
+    /// and bands only the one that is picked. So the ink follows the ground — the pane's ink
+    /// (<c>list.header.text</c>, which is what reads on it in every theme) for an ordinary row,
+    /// and the content ink for the selected band, which is a light panel even in Dark Gray.
+    /// </remarks>
     private void DrawRows(DrawingContext context, Rect area)
     {
-        var ink = Colour(TokenKeys.List.ReadText);
+        var onPane = Colour(TokenKeys.List.HeaderText);
+        var onBand = Colour(TokenKeys.List.ReadText);
         var subtle = Colour(TokenKeys.List.PreviewText);
         var selected = Colour(TokenKeys.List.RowSelected);
-        var line = Colour(TokenKeys.Border.Subtle);
+        var hover = Colour(TokenKeys.List.RowHover);
+        var line = Colour(TokenKeys.List.Separator);
 
-        var y = area.Y;
+        var y = area.Y + RowsTop;
+        var width = Math.Max(40, area.Width - Gutter);
+
         for (var i = _scroll; i < _rows.Count && y < area.Bottom; i++)
         {
             var row = _rows[i];
-            var box = new Rect(area.X, y, area.Width, RowHeight);
+            var box = new Rect(area.X, y, width, RowHeight);
+            var chosen = _selected is { } picked && picked.Id == row.Id;
 
-            if (_selected is { } chosen && chosen.Id == row.Id) Fill(context, box, selected);
+            if (chosen) Fill(context, box, selected);
+            else if (_hover is { } over && over.Id == row.Id) Fill(context, box, hover);
+
+            var ink = chosen ? onBand : onPane;
 
             DrawAvatar(context, row, new Rect(box.X + AvatarLeft, box.Y + ((RowHeight - AvatarSize) / 2), AvatarSize, AvatarSize));
 
             var name = row.Contact.FiledAs(Order);
             var room = box.Width - NameLeft - 8;
-            DrawAt(context, Ink(Ellipsize(name, room, NameTextSize), NameTextSize, ink), box.X + NameLeft, box.Y + 20);
+            DrawAt(context, Ink(Ellipsize(name, room, NameTextSize), NameTextSize, ink), box.X + NameLeft, box.Y + NameBaseline);
 
             // A group says so beside its name: a distribution list and a person are different
             // things to press Enter on.
             if (row.Contact.IsGroup)
             {
-                var mark = Ink("group", IndexTextSize, subtle);
-                DrawAt(context, mark, box.Right - mark.Width - 10, box.Y + 20);
+                var mark = Ink("group", IndexTextSize, chosen ? subtle : onPane);
+                DrawAt(context, mark, box.Right - mark.Width - 10, box.Y + NameBaseline);
             }
 
             Fill(context, new Rect(box.X, Math.Round(box.Bottom) - 1, box.Width, 1), line);
@@ -236,14 +276,15 @@ public sealed class ContactListView : DrawnSurface
     /// </summary>
     private void DrawAvatar(DrawingContext context, ContactRow row, Rect box)
     {
-        var circle = Colour(TokenKeys.Accent.Subtle);
+        var circle = Colour(TokenKeys.People.Avatar);
         context.DrawEllipse(Brush(circle), null, box.Center, box.Width / 2, box.Height / 2);
 
         var initials = InitialsOf(row.Contact);
         if (initials.Length == 0) return;
 
-        var run = Ink(initials, 10, Colour(TokenKeys.Text.Primary), SemiBoldFace);
-        DrawAt(context, run, box.Center.X - (run.Width / 2), box.Center.Y + 4);
+        // Measured: the initials are white on the disc and about a third of its height.
+        var run = Ink(initials, Math.Round(box.Height * 0.36), Colour(TokenKeys.People.AvatarText), SemiBoldFace);
+        DrawAt(context, run, box.Center.X - (run.Width / 2), box.Center.Y + (run.Height / 3));
     }
 
     /// <summary>The two letters a photograph-less contact is drawn with.</summary>
@@ -290,6 +331,32 @@ public sealed class ContactListView : DrawnSurface
         // The reference's own invitation: double-clicking the empty list makes a contact.
         if (e.ClickCount >= 2) EmptySpaceActivated?.Invoke(this, EventArgs.Empty);
         e.Handled = true;
+    }
+
+    /// <summary>The row under the pointer, which is lit as every other list of ours lights one.</summary>
+    protected override void OnPointerMoved(PointerEventArgs e)
+    {
+        base.OnPointerMoved(e);
+        var point = e.GetPosition(this);
+        ContactRow? over = null;
+        foreach (var (box, row) in _rowHits)
+        {
+            if (!box.Contains(point)) continue;
+            over = row;
+            break;
+        }
+
+        if (over?.Id == _hover?.Id) return;
+        _hover = over;
+        InvalidateVisual();
+    }
+
+    protected override void OnPointerExited(PointerEventArgs e)
+    {
+        base.OnPointerExited(e);
+        if (_hover is null) return;
+        _hover = null;
+        InvalidateVisual();
     }
 
     /// <summary>Scrolls to the first contact filed under a letter, as pressing the index does.</summary>

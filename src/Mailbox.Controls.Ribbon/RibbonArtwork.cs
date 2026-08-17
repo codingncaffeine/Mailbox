@@ -107,8 +107,15 @@ public sealed class RibbonArtwork : Control
         var top = Math.Round((Bounds.Height - Figure) / 2);
         using var _ = context.PushTransform(Matrix.CreateTranslation(left, top));
 
-        if (Drawing == "followup") DrawFollowUp(context);
-        else DrawCategorize(context);
+        // By name, and nothing for a name there is no drawing for — the icon map's own rule. A
+        // fall-through to the swatches is how People's Follow Up button spent a phase drawing
+        // Categorize: its command asked for "follow-up", which is not what this one is called.
+        switch (Drawing)
+        {
+            case "followup": DrawFollowUp(context); break;
+            case "categorize": DrawCategorize(context); break;
+            default: break;
+        }
     }
 
     /// <summary>

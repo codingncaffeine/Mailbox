@@ -57,6 +57,37 @@ public static class TokenKeys
     }
 
     /// <summary>
+    /// The People module's own surfaces: the disc a person is drawn as, and the card beside the
+    /// list.
+    /// </summary>
+    /// <remarks>
+    /// Measured off the reference's own People module in Dark Gray, where the card is a lighter
+    /// panel than the mail module's reading pane — #F0F0F0 against its #D4D4D4 — and a contact's
+    /// disc is a saturated blue with white initials rather than the account disc's darker one. The
+    /// list itself needs no colours of its own: its rows are drawn straight on
+    /// <c>list.background</c> with <c>list.header.text</c>, which is the ink that reads on that
+    /// pane in every theme, and a selected row is a content band with content ink on it.
+    /// </remarks>
+    public static class People
+    {
+        /// <summary>The disc a contact is drawn as, and the initials on it.</summary>
+        public const string Avatar = "people.avatar";
+        public const string AvatarText = "people.avatar.text";
+
+        /// <summary>The card beside the list: its panel, its ink, and its quieter labels.</summary>
+        public const string CardBackground = "people.card.background";
+        public const string CardText = "people.card.text";
+        public const string CardSubtle = "people.card.subtle";
+
+        /// <summary>The rule under the card's tab strip, and the line under the tab that is open.</summary>
+        public const string CardRule = "people.card.rule";
+        public const string CardTab = "people.card.tab";
+
+        public static readonly IReadOnlyList<string> All =
+            [Avatar, AvatarText, CardBackground, CardText, CardSubtle, CardRule, CardTab];
+    }
+
+    /// <summary>
     /// The follow-up flag, wherever it is drawn.
     /// </summary>
     /// <remarks>
@@ -718,6 +749,7 @@ public static class TokenKeys
         State.Hover, State.Selected, State.SelectedInactive, State.Pressed,
         Status.Success, Status.Warning, Status.Danger, Status.Info,
         .. Tags.All,
+        .. People.All,
         TitleBar.Background, TitleBar.Foreground, TitleBar.Search,
         TitleBar.SearchBorder, TitleBar.SearchText, TitleBar.Height,
         TitleBar.SearchWidth, TitleBar.SearchHeight, TitleBar.SearchOffset,
