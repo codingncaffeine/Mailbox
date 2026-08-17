@@ -440,8 +440,14 @@ public partial class MainWindow : Window
                 {
                     if (DataContext is not ShellViewModel s) return;
 
-                    var match = s.Folders.FirstOrDefault(
-                        f => f.Name.Contains(wanted, StringComparison.OrdinalIgnoreCase));
+                    // "unified:Inbox" names one of the All Accounts folders, which otherwise
+                    // cannot be told from the six others with the same names.
+                    var match = wanted.StartsWith("unified:", StringComparison.OrdinalIgnoreCase)
+                        ? s.Folders.FirstOrDefault(
+                            f => f.Kind == FolderNodeKind.Unified
+                                 && f.Name.Contains(wanted["unified:".Length..], StringComparison.OrdinalIgnoreCase))
+                        : s.Folders.FirstOrDefault(
+                            f => f.Name.Contains(wanted, StringComparison.OrdinalIgnoreCase));
 
                     Log.Info(match is null
                         ? $"No folder matching '{wanted}' in: {string.Join(", ", s.Folders.Select(f => f.Name))}"
@@ -449,6 +455,21 @@ public partial class MainWindow : Window
 
                     if (match is null) return;
                     s.SelectedFolder = match;
+
+                    // A unified folder draws two stores at once, and which account each row came
+                    // from is the claim worth reading back — a capture shows the list but not
+                    // whose mail is in it.
+                    if (match.Kind == FolderNodeKind.Unified)
+                    {
+                        Log.Info($"Harness: All Accounts › {match.Name} — {s.Messages.Count} row(s) from "
+                                 + $"{string.Join(", ", s.Messages.Select(m => m.Address).Distinct().Order())}.");
+
+                        foreach (var line in s.Messages)
+                        {
+                            Log.Info($"Harness: unified row “{line.Subject}” — {line.Address}, "
+                                     + $"{line.Received:yyyy-MM-dd HH:mm}, {(line.IsUnread ? "unread" : "read")}.");
+                        }
+                    }
 
                     // The posed selection again, now in the posed folder: MAILBOX_SELECT ran in
                     // the constructor against the first folder's rows, and the message it names
