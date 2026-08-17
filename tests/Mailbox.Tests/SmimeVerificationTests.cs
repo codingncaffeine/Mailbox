@@ -159,44 +159,10 @@ public class SmimeVerificationTests
     }
 
     /// <summary>A self-signed certificate for one address, trusted by the temporary context.</summary>
+    /// <remarks>
+    /// The public half only, which is all a verifier ever has: what arrives in a message is a
+    /// certificate, never a key.
+    /// </remarks>
     private static CmsSigner Import(TemporarySecureMimeContext context, string address, bool emailProtection = true)
-    {
-        var random = new SecureRandom();
-        var keys = new RsaKeyPairGenerator();
-        keys.Init(new KeyGenerationParameters(random, 2048));
-        var pair = keys.GenerateKeyPair();
-
-        var name = new X509Name($"CN=Test, E={address}");
-        var generator = new X509V3CertificateGenerator();
-        generator.SetSerialNumber(BigInteger.ProbablePrime(64, random));
-        generator.SetIssuerDN(name);
-        generator.SetSubjectDN(name);
-        generator.SetNotBefore(DateTimeOffset.Now.AddYears(-1).UtcDateTime);
-        generator.SetNotAfter(DateTimeOffset.Now.AddYears(5).UtcDateTime);
-        generator.SetPublicKey(pair.Public);
-
-        generator.AddExtension(
-            X509Extensions.SubjectAlternativeName, false,
-            new GeneralNames(new GeneralName(GeneralName.Rfc822Name, address)));
-
-        // KeyCertSign as well, because a self-signed certificate is its own root: the context
-        // trusts an imported certificate as an anchor only if it is allowed to sign one.
-        generator.AddExtension(
-            X509Extensions.KeyUsage, true,
-            new KeyUsage(KeyUsage.DigitalSignature | KeyUsage.KeyEncipherment | KeyUsage.KeyCertSign));
-
-        // The one difference between a certificate for mail and one for something else.
-        generator.AddExtension(
-            X509Extensions.ExtendedKeyUsage, false,
-            new ExtendedKeyUsage(emailProtection ? KeyPurposeID.id_kp_emailProtection : KeyPurposeID.id_kp_codeSigning));
-
-        generator.AddExtension(
-            X509Extensions.BasicConstraints, true, new BasicConstraints(true));
-
-        var certificate = generator.Generate(new Asn1SignatureFactory("SHA256WithRSA", pair.Private, random));
-
-        // Trusted by being in the store: a self-signed certificate is its own chain.
-        context.Import(certificate, TestContext.Current.CancellationToken);
-        return new CmsSigner(certificate, pair.Private);
-    }
+        => SmimeKeys.Generate(address, emailProtection).Trust(context).Signer;
 }

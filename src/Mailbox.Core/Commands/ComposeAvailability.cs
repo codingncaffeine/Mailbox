@@ -42,9 +42,6 @@ public static class ComposeAvailability
     private const string People =
         "Phase 12 — People. Names resolve against contacts, and there are none yet.";
 
-    private const string Crypto =
-        "Phase 15 — S/MIME and OpenPGP, which ship disabled until a key exists.";
-
     private const string I18n = "Phase 16 — internationalization and the accessibility pass.";
 
     private static readonly ComposeCommandStatus[] Table =
@@ -214,8 +211,12 @@ public static class ComposeAvailability
         new(ComposeCommands.Permission.Id, ComposeCommandState.Blocked,
             "Not planned. Restricting what a recipient may do with a message needs a rights " +
             "management server, which is exactly the tenant infrastructure that is out of scope."),
-        new(ComposeCommands.Encrypt.Id, ComposeCommandState.Blocked, Crypto),
-        new(ComposeCommands.Sign.Id, ComposeCommandState.Blocked, Crypto),
+        new(ComposeCommands.Encrypt.Id, ComposeCommandState.Working,
+            "Encrypts the message to every recipient and to its author, in whichever of S/MIME and " +
+            "OpenPGP holds keys for all of them. A recipient with no key stops the send and is named."),
+        new(ComposeCommands.Sign.Id, ComposeCommandState.Working,
+            "Signs the message with this account's own key, immediately before it goes and never " +
+            "on a draft. Needs S/MIME or OpenPGP switched on in the Trust Center first."),
         new(ComposeCommands.VotingButtons.Id, ComposeCommandState.Blocked,
             "Phase 8 — voting needs the reading side to collect the replies."),
         new(ComposeCommands.DeliveryReceipt.Id, ComposeCommandState.Working,

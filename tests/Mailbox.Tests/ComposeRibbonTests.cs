@@ -220,8 +220,9 @@ public class ComposeRibbonTests
     [Fact]
     public void TheWorkingCountIsWhatSomebodyLastDecidedItWas()
     {
-        Assert.Equal(49, ComposeAvailability.WorkingCount);
-        Assert.Equal(46, ComposeAvailability.BlockedCount);
+        // 51 as of Phase 15's outgoing side: Encrypt and Sign both act.
+        Assert.Equal(51, ComposeAvailability.WorkingCount);
+        Assert.Equal(44, ComposeAvailability.BlockedCount);
         Assert.Equal(95, ComposeAvailability.All.Count);
     }
 

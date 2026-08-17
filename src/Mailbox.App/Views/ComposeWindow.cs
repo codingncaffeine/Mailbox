@@ -165,6 +165,9 @@ public sealed class ComposeWindow : Window
     /// <summary>Presses Send, for the harness.</summary>
     public void PressSend() => _surface.PressSend();
 
+    /// <summary>Presses Sign, Encrypt or both on the Options tab, for the harness.</summary>
+    public void PressProtection(string what) => _surface.PressProtection(what);
+
     /// <summary>Poses the optional address fields, so a capture can show them.</summary>
     public void ShowOptionalFields() => _surface.ShowOptionalFields();
 

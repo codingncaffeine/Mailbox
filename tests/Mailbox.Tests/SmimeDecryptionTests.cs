@@ -104,42 +104,5 @@ public class SmimeDecryptionTests
     /// a public certificate on its own opens nothing.
     /// </remarks>
     private static MailboxAddress Import(SecureMimeContext context, string address)
-    {
-        var random = new SecureRandom();
-        var keys = new RsaKeyPairGenerator();
-        keys.Init(new KeyGenerationParameters(random, 2048));
-        var pair = keys.GenerateKeyPair();
-
-        var name = new X509Name($"CN=Test, E={address}");
-        var generator = new X509V3CertificateGenerator();
-        generator.SetSerialNumber(BigInteger.ProbablePrime(64, random));
-        generator.SetIssuerDN(name);
-        generator.SetSubjectDN(name);
-        generator.SetNotBefore(DateTimeOffset.Now.AddYears(-1).UtcDateTime);
-        generator.SetNotAfter(DateTimeOffset.Now.AddYears(5).UtcDateTime);
-        generator.SetPublicKey(pair.Public);
-
-        generator.AddExtension(
-            X509Extensions.SubjectAlternativeName, false,
-            new GeneralNames(new GeneralName(GeneralName.Rfc822Name, address)));
-        generator.AddExtension(
-            X509Extensions.KeyUsage, true,
-            new KeyUsage(KeyUsage.DigitalSignature | KeyUsage.KeyEncipherment | KeyUsage.KeyCertSign));
-        generator.AddExtension(
-            X509Extensions.ExtendedKeyUsage, false, new ExtendedKeyUsage(KeyPurposeID.id_kp_emailProtection));
-        generator.AddExtension(X509Extensions.BasicConstraints, true, new BasicConstraints(true));
-
-        var certificate = generator.Generate(new Asn1SignatureFactory("SHA256WithRSA", pair.Private, random));
-
-        var store = new Pkcs12StoreBuilder().Build();
-        var entry = new X509CertificateEntry(certificate);
-        store.SetKeyEntry(address, new AsymmetricKeyEntry(pair.Private), [entry]);
-
-        using var stream = new MemoryStream();
-        store.Save(stream, "test".ToCharArray(), random);
-        stream.Position = 0;
-        context.Import(stream, "test", TestContext.Current.CancellationToken);
-
-        return new MailboxAddress("Test", address);
-    }
+        => SmimeKeys.Generate(address).Hold(context).Mailbox;
 }
