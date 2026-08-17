@@ -409,6 +409,65 @@ public sealed class DavSync(DavClient client, PimRepository repository, IDavPayl
         return written;
     }
 
+    /// <summary>
+    /// The same for a task list, over VTODOs.
+    /// </summary>
+    /// <remarks>
+    /// A near-copy of <see cref="StoreCalendar"/> on purpose: what the two share is the shape of
+    /// the decision — match by UID and RECURRENCE-ID, leave an unsent local change alone, keep the
+    /// server's text verbatim when the resource holds one component — and what they do not share
+    /// is every type in it. Folding them together would mean a generic over two codecs and two
+    /// records to save fifteen lines that will not change again.
+    /// </remarks>
+    internal static int StoreTodos(PimRepository repository, long collectionId, string href, string? etag, string payload, bool overLocalChanges = false)
+    {
+        IReadOnlyList<TaskItem> tasks;
+        try
+        {
+            tasks = TodoCodec.Parse(payload);
+        }
+        catch (FormatException)
+        {
+            return 0;
+        }
+
+        if (tasks.Count == 0) return 0;
+
+        var existing = repository.ItemsByUid(collectionId, tasks[0].Uid);
+        var written = 0;
+
+        foreach (var task in tasks)
+        {
+            var match = existing.FirstOrDefault(i =>
+                i.IsOverride == task.IsOverride
+                && (!task.IsOverride
+                    || string.Equals(i.RecurrenceId, ICalendarCodec.RecurrenceIdText(task.RecurrenceId!), StringComparison.Ordinal)));
+
+            if (!overLocalChanges && match is { SyncState: not PimSyncState.Synced }) continue;
+
+            var row = PimTodoCodec.ToItem(task, collectionId, match, PimSyncState.Synced) with
+            {
+                DavHref = href,
+                Etag = etag,
+                RawPayload = tasks.Count == 1 ? payload : TodoCodec.Serialize(task),
+            };
+
+            if (match is null) repository.AddItem(row);
+            else repository.UpdateItem(row);
+            written++;
+        }
+
+        foreach (var orphan in existing.Where(i => i.IsOverride
+                     && (overLocalChanges || i.SyncState == PimSyncState.Synced)
+                     && !tasks.Any(t =>
+                     t.IsOverride && string.Equals(i.RecurrenceId, ICalendarCodec.RecurrenceIdText(t.RecurrenceId!), StringComparison.Ordinal))))
+        {
+            repository.DeleteItem(orphan.Id);
+        }
+
+        return written;
+    }
+
     // ---- Settling a conflict -------------------------------------------------------------------
 
     /// <summary>

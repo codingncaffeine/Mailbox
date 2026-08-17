@@ -38,19 +38,29 @@ public interface IDavPayload
     string Summarize(string text);
 }
 
-/// <summary>The two payloads there are, and which one a collection wants.</summary>
+/// <summary>The payloads there are, and which one a collection wants.</summary>
 public static class DavPayloads
 {
     public static readonly IDavPayload Calendar = new CalendarPayload();
 
     public static readonly IDavPayload AddressBook = new ContactPayload();
 
+    public static readonly IDavPayload Tasks = new TodoPayload();
+
+    public static readonly IDavPayload Journal = new JournalPayload();
+
     /// <summary>
-    /// Tasks and journals ride the calendar payload, being VTODO and VJOURNAL inside the same
-    /// VCALENDAR; only an address book is different.
+    /// A task list and a notebook are CalDAV like a calendar — same verbs, same REPORT, same
+    /// content type — but the components inside a resource are VTODOs and VJOURNALs, and a codec
+    /// that reads VEVENTs finds nothing in either. Which is why these are payloads of their own.
     /// </summary>
-    public static IDavPayload For(CollectionKind kind)
-        => kind == CollectionKind.Contacts ? AddressBook : Calendar;
+    public static IDavPayload For(CollectionKind kind) => kind switch
+    {
+        CollectionKind.Contacts => AddressBook,
+        CollectionKind.Tasks => Tasks,
+        CollectionKind.Journal => Journal,
+        _ => Calendar,
+    };
 }
 
 /// <summary>iCalendar over CalDAV: a resource is one UID's whole family.</summary>
@@ -88,6 +98,111 @@ internal sealed class CalendarPayload : IDavPayload
         try
         {
             return ICalendarCodec.Parse(text).FirstOrDefault()?.Summary ?? string.Empty;
+        }
+        catch (FormatException)
+        {
+            return string.Empty;
+        }
+    }
+}
+
+/// <summary>iCalendar over CalDAV again, with VTODOs in the resources instead of VEVENTs.</summary>
+internal sealed class TodoPayload : IDavPayload
+{
+    public CollectionKind Kind => CollectionKind.Tasks;
+
+    public string ContentType => "text/calendar; charset=utf-8";
+
+    public string Multiget(IEnumerable<string> hrefs) => DavXml.CalendarMultiget(hrefs);
+
+    public int Store(PimRepository repository, long collectionId, string href, string? etag, string text, bool overLocalChanges)
+        => DavSync.StoreTodos(repository, collectionId, href, etag, text, overLocalChanges);
+
+    /// <summary>
+    /// A repeating task's master and every override together, for the reason an appointment's
+    /// family goes up together: a server keeps one resource per UID, and a PUT of the master
+    /// alone deletes the rest of it.
+    /// </summary>
+    public string Whole(PimRepository repository, PimItem item)
+    {
+        var family = repository.ItemsByUid(item.CollectionId, item.Uid);
+        if (family.Count > 1) return TodoCodec.SerializeCalendar(family.Select(PimTodoCodec.FromItem).ToList());
+
+        // A bare VTODO is what the store keeps and less than a server takes — the same refusal a
+        // bare VEVENT gets. A payload that came from a server goes back verbatim.
+        return item.RawPayload.Contains("BEGIN:VCALENDAR", StringComparison.OrdinalIgnoreCase)
+            ? item.RawPayload
+            : TodoCodec.SerializeCalendar([PimTodoCodec.FromItem(item)]);
+    }
+
+    public string Summarize(string text)
+    {
+        try
+        {
+            return TodoCodec.Parse(text).FirstOrDefault()?.Summary ?? string.Empty;
+        }
+        catch (FormatException)
+        {
+            return string.Empty;
+        }
+    }
+}
+
+/// <summary>
+/// The notebook: VJOURNALs, one to a resource, which is the one thing this payload can rely on —
+/// a journal has no recurrence and so no family of overrides to keep together.
+/// </summary>
+internal sealed class JournalPayload : IDavPayload
+{
+    public CollectionKind Kind => CollectionKind.Journal;
+
+    public string ContentType => "text/calendar; charset=utf-8";
+
+    public string Multiget(IEnumerable<string> hrefs) => DavXml.CalendarMultiget(hrefs);
+
+    public int Store(PimRepository repository, long collectionId, string href, string? etag, string text, bool overLocalChanges)
+    {
+        IReadOnlyList<JournalEntry> entries;
+        try
+        {
+            entries = JournalCodec.Parse(text);
+        }
+        catch (FormatException)
+        {
+            return 0;
+        }
+
+        var written = 0;
+        foreach (var entry in entries)
+        {
+            var match = repository.ItemsByUid(collectionId, entry.Uid).FirstOrDefault();
+            if (!overLocalChanges && match is { SyncState: not PimSyncState.Synced }) continue;
+
+            var row = PimJournalCodec.ToItem(entry, collectionId, match, PimSyncState.Synced) with
+            {
+                DavHref = href,
+                Etag = etag,
+                RawPayload = entries.Count == 1 ? text : JournalCodec.Serialize(entry),
+            };
+
+            if (match is null) repository.AddItem(row);
+            else repository.UpdateItem(row);
+            written++;
+        }
+
+        return written;
+    }
+
+    public string Whole(PimRepository repository, PimItem item)
+        => item.RawPayload.Contains("BEGIN:VCALENDAR", StringComparison.OrdinalIgnoreCase)
+            ? item.RawPayload
+            : JournalCodec.SerializeCalendar([PimJournalCodec.FromItem(item)]);
+
+    public string Summarize(string text)
+    {
+        try
+        {
+            return JournalCodec.Parse(text).FirstOrDefault()?.Titled() ?? string.Empty;
         }
         catch (FormatException)
         {
