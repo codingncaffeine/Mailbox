@@ -80,6 +80,18 @@ public sealed record PimItem
     public string Busy { get; init; } = "busy";
     public int? ReminderMinutes { get; init; }
     public string Categories { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Kept to oneself when the collection is shared — RFC 5545's <c>CLASS:PRIVATE</c>, which the
+    /// reference's own Private button sets.
+    /// </summary>
+    /// <remarks>
+    /// A column so a list can draw the mark without parsing the item; the text is still what says
+    /// so, and CONFIDENTIAL reads as private here because both mean "not for the reader of a
+    /// shared calendar".
+    /// </remarks>
+    public bool IsPrivate { get; init; }
+
     public DateTimeOffset LastModified { get; init; }
     public PimSyncState SyncState { get; init; } = PimSyncState.Synced;
     public string? DavHref { get; init; }

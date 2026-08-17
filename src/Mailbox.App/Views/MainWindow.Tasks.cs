@@ -118,6 +118,24 @@ public partial class MainWindow
                 CategorizeTask(shell);
                 return true;
 
+            // The rest of the Tags group. Each has two meanings, as everything on this bar does:
+            // see MainWindow.TaskTags.cs.
+            case "tasks.followup":
+                ShowTaskFlagMenu(shell);
+                return true;
+
+            case "tasks.private":
+                SetToDoPrivate(shell);
+                return true;
+
+            case "tasks.importance.high":
+                SetToDoImportance(shell, TaskUrgency.High);
+                return true;
+
+            case "tasks.importance.low":
+                SetToDoImportance(shell, TaskUrgency.Low);
+                return true;
+
             // The reference's list holds flagged mail beside the tasks, and these three are what
             // it is for: answering the message the flag is on.
             case "tasks.reply" or "tasks.replyall" or "tasks.forward":
@@ -374,7 +392,7 @@ public partial class MainWindow
             {
                 Log.Info($"Harness: “{after.Subject}” is now "
                     + $"{(after.FollowUpComplete ? "complete" : after.IsFlagged ? "flagged" : "unflagged")}, "
-                    + $"due {after.FollowUpDue?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "—"}.");
+                    + $"due {after.FollowUpDue?.LocalDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "—"}.");
             }
 
             return;

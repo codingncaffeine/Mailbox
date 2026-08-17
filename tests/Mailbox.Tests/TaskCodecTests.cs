@@ -211,6 +211,48 @@ public class TaskCodecTests
     }
 
     [Fact]
+    public void APrivateTaskSaysSoInItsTextAndInItsRow()
+    {
+        var task = Sample() with { IsPrivate = true };
+        var text = TodoCodec.Serialize(task);
+
+        Assert.Contains("CLASS:PRIVATE", text, StringComparison.Ordinal);
+        Assert.True(TodoCodec.Parse(text).Single().IsPrivate);
+
+        // The column and the text agree, which is what lets a list draw the mark without parsing.
+        var row = PimTodoCodec.ToItem(task, 3);
+        Assert.True(row.IsPrivate);
+        Assert.True(PimTodoCodec.FromColumns(row).IsPrivate);
+    }
+
+    [Fact]
+    public void ATaskThatIsNotPrivateWritesNoClassAtAll()
+    {
+        // PUBLIC is the standard's own default, so saying it would put a property on every task
+        // in the file to state what its absence states.
+        var text = TodoCodec.Serialize(Sample());
+
+        Assert.DoesNotContain("CLASS:", text, StringComparison.Ordinal);
+        Assert.False(TodoCodec.Parse(text).Single().IsPrivate);
+        Assert.False(PimTodoCodec.ToItem(Sample(), 3).IsPrivate);
+    }
+
+    [Fact]
+    public void ATaskAnotherClientMarkedConfidentialReadsAsPrivate()
+    {
+        var text = """
+            BEGIN:VTODO
+            UID:confidential@example.com
+            DTSTAMP:20260816T090000Z
+            SUMMARY:The other thing
+            CLASS:CONFIDENTIAL
+            END:VTODO
+            """;
+
+        Assert.True(TodoCodec.Parse(text).Single().IsPrivate);
+    }
+
+    [Fact]
     public void AWholeCalendarOfTasksCarriesEveryOneOfThem()
     {
         var master = Sample() with { Rrule = "FREQ=WEEKLY;BYDAY=MO" };

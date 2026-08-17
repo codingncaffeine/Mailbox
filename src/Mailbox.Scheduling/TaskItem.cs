@@ -81,6 +81,17 @@ public sealed record TaskItem
 
     public IReadOnlyList<string> Categories { get; init; } = [];
 
+    /// <summary>
+    /// Kept to oneself when the list is shared, which is RFC 5545's <c>CLASS:PRIVATE</c> and the
+    /// reference's own Private button.
+    /// </summary>
+    /// <remarks>
+    /// A statement to whoever else reads the list rather than a lock: nothing here is encrypted by
+    /// it, and a server that ignores CLASS shows the task to everyone it shows the list to. That is
+    /// what the property means in the standard, and the reference's button means no more.
+    /// </remarks>
+    public bool IsPrivate { get; init; }
+
     /// <summary>Whoever owns it — the reference's Owner column, and RFC 5545's ORGANIZER.</summary>
     public string Owner { get; init; } = string.Empty;
 
@@ -132,6 +143,7 @@ public sealed record TaskItem
            && ExceptionDates.SequenceEqual(other.ExceptionDates)
            && ReminderMinutes == other.ReminderMinutes
            && Categories.SequenceEqual(other.Categories, StringComparer.Ordinal)
+           && IsPrivate == other.IsPrivate
            && Owner == other.Owner && Sequence == other.Sequence && LastModified == other.LastModified;
 
     public override int GetHashCode()

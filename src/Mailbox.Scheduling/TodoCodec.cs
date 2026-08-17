@@ -26,6 +26,9 @@ public static class TodoCodec
     /// <summary>The property carrying the two states RFC 5545 has no word for.</summary>
     private const string ProgressProperty = "X-MAILBOX-TASK-STATUS";
 
+    /// <summary>What CLASS says about a task the reference calls Private.</summary>
+    private const string PrivateClass = "PRIVATE";
+
     /// <summary>One VTODO block — <c>BEGIN:VTODO</c> to <c>END:VTODO</c> — as the store keeps a row.</summary>
     public static string Serialize(TaskItem task)
     {
@@ -120,6 +123,10 @@ public static class TodoCodec
         if (task.Owner.Length > 0) ical.Organizer = new Organizer(task.Owner.Contains(':', StringComparison.Ordinal) ? task.Owner : "mailto:" + task.Owner);
         foreach (var category in task.Categories) ical.Categories.Add(category);
 
+        // CLASS is written only when it is private. PUBLIC is the standard's own default, so
+        // saying it adds a property to every task in the file to state what its absence states.
+        if (task.IsPrivate) ical.Class = PrivateClass;
+
         // The two states RFC 5545 cannot say. Written beside NEEDS-ACTION rather than instead of
         // it, so a client that ignores the property still has a true statement.
         if (task.Progress is TaskProgress.Waiting or TaskProgress.Deferred)
@@ -181,6 +188,7 @@ public static class TodoCodec
             RecurrenceId = ical.RecurrenceIdentifier is { } rid ? ICalendarCodec.FromCal(rid.StartTime) : null,
             ReminderMinutes = reminder,
             Categories = ical.Categories.Where(c => !string.IsNullOrWhiteSpace(c)).ToList(),
+            IsPrivate = IsPrivateClass(ical.Class),
             Owner = ical.Organizer?.Value is { } org
                 ? org.ToString().StartsWith("mailto:", StringComparison.OrdinalIgnoreCase) ? org.ToString()["mailto:".Length..] : org.ToString()
                 : string.Empty,
@@ -190,6 +198,20 @@ public static class TodoCodec
                 : DateTimeOffset.UtcNow,
         };
     }
+
+    /// <summary>
+    /// Whether a CLASS value means the reference's Private.
+    /// </summary>
+    /// <remarks>
+    /// CONFIDENTIAL counts. RFC 5545 offers three values and the reference's button offers a tick,
+    /// so both of the values that mean "not for everyone this list is shared with" read as the tick
+    /// being on. The one thing that costs: a task another client marked CONFIDENTIAL is written
+    /// back as PRIVATE if it is saved here, a tick having no way to say which of the two it was.
+    /// </remarks>
+    public static bool IsPrivateClass(string? value)
+        => value?.Trim() is { Length: > 0 } word
+           && (word.Equals(PrivateClass, StringComparison.OrdinalIgnoreCase)
+               || word.Equals("CONFIDENTIAL", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>The STATUS a progress is written as.</summary>
     public static string Status(TaskProgress progress) => progress switch
