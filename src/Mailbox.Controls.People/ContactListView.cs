@@ -13,13 +13,11 @@ namespace Mailbox.Controls.People;
 /// alphabet index down its left-hand side.
 /// </summary>
 /// <remarks>
-/// Measured off the one People capture there is, which is of an empty address book with the peek
-/// pane over its left-hand half: the index letters are 23px apart with the first baseline 25px
-/// below the list's top and their ink 17px in from its edge, and the empty-state text is two
-/// centred lines 13px apart. **The rows themselves have no capture** — the reference's own
-/// address book in that screenshot is empty — so a row's 30px height, its 20px avatar and where
-/// its name starts are authored from the reference's shape, and a capture of a full list would
-/// settle them.
+/// Measured off the reference's own module, and every number here is read off it rather than
+/// reasoned about: the index letters are 23px apart in a 39px column with their ink 18 in, the
+/// empty state is two centred lines 13px apart, and a row is 56 tall closed by a hairline with a
+/// 36px disc 8 in and its name 53 in. A row has no fill of its own — the reference draws its
+/// contacts on the pane and bands only the one that is picked.
 /// <para>
 /// The index is what the Options page calls "Show an additional index", and it is not decoration:
 /// it is how the reference reaches the Ws in an address book of two thousand people without a
@@ -103,6 +101,29 @@ public sealed class ContactListView : DrawnSurface
         }
     }
 
+    /// <summary>
+    /// Whether this list is inside a desktop popup, and so takes the popup's own palette.
+    /// </summary>
+    /// <remarks>
+    /// The rule the calendar peek states and this obeys: a pane inside the window follows the
+    /// theme, and a popup off the rail keeps the desktop's light colours in every theme. Without
+    /// it the People peek drew a dark list inside a light grey popup — the theme's palette in a
+    /// place the theme does not reach.
+    /// </remarks>
+    public bool OnPopup
+    {
+        get;
+        set
+        {
+            if (field == value) return;
+            field = value;
+            InvalidateVisual();
+        }
+    }
+
+    /// <summary>The token for a part of the list, in whichever palette it is drawing in.</summary>
+    private Color Ink(string themed, string popup) => Colour(OnPopup ? popup : themed);
+
     /// <summary>Whether the alphabet runs down the side — the People page's own switch.</summary>
     public bool ShowIndex
     {
@@ -154,7 +175,7 @@ public sealed class ContactListView : DrawnSurface
         var height = Bounds.Height;
         if (width < 40 || height < 20) return;
 
-        Fill(context, new Rect(0, 0, width, height), Colour(TokenKeys.List.Background));
+        Fill(context, new Rect(0, 0, width, height), Ink(TokenKeys.List.Background, TokenKeys.Peek.PopBackground));
 
         var left = _showIndex ? IndexWidth : 0;
         if (_showIndex) DrawIndex(context, height);
@@ -184,7 +205,7 @@ public sealed class ContactListView : DrawnSurface
     /// </remarks>
     private void DrawIndex(DrawingContext context, double height)
     {
-        var ink = Colour(TokenKeys.List.HeaderText);
+        var ink = Ink(TokenKeys.List.HeaderText, TokenKeys.Peek.PopText);
 
         var baseline = IndexFirstBaseline;
         foreach (var letter in Letters())
@@ -212,7 +233,7 @@ public sealed class ContactListView : DrawnSurface
     private void DrawEmpty(DrawingContext context, Rect area)
     {
         // On the pane, so the pane's ink — the same the index and an unbanded row take.
-        var ink = Colour(TokenKeys.List.HeaderText);
+        var ink = Ink(TokenKeys.List.HeaderText, TokenKeys.Peek.PopText);
         string[] lines = ["We didn't find anything to show here.", "Double-click here to create a new Contact."];
 
         var baseline = area.Y + EmptyFirstBaseline;
@@ -232,12 +253,12 @@ public sealed class ContactListView : DrawnSurface
     /// </remarks>
     private void DrawRows(DrawingContext context, Rect area)
     {
-        var onPane = Colour(TokenKeys.List.HeaderText);
-        var onBand = Colour(TokenKeys.List.ReadText);
-        var subtle = Colour(TokenKeys.List.PreviewText);
-        var selected = Colour(TokenKeys.List.RowSelected);
-        var hover = Colour(TokenKeys.List.RowHover);
-        var line = Colour(TokenKeys.List.Separator);
+        var onPane = Ink(TokenKeys.List.HeaderText, TokenKeys.Peek.PopText);
+        var onBand = Ink(TokenKeys.List.ReadText, TokenKeys.Peek.PopText);
+        var subtle = Ink(TokenKeys.List.PreviewText, TokenKeys.Peek.PopTextDim);
+        var selected = Ink(TokenKeys.List.RowSelected, TokenKeys.Peek.PopHover);
+        var hover = Ink(TokenKeys.List.RowHover, TokenKeys.Peek.PopHover);
+        var line = Ink(TokenKeys.List.Separator, TokenKeys.Peek.PopFrame);
 
         var y = area.Y + RowsTop;
         var width = Math.Max(40, area.Width - Gutter);

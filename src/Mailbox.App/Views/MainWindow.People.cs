@@ -144,6 +144,37 @@ public partial class MainWindow
     }
 
     /// <summary>
+    /// The People peek: the favourites, on a hover over the rail's People icon.
+    /// </summary>
+    /// <remarks>
+    /// The calendar peek's own machinery — the layer, the dwell, the grace period on the way out —
+    /// over a different popup. Its corner button docks the same section into the To-Do Bar, which
+    /// is what the calendar peek's does, and its search box is the module's own Search People.
+    /// </remarks>
+    private void OpenPeoplePeek(ShellViewModel shell)
+    {
+        var favourites = App.ContactFavourites.All;
+        var rows = favourites.Count == 0
+            ? []
+            : App.Contacts.Rows()
+                .Where(r => App.ContactFavourites.Contains(r.Contact.Uid))
+                .OrderBy(r => favourites.ToList().FindIndex(u => string.Equals(u, r.Contact.Uid, StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+
+        var peek = new PeoplePeek(rows, FileAsOrders.FromIndex(App.PeopleOptions.FileAsIndex));
+        peek.ContactOpened += (_, row) => { ClosePeek(); _ = OpenContactAsync(shell, row); };
+        peek.SearchRequested += (_, _) => { ClosePeek(); _ = SearchPeopleAsync(shell); };
+        peek.DockRequested += (_, _) =>
+        {
+            ClosePeek();
+            ShowToDoPeople(shell, true);
+        };
+
+        ShowPeekPopup(peek);
+        Log.Info($"People peek: {rows.Count} favourite(s).");
+    }
+
+    /// <summary>
     /// The menu a right-click on somebody opens, in the reference's own order.
     /// </summary>
     /// <remarks>

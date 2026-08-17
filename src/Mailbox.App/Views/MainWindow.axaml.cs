@@ -557,6 +557,18 @@ public partial class MainWindow : Window
         {
             case "calendar": Opened += (_, _) => TogglePeek(); break;
 
+            // The rail's other peek: People's, which the hover opens the same way.
+            case "peoplepeek":
+                Opened += (_, _) => Dispatcher.UIThread.Post(
+                    () =>
+                    {
+                        if (DataContext is not ShellViewModel shell) return;
+                        _peekModule = MailboxModule.People;
+                        OpenPeek();
+                    },
+                    DispatcherPriority.Background);
+                break;
+
             // A flyout is a separate surface and never appears in a capture, so this one is
             // checked by reading back where it hangs and what it holds. No CaptureNextWindow:
             // a menu is not a window and waiting for one would time the run out.
@@ -2258,7 +2270,14 @@ public partial class MainWindow : Window
     // Calendar peek and dock
     // ------------------------------------------------------------------------------------
 
-    private PeekView? _floatingPeek;
+    /// <summary>
+    /// The peek in the layer, whichever module opened it — the calendar's or People's, the rail
+    /// opening two kinds now.
+    /// </summary>
+    private Control? _peekPopup;
+
+    /// <summary>The floating peek when it is the calendar's, which is what its own poses want.</summary>
+    private PeekView? _floatingPeek => _peekPopup as PeekView;
 
     /// <summary>
     /// Gives each rail module a command. Mail and Calendar switch the window over; the rest say
@@ -2291,21 +2310,36 @@ public partial class MainWindow : Window
 
     private DispatcherTimer? _peekTimer;
 
+    /// <summary>Which module's peek the pointer is waiting on, or null when none is.</summary>
+    private MailboxModule? _peekModule;
+
     /// <summary>
-    /// Pointer over a rail icon. Only Calendar has a peek; the rest arrive with their modules.
+    /// Pointer over a rail icon. Calendar and People have peeks; the rest have nothing to show.
     /// </summary>
     private void RailPointerEntered(object? sender, PointerEventArgs e)
     {
-        if (sender is not Control { DataContext: ModuleTab tab } || tab.Module != MailboxModule.Calendar) return;
-        if (DataContext is ShellViewModel { IsCalendarDocked: true }) return;
+        if (sender is not Control { DataContext: ModuleTab tab } || !HasPeek(tab.Module)) return;
+
+        // A section already docked in the To-Do Bar has nothing to pop up: it is on screen.
+        if (DataContext is ShellViewModel shell
+            && ((tab.Module == MailboxModule.Calendar && shell.IsCalendarDocked)
+                || (tab.Module == MailboxModule.People && shell.ArePeopleDocked)))
+        {
+            return;
+        }
+
+        _peekModule = tab.Module;
         SchedulePeek(PeekDwell, open: true);
     }
 
     private void RailPointerExited(object? sender, PointerEventArgs e)
     {
-        if (sender is not Control { DataContext: ModuleTab tab } || tab.Module != MailboxModule.Calendar) return;
+        if (sender is not Control { DataContext: ModuleTab tab } || !HasPeek(tab.Module)) return;
         SchedulePeek(PeekGrace, open: false);
     }
+
+    private static bool HasPeek(MailboxModule module)
+        => module is MailboxModule.Calendar or MailboxModule.People;
 
     /// <summary>
     /// Opens or closes the peek after a pause, replacing whatever was already waiting. One timer
@@ -2327,20 +2361,40 @@ public partial class MainWindow : Window
 
     private void TogglePeek()
     {
-        if (_floatingPeek is not null) ClosePeek();
+        if (_peekPopup is not null) ClosePeek();
         else OpenPeek();
     }
 
     private void OpenPeek()
     {
-        if (_floatingPeek is not null) return;
-        if (DataContext is not ShellViewModel shell || shell.IsCalendarDocked) return;
+        if (_peekPopup is not null) return;
+        if (DataContext is not ShellViewModel shell) return;
 
+        // People's peek is the other one the rail opens, and it is built the same way: a popup in
+        // the layer, anchored beside the icon, kept open by the pointer being in it.
+        if (_peekModule == MailboxModule.People)
+        {
+            OpenPeoplePeek(shell);
+            return;
+        }
+
+        if (shell.IsCalendarDocked) return;
         var peek = BuildPeek(shell, docked: false);
 
-        // Anchored just right of the rail, level with the icon that opened it — the position
-        // the reference application uses so the peek reads as belonging to that module. Its own
-        // height often exceeds what is above the icon, so it is held inside the layer.
+        ShowPeekPopup(peek);
+    }
+
+    /// <summary>
+    /// Puts a peek in the layer beside the rail, and keeps it there while the pointer is in it.
+    /// </summary>
+    /// <remarks>
+    /// Anchored just right of the rail, level with the icon that opened it — the position the
+    /// reference uses so a peek reads as belonging to that module. Its own height often exceeds
+    /// what is above the icon, so it is held inside the layer. Both peeks come through here, which
+    /// is what stops the second one growing its own idea of a dwell.
+    /// </remarks>
+    private void ShowPeekPopup(Control peek)
+    {
         var layer = this.FindControl<Canvas>("PeekLayer")!;
         Canvas.SetLeft(peek, PeekGap);
         Canvas.SetTop(peek, PeekTop(layer));
@@ -2351,7 +2405,7 @@ public partial class MainWindow : Window
         peek.PointerExited += (_, _) => SchedulePeek(PeekGrace, open: false);
 
         layer.Children.Add(peek);
-        _floatingPeek = peek;
+        _peekPopup = peek;
     }
 
     /// <summary>What separates the peek from the rail, measured off the reference.</summary>
@@ -2384,9 +2438,9 @@ public partial class MainWindow : Window
     private void ClosePeek()
     {
         _peekTimer?.Stop();
-        if (_floatingPeek is null) return;
-        this.FindControl<Canvas>("PeekLayer")!.Children.Remove(_floatingPeek);
-        _floatingPeek = null;
+        if (_peekPopup is null) return;
+        this.FindControl<Canvas>("PeekLayer")!.Children.Remove(_peekPopup);
+        _peekPopup = null;
     }
 
     private Control? _floatingRibbon;
@@ -3023,7 +3077,7 @@ public partial class MainWindow : Window
 
         // A click anywhere but inside the peek dismisses it, the rail's own icon included —
         // that one switches module and the peek would be left hanging over the new one.
-        if (_floatingPeek is { } peek && !IsWithin(source, peek)) ClosePeek();
+        if (_peekPopup is { } peek && !IsWithin(source, peek)) ClosePeek();
 
         if (_floatingRibbon is null) return;
         if (IsWithin(source, _floatingRibbon) || IsWithin(source, _ribbon)) return;
