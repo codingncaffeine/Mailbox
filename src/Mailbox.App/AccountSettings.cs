@@ -144,15 +144,18 @@ public sealed record AccountSettings(
     /// account names another, port 4190, STARTTLS required, and the incoming credentials. Null
     /// for a POP3 account, which has no server-side rules.
     /// </summary>
-    public ServerSettings? ToSieveServer(Account account, ICredentialStore secrets,
-        OAuthAccounts? oauth = null)
+    /// <inheritdoc cref="ToConnectionAsync"/>
+    public async Task<ServerSettings?> ToSieveServerAsync(
+        Account account, ICredentialStore secrets, OAuthAccounts? oauth = null,
+        CancellationToken cancellation = default)
     {
         if (account.Protocol != MailProtocol.Imap) return null;
 
         var host = SieveHost.Length > 0 ? SieveHost : IncomingHost;
         if (host.Length == 0) return null;
 
-        var password = secrets.LoadAsync(account.Address, Credentials.Incoming).GetAwaiter().GetResult() ?? string.Empty;
+        var password = await secrets.LoadAsync(account.Address, Credentials.Incoming, cancellation)
+            .ConfigureAwait(false) ?? string.Empty;
         return new ServerSettings(host, SievePort > 0 ? SievePort : 4190, SecureSocketOptions.StartTls,
             IncomingUser.Length > 0 ? IncomingUser : account.Address, password)
         {
@@ -165,8 +168,17 @@ public sealed record AccountSettings(
     /// Builds what the transfer service needs, fetching passwords from the keyring at the last
     /// moment. They are held for the length of one send/receive and no longer.
     /// </summary>
-    public AccountConnection ToConnection(Account account, ICredentialStore secrets,
-        OAuthAccounts? oauth = null)
+    /// <remarks>
+    /// <b>Asynchronous because the keyring is.</b> Reading a password runs <c>secret-tool</c>,
+    /// which talks to whatever Secret Service the desktop provides, and that can take as long as
+    /// it likes — a locked wallet whose unlock prompt cannot be shown never answers at all.
+    /// Blocking on it froze the whole application the first time somebody pressed Send/Receive
+    /// with a real keyring behind it: the UI thread waited on a task whose continuation needed
+    /// the UI thread, which is a deadlock with no way out but killing the process.
+    /// </remarks>
+    public async Task<AccountConnection> ToConnectionAsync(
+        Account account, ICredentialStore secrets, OAuthAccounts? oauth = null,
+        CancellationToken cancellation = default)
     {
         var tokens = TokensFor(account.Address, oauth);
 
@@ -174,12 +186,13 @@ public sealed record AccountSettings(
         // in front of a locked keyring for a password that is not there and would not be used.
         var incomingPassword = tokens is not null
             ? string.Empty
-            : secrets.LoadAsync(account.Address, Credentials.Incoming).GetAwaiter().GetResult() ?? string.Empty;
+            : await secrets.LoadAsync(account.Address, Credentials.Incoming, cancellation)
+                .ConfigureAwait(false) ?? string.Empty;
 
         var outgoingPassword = tokens is not null
             ? string.Empty
-            : secrets.LoadAsync(account.Address, Credentials.Outgoing).GetAwaiter().GetResult()
-              ?? incomingPassword;
+            : await secrets.LoadAsync(account.Address, Credentials.Outgoing, cancellation)
+                .ConfigureAwait(false) ?? incomingPassword;
 
         return new AccountConnection(
             account.Id,

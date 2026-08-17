@@ -26,8 +26,11 @@ public static class SieveSync
            && AccountSettings.Load(App.Settings, account.Account.Address) is { IncomingHost.Length: > 0 };
 
     /// <summary>The ManageSieve server for an account, or null when there is none to speak of.</summary>
-    public static ServerSettings? ServerFor(OpenAccount account)
-        => AccountSettings.Load(App.Settings, account.Account.Address)?.ToSieveServer(account.Account, App.Secrets, App.OAuth);
+    /// <remarks>Asynchronous because reading the password is: see <see cref="AccountSettings.ToConnectionAsync"/>.</remarks>
+    public static async Task<ServerSettings?> ServerForAsync(OpenAccount account, CancellationToken cancellation = default)
+        => AccountSettings.Load(App.Settings, account.Account.Address) is { } settings
+            ? await settings.ToSieveServerAsync(account.Account, App.Secrets, App.OAuth, cancellation).ConfigureAwait(false)
+            : null;
 
     // ---- What the server can do, remembered ------------------------------------------------------
 
@@ -45,10 +48,14 @@ public static class SieveSync
     public static async Task<IReadOnlySet<string>> ProbeAsync(OpenAccount account, CancellationToken cancellation = default)
     {
         // Off the UI thread from the start: the password comes from the keyring, which can be slow to answer.
-        var capabilities = await Task.Run(() =>
+        var capabilities = await Task.Run(async () =>
         {
-            if (ServerFor(account) is not { } server) throw new InvalidOperationException("The account has no server for rules.");
-            return SievePublisher.ProbeAsync(server, cancellation);
+            if (await ServerForAsync(account, cancellation) is not { } server)
+            {
+                throw new InvalidOperationException("The account has no server for rules.");
+            }
+
+            return await SievePublisher.ProbeAsync(server, cancellation);
         }, cancellation);
         App.Settings.Set(Key(account.Account.Address, "extensions"), string.Join(' ', capabilities.Extensions.Order(StringComparer.Ordinal)));
         App.Settings.Set(Key(account.Account.Address, "implementation"), capabilities.Implementation);
@@ -78,14 +85,14 @@ public static class SieveSync
         await Gate.WaitAsync(cancellation);
         try
         {
-            return await Task.Run(() =>
+            return await Task.Run(async () =>
             {
-                if (ServerFor(account) is not { } server)
+                if (await ServerForAsync(account, cancellation) is not { } server)
                 {
-                    return Task.FromResult(new SievePublishOutcome(false, "The account has no server for rules."));
+                    return new SievePublishOutcome(false, "The account has no server for rules.");
                 }
 
-                return SievePublisher.PublishAsync(
+                return await SievePublisher.PublishAsync(
                     server, account.Mail, account.Account.Id, [account.Account.Address], null, cancellation);
             }, cancellation);
         }

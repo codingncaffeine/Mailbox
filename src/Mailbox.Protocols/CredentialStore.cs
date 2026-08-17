@@ -58,7 +58,7 @@ public sealed class SecretServiceStore : ICredentialStore
             ["store", "--label", $"Mailbox — {purpose} — {account}",
              "service", ServiceAttribute, "account", account, "purpose", purpose],
             input: secret,
-            cancellation);
+            cancellation).ConfigureAwait(false);
 
         if (!result.Ok) Log.Warn($"Could not save the {purpose} password: {result.Error}");
         return result.Ok;
@@ -70,7 +70,7 @@ public sealed class SecretServiceStore : ICredentialStore
         var result = await RunAsync(
             ["lookup", "service", ServiceAttribute, "account", account, "purpose", purpose],
             input: null,
-            cancellation);
+            cancellation).ConfigureAwait(false);
 
         // secret-tool exits non-zero when nothing matches, which is not an error here.
         return result.Ok && result.Output.Length > 0 ? result.Output.TrimEnd('\n') : null;
@@ -82,7 +82,7 @@ public sealed class SecretServiceStore : ICredentialStore
         var result = await RunAsync(
             ["clear", "service", ServiceAttribute, "account", account, "purpose", purpose],
             input: null,
-            cancellation);
+            cancellation).ConfigureAwait(false);
 
         return result.Ok;
     }
@@ -108,6 +108,18 @@ public sealed class SecretServiceStore : ICredentialStore
         }
     }
 
+    /// <summary>
+    /// How long the keyring is given to answer before this gives up on it.
+    /// </summary>
+    /// <remarks>
+    /// A keyring that never answers must not be able to stop the application. It happens: a
+    /// locked wallet whose unlock prompt cannot be shown, or a Secret Service that has gone away
+    /// mid-session, leaves <c>secret-tool</c> waiting for something that is never coming. Ten
+    /// seconds is far longer than the lookup takes and far shorter than a person will wait before
+    /// deciding the program has hung.
+    /// </remarks>
+    public static readonly TimeSpan Patience = TimeSpan.FromSeconds(10);
+
     private static async Task<(bool Ok, string Output, string Error)> RunAsync(
         string[] arguments, string? input, CancellationToken cancellation)
     {
@@ -116,6 +128,7 @@ public sealed class SecretServiceStore : ICredentialStore
             RedirectStandardInput = input is not null,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            UseShellExecute = false,
         };
 
         foreach (var argument in arguments) info.ArgumentList.Add(argument);
@@ -125,19 +138,40 @@ public sealed class SecretServiceStore : ICredentialStore
             using var process = Process.Start(info);
             if (process is null) return (false, string.Empty, "Could not start secret-tool.");
 
+            using var patience = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+            patience.CancelAfter(Patience);
+
+            // Both pipes drained at once. Reading one to its end and then the other is the
+            // textbook subprocess deadlock: a child that fills the pipe nobody is reading blocks
+            // writing to it, while this blocks reading the other, and neither ever moves again.
+            var output = process.StandardOutput.ReadToEndAsync(patience.Token);
+            var error = process.StandardError.ReadToEndAsync(patience.Token);
+
             if (input is not null)
             {
-                await process.StandardInput.WriteAsync(input);
+                await process.StandardInput.WriteAsync(input.AsMemory(), patience.Token).ConfigureAwait(false);
                 process.StandardInput.Close();
             }
 
-            var output = await process.StandardOutput.ReadToEndAsync(cancellation);
-            var error = await process.StandardError.ReadToEndAsync(cancellation);
-            await process.WaitForExitAsync(cancellation);
+            try
+            {
+                await process.WaitForExitAsync(patience.Token).ConfigureAwait(false);
+                return (process.ExitCode == 0,
+                    await output.ConfigureAwait(false),
+                    await error.ConfigureAwait(false));
+            }
+            catch (OperationCanceledException) when (!cancellation.IsCancellationRequested)
+            {
+                // The keyring did not answer. Killed rather than left behind, and reported as a
+                // failure rather than as an empty password, which would look like a password that
+                // was simply not set.
+                try { process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
 
-            return (process.ExitCode == 0, output, error);
+                return (false, string.Empty,
+                    $"the desktop keyring did not answer within {Patience.TotalSeconds:0} seconds");
+            }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return (false, string.Empty, ex.Message);
         }
