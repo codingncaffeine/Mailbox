@@ -6,6 +6,8 @@ using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.LogicalTree;
 using Mailbox.App.Options;
+using Mailbox.App.Theming;
+using Mailbox.Core.Diagnostics;
 using Mailbox.Core.Ribbon;
 using Mailbox.Core.Settings;
 using Mailbox.Theming;
@@ -449,6 +451,11 @@ public sealed class OptionsWindow : Window
             autocomplete.Content = AutoCompleteRow();
         }
 
+        if (renderer.Slots.TryGetValue("keys", out var keys))
+        {
+            keys.Content = KeyRingRows();
+        }
+
         if (renderer.Slots.TryGetValue("autostart", out var autostart))
         {
             autostart.Content = AutostartRows();
@@ -549,6 +556,185 @@ public sealed class OptionsWindow : Window
     /// autostart entry (§10). Read from the entry rather than from a setting, so a desktop that
     /// has switched the entry off in its own session settings is shown the truth.
     /// </summary>
+    /// <summary>
+    /// The Trust Center's key list: what is in the ring, and how to put more there.
+    /// </summary>
+    /// <remarks>
+    /// Reading the ring asks for no passphrase — a secret key's presence is a fact about the ring
+    /// and opening it is a different operation — so this page can say what is here without
+    /// summoning a prompt for a page nobody asked to unlock anything on.
+    /// <para>
+    /// A revoked or expired key is listed rather than filtered out, and says which it is: a reader
+    /// wondering why a message will not encrypt is owed the reason, and the reason is usually
+    /// sitting in this list.
+    /// </para>
+    /// </remarks>
+    private Control KeyRingRows()
+    {
+        var panel = new StackPanel { Spacing = 8 };
+
+        var summary = new TextBlock { TextWrapping = TextWrapping.Wrap, MaxWidth = 520 };
+        Bind(summary, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
+
+        var list = new StackPanel { Spacing = 2, Margin = new Thickness(0, 4, 0, 0) };
+
+        var import = DialogButton("Import…", isDefault: false);
+        import.Width = 120;
+
+        var status = new TextBlock { TextWrapping = TextWrapping.Wrap, MaxWidth = 520, IsVisible = false };
+        Bind(status, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
+
+        void Fill()
+        {
+            list.Children.Clear();
+
+            IReadOnlyList<Mailbox.Security.OpenPgp.KeyEntry> keys;
+            try
+            {
+                using var ring = CryptoStores.KeyRing();
+                keys = Mailbox.Security.OpenPgp.KeyInventory.Read(ring);
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("The keyring could not be read.", ex);
+                summary.Text = $"The keyring could not be read: {ex.Message}";
+                return;
+            }
+
+            if (keys.Count == 0)
+            {
+                summary.Text = "No keys yet. Import brings a copy of GnuPG's across, if you have any there.";
+                return;
+            }
+
+            var mine = keys.Count(k => k.HasSecret);
+            summary.Text = $"{Count(keys.Count, "key")} in the ring, {mine} of them yours.";
+
+            var now = DateTimeOffset.Now;
+            foreach (var key in keys.OrderByDescending(k => k.HasSecret).ThenBy(k => k.Owner, StringComparer.CurrentCultureIgnoreCase))
+            {
+                list.Children.Add(KeyLine(key, now));
+            }
+        }
+
+        import.Click += async (_, _) =>
+        {
+            import.IsEnabled = false;
+            status.IsVisible = true;
+            status.Text = "Asking GnuPG…";
+
+            try
+            {
+                using var ring = CryptoStores.KeyRing();
+                var result = await Mailbox.Security.OpenPgp.GnuPgImport.RunAsync(ring);
+                status.Text = result.Summary;
+                Log.Info($"Trust Center: key import — {result.Summary}");
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("Importing from GnuPG failed.", ex);
+                status.Text = $"The import failed: {ex.Message}";
+            }
+            finally
+            {
+                import.IsEnabled = true;
+                Fill();
+            }
+        };
+
+        Fill();
+
+        var buttons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            Margin = new Thickness(0, 6, 0, 0),
+            Children = { import },
+        };
+
+        if (!Mailbox.Security.OpenPgp.GnuPgImport.IsAvailable)
+        {
+            import.IsEnabled = false;
+            var absent = new TextBlock
+            {
+                Text = "GnuPG is not installed on this machine.",
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            Bind(absent, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
+            buttons.Children.Add(absent);
+        }
+
+        panel.Children.Add(summary);
+        panel.Children.Add(list);
+        panel.Children.Add(buttons);
+        panel.Children.Add(status);
+
+        // What the harness reads back, a capture of a scrolled page being a poor way to check a
+        // list. MAILBOX_OPTIONS_PAGE=trust is what opens it.
+        if (WindowCapture.IsRequested) LogKeyRing();
+
+        return panel;
+    }
+
+    private Control KeyLine(Mailbox.Security.OpenPgp.KeyEntry key, DateTimeOffset now)
+    {
+        var owner = new TextBlock
+        {
+            Text = key.Owner,
+            FontWeight = key.HasSecret ? FontWeight.SemiBold : FontWeight.Normal,
+            Width = 260,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        Bind(owner, TextBlock.ForegroundProperty, "dialog.foreground.brush");
+
+        var detail = new TextBlock
+        {
+            Text = $"{key.ShortId} · {key.Algorithm} {key.Bits} · {key.State(now)}"
+                   + (key.HasSecret ? " · yours" : string.Empty),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        // A key that will not be used says so in the ordinary subtle colour rather than in a
+        // warning colour of its own: this is a list of facts, not a list of problems, and the
+        // theme has no token for "bad" that is not the accent doing something else.
+        Bind(detail, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
+        detail.Opacity = key.IsUsable(now) ? 1.0 : 0.7;
+
+        return new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            Children = { owner, detail },
+        };
+    }
+
+    /// <summary>Reads the ring back for a capture run, a list being a poor thing to photograph.</summary>
+    private static void LogKeyRing()
+    {
+        try
+        {
+            using var ring = CryptoStores.KeyRing();
+            var keys = Mailbox.Security.OpenPgp.KeyInventory.Read(ring);
+            var now = DateTimeOffset.Now;
+
+            Log.Info($"Harness: keyring — {keys.Count} key(s); GnuPG "
+                     + $"{(Mailbox.Security.OpenPgp.GnuPgImport.IsAvailable ? "available" : "absent")}.");
+
+            foreach (var key in keys)
+            {
+                Log.Info($"Harness: key {key.ShortId} — “{key.Owner}”, {key.Algorithm} {key.Bits}, "
+                         + $"{key.State(now)}, {(key.HasSecret ? "secret half held" : "public only")}, "
+                         + $"{(key.IsUsable(now) ? "usable" : "not usable")}.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Harness: the keyring could not be read.", ex);
+        }
+    }
+
+    private static string Count(int n, string noun) => n == 1 ? $"1 {noun}" : $"{n} {noun}s";
+
     private Control AutostartRows()
     {
         var autostart = new Mailbox.Core.Platform.Autostart();
