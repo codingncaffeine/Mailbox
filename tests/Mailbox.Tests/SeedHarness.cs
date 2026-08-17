@@ -81,7 +81,7 @@ public class SeedHarness
             // In the default account, so a capture that poses nothing but the store lands on the
             // folder these are in — the crypto bars are the point of them and nothing else reaches
             // those bars.
-            PgpSealed(), PgpSigned(), PgpUnprotected());
+            PgpSealed(), PgpSigned(), PgpUnprotected(), PgpHeaderProtected());
 
         SeedImap(stores, "imap@example.org");
         SeedKeyring(Path.Combine(target, "openpgp"));
@@ -698,6 +698,43 @@ public class SeedHarness
             {
                 Text = "Everything on the checklist is ticked except the tag itself.\n\nA.",
             });
+
+        return message;
+    }
+
+    /// <summary>
+    /// Header-protected, so the list says <c>[...]</c> and the pane says what the message is.
+    /// </summary>
+    /// <remarks>
+    /// Written by this application's own writer rather than by hand, which is the point of it: the
+    /// shape under test is one it would send, and what the reading pane makes of it is therefore a
+    /// claim about the pair rather than about a fixture. It is the one seeded message whose row and
+    /// whose header disagree, and the disagreement is the feature.
+    /// </remarks>
+    private static MimeMessage PgpHeaderProtected()
+    {
+        var message = Envelope(
+            "A. Person", PgpKeys.Sender.Address, "Rates for the Hallam contract", PgpKeys.Reader.Address);
+
+        message.Headers.Add("Keywords", "Contract, Urgent");
+        message.Body = new TextPart("plain")
+        {
+            Text = "Held to last year's for the first six months, then the new schedule.\n\n"
+                   + "Nothing about this is in the subject line, which is the idea.\n\nA.",
+        };
+
+        using var context = Signing();
+        var report = Mailbox.Security.MessageProtection.Apply(
+            message,
+            Mailbox.Security.Protection.Sign | Mailbox.Security.Protection.Encrypt,
+            null,
+            context,
+            TestContext.Current.CancellationToken);
+
+        if (report.State != Mailbox.Security.ProtectionState.Applied)
+        {
+            throw new InvalidOperationException("The seed could not protect a message: " + report.Detail);
+        }
 
         return message;
     }

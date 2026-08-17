@@ -964,14 +964,17 @@
                             BorderThickness="0,0,0,1"
                             BorderBrush="{DynamicResource border.subtle.brush}">
                         <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto">
+                            <!-- The subject and sender come from the shell rather than the row: a
+                                 message that carried its own header fields inside its cryptography
+                                 is drawn from those, and the row still holds what arrived. -->
                             <TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2"
-                                       Text="{Binding SelectedMessage.Subject}"
+                                       Text="{Binding ReadingSubject}"
                                        FontSize="18"
                                        Margin="0,0,0,8"
                                        TextWrapping="Wrap" />
 
                             <StackPanel Grid.Row="1" Grid.Column="0" Spacing="2">
-                                <TextBlock Text="{Binding SelectedMessage.From}"
+                                <TextBlock Text="{Binding ReadingFrom}"
                                            FontWeight="SemiBold" />
                                 <TextBlock Text="{Binding SelectedMessage.ToLine}"
                                            Classes="small secondary" />

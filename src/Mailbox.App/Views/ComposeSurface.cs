@@ -159,6 +159,15 @@ public sealed class ComposeSurface : UserControl
     /// see <see cref="MessageProtection"/> for why that is the application's decision.
     /// </remarks>
     private Protection _protection = Protection.None;
+
+    /// <summary>
+    /// The header fields the message this one answers kept off its own outside. Usually empty.
+    /// </summary>
+    /// <remarks>
+    /// RFC 9788 §6.1's half of the reply rules — see <see cref="Answering"/>. Held rather than
+    /// derived, because by the time Send is pressed the message being answered is not in hand.
+    /// </remarks>
+    private IReadOnlyList<string> _confidential = [];
     private DateTimeOffset? _notBefore;
     private string? _replyTo;
     private bool _sent;
@@ -521,6 +530,39 @@ public sealed class ComposeSurface : UserControl
         // attachment to the tree rather than a window's Opened, so it works inline too.
         if (kind == ReplyKind.Forward) _to.AttachedToVisualTree += (_, _) => _to.Focus();
         else _body.AttachedToVisualTree += (_, _) => _body.Focus();
+    }
+
+    /// <summary>
+    /// Says which of the answered message's header fields were confidential, and asks for the same.
+    /// </summary>
+    /// <remarks>
+    /// RFC 9788 §6.1, a MUST: a value that was kept off the outside of the message being answered
+    /// must not go out in the clear in the answer, <em>even where this writer's own policy would not
+    /// have hidden it</em>. Two things follow, and the first is the one that makes the second rare:
+    /// <list type="bullet">
+    /// <item><description>Encrypt goes down by itself. A reply to a message somebody took the
+    /// trouble to encrypt is a reply that wants encrypting, and once it is encrypted the subject is
+    /// obscured again by the same policy that obscured theirs.</description></item>
+    /// <item><description>If the writer takes it back off, the send is <b>refused</b> and says which
+    /// field it would have exposed. There is no partial state here for the same reason there is none
+    /// anywhere else in this file: sending it anyway and mentioning it afterwards is doing the one
+    /// thing the writer was trying to prevent.</description></item>
+    /// </list>
+    /// </remarks>
+    public void Answering(IReadOnlyList<string> confidential)
+    {
+        ArgumentNullException.ThrowIfNull(confidential);
+
+        _confidential = confidential;
+        if (confidential.Count == 0) return;
+
+        // Nothing to encrypt with means nothing to promise (§14). The refusal on Send is what stops
+        // the leak in that case, and it says why.
+        if (!App.Security.Smime && !App.Security.OpenPgp) return;
+
+        _protection |= Protection.Encrypt;
+        Report("This message will be encrypted: the one it answers kept its "
+            + Names(confidential) + " out of the clear.");
     }
 
     /// <summary>
@@ -2291,6 +2333,18 @@ public sealed class ComposeSurface : UserControl
     /// </remarks>
     private async Task<bool> ProtectAsync(MimeMessage message)
     {
+        // Before the toggles are even looked at, because the message this answers gets a say: a
+        // field it kept back does not go out in the clear here (§6.1). See Answering.
+        if (Exposed() is { Count: > 0 } exposed)
+        {
+            Report("This message answers one that kept its " + Names(exposed)
+                + " out of the clear, so it cannot be sent unencrypted. "
+                + "Press Encrypt, or take that out of this message.");
+
+            Log.Info($"Harness: protection — refused, would expose {string.Join(", ", exposed)}.");
+            return false;
+        }
+
         if (_protection == Protection.None) return true;
 
         // So the list of keys to ask about is this attempt's own rather than a previous send's.
@@ -2331,6 +2385,36 @@ public sealed class ComposeSurface : UserControl
         return draft
             ? MessageProtection.ApplyToDraft(message, _protection, certificates, keys)
             : MessageProtection.Apply(message, _protection, certificates, keys);
+    }
+
+    /// <summary>
+    /// Which of the answered message's confidential fields this one would send in the clear.
+    /// </summary>
+    /// <remarks>
+    /// A field is safe when this message is going out encrypted <em>and</em> the policy that reduces
+    /// its outer header section hides that field too — which is why the question is asked of the
+    /// policy rather than answered from a list here: the two have to agree, and only one of them can
+    /// be right about what it does.
+    /// </remarks>
+    private List<string> Exposed()
+    {
+        if (_confidential.Count == 0) return [];
+        if (!_protection.HasFlag(Protection.Encrypt)) return [.. _confidential];
+
+        return [.. _confidential.Where(name => !HeaderConfidentiality.Baseline.Hides(name))];
+    }
+
+    /// <summary>Header field names as a sentence: "subject", or "subject and keywords".</summary>
+    private static string Names(IReadOnlyList<string> fields)
+    {
+        var words = fields.Select(f => f.ToLowerInvariant()).ToList();
+
+        return words.Count switch
+        {
+            0 => "header fields",
+            1 => words[0],
+            _ => string.Join(", ", words.Take(words.Count - 1)) + " and " + words[^1],
+        };
     }
 
     /// <summary>Asks for whatever the last attempt could not open. False if the reader declines.</summary>

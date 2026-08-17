@@ -181,6 +181,17 @@ internal sealed class HtmlSanitizer(ResourceMap resources, RenderOptions options
             return;
         }
 
+        // A legacy display element: the header fields an encrypted message's composer kept off the
+        // outside, written into the body for a client that cannot read them anywhere else. This one
+        // can, so RFC 9788 §4.5.3 says not to draw it — and names a sanitizer as where that belongs.
+        // Only ever inside a cryptographic payload; see RenderOptions.HideLegacyDisplay.
+        if (options.HideLegacyDisplay && !tag.IsEndTag && !tag.IsEmptyElement && LegacyDisplay(tag))
+        {
+            _skipping = name;
+            _skipDepth = 1;
+            return;
+        }
+
         if (!Allowed.Contains(name)) return;
 
         // html, head and body would nest inside the document this is wrapped in. head is dropped
@@ -199,6 +210,35 @@ internal sealed class HtmlSanitizer(ResourceMap resources, RenderOptions options
         _out.Append('<').Append(name);
         foreach (var attribute in tag.Attributes) Attribute(name, attribute);
         _out.Append(tag.IsEmptyElement ? " />" : ">");
+    }
+
+    /// <summary>
+    /// Whether this tag opens the <c>div</c> RFC 9788 §4.5.3.3 names.
+    /// </summary>
+    /// <remarks>
+    /// The class is matched as one of the element's classes rather than as the whole attribute, an
+    /// element being allowed more than one; the name is spelled out here rather than shared with the
+    /// security project, which this one does not reference and should not.
+    /// </remarks>
+    private static bool LegacyDisplay(HtmlTagToken tag)
+    {
+        if (!string.Equals(tag.Name, "div", StringComparison.OrdinalIgnoreCase)) return false;
+
+        foreach (var attribute in tag.Attributes)
+        {
+            if (!string.Equals(attribute.Name, "class", StringComparison.OrdinalIgnoreCase)) continue;
+
+            foreach (var css in (attribute.Value ?? string.Empty).Split(
+                (char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (string.Equals(css, "header-protection-legacy-display", StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private void CloseStyle()

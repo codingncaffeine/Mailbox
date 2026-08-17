@@ -39,12 +39,14 @@ public sealed class MessageSourceWindow : Window
             IsReadOnly = true,
             AcceptsReturn = true,
             TextWrapping = TextWrapping.NoWrap,
-            FontFamily = new FontFamily("monospace"),
             BorderThickness = default,
             Padding = new Thickness(10),
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Stretch,
         };
+        // The theme's monospaced family rather than a name in this file: a family asked for by its
+        // bare name skips the metric-compatible substitution, and a bundled one is never found.
+        Bind(text, TemplatedControl.FontFamilyProperty, "mono.fontfamily");
         Bind(text, TemplatedControl.BackgroundProperty, "dialog.surface.brush");
         Bind(text, TemplatedControl.ForegroundProperty, "dialog.surface.text.brush");
 
