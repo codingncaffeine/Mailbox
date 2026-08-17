@@ -1245,6 +1245,35 @@ public partial class MainWindow : Window
     /// Opens a new message in its own window, as the reference does — not modally, because
     /// writing one message must not stop you reading another.
     /// </summary>
+    /// <summary>
+    /// A new message that opens on a draft rather than on nothing — what forwarding an item makes.
+    /// </summary>
+    /// <remarks>
+    /// The same window a reply opens, prefilled the same way: a forwarded contact is a message
+    /// with a vCard on it, and nothing about the window has to know which kind of item it came
+    /// from.
+    /// </remarks>
+    private void NewMessage(Mailbox.Rendering.ReplyDraft draft, Mailbox.Rendering.ReplyKind kind)
+    {
+        var compose = new ComposeWindow(App.Commands, App.Accounts, App.Contacts);
+
+        if (!App.MailOptions.AlwaysUseDefaultAccount
+            && DataContext is ShellViewModel current
+            && current.CurrentAddress is { Length: > 0 } address)
+        {
+            compose.SendFromAccount(address);
+        }
+
+        compose.Prefill(draft, kind);
+        compose.Closed += (_, _) =>
+        {
+            if (DataContext is ShellViewModel shell) shell.Refresh();
+        };
+
+        compose.Queued += (_, e) => OnQueued(e);
+        compose.Show(this);
+    }
+
     private void NewMessage(Mailbox.Core.Compose.MailtoLink? mailto = null)
     {
         var compose = new ComposeWindow(App.Commands, App.Accounts, App.Contacts);
@@ -3972,19 +4001,14 @@ public partial class MainWindow : Window
             flyout.Items.Add(item);
         }
 
-        void Waiting(string header, string icon, string phase)
-        {
-            var item = new MenuItem { Header = header, Icon = MenuIcon(icon), IsEnabled = false };
-            ToolTip.SetTip(item, $"{header}s arrive with {phase}.");
-            flyout.Items.Add(item);
-        }
-
-        // The reference's own list, in its own order, with the mnemonics it underlines.
+        // The reference's own list, in its own order, with the mnemonics it underlines. Every
+        // one of them makes its thing now — the modules they were waiting for are all up.
         Entry("_E-mail Message", "mail-new", () => NewMessage());
         Entry("_Appointment", "new-appointment", () => RunCommand(CalendarCommands.NewAppointment.Id));
         Entry("_Meeting", "meeting", () => RunCommand(CalendarCommands.NewMeeting.Id));
         Entry("_Contact", "contact-card", () => RunCommand(PeopleCommands.NewContact.Id));
-        Waiting("_Task", "new-task", "Phase 13");
+        Entry("Contact _Group", "contact-group", () => RunCommand(PeopleCommands.NewContactGroup.Id));
+        Entry("_Task", "new-task", () => RunCommand(TaskCommands.NewTask.Id));
         flyout.Items.Add(new Separator());
 
         var using_ = new MenuItem { Header = "E-mail Message _Using" };
@@ -3994,16 +4018,28 @@ public partial class MainWindow : Window
         flyout.Items.Add(using_);
 
         var more = new MenuItem { Header = "M_ore Items" };
-        more.Items.Add(new MenuItem { Header = "Note", IsEnabled = false });
-        more.Items.Add(new MenuItem { Header = "Choose Form…", IsEnabled = false });
-        ToolTip.SetTip(more, "The rest of the item types arrive with their modules.");
+        var note = new MenuItem { Header = "Note", Icon = MenuIcon("note") };
+        note.Click += (_, _) => RunCommand(NoteCommands.NewNote.Id);
+        more.Items.Add(note);
+
+        var entry = new MenuItem { Header = "Journal Entry", Icon = MenuIcon("journal") };
+        entry.Click += (_, _) => RunCommand(JournalCommands.NewEntry.Id);
+        more.Items.Add(entry);
+
+        var form = new MenuItem { Header = "Choose Form…", IsEnabled = false };
+        ToolTip.SetTip(form, "Custom forms are a plugin's business (§13).");
+        more.Items.Add(form);
         flyout.Items.Add(more);
 
-        // New Items has its own button on the classic ribbon and hangs off New Email's chevron
-        // on the Simplified bar, so the menu falls back to whichever of the two is on screen.
-        _ribbon.OpenMenuUnder(
-            MailCommands.NewItems.Id, flyout,
-            _ribbon.ControlFor(MailCommands.NewEmail.Id) ?? this);
+        // New Items has its own button on the classic ribbon and hangs off the New chevron on the
+        // Simplified bar — whichever module's New that is — so the menu falls back to whichever of
+        // the two is on screen.
+        var under = _ribbon.ControlFor(MailCommands.NewEmail.Id)
+                    ?? _ribbon.ControlFor(PeopleCommands.NewContact.Id)
+                    ?? _ribbon.ControlFor(TaskCommands.NewTask.Id)
+                    ?? (Control)this;
+
+        _ribbon.OpenMenuUnder(MailCommands.NewItems.Id, flyout, under);
         shell.StatusRight = string.Empty;
     }
 

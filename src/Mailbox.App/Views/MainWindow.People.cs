@@ -37,6 +37,7 @@ public partial class MainWindow
 
         workspace.Changed += (_, _) => shell.ModuleStatusLeft = workspace.Status;
         workspace.ContactOpened += (_, row) => _ = OpenContactAsync(shell, row);
+        workspace.ContactMenuRequested += (_, row) => ShowContactMenu(shell, row);
         workspace.NewRequested += (_, _) => _ = NewContactAsync(shell);
         _people = workspace;
         return workspace;
@@ -70,6 +71,11 @@ public partial class MainWindow
         if (id == PeopleCommands.Categorize.Id) { CategorizeContact(shell); return true; }
         if (id == PeopleCommands.DeleteAddressBook.Id) { _ = DeleteAddressBookAsync(shell); return true; }
         if (id == PeopleCommands.Favourite.Id) { FavouriteContact(shell); return true; }
+        if (id == PeopleCommands.NewItems.Id) { SwitchModule(shell, MailboxModule.People); ShowNewItemsMenu(); return true; }
+        if (id == PeopleCommands.MoveTo.Id) { MoveContact(shell); return true; }
+        if (id == PeopleCommands.ForwardContact.Id) { ForwardContact(shell); return true; }
+        if (id == PeopleCommands.MeetContact.Id) { MeetContact(shell); return true; }
+        if (id == ViewCommands.SearchPeople.Id) { _ = SearchPeopleAsync(shell); return true; }
 
         // The views, the tags and the rest are placed and say what they wait for, as the
         // calendar's unfinished buttons do (§20).
@@ -137,6 +143,214 @@ public partial class MainWindow
         return view;
     }
 
+    /// <summary>
+    /// The menu a right-click on somebody opens, in the reference's own order.
+    /// </summary>
+    /// <remarks>
+    /// This is where Add to Favourites belongs: the reference's own People peek says so in so
+    /// many words — "right-click a person anywhere to add them to your favourites" — which is why
+    /// the button is not on its bar and is not on ours.
+    /// </remarks>
+    private void ShowContactMenu(ShellViewModel shell, ContactRow row)
+    {
+        var flyout = new MenuFlyout();
+
+        void Entry(string header, Action run, bool enabled = true)
+        {
+            var item = new MenuItem { Header = header, IsEnabled = enabled };
+            item.Click += (_, _) => run();
+            flyout.Items.Add(item);
+        }
+
+        Entry("Open", () => _ = OpenContactAsync(shell, row));
+        Entry("E-mail", () => EmailSelectedContact(shell), row.Contact.PrimaryEmail is { Length: > 0 } || row.Contact.IsGroup);
+        Entry("Meeting", () => MeetContact(shell));
+        flyout.Items.Add(new Separator());
+
+        Entry("Forward Contact", () => ForwardContact(shell));
+        Entry("Move", () => MoveContact(shell));
+        Entry("Categorize", () => CategorizeContact(shell));
+        flyout.Items.Add(new Separator());
+
+        Entry(
+            App.ContactFavourites.Contains(row.Contact.Uid) ? "Remove from Favourites" : "Add to Favourites",
+            () => FavouriteContact(shell));
+
+        flyout.Items.Add(new Separator());
+        Entry("Delete", () => _ = DeleteSelectedContactAsync(shell));
+
+        Log.Info($"People: the menu for “{row.Named()}” is open.");
+        flyout.ShowAt(EnsurePeople(shell), showAtPointer: true);
+    }
+
+    /// <summary>
+    /// Search People: what the box on every module's bar is for — find somebody by name, company,
+    /// address or number, and narrow the People list to them.
+    /// </summary>
+    /// <remarks>
+    /// <b>Divergence, stated:</b> the reference types into the box itself. Every field on this
+    /// ribbon is a button — the bar has no editable control yet (§20) — so pressing it asks for
+    /// the words in a prompt and the list answers. What it does with them is the reference's:
+    /// the module's own list narrows, and emptying the box brings everybody back.
+    /// </remarks>
+    private async Task SearchPeopleAsync(ShellViewModel shell)
+    {
+        SwitchModule(shell, MailboxModule.People);
+        var people = EnsurePeople(shell);
+
+        // The harness poses the words rather than the prompt, a dialog being a surface that
+        // blocks a capture run.
+        var posed = Environment.GetEnvironmentVariable("MAILBOX_SEARCH");
+        var wanted = posed is { Length: > 0 }
+            ? posed
+            : await Prompt.AskAsync(this, "Search People", "Find:", people.Search);
+
+        if (wanted is null) return;
+
+        people.Search = wanted;
+        shell.ModuleStatusLeft = people.Status;
+        shell.StatusRight = people.Search.Length == 0
+            ? "Showing everybody."
+            : $"{people.Rows.Count} of {people.Total.Count} match “{people.Search}”.";
+        Log.Info($"People: search “{people.Search}” matched {people.Rows.Count} of {people.Total.Count}.");
+    }
+
+    /// <summary>
+    /// Move: the address books, in a menu under the button.
+    /// </summary>
+    /// <remarks>
+    /// A contact is not moved the way a note is. Its addresses, its numbers and its photograph are
+    /// rows of their own hung off its id, so the move goes through the contact book — which writes
+    /// all three in one call — rather than through the store's own <c>MoveItem</c>, which carries
+    /// the item and its text and nothing else.
+    /// </remarks>
+    private void MoveContact(ShellViewModel shell)
+    {
+        var people = EnsurePeople(shell);
+        if (people.Selected is not { } row || App.Pim.Item(row.Id) is not { } stored)
+        {
+            shell.StatusRight = "Select a contact first.";
+            return;
+        }
+
+        var books = App.Contacts.AddressBooks().Where(b => b.Id != stored.CollectionId).ToList();
+        if (books.Count == 0)
+        {
+            shell.StatusRight = "There is nowhere else to keep a contact: this is the only address book.";
+            return;
+        }
+
+        // A menu is a surface no capture can show, so the harness names the book instead.
+        if (Environment.GetEnvironmentVariable("MAILBOX_MOVE")?.Trim() is { Length: > 0 } posed)
+        {
+            if (books.FirstOrDefault(b => b.DisplayName.Contains(posed, StringComparison.OrdinalIgnoreCase)) is not { } wanted)
+            {
+                Log.Info($"Harness: no address book matching “{posed}” to move “{row.Named()}” to.");
+                return;
+            }
+
+            MoveContactTo(shell, row, stored, wanted);
+            return;
+        }
+
+        var flyout = new MenuFlyout();
+        foreach (var book in books)
+        {
+            var entry = new MenuItem { Header = book.DisplayName };
+            var chosen = book;
+            entry.Click += (_, _) => MoveContactTo(shell, row, stored, chosen);
+            flyout.Items.Add(entry);
+        }
+
+        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+    }
+
+    private void MoveContactTo(ShellViewModel shell, ContactRow row, PimItem stored, Collection book)
+    {
+        var contact = App.Contacts.Full(row.Id) ?? row.Contact;
+
+        var made = App.Contacts.Save(contact, book.Id);
+        App.PimSync.QueuePut(made);
+        App.PimSync.Remove(stored);
+
+        EnsurePeople(shell).Reload();
+        shell.StatusRight = $"“{contact.Named()}” moved to {book.DisplayName}.";
+        Log.Info($"People: contact {row.Id} moved to {book.DisplayName} as {made.Id}.");
+    }
+
+    /// <summary>
+    /// Forward Contact: a message with the card attached, which is what the reference sends.
+    /// </summary>
+    /// <remarks>
+    /// A vCard rather than the card's text in the body: what arrives is a file the reader's own
+    /// address book can take in, which is the whole point of forwarding somebody.
+    /// </remarks>
+    private void ForwardContact(ShellViewModel shell)
+    {
+        var people = EnsurePeople(shell);
+        if (people.Selected is not { } row)
+        {
+            shell.StatusRight = "Select a contact first.";
+            return;
+        }
+
+        var contact = App.Contacts.Full(row.Id) ?? row.Contact;
+        var card = VCardCodec.Serialize(contact);
+        var named = contact.Named() is { Length: > 0 } who ? who : "Contact";
+        var name = new string([.. named.Where(c => !Path.GetInvalidFileNameChars().Contains(c))]) + ".vcf";
+
+        var part = new MimeKit.MimePart("text", "vcard")
+        {
+            Content = new MimeKit.MimeContent(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(card))),
+            ContentDisposition = new MimeKit.ContentDisposition(MimeKit.ContentDisposition.Attachment) { FileName = name },
+            ContentTransferEncoding = MimeKit.ContentEncoding.Base64,
+            FileName = name,
+        };
+
+        var draft = new Mailbox.Rendering.ReplyDraft
+        {
+            Subject = $"Contact: {contact.Named()}",
+            Attachments = [new Mailbox.Rendering.CarriedPart(name, "text/vcard", part)],
+        };
+
+        NewMessage(draft, Mailbox.Rendering.ReplyKind.Forward);
+        shell.StatusRight = $"“{contact.Named()}” ready to send.";
+        Log.Info($"People: forwarding contact {row.Id} as {name} ({card.Length} bytes of vCard).");
+    }
+
+    /// <summary>
+    /// Meeting: the meeting window with the contact already asked.
+    /// </summary>
+    /// <remarks>
+    /// What this waited for was the Scheduling Assistant, which Phase 12 built — a meeting with
+    /// somebody in it is exactly what that tab draws.
+    /// </remarks>
+    private void MeetContact(ShellViewModel shell)
+    {
+        var people = EnsurePeople(shell);
+        if (people.Selected is not { } row)
+        {
+            shell.StatusRight = "Select a contact first.";
+            return;
+        }
+
+        var contact = App.Contacts.Full(row.Id) ?? row.Contact;
+        var asked = contact.IsGroup
+            ? contact.Members.Select(m => m.Address).Where(a => a is { Length: > 0 }).ToList()
+            : contact.PrimaryEmail is { Length: > 0 } one ? [one] : new List<string>();
+
+        if (asked.Count == 0)
+        {
+            shell.StatusRight = $"“{contact.Named()}” has no e-mail address to invite.";
+            return;
+        }
+
+        SwitchModule(shell, MailboxModule.Calendar);
+        var calendar = EnsureCalendar(shell);
+        _ = NewAppointmentAsync(shell, calendar.Anchor.ToDateTime(NextHalfHour()), allDay: false, meeting: true, asked);
+        Log.Info($"People: meeting with {string.Join(", ", asked)}.");
+    }
+
     /// <summary>What a People button that is placed but not yet live says when pressed.</summary>
     private static string? WaitingPeopleCommand(CommandId id)
     {
@@ -147,11 +361,8 @@ public partial class MainWindow
         }
 
         if (id == PeopleCommands.PeopleView.Id) return "This is the People view.";
-        if (id == PeopleCommands.MeetContact.Id) return "Inviting a contact to a meeting arrives with the Scheduling Assistant.";
         if (id == PeopleCommands.MoreCommunicate.Id) return "The other ways to reach somebody arrive with the module's actions.";
-        if (id == PeopleCommands.MoveTo.Id) return "Moving a contact between address books arrives with the module's actions.";
         if (id == PeopleCommands.MailMerge.Id) return "Mail merge arrives with Phase 16.";
-        if (id == PeopleCommands.ForwardContact.Id) return "Forwarding a contact as a vCard arrives with the module's actions.";
         if (id == PeopleCommands.ShareContacts.Id) return "Sharing an address book wants CardDAV publishing, which is still to come.";
         if (id == PeopleCommands.OpenSharedContacts.Id) return "A shared address book is a CardDAV account — add one in Account Settings.";
         if (id == PeopleCommands.FollowUp.Id || id == PeopleCommands.Private.Id)
