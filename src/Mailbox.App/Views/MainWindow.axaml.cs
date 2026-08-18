@@ -4721,7 +4721,12 @@ public partial class MainWindow : Window
     /// Which group to run, or null for Send/Receive All Folders — every group that asked to be
     /// included, which is what the reference means by F9.
     /// </param>
-    private async Task SendReceiveAsync(ShellViewModel shell, SendReceiveGroup? group = null)
+    /// <param name="retrying">
+    /// True on the second run of a pair, after the reader has agreed to a certificate the first
+    /// was refused. It stops a server that refuses whatever it is shown from asking forever.
+    /// </param>
+    private async Task SendReceiveAsync(
+        ShellViewModel shell, SendReceiveGroup? group = null, bool retrying = false)
     {
         if (_transferring) return;
 
@@ -4828,6 +4833,46 @@ public partial class MainWindow : Window
             _cancellation.Dispose();
             _cancellation = null;
         }
+
+        // A run refused a certificate has a question for the reader rather than an error for them
+        // to read. The account wizard already asks this on the way in; a server met later — a
+        // second host for the same account, a renewal, a provider that moved — was refused with
+        // nothing but a line in the log, and no way to answer from inside the application at all.
+        if (!retrying) await AskAboutRefusedCertificatesAsync(shell, group);
+    }
+
+    /// <summary>
+    /// Offers the certificates a run was refused, and runs it again if any were agreed to.
+    /// </summary>
+    /// <remarks>
+    /// Once, and only after the run has finished: asking mid-flight would put a dialog over a
+    /// transfer that is still working on other accounts, and the refusal is recorded rather than
+    /// raised precisely so the question can wait for a moment when it can be answered.
+    /// </remarks>
+    private async Task AskAboutRefusedCertificatesAsync(ShellViewModel shell, SendReceiveGroup? group)
+    {
+        if (App.Trust.Refused is not { Count: > 0 } refusals) return;
+
+        var agreed = false;
+
+        foreach (var refusal in refusals)
+        {
+            Log.Info($"Send/receive was refused {refusal.Host}:{refusal.Port}; asking.");
+            if (await CertificateDialog.AskAsync(this, refusal))
+            {
+                App.Trust.Pin(refusal);
+                agreed = true;
+            }
+        }
+
+        // Cleared either way: a certificate the reader declined should not be put to them again
+        // on the next press, and one they agreed to is pinned and will not come back.
+        App.Trust.ClearRefusals();
+
+        if (!agreed) return;
+
+        shell.StatusRight = "Trying again with the certificate you trusted…";
+        await SendReceiveAsync(shell, group, retrying: true);
     }
 
     /// <summary>
