@@ -418,14 +418,38 @@ public sealed class AccountWizard : Window
                 Trust = App.Trust,
             };
 
+            // The incoming server first, because it is the one every send/receive afterwards
+            // depends on: an account added without reaching it works until the moment somebody
+            // presses the button. Both are asked about here so a certificate question is answered
+            // once, at setup, rather than turning up later as a failure with no way to answer it.
+            var incoming = new ServerSettings(
+                settings.IncomingHost, settings.IncomingPort, settings.IncomingSecurity)
+            {
+                Trust = App.Trust,
+            };
+
+            var protocol2 = protocol == MailProtocol.Imap ? MailProtocolKind.Imap : MailProtocolKind.Pop3;
+            var inbound = await new ServerProbe().CheckReceivingAsync(incoming, protocol2);
+
+            if (!inbound.Reached && await AskAboutCertificateAsync(settings.IncomingHost, settings.IncomingPort))
+            {
+                inbound = await new ServerProbe().CheckReceivingAsync(incoming, protocol2);
+            }
+
             var probe = await new ServerProbe().CheckSendingAsync(outgoing);
 
-            if (!probe.Reached
-                && App.Trust.RefusalFor(settings.OutgoingHost, settings.OutgoingPort) is { } refused
-                && await CertificateDialog.AskAsync(this, refused))
+            if (!probe.Reached && await AskAboutCertificateAsync(settings.OutgoingHost, settings.OutgoingPort))
             {
-                App.Trust.Pin(refused);
                 probe = await new ServerProbe().CheckSendingAsync(outgoing);
+            }
+
+            // An account whose incoming server cannot be reached is one that will fail every time
+            // it is asked to collect mail, so it is reported here rather than saved quietly and
+            // discovered later. It is still added — the settings may simply need correcting, and
+            // throwing the typing away would be worse — but nobody is left thinking it worked.
+            if (!inbound.Reached)
+            {
+                Log.Warn($"The incoming server for {address} could not be reached: {inbound.Explanation}");
             }
 
             if (SignsIn && _tokens is { } tokens)
@@ -446,7 +470,13 @@ public sealed class AccountWizard : Window
                 }
             }
 
-            if (!probe.IsClear)
+            if (!inbound.Reached)
+            {
+                _status.Text = inbound.Explanation
+                               + " The account was added; correct the incoming server in Account "
+                               + "Settings, or it will not be able to collect mail.";
+            }
+            else if (!probe.IsClear)
             {
                 Log.Info($"Sending check for {address}: {probe.Explanation}");
                 _status.Text = probe.Explanation;
@@ -457,7 +487,7 @@ public sealed class AccountWizard : Window
 
             // Kept open when there is something to say. Closing over the explanation would put
             // the account in exactly the state the check exists to warn about, silently.
-            if (probe.IsClear)
+            if (probe.IsClear && inbound.Reached)
             {
                 Close();
                 return;
@@ -565,6 +595,22 @@ public sealed class AccountWizard : Window
             + $"password box {(_passwordRow.IsVisible ? "shown" : "hidden")}, "
             + $"client ID box {(_clientIdRow.IsVisible ? "shown" : "hidden")}; "
             + $"Add is {(_add.IsEnabled ? "on" : "off")}.");
+    }
+
+    /// <summary>
+    /// Offers a certificate the probe was refused, and says whether the reader agreed to it.
+    /// </summary>
+    /// <remarks>
+    /// False when there was no certificate question — the server simply was not there — so the
+    /// caller does not retry a connection that failed for some other reason.
+    /// </remarks>
+    private async Task<bool> AskAboutCertificateAsync(string host, int port)
+    {
+        if (App.Trust.RefusalFor(host, port) is not { } refusal) return false;
+        if (!await CertificateDialog.AskAsync(this, refusal)) return false;
+
+        App.Trust.Pin(refusal);
+        return true;
     }
 
     private static int Port(string? text, int fallback)

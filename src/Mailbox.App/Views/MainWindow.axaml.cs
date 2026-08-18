@@ -4741,6 +4741,14 @@ public partial class MainWindow : Window
 
         _transferring = true;
 
+        // The dialog from the last run goes first. It is bound to that run's tasks, and this line
+        // replaces them — so a dialog left open by a failure would sit there showing the failure
+        // while the new run succeeded behind it, and ShowProgressDialog below would decline to
+        // open a second one because it could see the first. Which is exactly what happened after
+        // a certificate was trusted and the retry went through: eight messages arrived and the
+        // window on screen still said Failed.
+        CloseProgressDialog();
+
         _tasks = new SendReceiveTasks(accounts.Select(a => a.Connection.Address));
         _cancellation = new CancellationTokenSource();
         ShowProgressDialog();

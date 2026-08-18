@@ -27,6 +27,54 @@ public sealed class ServerProbe(Func<ISmtpSession>? session = null)
 {
     private readonly Func<ISmtpSession> _session = session ?? (() => new MailKitSmtpSession());
 
+    /// <summary>
+    /// Reaches the incoming server, so whatever it is going to object to is objected to now.
+    /// </summary>
+    /// <remarks>
+    /// Checking only the outgoing server was half a check. An account whose incoming host
+    /// presents a certificate for another name — which is what shared hosting looks like, and
+    /// which the outgoing host may well have already been trusted for under a different name —
+    /// was added cleanly and then failed on every send/receive afterwards, with the question that
+    /// would have settled it never asked. Reaching both means both are settled once, at setup,
+    /// where the reader is already answering questions about this account.
+    /// <para>
+    /// Connect only, and no credentials: this is about whether the server is there and whether
+    /// its certificate is acceptable, and a password is checked by the first real poll. Trying to
+    /// authenticate here would turn a mistyped password into a refusal to add the account at all.
+    /// </para>
+    /// </remarks>
+    public async Task<ProbeResult> CheckReceivingAsync(
+        ServerSettings server, MailProtocolKind protocol, CancellationToken cancellation = default)
+    {
+        ArgumentNullException.ThrowIfNull(server);
+
+        using var client = protocol == MailProtocolKind.Imap
+            ? (IDisposable)new MailKitImapSession()
+            : new MailKitPop3Session();
+
+        try
+        {
+            switch (client)
+            {
+                case MailKitImapSession imap: await imap.ConnectAsync(server, cancellation); break;
+                case MailKitPop3Session pop: await pop.ConnectAsync(server, cancellation); break;
+            }
+
+            return new ProbeResult(Reached: true, CanAuthenticate: true, string.Empty);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return new ProbeResult(
+                Reached: false,
+                CanAuthenticate: false,
+                $"{server.Host} could not be reached: {ex.Message}");
+        }
+    }
+
     public async Task<ProbeResult> CheckSendingAsync(
         ServerSettings server, CancellationToken cancellation = default)
     {
