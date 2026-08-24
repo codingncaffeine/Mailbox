@@ -180,10 +180,11 @@ public static class ImportFilesDialog
 
         var caption = new TextBlock
         {
-            Text = "Import files: a .pst brings its whole folder tree into the chosen account — " +
-                   "mail only, its calendar and contacts wait for their own importer — an mbox " +
-                   "or .eml lands in the account's Inbox, .ics appointments and tasks go to your " +
-                   "default calendar and task list, and .vcf cards to your address book.",
+            Text = "Import files: a .pst brings everything it holds — its mail tree into the " +
+                   "chosen account, its calendar, contacts, tasks, notes and journal into their " +
+                   "own modules. An mbox or .eml lands in the account's Inbox, .ics appointments " +
+                   "and tasks go to your default calendar and task list, and .vcf cards to your " +
+                   "address book.",
             TextWrapping = TextWrapping.Wrap,
             MaxWidth = 460,
         };
@@ -314,10 +315,11 @@ internal static class ImportFiles
                 {
                     case ".pst":
                         // The one importer here that brings a whole folder tree, not a file
-                        // into the Inbox — the account is the destination.
+                        // into the Inbox — the account is the destination for the mail, and
+                        // the PIM store for everything else the file carries.
                         lines.Add(mailAccount is null
                             ? $"{name}: add an account first."
-                            : $"{name}: {new PstImporter(mailAccount.Mail, mailAccount.Account.Id).Run(path).Summary}");
+                            : $"{name}: {new PstImporter(mailAccount.Mail, mailAccount.Account.Id, pim, queuePut).Run(path).Summary}");
                         break;
 
                     case ".ics":

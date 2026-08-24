@@ -299,9 +299,9 @@ public sealed class BackstageView : Border
         stack.Children.Add(BuildSection(
             "attach", "Import Files", hasDropdown: false,
             "Import files",
-            "One or more files: a .pst data file's whole mail tree, an mbox into a folder, " +
-            ".eml messages, .ics appointments and tasks, .vcf contacts — each routed by what " +
-            "it is. A .pst's calendar and contacts wait for their own importer.",
+            "One or more files: a whole .pst data file — mail, calendar, contacts, tasks, " +
+            "notes and journal — an mbox into a folder, .eml messages, .ics appointments and " +
+            "tasks, .vcf contacts, each routed by what it is.",
             action: "import.files"));
 
         stack.Children.Add(BuildSection(

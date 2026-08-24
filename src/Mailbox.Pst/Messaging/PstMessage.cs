@@ -43,6 +43,10 @@ public sealed class PstMessage
     /// <summary>Any property by id — the layer above decides what the rest mean.</summary>
     public PstProperty? Property(ushort id) => _properties.Find(id);
 
+    /// <summary>A named property, through this file's own map — null when the file never stored the name or the value.</summary>
+    public PstProperty? Named(PstNamedProperties names, Guid set, uint numericId) =>
+        names.IdOf(set, numericId) is { } id ? _properties.Find(id) : null;
+
     public IReadOnlyDictionary<ushort, PstProperty> Properties => _properties.Properties;
 
     public string MessageClass => _properties.Find(Pid.MessageClass)?.AsString() ?? string.Empty;
