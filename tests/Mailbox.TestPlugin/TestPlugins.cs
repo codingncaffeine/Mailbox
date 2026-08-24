@@ -72,6 +72,12 @@ public sealed class GoodPlugin : IPlugin, IDisposable
             message.Subject.Contains("plugin-bar")
                 ? new PluginInfoBar("The test plugin saw this message.")
                 : null);
+
+        // A column, so the host's column plumbing has something to draw: the subject shouted,
+        // which a test can predict from the row it staged.
+        host.Columns.Add(
+            new PluginColumn { Name = "shout", Label = "Shout", Width = 140 },
+            row => row.Subject.ToUpperInvariant());
     }
 
     public void Dispose()

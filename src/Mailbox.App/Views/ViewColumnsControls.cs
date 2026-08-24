@@ -265,8 +265,43 @@ public sealed class MessageCells : Grid
             case ViewFields.Mention:
                 return null;
             default:
+            {
+                // A plugin's column: the id names its owner, and the cell asks the host per row.
+                // Bound to the row itself so a recycled container re-asks for the row it now
+                // holds; an id whose plugin is disabled draws empty rather than breaking a view.
+                if (field.StartsWith("plugin.", StringComparison.Ordinal))
+                {
+                    var text = new TextBlock
+                    {
+                        TextTrimming = TextTrimming.CharacterEllipsis,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Margin = new Thickness(0, 0, 6, 0),
+                    };
+                    text.Classes.Add("small");
+                    text[!TextBlock.TextProperty] = new Binding(".") { Converter = new PluginColumnConverter(field) };
+                    text[!TextBlock.ForegroundProperty] = new Binding(nameof(MessageRow.InkToken)) { Converter = Theming.InkTokenConverter.Instance };
+                    return text;
+                }
+
                 return null;
+            }
         }
+    }
+
+    /// <summary>
+    /// Turns the row a cell is bound to into the plugin column's text — on the UI thread, per
+    /// visible row, which is why the provider's contract says answer from the row alone.
+    /// </summary>
+    private sealed class PluginColumnConverter(string field) : Avalonia.Data.Converters.IValueConverter
+    {
+        public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+            => value is MessageRow row
+                ? App.Plugins.ColumnValue(field, new Mailbox.Plugins.Api.PluginMessageSummary(
+                    row.Address, row.Id, row.FolderId, row.Subject, row.From, row.Received, !row.IsUnread))
+                : string.Empty;
+
+        public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+            => throw new NotSupportedException();
     }
 
     private static TextBlock Text(string path, string weightPath)

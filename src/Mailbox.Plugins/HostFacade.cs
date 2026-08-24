@@ -17,7 +17,7 @@ namespace Mailbox.Plugins;
 /// makes a greedy one visible.
 /// </summary>
 internal sealed class HostFacade : IPluginHost, IPluginSettings, IPluginCommands,
-    IPluginMail, IPluginPim, IPluginPipeline, IPluginReadingPane
+    IPluginMail, IPluginPim, IPluginPipeline, IPluginReadingPane, IPluginColumns
 {
     private readonly PluginHost _host;
     private readonly PluginHost.Entry _entry;
@@ -52,6 +52,8 @@ internal sealed class HostFacade : IPluginHost, IPluginSettings, IPluginCommands
     public IPluginPipeline Pipeline => this;
 
     public IPluginReadingPane ReadingPane => Demand(PluginPermission.Ui);
+
+    public IPluginColumns Columns => Demand(PluginPermission.Ui);
 
     /// <summary>
     /// The read permission opens a surface; each write inside it checks its own. Checked at the
@@ -339,5 +341,21 @@ internal sealed class HostFacade : IPluginHost, IPluginSettings, IPluginCommands
     {
         ArgumentNullException.ThrowIfNull(provider);
         _host.AddBarProvider(_entry, provider);
+    }
+
+    void IPluginColumns.Add(PluginColumn column, Func<PluginMessageSummary, string> value)
+    {
+        ArgumentNullException.ThrowIfNull(column);
+        ArgumentNullException.ThrowIfNull(value);
+
+        if (!PluginManifest.IsWellFormedId(column.Name))
+        {
+            throw new ArgumentException(
+                $"'{column.Name}' is not a valid column name; lowercase letters and digits only.");
+        }
+
+        _host.AddColumn(
+            _entry, $"plugin.{PluginId}.{column.Name}", column.Label,
+            Math.Clamp(column.Width, 24, 600), value);
     }
 }

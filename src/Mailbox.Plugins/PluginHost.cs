@@ -384,6 +384,7 @@ public sealed class PluginHost
         entry.Actions.Clear();
         entry.Tabs.Clear();
         entry.SimplifiedTabs.Clear();
+        entry.Columns.Clear();
         entry.ArrivalHooks = [];
         entry.SendingHooks = [];
         entry.BarProviders = [];
@@ -636,6 +637,78 @@ public sealed class PluginHost
         lock (_gate) entry.BarProviders = [.. entry.BarProviders, provider];
     }
 
+    internal void AddColumn(Entry entry, string id, string label, double width, Func<PluginMessageSummary, string> value)
+    {
+        lock (_gate) entry.Columns[id] = (label, width, value);
+        RaiseChanged();
+    }
+
+    /// <summary>The enabled plugins' columns, for Show Columns and the header strip.</summary>
+    public IReadOnlyList<(string Id, string Label, double Width)> Columns()
+    {
+        lock (_gate)
+        {
+            return [.. _plugins
+                .Where(p => p.State == PluginState.Enabled)
+                .SelectMany(p => p.Columns.Select(c => (c.Key, c.Value.Label, c.Value.Width)))];
+        }
+    }
+
+    /// <summary>The header's word for a plugin column, or null when no enabled plugin owns the id.</summary>
+    public string? ColumnLabel(string id)
+    {
+        lock (_gate)
+        {
+            foreach (var entry in _plugins)
+            {
+                if (entry.State == PluginState.Enabled && entry.Columns.TryGetValue(id, out var column))
+                {
+                    return column.Label;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// One cell's text. Empty for an id no enabled plugin owns — a saved view that names a
+    /// disabled plugin's column draws it blank rather than breaking — and empty again for a
+    /// provider that throws, which is charged to its plugin as every hook is.
+    /// </summary>
+    public string ColumnValue(string id, PluginMessageSummary row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+
+        Entry? owner = null;
+        Func<PluginMessageSummary, string>? value = null;
+
+        lock (_gate)
+        {
+            foreach (var entry in _plugins)
+            {
+                if (entry.State == PluginState.Enabled && entry.Columns.TryGetValue(id, out var column))
+                {
+                    owner = entry;
+                    value = column.Value;
+                    break;
+                }
+            }
+        }
+
+        if (owner is null || value is null) return string.Empty;
+
+        try
+        {
+            return value(row) ?? string.Empty;
+        }
+        catch (Exception ex)
+        {
+            Fail(owner, $"The {id} column", ex);
+            return string.Empty;
+        }
+    }
+
     /// <summary>
     /// Records a call whose permission the manifest does not declare. The call itself was
     /// refused; this is the part the Add-ins page shows, and the warning the Options row asks
@@ -767,6 +840,8 @@ public sealed class PluginHost
         public List<(MailboxModule Module, RibbonTab Tab)> Tabs { get; } = [];
 
         public Dictionary<string, SimplifiedBar> SimplifiedTabs { get; } = [];
+
+        public Dictionary<string, (string Label, double Width, Func<PluginMessageSummary, string> Value)> Columns { get; } = [];
 
         // Replaced whole on registration and cleared on teardown, so a reader iterating a
         // snapshot never sees a list change under it.

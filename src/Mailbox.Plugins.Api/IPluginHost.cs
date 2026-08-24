@@ -42,6 +42,9 @@ public interface IPluginHost
 
     /// <summary>Bars above a rendered message. Permission: <c>ui</c>.</summary>
     IPluginReadingPane ReadingPane { get; }
+
+    /// <summary>Columns on the message list's table views. Permission: <c>ui</c>.</summary>
+    IPluginColumns Columns { get; }
 }
 
 /// <summary>

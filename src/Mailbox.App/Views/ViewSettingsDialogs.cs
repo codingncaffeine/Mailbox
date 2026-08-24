@@ -359,7 +359,12 @@ public sealed class ShowColumnsDialog : Window
 
     private void Refresh(string? select = null)
     {
-        _available.ItemsSource = ViewFields.All.Where(f => !_shown.Contains(f)).ToList();
+        // The built-in fields in the reference's order, then the plugins' columns — ordinary
+        // offerings here, placed and widened like any field.
+        _available.ItemsSource = ViewFields.All
+            .Concat(App.Plugins.Columns().Select(c => c.Id))
+            .Where(f => !_shown.Contains(f))
+            .ToList();
         _chosen.ItemsSource = _shown.ToList();
         if (select is not null) _chosen.SelectedItem = select;
     }

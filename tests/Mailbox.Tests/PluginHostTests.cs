@@ -272,6 +272,31 @@ public class PluginHostTests : IDisposable
     }
 
     [Fact]
+    public void AColumnListsLabelsAndComputesPerRowAndDisablingBlanksIt()
+    {
+        Stage("good", "test.good", "GoodPlugin", Everything);
+
+        var host = Host();
+        host.Start();
+
+        var column = Assert.Single(host.Columns());
+        Assert.Equal("plugin.test.good.shout", column.Id);
+        Assert.Equal("Shout", column.Label);
+        Assert.Equal(140, column.Width);
+        Assert.Equal("Shout", host.ColumnLabel(column.Id));
+
+        var row = new Mailbox.Plugins.Api.PluginMessageSummary(
+            "a@example.net", 1, 1, "quiet words", "s@example.org", DateTimeOffset.UtcNow, true);
+        Assert.Equal("QUIET WORDS", host.ColumnValue(column.Id, row));
+
+        // Disabled means blank, never broken: a saved view naming the id keeps rendering.
+        host.Disable("test.good");
+        Assert.Empty(host.Columns());
+        Assert.Null(host.ColumnLabel(column.Id));
+        Assert.Equal(string.Empty, host.ColumnValue(column.Id, row));
+    }
+
+    [Fact]
     public void AModuleThatIsNotOneIsRefusedWithTheWordsNamed()
     {
         Stage("sideways", "test.sideways", "SidewaysPlugin", ["ui"]);

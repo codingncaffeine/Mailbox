@@ -96,6 +96,16 @@ public static class ViewFields
 
     public static bool IsDate(string id) => id is Received or Sent;
 
+    /// <summary>
+    /// Set by the application for fields it grows at runtime — plugin columns. The same shape
+    /// as <c>RibbonView.GestureLookup</c>: a hook rather than a reference, because this file
+    /// cannot know about the plugin host and the ids are strings either way.
+    /// </summary>
+    public static Func<string, string?>? ExtraLabel { get; set; }
+
+    /// <summary>The runtime fields' own widths, same hook and same reason.</summary>
+    public static Func<string, double?>? ExtraWidth { get; set; }
+
     /// <summary>What the header calls the column.</summary>
     public static string Label(string id) => id switch
     {
@@ -113,7 +123,7 @@ public static class ViewFields
         Categories => "Categories",
         Mention => "Mention",
         Folder => "In Folder",
-        _ => id,
+        _ => ExtraLabel?.Invoke(id) ?? id,
     };
 
     /// <summary>The header's glyph for a glyph column, or its label.</summary>
@@ -138,7 +148,7 @@ public static class ViewFields
         Categories => 90,
         Mention => 70,
         Folder => 110,
-        _ => 100,
+        _ => ExtraWidth?.Invoke(id) ?? 100,
     };
 
     /// <summary>The Arrange By arrangement a column sorts by, or null for one that does not sort.</summary>

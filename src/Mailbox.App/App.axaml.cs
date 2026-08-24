@@ -639,6 +639,12 @@ public partial class App : Application
         Signatures = new Signatures(Settings);
         UndoSend = new UndoSend(Settings);
 
+        // The list's field vocabulary learns the plugins' columns: the hooks are how a Core
+        // file that cannot know the host still labels and sizes an id a plugin owns.
+        Mailbox.Core.Views.ViewFields.ExtraLabel = id => Plugins.ColumnLabel(id);
+        Mailbox.Core.Views.ViewFields.ExtraWidth = id =>
+            Plugins.Columns().FirstOrDefault(c => c.Id == id) is { Id.Length: > 0 } column ? column.Width : null;
+
         // Last in the composition, so everything a plugin's Initialize reaches for is already
         // standing. The window subscribes to Changed for its ribbon; nothing here needs to.
         Plugins.Start();

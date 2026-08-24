@@ -79,6 +79,38 @@ public sealed record PluginRibbonGroup
 }
 
 /// <summary>
+/// Columns a plugin adds to the message list's table views. Permission: <c>ui</c>.
+/// </summary>
+/// <remarks>
+/// A plugin column is an ordinary column: it appears in Show Columns beside the built-in
+/// fields, is placed and widened the same way, and survives in saved views by its id —
+/// <c>plugin.&lt;pluginId&gt;.&lt;name&gt;</c>. A view that names a column whose plugin is
+/// disabled draws it empty rather than breaking the view.
+/// </remarks>
+public interface IPluginColumns
+{
+    /// <summary>
+    /// Registers a column. The value provider is called on the UI thread for each visible row
+    /// as the list draws — answer from the row it is handed, never from the network or a store
+    /// walk, or scrolling stutters by exactly the time taken.
+    /// </summary>
+    void Add(PluginColumn column, Func<PluginMessageSummary, string> value);
+}
+
+/// <summary>One column a plugin registers.</summary>
+public sealed record PluginColumn
+{
+    /// <summary>The id's last part, same rules as a command name. Stable once shipped — saved views persist it.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>What the header calls the column.</summary>
+    public required string Label { get; init; }
+
+    /// <summary>The width the column has until Format Columns says otherwise.</summary>
+    public double Width { get; init; } = 110;
+}
+
+/// <summary>
 /// Bars above a rendered message. Permission: <c>ui</c>.
 /// </summary>
 public interface IPluginReadingPane
