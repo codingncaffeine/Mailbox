@@ -182,9 +182,9 @@ public static class ImportFilesDialog
         {
             Text = "Import files: a .pst brings everything it holds — its mail tree into the " +
                    "chosen account, its calendar, contacts, tasks, notes and journal into their " +
-                   "own modules. An mbox or .eml lands in the account's Inbox, .ics appointments " +
-                   "and tasks go to your default calendar and task list, and .vcf cards to your " +
-                   "address book.",
+                   "own modules — and a saved .msg goes wherever its kind belongs. An mbox or " +
+                   ".eml lands in the account's Inbox, .ics appointments and tasks go to your " +
+                   "default calendar and task list, and .vcf cards to your address book.",
             TextWrapping = TextWrapping.Wrap,
             MaxWidth = 460,
         };
@@ -223,7 +223,7 @@ public static class ImportFilesDialog
                 AllowMultiple = true,
                 FileTypeFilter =
                 [
-                    new FilePickerFileType("Everything importable") { Patterns = ["*.pst", "*.mbox", "*.eml", "*.ics", "*.vcf", "*"] },
+                    new FilePickerFileType("Everything importable") { Patterns = ["*.pst", "*.msg", "*.mbox", "*.eml", "*.ics", "*.vcf", "*"] },
                 ],
             });
 
@@ -320,6 +320,10 @@ internal static class ImportFiles
                         lines.Add(mailAccount is null
                             ? $"{name}: add an account first."
                             : $"{name}: {new PstImporter(mailAccount.Mail, mailAccount.Account.Id, pim, queuePut).Run(path).Summary}");
+                        break;
+
+                    case ".msg":
+                        lines.Add($"{name}: {MsgImport.Run(path, mailAccount?.Mail, mailAccount?.Account.Id ?? 0, pim, queuePut)}");
                         break;
 
                     case ".ics":

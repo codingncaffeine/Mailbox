@@ -13,7 +13,7 @@ namespace Mailbox.Import;
 /// </summary>
 internal static class PstMime
 {
-    public static MimeMessage Assemble(PstMessage source, string? syntheticMessageId = null)
+    public static MimeMessage Assemble(IStoredMessage source, string? syntheticMessageId = null)
     {
         var message = new MimeMessage();
         message.Headers.Remove(HeaderId.Date);

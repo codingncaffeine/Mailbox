@@ -42,7 +42,7 @@ public sealed class PstNamedProperties
     private readonly Dictionary<(Guid, string), ushort> _byString = [];
 
     /// <summary>An empty map — what a file with no name node gets, every lookup answering null.</summary>
-    public static PstNamedProperties Empty { get; } = new([], [], []);
+    public static PstNamedProperties Empty { get; } = new((byte[])[], [], []);
 
     public int Count => _byId.Count;
 
@@ -56,6 +56,53 @@ public sealed class PstNamedProperties
             properties.Find(0x0003)?.Raw ?? [],
             properties.Find(0x0002)?.Raw ?? [],
             properties.Find(0x0004)?.Raw ?? []);
+    }
+
+    private void Add(ushort propertyId, PstPropertyName name)
+    {
+        _byId[propertyId] = name;
+        if (name.StringName is { } text) _byString[(name.Set, text)] = propertyId;
+        else if (name.NumericId is { } number) _byNumber[(name.Set, number)] = propertyId;
+    }
+
+    /// <summary>
+    /// The .msg shape of the same three streams ([MS-OXMSG] §2.2.3.1): the entry's second word
+    /// is an explicit index, and the kind bit rides the top of the GUID word rather than its
+    /// bottom — everything else, GUID stream included, means what it means in a PST.
+    /// </summary>
+    internal static PstNamedProperties FromMsgStreams(byte[] entryStream, byte[] guidStream, byte[] stringStream)
+    {
+        var map = new PstNamedProperties((byte[])[], [], []);
+        for (var at = 0; at + 8 <= entryStream.Length; at += 8)
+        {
+            var nameValue = BinaryPrimitives.ReadUInt32LittleEndian(entryStream.AsSpan(at));
+            var propertyId = (ushort)(0x8000 + BinaryPrimitives.ReadUInt16LittleEndian(entryStream.AsSpan(at + 4)));
+            var guidAndKind = BinaryPrimitives.ReadUInt16LittleEndian(entryStream.AsSpan(at + 6));
+            var guidIndex = guidAndKind & 0x7FFF;
+            var isString = (guidAndKind & 0x8000) != 0;
+
+            Guid set;
+            if (guidIndex == 1) set = PstPropertySets.Mapi;
+            else if (guidIndex == 2) set = PstPropertySets.PublicStrings;
+            else if (guidIndex >= 3 && (guidIndex - 3) * 16 + 16 <= guidStream.Length)
+                set = new Guid(guidStream.AsSpan((guidIndex - 3) * 16, 16));
+            else if (guidIndex == 0) set = Guid.Empty;
+            else continue;
+
+            if (!isString)
+            {
+                map.Add(propertyId, new PstPropertyName(set, nameValue, null));
+                continue;
+            }
+
+            if (nameValue + 4 > stringStream.Length) continue;
+            var length = BinaryPrimitives.ReadUInt32LittleEndian(stringStream.AsSpan((int)nameValue));
+            if (nameValue + 4 + length > (ulong)stringStream.Length) continue;
+            map.Add(propertyId, new PstPropertyName(set, null,
+                Encoding.Unicode.GetString(stringStream.AsSpan((int)(nameValue + 4), (int)length))));
+        }
+
+        return map;
     }
 
     internal PstNamedProperties(byte[] entryStream, byte[] guidStream, byte[] stringStream)
@@ -83,8 +130,7 @@ public sealed class PstNamedProperties
 
             if ((kindAndGuid & 1) == 0)
             {
-                _byId[propertyId] = new PstPropertyName(set, nameValue, null);
-                _byNumber[(set, nameValue)] = propertyId;
+                Add(propertyId, new PstPropertyName(set, nameValue, null));
                 continue;
             }
 
@@ -94,9 +140,8 @@ public sealed class PstNamedProperties
             var length = BinaryPrimitives.ReadUInt32LittleEndian(stringStream.AsSpan((int)nameValue));
             if (nameValue + 4 + length > (ulong)stringStream.Length) continue;
 
-            var name = Encoding.Unicode.GetString(stringStream.AsSpan((int)(nameValue + 4), (int)length));
-            _byId[propertyId] = new PstPropertyName(set, null, name);
-            _byString[(set, name)] = propertyId;
+            Add(propertyId, new PstPropertyName(set, null,
+                Encoding.Unicode.GetString(stringStream.AsSpan((int)(nameValue + 4), (int)length))));
         }
     }
 

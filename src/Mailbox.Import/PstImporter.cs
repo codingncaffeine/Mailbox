@@ -230,7 +230,7 @@ public sealed class PstImporter(MailRepository mail, long accountId, PimReposito
 
         public PimImportReport Report() => new(_events, _tasks, _journal, _contacts, _already, _notes);
 
-        public void Add(ItemKind kind, PstMessage message, PstNamedProperties names, string uid, string? folderName)
+        public void Add(ItemKind kind, IStoredMessage message, PstNamedProperties names, string uid, string? folderName)
         {
             if (pim is null) return;
             try
@@ -260,7 +260,7 @@ public sealed class PstImporter(MailRepository mail, long accountId, PimReposito
             }
         }
 
-        private void AddEvents(PstMessage message, PstNamedProperties names, string uid, string? folderName)
+        private void AddEvents(IStoredMessage message, PstNamedProperties names, string uid, string? folderName)
         {
             if (PstPim.ToEvents(message, names, uid, _notes) is not { } events)
             {
@@ -287,7 +287,7 @@ public sealed class PstImporter(MailRepository mail, long accountId, PimReposito
             }
         }
 
-        private void AddTask(PstMessage message, PstNamedProperties names, string uid, string? folderName)
+        private void AddTask(IStoredMessage message, PstNamedProperties names, string uid, string? folderName)
         {
             var collection = Collection(CollectionKind.Tasks, folderName, "Tasks");
             if (pim!.ItemsByUid(collection, uid).Count > 0)
@@ -301,7 +301,7 @@ public sealed class PstImporter(MailRepository mail, long accountId, PimReposito
             _tasks++;
         }
 
-        private void AddContact(PstMessage message, PstNamedProperties names, string uid, string? folderName)
+        private void AddContact(IStoredMessage message, PstNamedProperties names, string uid, string? folderName)
         {
             _book ??= new ContactBook(pim!);
             var collection = Collection(CollectionKind.Contacts, folderName, "Contacts");

@@ -97,10 +97,6 @@ internal static class BackstageActions
                 if (await ImportFilesDialog.RunAsync(host.Owner)) host.Refresh();
                 break;
 
-            case "import.waiting":
-                host.Report(".msg is a spec-built reader of its own and arrives with the rest of the PST block.");
-                break;
-
             case "update.check":
                 host.Report("Checking for updates…");
                 host.Report(await UpdateCheck.CheckAsync());

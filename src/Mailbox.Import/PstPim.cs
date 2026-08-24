@@ -26,10 +26,10 @@ internal static class PstPim
             ? utc.UtcDateTime.Date.AddDays(1)
             : utc.UtcDateTime.Date);
 
-    private static string Text(PstMessage m, PstNamedProperties names, Guid set, uint lid) =>
+    private static string Text(IStoredMessage m, PstNamedProperties names, Guid set, uint lid) =>
         m.Named(names, set, lid)?.AsString() ?? string.Empty;
 
-    private static IReadOnlyList<string> Categories(PstMessage m, PstNamedProperties names)
+    private static IReadOnlyList<string> Categories(IStoredMessage m, PstNamedProperties names)
     {
         if (names.IdOf(PstPropertySets.PublicStrings, "Keywords") is not { } id) return [];
         if (m.Property(id) is not { IsMultiValued: true } keywords) return [];
@@ -42,7 +42,7 @@ internal static class PstPim
     /// An appointment as one or more events: the master, and an override for each occurrence
     /// its recurrence blob moved. Null when the item has no times to stand on.
     /// </summary>
-    public static IReadOnlyList<CalendarEvent>? ToEvents(PstMessage m, PstNamedProperties names, string uid, List<string> notes)
+    public static IReadOnlyList<CalendarEvent>? ToEvents(IStoredMessage m, PstNamedProperties names, string uid, List<string> notes)
     {
         var start = m.Named(names, PstPropertySets.Appointment, 0x820D)?.AsTime();
         var end = m.Named(names, PstPropertySets.Appointment, 0x820E)?.AsTime();
@@ -131,7 +131,7 @@ internal static class PstPim
 
     // ---- Tasks ---------------------------------------------------------------------------
 
-    public static TaskItem ToTask(PstMessage m, PstNamedProperties names, string uid, List<string> notes)
+    public static TaskItem ToTask(IStoredMessage m, PstNamedProperties names, string uid, List<string> notes)
     {
         var status = m.Named(names, PstPropertySets.Task, 0x8101)?.AsInteger32() ?? 0;
         var percent = m.Named(names, PstPropertySets.Task, 0x8102)?.Raw is { Length: 8 } raw
@@ -173,7 +173,7 @@ internal static class PstPim
 
     // ---- Contacts ------------------------------------------------------------------------
 
-    public static Contact ToContact(PstMessage m, PstNamedProperties names, string uid)
+    public static Contact ToContact(IStoredMessage m, PstNamedProperties names, string uid)
     {
         if (m.MessageClass.StartsWith("IPM.DistList", StringComparison.OrdinalIgnoreCase))
             return ToGroup(m, names, uid);
@@ -254,7 +254,7 @@ internal static class PstPim
     private static ReadOnlySpan<byte> OneOffProviderUid =>
         [0x81, 0x2B, 0x1F, 0xA4, 0xBE, 0xA3, 0x10, 0x19, 0x9D, 0x6E, 0x00, 0xDD, 0x01, 0x0F, 0x54, 0x02];
 
-    private static Contact ToGroup(PstMessage m, PstNamedProperties names, string uid)
+    private static Contact ToGroup(IStoredMessage m, PstNamedProperties names, string uid)
     {
         var members = new List<GroupMember>();
         if (m.Named(names, PstPropertySets.Address, 0x8055) is { IsMultiValued: true } list)
@@ -308,7 +308,7 @@ internal static class PstPim
 
     private static readonly string[] NoteColours = ["Blue Category", "Green Category", "Pink Category", "Yellow Category", "White Category"];
 
-    public static JournalEntry ToNote(PstMessage m, PstNamedProperties names, string uid)
+    public static JournalEntry ToNote(IStoredMessage m, PstNamedProperties names, string uid)
     {
         var colour = m.Named(names, PstPropertySets.Note, 0x8B00)?.AsInteger32();
         var categories = Categories(m, names);
@@ -321,7 +321,7 @@ internal static class PstPim
         };
     }
 
-    public static JournalEntry ToJournal(PstMessage m, PstNamedProperties names, string uid)
+    public static JournalEntry ToJournal(IStoredMessage m, PstNamedProperties names, string uid)
     {
         var type = Text(m, names, PstPropertySets.Log, 0x8700);
         var minutes = m.Named(names, PstPropertySets.Log, 0x8707)?.AsInteger32();

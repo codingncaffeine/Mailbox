@@ -300,17 +300,9 @@ public sealed class BackstageView : Border
             "attach", "Import Files", hasDropdown: false,
             "Import files",
             "One or more files: a whole .pst data file — mail, calendar, contacts, tasks, " +
-            "notes and journal — an mbox into a folder, .eml messages, .ics appointments and " +
-            "tasks, .vcf contacts, each routed by what it is.",
+            "notes and journal — a saved .msg routed by what it is, an mbox into a folder, " +
+            ".eml messages, .ics appointments and tasks, .vcf contacts.",
             action: "import.files"));
-
-        stack.Children.Add(BuildSection(
-            "archive", "Still to Come", hasDropdown: false,
-            "The .msg format",
-            "A single saved message as Windows mail programs write one is a spec-built binary " +
-            "reader of its own, and a parser that cannot be verified against real fixtures is " +
-            "not shipped here. Pressing this says so rather than doing nothing.",
-            action: "import.waiting"));
 
         return stack;
     }

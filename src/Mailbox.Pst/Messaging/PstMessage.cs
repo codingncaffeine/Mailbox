@@ -25,8 +25,10 @@ public sealed record PstRecipient(int Type, string Name, string Address, string 
 /// stored that way so "RE:" sorts with its conversation, and stripped here so no reader ever
 /// sees the control characters.
 /// </remarks>
-public sealed class PstMessage
+public sealed class PstMessage : IStoredMessage
 {
+    IEnumerable<IStoredAttachment> IStoredMessage.Attachments() => Attachments();
+
     private readonly PstNode _node;
     private readonly PropertyContext _properties;
 
@@ -142,8 +144,10 @@ public sealed class PstMessage
 /// An attachment ([MS-PST] §2.4.6): a property context living as a subnode of its message, with
 /// the payload behind one more indirection.
 /// </summary>
-public sealed class PstAttachment
+public sealed class PstAttachment : IStoredAttachment
 {
+    IStoredMessage? IStoredAttachment.EmbeddedMessage => EmbeddedMessage;
+
     private readonly PstNode _node;
     private readonly PropertyContext _properties;
 
