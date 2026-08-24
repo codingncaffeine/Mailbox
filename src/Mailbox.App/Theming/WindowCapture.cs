@@ -129,6 +129,41 @@ public static class WindowCapture
     }
 
     /// <summary>
+    /// Keeps the capture from shooting and exiting while a pose's work is still running.
+    /// </summary>
+    /// <remarks>
+    /// The settle delay is for layout, and it is 900ms because layout is; a pose that computes —
+    /// key generation is seconds of RSA — is not layout, and without this the run photographs
+    /// whatever the window held when the timer went off and then exits under the work. Taken on
+    /// the dispatcher thread in the same pass the pose starts, so the timer cannot beat it.
+    /// </remarks>
+    public static IDisposable Hold()
+    {
+        Interlocked.Increment(ref _holds);
+        return new Released();
+    }
+
+    private static int _holds;
+
+    private static bool Held => Volatile.Read(ref _holds) > 0;
+
+    /// <summary>Waits out any holds, checking gently — a pose's work is not a spin target.</summary>
+    internal static async Task WhileHeldAsync()
+    {
+        while (Held) await Task.Delay(100);
+    }
+
+    private sealed class Released : IDisposable
+    {
+        private int _done;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _done, 1) == 0) Interlocked.Decrement(ref _holds);
+        }
+    }
+
+    /// <summary>
     /// Captures once the window has settled, then shuts the application down. Wired only when
     /// <see cref="IsRequested"/>, so it never affects an interactive run.
     /// </summary>
@@ -143,6 +178,7 @@ public static class WindowCapture
             try
             {
                 await Task.Delay(SettleDelay);
+                await WhileHeldAsync();
 
                 // A harness pose that opens another window photographs that one instead, and
                 // says so before this timer is up. Two captures racing to one path and one exit

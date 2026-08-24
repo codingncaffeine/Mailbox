@@ -654,12 +654,41 @@ public sealed class OptionsWindow : Window
 
         Fill();
 
+        // Making a key here is the door for the reader who has none anywhere — Import assumes
+        // one already exists. The dialog runs the generation off the UI thread and the list is
+        // refilled from the ring afterwards, which is the read-back rather than the claim.
+        var make = DialogButton("New…", isDefault: false);
+        make.Width = 120;
+        make.Click += async (_, _) =>
+        {
+            try
+            {
+                using var ring = CryptoStores.KeyRing();
+                var account = App.Accounts.All.FirstOrDefault();
+                var madeKey = await NewKeyDialog.MakeAsync(
+                    this, ring, CryptoStores.Passphrases,
+                    account?.Account.DisplayName ?? string.Empty,
+                    account?.Account.Address ?? string.Empty);
+
+                if (madeKey is not null)
+                {
+                    status.IsVisible = true;
+                    status.Text = $"Made {madeKey.ShortId} for {madeKey.Owner}.";
+                    Fill();
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("The new-key dialog failed.", ex);
+            }
+        };
+
         var buttons = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             Spacing = 8,
             Margin = new Thickness(0, 6, 0, 0),
-            Children = { import },
+            Children = { make, import },
         };
 
         if (!Mailbox.Security.OpenPgp.GnuPgImport.IsAvailable)

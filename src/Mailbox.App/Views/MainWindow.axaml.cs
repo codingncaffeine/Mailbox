@@ -654,6 +654,7 @@ public partial class MainWindow : Window
         _ = Dispatcher.UIThread.InvokeAsync(async () =>
         {
             await Task.Delay(700);
+            await WindowCapture.WhileHeldAsync();
 
             var dialog = (Application.Current?.ApplicationLifetime
                     as IClassicDesktopStyleApplicationLifetime)
@@ -880,6 +881,68 @@ public partial class MainWindow : Window
                     {
                         // A pose that throws leaves no window, no error and no capture. Say so.
                         Log.Warn("Harness: the passphrase pose failed.", ex);
+                    }
+                };
+                break;
+
+            // The new-key dialog. Alone the picture is the point; with MAILBOX_KEYGEN posed as
+            // well — name:A. Person,address:a.person@example.com,pass:secret — the dialog's own
+            // Make is pressed and the ring is read back, which is the claim: a key exists that
+            // did not, and the inventory lists it as ours. A capture run's ring is a throwaway
+            // unless MAILBOX_STORE poses one (CryptoStores.Throwaway), so the machine's own is
+            // never grown by a photograph.
+            case "newkey":
+                Opened += async (_, _) =>
+                {
+                    try
+                    {
+                        using var keys = CryptoStores.KeyRing();
+                        var whose = (DataContext as ShellViewModel)?.CurrentAddress ?? "work@example.net";
+
+                        if (Environment.GetEnvironmentVariable("MAILBOX_KEYGEN") is { Length: > 0 } spec)
+                        {
+                            // The log lines are the claim here, not the picture: the dialog
+                            // closes itself on success, so the shell is what gets photographed —
+                            // held open until the generation has finished and been read back.
+                            using var busy = WindowCapture.Hold();
+
+                            string name = "A. Person", address = whose, pass = string.Empty;
+                            foreach (var part in spec.Split(',', StringSplitOptions.RemoveEmptyEntries))
+                            {
+                                var split = part.IndexOf(':');
+                                if (split < 1) continue;
+                                var value = part[(split + 1)..];
+                                switch (part[..split].Trim().ToLowerInvariant())
+                                {
+                                    case "name": name = value; break;
+                                    case "address": address = value; break;
+                                    case "pass": pass = value; break;
+                                }
+                            }
+
+                            var madeKey = await NewKeyDialog.HarnessAsync(
+                                this, keys, CryptoStores.Passphrases, name, address, pass);
+
+                            Log.Info(madeKey is null
+                                ? "Harness: keygen — nothing was made."
+                                : $"Harness: keygen — made {madeKey.ShortId} for “{madeKey.Owner}”, "
+                                  + $"{madeKey.Algorithm} {madeKey.Bits}, secret half "
+                                  + $"{(madeKey.HasSecret ? "held" : "missing")}, "
+                                  + $"{(madeKey.IsUsable(DateTimeOffset.Now) ? "usable" : "not usable")}.");
+                            Log.Info($"Harness: keygen — the ring holds "
+                                     + $"{Mailbox.Security.OpenPgp.KeyInventory.Read(keys).Count} key(s).");
+                        }
+                        else
+                        {
+                            CaptureNextWindow();
+                            await NewKeyDialog.MakeAsync(
+                                this, keys, CryptoStores.Passphrases, "A. Person", whose);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        // A pose that throws leaves no window, no error and no capture. Say so.
+                        Log.Warn("Harness: the new-key pose failed.", ex);
                     }
                 };
                 break;
