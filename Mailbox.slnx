@@ -14,6 +14,8 @@
     <Project Path="src/Mailbox.Editor/Mailbox.Editor.csproj" />
     <Project Path="src/Mailbox.Google/Mailbox.Google.csproj" />
     <Project Path="src/Mailbox.Junk/Mailbox.Junk.csproj" />
+    <Project Path="src/Mailbox.Plugins.Api/Mailbox.Plugins.Api.csproj" />
+    <Project Path="src/Mailbox.Plugins/Mailbox.Plugins.csproj" />
     <Project Path="src/Mailbox.Protocols/Mailbox.Protocols.csproj" />
     <Project Path="src/Mailbox.Rendering/Mailbox.Rendering.csproj" />
     <Project Path="src/Mailbox.Scheduling/Mailbox.Scheduling.csproj" />
@@ -22,6 +24,7 @@
     <Project Path="src/Mailbox.Theming/Mailbox.Theming.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Mailbox.TestPlugin/Mailbox.TestPlugin.csproj" />
     <Project Path="tests/Mailbox.Tests/Mailbox.Tests.csproj" />
   </Folder>
 </Solution>
