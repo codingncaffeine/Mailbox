@@ -7,6 +7,10 @@
   -->
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Mailbox.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />
   </ItemGroup>
 
@@ -15,6 +19,8 @@
          beside a self-contained runtime, and it means adding an icon later costs nothing. -->
     <AvaloniaResource Include="..\..\assets\fonts\FluentSystemIcons-Regular.ttf"
                       Link="Assets/Fonts/FluentSystemIcons-Regular.ttf" />
+    <AvaloniaResource Include="..\..\assets\fonts\FluentSystemIcons-Filled.ttf"
+                      Link="Assets/Fonts/FluentSystemIcons-Filled.ttf" />
 
     <!-- Selawik (OFL-1.1), a metric-compatible Segoe UI substitute. Bundled
          because no distro reliably packages it. Ships five weights — Light, Semilight,

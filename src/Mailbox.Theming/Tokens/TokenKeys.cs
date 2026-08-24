@@ -725,6 +725,12 @@ public static class TokenKeys
         ];
     }
 
+    /// <summary>The icon set the theme draws with — §8's "optional icon set reference" as a token.</summary>
+    public static class Icons
+    {
+        public const string Set = "icons.set";
+    }
+
     public static class Typography
     {
         public const string UiFamily = "type.ui.family";

@@ -1,0 +1,41 @@
+# The whole suite, and Phase 10's pixel gate (§8): the four built-in themes stay
+# pixel-identical to their reference captures. The runner image is pinned because the
+# references are rasterised by this environment's own font stack; a runner bump that shifts
+# antialiasing is a real change and regenerating the references (download the fidelity
+# artifact from a green run, commit as tests/fidelity/*.png) is the deliberate answer to it.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Test
+        run: dotnet test tests/Mailbox.Tests/Mailbox.Tests.csproj
+
+  fidelity:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Install a display and ImageMagick
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb imagemagick
+      - name: Pixel gate
+        run: xvfb-run -a tools/fidelity-gate.sh
+      - name: Upload captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fidelity
+          path: artifacts/fidelity/
+          if-no-files-found: error

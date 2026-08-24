@@ -428,7 +428,10 @@ public sealed class OptionsWindow : Window
     {
         if (renderer.Slots.TryGetValue("theme", out var theme))
         {
-            theme.Content = LabelledLive("Mailbox Theme:", ThemeCombo());
+            var customize = new Button { Content = "Customize…", VerticalAlignment = VerticalAlignment.Center };
+            customize.Click += async (_, _) => await new ThemeEditorWindow(_themes).ShowDialog(this);
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { ThemeCombo(), customize } };
+            theme.Content = LabelledLive("Mailbox Theme:", row);
         }
 
         if (renderer.Slots.TryGetValue("density", out var density))

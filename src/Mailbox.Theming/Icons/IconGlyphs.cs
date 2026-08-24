@@ -3,6 +3,8 @@
 //   Regenerate with tools/generate-icons.py rather than editing by hand.
 // </auto-generated>
 
+#nullable enable
+
 namespace Mailbox.Theming.Icons;
 
 /// <summary>
@@ -10,7 +12,8 @@ namespace Mailbox.Theming.Icons;
 /// </summary>
 /// <remarks>
 /// Commands reference icons by logical name, never by codepoint, so a theme can swap the whole
-/// icon set without touching a single command definition.
+/// icon set without touching a single command definition — which is exactly what the
+/// <c>icons.set</c> token does, routing every lookup through <see cref="IconSets.Active"/>.
 /// <para>
 /// Fluent ships separately drawn artwork per size rather than one outline scaled up — a 16px
 /// glyph carries less detail than its 24px sibling by design. Asking for the size you will
@@ -19,13 +22,13 @@ namespace Mailbox.Theming.Icons;
 /// </remarks>
 public static class IconGlyphs
 {
-    /// <summary>Sizes the bundled font provides artwork for.</summary>
+    /// <summary>Sizes the bundled fonts provide artwork for.</summary>
     public static readonly int[] Sizes = [16, 20, 24, 32];
 
     // Values are strings rather than chars: Fluent places some glyphs in supplementary
     // private-use planes above U+FFFF, which do not fit in a 16-bit char and need a
     // surrogate pair.
-    private static readonly Dictionary<string, Dictionary<int, string>> Map =
+    private static readonly Dictionary<string, Dictionary<int, string>> Regular =
         new(StringComparer.OrdinalIgnoreCase)
     {
         ["3d-models"] = new() { [16] = "\uF334", [20] = "\uF335", [24] = "\uF336", [32] = "\uEECA" },
@@ -226,22 +229,240 @@ public static class IconGlyphs
         ["zoom-out"] = new() { [16] = "\uEBCF", [20] = "\uEBD0", [24] = "\uEBD1" },
     };
 
-    public static IReadOnlyCollection<string> Names => Map.Keys;
+    // The filled variants, for themes that ask for them. Only the names and sizes the filled
+    // font actually draws are listed; a lookup that finds nothing here falls back to Regular,
+    // so choosing the filled set can never lose an icon.
+    private static readonly Dictionary<string, Dictionary<int, string>> Filled =
+        new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["3d-models"] = new() { [16] = "\uF334", [20] = "\uF335", [24] = "\uF336", [32] = "\uEECA" },
+        ["accept"] = new() { [16] = "\uF21B", [20] = "\uF21C", [24] = "\uF8E1", [32] = "\U000F0B18" },
+        ["accessibility"] = new() { [20] = "\uE003", [24] = "\uE004", [32] = "\uF00B" },
+        ["add"] = new() { [16] = "\uF108", [20] = "\uF109", [24] = "\uF10A", [32] = "\uF5A2" },
+        ["address-book"] = new() { [16] = "\U000F0A2A", [20] = "\uE17E", [24] = "\uE17F", [32] = "\uE181" },
+        ["align"] = new() { [16] = "\uECC1", [20] = "\uF7B7", [24] = "\uF7B8" },
+        ["apps"] = new() { [16] = "\uE6D0", [20] = "\uF466", [24] = "\uF467" },
+        ["archive"] = new() { [16] = "\uF8E4", [20] = "\uF139", [24] = "\uF13A", [32] = "\uE066" },
+        ["arrange"] = new() { [16] = "\uF1AB", [20] = "\uF18A", [24] = "\uF18B" },
+        ["assign-task"] = new() { [16] = "\uF5D0", [20] = "\uF5D1", [24] = "\uF5D2" },
+        ["attach"] = new() { [16] = "\uF1A8", [20] = "\uF1A9", [24] = "\uF1AA", [32] = "\U000F043A" },
+        ["avatar"] = new() { [16] = "\U000F0BD3", [20] = "\uE93A", [24] = "\uE93B", [32] = "\uF042" },
+        ["bcc"] = new() { [20] = "\uF51B", [24] = "\uF51C", [32] = "\U000F0655" },
+        ["bold"] = new() { [16] = "\uECD0", [20] = "\uF7BC", [24] = "\uF7BD" },
+        ["bullets"] = new() { [16] = "\U000F02A2", [20] = "\U000F02A3", [24] = "\U000F02A4" },
+        ["business-card"] = new() { [16] = "\uE418", [20] = "\uE419", [24] = "\uF321" },
+        ["calendar"] = new() { [16] = "\uE261", [20] = "\uE262", [24] = "\uE263", [32] = "\uE265" },
+        ["calendar-color"] = new() { [16] = "\uE3D1", [20] = "\uF2F5", [24] = "\uF2F6", [32] = "\U000F0D30" },
+        ["calendar-groups"] = new() { [16] = "\uF204", [20] = "\uF22D", [24] = "\uF22E", [32] = "\uE26B" },
+        ["calendar-settings"] = new() { [16] = "\uE27D", [20] = "\uF235", [24] = "\uEF4B", [32] = "\uEF4D" },
+        ["calendar-sync"] = new() { [16] = "\uF238", [20] = "\uF239", [24] = "\uF23A" },
+        ["cancel"] = new() { [16] = "\uF36C", [20] = "\uF36D", [24] = "\uF36E", [32] = "\uE4CF" },
+        ["cancel-meeting"] = new() { [16] = "\uE254", [20] = "\uF219", [24] = "\uF21A" },
+        ["categorize"] = new() { [16] = "\uEC6A", [20] = "\uF794", [24] = "\uF795", [32] = "\uEC6C" },
+        ["change-styles"] = new() { [16] = "\U000F03B6", [20] = "\uF7F1", [24] = "\uF7F2", [32] = "\U000F0B24" },
+        ["change-view"] = new() { [16] = "\U000F02B7", [20] = "\uF18D", [24] = "\uF18E" },
+        ["chart"] = new() { [16] = "\U000F064D", [20] = "\uE2F1", [24] = "\uE2F2", [32] = "\U000F0893" },
+        ["check-names"] = new() { [16] = "\uF5D3", [20] = "\uE936", [24] = "\uF5D4" },
+        ["chevron-down"] = new() { [16] = "\uF2A2", [20] = "\uF2A3", [24] = "\uF2A4", [32] = "\U000F0333" },
+        ["chevron-left"] = new() { [16] = "\uF2A9", [20] = "\uF2AA", [24] = "\uF2AB", [32] = "\U000F0334" },
+        ["chevron-right"] = new() { [16] = "\uF2AF", [20] = "\uF2B0", [24] = "\uF2B1", [32] = "\U000F0335" },
+        ["chevron-up"] = new() { [16] = "\uF2B5", [20] = "\uF2B6", [24] = "\uF2B7", [32] = "\U000F0336" },
+        ["cleanup"] = new() { [16] = "\uF1FE", [20] = "\uF201", [24] = "\uF202", [32] = "\U000F043C" },
+        ["clear-formatting"] = new() { [16] = "\uECF1", [20] = "\uF7D4", [24] = "\uF7D5", [32] = "\U000F0C50" },
+        ["collapse-left"] = new() { [16] = "\uF2A9", [20] = "\uF2AA", [24] = "\uF2AB", [32] = "\U000F0334" },
+        ["contact-card"] = new() { [16] = "\uF362", [20] = "\uF31F", [24] = "\uF320", [32] = "\uE416" },
+        ["contact-group"] = new() { [16] = "\uF5C1", [20] = "\uF5C2", [24] = "\uF5C3", [32] = "\uE922" },
+        ["copy"] = new() { [16] = "\uF32A", [20] = "\uF32B", [24] = "\uF32C", [32] = "\U000F000A" },
+        ["cut"] = new() { [16] = "\U000F039F", [20] = "\uF33A", [24] = "\uF33B", [32] = "\U000F0A35" },
+        ["daily-task-list"] = new() { [16] = "\uEFAD", [20] = "\uEC97", [24] = "\uEC98" },
+        ["day-view"] = new() { [16] = "\uE258", [20] = "\uF222", [24] = "\uF223", [32] = "\U000F0A52" },
+        ["decline"] = new() { [20] = "\uE387", [24] = "\uE388" },
+        ["delay-delivery"] = new() { [16] = "\uE384", [20] = "\uF2E1", [24] = "\uF2E2", [32] = "\uE385" },
+        ["delete"] = new() { [16] = "\uE487", [20] = "\uF34C", [24] = "\uF34D", [32] = "\uEEA6" },
+        ["delete-folder"] = new() { [16] = "\uE668", [20] = "\uE669", [24] = "\uE66A", [32] = "\U000F022A" },
+        ["dictate"] = new() { [16] = "\uE806", [20] = "\uE807", [24] = "\uE808", [32] = "\uE80A" },
+        ["direct-replies"] = new() { [16] = "\uF17A", [20] = "\uF17B", [24] = "\uF17C", [32] = "\U000F0439" },
+        ["dismiss"] = new() { [16] = "\uF368", [20] = "\uF369", [24] = "\uF36A", [32] = "\uF3F2" },
+        ["dock"] = new() { [16] = "\uF58B", [20] = "\uF58C", [24] = "\uF58D", [32] = "\uF671" },
+        ["editor"] = new() { [20] = "\uED16", [24] = "\uED17" },
+        ["email-calendar"] = new() { [16] = "\uF231", [20] = "\uF232", [24] = "\uF233" },
+        ["encrypt"] = new() { [16] = "\U000F041A", [20] = "\uF50C", [24] = "\uF50D", [32] = "\U000F041C" },
+        ["equation"] = new() { [16] = "\uE7EF", [20] = "\uE7F0", [24] = "\uE7F1", [32] = "\uE7F2" },
+        ["expand-right"] = new() { [16] = "\uF2AF", [20] = "\uF2B0", [24] = "\uF2B1", [32] = "\U000F0335" },
+        ["filter"] = new() { [16] = "\uE617", [20] = "\uF405", [24] = "\uF406", [32] = "\U000F0445" },
+        ["flag"] = new() { [16] = "\uF409", [20] = "\uF40A", [24] = "\uF40B", [32] = "\U000F0040" },
+        ["focus-time"] = new() { [16] = "\uF4DF", [20] = "\uF4E0", [24] = "\uF4E1", [32] = "\uF07D" },
+        ["folder"] = new() { [16] = "\uE650", [20] = "\uF41C", [24] = "\uF41D", [32] = "\uE651" },
+        ["folder-open"] = new() { [16] = "\uF431", [20] = "\uF432", [24] = "\uF433" },
+        ["follow-up"] = new() { [16] = "\uF409", [20] = "\uF40A", [24] = "\uF40B", [32] = "\U000F0040" },
+        ["font"] = new() { [16] = "\uF7FB", [20] = "\uF7FC", [24] = "\uF7FD" },
+        ["font-color"] = new() { [16] = "\uECF3", [20] = "\uF7D7", [24] = "\uF7D8" },
+        ["font-size"] = new() { [16] = "\uED11", [20] = "\uF7FE", [24] = "\uF7FF" },
+        ["format-painter"] = new() { [16] = "\uF59B", [20] = "\uF59C", [24] = "\uF59D", [32] = "\U000F0237" },
+        ["forward"] = new() { [16] = "\uF156", [20] = "\uF157", [24] = "\uF158", [32] = "\U000F0437" },
+        ["from-field"] = new() { [16] = "\uE949", [20] = "\uE94A", [24] = "\uE94B", [32] = "\U000F06EA" },
+        ["goto-date"] = new() { [16] = "\uF878", [20] = "\uE27C" },
+        ["grow-font"] = new() { [20] = "\uF43D", [24] = "\uF43E" },
+        ["highlight"] = new() { [16] = "\uF47F", [20] = "\uF480", [24] = "\uF481" },
+        ["icons"] = new() { [16] = "\uF3DE", [20] = "\uF3DF", [24] = "\uF3E0", [32] = "\uE5D2" },
+        ["ignore"] = new() { [16] = "\uF36C", [20] = "\uF36D", [24] = "\uF36E", [32] = "\uE4CF" },
+        ["immersive"] = new() { [20] = "\uF665", [24] = "\uF666" },
+        ["importance"] = new() { [16] = "\uF4A5", [20] = "\uF4A6", [24] = "\uF4A7", [32] = "\U000F0457" },
+        ["importance-low"] = new() { [16] = "\uF147", [20] = "\uF148", [24] = "\uF149", [32] = "\uF14C" },
+        ["indent-decrease"] = new() { [16] = "\uED23", [20] = "\uED24", [24] = "\uED25" },
+        ["indent-increase"] = new() { [16] = "\uED2D", [20] = "\uED2E", [24] = "\uED2F" },
+        ["info"] = new() { [16] = "\uF4A9", [20] = "\uF4AA", [24] = "\uF4AB", [32] = "\U000F005D" },
+        ["italic"] = new() { [16] = "\uED37", [20] = "\uF80C", [24] = "\uF80D" },
+        ["journal"] = new() { [16] = "\U000F039B", [20] = "\uE172", [24] = "\uE173", [32] = "\U000F03E8" },
+        ["journal-entry"] = new() { [16] = "\uF66F", [20] = "\uF580", [24] = "\uF581", [32] = "\uE88D" },
+        ["journal-timeline"] = new() { [20] = "\uED83", [24] = "\uF83E" },
+        ["junk"] = new() { [16] = "\uF70E", [20] = "\uF637", [24] = "\uF638", [32] = "\U000F01F5" },
+        ["language"] = new() { [16] = "\uF4FC", [20] = "\uF4FD", [24] = "\uF4FE" },
+        ["last-seven-days"] = new() { [16] = "\uE712", [20] = "\uF485", [24] = "\uF486", [32] = "\uE714" },
+        ["layout"] = new() { [16] = "\uE8BD", [20] = "\uE8BE", [24] = "\uE8BF", [32] = "\uEFF6" },
+        ["lightbulb"] = new() { [16] = "\uF4DF", [20] = "\uF4E0", [24] = "\uF4E1", [32] = "\uF07D" },
+        ["line-spacing"] = new() { [16] = "\U000F0C59", [20] = "\uF80E", [24] = "\uF80F", [32] = "\U000F0C5A" },
+        ["link"] = new() { [16] = "\uF4ED", [20] = "\uF4EE", [24] = "\uF4EF", [32] = "\uE77F" },
+        ["list-view"] = new() { [16] = "\uE787", [20] = "\uF4F7", [24] = "\uF4F8" },
+        ["mail"] = new() { [16] = "\uE7AF", [20] = "\uF510", [24] = "\uF511", [32] = "\U000F01F3" },
+        ["mail-merge"] = new() { [16] = "\uE7E5", [20] = "\uF5F3", [24] = "\uF5F7", [32] = "\U000F09C3" },
+        ["mail-new"] = new() { [16] = "\uF517", [20] = "\uF529", [24] = "\uF514" },
+        ["mark-complete"] = new() { [16] = "\uF297", [20] = "\uF298", [24] = "\uF299", [32] = "\uE31C" },
+        ["meeting"] = new() { [16] = "\uE261", [20] = "\uE262", [24] = "\uE263", [32] = "\uE265" },
+        ["message-preview"] = new() { [20] = "\uE8BA" },
+        ["month-view"] = new() { [16] = "\U000F0A7D", [20] = "\uF22A", [24] = "\uF22B", [32] = "\uEEC3" },
+        ["more"] = new() { [16] = "\uE831", [20] = "\uE832", [24] = "\uE833", [32] = "\uE835" },
+        ["move"] = new() { [16] = "\uE658", [20] = "\uE659", [24] = "\uE65A", [32] = "\U000F0226" },
+        ["move-to"] = new() { [16] = "\uE658", [20] = "\uE659", [24] = "\uE65A", [32] = "\U000F0226" },
+        ["multilevel-list"] = new() { [16] = "\uF7C5", [20] = "\uF7C6", [24] = "\uF7C7" },
+        ["new-appointment"] = new() { [16] = "\uE24D", [20] = "\uF211", [24] = "\uF212" },
+        ["new-email"] = new() { [16] = "\uF517", [20] = "\uF529", [24] = "\uF514" },
+        ["new-folder"] = new() { [16] = "\uE652", [20] = "\uF420", [24] = "\uF421", [32] = "\U000F0224" },
+        ["new-items"] = new() { [16] = "\uE4E6", [20] = "\uE4E7", [24] = "\uE4E8" },
+        ["new-note"] = new() { [16] = "\uF577", [20] = "\uF578", [24] = "\uF579" },
+        ["new-task"] = new() { [20] = "\uF7A0", [24] = "\uF7A1" },
+        ["next-7"] = new() { [20] = "\uE281", [24] = "\uF23F" },
+        ["note-list"] = new() { [16] = "\U000F0018", [20] = "\uF401", [24] = "\uF402" },
+        ["notes"] = new() { [16] = "\uF66D", [20] = "\uF575", [24] = "\uF576" },
+        ["notes-icons"] = new() { [16] = "\uE6D0", [20] = "\uF466", [24] = "\uF467" },
+        ["numbering"] = new() { [16] = "\uED3A", [20] = "\uF812", [24] = "\uF813" },
+        ["online-pictures"] = new() { [20] = "\uE72F", [24] = "\uE730" },
+        ["open-calendar"] = new() { [16] = "\uE251", [20] = "\uF216", [24] = "\uE252" },
+        ["open-folder"] = new() { [16] = "\uF431", [20] = "\uF432", [24] = "\uF433" },
+        ["open-item"] = new() { [16] = "\uF58B", [20] = "\uF58C", [24] = "\uF58D", [32] = "\uF671" },
+        ["overlay"] = new() { [20] = "\uF4D5", [24] = "\uF4D6" },
+        ["page-color"] = new() { [16] = "\uF59E", [20] = "\uF59F", [24] = "\uF5A0" },
+        ["paste"] = new() { [16] = "\uE36F", [20] = "\uF2D5", [24] = "\uF2D6", [32] = "\U000F020B" },
+        ["people"] = new() { [16] = "\uF5B1", [20] = "\uF5B2", [24] = "\uF5B3", [32] = "\uE8FE" },
+        ["permission"] = new() { [16] = "\uE79C", [20] = "\uE79D", [24] = "\uE79E", [32] = "\uE79F" },
+        ["person-add"] = new() { [16] = "\uE933", [20] = "\uF5CC", [24] = "\uF5CD", [32] = "\U000F0462" },
+        ["phone"] = new() { [16] = "\uF6F7", [20] = "\uF5EA", [24] = "\uF5EB", [32] = "\uEFA1" },
+        ["picture"] = new() { [16] = "\uF48E", [20] = "\uF48F", [24] = "\uF490", [32] = "\uE726" },
+        ["pin"] = new() { [16] = "\uF60A", [20] = "\uF60B", [24] = "\uF60C", [32] = "\uE995" },
+        ["print"] = new() { [16] = "\uF703", [20] = "\uF634", [24] = "\uF635", [32] = "\uE9D5" },
+        ["private"] = new() { [16] = "\uE79C", [20] = "\uE79D", [24] = "\uE79E", [32] = "\uE79F" },
+        ["publish-calendar"] = new() { [16] = "\uE6BE", [20] = "\uF45E", [24] = "\uF45F", [32] = "\uE6BF" },
+        ["quicksteps"] = new() { [16] = "\U000F0643", [20] = "\U000F02E9", [24] = "\U000F02EA" },
+        ["read-aloud"] = new() { [20] = "\uEB37", [24] = "\uF6FF" },
+        ["reader"] = new() { [20] = "\uF665", [24] = "\uF666" },
+        ["reading-pane"] = new() { [16] = "\uE8CE", [20] = "\uE8CF", [24] = "\uE8D0", [32] = "\uF000" },
+        ["receipt"] = new() { [16] = "\uE7DF", [20] = "\uF52B", [24] = "\uF52C", [32] = "\U000F045B" },
+        ["recurrence"] = new() { [16] = "\uF170", [20] = "\uF171", [24] = "\uF172" },
+        ["redo"] = new() { [16] = "\uE0E4", [20] = "\uF16E", [24] = "\uF16F", [32] = "\uF8FE" },
+        ["reminder"] = new() { [16] = "\uE014", [20] = "\uF114", [24] = "\uF115", [32] = "\uE015" },
+        ["remove-from-list"] = new() { [16] = "\uF368", [20] = "\uF369", [24] = "\uF36A", [32] = "\uF3F2" },
+        ["reply"] = new() { [16] = "\uF176", [20] = "\uF177", [24] = "\uF178", [32] = "\U000F0438" },
+        ["reply-all"] = new() { [16] = "\uF17A", [20] = "\uF17B", [24] = "\uF17C", [32] = "\U000F0439" },
+        ["reverse-sort"] = new() { [16] = "\uF1B3", [20] = "\uF82B", [24] = "\uF83A" },
+        ["room-list"] = new() { [16] = "\uF317", [20] = "\uF318", [24] = "\uF319" },
+        ["rules"] = new() { [16] = "\uE624", [20] = "\uE625", [24] = "\uE626", [32] = "\U000F01CF" },
+        ["save"] = new() { [16] = "\uEA4B", [20] = "\uF689", [24] = "\uF68A", [32] = "\U000F05F2" },
+        ["schedule-view"] = new() { [16] = "\U000F0D48", [20] = "\uF213", [24] = "\uF214" },
+        ["search"] = new() { [16] = "\uEA84", [20] = "\uF699", [24] = "\uF69A", [32] = "\uEA85" },
+        ["send"] = new() { [16] = "\uEA97", [20] = "\uF6A2", [24] = "\uF6A3", [32] = "\U000F0097" },
+        ["send-receive"] = new() { [16] = "\uE110", [20] = "\uF190", [24] = "\uF191" },
+        ["settings"] = new() { [16] = "\uF6B1", [20] = "\uF6B2", [24] = "\uF6B3", [32] = "\uEA9D" },
+        ["shapes"] = new() { [16] = "\uF6B5", [20] = "\uF6B6", [24] = "\uF6B7", [32] = "\U000F03D6" },
+        ["share"] = new() { [16] = "\uEAAF", [20] = "\uF6B8", [24] = "\uF6B9", [32] = "\U000F0A3D" },
+        ["shield"] = new() { [16] = "\uEACC", [20] = "\uF6C7", [24] = "\uF6C8", [32] = "\uEF20" },
+        ["show-as"] = new() { [16] = "\uF30A", [20] = "\uF2BD", [24] = "\uF2BE" },
+        ["show-progress"] = new() { [16] = "\uF192", [20] = "\uF193", [24] = "\uF194", [32] = "\U000F072B" },
+        ["shrink-font"] = new() { [20] = "\uF43B", [24] = "\uF43C" },
+        ["sign"] = new() { [16] = "\uF0BB", [20] = "\uF27E", [24] = "\uF27F", [32] = "\U000F047C" },
+        ["signature"] = new() { [16] = "\uF6E4", [20] = "\uF6E5", [24] = "\uF6E6", [32] = "\U000F0250" },
+        ["smart-lookup"] = new() { [20] = "\uEA87", [24] = "\uF69C" },
+        ["smartart"] = new() { [16] = "\uE8A9", [20] = "\uF593", [24] = "\uF594", [32] = "\uE8AA" },
+        ["snooze"] = new() { [16] = "\uF2DC", [20] = "\uF2DD", [24] = "\uF2DE", [32] = "\uE383" },
+        ["source"] = new() { [16] = "\uF339", [20] = "\uF2EF", [24] = "\uF2F0" },
+        ["spacing"] = new() { [20] = "\uE077", [24] = "\uF8E5" },
+        ["spelling"] = new() { [16] = "\uED1D", [20] = "\uED1E", [24] = "\uED1F" },
+        ["sr-groups"] = new() { [16] = "\uF0E7", [20] = "\U000F0B5C", [24] = "\U000F0B5D", [32] = "\U000F0B5F" },
+        ["star"] = new() { [16] = "\uF717", [20] = "\uF718", [24] = "\uF719", [32] = "\U000F0471" },
+        ["status-report"] = new() { [16] = "\uE7B9", [20] = "\uF537", [24] = "\uF555" },
+        ["stock-images"] = new() { [16] = "\uE731", [20] = "\uE732", [24] = "\uE733", [32] = "\uE735" },
+        ["strikethrough"] = new() { [16] = "\uED5E", [20] = "\uED5F", [24] = "\uED60" },
+        ["styles"] = new() { [20] = "\uF7F3", [24] = "\uF7F4" },
+        ["subscript"] = new() { [16] = "\uED61", [20] = "\uF81F", [24] = "\uF820" },
+        ["superscript"] = new() { [16] = "\uED62", [20] = "\uF821", [24] = "\uF822" },
+        ["symbol"] = new() { [16] = "\uE7F3", [20] = "\uE7F4", [24] = "\uE7F5", [32] = "\uE7F7" },
+        ["table"] = new() { [16] = "\uEBEE", [20] = "\uF775", [24] = "\uF776", [32] = "\uEBF0" },
+        ["task-detailed"] = new() { [20] = "\uE064", [24] = "\uE065", [32] = "\U000F087B" },
+        ["task-simple-list"] = new() { [16] = "\U000F02A2", [20] = "\U000F02A3", [24] = "\U000F02A4" },
+        ["tasks"] = new() { [16] = "\uEFAD", [20] = "\uEC97", [24] = "\uEC98" },
+        ["theme-colors"] = new() { [16] = "\uE3D2", [20] = "\uF2F9", [24] = "\uF2FA", [32] = "\U000F0C49" },
+        ["theme-effects"] = new() { [16] = "\uEE36", [20] = "\uEE37", [24] = "\uEE38" },
+        ["themes"] = new() { [16] = "\uE3D1", [20] = "\uF2F5", [24] = "\uF2F6", [32] = "\U000F0D30" },
+        ["thesaurus"] = new() { [16] = "\U000F039B", [20] = "\uE172", [24] = "\uE173", [32] = "\U000F03E8" },
+        ["time-scale"] = new() { [16] = "\uF2DC", [20] = "\uF2DD", [24] = "\uF2DE", [32] = "\uE383" },
+        ["today"] = new() { [16] = "\uF23B", [20] = "\uF23C", [24] = "\uF23D" },
+        ["todo-list"] = new() { [20] = "\uEC90", [24] = "\uEC91" },
+        ["tracker"] = new() { [16] = "\uE601", [20] = "\uE602", [24] = "\uE603", [32] = "\U000F0750" },
+        ["underline"] = new() { [16] = "\uED67", [20] = "\uF823", [24] = "\uF824" },
+        ["undo"] = new() { [16] = "\uE126", [20] = "\uF199", [24] = "\uF19A", [32] = "\uE128" },
+        ["unread"] = new() { [16] = "\uF52F", [20] = "\uF530", [24] = "\uF531", [32] = "\U000F045C" },
+        ["update-folder"] = new() { [16] = "\uE670", [20] = "\uE671", [24] = "\uE672" },
+        ["view-settings"] = new() { [20] = "\U000F013B", [24] = "\U000F013C" },
+        ["voting"] = new() { [16] = "\uE9B0", [20] = "\uE9B1", [24] = "\uF617", [32] = "\U000F046D" },
+        ["warning"] = new() { [16] = "\uF880", [20] = "\uF881", [24] = "\uF882", [32] = "\U000F025D" },
+        ["week-view"] = new() { [20] = "\uF240", [24] = "\uF241" },
+        ["word-count"] = new() { [20] = "\uF825", [24] = "\uF826" },
+        ["work-offline"] = new() { [16] = "\U000F03A7", [20] = "\uF613", [24] = "\uF614" },
+        ["work-week"] = new() { [16] = "\uF243", [20] = "\uF244", [24] = "\uF245", [32] = "\U000F0A53" },
+        ["zoom"] = new() { [16] = "\uEE8E", [20] = "\uF8DC", [24] = "\uF8DD", [32] = "\U000F0A6E" },
+        ["zoom-in"] = new() { [16] = "\uF108", [20] = "\uF109", [24] = "\uF10A", [32] = "\uF5A2" },
+        ["zoom-out"] = new() { [16] = "\uEBC9", [20] = "\uEBCA", [24] = "\uEBCB" },
+    };
 
-    public static bool Has(string name) => Map.ContainsKey(name);
+    public static IReadOnlyCollection<string> Names => Regular.Keys;
+
+    public static bool Has(string name) => Regular.ContainsKey(name);
 
     /// <summary>
     /// The glyph for a logical name at the nearest available size, rounding down so a request
-    /// never returns artwork drawn with more detail than the target can show.
+    /// never returns artwork drawn with more detail than the target can show. The active icon
+    /// set answers first; the regular set is the floor under it.
     /// </summary>
     public static string Get(string name, int size = 20)
     {
-        if (!Map.TryGetValue(name, out var bySize))
+        if (IconSets.Active == IconSets.Filled
+            && Filled.TryGetValue(name, out var filled)
+            && Nearest(filled, size) is { } filledGlyph)
+        {
+            return filledGlyph;
+        }
+
+        if (!Regular.TryGetValue(name, out var bySize))
         {
             throw new KeyNotFoundException(
                 $"No icon named '{name}'. Add it to tools/generate-icons.py and regenerate.");
         }
 
+        return Nearest(bySize, size)!;
+    }
+
+    private static string? Nearest(Dictionary<int, string> bySize, int size)
+    {
+        if (bySize.Count == 0) return null;
         if (bySize.TryGetValue(size, out var exact)) return exact;
 
         var best = bySize.Keys.Where(s => s <= size).DefaultIfEmpty(bySize.Keys.Min()).Max();
@@ -250,5 +471,8 @@ public static class IconGlyphs
 
     /// <summary>Never throws. Returns an empty string for an unknown name.</summary>
     public static string GetOrEmpty(string name, int size = 20)
-        => Map.ContainsKey(name) ? Get(name, size) : string.Empty;
+        => Regular.ContainsKey(name) ? Get(name, size) : string.Empty;
+
+    /// <summary>The filled coverage for a name, for the tests that hold the two sets together.</summary>
+    internal static bool HasFilled(string name) => Filled.ContainsKey(name);
 }

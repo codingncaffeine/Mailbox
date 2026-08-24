@@ -960,6 +960,15 @@ public partial class MainWindow : Window
                 };
                 break;
 
+            // The theme editor is its own window, and MAILBOX_THEME_EDIT presses its machinery.
+            case "themeeditor":
+                Opened += async (_, _) =>
+                {
+                    CaptureNextWindow();
+                    await new ThemeEditorWindow(App.Themes).ShowDialog(this);
+                };
+                break;
+
             // Options is its own window, so the harness captures that rather than the shell.
             case "options":
                 Opened += async (_, _) =>

@@ -7,7 +7,7 @@ Fonts
 -----
 Selawik (selawk*.ttf) — Copyright 2015, Microsoft Corporation, with Reserved Font Name Selawik.
   SIL Open Font License, Version 1.1. Full text: Selawik-LICENSE.txt beside the fonts.
-Fluent UI System Icons (FluentSystemIcons-Regular.ttf) — Copyright (c) 2020 Microsoft Corporation.
+Fluent UI System Icons (FluentSystemIcons-Regular.ttf, FluentSystemIcons-Filled.ttf) — Copyright (c) 2020 Microsoft Corporation.
   MIT License.
 Inter — Copyright (c) 2016 The Inter Project Authors. SIL Open Font License, Version 1.1.
   Bundled by Avalonia.Fonts.Inter as the framework's fallback face.

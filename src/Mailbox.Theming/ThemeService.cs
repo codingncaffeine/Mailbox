@@ -128,7 +128,23 @@ public sealed class ThemeService
         var resolved = tokens.Resolve();
         AssertCoverage(resolved, themeId);
         ReportContrast(resolved, themeId);
+        ApplyIconSet(resolved, themeId);
         return resolved;
+    }
+
+    /// <summary>
+    /// The icon set is part of the theme: absent means the regular set, and a set this build
+    /// does not carry is named in the log and drawn as regular rather than as boxes.
+    /// </summary>
+    private static void ApplyIconSet(ResolvedTokens resolved, string themeId)
+    {
+        resolved.TryGetString(Mailbox.Theming.Tokens.TokenKeys.Icons.Set, out var set);
+        if (set is { Length: > 0 } && !Icons.IconSets.IsKnown(set))
+        {
+            Mailbox.Core.Diagnostics.Log.Warn($"Theme \"{themeId}\" asks for icon set \"{set}\", which this build does not carry; the regular set stands in.");
+        }
+
+        Icons.IconSets.Apply(set);
     }
 
     /// <summary>
