@@ -2793,11 +2793,16 @@ public partial class MainWindow : Window
     /// </summary>
     private void WireMessageWindow(ShellViewModel shell, MessageWindow window)
     {
-        // A reply from a message window opens a window whatever the Options page says — there
-        // is no pane there to grow it in — addressed from the window's own message, protected
-        // fields and all.
+        // The owner's own flow, tested against the reference: Reply pressed in an open message
+        // window takes you back to the app — the window closes and the reply grows inline, the
+        // ribbon changing with it. The reply is addressed from the window's message, protected
+        // fields and all, before the window goes; Pop Out is then the way back to a window.
         window.RespondRequested += (_, kind) =>
-            Respond(shell, kind, window.Current, forceWindow: true, covered: window.Covered);
+        {
+            Respond(shell, kind, window.Current, covered: window.Covered);
+            window.Close();
+            Activate();
+        };
 
         window.Changed += (_, _) => shell.Refresh();
 
@@ -3781,16 +3786,12 @@ public partial class MainWindow : Window
     /// repeat them. What the reader has chosen about quoting comes from the Options page, and
     /// the reader's own addresses come from every account, so a reply to all never copies them.
     /// </remarks>
-    /// <param name="forceWindow">
-    /// A reply started from a message window opens a window whatever the Options page says —
-    /// the reference's own behaviour, there being no reading pane there to grow it in.
-    /// </param>
     /// <param name="covered">
     /// The protected header fields of <paramref name="message"/>, when its own pane has them —
     /// a message window's reply must address from those exactly as the shell's does.
     /// </param>
     private void Respond(ShellViewModel shell, ReplyKind kind, MimeKit.MimeMessage? message = null,
-        IReadOnlyList<string>? to = null, bool forceWindow = false, ProtectedHeaders? covered = null)
+        IReadOnlyList<string>? to = null, ProtectedHeaders? covered = null)
     {
         if ((message ?? _openMessage) is not { } original)
         {
@@ -3824,12 +3825,13 @@ public partial class MainWindow : Window
         // The account the message arrived in, which is what a reply means.
         var address = shell.CurrentAddress;
 
-        // The reference grows the reply where the message is; the Options page's "Open replies
-        // and forwards in a new window" is the switch back to a separate window. An inline reply
-        // is already open — a reply to a reply — reuses the strip rather than stacking a second.
-        // A hidden reading pane leaves the reply nowhere to grow, so it opens a window too —
-        // growing it into a collapsed container is how a reply opens invisibly.
-        if (forceWindow || App.MailOptions.OpenRepliesInNewWindow || !shell.ReadingPaneVisible)
+        // The reference embeds the reply in the app whatever the layout: with the reading pane
+        // off, the wide list gives way and the reply takes that section (the owner's own setup
+        // reads with the pane off, and the earlier fall-back-to-a-window here is what made
+        // Reply open a window on their machine — the wrong reading of the capture). The Options
+        // page's "Open replies and forwards in a new window" is the one switch that means a
+        // window; Pop Out is the button for one reply at a time.
+        if (App.MailOptions.OpenRepliesInNewWindow)
         {
             OpenReplyWindow(shell, draft, kind, address, covered?.ConfidentialFields ?? []);
         }
@@ -3870,6 +3872,12 @@ public partial class MainWindow : Window
     private ComposeSurface? _inlineCompose;
 
     /// <summary>
+    /// True while an inline reply borrows a reading-pane section the reader keeps hidden — put
+    /// back the way it was when the reply closes or pops out.
+    /// </summary>
+    private bool _restoreHiddenPane;
+
+    /// <summary>
     /// Grows a reply where the message is: the reading pane's read view is covered by a compose
     /// surface, and the shell's ribbon becomes the compose ribbon aimed at it.
     /// </summary>
@@ -3889,6 +3897,17 @@ public partial class MainWindow : Window
         // A reply already open — a reply to a reply, or Forward pressed twice — is dismissed
         // first, so there is one inline surface at a time rather than a stack nobody asked for.
         if (_inlineCompose is not null) CloseInlineCompose(shell);
+
+        // With the reading pane off, the reply still embeds: the pane's section is shown for
+        // the reply's lifetime — the wide list narrowing beside it, which is what "the other
+        // emails disappear" looks like in the reference — and hidden again when the reply
+        // closes or pops out.
+        _restoreHiddenPane = !shell.ReadingPaneVisible;
+        if (_restoreHiddenPane)
+        {
+            shell.ReadingPaneAtBottom = false;
+            shell.ReadingPaneVisible = true;
+        }
 
         var surface = new ComposeSurface(App.Commands, App.Accounts, App.Contacts);
         if (address is { Length: > 0 }) surface.SendFromAccount(address);
@@ -4046,6 +4065,12 @@ public partial class MainWindow : Window
         this.FindControl<ContentControl>("ReadingComposeHost")!.IsVisible = false;
         _inlineCompose = null;
 
+        if (_restoreHiddenPane)
+        {
+            _restoreHiddenPane = false;
+            shell.HideReadingPane.Execute(null);
+        }
+
         compose.Show(this);
     }
 
@@ -4057,6 +4082,12 @@ public partial class MainWindow : Window
         this.FindControl<ContentControl>("ReadingComposeHost")!.IsVisible = false;
         this.FindControl<ContentControl>("ReadingComposeHost")!.Content = null;
         _inlineCompose = null;
+
+        if (_restoreHiddenPane)
+        {
+            _restoreHiddenPane = false;
+            shell.HideReadingPane.Execute(null);
+        }
 
         RestoreReadingRibbon();
         shell.Refresh();
