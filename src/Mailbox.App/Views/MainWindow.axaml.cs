@@ -3654,8 +3654,19 @@ public partial class MainWindow : Window
                 left = Math.Max(left, Math.Round(end.X) + 12);
             }
 
-            if (left <= 0 || Math.Abs(search.Margin.Left - left) < 0.5) return;
-            search.Margin = new Thickness(left, search.Margin.Top, search.Margin.Right, search.Margin.Bottom);
+            // The box spans the list column, not a fixed width: the reply capture puts its right
+            // edge on the reading-pane divider (296→598 over a 304 list), and home.png's 511 was
+            // the same rule photographed at the default list width — so 511, the token, is the
+            // cap it never grows past, and the floor is room for the glyph and the word.
+            var cap = this.TryFindResource("titlebar.search.width.value", out var t) && t is double d ? d : 511;
+            var width = Math.Clamp(Math.Round(list.Bounds.Width), 180, cap);
+
+            var moved = left > 0 && Math.Abs(search.Margin.Left - left) >= 0.5;
+            var resized = double.IsNaN(search.Width) || Math.Abs(search.Width - width) >= 0.5;
+            if (!moved && !resized) return;
+
+            if (moved) search.Margin = new Thickness(left, search.Margin.Top, search.Margin.Right, search.Margin.Bottom);
+            if (resized) search.Width = width;
         }
 
         list.LayoutUpdated += (_, _) => Follow();
