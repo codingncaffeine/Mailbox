@@ -254,6 +254,37 @@ public class PluginHostTests : IDisposable
     }
 
     [Fact]
+    public void ATabRidesItsOwnModuleAndNoOther()
+    {
+        Stage("good", "test.good", "GoodPlugin", Everything);
+
+        var host = Host();
+        host.Start();
+
+        // The People tab is on People's ribbon and nowhere near Mail's; the Mail tab likewise.
+        var people = host.InjectRibbon(DefaultRibbonLayouts.People);
+        Assert.NotNull(people.FindTab("plugin.test.good.peopletools"));
+        Assert.Null(people.FindTab("plugin.test.good.tools"));
+
+        var mail = host.InjectRibbon(DefaultRibbonLayouts.Mail);
+        Assert.NotNull(mail.FindTab("plugin.test.good.tools"));
+        Assert.Null(mail.FindTab("plugin.test.good.peopletools"));
+    }
+
+    [Fact]
+    public void AModuleThatIsNotOneIsRefusedWithTheWordsNamed()
+    {
+        Stage("sideways", "test.sideways", "SidewaysPlugin", ["ui"]);
+
+        var host = Host();
+        host.Start();
+
+        var record = Assert.Single(host.Plugins);
+        Assert.Equal(PluginState.Crashed, record.State);
+        Assert.Contains("names no module", record.Error);
+    }
+
+    [Fact]
     public void DisablingRevokesEverythingAndEnablingBringsItBack()
     {
         Stage("good", "test.good", "GoodPlugin", Everything);

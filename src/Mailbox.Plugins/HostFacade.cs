@@ -129,6 +129,20 @@ internal sealed class HostFacade : IPluginHost, IPluginSettings, IPluginCommands
                 $"'{tab.Name}' is not a valid tab name; lowercase letters and digits only.");
         }
 
+        // Refused with the accepted words named, because a misspelt module would otherwise be a
+        // tab that silently never appears anywhere.
+        var module = tab.Module.ToLowerInvariant() switch
+        {
+            "mail" => MailboxModule.Mail,
+            "calendar" => MailboxModule.Calendar,
+            "people" => MailboxModule.People,
+            "tasks" => MailboxModule.Tasks,
+            "notes" => MailboxModule.Notes,
+            "journal" => MailboxModule.Journal,
+            _ => throw new ArgumentException(
+                $"'{tab.Module}' names no module; use mail, calendar, people, tasks, notes or journal."),
+        };
+
         var tabId = $"plugin.{PluginId}.{tab.Name}";
 
         var groups = new List<RibbonGroup>();
@@ -173,7 +187,7 @@ internal sealed class HostFacade : IPluginHost, IPluginSettings, IPluginCommands
             Groups = groups,
         };
 
-        _host.AddTab(_entry, classic, new SimplifiedBar { Groups = simplified });
+        _host.AddTab(_entry, module, classic, new SimplifiedBar { Groups = simplified });
     }
 
     // ---- Mail ----------------------------------------------------------------------------------

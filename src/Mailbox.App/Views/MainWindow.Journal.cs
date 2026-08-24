@@ -22,7 +22,7 @@ public partial class MainWindow
     private JournalWorkspace? _journalModule;
 
     /// <summary>The Journal ribbon: the shipped layout with the reader's edits over it.</summary>
-    private static RibbonLayout JournalRibbon() => App.RibbonEdits.Apply(JournalRibbonLayout.Build());
+    private static RibbonLayout JournalRibbon() => App.RibbonEdits.Apply(App.Plugins.InjectRibbon(JournalRibbonLayout.Build()));
 
     private JournalWorkspace EnsureJournal(ShellViewModel shell)
     {

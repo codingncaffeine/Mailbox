@@ -49,7 +49,7 @@ public partial class MainWindow
         Environment.GetEnvironmentVariable("MAILBOX_TODAY") is { Length: > 0 } ? null : DateTime.Now;
 
     /// <summary>The calendar ribbon: the shipped layout with the reader's edits over it.</summary>
-    private static RibbonLayout CalendarRibbon() => App.RibbonEdits.Apply(DefaultRibbonLayouts.Calendar);
+    private static RibbonLayout CalendarRibbon() => App.RibbonEdits.Apply(App.Plugins.InjectRibbon(DefaultRibbonLayouts.Calendar));
 
     /// <summary>
     /// Puts a module on screen: the rail's mark, the workspace in the window, and the ribbon

@@ -59,15 +59,22 @@ public partial class MainWindow : Window
         _ribbon.BackstageRequested += (_, _) => ShowBackstage();
         _ribbon.FloatingBodyChanged += (_, e) => ShowFloatingRibbon(e.Body);
 
-        // A plugin enabled, disabled or crashed changes what the bar holds. The mail layout is
-        // the one plugin tabs ride, so refresh only when it is the one showing — another module
-        // fetches a fresh layout on its way back in anyway.
+        // A plugin enabled, disabled or crashed changes what the bar holds — on whichever
+        // module is showing, plugin tabs riding all six now. A module not on screen fetches a
+        // fresh layout on its way back in anyway.
         App.Plugins.Changed += (_, _) => Dispatcher.UIThread.Post(() =>
         {
-            if (DataContext is ShellViewModel s && s.Module == MailboxModule.Mail && _inlineCompose is null)
+            if (DataContext is not ShellViewModel s || _inlineCompose is not null) return;
+
+            _ribbon.Layout = s.Module switch
             {
-                _ribbon.Layout = App.MailRibbon();
-            }
+                MailboxModule.Calendar => CalendarRibbon(),
+                MailboxModule.People => PeopleRibbon(),
+                MailboxModule.Tasks => TasksRibbon(),
+                MailboxModule.Notes => NotesRibbon(),
+                MailboxModule.Journal => JournalRibbon(),
+                _ => App.MailRibbon(),
+            };
         });
         AddHandler(PointerPressedEvent, OnWindowPointerPressed, RoutingStrategies.Tunnel);
         this.FindControl<ContentControl>("RibbonHost")!.Content = _ribbon;

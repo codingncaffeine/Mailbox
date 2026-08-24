@@ -23,7 +23,7 @@ public partial class MainWindow
     private TasksWorkspace? _taskModule;
 
     /// <summary>The Tasks ribbon: the shipped layout with the reader's edits over it.</summary>
-    private static RibbonLayout TasksRibbon() => App.RibbonEdits.Apply(TasksRibbonLayout.Build());
+    private static RibbonLayout TasksRibbon() => App.RibbonEdits.Apply(App.Plugins.InjectRibbon(TasksRibbonLayout.Build()));
 
     private TasksWorkspace EnsureTasks(ShellViewModel shell)
     {

@@ -460,9 +460,9 @@ public sealed class PluginHost
     }
 
     /// <summary>
-    /// The shipped layout with the enabled plugins' tabs appended, in both renderings. Applied
-    /// before the reader's own edits, so Customize Ribbon sees plugin tabs as part of the
-    /// furniture — hideable, reorderable, and their commands placeable anywhere.
+    /// The shipped layout with the enabled plugins' tabs for its module appended, in both
+    /// renderings. Applied before the reader's own edits, so Customize Ribbon sees plugin tabs
+    /// as part of the furniture — hideable, reorderable, and their commands placeable anywhere.
     /// </summary>
     public RibbonLayout InjectRibbon(RibbonLayout shipped)
     {
@@ -473,11 +473,15 @@ public sealed class PluginHost
 
         lock (_gate)
         {
-            var enabled = _plugins.Where(p => p.State == PluginState.Enabled && p.Tabs.Count > 0).ToList();
+            var enabled = _plugins
+                .Where(p => p.State == PluginState.Enabled
+                            && p.Tabs.Any(t => t.Module == shipped.Module))
+                .ToList();
             if (enabled.Count == 0) return shipped;
 
-            tabs = [.. enabled.SelectMany(p => p.Tabs)];
+            tabs = [.. enabled.SelectMany(p => p.Tabs.Where(t => t.Module == shipped.Module).Select(t => t.Tab))];
             bars = enabled.SelectMany(p => p.SimplifiedTabs)
+                .Where(pair => tabs.Any(t => t.Id == pair.Key))
                 .ToDictionary(pair => pair.Key, pair => pair.Value);
         }
 
@@ -606,11 +610,11 @@ public sealed class PluginHost
         RaiseChanged();
     }
 
-    internal void AddTab(Entry entry, RibbonTab classic, SimplifiedBar simplified)
+    internal void AddTab(Entry entry, MailboxModule module, RibbonTab classic, SimplifiedBar simplified)
     {
         lock (_gate)
         {
-            entry.Tabs.Add(classic);
+            entry.Tabs.Add((module, classic));
             entry.SimplifiedTabs[classic.Id] = simplified;
         }
 
@@ -760,7 +764,7 @@ public sealed class PluginHost
 
         public Dictionary<CommandId, Action> Actions { get; } = [];
 
-        public List<RibbonTab> Tabs { get; } = [];
+        public List<(MailboxModule Module, RibbonTab Tab)> Tabs { get; } = [];
 
         public Dictionary<string, SimplifiedBar> SimplifiedTabs { get; } = [];
 

@@ -23,7 +23,7 @@ public partial class MainWindow
     private NotesWorkspace? _noteModule;
 
     /// <summary>The Notes ribbon: the shipped layout with the reader's edits over it.</summary>
-    private static RibbonLayout NotesRibbon() => App.RibbonEdits.Apply(NotesRibbonLayout.Build());
+    private static RibbonLayout NotesRibbon() => App.RibbonEdits.Apply(App.Plugins.InjectRibbon(NotesRibbonLayout.Build()));
 
     private NotesWorkspace EnsureNotes(ShellViewModel shell)
     {

@@ -60,6 +60,13 @@ public sealed record PluginRibbonTab
     public required string Label { get; init; }
 
     public required IReadOnlyList<PluginRibbonGroup> Groups { get; init; }
+
+    /// <summary>
+    /// Which module's ribbon carries the tab: <c>mail</c> (the default), <c>calendar</c>,
+    /// <c>people</c>, <c>tasks</c>, <c>notes</c> or <c>journal</c>. Anything else is refused at
+    /// registration with the accepted words named.
+    /// </summary>
+    public string Module { get; init; } = "mail";
 }
 
 /// <summary>A labelled cluster on a plugin's tab.</summary>

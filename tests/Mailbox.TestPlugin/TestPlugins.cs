@@ -32,6 +32,28 @@ public sealed class GoodPlugin : IPlugin, IDisposable
             ],
         });
 
+        // A second tab on another module, so the host's per-module filtering has something to
+        // filter: this one rides People and must never appear on Mail.
+        host.Commands.Register(
+            new PluginCommand
+            {
+                Name = "wave",
+                Label = "Wave",
+                Description = "Waves at the selected person.",
+            },
+            () => host.Log("waved"));
+
+        host.Commands.AddRibbonTab(new PluginRibbonTab
+        {
+            Name = "peopletools",
+            Label = "People Tools",
+            Module = "people",
+            Groups =
+            [
+                new PluginRibbonGroup { Label = "Waving", Commands = ["wave"] },
+            ],
+        });
+
         host.Pipeline.OnArrival(arriving =>
         {
             if (arriving.Subject.Contains("plugin-crash")) throw new InvalidOperationException("deliberate hook crash");
@@ -63,6 +85,19 @@ public sealed class ThrowingPlugin : IPlugin
 {
     public void Initialize(IPluginHost host)
         => throw new InvalidOperationException("deliberate failure");
+}
+
+/// <summary>Names a module that is not one, for the refused-at-registration path.</summary>
+public sealed class SidewaysPlugin : IPlugin
+{
+    public void Initialize(IPluginHost host)
+        => host.Commands.AddRibbonTab(new PluginRibbonTab
+        {
+            Name = "nowhere",
+            Label = "Nowhere",
+            Module = "ribbon",
+            Groups = [],
+        });
 }
 
 /// <summary>Writes one appointment through the PIM surface, so a test can read the columns back.</summary>

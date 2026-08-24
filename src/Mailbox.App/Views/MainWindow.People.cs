@@ -24,7 +24,7 @@ public partial class MainWindow
     private PeopleWorkspace? _people;
 
     /// <summary>The People ribbon: the shipped layout with the reader's edits over it.</summary>
-    private static RibbonLayout PeopleRibbon() => App.RibbonEdits.Apply(DefaultRibbonLayouts.People);
+    private static RibbonLayout PeopleRibbon() => App.RibbonEdits.Apply(App.Plugins.InjectRibbon(DefaultRibbonLayouts.People));
 
     private PeopleWorkspace EnsurePeople(ShellViewModel shell)
     {
