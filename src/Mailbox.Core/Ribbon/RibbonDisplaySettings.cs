@@ -15,6 +15,9 @@ public enum RibbonWindow
 
     /// <summary>A message window of its own.</summary>
     Compose,
+
+    /// <summary>A received message opened in its own window — the read ribbon's host.</summary>
+    Message,
 }
 
 /// <summary>
@@ -49,6 +52,8 @@ public sealed class RibbonDisplaySettings
     public const string ShellShowKey = "ribbon.show";
     public const string ComposeLayoutKey = "ribbon.compose.layout";
     public const string ComposeShowKey = "ribbon.compose.show";
+    public const string MessageLayoutKey = "ribbon.message.layout";
+    public const string MessageShowKey = "ribbon.message.show";
 
     private readonly SettingsStore _settings;
 
@@ -93,6 +98,7 @@ public sealed class RibbonDisplaySettings
     private static (string Layout, string Show) Keys(RibbonWindow host) => host switch
     {
         RibbonWindow.Compose => (ComposeLayoutKey, ComposeShowKey),
+        RibbonWindow.Message => (MessageLayoutKey, MessageShowKey),
         _ => (ShellLayoutKey, ShellShowKey),
     };
 }

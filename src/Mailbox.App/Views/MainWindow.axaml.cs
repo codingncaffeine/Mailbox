@@ -1452,6 +1452,9 @@ public partial class MainWindow : Window
                 break;
 
             // A message in its own window, which otherwise takes a double-click to reach.
+            // The message window. MAILBOX_MESSAGE_RUN presses its ribbon by id — through the
+            // window's own dispatcher, not the shell's — and the store is read back by the
+            // press's own log lines; the capture then shows what the presses left.
             case "message":
                 Opened += (_, _) =>
                 {
@@ -1459,6 +1462,28 @@ public partial class MainWindow : Window
 
                     CaptureNextWindow();
                     OpenMessageWindow(shell);
+
+                    if (Environment.GetEnvironmentVariable("MAILBOX_MESSAGE_RUN") is { Length: > 0 } presses)
+                    {
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            var window = (Application.Current?.ApplicationLifetime
+                                    as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)
+                                ?.Windows.OfType<MessageWindow>().FirstOrDefault();
+
+                            if (window is null)
+                            {
+                                Log.Warn("Harness: no message window opened to press.");
+                                return;
+                            }
+
+                            foreach (var id in presses.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                            {
+                                Log.Info($"Harness: message window running {id}.");
+                                window.Press(new CommandId(id));
+                            }
+                        }, DispatcherPriority.Background);
+                    }
                 };
                 break;
 
@@ -2752,8 +2777,64 @@ public partial class MainWindow : Window
             return;
         }
 
-        new MessageWindow(App.Themes, () => shell.CurrentMail, message, _openRaw, Verified(shell))
-            .Show(this);
+        var window = new MessageWindow(
+            App.Themes, () => shell.CurrentMail, message, _openRaw, Verified(shell),
+            shell.SelectedMessage is { } row
+                ? new OpenedMessageContext(row.Address, row.Id, row.FolderId)
+                : null);
+
+        WireMessageWindow(shell, window);
+        window.Show(this);
+    }
+
+    /// <summary>
+    /// What the message window cannot do alone: drafts, stepping and Quick Steps all live in
+    /// the shell, so the window asks and the shell answers.
+    /// </summary>
+    private void WireMessageWindow(ShellViewModel shell, MessageWindow window)
+    {
+        // A reply from a message window opens a window whatever the Options page says — there
+        // is no pane there to grow it in — addressed from the window's own message, protected
+        // fields and all.
+        window.RespondRequested += (_, kind) =>
+            Respond(shell, kind, window.Current, forceWindow: true, covered: window.Covered);
+
+        window.Changed += (_, _) => shell.Refresh();
+
+        // The QAT's arrows: step the shell's selection, then hand the window what the pane
+        // loaded for it — the pane's own load path, so the window shows exactly what the shell
+        // would. Posted at Background because the list re-asserts its selection as it lays out.
+        window.StepRequested += (_, delta) =>
+        {
+            StepSelection(shell, delta);
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (_openMessage is not { } stepped) return;
+
+                window.Replace(stepped, _openRaw, Verified(shell),
+                    shell.SelectedMessage is { } row
+                        ? new OpenedMessageContext(row.Address, row.Id, row.FolderId)
+                        : null);
+            }, DispatcherPriority.Background);
+        };
+
+        // A Quick Step is a sequence only the shell can run. It acts on the window's row when
+        // the shell still shows it; a row that has moved out from under the list says so.
+        window.QuickStepRequested += (_, id) =>
+        {
+            if (App.QuickSteps.FindByCommand(id) is not { } step) return;
+
+            if (window.Context is { } context
+                && shell.SelectedMessage is { } row
+                && row.Id == context.MessageId
+                && string.Equals(row.Address, context.Address, StringComparison.OrdinalIgnoreCase))
+            {
+                _ = RunQuickStepAsync(shell, step, [row]);
+                return;
+            }
+
+            window.Say("Select this message in the main window to run a Quick Step on it.");
+        };
     }
 
     /// <summary>Opens the Options dialog modally over the shell, optionally on a given page.</summary>
@@ -3128,6 +3209,10 @@ public partial class MainWindow : Window
                 case "nav-collapsed": shell.ToggleNav.Execute(null); break;
                 case "no-reading": shell.HideReadingPane.Execute(null); break;
                 case "reading-bottom": shell.ReadingPaneAtBottom = true; shell.ReadingPaneVisible = true; break;
+
+                // The reference's default: beside the list. A pose, because the scratch settings
+                // carry whatever the machine last chose and a capture must be able to say.
+                case "reading-right": shell.ReadingPaneAtBottom = false; shell.ReadingPaneVisible = true; break;
                 case "zoom-in": shell.ZoomIn.Execute(null); break;
                 case "zoom-out": shell.ZoomOut.Execute(null); break;
                 case "attachments": shell.Filter = ShellViewModel.ListFilter.HasAttachments; break;
@@ -3521,9 +3606,12 @@ public partial class MainWindow : Window
         // the mode: it is there when wanted and gone the rest of the time.
         _ribbon.CloseFloatingBody();
 
-        // While an inline reply is open the ribbon shows the compose tabs, and its commands act
-        // on that surface rather than on the message list behind it.
-        if (_inlineCompose is { } surface)
+        // While an inline reply is open the strip carries both worlds: the Message tab's
+        // commands act on the reply's surface, and the shell's own tabs stay the shell's — the
+        // reader can file mail behind a reply without discarding it.
+        if (_inlineCompose is { } surface
+            && App.Commands.TryGet(e.Command, out var invoked)
+            && invoked.Surface == CommandSurface.Compose)
         {
             surface.Invoke(e.Command);
             return;
@@ -3693,7 +3781,16 @@ public partial class MainWindow : Window
     /// repeat them. What the reader has chosen about quoting comes from the Options page, and
     /// the reader's own addresses come from every account, so a reply to all never copies them.
     /// </remarks>
-    private void Respond(ShellViewModel shell, ReplyKind kind, MimeKit.MimeMessage? message = null, IReadOnlyList<string>? to = null)
+    /// <param name="forceWindow">
+    /// A reply started from a message window opens a window whatever the Options page says —
+    /// the reference's own behaviour, there being no reading pane there to grow it in.
+    /// </param>
+    /// <param name="covered">
+    /// The protected header fields of <paramref name="message"/>, when its own pane has them —
+    /// a message window's reply must address from those exactly as the shell's does.
+    /// </param>
+    private void Respond(ShellViewModel shell, ReplyKind kind, MimeKit.MimeMessage? message = null,
+        IReadOnlyList<string>? to = null, bool forceWindow = false, ProtectedHeaders? covered = null)
     {
         if ((message ?? _openMessage) is not { } original)
         {
@@ -3706,7 +3803,7 @@ public partial class MainWindow : Window
         // an extra address added to the outer Cc — answer that and the conversation is encrypted to
         // whoever added it. The body stays the envelope's, because a reply must not carry decrypted
         // content out in the clear (§19).
-        var covered = ReferenceEquals(original, _openMessage) ? _reading?.Protected : null;
+        covered ??= ReferenceEquals(original, _openMessage) ? _reading?.Protected : null;
         if (covered is not null) original = HeaderProtection.Addressed(original, covered, original.Body);
 
         var styleIndex = kind == ReplyKind.Forward
@@ -3730,7 +3827,9 @@ public partial class MainWindow : Window
         // The reference grows the reply where the message is; the Options page's "Open replies
         // and forwards in a new window" is the switch back to a separate window. An inline reply
         // is already open — a reply to a reply — reuses the strip rather than stacking a second.
-        if (App.MailOptions.OpenRepliesInNewWindow)
+        // A hidden reading pane leaves the reply nowhere to grow, so it opens a window too —
+        // growing it into a collapsed container is how a reply opens invisibly.
+        if (forceWindow || App.MailOptions.OpenRepliesInNewWindow || !shell.ReadingPaneVisible)
         {
             OpenReplyWindow(shell, draft, kind, address, covered?.ConfidentialFields ?? []);
         }
@@ -3806,15 +3905,29 @@ public partial class MainWindow : Window
 
         _inlineCompose = surface;
 
-        // The ribbon becomes the compose ribbon, aimed at the surface. Its enablement predicate
-        // and its commands both point there until the reply closes.
+        // The strip keeps the shell's own tabs and gains Message, selected — the reference
+        // changes the ribbon, not the window. A command routes by whose it is: the compose
+        // window's commands ask the surface, everything else asks whatever the shell asked
+        // before the reply opened.
         _savedRibbonEnabled = _ribbon.CommandEnabled;
-        _ribbon.Layout = DefaultRibbonLayouts.Compose;
-        _ribbon.CommandEnabled = surface.IsCommandEnabled;
+        var saved = _savedRibbonEnabled;
+        _ribbon.Layout = App.InlineReplyRibbon();
+        _ribbon.ActiveTabId = "message";
+        _ribbon.CommandEnabled = id =>
+            App.Commands.TryGet(id, out var command) && command.Surface == CommandSurface.Compose
+                ? surface.IsCommandEnabled(id)
+                : saved?.Invoke(id) ?? true;
         _ribbon.RefreshEnablement();
 
-        this.FindControl<ContentControl>("ReadingComposeHost")!.Content = InlineComposeChrome(shell, surface);
-        this.FindControl<ContentControl>("ReadingComposeHost")!.IsVisible = true;
+        var host = this.FindControl<ContentControl>("ReadingComposeHost")!;
+        host.Content = InlineComposeChrome(shell, surface);
+        host.IsVisible = true;
+
+        // A control made visible after layout does not grow its band until it is measured again
+        // (the traps list) — without this a reply opened by the harness photographs as an empty
+        // pane, and one opened at certain sizes draws late.
+        host.InvalidateMeasure();
+        host.UpdateLayout();
 
         // The harness sends the inline reply too, so its wire form — the threading headers most
         // of all — can be read back out of the outbox exactly as the windowed reply's is.
@@ -3841,13 +3954,49 @@ public partial class MainWindow : Window
     /// </summary>
     private Control InlineComposeChrome(ShellViewModel shell, ComposeSurface surface)
     {
-        var popOut = new Button { Content = "Pop Out", Padding = new Thickness(10, 4), Margin = new Thickness(0, 0, 6, 0) };
-        ToolTip.SetTip(popOut, "Open this reply in its own window");
-        popOut.Click += (_, _) => PopOutInline(shell);
+        // The reference's order and dress: Discard with its bin, then Pop Out with its window,
+        // both flat on the strip's own surface (clicking reply.png, top right of the pane).
+        Button Flat(string icon, string label, string tip)
+        {
+            var glyph = new TextBlock
+            {
+                Text = Mailbox.Theming.Icons.IconGlyphs.GetOrEmpty(icon, 16),
+                FontFamily = Mailbox.Theming.Icons.IconFont.Family,
+                FontSize = 14,
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                [!TextBlock.ForegroundProperty] = new DynamicResourceExtension("text.primary.brush"),
+            };
 
-        var discard = new Button { Content = "Discard", Padding = new Thickness(10, 4) };
-        ToolTip.SetTip(discard, "Discard this reply");
+            var text = new TextBlock
+            {
+                Text = label,
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                [!TextBlock.ForegroundProperty] = new DynamicResourceExtension("text.primary.brush"),
+                [!TextBlock.FontSizeProperty] = new DynamicResourceExtension("type.ui.size.small.value"),
+            };
+
+            var button = new Button
+            {
+                Content = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 6,
+                    Children = { glyph, text },
+                },
+                Padding = new Thickness(10, 4),
+                Background = Avalonia.Media.Brushes.Transparent,
+                BorderThickness = default,
+            };
+            ToolTip.SetTip(button, tip);
+            return button;
+        }
+
+        var discard = Flat("delete", "Discard", "Discard this reply");
+        discard.Margin = new Thickness(0, 0, 6, 0);
         discard.Click += (_, _) => surface.Invoke(ComposeCommands.Discard.Id);
+
+        var popOut = Flat("open-item", "Pop Out", "Open this reply in its own window");
+        popOut.Click += (_, _) => PopOutInline(shell);
 
         var bar = new Border
         {
@@ -3859,7 +4008,7 @@ public partial class MainWindow : Window
             {
                 Orientation = Orientation.Horizontal,
                 HorizontalAlignment = HorizontalAlignment.Right,
-                Children = { popOut, discard },
+                Children = { discard, popOut },
             },
         };
         DockPanel.SetDock(bar, Dock.Top);
@@ -3916,6 +4065,10 @@ public partial class MainWindow : Window
     private void RestoreReadingRibbon()
     {
         _ribbon.Layout = App.MailRibbon();
+
+        // The Message tab the reply brought is gone with it; back to Home, not to a tab id
+        // the strip no longer holds.
+        _ribbon.ActiveTabId = "home";
         _ribbon.CommandEnabled = _savedRibbonEnabled;
         _ribbon.RefreshEnablement();
         _savedRibbonEnabled = null;

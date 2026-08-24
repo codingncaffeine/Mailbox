@@ -283,6 +283,42 @@ public static class ViewCommands
     };
 
     /// <summary>
+    /// The Zoom dialog over an open message's body — the message window's own button. The shell
+    /// reads at the status bar's zoom; a window carries a zoom of its own, as the reference's do.
+    /// </summary>
+    public static readonly MailboxCommand Zoom = new()
+    {
+        Id = new("view.zoom"),
+        Label = "Zoom",
+        Description = "Choose how large the message's text is drawn.",
+        Icon = "zoom",
+        Category = "Zoom",
+        Scope = ModuleScope.Mail,
+    };
+
+    /// <summary>Waits for Phase 16's language work, and says so when pressed (§20).</summary>
+    public static readonly MailboxCommand Translate = new()
+    {
+        Id = new("view.translate"),
+        Label = "Translate",
+        Description = "Translate the selected text.",
+        Icon = "language",
+        Category = "Language",
+        Scope = ModuleScope.Mail,
+    };
+
+    /// <summary>Find inside the open message. Waits for Phase 16's polish, and says so (§20).</summary>
+    public static readonly MailboxCommand FindInMessage = new()
+    {
+        Id = new("mail.find"),
+        Label = "Find",
+        Description = "Find words inside this message.",
+        Icon = "search",
+        Category = "Editing",
+        Scope = ModuleScope.Mail,
+    };
+
+    /// <summary>
     /// the reference's third Move entry is Send to OneNote. Deliberately absent: that is Microsoft
     /// integration, which the project excludes, so the group ships with two entries.
     /// </summary>
@@ -405,5 +441,6 @@ public static class ViewCommands
         ImmersiveReader, ShowFocusedInbox,
         Redo, Apps, SearchPeople, ReadAloud, KeyboardShortcuts,
         MoveToQuick, ToManager, TeamEmail,
+        Zoom, Translate, FindInMessage,
     ];
 }

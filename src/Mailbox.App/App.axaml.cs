@@ -180,6 +180,35 @@ public partial class App : Application
             RibbonEdits.Apply(Plugins.InjectRibbon(DefaultRibbonLayouts.Mail)), QuickSteps.All);
 
     /// <summary>
+    /// The ribbon while a reply grows inline: the shell's own tabs with the compose window's
+    /// Message tab appended — the reference keeps File through Help on the strip and adds
+    /// Message, selected, rather than swapping the whole strip for the compose window's.
+    /// </summary>
+    /// <remarks>
+    /// The tab is cloned onto M so its KeyTip cannot collide with Home's H on a strip the two
+    /// never otherwise share.
+    /// </remarks>
+    public static RibbonLayout InlineReplyRibbon()
+    {
+        var shell = MailRibbon();
+        var compose = DefaultRibbonLayouts.Compose;
+
+        if (compose.FindTab("message") is not { } message) return compose;
+
+        // The compose window authors its Simplified rows directly rather than through named
+        // clusters (see RibbonLayout.SimplifiedRows), so the row travels whole; the shell's own
+        // clusters re-derive their rows over this on the way out.
+        var rows = shell.SimplifiedRows.ToDictionary(pair => pair.Key, pair => pair.Value);
+        if (compose.SimplifiedRows.TryGetValue("message", out var row)) rows["message"] = row;
+
+        return shell with
+        {
+            Tabs = [.. shell.Tabs, message with { KeyTip = "M" }],
+            SimplifiedRows = rows,
+        };
+    }
+
+    /// <summary>
     /// Puts every Quick Step in the catalogue as a command — the shipped three already are, by
     /// the ids the layout places; the reader's own join them — so the gallery, the QAT and the
     /// shortcut editor see them like any command. Called at start and whenever the list changes.

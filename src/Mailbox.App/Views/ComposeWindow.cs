@@ -425,7 +425,7 @@ public sealed class ComposeWindow : Window
     /// The assembly is named <c>mailbox</c>, not <c>Mailbox.App</c>, and an avares URI keys off
     /// the assembly name rather than the namespace.
     /// </summary>
-    private static Stream AssetLoaderIcon()
+    internal static Stream AssetLoaderIcon()
         => Avalonia.Platform.AssetLoader.Open(
             new Uri("avares://mailbox/Assets/Icons/mailbox-256.png"));
 
