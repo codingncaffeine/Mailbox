@@ -126,7 +126,10 @@ public sealed class PeopleWorkspace : Border
             .. _rows.Where(r =>
                 Has(r.Contact.Named()) || Has(r.Contact.FiledAs(FileAsOrders.FromIndex(_options.FileAsIndex)))
                 || Has(r.Contact.Company) || r.Contact.Emails.Any(e => Has(e.Address))
-                || r.Contact.Phones.Any(p => Has(p.Number))),
+                || r.Contact.Phones.Any(p => Has(p.Number))
+                // A collapsed person answers to every member's name, or linking two cards would
+                // make one of them unfindable.
+                || r.AlsoNamed.Any(Has)),
         ];
 
         bool Has(string? text) => text is { Length: > 0 } && text.Contains(Search, StringComparison.OrdinalIgnoreCase);
@@ -285,7 +288,9 @@ public sealed class PeopleWorkspace : Border
             // The reference starts with one address book called Contacts, so a first run has a
             // folder to show rather than an empty navigation pane.
             _book.Default();
-            _rows = _book.Rows();
+            // People() rather than Rows(): linked cards collapse into one person here, and only
+            // here — the Address Book and Select Names keep every card, a picker being a picker.
+            _rows = _book.People();
         }
         catch (Microsoft.Data.Sqlite.SqliteException ex)
         {
@@ -336,7 +341,7 @@ public sealed class PeopleWorkspace : Border
         var linkedRows = _book.Linked(row.Id);
         if (linkedRows.Count > 0)
         {
-            contact = MergedForDisplay(
+            contact = ContactMerge.Display(
                 contact, [.. linkedRows.Select(l => _book.Full(l.Id) ?? l.Contact)]);
         }
 
@@ -432,48 +437,6 @@ public sealed class PeopleWorkspace : Border
         var rule = new Border { Height = 1, Margin = new Thickness(0, 8, 0, 0) };
         rule[!BackgroundProperty] = new DynamicResourceExtension("people.card.rule.brush");
         _card.Children.Add(rule);
-    }
-
-    /// <summary>
-    /// One person out of several cards, for display only: the primary card's own fields, with
-    /// every way of reaching them the linked cards add. Nothing here is written anywhere — the
-    /// cards stay separate, which is the point of a link as against a merge.
-    /// </summary>
-    private static Contact MergedForDisplay(Contact primary, IReadOnlyList<Contact> linked)
-    {
-        var emails = primary.Emails.ToList();
-        var phones = primary.Phones.ToList();
-        var addresses = primary.Addresses.ToList();
-        var urls = primary.Urls.ToList();
-        var im = primary.InstantMessaging.ToList();
-
-        foreach (var other in linked)
-        {
-            emails.AddRange(other.Emails.Where(e => e.Address.Length > 0
-                && !emails.Any(x => string.Equals(x.Address.Trim(), e.Address.Trim(), StringComparison.OrdinalIgnoreCase))));
-
-            // Numbers compare by their digits: "+44 20 7946 0958" and "020 7946 0958" are one
-            // telephone written two ways, exactly as the duplicate finder reads them.
-            phones.AddRange(other.Phones.Where(p => Digits(p.Number).Length > 0
-                && !phones.Any(x => Digits(x.Number) == Digits(p.Number))));
-
-            addresses.AddRange(other.Addresses.Where(a => !a.IsEmpty
-                && !addresses.Any(x => string.Equals(x.OneLine(), a.OneLine(), StringComparison.OrdinalIgnoreCase))));
-
-            urls.AddRange(other.Urls.Where(u => !urls.Contains(u, StringComparer.OrdinalIgnoreCase)));
-            im.AddRange(other.InstantMessaging.Where(i => !im.Contains(i, StringComparer.OrdinalIgnoreCase)));
-        }
-
-        return primary with
-        {
-            Emails = emails,
-            Phones = phones,
-            Addresses = addresses,
-            Urls = urls,
-            InstantMessaging = im,
-        };
-
-        static string Digits(string text) => new([.. text.Where(char.IsAsciiDigit)]);
     }
 
     /// <summary>One of the icon font's glyphs, for the card's own small marks.</summary>

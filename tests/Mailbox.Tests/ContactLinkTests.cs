@@ -89,6 +89,48 @@ public class ContactLinkTests
         Assert.Empty(book.Full(one.Id)!.Links);
     }
 
+    [Fact]
+    public void ThePeopleListShowsALinkedPairAsOnePerson()
+    {
+        var (store, book, address) = Fresh();
+        using var _ = store;
+
+        var one = book.Save(Person("card-1", "A. Person", "a@example.com"), address.Id);
+        var two = book.Save(Person("card-2", "Anne Person", "anne@example.net", phone: "020 7946 0958"), address.Id);
+        book.Save(Person("card-3", "B. Other", "b@example.org"), address.Id);
+        book.Link(one.Id, two.Id);
+
+        // Every card for the pickers; one person for the People list.
+        Assert.Equal(3, book.Rows().Count);
+        var people = book.People();
+        Assert.Equal(2, people.Count);
+
+        // The collapsed row leads with the member whose File As sorts first, carries the other's
+        // ways of reaching them, and answers to the other's name.
+        var person = Assert.Single(people, r => r.AlsoNamed.Count > 0);
+        Assert.Equal(2, person.Contact.Emails.Count);
+        Assert.Single(person.Contact.Phones);
+        Assert.NotEqual(person.Named(), Assert.Single(person.AlsoNamed));
+    }
+
+    [Fact]
+    public void ThreeCardsLinkedPairwiseAreOnePerson()
+    {
+        var (store, book, address) = Fresh();
+        using var _ = store;
+
+        var one = book.Save(Person("card-1", "A. Person", "a@example.com"), address.Id);
+        var two = book.Save(Person("card-2", "A. Person", "b@example.com"), address.Id);
+        var three = book.Save(Person("card-3", "A. Person", "c@example.com"), address.Id);
+        book.Link(one.Id, two.Id);
+        book.Link(two.Id, three.Id);
+
+        // card-1 and card-3 never linked directly; the union is what makes them one person.
+        var person = Assert.Single(book.People());
+        Assert.Equal(3, person.Contact.Emails.Count);
+        Assert.Equal(2, person.AlsoNamed.Count);
+    }
+
     // ---- Duplicates ----------------------------------------------------------------------------
 
     [Fact]

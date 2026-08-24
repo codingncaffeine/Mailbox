@@ -14,6 +14,12 @@ namespace Mailbox.Contacts;
 public sealed record ContactRow(long Id, long CollectionId, string CollectionName, Contact Contact, bool IsReadOnly)
 {
     public string Named() => Contact.Named();
+
+    /// <summary>
+    /// The names of the linked cards collapsed into this row, when it stands for several — so a
+    /// search for any member's name still finds the person they collapsed into.
+    /// </summary>
+    public IReadOnlyList<string> AlsoNamed { get; init; } = [];
 }
 
 /// <summary>
@@ -49,6 +55,85 @@ public sealed class ContactBook(PimRepository repository)
         return _repository.Contacts(collectionIds)
             .Select(item => Row(item, books))
             .ToList();
+    }
+
+    /// <summary>
+    /// The rows the People module lists: one per person, linked cards collapsed into the member
+    /// whose File As sorts first — the reference shows a linked person once. Everything else —
+    /// the Address Book, Select Names, autocomplete — reads <see cref="Rows"/>, because a picker
+    /// wants every card: each is an addressable thing whoever it belongs to.
+    /// </summary>
+    /// <remarks>
+    /// Grouping reads the links <em>column</em> (step 7), never the cards — which also means a
+    /// card saved before the column existed lists separately until its next save writes the
+    /// mirror. A link naming a uid that is not here — another book, a card deleted elsewhere —
+    /// simply contributes nothing.
+    /// </remarks>
+    public IReadOnlyList<ContactRow> People(IReadOnlyCollection<long>? collectionIds = null)
+    {
+        var rows = Rows(collectionIds);
+        if (rows.All(r => r.Contact.Links.Count == 0)) return rows;
+
+        var here = new HashSet<string>(rows.Select(r => r.Contact.Uid), StringComparer.OrdinalIgnoreCase);
+
+        // Union-find over uids, so three cards linked pairwise are one person however the pairs
+        // were made.
+        var parent = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        string Find(string uid)
+        {
+            var root = uid;
+            while (parent.TryGetValue(root, out var up)
+                   && !string.Equals(up, root, StringComparison.OrdinalIgnoreCase))
+            {
+                root = up;
+            }
+
+            return root;
+        }
+
+        foreach (var row in rows)
+        {
+            parent.TryAdd(row.Contact.Uid, row.Contact.Uid);
+            foreach (var link in row.Contact.Links.Where(here.Contains))
+            {
+                parent.TryAdd(link, link);
+                var a = Find(row.Contact.Uid);
+                var b = Find(link);
+                if (!string.Equals(a, b, StringComparison.OrdinalIgnoreCase)) parent[b] = a;
+            }
+        }
+
+        var members = rows
+            .GroupBy(r => Find(r.Contact.Uid), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
+        // Rows arrive in File As order, so the first member met leads its set and the output
+        // keeps the list's own order.
+        var output = new List<ContactRow>(rows.Count);
+        var done = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var row in rows)
+        {
+            var root = Find(row.Contact.Uid);
+            if (!done.Add(root)) continue;
+
+            var set = members[root];
+            if (set.Count == 1)
+            {
+                output.Add(row);
+                continue;
+            }
+
+            var others = set.Where(r => r.Id != row.Id).ToList();
+            output.Add(row with
+            {
+                Contact = ContactMerge.Display(row.Contact, [.. others.Select(o => o.Contact)]),
+                AlsoNamed = [.. others.Select(o => o.Named())],
+            });
+        }
+
+        return output;
     }
 
     /// <summary>One row, or null when the id names nothing.</summary>

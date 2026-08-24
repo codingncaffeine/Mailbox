@@ -88,7 +88,7 @@ public sealed class PimRepository(PimStore store)
                completed_utc, rrule, recurrence_id, is_override, sequence, organizer, busy, reminder_minutes,
                categories, last_modified, sync_state,
                file_as, first_name, last_name, company, job_title, is_group, is_private,
-               follow_up_due, follow_up_complete
+               follow_up_due, follow_up_complete, links
         FROM pim_items
         """;
 
@@ -150,14 +150,14 @@ public sealed class PimRepository(PimStore store)
                      completed_utc, rrule, recurrence_id, is_override, sequence, organizer, busy, reminder_minutes,
                      categories, last_modified, sync_state,
                      file_as, first_name, last_name, company, job_title, is_group, is_private,
-                     follow_up_due, follow_up_complete)
+                     follow_up_due, follow_up_complete, links)
                 VALUES
                     ($collection, $uid, $kind, $href, $etag, $raw, $summary, $description, $location,
                      $starts, $ends, $startsLocal, $endsLocal, $tz, $allDay, $status, $priority, $percent,
                      $completed, $rrule, $recurrenceId, $override, $sequence, $organizer, $busy, $reminder,
                      $categories, $modified, $sync,
                      $fileAs, $firstName, $lastName, $company, $jobTitle, $isGroup, $isPrivate,
-                     $followUpDue, $followUpComplete)
+                     $followUpDue, $followUpComplete, $links)
                 """,
                 Parameters(item));
             var id = _store.LastInsertId;
@@ -183,7 +183,7 @@ public sealed class PimRepository(PimStore store)
                     busy = $busy, reminder_minutes = $reminder, categories = $categories, last_modified = $modified, sync_state = $sync,
                     file_as = $fileAs, first_name = $firstName, last_name = $lastName, company = $company,
                     job_title = $jobTitle, is_group = $isGroup, is_private = $isPrivate,
-                    follow_up_due = $followUpDue, follow_up_complete = $followUpComplete
+                    follow_up_due = $followUpDue, follow_up_complete = $followUpComplete, links = $links
                 WHERE id = $id
                 """,
                 [.. Parameters(item), ("$id", item.Id)]);
@@ -673,6 +673,7 @@ public sealed class PimRepository(PimStore store)
         ("$company", item.Company), ("$jobTitle", item.JobTitle), ("$isGroup", item.IsGroup ? 1 : 0),
         ("$isPrivate", item.IsPrivate ? 1 : 0),
         ("$followUpDue", item.FollowUpDue?.ToUnixTimeSeconds()), ("$followUpComplete", item.FollowUpComplete ? 1 : 0),
+        ("$links", string.Join("\n", item.Links)),
     ];
 
     private static PimItem ReadItem(SqliteDataReader r) => new()
@@ -716,6 +717,9 @@ public sealed class PimRepository(PimStore store)
         IsPrivate = r.GetInt32(36) != 0,
         FollowUpDue = r.IsDBNull(37) ? null : DateTimeOffset.FromUnixTimeSeconds(r.GetInt64(37)),
         FollowUpComplete = r.GetInt32(38) != 0,
+        Links = r.GetString(39) is { Length: > 0 } links
+            ? links.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            : [],
     };
 
     private static Collection ReadCollection(SqliteDataReader r) => new(

@@ -58,6 +58,10 @@ public static class PimContactCodec
             IsGroup = contact.IsGroup,
             IsPrivate = contact.IsPrivate,
 
+            // Mirrored from the card's own X-MAILBOX-LINK lines so the People list can group
+            // linked cards without parsing every card in the book (step 7).
+            Links = contact.Links,
+
             // The flag is the reader's own and is not written into the card (see Contact).
             FollowUpDue = contact.FollowUpDue,
             FollowUpComplete = contact.FollowUpComplete,
@@ -120,6 +124,7 @@ public static class PimContactCodec
             Notes = item.Description,
             IsGroup = item.IsGroup,
             IsPrivate = item.IsPrivate,
+            Links = item.Links,
             FollowUpDue = item.FollowUpDue,
             FollowUpComplete = item.FollowUpComplete,
             Categories = item.Categories.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),

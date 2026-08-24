@@ -194,6 +194,17 @@ public static class PimMigrations
         ALTER TABLE pim_items ADD COLUMN follow_up_due      INTEGER;
         ALTER TABLE pim_items ADD COLUMN follow_up_complete INTEGER NOT NULL DEFAULT 0;
         """,
+
+        // ---- 7: linked contacts --------------------------------------------------------------
+        // The card's X-MAILBOX-LINK lines, mirrored as a column the way is_private mirrors
+        // CLASS: the People list shows linked cards as one person, and a list that had to parse
+        // every card to know who links to whom would parse the whole book on every load. The
+        // text is still the truth; the column is what a list may read. Newline-separated UIDs,
+        // empty for the unlinked — including cards written before this step, which fill in the
+        // next time they are saved.
+        """
+        ALTER TABLE pim_items ADD COLUMN links TEXT NOT NULL DEFAULT '';
+        """,
     ];
 
     public static int Latest => Steps.Count;

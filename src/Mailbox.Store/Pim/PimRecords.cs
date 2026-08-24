@@ -103,6 +103,14 @@ public sealed record PimItem
 
     public bool FollowUpComplete { get; init; }
 
+    /// <summary>
+    /// The UIDs of the cards linked to this one, mirrored from the vCard's own lines so a list
+    /// can group linked people without parsing every card (step 7). Empty for everything that is
+    /// not a contact, and for a card saved before the column existed — the text is the truth and
+    /// the mirror fills in on the next save.
+    /// </summary>
+    public IReadOnlyList<string> Links { get; init; } = [];
+
     public DateTimeOffset LastModified { get; init; }
     public PimSyncState SyncState { get; init; } = PimSyncState.Synced;
     public string? DavHref { get; init; }
