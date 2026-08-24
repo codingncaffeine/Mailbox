@@ -224,6 +224,12 @@ internal static class PstPim
             .Where(url => url is { Length: > 0 }).Select(url => url!).ToList();
         var im = Text(m, names, PstPropertySets.Address, 0x8062);
 
+        // The photograph rides as an attachment that says it is one (PidTagAttachmentContactPhoto).
+        var photo = m.Attachments()
+            .Where(a => a.Property(0x7FFF)?.AsBoolean() ?? false)
+            .Select(a => (a.Content, a.MimeType))
+            .FirstOrDefault(p => p.Content.Length > 0);
+
         return new Contact
         {
             Uid = uid,
@@ -247,6 +253,9 @@ internal static class PstPim
             Notes = m.BodyText,
             Birthday = m.Property(0x3A42)?.AsTime() is { } birthday ? AsDate(birthday) : null,
             Anniversary = m.Property(0x3A41)?.AsTime() is { } anniversary ? AsDate(anniversary) : null,
+            Photo = photo.Content is { Length: > 0 }
+                ? new ContactPhoto(photo.Content, photo.MimeType is { Length: > 0 } ? photo.MimeType : "image/jpeg")
+                : null,
         };
     }
 

@@ -1,4 +1,5 @@
 using System.Text;
+using Mailbox.Pst;
 using Mailbox.Pst.Messaging;
 using MimeKit;
 using MimeKit.Utils;
@@ -39,6 +40,16 @@ internal static class PstMime
 
         var html = source.HtmlBody;
         if (html.Length > 0) builder.HtmlBody = DecodeHtml(html);
+
+        // The body of last resort: a message whose only body is compressed RTF
+        // (PidTagRtfCompressed, 0x1009) gets the HTML the RTF encapsulates, or its text.
+        if (builder.TextBody is null && builder.HtmlBody is null
+            && source.Property(0x1009) is { Type: PstPropertyType.Binary } rtf && rtf.Raw.Length > 0)
+        {
+            var (fromHtml, fromText) = RtfBody.FromCompressed(rtf.Raw);
+            if (fromHtml is { Length: > 0 }) builder.HtmlBody = fromHtml;
+            else if (fromText is { Length: > 0 }) builder.TextBody = fromText;
+        }
 
         foreach (var attachment in source.Attachments())
         {

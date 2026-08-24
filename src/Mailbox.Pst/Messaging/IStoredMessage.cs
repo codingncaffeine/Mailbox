@@ -43,6 +43,8 @@ public interface IStoredMessage
 /// <summary>An attachment as both formats carry one: a payload, its naming, or a whole message inside.</summary>
 public interface IStoredAttachment
 {
+    PstProperty? Property(ushort id);
+
     string FileName { get; }
 
     string MimeType { get; }

@@ -260,6 +260,8 @@ public sealed class MsgAttachment : IStoredAttachment
         _properties = new MsgPropertySet(file, storage, MsgPropertySet.RowHeader);
     }
 
+    public PstProperty? Property(ushort id) => _properties.Find(id);
+
     public int Method => _properties.Find(Pid.AttachMethod)?.AsInteger32() ?? 0;
 
     public string FileName
