@@ -130,14 +130,15 @@
 
                 <!--
                     Search is neither centred nor stretched. Its left edge lines up with the
-                    start of the message list — the app rail plus the folder pane — and it is
-                    as wide as the list column itself, to a cap: the reply capture's box ends
-                    on the reading-pane divider over a 304px list, and home.png's 511 is the
-                    same rule at the default list width, which is what the width token caps.
-                    WireSearchBoxToListEdge keeps both edges; the token width here is only the
-                    first frame's guess. It spans the columns rather than sitting in one so
-                    position is absolute and does not drift as the Quick Access Toolbar gains
-                    buttons.
+                    start of the message list and is as wide as the list column — as both were
+                    when the window opened, and never again: the owner's rule is that resizing
+                    the email area must not move it. The reply capture's box ends on the
+                    reading-pane divider over a 304px list and home.png's 511 is the same rule
+                    at the default width (the width token is the cap); each photographed a
+                    freshly opened layout. WireSearchBoxToListEdge places it once at the first
+                    settled layout; the token width here is only the first frame's guess. It
+                    spans the columns rather than sitting in one so position is absolute and
+                    does not drift as the Quick Access Toolbar gains buttons.
                 -->
                 <Border Grid.Column="0" Grid.ColumnSpan="6"
                         Name="TitleSearchHost"

@@ -3645,32 +3645,43 @@ public partial class MainWindow : Window
         // last button instead of covering it.
         var toolbar = this.FindControl<Control>("QuickAccessTitleGroup");
 
-        void Follow()
+        // The box takes its place from the layout in front of it and then holds still — the
+        // owner's rule, stated after watching it follow a splitter: resizing the email area
+        // must never move it. What re-places it is a mode change, not a drag: the window
+        // opening, and the inline reply opening or closing — the reply capture the size was
+        // matched against shows the box ending on the reading-pane divider while a reply is
+        // up, and home.png shows 511 (the token, now the cap) over the default list. So each
+        // of those moments takes one measurement at the next settled layout, and between
+        // them the box ignores the panes entirely.
+        var placed = false;
+
+        void PlaceOnce()
         {
+            if (placed) return;
             if (list.TranslatePoint(default, this) is not { } origin) return;
+
             var left = Math.Round(origin.X);
             if (toolbar is { IsVisible: true } && toolbar.TranslatePoint(new Point(toolbar.Bounds.Width, 0), this) is { } end)
             {
                 left = Math.Max(left, Math.Round(end.X) + 12);
             }
 
-            // The box spans the list column, not a fixed width: the reply capture puts its right
-            // edge on the reading-pane divider (296→598 over a 304 list), and home.png's 511 was
-            // the same rule photographed at the default list width — so 511, the token, is the
-            // cap it never grows past, and the floor is room for the glyph and the word.
             var cap = this.TryFindResource("titlebar.search.width.value", out var t) && t is double d ? d : 511;
             var width = Math.Clamp(Math.Round(list.Bounds.Width), 180, cap);
 
-            var moved = left > 0 && Math.Abs(search.Margin.Left - left) >= 0.5;
-            var resized = double.IsNaN(search.Width) || Math.Abs(search.Width - width) >= 0.5;
-            if (!moved && !resized) return;
+            if (left <= 0 || list.Bounds.Width <= 0) return;
 
-            if (moved) search.Margin = new Thickness(left, search.Margin.Top, search.Margin.Right, search.Margin.Bottom);
-            if (resized) search.Width = width;
+            search.Margin = new Thickness(left, search.Margin.Top, search.Margin.Right, search.Margin.Bottom);
+            search.Width = width;
+            placed = true;
         }
 
-        list.LayoutUpdated += (_, _) => Follow();
+        _replaceSearchBox = () => placed = false;
+        list.LayoutUpdated += (_, _) => PlaceOnce();
     }
+
+    /// <summary>Asks the search box to take a fresh measurement at the next settled layout.</summary>
+    private Action _replaceSearchBox = () => { };
 
     /// <summary>
     /// Ctrl+E and F3: the cursor goes to whichever search box the layout is showing — the title
@@ -3953,6 +3964,10 @@ public partial class MainWindow : Window
         host.Content = InlineComposeChrome(shell, surface);
         host.IsVisible = true;
 
+        // A mode change, so the box re-measures once the reply's layout settles — the reply
+        // capture shows it ending on the divider while a reply is up. Drags still move nothing.
+        _replaceSearchBox();
+
         // A control made visible after layout does not grow its band until it is measured again
         // (the traps list) — without this a reply opened by the harness photographs as an empty
         // pane, and one opened at certain sizes draws late.
@@ -4082,6 +4097,7 @@ public partial class MainWindow : Window
             shell.HideReadingPane.Execute(null);
         }
 
+        _replaceSearchBox();
         compose.Show(this);
     }
 
@@ -4100,6 +4116,7 @@ public partial class MainWindow : Window
             shell.HideReadingPane.Execute(null);
         }
 
+        _replaceSearchBox();
         RestoreReadingRibbon();
         shell.Refresh();
     }
