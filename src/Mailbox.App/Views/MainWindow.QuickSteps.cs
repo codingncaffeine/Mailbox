@@ -33,7 +33,9 @@ public partial class MainWindow
             App.QuickSteps.Upsert(step);
         }
 
-        if (rows.Count == 0 && step.Actions.Any(a => a.Kind != QuickStepKind.NewMessage))
+        // NewMessage and RunCommand act without a row — the second because the command it
+        // presses decides for itself, exactly as it would from the ribbon.
+        if (rows.Count == 0 && step.Actions.Any(a => a.Kind is not (QuickStepKind.NewMessage or QuickStepKind.RunCommand)))
         {
             shell.StatusRight = "Select a message first.";
             return;
@@ -127,6 +129,27 @@ public partial class MainWindow
                         if (account is null || _openMessage?.From.Mailboxes.FirstOrDefault() is not { } from) break;
                         var name = from.Name is { Length: > 0 } ? from.Name : from.Address;
                         await AlwaysMoveAsync(shell, account, new RuleCondition(RuleConditionKind.From) { Values = [from.Address] }, name);
+                        acted++;
+                        break;
+                    }
+
+                    // Any catalogue command as an action — which is how a plugin's command
+                    // becomes part of a step (§13), and how an unplaced addition can. Through
+                    // the shell's own dispatcher, so it means here what it means anywhere. A
+                    // step's own command is refused: a step that runs a step is a loop wearing
+                    // a gallery button.
+                    case QuickStepKind.RunCommand:
+                    {
+                        if (action.Values.FirstOrDefault() is not { Length: > 0 } commandId) break;
+
+                        var target = new CommandId(commandId);
+                        if (App.QuickSteps.FindByCommand(target) is not null)
+                        {
+                            Log.Warn($"Quick Step “{step.Name}”: “{commandId}” is a Quick Step itself, and a step does not run a step.");
+                            break;
+                        }
+
+                        RunCommand(target);
                         acted++;
                         break;
                     }

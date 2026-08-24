@@ -6,6 +6,7 @@ using Avalonia.Controls.Templates;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Mailbox.Core.Commands;
 using Mailbox.Core.Settings;
 using Mailbox.Store;
 using Mailbox.Theming.Icons;
@@ -87,6 +88,27 @@ internal static class QuickStepUi
                 var chosen = await Chooser.AskAsync(owner, "Flag Message", "Flag:", choices,
                     action.Level is { } d ? d.ToString(CultureInfo.InvariantCulture) : "none");
                 return chosen is null ? null : action with { Level = chosen == "none" ? null : int.Parse(chosen, CultureInfo.InvariantCulture) };
+            }
+
+            case QuickStepKind.RunCommand:
+            {
+                // Every catalogue command, plugins' included — that is the point (§13) — except
+                // the steps themselves, which would be a loop offered in a dropdown. The value
+                // keeps the id and the label both: the id is what runs, whatever the command is
+                // later renamed to; the label is what the dialog's line reads back.
+                var commands = App.Commands.All
+                    .Where(c => !c.Id.Value.StartsWith("quickstep.", StringComparison.Ordinal))
+                    .OrderBy(c => c.Label, StringComparer.CurrentCultureIgnoreCase)
+                    .Select(c => new Choice(
+                        c.OwningPluginId is null ? c.Label : $"{c.Label} — plugin", c.Id.Value))
+                    .ToList();
+
+                var chosen = await Chooser.AskAsync(owner, "Run a command", "Command:", commands,
+                    action.Values.FirstOrDefault() ?? string.Empty);
+                if (chosen is null) return null;
+
+                var label = App.Commands.TryGet(new CommandId(chosen), out var picked) ? picked.Label : chosen;
+                return action with { Values = [chosen, label] };
             }
 
             default:

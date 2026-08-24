@@ -480,3 +480,40 @@ public class PluginHostTests : IDisposable
     private static Mailbox.Plugins.Api.PluginMessageSummary Summary(string subject)
         => new("a@example.net", 1, 1, subject, "Sender", DateTimeOffset.UtcNow, false);
 }
+
+/// <summary>§13's "add Quick Steps actions": any catalogue command as a step's action.</summary>
+public class QuickStepRunCommandTests
+{
+    [Fact]
+    public void ARunCommandActionSurvivesTheStoreAndSaysItsLabel()
+    {
+        var settings = Mailbox.Core.Settings.SettingsStore.Transient();
+        var steps = new Mailbox.Core.Settings.QuickSteps(settings);
+
+        steps.Upsert(new Mailbox.Core.Settings.QuickStep
+        {
+            Id = "pluginstep",
+            Name = "Plugin Step",
+            Actions = [new Mailbox.Core.Settings.QuickStepAction(Mailbox.Core.Settings.QuickStepKind.RunCommand)
+            {
+                Values = ["plugin.sample.tools.hello", "Say Hello"],
+            }],
+        });
+
+        // Read back through a fresh instance over the same store: the kind serializes by name,
+        // so appending it cannot renumber what older files hold.
+        var reread = new Mailbox.Core.Settings.QuickSteps(settings);
+        var step = Assert.Single(reread.All, s => s.Id == "pluginstep");
+        var action = Assert.Single(step.Actions);
+
+        Assert.Equal(Mailbox.Core.Settings.QuickStepKind.RunCommand, action.Kind);
+        Assert.False(action.NeedsSetup);
+        Assert.Contains("Say Hello", action.Describe());
+
+        // The step itself does not demand a selection: the command it presses decides.
+        Assert.False(step.ToCommand().RequiresSelection);
+
+        // Unchosen is still-to-set-up, which is what First Time Setup keys on.
+        Assert.True(new Mailbox.Core.Settings.QuickStepAction(Mailbox.Core.Settings.QuickStepKind.RunCommand).NeedsSetup);
+    }
+}

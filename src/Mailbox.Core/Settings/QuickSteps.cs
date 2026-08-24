@@ -34,6 +34,11 @@ public enum QuickStepKind
 
     // Conversation
     AlwaysMoveFromSender,
+
+    // Commands. Appended after everything the reference's own picker offers: any catalogue
+    // command as an action, which is how a plugin's command becomes part of a step (§13) —
+    // and how Snooze or Message Source could, additions being ordinary commands too.
+    RunCommand,
 }
 
 /// <summary>One action in a Quick Step, with the value it carries.</summary>
@@ -59,6 +64,7 @@ public sealed record QuickStepAction(QuickStepKind Kind)
     {
         QuickStepKind.MoveToFolder or QuickStepKind.CopyToFolder => FolderId is null && string.IsNullOrEmpty(FolderName),
         QuickStepKind.NewMessage or QuickStepKind.Forward or QuickStepKind.ForwardAsAttachment => Values.Count == 0,
+        QuickStepKind.RunCommand => Values.Count == 0,
         _ => false,
     };
 
@@ -83,6 +89,10 @@ public sealed record QuickStepAction(QuickStepKind Kind)
         QuickStepKind.ReplyAll => "Reply All",
         QuickStepKind.ForwardAsAttachment => $"Forward as attachment to: {(Values.Count == 0 ? "(choose on first use)" : string.Join("; ", Values))}",
         QuickStepKind.AlwaysMoveFromSender => "Always move messages from sender",
+
+        // Values carries the id and then the label, so the dialog's line reads like a person
+        // and the runner still has the id whatever the command is renamed to.
+        QuickStepKind.RunCommand => $"Run: {(Values.Count > 1 ? Values[1] : Values.FirstOrDefault() ?? "(choose on first use)")}",
         _ => Kind.ToString(),
     };
 
@@ -107,6 +117,7 @@ public sealed record QuickStepAction(QuickStepKind Kind)
         QuickStepKind.ReplyAll => "Reply All",
         QuickStepKind.ForwardAsAttachment => "Forward message as an attachment",
         QuickStepKind.AlwaysMoveFromSender => "Always Move Messages from Sender",
+        QuickStepKind.RunCommand => "Run a command",
         _ => kind.ToString(),
     };
 
@@ -118,6 +129,7 @@ public sealed record QuickStepAction(QuickStepKind Kind)
         QuickStepKind.Categorize or QuickStepKind.ClearCategories or QuickStepKind.FlagMessage or QuickStepKind.ClearFlags or QuickStepKind.MarkComplete
             => "Categories, Tasks and Flags",
         QuickStepKind.AlwaysMoveFromSender => "Conversation",
+        QuickStepKind.RunCommand => "Commands",
         _ => "Respond",
     };
 }
@@ -155,7 +167,7 @@ public sealed record QuickStep
         Icon = Icon,
         Category = "Quick Steps",
         Scope = ModuleScope.Mail,
-        RequiresSelection = Actions.Any(a => a.Kind is not (QuickStepKind.NewMessage)),
+        RequiresSelection = Actions.Any(a => a.Kind is not (QuickStepKind.NewMessage or QuickStepKind.RunCommand)),
         DefaultGesture = Shortcut is { } n ? $"Ctrl+Shift+{n}" : null,
         InDefaultLayout = false,
     };
