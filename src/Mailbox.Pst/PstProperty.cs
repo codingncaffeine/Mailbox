@@ -37,13 +37,16 @@ public enum PstPropertyType : ushort
 /// sits on. Readings are forgiving of short values (a missing byte reads as zero) but never of
 /// type confusion: asking a binary for its integer is a caller's bug and throws.
 /// <para>
-/// <c>String8</c> values decode as Latin-1 here. Their real encoding is the writing program's
-/// own code page, which is a per-message fact the messaging layer resolves; this layer does not
-/// guess beyond the bytes.
+/// <c>String8</c> values decode by <see cref="String8Encoding"/> when whoever built the
+/// property knew the message's code page, and as Latin-1 otherwise — the reading that never
+/// throws and never widens a byte.
 /// </para>
 /// </remarks>
 public sealed record PstProperty(ushort Id, PstPropertyType Type, byte[] Raw)
 {
+    /// <summary>How String8 bytes decode — stamped by the property's source from PidTagMessageCodepage; null means Latin-1.</summary>
+    public Encoding? String8Encoding { get; init; }
+
     /// <summary>The multi-valued flag: any type ORed with it is an array of that type.</summary>
     public const ushort MultiValuedFlag = 0x1000;
 
@@ -101,7 +104,7 @@ public sealed record PstProperty(ushort Id, PstPropertyType Type, byte[] Raw)
     public string AsString() => Type switch
     {
         PstPropertyType.String => Encoding.Unicode.GetString(Raw),
-        PstPropertyType.String8 => Encoding.Latin1.GetString(Raw),
+        PstPropertyType.String8 => (String8Encoding ?? Encoding.Latin1).GetString(Raw),
         _ => throw Wrong("a string"),
     };
 
@@ -121,7 +124,7 @@ public sealed record PstProperty(ushort Id, PstPropertyType Type, byte[] Raw)
         {
             // Fixed-size elements are the bytes divided evenly ([MS-PST] §2.3.3.4.1).
             for (var at = 0; at + size <= Raw.Length; at += size)
-                elements.Add(new PstProperty(Id, BaseType, Raw.AsSpan(at, size).ToArray()));
+                elements.Add(new PstProperty(Id, BaseType, Raw.AsSpan(at, size).ToArray()) { String8Encoding = String8Encoding });
             return elements;
         }
 
@@ -135,7 +138,7 @@ public sealed record PstProperty(ushort Id, PstPropertyType Type, byte[] Raw)
             var start = BinaryPrimitives.ReadUInt32LittleEndian(Raw.AsSpan(4 + i * 4));
             var end = i + 1 < count ? BinaryPrimitives.ReadUInt32LittleEndian(Raw.AsSpan(4 + (i + 1) * 4)) : (uint)Raw.Length;
             if (start > end || end > Raw.Length) break;
-            elements.Add(new PstProperty(Id, BaseType, Raw.AsSpan((int)start, (int)(end - start)).ToArray()));
+            elements.Add(new PstProperty(Id, BaseType, Raw.AsSpan((int)start, (int)(end - start)).ToArray()) { String8Encoding = String8Encoding });
         }
 
         return elements;

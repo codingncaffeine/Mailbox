@@ -57,17 +57,53 @@ public sealed class PstStore
     /// The folder a mail program treats as the top — "Top of Personal Folders" and its
     /// translations — or the root folder itself when the store does not point to one.
     /// </summary>
-    public PstFolder MailRoot => FolderByEntryId(_properties.Find(Pid.IpmSubTreeEntryId)) ?? RootFolder;
+    public PstFolder MailRoot =>
+        FolderByEntryId(_properties.Find(Pid.IpmSubTreeEntryId)) ?? OstSubtree() ?? RootFolder;
+
+    /// <summary>
+    /// The 4K layout's answer when the store carries no subtree pointer at all, which real OST
+    /// files do: the mail lives under a folder literally named IPM_SUBTREE — a MAPI constant,
+    /// not display text, so the name is safe to look for — and the file keeps an empty second
+    /// one for public folders, which is why the populated one wins.
+    /// </summary>
+    private PstFolder? OstSubtree()
+    {
+        if (_file.Format != Ndb.PstFormat.Unicode4K) return null;
+
+        PstFolder? best = null;
+        var bestChildren = 0;
+        foreach (var branch in RootFolder.Subfolders())
+        {
+            foreach (var candidate in new[] { branch }.Concat(branch.Subfolders()))
+            {
+                if (!string.Equals(candidate.Name, "IPM_SUBTREE", StringComparison.OrdinalIgnoreCase)) continue;
+                var children = candidate.Subfolders().Count();
+                if (children > bestChildren)
+                {
+                    best = candidate;
+                    bestChildren = children;
+                }
+            }
+        }
+
+        return best;
+    }
 
     private PstFolder? FolderByEntryId(PstProperty? entryId)
     {
         if (entryId is null || entryId.Raw.Length < 24) return null;
 
         // The sixteen bytes in the middle are the store's uid; a mismatch means the EntryID
-        // belongs to some other file and its NID means nothing here.
+        // belongs to some other file and its NID means nothing here. The 4K layout is exempt:
+        // real OST files stamp their EntryIDs with a mapping uid that is not the record key,
+        // and the check that protects a PST from a foreign pointer just blinds an OST to its
+        // own — the target still has to be a real folder in this file either way.
         var recordKey = _properties.Find(Pid.RecordKey)?.Raw;
-        if (recordKey is { Length: 16 } && !recordKey.AsSpan().SequenceEqual(entryId.Raw.AsSpan(4, 16)))
+        if (_file.Format != Ndb.PstFormat.Unicode4K
+            && recordKey is { Length: 16 } && !recordKey.AsSpan().SequenceEqual(entryId.Raw.AsSpan(4, 16)))
+        {
             return null;
+        }
 
         var nid = new Nid(System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(entryId.Raw.AsSpan(20)));
         return PstFolder.Open(_file, nid);

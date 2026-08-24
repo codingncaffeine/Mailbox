@@ -41,10 +41,16 @@ public class PstCorpusTests
     {
         var directory = CorpusDirectory();
         Assert.SkipWhen(directory is null, "Set MAILBOX_PST_CORPUS, or keep files in specs/pst-corpus, to run against real PST files.");
-        var files = Directory.GetFiles(directory!, "*.pst");
+        var files = CorpusScan(directory!);
         Assert.SkipWhen(files.Length == 0, $"No .pst files in {directory}.");
         return files;
     }
+
+    /// <summary>Every readable file in the corpus — PSTs and, best-effort, OSTs.</summary>
+    internal static string[] CorpusScan(string directory) =>
+        [.. Directory.GetFiles(directory).Where(f =>
+            f.EndsWith(".pst", StringComparison.OrdinalIgnoreCase)
+            || f.EndsWith(".ost", StringComparison.OrdinalIgnoreCase)).Order()];
 
     [Fact]
     public void EveryCorpusFileOpensAndStatesItsShape()
@@ -60,15 +66,20 @@ public class PstCorpusTests
             using var raw = File.OpenRead(path);
             raw.Position = 10;
             raw.ReadExactly(version);
-            var expected = version[0] is 14 or 15 && version[1] == 0 ? PstFormat.Ansi : PstFormat.Unicode;
+            var expected = (version[0] | (version[1] << 8)) switch
+            {
+                14 or 15 => PstFormat.Ansi,
+                36 or 37 => PstFormat.Unicode4K,
+                _ => PstFormat.Unicode,
+            };
 
             Assert.Equal(expected, file.Format);
             layouts.Add(file.Format);
         }
 
-        // The known corpus carries both layouts (sample2 and test_ansi are ANSI); a corpus that
-        // has quietly lost one of them is not testing half the reader.
-        Assert.Equal(2, layouts.Count);
+        // The known corpus carries all three layouts (sample2 and test_ansi are ANSI, the
+        // example OST is 4K); a corpus that has quietly lost one is not testing that reader.
+        Assert.Equal(3, layouts.Count);
     }
 
     [Fact]

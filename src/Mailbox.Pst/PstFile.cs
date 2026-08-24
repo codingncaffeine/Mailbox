@@ -28,7 +28,6 @@ public sealed class PstFile : IDisposable
     private readonly Dictionary<ulong, BTreePage> _pages = [];
     private const int PageCacheLimit = 4096;
 
-    private const int MaxBlockSize = 8192;
     private const int MaxBTreeDepth = 8;
 
     internal PstFormat Format => _header.Format;
@@ -141,7 +140,8 @@ public sealed class PstFile : IDisposable
             return cached;
         }
 
-        Span<byte> bytes = stackalloc byte[BTreePage.Size];
+        Span<byte> buffer = stackalloc byte[4096];
+        var bytes = buffer[..BTreePage.PageSize(Format)];
         ReadExactly((long)source.Ib, bytes);
         var page = BTreePage.Read(bytes, source, Format);
         if (page.Type != expected)
@@ -203,8 +203,9 @@ public sealed class PstFile : IDisposable
     private byte[] ReadStoredBlock(Bid bid, BbtEntry entry)
     {
         var trailerSize = BlockTrailer.Size(Format);
-        if (entry.Length > MaxBlockSize - trailerSize)
-            throw new PstException($"Block {bid} claims {entry.Length} bytes of data, and no block holds more than {MaxBlockSize - trailerSize}.");
+        var maxBlock = BlockTrailer.MaxSize(Format);
+        if (entry.Length > maxBlock - trailerSize)
+            throw new PstException($"Block {bid} claims {entry.Length} bytes of data, and no block holds more than {maxBlock - trailerSize}.");
 
         var stored = BlockTrailer.StoredSize(entry.Length, Format);
         var buffer = new byte[stored];
@@ -223,13 +224,51 @@ public sealed class PstFile : IDisposable
             throw new PstException(
                 $"The block at 0x{entry.Bref.Ib:X} carries signature 0x{trailer.Signature:X4} where 0x{signature:X4} belongs: the block is not the one that was written here.");
 
-        // The CRC covers the bytes as stored — for an encoded block, the encoded ones.
+        // The CRC covers the bytes as stored — for an encoded or compressed block, those.
         var crc = PstCrc.Compute(buffer.AsSpan(0, entry.Length));
         if (crc != trailer.Crc)
             throw new PstException($"Block {bid} carries CRC 0x{trailer.Crc:X8} but its bytes come to 0x{crc:X8}: the block is damaged.");
 
+        // The 4K layout can deflate a block's data; the trailer's uncompressed size differing
+        // from the stored size is the flag, and the wrapper is zlib — learnt from real files,
+        // the documentation saying bare deflate.
+        if (Format == PstFormat.Unicode4K && trailer.UncompressedLength != (ushort)entry.Length)
+            return Inflate(buffer.AsSpan(0, entry.Length), trailer.UncompressedLength, bid);
+
         Array.Resize(ref buffer, entry.Length);
         return buffer;
+    }
+
+    private static byte[] Inflate(ReadOnlySpan<byte> compressed, ushort statedLength, Bid bid)
+    {
+        try
+        {
+            using var source = new MemoryStream(compressed.ToArray());
+            using var inflater = new System.IO.Compression.ZLibStream(source, System.IO.Compression.CompressionMode.Decompress);
+            using var inflated = new MemoryStream();
+
+            // The stated size is sixteen bits, so it is checked modulo rather than trusted as a
+            // bound; the block's own ceiling is the real one.
+            var buffer = new byte[8192];
+            int read;
+            while ((read = inflater.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                inflated.Write(buffer, 0, read);
+                if (inflated.Length > BlockTrailer.MaxSize(PstFormat.Unicode4K))
+                    throw new PstException($"Block {bid} inflates past the largest block the format allows: the block is damaged.");
+            }
+
+            var result = inflated.ToArray();
+            if ((ushort)result.Length != statedLength)
+                throw new PstException(
+                    $"Block {bid} says it inflates to {statedLength} bytes and came to {result.Length}: the block is damaged.");
+
+            return result;
+        }
+        catch (Exception ex) when (ex is InvalidDataException or IOException)
+        {
+            throw new PstException($"Block {bid} is marked compressed and would not inflate: the block is damaged.", ex);
+        }
     }
 
     private byte[] ReadBlock(Bid bid)

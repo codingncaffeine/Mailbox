@@ -24,7 +24,8 @@ public readonly record struct NbtEntry(Nid Nid, Bid Data, Bid Subnode, Nid Paren
 public readonly record struct BbtEntry(Bref Bref, ushort Length, ushort ReferenceCount);
 
 /// <summary>
-/// One 512-byte BTree page ([MS-PST] §2.2.2.7.7.1), verified and pulled apart.
+/// One BTree page ([MS-PST] §2.2.2.7.7.1) — 512 bytes, or 4096 in the 4K layout — verified and
+/// pulled apart.
 /// </summary>
 /// <remarks>
 /// Three verifications stand between the disk and the caller, because a BTree page is reached by
@@ -36,14 +37,14 @@ public readonly record struct BbtEntry(Bref Bref, ushort Length, ushort Referenc
 /// </remarks>
 internal sealed class BTreePage
 {
-    public const int Size = 512;
+    public static int PageSize(PstFormat format) => format == PstFormat.Unicode4K ? 4096 : 512;
 
     public required PageType Type { get; init; }
 
     /// <summary>Zero at the leaves, counting up toward the root.</summary>
     public required byte Level { get; init; }
 
-    public required byte EntryCount { get; init; }
+    public required ushort EntryCount { get; init; }
 
     public required byte EntryStride { get; init; }
 
@@ -51,24 +52,40 @@ internal sealed class BTreePage
 
     public static BTreePage Read(ReadOnlySpan<byte> page, Bref source, PstFormat format)
     {
-        if (page.Length != Size)
-            throw new PstException($"A BTree page must be {Size} bytes and {page.Length} arrived for the one at 0x{source.Ib:X}.");
+        if (page.Length != PageSize(format))
+            throw new PstException($"A BTree page must be {PageSize(format)} bytes and {page.Length} arrived for the one at 0x{source.Ib:X}.");
 
         // Unicode: 488 bytes of entries, 4 of metadata, 4 of padding, a 16-byte trailer.
         // ANSI: 496 bytes of entries, 4 of metadata, a 12-byte trailer.
-        var entryRegion = format == PstFormat.Unicode ? 488 : 496;
-        var meta = page.Slice(entryRegion, 4);
+        // 4K: 4056 bytes of entries, 16-bit counts, and the trailer at 4072 — the counts grew
+        // with the page, which is the one metadata change the bigger page forced.
+        var entryRegion = format == PstFormat.Unicode4K ? 4056 : format.IsWide() ? 488 : 496;
         var trailer = PageTrailer.Read(page, format);
 
         if (trailer.Type is not (PageType.NodeBTree or PageType.BlockBTree))
             throw new PstException($"The page at 0x{source.Ib:X} is a 0x{(byte)trailer.Type:X2} page where a BTree page was expected.");
 
-        // The page CRC covers everything before the trailer — the entries, the metadata, and on
-        // the Unicode layout the padding word between them.
-        trailer.Verify(page[..^(format == PstFormat.Unicode ? 16 : 12)], source, format);
+        // The page CRC covers everything before the trailer — the entries, the metadata, and
+        // the padding between them.
+        trailer.Verify(page[..CrcRegion(format)], source, format);
 
-        var count = meta[0];
-        var stride = meta[2];
+        ushort count;
+        byte stride;
+        byte level;
+        if (format == PstFormat.Unicode4K)
+        {
+            count = BinaryPrimitives.ReadUInt16LittleEndian(page[4056..]);
+            stride = page[4060];
+            level = page[4061];
+        }
+        else
+        {
+            var meta = page.Slice(entryRegion, 4);
+            count = meta[0];
+            stride = meta[2];
+            level = meta[3];
+        }
+
         if (stride == 0 || count * stride > entryRegion)
             throw new PstException(
                 $"The BTree page at 0x{source.Ib:X} claims {count} entries of {stride} bytes, which do not fit in a page.");
@@ -76,19 +93,22 @@ internal sealed class BTreePage
         return new BTreePage
         {
             Type = trailer.Type,
-            Level = meta[3],
+            Level = level,
             EntryCount = count,
             EntryStride = stride,
             Entries = page[..(count * stride)].ToArray(),
         };
     }
 
+    internal static int CrcRegion(PstFormat format) =>
+        format == PstFormat.Unicode4K ? 4072 : format.IsWide() ? 496 : 500;
+
     private ReadOnlySpan<byte> Entry(int index) => Entries.AsSpan(index * EntryStride, EntryStride);
 
     public BtEntry Intermediate(int index, PstFormat format)
     {
         var entry = Entry(index);
-        return format == PstFormat.Unicode
+        return format.IsWide()
             ? new BtEntry(BinaryPrimitives.ReadUInt64LittleEndian(entry), PstHeader.ReadBref(entry[8..], format))
             : new BtEntry(BinaryPrimitives.ReadUInt32LittleEndian(entry), PstHeader.ReadBref(entry[4..], format));
     }
@@ -96,7 +116,7 @@ internal sealed class BTreePage
     public NbtEntry Node(int index, PstFormat format)
     {
         var entry = Entry(index);
-        return format == PstFormat.Unicode
+        return format.IsWide()
             ? new NbtEntry(
                 new Nid((uint)BinaryPrimitives.ReadUInt64LittleEndian(entry)),
                 new Bid(BinaryPrimitives.ReadUInt64LittleEndian(entry[8..])),
@@ -112,7 +132,7 @@ internal sealed class BTreePage
     public BbtEntry Block(int index, PstFormat format)
     {
         var entry = Entry(index);
-        var brefSize = format == PstFormat.Unicode ? 16 : 8;
+        var brefSize = format.IsWide() ? 16 : 8;
         return new BbtEntry(
             PstHeader.ReadBref(entry, format),
             BinaryPrimitives.ReadUInt16LittleEndian(entry[brefSize..]),
@@ -125,12 +145,12 @@ internal readonly record struct PageTrailer(PageType Type, ushort Signature, uin
 {
     public static PageTrailer Read(ReadOnlySpan<byte> page, PstFormat format)
     {
-        var trailer = page[(format == PstFormat.Unicode ? 496 : 500)..];
+        var trailer = page[BTreePage.CrcRegion(format)..];
         if (trailer[0] != trailer[1])
             throw new PstException($"A page trailer repeats its type byte and this one does not (0x{trailer[0]:X2} then 0x{trailer[1]:X2}): the page is damaged.");
 
         // The CRC and the block id swap places between the two layouts.
-        return format == PstFormat.Unicode
+        return format.IsWide()
             ? new PageTrailer((PageType)trailer[0], BinaryPrimitives.ReadUInt16LittleEndian(trailer[2..]),
                 BinaryPrimitives.ReadUInt32LittleEndian(trailer[4..]), new Bid(BinaryPrimitives.ReadUInt64LittleEndian(trailer[8..])))
             : new PageTrailer((PageType)trailer[0], BinaryPrimitives.ReadUInt16LittleEndian(trailer[2..]),

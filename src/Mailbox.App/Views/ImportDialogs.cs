@@ -223,7 +223,7 @@ public static class ImportFilesDialog
                 AllowMultiple = true,
                 FileTypeFilter =
                 [
-                    new FilePickerFileType("Everything importable") { Patterns = ["*.pst", "*.msg", "*.mbox", "*.eml", "*.ics", "*.vcf", "*"] },
+                    new FilePickerFileType("Everything importable") { Patterns = ["*.pst", "*.ost", "*.msg", "*.mbox", "*.eml", "*.ics", "*.vcf", "*"] },
                 ],
             });
 
@@ -314,6 +314,7 @@ internal static class ImportFiles
                 switch (extension)
                 {
                     case ".pst":
+                    case ".ost":
                         // The one importer here that brings a whole folder tree, not a file
                         // into the Inbox — the account is the destination for the mail, and
                         // the PIM store for everything else the file carries.

@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Text;
 using Mailbox.Pst.Cfb;
 using Mailbox.Pst.Messaging;
 
@@ -58,8 +59,12 @@ internal sealed class MsgPropertySet
 
     public PstProperty? Find(ushort id) => _properties.GetValueOrDefault(id);
 
-    public MsgPropertySet(CompoundFile file, CfbEntry storage, int headerSize)
+    /// <summary>The String8 encoding this set's values decode by — its own code page, or its message's.</summary>
+    public Encoding? String8 { get; }
+
+    public MsgPropertySet(CompoundFile file, CfbEntry storage, int headerSize, Encoding? inheritedString8 = null)
     {
+        String8 = inheritedString8;
         if (file.Find(storage, "__properties_version1.0") is not { } propertyStream) return;
 
         var entries = file.ReadStream(propertyStream);
@@ -82,6 +87,21 @@ internal sealed class MsgPropertySet
 
             // A variable, GUID, or multi-valued value lives in its own stream, named by the tag.
             _properties[id] = new PstProperty(id, type, Resolve(file, substreams, tag, type));
+        }
+
+        // The code page is one of the properties just read; String8 values are stamped after.
+        String8 = PstCodePage.Resolve(
+            _properties.GetValueOrDefault((ushort)0x3FFD) is { Type: PstPropertyType.Integer32 } codepage
+                ? codepage.AsInteger32()
+                : null) ?? inheritedString8;
+
+        if (String8 is not null)
+        {
+            foreach (var id in _properties.Keys.ToList())
+            {
+                if (_properties[id].BaseType == PstPropertyType.String8)
+                    _properties[id] = _properties[id] with { String8Encoding = String8 };
+            }
         }
     }
 
@@ -163,11 +183,11 @@ public sealed class MsgMessage : IStoredMessage
     private readonly CfbEntry _storage;
     private readonly MsgPropertySet _properties;
 
-    internal MsgMessage(CompoundFile file, CfbEntry storage, int headerSize)
+    internal MsgMessage(CompoundFile file, CfbEntry storage, int headerSize, Encoding? inheritedString8 = null)
     {
         _file = file;
         _storage = storage;
-        _properties = new MsgPropertySet(file, storage, headerSize);
+        _properties = new MsgPropertySet(file, storage, headerSize, inheritedString8);
     }
 
     public PstProperty? Property(ushort id) => _properties.Find(id);
@@ -223,7 +243,7 @@ public sealed class MsgMessage : IStoredMessage
     {
         foreach (var storage in Substorages("__recip_version1.0_#"))
         {
-            var row = new MsgPropertySet(_file, storage, MsgPropertySet.RowHeader);
+            var row = new MsgPropertySet(_file, storage, MsgPropertySet.RowHeader, _properties.String8);
             var smtp = row.Find(Pid.SmtpAddress)?.AsString();
             yield return new PstRecipient(
                 row.Find(Pid.RecipientType)?.AsInteger32() ?? PstRecipient.To,
@@ -238,7 +258,7 @@ public sealed class MsgMessage : IStoredMessage
     public IEnumerable<MsgAttachment> Attachments()
     {
         foreach (var storage in Substorages("__attach_version1.0_#"))
-            yield return new MsgAttachment(_file, storage);
+            yield return new MsgAttachment(_file, storage, _properties.String8);
     }
 
     private IEnumerable<CfbEntry> Substorages(string prefix) => _file.Children(_storage)
@@ -253,11 +273,14 @@ public sealed class MsgAttachment : IStoredAttachment
     private readonly CfbEntry _storage;
     private readonly MsgPropertySet _properties;
 
-    internal MsgAttachment(CompoundFile file, CfbEntry storage)
+    private readonly Encoding? _string8;
+
+    internal MsgAttachment(CompoundFile file, CfbEntry storage, Encoding? inheritedString8 = null)
     {
         _file = file;
         _storage = storage;
-        _properties = new MsgPropertySet(file, storage, MsgPropertySet.RowHeader);
+        _properties = new MsgPropertySet(file, storage, MsgPropertySet.RowHeader, inheritedString8);
+        _string8 = _properties.String8;
     }
 
     public PstProperty? Property(ushort id) => _properties.Find(id);
@@ -284,6 +307,6 @@ public sealed class MsgAttachment : IStoredAttachment
     /// <summary>The message inside: a substorage named for the data tag with the object type, itself a whole message.</summary>
     public MsgMessage? EmbeddedMessage =>
         _file.Find(_storage, "__substg1.0_3701000D") is { Type: CfbEntry.Storage } inner
-            ? new MsgMessage(_file, inner, MsgPropertySet.EmbeddedHeader)
+            ? new MsgMessage(_file, inner, MsgPropertySet.EmbeddedHeader, _string8)
             : null;
 }

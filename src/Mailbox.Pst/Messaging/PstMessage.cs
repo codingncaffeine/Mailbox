@@ -34,12 +34,12 @@ public sealed class PstMessage : IStoredMessage
 
     public Nid Nid => _node.Nid;
 
-    internal static PstMessage Open(PstNode node) => new(node);
+    internal static PstMessage Open(PstNode node, System.Text.Encoding? inheritedString8 = null) => new(node, inheritedString8);
 
-    private PstMessage(PstNode node)
+    private PstMessage(PstNode node, System.Text.Encoding? inheritedString8)
     {
         _node = node;
-        _properties = PropertyContext.Read(node);
+        _properties = PropertyContext.Read(node, inheritedString8);
     }
 
     /// <summary>Any property by id — the layer above decides what the rest mean.</summary>
@@ -112,7 +112,7 @@ public sealed class PstMessage : IStoredMessage
         var table = _node.Subnode(RecipientTableNid);
         if (table is null) yield break;
 
-        foreach (var row in TableContext.Read(table).Rows())
+        foreach (var row in TableContext.Read(table, _properties.String8).Rows())
         {
             // The SMTP address wins over the address-book one when both are present: the
             // importer is bound for internet mail, and an X.500 path helps nobody there.
@@ -135,7 +135,7 @@ public sealed class PstMessage : IStoredMessage
             var nid = new Nid(row.RowId);
             if (nid.Type != NidType.Attachment) continue;
             if (_node.Subnode(nid) is { } attachment)
-                yield return new PstAttachment(attachment);
+                yield return new PstAttachment(attachment, _properties.String8);
         }
     }
 }
@@ -151,10 +151,13 @@ public sealed class PstAttachment : IStoredAttachment
     private readonly PstNode _node;
     private readonly PropertyContext _properties;
 
-    internal PstAttachment(PstNode node)
+    private readonly System.Text.Encoding? _string8;
+
+    internal PstAttachment(PstNode node, System.Text.Encoding? inheritedString8 = null)
     {
         _node = node;
-        _properties = PropertyContext.Read(node);
+        _properties = PropertyContext.Read(node, inheritedString8);
+        _string8 = _properties.String8;
     }
 
     public PstProperty? Property(ushort id) => _properties.Find(id);
@@ -200,7 +203,7 @@ public sealed class PstAttachment : IStoredAttachment
             if (data is not { Type: PstPropertyType.Object } || data.Raw.Length < 4) return null;
 
             var nid = new Nid(BinaryPrimitives.ReadUInt32LittleEndian(data.Raw));
-            return _node.Subnode(nid) is { } inner ? PstMessage.Open(inner) : null;
+            return _node.Subnode(nid) is { } inner ? PstMessage.Open(inner, _string8) : null;
         }
     }
 }

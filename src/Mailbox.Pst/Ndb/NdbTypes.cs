@@ -11,6 +11,21 @@ public enum PstFormat
 
     /// <summary>64-bit layout (wVer 23).</summary>
     Unicode,
+
+    /// <summary>
+    /// The 64-bit layout on 4096-byte pages (wVer 36 and 37) — what cached-mode OST files use.
+    /// Outside [MS-PST]; read best-effort from the libpff project's documentation and the real
+    /// files themselves. Same entry shapes as Unicode; bigger pages, bigger blocks, and block
+    /// data that can arrive zlib-compressed.
+    /// </summary>
+    Unicode4K,
+}
+
+/// <summary>The one distinction most of the reader cares about: 32-bit fields or 64-bit ones.</summary>
+public static class PstFormatExtensions
+{
+    /// <summary>True for both 64-bit layouts — ANSI is the narrow one everywhere.</summary>
+    public static bool IsWide(this PstFormat format) => format != PstFormat.Ansi;
 }
 
 /// <summary>How the data blocks are obfuscated ([MS-PST] §2.2.2.8.3.1.1 — the header names it once for the whole file).</summary>

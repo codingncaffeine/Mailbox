@@ -73,7 +73,7 @@ public class PstNamedPropertyTests
         Assert.SkipWhen(directory is null, "Set MAILBOX_PST_CORPUS, or keep files in specs/pst-corpus, to run against real PST files.");
 
         var resolvedAppointments = 0;
-        foreach (var path in Directory.GetFiles(directory!, "*.pst"))
+        foreach (var path in PstCorpusTests.CorpusScan(directory!))
         {
             using var file = PstFile.Open(path);
             var names = PstNamedProperties.Open(file);

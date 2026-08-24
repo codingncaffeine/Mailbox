@@ -24,7 +24,7 @@ public sealed record PstHeader
 
     public required PstRoot Root { get; init; }
 
-    /// <summary>wVer as written. 14 and 15 are the ANSI layout, 23 the Unicode one; 36 and up are the 4K-page variant this reader refuses by name.</summary>
+    /// <summary>wVer as written. 14 and 15 are the ANSI layout, 23 the Unicode one, 36 and 37 the 4K-page variant.</summary>
     public required ushort Version { get; init; }
 
     internal const int UnicodeLength = 564;
@@ -43,7 +43,8 @@ public sealed record PstHeader
         if (BinaryPrimitives.ReadUInt32LittleEndian(header) != 0x4E444221)
             throw new PstException("The file does not start with the PST magic number, so it is not a PST file.");
 
-        if (BinaryPrimitives.ReadUInt16LittleEndian(header[8..]) != 0x4D53)
+        // "SM" for a PST, "SO" for an OST — the one letter the two kinds of file disagree on.
+        if (BinaryPrimitives.ReadUInt16LittleEndian(header[8..]) is not (0x4D53 or 0x4F53))
             throw new PstException("The header's client magic is wrong: the file is damaged, or something else wearing a PST extension.");
 
         var version = BinaryPrimitives.ReadUInt16LittleEndian(header[10..]);
@@ -51,10 +52,8 @@ public sealed record PstHeader
         {
             14 or 15 => PstFormat.Ansi,
             23 => PstFormat.Unicode,
-            >= 36 => throw new PstException(
-                $"The file uses the 4K-page layout (version {version}), which is written by cached-mode OST "
-                + "files rather than PST exports. Reading it is not supported."),
-            _ => throw new PstException($"The header names format version {version}, which [MS-PST] does not define."),
+            36 or 37 => PstFormat.Unicode4K,
+            _ => throw new PstException($"The header names format version {version}, which this reader does not know."),
         };
 
         // dwCRCPartial covers the 471 bytes from wMagicClient in both layouts; the Unicode layout
@@ -65,7 +64,7 @@ public sealed record PstHeader
             throw new PstException(
                 $"The header's partial CRC is 0x{crcPartial:X8} but its bytes come to 0x{computedPartial:X8}: the header is damaged.");
 
-        if (format == PstFormat.Unicode)
+        if (format.IsWide())
         {
             if (header.Length < UnicodeLength)
                 throw new PstException("The file ends inside its own header.");
@@ -77,7 +76,7 @@ public sealed record PstHeader
                     $"The header's full CRC is 0x{crcFull:X8} but its bytes come to 0x{computedFull:X8}: the header is damaged.");
         }
 
-        var cryptByte = format == PstFormat.Unicode ? header[0x201] : header[0x1CD];
+        var cryptByte = format.IsWide() ? header[0x201] : header[0x1CD];
         var crypt = cryptByte switch
         {
             0x00 => PstCryptMethod.None,
@@ -89,7 +88,7 @@ public sealed record PstHeader
             _ => throw new PstException($"The header names encoding method 0x{cryptByte:X2}, which [MS-PST] does not define."),
         };
 
-        var root = format == PstFormat.Unicode ? ReadUnicodeRoot(header[0xB4..]) : ReadAnsiRoot(header[0xA4..]);
+        var root = format.IsWide() ? ReadUnicodeRoot(header[0xB4..]) : ReadAnsiRoot(header[0xA4..]);
 
         return new PstHeader { Format = format, CryptMethod = crypt, Root = root, Version = version };
     }
@@ -104,7 +103,7 @@ public sealed record PstHeader
         NodeBTree: ReadBref(root[0x14..], PstFormat.Ansi),
         BlockBTree: ReadBref(root[0x1C..], PstFormat.Ansi));
 
-    internal static Bref ReadBref(ReadOnlySpan<byte> bytes, PstFormat format) => format == PstFormat.Unicode
+    internal static Bref ReadBref(ReadOnlySpan<byte> bytes, PstFormat format) => format.IsWide()
         ? new Bref(new Bid(BinaryPrimitives.ReadUInt64LittleEndian(bytes)), BinaryPrimitives.ReadUInt64LittleEndian(bytes[8..]))
         : new Bref(new Bid(BinaryPrimitives.ReadUInt32LittleEndian(bytes)), BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..]));
 }

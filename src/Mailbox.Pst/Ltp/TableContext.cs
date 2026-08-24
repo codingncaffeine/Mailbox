@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Text;
 using Mailbox.Pst.Ndb;
 
 namespace Mailbox.Pst.Ltp;
@@ -35,6 +36,7 @@ internal sealed class TableContext
     private readonly int _rowWidth;
     private readonly int _bitmapAt;
     private readonly List<(uint RowId, uint RowIndex)> _index;
+    private Encoding? _string8;
 
     public IReadOnlyList<TableColumn> Columns { get; }
 
@@ -55,7 +57,7 @@ internal sealed class TableContext
         Columns = columns;
     }
 
-    public static TableContext Read(ILtpNode node)
+    public static TableContext Read(ILtpNode node, Encoding? string8 = null)
     {
         var heap = HeapNode.Parse(node.DataBlocks(), node.Nid);
         if (heap.ClientSignature != ClientSignature)
@@ -130,11 +132,15 @@ internal sealed class TableContext
 
             // §2.3.4.4: every block but the last is exactly 8,192 bytes on disk, so the rows per
             // block come from the usable size of a full block, not from any one block's length.
-            rowsPerBlock = (8192 - BlockTrailer.Size(node.Format)) / rowWidth;
+            // The 4K layout sits outside that rule, so there the first block's own length — a
+            // whole number of rows by the same no-straddling constraint — is the divisor.
+            rowsPerBlock = node.Format == PstFormat.Unicode4K && rowBlocks.Length > 0
+                ? Math.Max(1, rowBlocks[0].Length / rowWidth)
+                : (8192 - BlockTrailer.Size(node.Format)) / rowWidth;
         }
 
         if (rowsPerBlock < 1) rowsPerBlock = 1;
-        return new TableContext(node, heap, rowBlocks, rowsPerBlock, rowWidth, bitmapAt, index, columns);
+        return new TableContext(node, heap, rowBlocks, rowsPerBlock, rowWidth, bitmapAt, index, columns) { _string8 = string8 };
     }
 
     /// <summary>The rows in matrix order, each a view that answers by property id.</summary>
@@ -208,13 +214,14 @@ internal sealed class TableContext
                 return new PstProperty(column.PropertyId, type, cell[..Math.Min(size, cell.Length)].ToArray());
 
             var hnid = new Hnid(BinaryPrimitives.ReadUInt32LittleEndian(cell));
-            if (hnid.IsZero) return new PstProperty(column.PropertyId, type, []);
-            if (hnid.IsHeap) return new PstProperty(column.PropertyId, type, _table._heap.Item(hnid.AsHeapId).ToArray());
+            if (hnid.IsZero) return new PstProperty(column.PropertyId, type, []) { String8Encoding = _table._string8 };
+            if (hnid.IsHeap)
+                return new PstProperty(column.PropertyId, type, _table._heap.Item(hnid.AsHeapId).ToArray()) { String8Encoding = _table._string8 };
 
             var subnode = _table._node.Subnode(hnid.AsNid)
                 ?? throw new PstException(
                     $"Node {_table._node.Nid} keeps a table cell in subnode {hnid.AsNid}, which its subnode tree does not hold.");
-            return new PstProperty(column.PropertyId, type, subnode.Data());
+            return new PstProperty(column.PropertyId, type, subnode.Data()) { String8Encoding = _table._string8 };
         }
     }
 }

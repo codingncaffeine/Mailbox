@@ -39,7 +39,8 @@ internal static class PstMime
         if (source.BodyText.Length > 0) builder.TextBody = source.BodyText;
 
         var html = source.HtmlBody;
-        if (html.Length > 0) builder.HtmlBody = DecodeHtml(html);
+        if (html.Length > 0)
+            builder.HtmlBody = DecodeHtml(html, source.Property(0x3FDE)?.AsInteger32());
 
         // The body of last resort: a message whose only body is compressed RTF
         // (PidTagRtfCompressed, 0x1009) gets the HTML the RTF encapsulates, or its text.
@@ -126,16 +127,27 @@ internal static class PstMime
         }
     }
 
-    private static string DecodeHtml(byte[] bytes)
+    private static string DecodeHtml(byte[] bytes, int? internetCodepage)
     {
+        // The document's own stated code page (PidTagInternetCodepage) is the first word;
+        // strict UTF-8 the second; byte-for-byte Latin-1 the reading that cannot fail.
+        if (Mailbox.Pst.PstCodePage.Resolve(internetCodepage) is { } declared)
+        {
+            try
+            {
+                return declared.GetString(bytes);
+            }
+            catch (DecoderFallbackException)
+            {
+            }
+        }
+
         try
         {
             return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true).GetString(bytes);
         }
         catch (DecoderFallbackException)
         {
-            // Not UTF-8: read it byte-for-byte. The document's own charset declaration, if it
-            // has one, still names the truth for anything that renders it.
             return Encoding.Latin1.GetString(bytes);
         }
     }

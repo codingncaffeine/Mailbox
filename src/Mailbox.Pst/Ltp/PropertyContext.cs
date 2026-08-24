@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Text;
 
 namespace Mailbox.Pst.Ltp;
 
@@ -20,13 +21,20 @@ internal sealed class PropertyContext
 
     public IReadOnlyDictionary<ushort, PstProperty> Properties => _properties;
 
-    private PropertyContext(Dictionary<ushort, PstProperty> properties) => _properties = properties;
+    /// <summary>The String8 encoding this context's properties decode by, for whoever reads beside it.</summary>
+    public Encoding? String8 { get; }
+
+    private PropertyContext(Dictionary<ushort, PstProperty> properties, Encoding? string8)
+    {
+        _properties = properties;
+        String8 = string8;
+    }
 
     public PstProperty? Find(ushort id) => _properties.GetValueOrDefault(id);
 
     public const byte ClientSignature = 0xBC;
 
-    public static PropertyContext Read(ILtpNode node)
+    public static PropertyContext Read(ILtpNode node, Encoding? inheritedString8 = null)
     {
         var heap = HeapNode.Parse(node.DataBlocks(), node.Nid);
         if (heap.ClientSignature != ClientSignature)
@@ -49,7 +57,24 @@ internal sealed class PropertyContext
             properties[id] = new PstProperty(id, type, Resolve(type, slot, heap, node));
         }
 
-        return new PropertyContext(properties);
+        // The code page is itself a property in the bag (PidTagMessageCodepage), so String8
+        // values are stamped after the bag is read; a bag without one — an attachment, a
+        // recipient row's parent — inherits its message's.
+        var string8 = PstCodePage.Resolve(
+            properties.GetValueOrDefault((ushort)0x3FFD) is { Type: PstPropertyType.Integer32 } codepage
+                ? codepage.AsInteger32()
+                : null) ?? inheritedString8;
+
+        if (string8 is not null)
+        {
+            foreach (var id in properties.Keys.ToList())
+            {
+                if (properties[id].BaseType == PstPropertyType.String8)
+                    properties[id] = properties[id] with { String8Encoding = string8 };
+            }
+        }
+
+        return new PropertyContext(properties, string8);
     }
 
     /// <summary>§2.3.3.3's table, one row per branch.</summary>
