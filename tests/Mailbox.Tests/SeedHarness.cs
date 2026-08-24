@@ -35,6 +35,18 @@ public class SeedHarness
             ? day
             : DateOnly.FromDateTime(DateTime.Today);
 
+    /// <summary>
+    /// The moment the seed stamps as "now": half past two on the pinned day when there is one,
+    /// the real clock otherwise. The pixel gate is why the time of day pins too — a received
+    /// column showing the seeding minute made every capture unique to its own run.
+    /// </summary>
+    private static DateTimeOffset SeedNow()
+    {
+        if (Environment.GetEnvironmentVariable("MAILBOX_TODAY") is not { Length: > 0 }) return SeedNow();
+        var wall = SeedToday().ToDateTime(new TimeOnly(14, 30));
+        return new DateTimeOffset(wall, TimeZoneInfo.Local.GetUtcOffset(wall));
+    }
+
     /// <summary>An 8-byte PNG header, which is enough to be a distinct inline part.</summary>
     private static readonly byte[] TinyPng = [137, 80, 78, 71, 13, 10, 26, 10];
 
@@ -238,7 +250,7 @@ public class SeedHarness
                     PercentComplete = percent,
                     Urgency = urgency,
                     ReminderMinutes = reminder,
-                    LastModified = DateTimeOffset.UtcNow,
+                    LastModified = SeedNow(),
                 },
                 list));
 
@@ -286,7 +298,7 @@ public class SeedHarness
                     Uid = JournalEntry.NewUid(),
                     When = EventTime.At(on.ToDateTime(at), zone),
                     Categories = categories,
-                    LastModified = DateTimeOffset.UtcNow,
+                    LastModified = SeedNow(),
                 }.WithBody(body),
                 notes));
 
@@ -302,7 +314,7 @@ public class SeedHarness
                     Duration = took,
                     Contacts = contact.Length > 0 ? [contact] : [],
                     Categories = categories,
-                    LastModified = DateTimeOffset.UtcNow,
+                    LastModified = SeedNow(),
                 },
                 journal));
 
@@ -451,7 +463,7 @@ public class SeedHarness
         var projects = account.Mail.AddFolder(accountId, "Projects", FolderRole.None, null, "Projects");
         account.Mail.AddFolder(accountId, "Mailbox", FolderRole.None, projects.Id, "Projects/Mailbox");
 
-        var when = DateTimeOffset.UtcNow;
+        var when = SeedNow();
         var messages = new[]
         {
             Plain("Dana Okafor", "dana@example.org", "Server-side folders",
@@ -788,7 +800,7 @@ public class SeedHarness
     private static void SeedOutbox(OpenAccount account)
     {
         var sender = new Mailbox.Protocols.SmtpSender(account.Mail);
-        var now = DateTimeOffset.UtcNow;
+        var now = SeedNow();
 
         var waiting = Envelope("You", "you@example.com", "Re: Thursday");
         waiting.To.Clear();
@@ -812,7 +824,7 @@ public class SeedHarness
         var account = stores.Add(address, address, MailProtocol.Pop3);
         SeedOutbox(account);
         var inbox = account.Mail.FolderWithRole(account.Account.Id, FolderRole.Inbox)!;
-        var when = DateTimeOffset.UtcNow;
+        var when = SeedNow();
 
         // Everyone the seeded mail is from has been written to, so the To line has names to
         // offer — the Auto-Complete List is fed by sending, and a seed has sent nothing.

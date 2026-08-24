@@ -53,7 +53,9 @@ capture() { # theme, output
 }
 
 differing() { # a, b -> prints the AE count
-  "${compare_tool[@]}" -metric AE "$1" "$2" null: 2>&1 | cut -d' ' -f1
+  # compare exits 1 when the images differ — that is an answer, not a failure, and under
+  # pipefail it must be absorbed here or the script dies before it can say what drifted.
+  { "${compare_tool[@]}" -metric AE "$1" "$2" null: 2>&1 || true; } | cut -d' ' -f1
 }
 
 status=0
