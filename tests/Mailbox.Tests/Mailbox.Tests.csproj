@@ -30,6 +30,14 @@
     <ProjectReference Include="..\..\src\Mailbox.Dav\Mailbox.Dav.csproj" />
     <ProjectReference Include="..\..\src\Mailbox.Google\Mailbox.Google.csproj" />
     <ProjectReference Include="..\..\src\Mailbox.Scheduling\Mailbox.Scheduling.csproj" />
+    <ProjectReference Include="..\..\src\Mailbox.Plugins\Mailbox.Plugins.csproj" />
+
+    <!-- The plugin the host tests stage into scratch directories: a file in the output, never a
+         reference, so it reaches the tests only through the real loader. -->
+    <ProjectReference Include="..\Mailbox.TestPlugin\Mailbox.TestPlugin.csproj"
+                      ReferenceOutputAssembly="false"
+                      OutputItemType="Content"
+                      CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

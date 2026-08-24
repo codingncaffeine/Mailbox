@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    §13's plugin host: discovery, the manifest, a collectible load context per plugin, and the
+    bridges that put a plugin's contributions into the same registries the built-ins use — the
+    command catalogue, the ribbon layout, the arrival pipeline. The API a plugin sees is
+    Mailbox.Plugins.Api and nothing here; this assembly is the application's side of the seam,
+    which is why it may reference the store and the codecs while the API package references
+    nothing at all.
+  -->
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Mailbox.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mailbox.Plugins.Api\Mailbox.Plugins.Api.csproj" />
+    <ProjectReference Include="..\Mailbox.Core\Mailbox.Core.csproj" />
+    <ProjectReference Include="..\Mailbox.Store\Mailbox.Store.csproj" />
+    <ProjectReference Include="..\Mailbox.Protocols\Mailbox.Protocols.csproj" />
+    <ProjectReference Include="..\Mailbox.Scheduling\Mailbox.Scheduling.csproj" />
+    <ProjectReference Include="..\Mailbox.Contacts\Mailbox.Contacts.csproj" />
+  </ItemGroup>
+
+</Project>

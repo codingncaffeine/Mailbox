@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The plugin the plugin-host tests load: compiled against the API package alone, exactly as a
+    real plugin is, and copied into the test output as a file rather than referenced — the tests
+    stage it into scratch plugin directories and load it through the real discovery, so nothing
+    about it may arrive through the test runner's own load context.
+  -->
+
+  <PropertyGroup>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Mailbox.Plugins.Api\Mailbox.Plugins.Api.csproj">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </ProjectReference>
+  </ItemGroup>
+
+</Project>
