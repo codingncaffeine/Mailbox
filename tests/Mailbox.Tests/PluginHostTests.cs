@@ -62,7 +62,7 @@ public class PluginHostTests : IDisposable
     }
 
     private static readonly string[] Everything =
-        ["ui", "mail", "mail-write", "pim", "pim-write", "arrival", "sending"];
+        ["ui", "mail", "mail-write", "pim", "pim-write", "arrival", "sending", "accounts"];
 
     private PluginHost Host(
         SettingsStore? settings = null,
@@ -294,6 +294,27 @@ public class PluginHostTests : IDisposable
         Assert.Empty(host.Columns());
         Assert.Null(host.ColumnLabel(column.Id));
         Assert.Equal(string.Empty, host.ColumnValue(column.Id, row));
+    }
+
+    [Fact]
+    public void AnAccountProviderAnswersForItsDomainAndOnlyItsDomain()
+    {
+        Stage("good", "test.good", "GoodPlugin", Everything);
+
+        var host = Host();
+        host.Start();
+
+        var recognised = host.RecognizeAccount("a.person@plugin.example");
+        Assert.NotNull(recognised);
+        Assert.Equal("Example Provider", recognised!.Value.ProviderName);
+        Assert.Equal("mail.plugin.example", recognised.Value.Settings.IncomingHost);
+        Assert.Equal(587, recognised.Value.Settings.OutgoingPort);
+        Assert.Contains("example console", recognised.Value.Settings.Guidance);
+
+        Assert.Null(host.RecognizeAccount("a.person@example.com"));
+
+        host.Disable("test.good");
+        Assert.Null(host.RecognizeAccount("a.person@plugin.example"));
     }
 
     [Fact]

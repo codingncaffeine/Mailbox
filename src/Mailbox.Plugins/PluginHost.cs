@@ -385,6 +385,7 @@ public sealed class PluginHost
         entry.Tabs.Clear();
         entry.SimplifiedTabs.Clear();
         entry.Columns.Clear();
+        entry.Providers = [];
         entry.ArrivalHooks = [];
         entry.SendingHooks = [];
         entry.BarProviders = [];
@@ -643,6 +644,45 @@ public sealed class PluginHost
         RaiseChanged();
     }
 
+    internal void AddProvider(Entry entry, PluginAccountProvider provider)
+    {
+        lock (_gate) entry.Providers = [.. entry.Providers, provider];
+    }
+
+    /// <summary>
+    /// Asks the enabled plugins' account providers about an address. The first that answers
+    /// wins, named so the wizard can say who recognised it; a recogniser that throws is charged
+    /// to its plugin as every hook is.
+    /// </summary>
+    public (string PluginName, string ProviderName, PluginAccountSettings Settings)? RecognizeAccount(string address)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(address);
+
+        foreach (var (entry, providers) in Snapshot(p => p.Providers))
+        {
+            foreach (var provider in providers)
+            {
+                PluginAccountSettings? settings;
+                try
+                {
+                    settings = provider.Recognize(address);
+                }
+                catch (Exception ex)
+                {
+                    Fail(entry, "An account provider", ex);
+                    break;
+                }
+
+                if (settings is not null)
+                {
+                    return (entry.Manifest!.Name, provider.Name, settings);
+                }
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>The enabled plugins' columns, for Show Columns and the header strip.</summary>
     public IReadOnlyList<(string Id, string Label, double Width)> Columns()
     {
@@ -842,6 +882,8 @@ public sealed class PluginHost
         public Dictionary<string, SimplifiedBar> SimplifiedTabs { get; } = [];
 
         public Dictionary<string, (string Label, double Width, Func<PluginMessageSummary, string> Value)> Columns { get; } = [];
+
+        public IReadOnlyList<PluginAccountProvider> Providers { get; set; } = [];
 
         // Replaced whole on registration and cleared on teardown, so a reader iterating a
         // snapshot never sees a list change under it.

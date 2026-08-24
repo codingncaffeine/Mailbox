@@ -17,7 +17,7 @@ namespace Mailbox.Plugins;
 /// makes a greedy one visible.
 /// </summary>
 internal sealed class HostFacade : IPluginHost, IPluginSettings, IPluginCommands,
-    IPluginMail, IPluginPim, IPluginPipeline, IPluginReadingPane, IPluginColumns
+    IPluginMail, IPluginPim, IPluginPipeline, IPluginReadingPane, IPluginColumns, IPluginAccounts
 {
     private readonly PluginHost _host;
     private readonly PluginHost.Entry _entry;
@@ -54,6 +54,8 @@ internal sealed class HostFacade : IPluginHost, IPluginSettings, IPluginCommands
     public IPluginReadingPane ReadingPane => Demand(PluginPermission.Ui);
 
     public IPluginColumns Columns => Demand(PluginPermission.Ui);
+
+    public IPluginAccounts Accounts => Demand(PluginPermission.Accounts);
 
     /// <summary>
     /// The read permission opens a surface; each write inside it checks its own. Checked at the
@@ -357,5 +359,12 @@ internal sealed class HostFacade : IPluginHost, IPluginSettings, IPluginCommands
         _host.AddColumn(
             _entry, $"plugin.{PluginId}.{column.Name}", column.Label,
             Math.Clamp(column.Width, 24, 600), value);
+    }
+
+    void IPluginAccounts.RegisterProvider(PluginAccountProvider provider)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+        ArgumentException.ThrowIfNullOrWhiteSpace(provider.Name);
+        _host.AddProvider(_entry, provider);
     }
 }

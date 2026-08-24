@@ -78,6 +78,18 @@ public sealed class GoodPlugin : IPlugin, IDisposable
         host.Columns.Add(
             new PluginColumn { Name = "shout", Label = "Shout", Width = 140 },
             row => row.Subject.ToUpperInvariant());
+
+        // An account provider, recognising its own invented domain.
+        host.Accounts.RegisterProvider(new PluginAccountProvider
+        {
+            Name = "Example Provider",
+            Recognize = address => address.EndsWith("@plugin.example", StringComparison.OrdinalIgnoreCase)
+                ? new PluginAccountSettings("mail.plugin.example", 993, "smtp.plugin.example", 587)
+                {
+                    Guidance = "Use the password from the example console.",
+                }
+                : null,
+        });
     }
 
     public void Dispose()

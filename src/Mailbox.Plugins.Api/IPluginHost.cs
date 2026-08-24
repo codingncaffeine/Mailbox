@@ -45,6 +45,49 @@ public interface IPluginHost
 
     /// <summary>Columns on the message list's table views. Permission: <c>ui</c>.</summary>
     IPluginColumns Columns { get; }
+
+    /// <summary>Account providers the wizard consults. Permission: <c>accounts</c>.</summary>
+    IPluginAccounts Accounts { get; }
+}
+
+/// <summary>
+/// Providers the Add Account wizard consults as an address is typed. Permission:
+/// <c>accounts</c>.
+/// </summary>
+/// <remarks>
+/// A provider recognises addresses and answers with the servers they want — what the built-in
+/// autoconfiguration does for the well-known ones, extended to whatever a plugin knows. The
+/// first enabled provider that answers wins, its settings fill the wizard's boxes, and its
+/// guidance is the line under them; the reader can still open the boxes and disagree.
+/// Authentication is the ordinary password path — a provider that needs its own sign-in dance
+/// is a later API, and saying so here beats half-pretending.
+/// </remarks>
+public interface IPluginAccounts
+{
+    void RegisterProvider(PluginAccountProvider provider);
+}
+
+/// <summary>One provider: a name for the guidance line, and the recogniser.</summary>
+public sealed record PluginAccountProvider
+{
+    public required string Name { get; init; }
+
+    /// <summary>
+    /// Answers for an address it recognises, null for one it does not. Called as the reader
+    /// types, so answer from the string alone — never the network.
+    /// </summary>
+    public required Func<string, PluginAccountSettings?> Recognize { get; init; }
+}
+
+/// <summary>The servers a recognised address should use.</summary>
+public sealed record PluginAccountSettings(
+    string IncomingHost, int IncomingPort, string OutgoingHost, int OutgoingPort)
+{
+    /// <summary><c>imap</c> (the default) or <c>pop3</c>.</summary>
+    public string Protocol { get; init; } = "imap";
+
+    /// <summary>The wizard's line under the boxes, beside the provider's name.</summary>
+    public string? Guidance { get; init; }
 }
 
 /// <summary>
@@ -100,6 +143,9 @@ public static class PluginPermission
 
     /// <summary>Commands, ribbon tabs and reading-pane bars.</summary>
     public const string Ui = "ui";
+
+    /// <summary>Account providers the Add Account wizard consults.</summary>
+    public const string Accounts = "accounts";
 
     /// <summary>
     /// Declares that the plugin talks to the network on its own. Nothing in the API does

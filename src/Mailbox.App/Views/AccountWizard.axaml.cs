@@ -231,6 +231,28 @@ public sealed class AccountWizard : Window
         // A guess is worth looking at; a known provider is not.
         _advanced.IsExpanded = !_found.IsKnownProvider;
 
+        // A plugin's account provider answers over the guess — §13's "register account
+        // providers": what the built-in autoconfiguration is for the well-known services, a
+        // plugin is for whatever it knows. The reader's boxes stay the reader's; the sign-in
+        // stays the ordinary password path, which the API says in as many words.
+        if (App.Plugins.RecognizeAccount(address) is { } recognised)
+        {
+            _incomingHost.Text = recognised.Settings.IncomingHost;
+            _incomingPort.Text = recognised.Settings.IncomingPort.ToString();
+            _outgoingHost.Text = recognised.Settings.OutgoingHost;
+            _outgoingPort.Text = recognised.Settings.OutgoingPort.ToString();
+            _protocol.SelectedIndex = string.Equals(recognised.Settings.Protocol, "pop3", StringComparison.OrdinalIgnoreCase) ? 0 : 1;
+
+            _guidance.Text = recognised.Settings.Guidance is { Length: > 0 } line
+                ? $"{recognised.ProviderName}: {line}"
+                : $"Recognised by {recognised.ProviderName} ({recognised.PluginName}). Settings filled in.";
+            _advanced.IsExpanded = false;
+
+            Log.Info($"Wizard: {address} recognised by plugin provider “{recognised.ProviderName}” "
+                     + $"({recognised.PluginName}) — {recognised.Settings.IncomingHost}:{recognised.Settings.IncomingPort} "
+                     + $"/ {recognised.Settings.OutgoingHost}:{recognised.Settings.OutgoingPort}.");
+        }
+
         ShowTheRightCredential(address);
     }
 

@@ -76,6 +76,7 @@ public sealed class Plugin : IPlugin
         {
             Name = "tools",
             Label = "Word Count",
+            Module = "mail",   // or calendar, people, tasks, notes, journal
             Groups = [new PluginRibbonGroup { Label = "Count", Commands = ["count"] }],
         });
     }
@@ -94,6 +95,8 @@ The host hands a plugin these surfaces; each is gated by a manifest permission.
 | `host.Mail` | `mail`, writes `mail-write` | Accounts, folders and messages as plain records, plus the verbatim RFC822 bytes. Bring your own MIME parser for structure; the bytes are exactly what Mailbox stores. Move, delete and mark need `mail-write`. |
 | `host.Pim` | `pim`, writes `pim-write` | Calendars, task lists, note lists and address books. Items travel as their own iCalendar or vCard text; `Save` goes through the same codecs Mailbox's editors use, so a plugin-written item has real columns and syncs like any other. |
 | `host.Pipeline.OnArrival` | `arrival` | Runs on every message as it arrives, after the junk filter, ignored conversations, the Focused Inbox and the rules. Background thread. Answer `None`, `MoveTo(folderName)` or `Delete`; a name that is no folder is logged and the message stays put. |
+| `host.Columns.Add` | `ui` | A column on the message list's table views: offered in Show Columns beside the built-in fields, placed and widened like any of them, persisted in saved views by its id. The value provider runs on the UI thread per visible row — answer from the row alone. |
+| `host.Accounts.RegisterProvider` | `accounts` | Consulted by the Add Account wizard as an address is typed: recognise it and answer with the servers, and your guidance goes under the boxes. Password authentication only — a provider needing its own sign-in dance is a later API. |
 | `host.Pipeline.OnSending` | `sending` | Runs on every message as the writer sends it, before it is queued and before any cryptography. UI thread. `SendDecision.Stop(reason)` keeps the message where it is and tells the writer which plugin stopped it and why. |
 | — | `network` | Declares that the plugin does network I/O of its own. Nothing in the API does it for you; the declaration is for the reader deciding whether to trust the file. |
 
