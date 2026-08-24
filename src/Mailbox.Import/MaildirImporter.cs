@@ -51,16 +51,11 @@ public sealed class MaildirImporter(MailRepository mail, long accountId)
     public ImportReport Run(string root, Action<int, int>? progress = null, CancellationToken cancellation = default)
     {
         var messages = Maildir.Scan(root);
-        var notes = new List<string>();
-
-        var imported = 0;
-        var alreadyHere = 0;
+        var filer = new MessageFiler(_mail);
         var trashed = 0;
-        var unreadable = 0;
         var done = 0;
 
         var folders = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
-        var seen = new Dictionary<long, HashSet<string>>();
 
         foreach (var message in messages)
         {
@@ -73,63 +68,29 @@ public sealed class MaildirImporter(MailRepository mail, long accountId)
                 continue;
             }
 
-            var folderId = Folder(folders, message.Folder, notes);
+            var folderId = Folder(folders, message.Folder, filer.Notes);
 
             byte[] raw;
-            MimeMessage parsed;
             try
             {
                 raw = File.ReadAllBytes(message.Path);
-                using var stream = new MemoryStream(raw);
-                parsed = MimeMessage.Load(stream);
             }
             catch (Exception ex)
             {
-                unreadable++;
-                if (unreadable <= 5) notes.Add($"Could not read {Path.GetFileName(message.Path)}: {ex.Message}");
+                filer.Notes.Add($"Could not read {Path.GetFileName(message.Path)}: {ex.Message}");
                 continue;
             }
 
-            // Known by Message-ID within the target folder, so a re-run tops up. The set is
-            // fetched once per folder and grown as the import writes.
-            if (!seen.TryGetValue(folderId, out var ids))
-            {
-                ids = _mail.MessageIdsIn(folderId);
-                seen[folderId] = ids;
-            }
-
-            var messageId = parsed.MessageId;
-            if (messageId is { Length: > 0 } && ids.Contains(messageId))
-            {
-                alreadyHere++;
-                continue;
-            }
-
-            var received = parsed.Date != default
-                ? parsed.Date
-                : new DateTimeOffset(File.GetLastWriteTimeUtc(message.Path), TimeSpan.Zero);
-
-            var summary = MessageMapper.ToSummary(parsed, serverUid: null, raw.Length, received) with
-            {
-                IsRead = message.IsRead,
-                IsFlagged = message.IsFlagged,
-            };
-
-            if (_mail.AddMessage(folderId, summary, raw) is null)
-            {
-                alreadyHere++;
-                continue;
-            }
-
-            if (messageId is { Length: > 0 }) ids.Add(messageId);
-            imported++;
+            filer.File(folderId, raw, message.IsRead, message.IsFlagged,
+                fallbackDate: new DateTimeOffset(File.GetLastWriteTimeUtc(message.Path), TimeSpan.Zero),
+                name: Path.GetFileName(message.Path));
         }
 
         progress?.Invoke(messages.Count, messages.Count);
-        Log.Info($"Maildir import: {imported} in, {alreadyHere} already here, {trashed} trashed, "
-                 + $"{unreadable} unreadable, from {root}.");
+        Log.Info($"Maildir import: {filer.Imported} in, {filer.AlreadyHere} already here, {trashed} trashed, "
+                 + $"{filer.Unreadable} unreadable, from {root}.");
 
-        return new ImportReport(folders.Count, imported, alreadyHere, trashed, unreadable, notes);
+        return new ImportReport(folders.Count, filer.Imported, filer.AlreadyHere, trashed, filer.Unreadable, filer.Notes);
     }
 
     /// <summary>The folder a path of segments files into, made on first meeting.</summary>
@@ -140,7 +101,7 @@ public sealed class MaildirImporter(MailRepository mail, long accountId)
 
         // One segment with a well-known name merges into the account's own folder — the point
         // of a migration is that Sent mail is in Sent Items, not in a second folder beside it.
-        if (path.Count == 1 && RoleFor(path[0]) is { } role
+        if (path.Count == 1 && WellKnownFolders.RoleFor(path[0]) is { } role
             && _mail.FolderWithRole(accountId, role) is { } existing)
         {
             known[key] = existing.Id;
@@ -168,15 +129,4 @@ public sealed class MaildirImporter(MailRepository mail, long accountId)
         return known[key];
     }
 
-    /// <summary>The spellings the sources use for the well-known folders. Outbox is absent on purpose.</summary>
-    private static FolderRole? RoleFor(string name) => name.Trim().ToLowerInvariant() switch
-    {
-        "inbox" => FolderRole.Inbox,
-        "sent" or "sent items" or "sent mail" or "sent-mail" or "sent messages" => FolderRole.Sent,
-        "drafts" or "draft" => FolderRole.Drafts,
-        "trash" or "deleted items" or "deleted messages" or "wastebasket" => FolderRole.Deleted,
-        "junk" or "spam" or "junk email" or "junk e-mail" => FolderRole.Junk,
-        "archive" or "archives" => FolderRole.Archive,
-        _ => null,
-    };
 }

@@ -215,8 +215,55 @@ public sealed class BackstageView : Border
         {
             "info" => BuildAccountInformation(),
             "openexport" => BuildOpenExport(),
+            "saveas" => BuildSaveAs(),
             _ => Placeholder(id),
         };
+
+    // ------------------------------------------------------------------------------------
+    // Save As — what leaves the store leaves it verbatim (§7.6a)
+    // ------------------------------------------------------------------------------------
+
+    private Control BuildSaveAs()
+    {
+        var stack = new StackPanel { Spacing = 0, MaxWidth = 720, HorizontalAlignment = HorizontalAlignment.Left };
+
+        var heading = new TextBlock
+        {
+            Text = "Save As",
+            FontSize = 21,
+            Margin = new Thickness(0, 0, 0, 14),
+        };
+        Bind(heading, TextBlock.ForegroundProperty, "text.primary.brush");
+        stack.Children.Add(heading);
+
+        stack.Children.Add(BuildSection(
+            "mail", "Save Message", hasDropdown: false,
+            "The selected message as .eml",
+            "Its stored bytes, verbatim — headers nothing here ever parsed included. That is " +
+            "the promise the store makes: you can always leave with everything.",
+            action: "export.eml"));
+
+        stack.Children.Add(BuildSection(
+            "folder", "Save Folder", hasDropdown: false,
+            "The open folder as mbox",
+            "Every message in the folder, byte-exact inside the one file everything since " +
+            "Unix reads.",
+            action: "export.mbox"));
+
+        stack.Children.Add(BuildSection(
+            "open-calendar", "Save Calendar", hasDropdown: false,
+            "The default calendar as .ics",
+            "Every appointment as the iCalendar text the store already keeps verbatim.",
+            action: "export.ics"));
+
+        stack.Children.Add(BuildSection(
+            "people", "Save Contacts", hasDropdown: false,
+            "The address book as .vcf",
+            "Every card as the vCard text the store already keeps verbatim.",
+            action: "export.vcf"));
+
+        return stack;
+    }
 
     // ------------------------------------------------------------------------------------
     // Open & Export — the importers, §16 arriving one format at a time
@@ -237,16 +284,31 @@ public sealed class BackstageView : Border
 
         stack.Children.Add(BuildSection(
             "folder-open", "Import Maildir", hasDropdown: false,
-            "Import",
+            "Import a Maildir",
             "Bring mail in from a Maildir tree — what Dovecot, Evolution, KMail, mutt and " +
             "offlineimap keep. The source is only read, never changed.",
             action: "import.maildir"));
 
         stack.Children.Add(BuildSection(
-            "archive", "Other Formats", hasDropdown: false,
-            "Still to come",
-            "Thunderbird profiles, mbox, .eml and .pst arrive with the rest of Phase 16; " +
-            "export goes with them. Pressing this says so rather than doing nothing.",
+            "mail", "Import Thunderbird", hasDropdown: false,
+            "Import a Thunderbird profile",
+            "The mail tree, the address books, and the filters that translate — a filter " +
+            "whose meaning would change is skipped and named instead.",
+            action: "import.thunderbird"));
+
+        stack.Children.Add(BuildSection(
+            "attach", "Import Files", hasDropdown: false,
+            "Import files",
+            "One or more files: an mbox into a folder, .eml messages, .ics appointments and " +
+            "tasks, .vcf contacts — each routed by what it is.",
+            action: "import.files"));
+
+        stack.Children.Add(BuildSection(
+            "archive", "Still to Come", hasDropdown: false,
+            "The binary formats",
+            ".pst and .msg are spec-built readers and arrive as their own block — a parser " +
+            "that cannot be verified against real fixtures is not shipped here. Pressing " +
+            "this says so rather than doing nothing.",
             action: "import.waiting"));
 
         return stack;

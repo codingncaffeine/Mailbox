@@ -87,8 +87,18 @@ internal static class BackstageActions
                 if (await ImportMaildirDialog.RunAsync(host.Owner)) host.Refresh();
                 break;
 
+            case "import.thunderbird":
+                host.Close();
+                if (await ImportThunderbirdDialog.RunAsync(host.Owner)) host.Refresh();
+                break;
+
+            case "import.files":
+                host.Close();
+                if (await ImportFilesDialog.RunAsync(host.Owner)) host.Refresh();
+                break;
+
             case "import.waiting":
-                host.Report("Thunderbird, mbox, .eml and .pst import arrive with the rest of Phase 16.");
+                host.Report(".pst and .msg are spec-built readers and arrive as their own block.");
                 break;
 
             case "tools.recover":

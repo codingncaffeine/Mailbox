@@ -262,22 +262,24 @@ public partial class MainWindow : Window
                         return;
                     }
 
-                    string? directory = null, address = null;
+                    string? kind = null, source = null, address = null;
                     foreach (var part in importSpec.Split(',', StringSplitOptions.RemoveEmptyEntries))
                     {
                         var split = part.IndexOf(':');
                         if (split < 1) continue;
+                        var key = part[..split].Trim().ToLowerInvariant();
                         var value = part[(split + 1)..].Trim();
-                        switch (part[..split].Trim().ToLowerInvariant())
+                        if (key == "account") address = value;
+                        else
                         {
-                            case "maildir": directory = value; break;
-                            case "account": address = value; break;
+                            kind = key;
+                            source = value;
                         }
                     }
 
-                    if (directory is null)
+                    if (kind is null || source is null)
                     {
-                        Log.Warn("Harness: MAILBOX_IMPORT names no maildir.");
+                        Log.Warn("Harness: MAILBOX_IMPORT names no source (maildir:|thunderbird:|mbox:|eml:|ics:|vcf:).");
                         return;
                     }
 
@@ -292,8 +294,15 @@ public partial class MainWindow : Window
                         return;
                     }
 
-                    var report = new Mailbox.Import.MaildirImporter(open.Mail, open.Account.Id).Run(directory);
-                    Log.Info($"Harness: import — {report.Summary}");
+                    var summary = kind switch
+                    {
+                        "maildir" => new Mailbox.Import.MaildirImporter(open.Mail, open.Account.Id).Run(source).Summary,
+                        "thunderbird" => new Mailbox.Import.ThunderbirdImporter(
+                            open.Mail, open.Account.Id, App.Pim, App.PimSync.QueuePut).Run(source).Summary,
+                        _ => string.Join(" | ", ImportFiles.Run([source], open, App.Pim, App.PimSync.QueuePut)),
+                    };
+
+                    Log.Info($"Harness: import — {summary}");
                     foreach (var folder in open.Mail.Folders(open.Account.Id))
                     {
                         var count = open.Mail.Messages(folder.Id).Count;
@@ -5485,8 +5494,23 @@ public partial class MainWindow : Window
         () => { if (DataContext is ShellViewModel s) s.Refresh(); },
         CloseBackstage);
 
-    private Task BackstageActionAsync(string action)
-        => BackstageActions.RunAsync(BackstageContext(), action);
+    private async Task BackstageActionAsync(string action)
+    {
+        // The exports act on what the shell is showing — the selection, the open folder — so
+        // they route here rather than through the shared actions, which have no shell.
+        if (DataContext is ShellViewModel shell)
+        {
+            switch (action)
+            {
+                case "export.eml": CloseBackstage(); await ExportEmlAsync(shell); return;
+                case "export.mbox": CloseBackstage(); await ExportMboxAsync(shell); return;
+                case "export.ics": CloseBackstage(); await ExportIcsAsync(shell); return;
+                case "export.vcf": CloseBackstage(); await ExportVcfAsync(shell); return;
+            }
+        }
+
+        await BackstageActions.RunAsync(BackstageContext(), action);
+    }
 
     private Task AddAccountAsync() => BackstageActions.AddAccountAsync(BackstageContext());
 
