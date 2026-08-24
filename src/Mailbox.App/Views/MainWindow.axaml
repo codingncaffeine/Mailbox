@@ -168,6 +168,7 @@
                                        Foreground="{DynamicResource titlebar.search.text.brush}"
                                        FontSize="{DynamicResource type.ui.size.value}" />
                             <TextBox Name="TitleSearchBox"
+                                     AutomationProperties.Name="Search"
                                      Text="{Binding SearchText}"
                                      Classes="titlebar-search"
                                      VerticalAlignment="Center"
@@ -359,6 +360,7 @@
                                  The handler asks the row which module it is, a template having
                                  no way to wire one icon and not the others. -->
                             <Button Width="40" Height="40"
+                                    AutomationProperties.Name="{Binding Module}"
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Center"
                                     Command="{Binding Activate}"

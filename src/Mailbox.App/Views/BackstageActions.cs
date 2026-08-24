@@ -101,6 +101,11 @@ internal static class BackstageActions
                 host.Report(".pst and .msg are spec-built readers and arrive as their own block.");
                 break;
 
+            case "update.check":
+                host.Report("Checking for updates…");
+                host.Report(await UpdateCheck.CheckAsync());
+                break;
+
             case "tools.recover":
                 await new RecoverDeletedItemsDialog().ShowDialog(host.Owner);
                 host.Refresh();

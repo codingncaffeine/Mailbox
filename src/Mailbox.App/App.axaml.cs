@@ -649,6 +649,15 @@ public partial class App : Application
         // standing. The window subscribes to Changed for its ribbon; nothing here needs to.
         Plugins.Start();
 
+        // The startup update check, only when the Options page's own switch says so, and never
+        // in a capture run — §19's "nothing phones home" is the default, and this is the one
+        // standing consent that overrides it. The answer goes to the log; the Backstage's
+        // button is the interactive ask.
+        if (!WindowCapture.IsRequested && Settings.GetBool(UpdateCheck.AutomaticKey))
+        {
+            _ = Task.Run(async () => Log.Info($"Update: {await UpdateCheck.CheckAsync()}"));
+        }
+
         _ = new ThemeResourceBridge(Resources, Themes);
 
         Log.Info($"Theme {Themes.ThemeId}, density {Themes.Density}");

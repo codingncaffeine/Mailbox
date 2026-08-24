@@ -139,6 +139,7 @@ public sealed class CaptionButtons : StackPanel
         }
 
         ToolTip.SetTip(button, tip);
+        Avalonia.Automation.AutomationProperties.SetName(button, tip);
         button.Click += (_, _) => onClick();
         return button;
     }

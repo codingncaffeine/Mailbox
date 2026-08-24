@@ -281,3 +281,99 @@ public class ImportFormatsTests : IDisposable
         Assert.Equal(Mailbox.Core.Rules.RuleConditionKind.From, Assert.Single(result.Rule.Conditions).Kind);
     }
 }
+
+/// <summary>The update check's pure half: reading a release answer, and version comparison.</summary>
+public class ReleaseCheckTests
+{
+    [Fact]
+    public void AReleaseAnswerYieldsItsVersionAndPage()
+    {
+        var latest = Mailbox.Core.Updates.Releases.LatestFrom(
+            """{"tag_name":"v0.2.0","html_url":"https://example.com/r/v0.2.0","name":"0.2"}""");
+
+        Assert.NotNull(latest);
+        Assert.Equal("0.2.0", latest!.Value.Version);
+        Assert.Equal("https://example.com/r/v0.2.0", latest.Value.Url);
+
+        Assert.Null(Mailbox.Core.Updates.Releases.LatestFrom("not json"));
+        Assert.Null(Mailbox.Core.Updates.Releases.LatestFrom("""{"no_tag":true}"""));
+    }
+
+    [Fact]
+    public void NewerMeansNewerAndNothingElse()
+    {
+        Assert.True(Mailbox.Core.Updates.Releases.IsNewer("0.1.0", "0.2.0"));
+        Assert.False(Mailbox.Core.Updates.Releases.IsNewer("0.2.0", "0.2.0"));
+        Assert.False(Mailbox.Core.Updates.Releases.IsNewer("0.3.0", "0.2.9"));
+        Assert.False(Mailbox.Core.Updates.Releases.IsNewer("0.1.0", "garbage"));
+    }
+}
+
+/// <summary>
+/// §16's localization scaffolding, and the import budget from its performance pass. Budgets,
+/// not benchmarks: generous enough not to fail on a slow machine, tight enough to catch a
+/// regression in kind.
+/// </summary>
+public class Phase16PassTests : IDisposable
+{
+    private readonly string _root = Path.Combine(
+        Path.GetTempPath(), "mailbox-p16-tests", Guid.NewGuid().ToString("n"));
+
+    public Phase16PassTests() => Directory.CreateDirectory(_root);
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true);
+        GC.SuppressFinalize(this);
+    }
+
+    [Fact]
+    public void AbsenceIsAlwaysHarmlessAndTheParentCultureIsReadFirst()
+    {
+        // Passthrough: unadopted is today's behaviour, exactly.
+        Assert.Equal("Sent Items", Mailbox.Core.Localization.Localizer.Passthrough.T("Sent Items"));
+
+        File.WriteAllText(Path.Combine(_root, "de.json"), """{"Inbox":"Posteingang","Sent Items":"Gesendete"}""");
+        File.WriteAllText(Path.Combine(_root, "de-AT.json"), """{"Sent Items":"Gesendet"}""");
+
+        var austrian = Mailbox.Core.Localization.Localizer.Load(_root, "de-AT");
+        Assert.Equal("Posteingang", austrian.T("Inbox"));        // the parent's
+        Assert.Equal("Gesendet", austrian.T("Sent Items"));      // the child's wins
+        Assert.Equal("Drafts", austrian.T("Drafts"));            // absence answers the English
+
+        // A locale that will not parse costs its translations and nothing else.
+        File.WriteAllText(Path.Combine(_root, "fr.json"), "not json");
+        Assert.Equal("Inbox", Mailbox.Core.Localization.Localizer.Load(_root, "fr").T("Inbox"));
+    }
+
+    [Fact]
+    public void AThousandMessageMboxImportsInsideItsBudget()
+    {
+        var path = Path.Combine(_root, "big.mbox");
+        using (var stream = File.Create(path))
+        {
+            for (var i = 0; i < 1000; i++)
+            {
+                var raw = System.Text.Encoding.ASCII.GetBytes(
+                    $"Message-ID: <bulk{i}@x.example>\nFrom: B. Other <b@example.org>\nTo: a@example.net\n"
+                    + $"Date: Fri, 21 Aug 2026 17:00:00 +0000\nSubject: Bulk {i}\n\nBody {i}.\n");
+                Mailbox.Import.Mbox.Append(stream, raw, DateTimeOffset.UtcNow);
+            }
+        }
+
+        using var store = new MailStore(Path.Combine(_root, "bulk.db"));
+        var mail = new MailRepository(store);
+        var account = mail.AddAccount("a@example.net", "A", MailProtocol.Pop3);
+        mail.CreateStandardFolders(account.Id);
+        var inbox = mail.FolderWithRole(account.Id, FolderRole.Inbox)!;
+
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var report = Mailbox.Import.MailFileImport.Mbox(mail, inbox.Id, path,
+            cancellation: TestContext.Current.CancellationToken);
+        clock.Stop();
+
+        Assert.Equal(1000, report.Imported);
+        Assert.True(clock.ElapsedMilliseconds < 20_000,
+            $"Importing 1,000 messages took {clock.ElapsedMilliseconds} ms.");
+    }
+}

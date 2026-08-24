@@ -62,6 +62,16 @@ public static class OptionsPages
         "general", "General", "settings",
         "General options for working with Mailbox.",
         [
+            new OptionSection("Updates",
+            [
+                // Keyed and off, because a version check is a network request with this
+                // machine's address on it (§19); the Backstage's own button asks by the press.
+                new CheckRow("Check for a newer version when Mailbox starts")
+                {
+                    Key = UpdateCheck.AutomaticKey,
+                },
+            ]),
+
             new OptionSection("User Interface options",
             [
                 new ComboRow("When using multiple displays:",

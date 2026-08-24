@@ -839,6 +839,10 @@ public sealed class RibbonView : ContentControl
             Classes = { RibbonButtonClass },
         };
         ToolTip.SetTip(button, Screentip(command));
+
+        // The name a screen reader speaks. A tooltip is not one — the two travel different
+        // channels — so every command button states its label here as well (§16's pass).
+        Avalonia.Automation.AutomationProperties.SetName(button, command.Label);
         button.Click += (_, _) =>
             CommandInvoked?.Invoke(this, new RibbonCommandEventArgs(command.Id));
 
@@ -1282,6 +1286,10 @@ public sealed class RibbonView : ContentControl
             Classes = { RibbonButtonClass },
         };
         ToolTip.SetTip(button, Screentip(command));
+
+        // The name a screen reader speaks. A tooltip is not one — the two travel different
+        // channels — so every command button states its label here as well (§16's pass).
+        Avalonia.Automation.AutomationProperties.SetName(button, command.Label);
         button.Click += (_, _) => CommandInvoked?.Invoke(this, new RibbonCommandEventArgs(command.Id));
 
         Record(command.Id, button);
@@ -2125,6 +2133,10 @@ public sealed class RibbonView : ContentControl
         };
 
         ToolTip.SetTip(button, Screentip(command));
+
+        // The name a screen reader speaks. A tooltip is not one — the two travel different
+        // channels — so every command button states its label here as well (§16's pass).
+        Avalonia.Automation.AutomationProperties.SetName(button, command.Label);
 
         button.Click += (_, _) => CommandInvoked?.Invoke(this, new RibbonCommandEventArgs(command.Id));
 

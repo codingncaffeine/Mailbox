@@ -360,6 +360,14 @@ public sealed class BackstageView : Border
             "updates when items are added, changed, or removed.",
             action: "rules"));
 
+        stack.Children.Add(BuildSection(
+            "refresh", "Check for\nUpdates", false,
+            "Mailbox Update",
+            "Ask the release page whether a newer version exists. Asks only when pressed — " +
+            "or at startup, if the Options page's own switch says so; nothing else here " +
+            "touches the network.",
+            action: "update.check"));
+
         return new ScrollViewer { Content = stack };
     }
 
