@@ -22,7 +22,16 @@ out="$root/artifacts/fidelity"
 update=false
 [[ "${1:-}" == "--update" ]] && update=true
 
-command -v magick >/dev/null || { echo "fidelity-gate: ImageMagick's 'magick' is required." >&2; exit 2; }
+# ImageMagick 7 fronts everything with `magick`; Ubuntu's ImageMagick 6 still ships the bare
+# `compare`. Either will do.
+if command -v magick >/dev/null; then
+  compare_tool=(magick compare)
+elif command -v compare >/dev/null; then
+  compare_tool=(compare)
+else
+  echo "fidelity-gate: ImageMagick is required ('magick' or 'compare')." >&2
+  exit 2
+fi
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
@@ -44,7 +53,7 @@ capture() { # theme, output
 }
 
 differing() { # a, b -> prints the AE count
-  magick compare -metric AE "$1" "$2" null: 2>&1 | cut -d' ' -f1
+  "${compare_tool[@]}" -metric AE "$1" "$2" null: 2>&1 | cut -d' ' -f1
 }
 
 status=0
@@ -56,7 +65,7 @@ for theme in colorful white darkgray black; do
   same_run=$(differing "$out/$theme.png" "$work/$theme-again.png")
   if [[ "$same_run" != "0" ]]; then
     echo "fidelity-gate: FAIL — two captures of $theme in one run differ by $same_run pixels: the capture is not deterministic."
-    magick compare "$out/$theme.png" "$work/$theme-again.png" "$out/$theme-selfdiff.png" || true
+    "${compare_tool[@]}" "$out/$theme.png" "$work/$theme-again.png" "$out/$theme-selfdiff.png" || true
     status=1
     continue
   fi
@@ -71,7 +80,7 @@ for theme in colorful white darkgray black; do
       echo "fidelity-gate: $theme is pixel-identical to its reference."
     else
       echo "fidelity-gate: FAIL — $theme differs from its reference by $drift pixels."
-      magick compare "$refs/$theme.png" "$out/$theme.png" "$out/$theme-diff.png" || true
+      "${compare_tool[@]}" "$refs/$theme.png" "$out/$theme.png" "$out/$theme-diff.png" || true
       status=1
     fi
   else

@@ -47,8 +47,12 @@ public sealed record Misspelling(string Word, int Offset, bool IsRepeated = fals
 /// </remarks>
 public sealed class SpellCheck
 {
-    /// <summary>Where distributions put Hunspell dictionaries.</summary>
-    private static readonly string[] SystemDirectories =
+    /// <summary>
+    /// Where distributions put Hunspell dictionaries. Mutable for the tests that answer for a
+    /// machine with none — the real directories are searched on every real machine, so a test
+    /// asserting "no dictionary anywhere" is otherwise at the mercy of what the host installed.
+    /// </summary>
+    internal static string[] SystemDirectories =
     [
         "/usr/share/hunspell",
         "/usr/share/myspell",

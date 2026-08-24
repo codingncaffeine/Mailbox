@@ -17,6 +17,13 @@ public class SpellCheckTests : IDisposable
     private readonly string _directory =
         Path.Combine(Path.GetTempPath(), "mailbox-dic-" + Guid.NewGuid().ToString("n"));
 
+    // The host's own dictionaries are taken out of the search for the class's lifetime: half
+    // these tests answer for a machine with none, and the first CI run proved the host's
+    // /usr/share/hunspell otherwise answers instead.
+    private readonly string[] _systemDirectories = SpellCheck.SystemDirectories;
+
+    public SpellCheckTests() => SpellCheck.SystemDirectories = [];
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     /// <summary>
@@ -230,6 +237,7 @@ public class SpellCheckTests : IDisposable
 
     public void Dispose()
     {
+        SpellCheck.SystemDirectories = _systemDirectories;
         GC.SuppressFinalize(this);
 
         try

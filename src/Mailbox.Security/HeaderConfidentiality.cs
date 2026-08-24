@@ -112,10 +112,13 @@ public static class HeaderConfidentialityPolicy
         ArgumentException.ThrowIfNullOrEmpty(name);
 
         // Compared against a value it cannot leave alone, because "does this policy touch this field"
-        // is not answerable for the structured ones without a value to try it on. A subject is the
-        // one field every policy either replaces or does not.
+        // is not answerable for the structured ones without a value to try it on. The date probe
+        // carries a fixed non-UTC offset on purpose: a policy that hides Date does it by taking
+        // the zone off, and probing with this machine's own "now" made the answer depend on the
+        // machine — on a UTC host the rewrite returned the probe unchanged and Date read as not
+        // hidden, which is the wrong answer precisely where servers run.
         var probe = name.Equals("date", StringComparison.OrdinalIgnoreCase)
-            ? DateUtils.FormatDate(DateTimeOffset.Now)
+            ? DateUtils.FormatDate(new DateTimeOffset(2021, 2, 20, 10, 9, 2, TimeSpan.FromHours(-5)))
             : "a";
 
         var outside = policy.Outside(name, probe);
