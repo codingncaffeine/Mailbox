@@ -18,4 +18,7 @@ tools/Mailbox.Fidelity/diffs/
 # Internal working documents — the plan and the session handoff stay local.
 docs/PLAN.md
 docs/HANDOFF.md
+
+# Downloaded format specifications — reference material, not ours to redistribute.
+specs/
 packaging/out/

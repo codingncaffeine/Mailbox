@@ -18,6 +18,7 @@
     <Project Path="src/Mailbox.Plugins.Api/Mailbox.Plugins.Api.csproj" />
     <Project Path="src/Mailbox.Plugins/Mailbox.Plugins.csproj" />
     <Project Path="src/Mailbox.Protocols/Mailbox.Protocols.csproj" />
+    <Project Path="src/Mailbox.Pst/Mailbox.Pst.csproj" />
     <Project Path="src/Mailbox.Rendering/Mailbox.Rendering.csproj" />
     <Project Path="src/Mailbox.Scheduling/Mailbox.Scheduling.csproj" />
     <Project Path="src/Mailbox.Security/Mailbox.Security.csproj" />

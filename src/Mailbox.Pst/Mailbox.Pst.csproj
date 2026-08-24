@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The PST reader (§7.7), built in-house from the published [MS-PST] specification. Read-only
+    by stated scope: almost nothing writes this format, but someone arriving from it has their
+    mail inside one and this is how it gets out.
+
+    Three layers, mirroring the specification's own: NDB (nodes, blocks, the two BTrees and the
+    obfuscation), LTP (heaps, property and table contexts), and messaging (folders, messages,
+    attachments). No dependencies on purpose — a parser for somebody else's binary format is an
+    attack surface (§19), and the fewer moving parts under it the better. Every structure is
+    verified against the specification's own worked byte examples, and the whole stack against
+    real files this project did not write.
+  -->
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Mailbox.Tests" />
+  </ItemGroup>
+
+</Project>
