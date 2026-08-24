@@ -149,6 +149,12 @@ public partial class App : Application
     /// <summary>The user's ribbon edits, and the layout that comes of applying them.</summary>
     public static RibbonCustomization RibbonEdits { get; private set; } = null!;
 
+    /// <summary>
+    /// The plugin host (§13): what is installed, what is running, and every contribution a
+    /// plugin has made — commands, tabs, hooks, bars — tracked so disabling reverses it.
+    /// </summary>
+    public static Mailbox.Plugins.PluginHost Plugins { get; private set; } = null!;
+
     /// <summary>The Quick Steps: the gallery's entries, and what each does.</summary>
     public static QuickSteps QuickSteps { get; private set; } = null!;
 
@@ -170,7 +176,8 @@ public partial class App : Application
     }
 
     public static RibbonLayout MailRibbon()
-        => QuickStepsRibbon.Inject(RibbonEdits.Apply(DefaultRibbonLayouts.Mail), QuickSteps.All);
+        => QuickStepsRibbon.Inject(
+            RibbonEdits.Apply(Plugins.InjectRibbon(DefaultRibbonLayouts.Mail)), QuickSteps.All);
 
     /// <summary>
     /// Puts every Quick Step in the catalogue as a command — the shipped three already are, by
@@ -513,10 +520,49 @@ public partial class App : Application
         // handed the arriving message's own store.
         Junk = new JunkService(MailOptions, Contacts);
 
-        // What acts on a message as it arrives, in order: the junk filter, then the rules. Both
-        // protocols run the same pipeline, so a rule means the same thing on POP3 and IMAP.
+        // The catalogue before the pipeline, because the plugin host joins both: its commands
+        // enter the catalogue and its arrival stage ends the pipeline.
+        Commands = new CommandCatalog();
+        Commands.RegisterRange(MailCommands.All);
+        Commands.RegisterRange(ViewCommands.All);
+        Commands.RegisterRange(ComposeCommands.All);
+        Commands.RegisterRange(CalendarCommands.All);
+        Commands.RegisterRange(AppointmentCommands.All);
+        Commands.RegisterRange(ContactCommands.All);
+        Commands.RegisterRange(PeopleCommands.All);
+        Commands.RegisterRange(TaskCommands.All);
+        Commands.RegisterRange(NoteCommands.All);
+        Commands.RegisterRange(JournalCommands.All);
+        Keys = new Mailbox.Core.Keyboard.KeyMap(Settings, Commands);
+        Mailbox.Controls.Ribbon.RibbonView.GestureLookup = command => Keys.GestureFor(command.Id)?.Display;
+
+        // A capture run must not load the machine's plugins any more than its settings or its
+        // keyring: MAILBOX_PLUGINS poses a directory, and without one a capture gets an empty
+        // scratch root — the same reasoning as MAILBOX_STORE.
+        var pluginsRoot = Environment.GetEnvironmentVariable("MAILBOX_PLUGINS");
+        if (string.IsNullOrEmpty(pluginsRoot))
+        {
+            pluginsRoot = WindowCapture.IsRequested
+                ? System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"mailbox-plugins-{Environment.ProcessId}")
+                : Mailbox.Plugins.PluginHost.DefaultRoot();
+        }
+
+        Plugins = new Mailbox.Plugins.PluginHost(pluginsRoot, new Mailbox.Plugins.PluginHostServices
+        {
+            Commands = Commands,
+            Settings = Settings,
+            Mailboxes = Mailboxes,
+            Pim = Pim,
+            QueuePut = item => PimSync.QueuePut(item),
+            RunOnUiThread = action => Dispatcher.UIThread.Post(action),
+        });
+
+        // What acts on a message as it arrives, in order: the junk filter, then the rules, then
+        // the plugins — last, so a hook sees where the application's own handlers left it. Both
+        // protocols run the same pipeline, so all of it means the same thing on POP3 and IMAP.
         Rules = new RulesHandler();
-        var arrival = new ArrivalPipeline(Junk, new IgnoreHandler(), new FocusedInboxHandler(), Rules);
+        var arrival = new ArrivalPipeline(
+            Junk, new IgnoreHandler(), new FocusedInboxHandler(), Rules, Plugins.Arrivals);
 
         // Read at the moment a collector is made, which is per run — so the Options page's
         // choice applies to the next send/receive rather than the next launch. IMAP and POP3
@@ -548,20 +594,6 @@ public partial class App : Application
             Log.Warn("Could not purge the recoverable holding area.", ex);
         }
 
-        Commands = new CommandCatalog();
-        Commands.RegisterRange(MailCommands.All);
-        Commands.RegisterRange(ViewCommands.All);
-        Commands.RegisterRange(ComposeCommands.All);
-        Commands.RegisterRange(CalendarCommands.All);
-        Commands.RegisterRange(AppointmentCommands.All);
-        Commands.RegisterRange(ContactCommands.All);
-        Commands.RegisterRange(PeopleCommands.All);
-        Commands.RegisterRange(TaskCommands.All);
-        Commands.RegisterRange(NoteCommands.All);
-        Commands.RegisterRange(JournalCommands.All);
-        Keys = new Mailbox.Core.Keyboard.KeyMap(Settings, Commands);
-        Mailbox.Controls.Ribbon.RibbonView.GestureLookup = command => Keys.GestureFor(command.Id)?.Display;
-
         RibbonEdits = new RibbonCustomization();
         QuickSteps = new QuickSteps(Settings);
         RegisterQuickSteps();
@@ -577,6 +609,10 @@ public partial class App : Application
         Groups = new SendReceiveGroups(Settings);
         Signatures = new Signatures(Settings);
         UndoSend = new UndoSend(Settings);
+
+        // Last in the composition, so everything a plugin's Initialize reaches for is already
+        // standing. The window subscribes to Changed for its ribbon; nothing here needs to.
+        Plugins.Start();
 
         _ = new ThemeResourceBridge(Resources, Themes);
 

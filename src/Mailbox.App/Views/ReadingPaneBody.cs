@@ -311,6 +311,16 @@ public sealed class ReadingPaneBody : UserControl
         if (disableLinks) _bars.Children.Add(JunkBar());
         if (_rendered.HasRemoteContent) _bars.Children.Add(RemoteImageBar(_rendered));
 
+        // The plugins' bars come after the application's own, so what the application says about
+        // a message always outranks an add-in. Providers answer from what they already know —
+        // this is the render path, where nothing may block or ask the network (§19) — and the
+        // host charges a provider that throws to its plugin rather than to the pane.
+        foreach (var (plugin, contributed) in App.Plugins.InfoBarsFor(PluginSummaryNow()))
+        {
+            _bars.Children.Add(PluginBar(contributed));
+            Log.Info($"Harness: plugin bar — {plugin}: {contributed.Text}");
+        }
+
         Load(_rendered.Html);
     }
 
@@ -321,6 +331,53 @@ public sealed class ReadingPaneBody : UserControl
     /// </summary>
     private IEnumerable<string> FamiliarDomains()
         => App.MailOptions.WarnAboutSuspiciousDomains ? _mail()?.FamiliarDomains() ?? [] : [];
+
+    /// <summary>
+    /// The row a plugin's info-bar provider is asked about. The shell fills this beside the
+    /// message when a list row is behind it; a pop-out window has only the envelope, and an
+    /// empty account with zeroed ids is what "no row" honestly looks like to a plugin.
+    /// </summary>
+    public Mailbox.Plugins.Api.PluginMessageSummary? PluginSummary { get; set; }
+
+    private Mailbox.Plugins.Api.PluginMessageSummary PluginSummaryNow()
+        => PluginSummary ?? new(
+            string.Empty, 0, 0,
+            _message?.Subject ?? string.Empty,
+            SenderAddress,
+            _message?.Date ?? DateTimeOffset.MinValue,
+            IsRead: true);
+
+    /// <summary>One plugin's bar: its text, and the one button it may carry.</summary>
+    private Control PluginBar(Mailbox.Plugins.Api.PluginInfoBar contributed)
+    {
+        var bar = Bar("reading.infobar.background.brush");
+        var row = Row();
+
+        var glyph = Glyph("apps");
+        Grid.SetColumn(glyph, 0);
+        row.Children.Add(glyph);
+
+        var text = new TextBlock
+        {
+            Text = contributed.Text,
+            TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+        Bind(text, TextBlock.ForegroundProperty, "reading.infobar.text.brush");
+        Grid.SetColumn(text, 1);
+        row.Children.Add(text);
+
+        if (contributed is { ButtonLabel.Length: > 0, ButtonPressed: { } pressed })
+        {
+            var button = BarButton(contributed.ButtonLabel);
+            button.Click += (_, _) => pressed();
+            Grid.SetColumn(button, 2);
+            row.Children.Add(button);
+        }
+
+        bar.Child = row;
+        return bar;
+    }
 
     /// <summary>The bar above a message in Junk whose links have been drawn inert.</summary>
     private Control JunkBar()

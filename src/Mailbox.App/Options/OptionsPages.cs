@@ -501,9 +501,16 @@ public static class OptionsPages
             [
                 new NoteRow("Plugins are .NET assemblies discovered from the plugins directory. " +
                             "Each declares the permissions it needs, and can be enabled or " +
-                            "disabled without restarting Mailbox."),
-                new CheckRow("Load plugins at startup", true),
-                new CheckRow("Warn me when a plugin requests a permission it did not declare", true),
+                            "disabled without restarting Mailbox. A plugin runs with Mailbox's " +
+                            "own reach: installing one is trusting it as far as Mailbox itself."),
+                // Keyed explicitly, because the host reads both: a row keyed by its own label
+                // loses its value the day the label is reworded.
+                new CheckRow("Load plugins at startup", true) { Key = Mailbox.Plugins.PluginHost.LoadKey },
+                new CheckRow("Warn me when a plugin requests a permission it did not declare", true)
+                {
+                    Key = Mailbox.Plugins.PluginHost.WarnUndeclaredKey,
+                },
+                new SlotRow("plugins"),
             ]),
         ]);
 

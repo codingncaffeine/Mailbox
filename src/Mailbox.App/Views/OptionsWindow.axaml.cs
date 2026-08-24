@@ -451,6 +451,11 @@ public sealed class OptionsWindow : Window
             autocomplete.Content = AutoCompleteRow();
         }
 
+        if (renderer.Slots.TryGetValue("plugins", out var plugins))
+        {
+            plugins.Content = PluginRows();
+        }
+
         if (renderer.Slots.TryGetValue("keys", out var keys))
         {
             keys.Content = KeyRingRows();
@@ -679,6 +684,174 @@ public sealed class OptionsWindow : Window
         if (WindowCapture.IsRequested) LogKeyRing();
 
         return panel;
+    }
+
+    /// <summary>
+    /// The plugins as the host knows them: each with its state, what it asked for, and a button
+    /// that enables or disables it now — §13's manager, on the page the reference keeps its own.
+    /// </summary>
+    private Control PluginRows()
+    {
+        var panel = new StackPanel { Spacing = 8 };
+
+        var summary = new TextBlock { TextWrapping = TextWrapping.Wrap, MaxWidth = 520 };
+        Bind(summary, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
+
+        var list = new StackPanel { Spacing = 6, Margin = new Thickness(0, 4, 0, 0) };
+
+        void Fill()
+        {
+            list.Children.Clear();
+
+            var records = App.Plugins.Plugins;
+            summary.Text = records.Count == 0
+                ? "No plugins are installed. A plugin is a directory holding plugin.json and " +
+                  $"its assembly, under {App.Plugins.Root}."
+                : $"{Count(records.Count, "plugin")} in {App.Plugins.Root}.";
+
+            foreach (var record in records) list.Children.Add(PluginLine(record));
+        }
+
+        // The host raises Changed off whatever thread failed a plugin, and the page may be gone
+        // by then — unhooked when the window closes, so the event does not keep it alive.
+        EventHandler onChanged = (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(Fill);
+        App.Plugins.Changed += onChanged;
+        Closed += (_, _) => App.Plugins.Changed -= onChanged;
+
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+
+        var open = DialogButton("Open Folder…", isDefault: false);
+        open.Width = 120;
+        open.Click += (_, _) =>
+        {
+            try
+            {
+                Directory.CreateDirectory(App.Plugins.Root);
+                System.Diagnostics.Process.Start(
+                    new System.Diagnostics.ProcessStartInfo("xdg-open", App.Plugins.Root)
+                    {
+                        UseShellExecute = false,
+                    });
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("Could not open the plugins directory.", ex);
+            }
+        };
+        buttons.Children.Add(open);
+
+        panel.Children.Add(summary);
+        panel.Children.Add(list);
+        panel.Children.Add(buttons);
+
+        Fill();
+
+        // What the harness reads back, a capture of a scrolled page being a poor way to check a
+        // list. MAILBOX_OPTIONS_PAGE=addins is what opens it.
+        if (WindowCapture.IsRequested) LogPlugins();
+
+        return panel;
+    }
+
+    private Control PluginLine(Mailbox.Plugins.PluginRecord record)
+    {
+        var lines = new StackPanel { Spacing = 1 };
+
+        var name = new TextBlock
+        {
+            Text = record.Manifest is { } m
+                ? $"{record.Name} {m.PluginVersion}" + (m.Author.Length > 0 ? $" — {m.Author}" : string.Empty)
+                : record.Name,
+            FontWeight = record.State == Mailbox.Plugins.PluginState.Enabled
+                ? FontWeight.SemiBold
+                : FontWeight.Normal,
+            Width = 380,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        Bind(name, TextBlock.ForegroundProperty, "dialog.foreground.brush");
+        lines.Children.Add(name);
+
+        var asked = record.Manifest?.Permissions is { Count: > 0 } permissions
+            ? $"asks for {string.Join(", ", permissions)}"
+            : "asks for nothing";
+
+        var detail = new TextBlock
+        {
+            Text = $"{Word(record.State)} · {asked}"
+                   + (record.Error is { Length: > 0 } error ? $" · {error}" : string.Empty),
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 380,
+        };
+        Bind(detail, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
+        lines.Children.Add(detail);
+
+        if (record.UndeclaredUses.Count > 0)
+        {
+            var undeclared = new TextBlock
+            {
+                Text = $"Used without declaring: {string.Join(", ", record.UndeclaredUses)}. " +
+                       "Those calls were refused.",
+                TextWrapping = TextWrapping.Wrap,
+                MaxWidth = 380,
+            };
+            Bind(undeclared, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
+            lines.Children.Add(undeclared);
+        }
+
+        var row = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            Children = { lines },
+        };
+
+        // Broken and incompatible plugins get the button too: Enable re-examines the directory,
+        // which is what "I replaced the files, try again" needs — and a crashed one may be tried
+        // again, its report having made its point.
+        if (record.Manifest is not null)
+        {
+            var toggle = DialogButton(
+                record.State == Mailbox.Plugins.PluginState.Enabled ? "Disable" : "Enable",
+                isDefault: false);
+            toggle.Width = 90;
+            toggle.VerticalAlignment = VerticalAlignment.Top;
+            var id = record.Manifest.Id;
+            var enabled = record.State == Mailbox.Plugins.PluginState.Enabled;
+            toggle.Click += (_, _) =>
+            {
+                if (enabled) App.Plugins.Disable(id);
+                else App.Plugins.Enable(id);
+            };
+            row.Children.Add(toggle);
+        }
+
+        return row;
+
+        static string Word(Mailbox.Plugins.PluginState state) => state switch
+        {
+            Mailbox.Plugins.PluginState.Enabled => "Enabled",
+            Mailbox.Plugins.PluginState.Disabled => "Disabled",
+            Mailbox.Plugins.PluginState.Crashed => "Disabled after an error",
+            Mailbox.Plugins.PluginState.Incompatible => "Needs a newer Mailbox",
+            _ => "Could not be read",
+        };
+    }
+
+    /// <summary>Reads the list back for a capture run, with each plugin's state and report.</summary>
+    private static void LogPlugins()
+    {
+        var records = App.Plugins.Plugins;
+        Log.Info($"Harness: plugins — {records.Count} under {App.Plugins.Root}.");
+
+        foreach (var record in records)
+        {
+            Log.Info($"Harness: plugin {record.Id} — {record.State.ToString().ToLowerInvariant()}"
+                     + (record.Manifest is { } m ? $", asks for [{string.Join(", ", m.Permissions)}]" : string.Empty)
+                     + (record.Error is { Length: > 0 } error ? $", “{error}”" : string.Empty)
+                     + (record.UndeclaredUses.Count > 0
+                         ? $", used undeclared [{string.Join(", ", record.UndeclaredUses)}]"
+                         : string.Empty));
+        }
     }
 
     private Control KeyLine(Mailbox.Security.OpenPgp.KeyEntry key, DateTimeOffset now)

@@ -58,6 +58,17 @@ public partial class MainWindow : Window
         _ribbon.CommandInvoked += OnRibbonCommand;
         _ribbon.BackstageRequested += (_, _) => ShowBackstage();
         _ribbon.FloatingBodyChanged += (_, e) => ShowFloatingRibbon(e.Body);
+
+        // A plugin enabled, disabled or crashed changes what the bar holds. The mail layout is
+        // the one plugin tabs ride, so refresh only when it is the one showing — another module
+        // fetches a fresh layout on its way back in anyway.
+        App.Plugins.Changed += (_, _) => Dispatcher.UIThread.Post(() =>
+        {
+            if (DataContext is ShellViewModel s && s.Module == MailboxModule.Mail && _inlineCompose is null)
+            {
+                _ribbon.Layout = App.MailRibbon();
+            }
+        });
         AddHandler(PointerPressedEvent, OnWindowPointerPressed, RoutingStrategies.Tunnel);
         this.FindControl<ContentControl>("RibbonHost")!.Content = _ribbon;
 
@@ -2106,6 +2117,14 @@ public partial class MainWindow : Window
         _openMessage = message;
         _openRaw = raw;
 
+        // The row behind the pane, for a plugin's info-bar provider: the account and ids a
+        // MimeMessage alone cannot say.
+        _reading.PluginSummary = shell.SelectedMessage is { } selected
+            ? new Mailbox.Plugins.Api.PluginMessageSummary(
+                selected.Address, selected.Id, selected.FolderId, selected.Subject,
+                selected.From, selected.Received, !selected.IsUnread)
+            : null;
+
         // The pane first, then the strip from what the pane is showing: an encrypted message's
         // attachments are inside it, and the envelope has none worth offering.
         _reading.Show(message, shell.SelectedMessage?.Body ?? string.Empty, Verified(shell),
@@ -3475,6 +3494,10 @@ public partial class MainWindow : Window
         if (RunJournalCommand(shell, id)) return;
         if (RunOverSelection(shell, id)) return;
         if (RunViewCommand(shell, id)) return;
+
+        // A plugin's command, found the way a Quick Step is: the host owns the handler, and a
+        // handler that throws disables its plugin rather than the window.
+        if (App.Plugins.TryRun(id)) return;
 
         // Everything left is recorded in §20 with what it waits for; the status line names
         // the command so the plan can be checked against the window rather than the reverse.

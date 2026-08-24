@@ -2247,6 +2247,15 @@ public sealed class ComposeSurface : UserControl
             return;
         }
 
+        // A plugin may stop a send (§13), and it is asked before the cryptography for the same
+        // reason the cryptography runs last: a message stopped after signing was signed for
+        // nothing. The refusal names the plugin, so the writer knows what stood in the way.
+        if (App.Plugins.BeforeSend(account.Account.Address, message) is { } stopped)
+        {
+            Report($"{stopped.PluginName} stopped the send: {stopped.Reason}");
+            return;
+        }
+
         // Signed and sealed here and nowhere else: immediately before it goes, over the message as
         // it will actually be sent, once the writer has decided to send it (§19). A refusal stops
         // the send with the message intact rather than sending it in the clear.
