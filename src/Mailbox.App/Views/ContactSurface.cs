@@ -498,7 +498,12 @@ public sealed class ContactSurface : UserControl
     public Contact Current()
     {
         var typed = (_name.Text ?? string.Empty).Trim();
-        var parts = typed.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        // What the typed name means is the People page's "Default Full Name order" — the string
+        // itself cannot say whether "Vries Anne" leads with the family name. A card that already
+        // carries its parts keeps them (the form edits the display name, not the analysis); only
+        // a name typed onto a card that has none is parsed.
+        var parsed = Mailbox.Core.People.FullNames.Parse(typed, App.PeopleOptions.FullName);
 
         var emails = new List<ContactEmail>();
         if ((_email.Text ?? string.Empty).Trim() is { Length: > 0 } address)
@@ -522,8 +527,9 @@ public sealed class ContactSurface : UserControl
         return _original with
         {
             DisplayName = typed,
-            FirstName = _original.FirstName.Length > 0 || parts.Length < 2 ? _original.FirstName : parts[0],
-            LastName = _original.LastName.Length > 0 || parts.Length < 2 ? _original.LastName : parts[^1],
+            FirstName = _original.FirstName.Length > 0 || parsed.Last.Length == 0 ? _original.FirstName : parsed.First,
+            MiddleName = _original.FirstName.Length > 0 || parsed.Last.Length == 0 ? _original.MiddleName : parsed.Middle,
+            LastName = _original.LastName.Length > 0 || parsed.Last.Length == 0 ? _original.LastName : parsed.Last,
             Company = (_company.Text ?? string.Empty).Trim(),
             JobTitle = (_jobTitle.Text ?? string.Empty).Trim(),
             FileAs = _fileAs.SelectedItem as string ?? _original.FileAs,
