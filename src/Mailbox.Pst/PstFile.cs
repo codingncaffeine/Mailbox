@@ -97,6 +97,12 @@ public sealed class PstFile : IDisposable
     public IEnumerable<NbtEntry> Nodes() => LeavesOf(_header.Root.NodeBTree, PageType.NodeBTree, 0)
         .SelectMany(page => Enumerable.Range(0, page.EntryCount).Select(i => page.Node(i, Format)));
 
+    /// <summary>The node with this id as a <see cref="PstNode"/>, or null.</summary>
+    public PstNode? Node(Nid nid) => FindNode(nid) is { } entry ? NodeOf(entry) : null;
+
+    /// <summary>A found entry wrapped with its context.</summary>
+    public PstNode NodeOf(NbtEntry entry) => new(this, entry.Nid, entry.Data, entry.Subnode);
+
     /// <summary>The node with this id, or null — absence is an answer here, not a fault.</summary>
     public NbtEntry? FindNode(Nid nid)
     {
@@ -251,13 +257,15 @@ public sealed class PstFile : IDisposable
     }
 
     /// <summary>
-    /// The full data behind a block reference: a single block's bytes, or a whole data tree
-    /// assembled in order. A zero id is an empty answer — nodes without data exist.
+    /// The data behind a block reference kept as its constituent blocks, in order — one entry
+    /// for a plain block, the leaf blocks of the tree otherwise. The heap and the table row
+    /// matrix are addressed per block, which is why the pieces survive here and concatenation
+    /// is the caller's move.
     /// </summary>
-    public byte[] ReadData(Bid bid)
+    internal IReadOnlyList<byte[]> ReadDataBlocks(Bid bid)
     {
         if (bid.IsZero) return [];
-        if (!bid.IsInternal) return ReadBlock(bid);
+        if (!bid.IsInternal) return [ReadBlock(bid)];
 
         var chunks = new List<byte[]>();
         var (level, claimed, children) = InternalBlocks.ReadDataTree(ReadBlock(bid), bid, Format);
@@ -293,6 +301,22 @@ public sealed class PstFile : IDisposable
 
         if (total != claimed)
             throw new PstException($"The data tree under block {bid} claims {claimed} bytes and its blocks hold {total}.");
+
+        return chunks;
+    }
+
+    /// <summary>
+    /// The full data behind a block reference: a single block's bytes, or a whole data tree
+    /// assembled in order. A zero id is an empty answer — nodes without data exist.
+    /// </summary>
+    public byte[] ReadData(Bid bid)
+    {
+        var chunks = ReadDataBlocks(bid);
+        if (chunks.Count == 1) return chunks[0];
+
+        var total = chunks.Sum(chunk => (long)chunk.Length);
+        if (total > int.MaxValue)
+            throw new PstException($"The data tree under block {bid} assembles to {total} bytes, which is more than any one value can be.");
 
         var assembled = new byte[total];
         var at = 0;

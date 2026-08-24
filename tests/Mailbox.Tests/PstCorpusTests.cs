@@ -1,4 +1,5 @@
 using Mailbox.Pst;
+using Mailbox.Pst.Ltp;
 using Mailbox.Pst.Ndb;
 
 namespace Mailbox.Tests;
@@ -107,6 +108,108 @@ public class PstCorpusTests
         }
 
         return count;
+    }
+
+    [Fact]
+    public void EveryPropertyAndTableInEveryCorpusFileDecodes()
+    {
+        foreach (var path in CorpusFiles())
+        {
+            using var file = PstFile.Open(path);
+
+            var contexts = 0;
+            var tables = 0;
+            var values = 0;
+
+            foreach (var entry in file.Nodes())
+                Decode(file.NodeOf(entry), entry.Nid.Type, 0, ref contexts, ref tables, ref values);
+
+            // Floors again: any PST at all carries the store and name-map contexts, a handful
+            // of folder contexts, and each folder's three tables.
+            Assert.True(contexts >= 5, $"{Path.GetFileName(path)} yielded only {contexts} property contexts.");
+            Assert.True(tables >= 3, $"{Path.GetFileName(path)} yielded only {tables} tables.");
+            Assert.True(values > 50, $"{Path.GetFileName(path)} yielded only {values} property values.");
+        }
+    }
+
+    /// <summary>
+    /// Reads a node as whatever its id type says it is — property bag or table — and follows a
+    /// message's subnodes, where its recipient and attachment tables and each attachment's own
+    /// context live. Every value is materialised, strings decoded and multi-values split, so a
+    /// wrong offset anywhere fails here rather than lurking.
+    /// </summary>
+    private static void Decode(PstNode node, NidType type, int depth, ref int contexts, ref int tables, ref int values)
+    {
+        if (depth > 4) return;
+
+        var isContext = type is NidType.NormalFolder or NidType.SearchFolder or NidType.NormalMessage
+            or NidType.AssocMessage or NidType.Attachment
+            || node.Nid.Value is 0x21 or 0x61;
+        // Search-folder contents tables are left out on purpose: real files write them with the
+        // reserved heap signature 0xAC, a shape [MS-PST] does not define — and a search folder
+        // is a computed view, not mail an importer would carry over.
+        var isTable = type is NidType.HierarchyTable or NidType.ContentsTable or NidType.AssocContentsTable
+            or NidType.AttachmentTable or NidType.RecipientTable;
+
+        if (isContext)
+        {
+            contexts++;
+            foreach (var property in PropertyContext.Read(node).Properties.Values)
+            {
+                values++;
+                Materialise(property);
+            }
+        }
+        else if (isTable)
+        {
+            tables++;
+            foreach (var row in TableContext.Read(node).Rows())
+            {
+                foreach (var property in row.Properties())
+                {
+                    values++;
+                    Materialise(property);
+                }
+            }
+        }
+        else
+        {
+            return;
+        }
+
+        if (type is NidType.NormalMessage or NidType.AssocMessage or NidType.Attachment)
+        {
+            foreach (var subnode in node.Subnodes())
+                Decode(subnode, subnode.Nid.Type, depth + 1, ref contexts, ref tables, ref values);
+        }
+    }
+
+    private static void Materialise(PstProperty property)
+    {
+        if (property.IsMultiValued)
+        {
+            foreach (var element in property.Elements()) Materialise(element);
+            return;
+        }
+
+        switch (property.Type)
+        {
+            case PstPropertyType.String or PstPropertyType.String8:
+                property.AsString();
+                break;
+            case PstPropertyType.Time:
+                property.AsTime();
+                break;
+            case PstPropertyType.Integer32:
+                property.AsInteger32();
+                break;
+            case PstPropertyType.Boolean:
+                property.AsBoolean();
+                break;
+            default:
+                _ = property.Raw.Length;
+                break;
+        }
     }
 
     [Fact]
