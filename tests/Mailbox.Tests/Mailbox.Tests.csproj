@@ -31,6 +31,7 @@
     <ProjectReference Include="..\..\src\Mailbox.Google\Mailbox.Google.csproj" />
     <ProjectReference Include="..\..\src\Mailbox.Scheduling\Mailbox.Scheduling.csproj" />
     <ProjectReference Include="..\..\src\Mailbox.Plugins\Mailbox.Plugins.csproj" />
+    <ProjectReference Include="..\..\src\Mailbox.Import\Mailbox.Import.csproj" />
 
     <!-- The plugin the host tests stage into scratch directories: a file in the output, never a
          reference, so it reaches the tests only through the real loader. -->

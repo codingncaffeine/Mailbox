@@ -82,6 +82,15 @@ internal static class BackstageActions
                 break;
             }
 
+            case "import.maildir":
+                host.Close();
+                if (await ImportMaildirDialog.RunAsync(host.Owner)) host.Refresh();
+                break;
+
+            case "import.waiting":
+                host.Report("Thunderbird, mbox, .eml and .pst import arrive with the rest of Phase 16.");
+                break;
+
             case "tools.recover":
                 await new RecoverDeletedItemsDialog().ShowDialog(host.Owner);
                 host.Refresh();

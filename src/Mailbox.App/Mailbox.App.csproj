@@ -50,6 +50,7 @@
     <ProjectReference Include="..\Mailbox.Rendering\Mailbox.Rendering.csproj" />
     <ProjectReference Include="..\Mailbox.Security\Mailbox.Security.csproj" />
     <ProjectReference Include="..\Mailbox.Plugins\Mailbox.Plugins.csproj" />
+    <ProjectReference Include="..\Mailbox.Import\Mailbox.Import.csproj" />
   </ItemGroup>
 
 </Project>

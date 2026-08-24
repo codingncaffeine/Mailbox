@@ -203,12 +203,54 @@ public sealed class BackstageView : Border
         return button;
     }
 
+    /// <summary>Opens a page by rail id — what a click does, for the harness, which cannot click.</summary>
+    internal void Open(string id)
+    {
+        _selected = id;
+        ShowPage(id);
+    }
+
     private void ShowPage(string id)
         => _page.Content = id switch
         {
             "info" => BuildAccountInformation(),
+            "openexport" => BuildOpenExport(),
             _ => Placeholder(id),
         };
+
+    // ------------------------------------------------------------------------------------
+    // Open & Export — the importers, §16 arriving one format at a time
+    // ------------------------------------------------------------------------------------
+
+    private Control BuildOpenExport()
+    {
+        var stack = new StackPanel { Spacing = 0, MaxWidth = 720, HorizontalAlignment = HorizontalAlignment.Left };
+
+        var heading = new TextBlock
+        {
+            Text = "Open & Export",
+            FontSize = 21,
+            Margin = new Thickness(0, 0, 0, 14),
+        };
+        Bind(heading, TextBlock.ForegroundProperty, "text.primary.brush");
+        stack.Children.Add(heading);
+
+        stack.Children.Add(BuildSection(
+            "folder-open", "Import Maildir", hasDropdown: false,
+            "Import",
+            "Bring mail in from a Maildir tree — what Dovecot, Evolution, KMail, mutt and " +
+            "offlineimap keep. The source is only read, never changed.",
+            action: "import.maildir"));
+
+        stack.Children.Add(BuildSection(
+            "archive", "Other Formats", hasDropdown: false,
+            "Still to come",
+            "Thunderbird profiles, mbox, .eml and .pst arrive with the rest of Phase 16; " +
+            "export goes with them. Pressing this says so rather than doing nothing.",
+            action: "import.waiting"));
+
+        return stack;
+    }
 
     private Control Placeholder(string id)
     {

@@ -360,6 +360,15 @@ public sealed class MailRepository(MailStore store)
     }
 
     /// <summary>The rows in a folder keyed by server id, for reconciling against the server.</summary>
+    /// <summary>
+    /// Every Message-ID the folder holds, for an importer's known-by-identity skip: re-running
+    /// an interrupted import tops the folder up rather than doubling it.
+    /// </summary>
+    public HashSet<string> MessageIdsIn(long folderId)
+        => [.. _store.Query(
+            "SELECT message_id FROM messages WHERE folder_id = $folder AND message_id IS NOT NULL AND message_id <> ''",
+            r => r.GetString(0), ("$folder", folderId))];
+
     public Dictionary<string, long> MessageIdsByServerUid(long folderId) => _store.Query(
         "SELECT server_uid, id FROM messages WHERE folder_id = $folder AND server_uid IS NOT NULL",
         r => (Uid: r.GetString(0), Id: r.GetInt64(1)), ("$folder", folderId))

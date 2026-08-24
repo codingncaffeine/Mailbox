@@ -13,6 +13,7 @@
     <Project Path="src/Mailbox.Dav/Mailbox.Dav.csproj" />
     <Project Path="src/Mailbox.Editor/Mailbox.Editor.csproj" />
     <Project Path="src/Mailbox.Google/Mailbox.Google.csproj" />
+    <Project Path="src/Mailbox.Import/Mailbox.Import.csproj" />
     <Project Path="src/Mailbox.Junk/Mailbox.Junk.csproj" />
     <Project Path="src/Mailbox.Plugins.Api/Mailbox.Plugins.Api.csproj" />
     <Project Path="src/Mailbox.Plugins/Mailbox.Plugins.csproj" />

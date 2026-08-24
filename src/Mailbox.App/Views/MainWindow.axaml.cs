@@ -246,6 +246,69 @@ public partial class MainWindow : Window
             }, DispatcherPriority.Background);
         }
 
+        // Imports a maildir into the posed store and logs the report — the counts are the
+        // claim. Wants MAILBOX_STORE for the reason every writing pose does: a capture run's
+        // accounts are the machine's own unless posed. MAILBOX_IMPORT=maildir:<dir>[,account:<addr>]
+        if (Environment.GetEnvironmentVariable("MAILBOX_IMPORT") is { Length: > 0 } importSpec)
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(() =>
+            {
+                try
+                {
+                    if (WindowCapture.IsRequested
+                        && Environment.GetEnvironmentVariable("MAILBOX_STORE") is not { Length: > 0 })
+                    {
+                        Log.Warn("Harness: MAILBOX_IMPORT writes to the accounts and wants MAILBOX_STORE.");
+                        return;
+                    }
+
+                    string? directory = null, address = null;
+                    foreach (var part in importSpec.Split(',', StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        var split = part.IndexOf(':');
+                        if (split < 1) continue;
+                        var value = part[(split + 1)..].Trim();
+                        switch (part[..split].Trim().ToLowerInvariant())
+                        {
+                            case "maildir": directory = value; break;
+                            case "account": address = value; break;
+                        }
+                    }
+
+                    if (directory is null)
+                    {
+                        Log.Warn("Harness: MAILBOX_IMPORT names no maildir.");
+                        return;
+                    }
+
+                    var open = address is null
+                        ? App.Accounts.All.FirstOrDefault()
+                        : App.Accounts.All.FirstOrDefault(a =>
+                            string.Equals(a.Account.Address, address, StringComparison.OrdinalIgnoreCase));
+
+                    if (open is null)
+                    {
+                        Log.Warn($"Harness: import — “{address}” names no account.");
+                        return;
+                    }
+
+                    var report = new Mailbox.Import.MaildirImporter(open.Mail, open.Account.Id).Run(directory);
+                    Log.Info($"Harness: import — {report.Summary}");
+                    foreach (var folder in open.Mail.Folders(open.Account.Id))
+                    {
+                        var count = open.Mail.Messages(folder.Id).Count;
+                        if (count > 0) Log.Info($"Harness: import — {folder.Name}: {count} message(s).");
+                    }
+
+                    if (DataContext is ShellViewModel s) s.Refresh();
+                }
+                catch (Exception ex)
+                {
+                    Log.Warn("Harness: the import pose failed.", ex);
+                }
+            }, DispatcherPriority.Background);
+        }
+
         // Accept, Tentative and Decline are buttons on a bar, which a capture cannot press:
         // MAILBOX_INVITE presses one on the selected message and the log says what the calendar
         // holds afterwards.
@@ -856,7 +919,19 @@ public partial class MainWindow : Window
                     LogToDoBar(bar);
                 };
                 break;
-            case "backstage": Opened += (_, _) => ShowBackstage(); break;
+            // MAILBOX_BACKSTAGE names a rail page to open on — openexport, print — the rail
+            // being buttons a capture cannot press.
+            case "backstage":
+                Opened += (_, _) =>
+                {
+                    ShowBackstage();
+                    if (Environment.GetEnvironmentVariable("MAILBOX_BACKSTAGE") is { Length: > 0 } page
+                        && this.FindControl<ContentControl>("BackstageHost")!.Content is BackstageView view)
+                    {
+                        view.Open(page.Trim().ToLowerInvariant());
+                    }
+                };
+                break;
 
             // The bar's "…": what it lists at this width, which a capture cannot show.
             case "overflow":
