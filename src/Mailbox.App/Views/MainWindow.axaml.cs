@@ -758,6 +758,14 @@ public partial class MainWindow : Window
                     DispatcherPriority.Background);
                 break;
 
+            // The All Apps menu — a flyout no capture shows, so opening it is the point: its
+            // own build logs every entry with the command a press would run.
+            case "allapps":
+                Opened += (_, _) => Dispatcher.UIThread.Post(
+                    () => RunCommand(ViewCommands.Apps.Id),
+                    DispatcherPriority.Background);
+                break;
+
             // The calendar module's own windows. Each opens over the shell, so the harness
             // photographs the next window rather than this one.
             case "appointment":
@@ -3752,6 +3760,14 @@ public partial class MainWindow : Window
         if (id == MailCommands.NewSearchFolder.Id) { _ = NewSearchFolderAsync(shell, null); return; }
         if (id == ViewCommands.CancelAll.Id) { CancelTransfer(); return; }
         if (id == ViewCommands.SendReceiveGroups.Id) { ShowGroupsMenu(shell); return; }
+
+        // All Apps: the installed plugins' commands, and the way to the page that manages them.
+        if (id == ViewCommands.Apps.Id)
+        {
+            AllAppsMenu.Build(RunCommand, () => _ = ShowOptions("addins"))
+                .ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+            return;
+        }
 
         // The View tab's first cluster: Change View, Current View, Arrange By, Layout, and the
         // entries behind them as commands of their own.

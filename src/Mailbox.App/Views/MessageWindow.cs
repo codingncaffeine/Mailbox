@@ -263,7 +263,16 @@ public sealed class MessageWindow : Window
         if (id == ViewCommands.ReadAloud.Id) { Notice("Read Aloud arrives with Phase 16's accessibility pass."); return; }
         if (id == ViewCommands.ImmersiveReader.Id) { Notice("Immersive Reader arrives with Phase 16's accessibility pass."); return; }
         if (id == ViewCommands.Translate.Id) { Notice("Translate arrives with Phase 16's language work."); return; }
-        if (id == ViewCommands.Apps.Id) { Notice("All Apps lists installed plugins' commands once its flyout is built (§20)."); return; }
+
+        if (id == ViewCommands.Apps.Id)
+        {
+            AllAppsMenu.Build(
+                    pressed => OnCommand(pressed, fromChevron: false),
+                    () => _ = new OptionsWindow(App.Themes, "addins").ShowDialog<bool>(this))
+                .ShowAt(this, showAtPointer: true);
+            return;
+        }
+
         if (id == MailCommands.ViewSource.Id) { ShowSource(); return; }
 
         // Everything below acts on the stored row.
@@ -311,6 +320,9 @@ public sealed class MessageWindow : Window
             QuickStepRequested?.Invoke(this, id);
             return;
         }
+
+        // A plugin's command is app-global and runs from any host, this window included.
+        if (App.Plugins.TryRun(id)) return;
 
         if (App.Commands.TryGet(id, out var command))
         {
