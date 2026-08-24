@@ -119,7 +119,15 @@ public sealed class MaildirImporter(MailRepository mail, long accountId)
             var partial = string.Join("/", path.Take(i + 1));
             if (!known.TryGetValue(partial, out var levelId))
             {
-                levelId = _mail.AddFolder(accountId, path[i], parentId: parent).Id;
+                // Find before make: a re-run meets the folders its first run created, and a
+                // second "Projects" beside the first would hide the dedupe from every message
+                // filed into it. Only ordinary folders are found this way — a folder wearing a
+                // role is reachable solely through the explicit merge above, which is what keeps
+                // a source's Outbox out of anything that sends.
+                var found = _mail.Folders(accountId).FirstOrDefault(f =>
+                    f.Role == Store.FolderRole.None && f.ParentId == parent
+                    && string.Equals(f.Name, path[i], StringComparison.OrdinalIgnoreCase));
+                levelId = found?.Id ?? _mail.AddFolder(accountId, path[i], parentId: parent).Id;
                 known[partial] = levelId;
             }
 

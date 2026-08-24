@@ -37,6 +37,9 @@ public sealed class PstFolder
         UnreadCount = properties.Find(Pid.ContentUnreadCount)?.AsInteger32() ?? 0;
     }
 
+    /// <summary>The container class — "IPM.Note" mail, "IPM.Appointment" a calendar, and so on; empty on ordinary mail folders too.</summary>
+    public string ContainerClass => _properties.Find(Pid.ContainerClass)?.AsString() ?? string.Empty;
+
     /// <summary>One of a folder's well-known property values, for what this layer does not interpret.</summary>
     public PstProperty? Property(ushort id) => _properties.Find(id);
 

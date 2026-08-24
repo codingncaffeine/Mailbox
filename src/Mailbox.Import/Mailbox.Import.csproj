@@ -18,6 +18,7 @@
     <ProjectReference Include="..\Mailbox.Protocols\Mailbox.Protocols.csproj" />
     <ProjectReference Include="..\Mailbox.Scheduling\Mailbox.Scheduling.csproj" />
     <ProjectReference Include="..\Mailbox.Contacts\Mailbox.Contacts.csproj" />
+    <ProjectReference Include="..\Mailbox.Pst\Mailbox.Pst.csproj" />
   </ItemGroup>
 
 </Project>

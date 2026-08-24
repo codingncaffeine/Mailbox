@@ -13,6 +13,7 @@ internal static class Pid
     public const ushort DisplayName = 0x3001;
 
     // Folders.
+    public const ushort ContainerClass = 0x3613;
     public const ushort ContentCount = 0x3602;
     public const ushort ContentUnreadCount = 0x3603;
     public const ushort Subfolders = 0x360A;
@@ -24,6 +25,8 @@ internal static class Pid
     public const ushort TransportHeaders = 0x007D;
     public const ushort SenderName = 0x0C1A;
     public const ushort SenderEmailAddress = 0x0C1F;
+    public const ushort SenderSmtpAddress = 0x5D01;
+    public const ushort FlagStatus = 0x1090;
     public const ushort MessageDeliveryTime = 0x0E06;
     public const ushort MessageFlags = 0x0E07;
     public const ushort MessageSize = 0x0E08;

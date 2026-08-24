@@ -299,16 +299,17 @@ public sealed class BackstageView : Border
         stack.Children.Add(BuildSection(
             "attach", "Import Files", hasDropdown: false,
             "Import files",
-            "One or more files: an mbox into a folder, .eml messages, .ics appointments and " +
-            "tasks, .vcf contacts — each routed by what it is.",
+            "One or more files: a .pst data file's whole mail tree, an mbox into a folder, " +
+            ".eml messages, .ics appointments and tasks, .vcf contacts — each routed by what " +
+            "it is. A .pst's calendar and contacts wait for their own importer.",
             action: "import.files"));
 
         stack.Children.Add(BuildSection(
             "archive", "Still to Come", hasDropdown: false,
-            "The binary formats",
-            ".pst and .msg are spec-built readers and arrive as their own block — a parser " +
-            "that cannot be verified against real fixtures is not shipped here. Pressing " +
-            "this says so rather than doing nothing.",
+            "The .msg format",
+            "A single saved message as Windows mail programs write one is a spec-built binary " +
+            "reader of its own, and a parser that cannot be verified against real fixtures is " +
+            "not shipped here. Pressing this says so rather than doing nothing.",
             action: "import.waiting"));
 
         return stack;

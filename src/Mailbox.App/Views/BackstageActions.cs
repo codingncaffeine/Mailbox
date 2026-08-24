@@ -98,7 +98,7 @@ internal static class BackstageActions
                 break;
 
             case "import.waiting":
-                host.Report(".pst and .msg are spec-built readers and arrive as their own block.");
+                host.Report(".msg is a spec-built reader of its own and arrives with the rest of the PST block.");
                 break;
 
             case "update.check":

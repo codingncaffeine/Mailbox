@@ -61,7 +61,17 @@ public sealed class PstMessage
 
     public string SenderName => _properties.Find(Pid.SenderName)?.AsString() ?? string.Empty;
 
-    public string SenderAddress => _properties.Find(Pid.SenderEmailAddress)?.AsString() ?? string.Empty;
+    public string SenderAddress
+    {
+        get
+        {
+            // The SMTP form wins when the writer recorded one; the plain address is an X.500
+            // path for mail that lived on an Exchange server, still worth keeping when it is
+            // all there is.
+            var smtp = _properties.Find(Pid.SenderSmtpAddress)?.AsString();
+            return smtp is { Length: > 0 } ? smtp : _properties.Find(Pid.SenderEmailAddress)?.AsString() ?? string.Empty;
+        }
+    }
 
     public string InternetMessageId => _properties.Find(Pid.InternetMessageId)?.AsString() ?? string.Empty;
 
@@ -82,6 +92,9 @@ public sealed class PstMessage
     public bool IsRead => (Flags & 0x1) != 0;
 
     public bool IsUnsent => (Flags & 0x8) != 0;
+
+    /// <summary>The follow-up flag: PidTagFlagStatus is 2 when the flag stands, 1 when it is complete.</summary>
+    public bool IsFlagged => (_properties.Find(Pid.FlagStatus)?.AsInteger32() ?? 0) == 2;
 
     public bool HasAttachments => (Flags & 0x10) != 0;
 

@@ -28,6 +28,9 @@ public sealed class PstStore
 
     public string DisplayName { get; }
 
+    /// <summary>The store's own sixteen-byte uid — what its EntryIDs carry, and a stable name for the file's contents.</summary>
+    public byte[] RecordKey => _properties.Find(Pid.RecordKey)?.Raw ?? [];
+
     private PstStore(PstFile file, PropertyContext properties, string displayName)
     {
         _file = file;

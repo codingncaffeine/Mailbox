@@ -279,7 +279,7 @@ public partial class MainWindow : Window
 
                     if (kind is null || source is null)
                     {
-                        Log.Warn("Harness: MAILBOX_IMPORT names no source (maildir:|thunderbird:|mbox:|eml:|ics:|vcf:).");
+                        Log.Warn("Harness: MAILBOX_IMPORT names no source (maildir:|thunderbird:|pst:|mbox:|eml:|ics:|vcf:).");
                         return;
                     }
 
