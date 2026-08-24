@@ -418,6 +418,9 @@ public partial class MainWindow
         Entry("Forward Contact", () => ForwardContact(shell));
         Entry("Move", () => MoveContact(shell));
         Entry("Categorize", () => CategorizeContact(shell));
+
+        // A distribution list is not a person, however it is named, so a group cannot link.
+        Entry("Link Contacts…", () => _ = LinkContactsAsync(shell, row), !row.Contact.IsGroup);
         flyout.Items.Add(new Separator());
 
         Entry(
@@ -429,6 +432,25 @@ public partial class MainWindow
 
         Log.Info($"People: the menu for “{row.Named()}” is open.");
         flyout.ShowAt(EnsurePeople(shell), showAtPointer: true);
+    }
+
+    /// <summary>
+    /// The Linked Contacts manager for one person. Link and unlink write both cards at once and
+    /// queue both to their servers, so the dialog commits as it goes and Done is just a close.
+    /// </summary>
+    private async Task LinkContactsAsync(ShellViewModel shell, ContactRow row)
+    {
+        var people = EnsurePeople(shell);
+
+        var changed = await LinkContactsDialog.ManageAsync(
+            this, App.Contacts, App.PimSync.QueuePut, row);
+
+        if (!changed) return;
+
+        people.Reload();
+        people.Select(row.Id);
+        shell.StatusRight = $"Linked contacts for “{row.Named()}” updated.";
+        shell.ModuleStatusLeft = people.Status;
     }
 
     /// <summary>
@@ -629,34 +651,75 @@ public partial class MainWindow
     // ---- Contacts -------------------------------------------------------------------------------
 
     /// <summary>Makes a contact or a group, opens it for editing, and writes it if it is kept.</summary>
+    /// <remarks>
+    /// A loop rather than a single pass, for the duplicate prompt's Cancel: cancelling the
+    /// prompt means "back to the form", and a form that reopens empty has thrown away everything
+    /// the reader typed to get here.
+    /// </remarks>
     private async Task NewContactAsync(ShellViewModel shell, bool group = false)
     {
         var people = EnsurePeople(shell);
-        var book = App.Contacts.Default();
 
-        var fresh = new Contact
+        var draft = new Contact
         {
             Uid = Contact.NewUid(),
             IsGroup = group,
         };
+        var bookId = App.Contacts.Default().Id;
 
-        var window = new ContactWindow(App.Commands, fresh, App.Contacts.AddressBooks(), book.Id);
-        WireContactWindow(shell, window);
-        await window.ShowDialog(this);
-        if (window.Result is not { Deleted: false } result)
+        while (true)
         {
-            if (window.Another) _ = NewContactAsync(shell, group);
+            var window = new ContactWindow(App.Commands, draft, App.Contacts.AddressBooks(), bookId);
+            WireContactWindow(shell, window);
+            await window.ShowDialog(this);
+            if (window.Result is not { Deleted: false } result)
+            {
+                if (window.Another) _ = NewContactAsync(shell, group);
+                return;
+            }
+
+            // The duplicate check, on new contacts only — the Options page's own switch, and its
+            // own words: "when saving new contacts". An edit is already somebody in particular.
+            if (App.PeopleOptions.CheckDuplicates
+                && App.Contacts.Duplicates(result.Contact) is { Count: > 0 } matches)
+            {
+                var choice = await DuplicateContactDialog.AskAsync(this, result.Contact, matches);
+
+                if (choice.Answer == DuplicateAnswer.Cancel)
+                {
+                    draft = result.Contact;
+                    bookId = result.CollectionId;
+                    continue;
+                }
+
+                if (choice is { Answer: DuplicateAnswer.Update, Existing: { } existing })
+                {
+                    // The existing card takes the new information and keeps its identity: the
+                    // uid is what its server knows it by, and what every link to it names.
+                    var stored = App.Contacts.Repository.Item(existing.Id);
+                    var kept = result.Contact with { Uid = existing.Contact.Uid };
+                    var updated = App.Contacts.Save(kept, existing.CollectionId, stored);
+                    App.PimSync.QueuePut(updated);
+
+                    people.Reload();
+                    people.Select(updated.Id);
+                    shell.StatusRight = $"“{kept.Named()}” updated.";
+                    Log.Info($"People: contact {updated.Id} updated from a duplicate save.");
+                    shell.ModuleStatusLeft = people.Status;
+                    return;
+                }
+            }
+
+            var written = App.Contacts.Save(result.Contact, result.CollectionId);
+            App.PimSync.QueuePut(written);
+            people.Reload();
+            people.Select(written.Id);
+
+            shell.StatusRight = $"“{result.Contact.Named()}” added to {App.Contacts.AddressBooks().First(b => b.Id == result.CollectionId).DisplayName}.";
+            Log.Info($"People: contact {written.Id} added — {result.Contact.Named()}.");
+            shell.ModuleStatusLeft = people.Status;
             return;
         }
-
-        var written = App.Contacts.Save(result.Contact, result.CollectionId);
-        App.PimSync.QueuePut(written);
-        people.Reload();
-        people.Select(written.Id);
-
-        shell.StatusRight = $"“{result.Contact.Named()}” added to {App.Contacts.AddressBooks().First(b => b.Id == result.CollectionId).DisplayName}.";
-        Log.Info($"People: contact {written.Id} added — {result.Contact.Named()}.");
-        shell.ModuleStatusLeft = people.Status;
     }
 
     /// <summary>Opens somebody, and writes what comes back.</summary>

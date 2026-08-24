@@ -183,6 +183,62 @@ public partial class MainWindow : Window
             }, DispatcherPriority.Background);
         }
 
+        // Links the posed selection to whoever the value names, and reads both cards back —
+        // which is the claim: the link is in both vCards, not in a view. Wants MAILBOX_STORE for
+        // the same reason MAILBOX_GOOGLE does: this writes to pim.db, and a capture run's pim.db
+        // is the machine's own unless posed.
+        if (Environment.GetEnvironmentVariable("MAILBOX_LINK") is { Length: > 0 } linkTo)
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(() =>
+            {
+                try
+                {
+                    if (WindowCapture.IsRequested
+                        && Environment.GetEnvironmentVariable("MAILBOX_STORE") is not { Length: > 0 })
+                    {
+                        Log.Warn("Harness: MAILBOX_LINK writes to pim.db and wants MAILBOX_STORE.");
+                        return;
+                    }
+
+                    if (DataContext is not ShellViewModel s) return;
+                    var people = EnsurePeople(s);
+
+                    if (people.Selected is not { } mine)
+                    {
+                        Log.Info("Harness: link — nothing is selected.");
+                        return;
+                    }
+
+                    var target = people.Rows.FirstOrDefault(r =>
+                        r.Id != mine.Id
+                        && r.Named().Contains(linkTo, StringComparison.CurrentCultureIgnoreCase));
+
+                    if (target is null)
+                    {
+                        Log.Info($"Harness: link — nobody matches “{linkTo}”.");
+                        return;
+                    }
+
+                    var linkedNow = App.Contacts.Link(mine.Id, target.Id);
+                    if (App.Contacts.Repository.Item(mine.Id) is { } a) App.PimSync.QueuePut(a);
+                    if (App.Contacts.Repository.Item(target.Id) is { } b) App.PimSync.QueuePut(b);
+
+                    Log.Info($"Harness: link — {(linkedNow ? "linked" : "already linked")} "
+                             + $"“{mine.Named()}” and “{target.Named()}”.");
+                    Log.Info($"Harness: link — “{mine.Named()}” carries "
+                             + $"[{string.Join(", ", App.Contacts.Full(mine.Id)?.Links ?? [])}]; "
+                             + $"“{target.Named()}” carries "
+                             + $"[{string.Join(", ", App.Contacts.Full(target.Id)?.Links ?? [])}].");
+
+                    people.Reload();
+                }
+                catch (Exception ex)
+                {
+                    Log.Warn("Harness: the link pose failed.", ex);
+                }
+            }, DispatcherPriority.Background);
+        }
+
         // Accept, Tentative and Decline are buttons on a bar, which a capture cannot press:
         // MAILBOX_INVITE presses one on the selected message and the log says what the calendar
         // holds afterwards.
@@ -943,6 +999,67 @@ public partial class MainWindow : Window
                     {
                         // A pose that throws leaves no window, no error and no capture. Say so.
                         Log.Warn("Harness: the new-key pose failed.", ex);
+                    }
+                };
+                break;
+
+            // The Linked Contacts manager, on whoever MAILBOX_SELECT picked in a posed People
+            // module. The dialog writes as it goes, so this pose only photographs; the press
+            // that writes is MAILBOX_LINK, which reads the store back.
+            case "linkcontacts":
+                Opened += (_, _) => Dispatcher.UIThread.Post(() =>
+                {
+                    try
+                    {
+                        if (DataContext is not ShellViewModel s) return;
+                        var people = EnsurePeople(s);
+                        if (people.Selected is not { } row)
+                        {
+                            Log.Warn("Harness: linkcontacts — nothing is selected; pose MAILBOX_MODULE=people and MAILBOX_SELECT.");
+                            return;
+                        }
+
+                        CaptureNextWindow();
+                        _ = LinkContactsDialog.ManageAsync(this, App.Contacts, App.PimSync.QueuePut, row);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Warn("Harness: the linkcontacts pose failed.", ex);
+                    }
+                }, DispatcherPriority.Background);
+                break;
+
+            // The duplicate prompt, over an invented pair — reaching it for real means typing a
+            // whole contact into a window a capture cannot type into. The invented cards say on
+            // their face what the finder's three strengths look like.
+            case "duplicate":
+                Opened += async (_, _) =>
+                {
+                    try
+                    {
+                        var candidate = new Mailbox.Contacts.Contact
+                        {
+                            Uid = "posed-duplicate",
+                            DisplayName = "A. Person",
+                            Emails = [new Mailbox.Contacts.ContactEmail("a.person@example.com")],
+                        };
+
+                        var existing = new Mailbox.Contacts.ContactRow(
+                            1, 1, "Contacts",
+                            candidate with { Uid = "posed-existing" },
+                            IsReadOnly: false);
+
+                        CaptureNextWindow();
+                        await DuplicateContactDialog.AskAsync(this, candidate,
+                        [
+                            new Mailbox.Contacts.DuplicateMatch(
+                                existing, Mailbox.Contacts.DuplicateStrength.Certain,
+                                "they share the address a.person@example.com"),
+                        ]);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Warn("Harness: the duplicate pose failed.", ex);
                     }
                 };
                 break;
