@@ -2968,9 +2968,35 @@ public sealed partial class ShellViewModel : ObservableObject
     public OpenAccount? CurrentAccountForCategories() => CurrentAccount;
 
     /// <summary>Unread across every account's Inbox, for the tray icon's tooltip and badge.</summary>
-    public int TotalUnread => Folders
-        .Where(f => _folderIds.TryGetValue(f, out var w) && w.Role == FolderRole.Inbox)
-        .Sum(f => f.Unread);
+    /// <summary>
+    /// Everything unread in every account's Inbox, which is what the tray icon and its tooltip
+    /// are about: mail waiting to be read, not mail sitting in Drafts or Junk.
+    /// </summary>
+    /// <remarks>
+    /// Each folder counted once. The pane draws a favourite Inbox twice — once under Favourites
+    /// and once in its account's tree, which is what the reference does — and both rows are
+    /// registered, so the sum used to count the default account's Inbox twice. The badge on the
+    /// tray has been saying twenty-two for fourteen unread messages since favourites were
+    /// seeded.
+    /// </remarks>
+    public int TotalUnread
+    {
+        get
+        {
+            var counted = new HashSet<(string Address, long Folder)>();
+            var total = 0;
+
+            foreach (var node in Folders)
+            {
+                if (!_folderIds.TryGetValue(node, out var where) || where.Role != FolderRole.Inbox) continue;
+                if (!counted.Add((where.Account.Account.Address, where.FolderId))) continue;
+
+                total += node.Unread;
+            }
+
+            return total;
+        }
+    }
 
     /// <summary>Re-reads what is on screen — the search results, or the folder — after a change to a row's state.</summary>
     private void ReloadCurrentView()

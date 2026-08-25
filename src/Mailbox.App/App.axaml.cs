@@ -321,12 +321,14 @@ public partial class App : Application
             menu.Add(new NativeMenuItemSeparator());
             menu.Add(quit);
 
-            var icon = new Avalonia.Media.Imaging.Bitmap(Avalonia.Platform.AssetLoader.Open(
-                new Uri("avares://mailbox/Assets/Icons/mailbox-32.png")));
+            // Two drawings, held for the life of the icon: the empty mailbox and the one with
+            // post in it. Which is shown is the unread count's answer — see TrayArtwork.
+            var empty = TrayIconArt(Mailbox.Core.Notifications.TrayArtwork.Empty);
+            var full = TrayIconArt(Mailbox.Core.Notifications.TrayArtwork.Full);
 
             _tray = new TrayIcon
             {
-                Icon = new WindowIcon(icon),
+                Icon = new WindowIcon(empty),
                 ToolTipText = "Mailbox",
                 IsVisible = true,
                 Menu = menu,
@@ -343,14 +345,21 @@ public partial class App : Application
                     var unread = shell.TotalUnread;
                     _tray.ToolTipText = unread > 0 ? $"Mailbox — {unread} unread" : "Mailbox";
 
+                    // The drawing first, the count on top of it: the picture says whether there
+                    // is anything waiting and the badge says how much. Reading the last of it —
+                    // or marking it read — empties the box again, which is the whole rule.
+                    var art = unread > 0 ? full : empty;
+
                     try
                     {
-                        _tray.Icon = Notifications.TrayBadge.For(icon, unread);
+                        _tray.Icon = Notifications.TrayBadge.For(art, unread);
                     }
                     catch (Exception ex)
                     {
-                        // The plain icon is still up; a badge that will not draw is not worth more.
+                        // The drawing is still right even where the badge will not draw, so the
+                        // state the reader actually looks for survives a failure here.
                         Log.Warn("The tray badge could not be drawn.", ex);
+                        _tray.Icon = new WindowIcon(art);
                     }
                 }
 
@@ -373,22 +382,46 @@ public partial class App : Application
         }
     }
 
+    /// <summary>
+    /// One of the tray's two drawings, at the size the notification area is handed.
+    /// </summary>
+    /// <remarks>
+    /// 32 pixels, which is what the tray has always been given here; the ladder beside it goes
+    /// to 256 for a panel that asks for more. Every size is cropped from the same frame, so the
+    /// mailbox does not move or change size when the icon swaps.
+    /// </remarks>
+    private static Avalonia.Media.Imaging.Bitmap TrayIconArt(string art)
+        => new(Avalonia.Platform.AssetLoader.Open(
+            new Uri($"avares://mailbox/Assets/Icons/{art}-32.png")));
+
     /// <summary>Harness only: the badged tray icon as a PNG, at four times its size so it can be looked at.</summary>
-    private static void WriteBadgeSample(string request)
+    private static void WriteBadgeSample(string request, ShellViewModel? shell = null)
     {
         var colon = request.IndexOf(':');
-        if (colon <= 0 || !int.TryParse(request[..colon], out var count)) return;
+        if (colon <= 0) return;
+
+        var wanted = request[..colon];
         var path = request[(colon + 1)..];
+
+        // "auto" is the running store's own answer, which is what makes this a read-back rather
+        // than a drawing exercise.
+        var count = string.Equals(wanted, "auto", StringComparison.OrdinalIgnoreCase)
+            ? shell?.TotalUnread ?? 0
+            : int.TryParse(wanted, out var asked) ? asked : -1;
+
+        if (count < 0) return;
 
         try
         {
-            using var stream = Avalonia.Platform.AssetLoader.Open(new Uri("avares://mailbox/Assets/Icons/mailbox-32.png"));
-            var icon = new Avalonia.Media.Imaging.Bitmap(stream);
+            // The drawing that count would put up, not a fixed one: the point of the sample is
+            // what the tray shows, and half of that is which mailbox it is.
+            var icon = TrayIconArt(Mailbox.Core.Notifications.TrayArtwork.For(count));
 
             // The same drawing the tray icon is built from, saved where it can be looked at.
             var sample = Notifications.TrayBadge.Render(icon, count);
             sample.Save(path, new Avalonia.Media.Imaging.PngBitmapEncoderOptions());
-            Log.Info($"Harness: tray badge for {count} written to {path}.");
+            Log.Info($"Harness: tray shows the {Mailbox.Core.Notifications.TrayArtwork.For(count)} "
+                     + $"mailbox for {count} unread; written to {path}.");
         }
         catch (Exception ex)
         {
@@ -699,10 +732,14 @@ public partial class App : Application
             var trayUp = !WindowCapture.IsRequested && InstallTrayIcon(window, desktop);
 
             // The badge cannot be photographed on a tray, so the harness writes it to a file:
-            // MAILBOX_TRAY_BADGE=<count>:<path.png> renders the icon wearing that count.
+            // MAILBOX_TRAY_BADGE=<count>:<path.png> renders the icon wearing that count, and
+            // =auto:<path.png> renders what this store actually asks for — which is the only
+            // way to check the count itself, the tray being off in a capture run.
             if (Environment.GetEnvironmentVariable("MAILBOX_TRAY_BADGE") is { Length: > 0 } badge)
             {
-                WriteBadgeSample(badge);
+                window.Opened += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(
+                    () => WriteBadgeSample(badge, window.DataContext as ShellViewModel),
+                    Avalonia.Threading.DispatcherPriority.Background);
             }
 
             // `--minimized` — the autostart entry's switch — starts into the tray with no window,
