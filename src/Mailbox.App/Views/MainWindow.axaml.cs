@@ -1191,6 +1191,17 @@ public partial class MainWindow : Window
                 };
                 break;
 
+            // Modify Button, three clicks in behind Options › Quick Access Toolbar › Modify… —
+            // and the only symbol picker in the application, so it wants a pose of its own to be
+            // checkable in every theme.
+            case "modifybutton":
+                Opened += async (_, _) =>
+                {
+                    CaptureNextWindow();
+                    await new ModifyButtonDialog("Send/Receive All Folders", "send-receive").ShowDialog(this);
+                };
+                break;
+
             // Adding an account, which is where a provider that no longer takes a password is
             // told apart from one that does. MAILBOX_ACCOUNT_ACTION types an address, pastes a
             // client ID and presses Sign in; a capture run has no browser to answer, so what the

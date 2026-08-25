@@ -31,6 +31,7 @@ public sealed class ModifyButtonDialog : Window
     private const double Cell = 30;
 
     private readonly TextBox _name = new();
+    private readonly Border? _chosenCell;
     private string? _icon;
 
     /// <summary>What was chosen when OK was pressed, or null for Cancel.</summary>
@@ -52,13 +53,37 @@ public sealed class ModifyButtonDialog : Window
         _icon = icon;
         _name.Text = label;
         _name.Width = 300;
+        ViewDialogKit.Bind(_name, TemplatedControl.BackgroundProperty, "dialog.surface.brush");
+        ViewDialogKit.Bind(_name, TemplatedControl.BorderBrushProperty, "dialog.border.brush");
+        ViewDialogKit.Bind(_name, TemplatedControl.ForegroundProperty, "dialog.surface.text.brush");
 
         var symbols = new WrapPanel { ItemWidth = Cell, ItemHeight = Cell, Width = Columns * Cell };
-        var buttons = new List<(Button Button, string Name)>();
+        var buttons = new List<(Border Ring, string Name)>();
 
         foreach (var name in IconGlyphs.Names.OrderBy(n => n, StringComparer.Ordinal))
         {
             if (IconGlyphs.GetOrEmpty(name, 16) is not { Length: > 0 } glyph) continue;
+
+            var mark = new TextBlock
+            {
+                Text = glyph,
+                FontFamily = IconFont.Family,
+                FontSize = 16,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            ViewDialogKit.Bind(mark, TextBlock.ForegroundProperty, "dialog.surface.text.brush");
+
+            // The ring is a Border inside the button rather than the button's own BorderBrush:
+            // a templated control's border is the template's to draw, and a local value set on
+            // it does not survive the default style — the trap this project has hit before.
+            var ring = new Border
+            {
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(3),
+                Padding = new Thickness(2),
+                Child = mark,
+            };
 
             var cell = new Button
             {
@@ -66,15 +91,8 @@ public sealed class ModifyButtonDialog : Window
                 Height = Cell - 2,
                 Padding = new Thickness(0),
                 Background = Brushes.Transparent,
-                BorderThickness = new Thickness(1),
-                Content = new TextBlock
-                {
-                    Text = glyph,
-                    FontFamily = IconFont.Family,
-                    FontSize = 16,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center,
-                },
+                BorderThickness = new Thickness(0),
+                Content = ring,
             };
 
             ToolTip.SetTip(cell, name);
@@ -85,11 +103,16 @@ public sealed class ModifyButtonDialog : Window
                 Mark(buttons, chosen);
             };
 
-            buttons.Add((cell, name));
+            buttons.Add((ring, name));
             symbols.Children.Add(cell);
         }
 
         Mark(buttons, _icon);
+
+        // Opened on the symbol it already has. Sorted by name, the current one is as likely as
+        // not to be several screens down, and a picker that opens at "accept" every time makes
+        // the reader hunt for what they are looking at on the toolbar behind the dialog.
+        _chosenCell = buttons.FirstOrDefault(b => string.Equals(b.Name, _icon, StringComparison.Ordinal)).Ring;
 
         var ok = Ok(() =>
         {
@@ -112,6 +135,7 @@ public sealed class ModifyButtonDialog : Window
         {
             Orientation = Orientation.Horizontal,
             Spacing = 8,
+            VerticalAlignment = VerticalAlignment.Center,
             Children = { Label("Display name:"), _name },
         };
 
@@ -130,28 +154,55 @@ public sealed class ModifyButtonDialog : Window
             Children =
             {
                 Label("Symbol:"),
-                new ScrollViewer
-                {
-                    Height = 250,
-                    HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-                    Content = symbols,
-                },
+                Boxed(
+                    new ScrollViewer
+                    {
+                        HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                        Content = symbols,
+                    },
+                    height: 250),
                 row,
                 footer,
             },
         };
 
-        Content = body;
-        Opened += (_, _) => _name.Focus();
+        DialogChrome.Apply(this, body);
+        ViewDialogKit.Bind(this, TemplatedControl.BackgroundProperty, "dialog.background.brush");
+        Opened += (_, _) =>
+        {
+            _name.Focus();
+
+            // After a layout pass, or the scroll viewer does not yet know where anything is.
+            Avalonia.Threading.Dispatcher.UIThread.Post(
+                () => _chosenCell?.BringIntoView(),
+                Avalonia.Threading.DispatcherPriority.Loaded);
+        };
     }
 
-    /// <summary>Draws the chosen symbol as chosen, and every other as not.</summary>
-    private static void Mark(List<(Button Button, string Name)> cells, string? chosen)
+    /// <summary>
+    /// Draws the chosen symbol as chosen, and every other as not.
+    /// </summary>
+    /// <remarks>
+    /// The dialog's own selection token, not an accent: this is a picker on a dialog surface and
+    /// it has to read the same in all four themes, which is what a hard-coded blue could not do
+    /// in the dark ones.
+    /// </remarks>
+    private static void Mark(List<(Border Ring, string Name)> cells, string? chosen)
     {
-        foreach (var (button, name) in cells)
+        foreach (var (ring, name) in cells)
         {
-            var picked = string.Equals(name, chosen, StringComparison.Ordinal);
-            button.BorderBrush = picked ? Brushes.SteelBlue : Brushes.Transparent;
+            if (string.Equals(name, chosen, StringComparison.Ordinal))
+            {
+                ViewDialogKit.Bind(ring, Border.BorderBrushProperty, "dialog.selection.focused.brush");
+                ViewDialogKit.Bind(ring, Border.BackgroundProperty, "dialog.selection.brush");
+            }
+            else
+            {
+                ring.ClearValue(Border.BorderBrushProperty);
+                ring.ClearValue(Border.BackgroundProperty);
+                ring.BorderBrush = Brushes.Transparent;
+                ring.Background = Brushes.Transparent;
+            }
         }
     }
 }

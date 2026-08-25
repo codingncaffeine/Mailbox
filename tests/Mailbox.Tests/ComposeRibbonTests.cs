@@ -191,25 +191,47 @@ public class ComposeRibbonTests
         });
 
     /// <summary>
-    /// A blocked note has to name what is blocking it, not merely that something is: a phase, an
-    /// explicit statement that nothing is planned, an open decision — or, since Phase 5, a gap in
-    /// the editor.
+    /// Every phrase that can honestly finish "it does not work because…": something absent, a
+    /// decision nobody has taken, or a deliberate refusal.
+    /// </summary>
+    private static readonly string[] NamesSomethingAbsent =
+        ["does not", "is not", "are not", "has no", "have not", "nothing", "never",
+         "No decision", "Not planned"];
+
+    /// <summary>
+    /// A blocked note has to name what is absent, not merely that something is.
     /// </summary>
     /// <remarks>
-    /// That fourth category is new and is the honest consequence of the survey: the editor is a
-    /// dependency rather than ours, so some of these are blocked on something no phase of this
-    /// project will deliver. Saying "Phase 5" about them would be a lie with a date on it.
+    /// A phase number used to count as an answer here, and that is exactly what rotted: by
+    /// 25 August 2026 nine of these named a phase §15 had already marked done, so the note told
+    /// the reader to wait for something that had arrived. A phase is a date, and a date is not a
+    /// reason — see <see cref="NoBlockedNoteNamesAPhase"/>, which now forbids it outright.
     /// </remarks>
     [Fact]
     public void EveryBlockedNoteNamesItsBlocker()
         => Assert.All(
             ComposeAvailability.All.Where(s => s.State == ComposeCommandState.Blocked),
             s => Assert.True(
-                s.Note.Contains("Phase ", StringComparison.Ordinal)
-                || s.Note.Contains("Not planned", StringComparison.Ordinal)
-                || s.Note.Contains("No decision", StringComparison.Ordinal)
-                || s.Note.Contains("The editor does not", StringComparison.Ordinal),
-                $"'{s.Command}' is blocked but does not say by what: {s.Note}"));
+                NamesSomethingAbsent.Any(phrase => s.Note.Contains(phrase, StringComparison.Ordinal)),
+                $"'{s.Command}' is blocked but does not say what is missing: {s.Note}"));
+
+    /// <summary>
+    /// No note names a phase, working or blocked.
+    /// </summary>
+    /// <remarks>
+    /// The rule this table learned the hard way. A phase number dates a note, and a dated note
+    /// goes stale silently: the phase lands, the command stays blocked for a different reason,
+    /// and the note now says something false while looking maintained. What is missing — the list
+    /// a compose window was opened from, a message picker, the properties dialog — stays true
+    /// whatever the plan does, and is what somebody pressing the button actually wants to know.
+    /// </remarks>
+    [Fact]
+    public void NoBlockedNoteNamesAPhase()
+        => Assert.All(
+            ComposeAvailability.All,
+            s => Assert.False(
+                s.Note.Contains("Phase ", StringComparison.Ordinal),
+                $"'{s.Command}' names a phase, which is a date rather than a reason: {s.Note}"));
 
     /// <summary>
     /// A tripwire, in the manner of the migration count: what works is a number somebody has to

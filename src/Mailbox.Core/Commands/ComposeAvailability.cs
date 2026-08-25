@@ -29,20 +29,21 @@ public sealed record ComposeCommandStatus(
 public static class ComposeAvailability
 {
     private const string EditorGap =
-        "The editor does not offer it. Phase 5 took a document model rather than building one, " +
-        "so what is missing here is what that model does not carry — see the survey in §7.3.";
+        "The editor does not offer it. The editor here is a library rather than ours (§7.3), so " +
+        "what is missing is what its document model does not carry — see the survey there.";
 
     private const string Drawing =
         "Not planned for the editor. A drawing surface is a different program inside this one, " +
         "and mail that needs one is mail with an attachment.";
 
     private const string Stationery =
-        "Phase 6 — stationery and themes, and Phase 5 for anywhere to apply them.";
+        "Not planned. These pick one of the reference's own stationery themes, which are its " +
+        "artwork — rule 4. Stationery and Fonts… is built and sets the faces new mail, replies " +
+        "and plain text are written in, which is the part that travels.";
 
-    private const string People =
-        "Phase 12 — People. Names resolve against contacts, and there are none yet.";
-
-    private const string I18n = "Phase 16 — internationalization and the accessibility pass.";
+    private const string Speech =
+        "No decision on record. It needs a speech engine, and choosing one that does not send " +
+        "what is on screen off the machine is the open question — the same one Dictate names.";
 
     private static readonly ComposeCommandStatus[] Table =
     [
@@ -55,11 +56,13 @@ public static class ComposeAvailability
         // Not Phase 4, which is done and opens messages in their own windows. What these want
         // is for the window to know which list it came from, so there is a next item to go to.
         new(ComposeCommands.PreviousItem.Id, ComposeCommandState.Blocked,
-            "Phase 8 — a compose window does not yet know which list it was opened from, so "
-            + "there is no previous item to step to."),
+            "A compose window does not know which list it was opened from, so there is no "
+            + "previous item to step to. The message window does step, because it is opened from "
+            + "a row and keeps it (OpenedMessageContext); a draft opened from Drafts would want "
+            + "the same, and a new message has no list at all."),
         new(ComposeCommands.NextItem.Id, ComposeCommandState.Blocked,
-            "Phase 8 — a compose window does not yet know which list it was opened from, so "
-            + "there is no next item to step to."),
+            "A compose window does not know which list it was opened from, so there is no next "
+            + "item to step to. See Previous Item."),
         new(MailCommands.Undo.Id, ComposeCommandState.Working, "Undoes the last edit to the body."),
         new(ViewCommands.Redo.Id, ComposeCommandState.Working, "Redoes it."),
 
@@ -130,8 +133,10 @@ public static class ComposeAvailability
         new(ComposeCommands.FormatHtml.Id, ComposeCommandState.Working,
             "The format this window composes in, and says so."),
         new(ComposeCommands.FormatRichText.Id, ComposeCommandState.Blocked,
-            "Phase 6 — the reference's RTF mode. The editor serializes RTF; what is missing is " +
-            "the decision to send it, and TNEF around it."),
+            "No decision on record, and it is the owner's: whether Mailbox should send RTF at " +
+            "all. The mode is persisted and composes as HTML; the editor serializes RTF but has " +
+            "not been held to the standard the HTML was, and TNEF is read here and never " +
+            "written."),
 
         // ---- Editing ------------------------------------------------------------------
         new(ComposeCommands.Find.Id, ComposeCommandState.Working, "Finds text in the body."),
@@ -144,15 +149,17 @@ public static class ComposeAvailability
         new(MailCommands.AddressBook.Id, ComposeCommandState.Working,
             "Opens Select Names: the address book, and the three lines to put people on."),
         new(ComposeCommands.CheckNames.Id, ComposeCommandState.Working,
-            "Checks that every address in To, Cc and Bcc parses, and says which do not. " +
-            "Resolving a bare name against contacts is Phase 12."),
+            "Resolves a bare name against the address book and writes the address in when only " +
+            "one contact matches, names it as ambiguous when several do, and says which of what " +
+            "is left does not parse."),
 
         // ---- Include ------------------------------------------------------------------
         new(ComposeCommands.AttachFile.Id, ComposeCommandState.Working,
             "Picks files and attaches them to the sent message."),
         new(ComposeCommands.AttachItem.Id, ComposeCommandState.Blocked,
-            "Phase 8 — attaching another stored message needs the message picker, which Search "
-            + "builds."),
+            "Attaching another stored message needs something to pick it with. Search finds "
+            + "messages and the folder picker picks folders; what is missing is a message "
+            + "picker — a folder tree with a list beside it — and nothing else wants one yet."),
         new(ComposeCommands.Signature.Id, ComposeCommandState.Working,
             "Inserts a signature at the caret, and is where they are written and removed. An "
             + "account can sign new messages automatically; none does unless asked to."),
@@ -164,9 +171,14 @@ public static class ComposeAvailability
         new(ComposeCommands.LowImportance.Id, ComposeCommandState.Working,
             "Sets the message's priority headers."),
         new(MailCommands.FollowUp.Id, ComposeCommandState.Blocked,
-            "Phase 8 — follow-up flags with due dates and reminders."),
+            "Flagging on the way out is a different thing from flagging a stored row, which "
+            + "works: it asks the recipient to follow up, and travels as an X-Message-Flag "
+            + "header nothing here writes or reads. A message being composed has no row of its "
+            + "own to carry a flag either, until it is saved."),
         new(ComposeCommands.Properties.Id, ComposeCommandState.Blocked,
-            "Phase 8 — the message properties dialog."),
+            "The message properties dialog is not built. Everything on it that has a home here "
+            + "already has a button on this tab — sensitivity aside, which has nowhere to go: "
+            + "the header exists, and no client on the receiving end is obliged to honour it."),
 
         // ---- Voice, apps, editor ------------------------------------------------------
         new(ComposeCommands.Dictate.Id, ComposeCommandState.Blocked,
@@ -177,7 +189,9 @@ public static class ComposeAvailability
             + "dispatcher as everywhere else."),
         new(ComposeCommands.Editor.Id, ComposeCommandState.Working,
             "Runs the spelling check over the message."),
-        new(ViewCommands.ImmersiveReader.Id, ComposeCommandState.Blocked, I18n),
+        new(ViewCommands.ImmersiveReader.Id, ComposeCommandState.Blocked,
+            "The editor does not offer it. Line focus, syllables and a column width are a second "
+            + "way of laying out the same document, and the editor lays out one way."),
 
         // ---- Insert -------------------------------------------------------------------
         new(ComposeCommands.Table.Id, ComposeCommandState.Working,
@@ -220,13 +234,17 @@ public static class ComposeAvailability
             "Signs the message with this account's own key, immediately before it goes and never " +
             "on a draft. Needs S/MIME or OpenPGP switched on in the Trust Center first."),
         new(ComposeCommands.VotingButtons.Id, ComposeCommandState.Blocked,
-            "Phase 8 — voting needs the reading side to collect the replies."),
+            "Voting rides TNEF, which is read here and never written — the same gap Rich Text "
+            + "names. A tally would then need the responses collected against the sent message, "
+            + "which is a second half nothing has asked for yet."),
         new(ComposeCommands.DeliveryReceipt.Id, ComposeCommandState.Working,
             "Adds the Return-Receipt-To header."),
         new(ComposeCommands.ReadReceipt.Id, ComposeCommandState.Working,
             "Adds the Disposition-Notification-To header."),
         new(ComposeCommands.SaveSentItemTo.Id, ComposeCommandState.Blocked,
-            "Phase 3 — the folder picker, which the message list's Move To also waits on."),
+            "Not the folder picker, which exists and which Move To uses: what is missing is a "
+            + "per-message override to put in it. The send path files the copy in the account's "
+            + "own Sent Items, and nothing on a message says otherwise."),
         new(ComposeCommands.DelayDelivery.Id, ComposeCommandState.Working,
             "Holds the message in the outbox until the time chosen."),
         new(ComposeCommands.DirectRepliesTo.Id, ComposeCommandState.Working,
@@ -241,12 +259,19 @@ public static class ComposeAvailability
             "Not planned. No free thesaurus with usable licensing has been chosen."),
         new(ComposeCommands.WordCount.Id, ComposeCommandState.Working,
             "Counts words, characters and paragraphs in the body."),
-        new(ViewCommands.ReadAloud.Id, ComposeCommandState.Blocked, I18n),
+        new(ViewCommands.ReadAloud.Id, ComposeCommandState.Blocked, Speech),
         new(ComposeCommands.SmartLookup.Id, ComposeCommandState.Blocked,
             "No decision on record. Looking the selection up means sending it to a search " +
             "engine, and whether Mailbox should do that quietly is the owner's call."),
-        new(ComposeCommands.Language.Id, ComposeCommandState.Blocked, I18n),
-        new(ComposeCommands.CheckAccessibility.Id, ComposeCommandState.Blocked, I18n),
+        new(ComposeCommands.Language.Id, ComposeCommandState.Blocked,
+            "The scaffolding is in (Localizer, one flat JSON per culture) and the surfaces have "
+            + "not adopted it, so there is nothing for a language choice to change yet. Proofing "
+            + "language is the other half: the spelling check reads the desktop's dictionaries, "
+            + "and picking one per selection wants the editor to carry it on a run."),
+        new(ComposeCommands.CheckAccessibility.Id, ComposeCommandState.Blocked,
+            "Not the application's own accessibility, which is done: this inspects the message "
+            + "being written — alt text on its pictures, contrast, a table's header row — and "
+            + "nothing reads the document for that."),
     ];
 
     public static IReadOnlyList<ComposeCommandStatus> All => Table;
