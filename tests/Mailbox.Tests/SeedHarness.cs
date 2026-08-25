@@ -26,14 +26,20 @@ namespace Mailbox.Tests;
 public class SeedHarness
 {
     /// <summary>
-    /// The day the seed is dated against: <c>MAILBOX_TODAY</c> when it is set, so a seed and a
-    /// pinned clock agree and a capture is the same picture next year.
+    /// The day <c>MAILBOX_TODAY</c> names, or null when it names none — the one place that
+    /// answers whether the clock is pinned, so the day and the moment cannot disagree about it.
     /// </summary>
-    private static DateOnly SeedToday()
+    private static DateOnly? PinnedDay()
         => Environment.GetEnvironmentVariable("MAILBOX_TODAY") is { Length: > 0 } pinned
            && DateOnly.TryParseExact(pinned, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var day)
             ? day
-            : DateOnly.FromDateTime(DateTime.Today);
+            : null;
+
+    /// <summary>
+    /// The day the seed is dated against: <c>MAILBOX_TODAY</c> when it is set, so a seed and a
+    /// pinned clock agree and a capture is the same picture next year.
+    /// </summary>
+    private static DateOnly SeedToday() => PinnedDay() ?? DateOnly.FromDateTime(DateTime.Today);
 
     /// <summary>
     /// The moment the seed stamps as "now": half past two on the pinned day when there is one,
@@ -42,8 +48,8 @@ public class SeedHarness
     /// </summary>
     private static DateTimeOffset SeedNow()
     {
-        if (Environment.GetEnvironmentVariable("MAILBOX_TODAY") is not { Length: > 0 }) return SeedNow();
-        var wall = SeedToday().ToDateTime(new TimeOnly(14, 30));
+        if (PinnedDay() is not { } day) return DateTimeOffset.Now;
+        var wall = day.ToDateTime(new TimeOnly(14, 30));
         return new DateTimeOffset(wall, TimeZoneInfo.Local.GetUtcOffset(wall));
     }
 
