@@ -4957,6 +4957,9 @@ public partial class MainWindow : Window
         var under = _ribbon.ControlFor(MailCommands.NewEmail.Id)
                     ?? _ribbon.ControlFor(PeopleCommands.NewContact.Id)
                     ?? _ribbon.ControlFor(TaskCommands.NewTask.Id)
+                    ?? _ribbon.ControlFor(CalendarCommands.NewAppointment.Id)
+                    ?? _ribbon.ControlFor(NoteCommands.NewNote.Id)
+                    ?? _ribbon.ControlFor(JournalCommands.NewEntry.Id)
                     ?? (Control)this;
 
         _ribbon.OpenMenuUnder(MailCommands.NewItems.Id, flyout, under);

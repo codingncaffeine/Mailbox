@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Threading;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
@@ -66,6 +67,7 @@ public sealed class AppointmentWindow : Window
         _ribbon.CommandInvoked += (_, e) =>
         {
             _ribbon.CloseFloatingBody();
+            if (RunHere(e.Command)) return;
             if (_surface.Invoke(e.Command) is { Length: > 0 } message) _surface.InfoBar = message;
             else RefreshPickers();
         };
@@ -101,6 +103,27 @@ public sealed class AppointmentWindow : Window
         {
             Opened += (_, _) => SelectTab(posed.Trim().ToLowerInvariant());
         }
+
+        // MAILBOX_APPOINTMENT_RUN presses this window's ribbon by id — through its own
+        // dispatcher, not the shell's, which does not own these commands and rightly says so.
+        // Each press logs what the form then holds, which is the claim; the capture shows what
+        // the presses left behind on the tag strip.
+        if (Environment.GetEnvironmentVariable("MAILBOX_APPOINTMENT_RUN") is { Length: > 0 } presses)
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(
+                () =>
+                {
+                    foreach (var id in presses.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    {
+                        Log.Info($"Harness: appointment window running {id}.");
+                        Press(new CommandId(id));
+                    }
+
+                    Log.Info($"Harness: appointment — {_surface.ShowAsText}, reminder {_surface.ReminderText}, "
+                             + $"categories {(_surface.Categories.Count == 0 ? "none" : string.Join("/", _surface.Categories))}.");
+                },
+                DispatcherPriority.Background);
+        }
         // Escape gives up, and everything else goes through the key map asked for this window's
         // own commands — Alt+S saves and closes, Ctrl+Enter sends — so a rebound shortcut is
         // rebound here too and a plain keystroke stays the reader typing.
@@ -124,8 +147,109 @@ public sealed class AppointmentWindow : Window
     /// <summary>The surface, for the harness: it poses the form and presses the big button.</summary>
     internal AppointmentSurface Surface => _surface;
 
+    /// <summary>
+    /// Copy to My Calendar: the appointment as the form states it, for the default calendar.
+    /// </summary>
+    /// <remarks>
+    /// Raised rather than written here for the reason the shell answers a message window's
+    /// Reply: the store this writes to and the views that redraw afterwards are the shell's, and
+    /// a window that reached into them would keep a second copy of what "afterwards" means.
+    /// </remarks>
+    public event EventHandler<CalendarEvent>? CopyRequested;
+
+    /// <summary>Forward: the appointment as an attachment on a new message.</summary>
+    public event EventHandler<CalendarEvent>? ForwardRequested;
+
+    /// <summary>
+    /// The three commands the window owns rather than the form: the two that leave it, and the
+    /// button that selects the tab beside it.
+    /// </summary>
+    /// <remarks>
+    /// Ahead of the surface, so a command the window answers is never also answered there. The
+    /// two pickers are here as well because a drop-down needs the bar to hang from and the form
+    /// has no handle on it — the surface still holds what they set.
+    /// </remarks>
+    private bool RunHere(CommandId id)
+    {
+        if (id == AppointmentCommands.SchedulingAssistant.Id) { SelectTab("scheduling"); return true; }
+        if (id == AppointmentCommands.CopyToMyCalendar.Id) { CopyRequested?.Invoke(this, _surface.Current()); return true; }
+        if (id == AppointmentCommands.Forward.Id) { ForwardRequested?.Invoke(this, _surface.Current()); return true; }
+        if (id == AppointmentCommands.ShowAs.Id) { ShowAsMenu(); return true; }
+        if (id == AppointmentCommands.Reminder.Id) { ReminderMenu(); return true; }
+        return false;
+    }
+
+    /// <summary>
+    /// Show As, as the reference draws it: a list under the box, ticked at what is set.
+    /// </summary>
+    /// <remarks>
+    /// A drop-down rather than the step it was — the capture's control carries a chevron and
+    /// opens, and stepping through four values to reach the third is not the same gesture.
+    /// </remarks>
+    private void ShowAsMenu()
+        => PickerMenu(
+            AppointmentCommands.ShowAs.Id,
+            [.. AppointmentSurface.ShowAs.Select((label, i) => (label, (Action)(() => _surface.SetShowAs(i))))],
+            _surface.ShowAsText);
+
+    private void ReminderMenu()
+        => PickerMenu(
+            AppointmentCommands.Reminder.Id,
+            [.. AppointmentSurface.Reminders.Select(r => (r.Label, (Action)(() => _surface.SetReminder(r.Minutes))))],
+            _surface.ReminderText);
+
+    private void PickerMenu(CommandId id, IReadOnlyList<(string Label, Action Choose)> values, string current)
+    {
+        // A menu is a surface no capture can show, so the harness picks an entry instead and the
+        // log says what the form then reads.
+        if (Environment.GetEnvironmentVariable("MAILBOX_APPOINTMENT_PICK") is { Length: > 0 } posed)
+        {
+            var wanted = posed.Trim();
+            var hit = values.FirstOrDefault(v => v.Label.Contains(wanted, StringComparison.OrdinalIgnoreCase));
+            if (hit.Choose is null)
+            {
+                Log.Info($"Harness: no {id.Value} value reads “{wanted}”.");
+                return;
+            }
+
+            hit.Choose();
+            Log.Info($"Harness: {id.Value} — {_surface.ShowAsText} / {_surface.ReminderText}.");
+            RefreshPickers();
+            return;
+        }
+
+        var flyout = new MenuFlyout();
+        foreach (var (label, choose) in values)
+        {
+            var item = new MenuItem
+            {
+                Header = label,
+                Icon = label == current ? Tick() : null,
+            };
+            item.Click += (_, _) => { choose(); RefreshPickers(); };
+            flyout.Items.Add(item);
+        }
+
+        _ribbon.OpenMenuUnder(id, flyout, this);
+    }
+
+    private static Control Tick() => new TextBlock
+    {
+        Text = IconGlyphs.GetOrEmpty("mark-complete", 16),
+        FontFamily = IconFont.Family,
+        FontSize = 12,
+    };
+
     /// <summary>Selects a ribbon tab by id. Used by the fidelity harness, which cannot click.</summary>
     public void SelectTab(string tabId) => _ribbon.ActiveTabId = tabId;
+
+    /// <summary>Runs a command as this window's own ribbon would. For the harness.</summary>
+    public void Press(CommandId id)
+    {
+        if (RunHere(id)) return;
+        if (_surface.Invoke(id) is { Length: > 0 } message) _surface.InfoBar = message;
+        else RefreshPickers();
+    }
 
     /// <summary>
     /// Puts the right thing under the bar for the tab that is showing: the form, the free/busy

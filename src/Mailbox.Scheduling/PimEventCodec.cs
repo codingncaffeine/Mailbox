@@ -43,6 +43,10 @@ public static class PimEventCodec
             Busy = ICalendarCodec.BusyWord(e.Busy),
             ReminderMinutes = e.ReminderMinutes,
             Categories = string.Join(",", e.Categories),
+            // Mirrored into the columns the way a task's are: a list draws the private mark and
+            // sorts by importance without parsing the VEVENT, and the text stays the truth.
+            IsPrivate = e.IsPrivate,
+            Priority = e.PriorityNumber,
             LastModified = e.LastModified,
             SyncState = syncState ?? (existing is null ? PimSyncState.New : existing.SyncState == PimSyncState.New ? PimSyncState.New : PimSyncState.Modified),
             DavHref = existing?.DavHref,
@@ -101,6 +105,8 @@ public static class PimEventCodec
             RecurrenceId = recurrenceId,
             Busy = ICalendarCodec.BusyFromWord(item.Busy),
             ReminderMinutes = item.ReminderMinutes,
+            IsPrivate = item.IsPrivate,
+            Urgency = TaskItem.UrgencyFor(item.Priority),
             Categories = item.Categories.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
             Organizer = item.Organizer,
             Sequence = item.Sequence,

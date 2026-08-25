@@ -219,7 +219,17 @@ public sealed class TimeGridView : CalendarSurface
     }
 
     /// <summary>How much of the left-hand edge the hours take: two columns when a second zone shows.</summary>
-    private double RulerSpan => SecondZone is null ? RulerWidth : RulerWidth * 2;
+    private double RulerSpan => RulerSpanFor(SecondZone is not null);
+
+    /// <summary>
+    /// How wide the time ruler is, with or without a second zone beside it.
+    /// </summary>
+    /// <remarks>
+    /// Public because the Daily Task List draws its columns under this grid's, and a band whose
+    /// first column starts a ruler-width away from the grid's would put every task under the
+    /// wrong day. One number, read by both.
+    /// </remarks>
+    public static double RulerSpanFor(bool secondZone) => secondZone ? RulerWidth * 2 : RulerWidth;
 
     public event EventHandler<DateOnly>? DaySelected;
     public event EventHandler<CalendarEntry>? EntrySelected;

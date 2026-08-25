@@ -9,6 +9,7 @@ using Avalonia.Media;
 using Mailbox.Controls.Calendar;
 using Mailbox.Core.Diagnostics;
 using Mailbox.Core.Settings;
+using Mailbox.Scheduling;
 using Mailbox.Store.Pim;
 using Mailbox.Theming.Icons;
 using Mailbox.Theming.Tokens;
@@ -51,6 +52,8 @@ public sealed class CalendarWorkspace : Border
     private readonly MonthView _month = new();
     private readonly TimeGridView _timeGrid = new();
     private readonly ScheduleView _schedule = new();
+    private readonly DailyTaskListView _dailyTasks = new();
+    private readonly DockPanel _timeGridWithTasks = new();
     private readonly Panel _viewHost = new();
     private readonly TextBlock _title = new();
     private readonly TextBlock _pickerLabel = new();
@@ -61,6 +64,7 @@ public sealed class CalendarWorkspace : Border
     private CalendarViewKind _kind = CalendarViewKind.Month;
     private DateOnly _anchor;
     private IReadOnlyList<CalendarEntry> _entries = [];
+    private DailyTaskListMode _dailyTaskList;
 
     public CalendarWorkspace(PimRepository repository, CalendarOptions options, DateOnly today, DateTime? now)
     {
@@ -583,6 +587,7 @@ public sealed class CalendarWorkspace : Border
         RefreshCalendarList();
         RefreshNavigator();
         ShowView();
+        RefreshDailyTasks();
         _title.Text = TitleText();
         _pickerLabel.Text = Label(_kind);
         _pickerGlyph.Text = IconGlyphs.GetOrEmpty(IconFor(_kind), 20);
@@ -666,7 +671,7 @@ public sealed class CalendarWorkspace : Border
                     _ => TimeGridSpan.Week,
                 };
                 _timeGrid.Entries = _entries;
-                view = _timeGrid;
+                view = ShowDailyTasks ? WithDailyTasks() : _timeGrid;
                 break;
 
             default:
@@ -679,6 +684,87 @@ public sealed class CalendarWorkspace : Border
         if (_viewHost.Children.Count == 1 && ReferenceEquals(_viewHost.Children[0], view)) return;
         _viewHost.Children.Clear();
         _viewHost.Children.Add(view);
+    }
+
+    /// <summary>
+    /// The Daily Task List's state, and the band it draws under the day and week grids.
+    /// </summary>
+    /// <remarks>
+    /// Only under the time grids. A month cell has no room beneath it for a band and the
+    /// reference draws none there either, so the setting is kept and the band simply does not
+    /// appear — switching to Week brings it back rather than losing what was asked for.
+    /// </remarks>
+    public DailyTaskListMode DailyTasks
+    {
+        get => _dailyTaskList;
+        set
+        {
+            if (_dailyTaskList == value) return;
+            _dailyTaskList = value;
+            ShowView();
+            RefreshDailyTasks();
+        }
+    }
+
+    private bool ShowDailyTasks => _dailyTaskList != DailyTaskListMode.Off;
+
+    private Control WithDailyTasks()
+    {
+        if (_timeGridWithTasks.Children.Count == 0)
+        {
+            DockPanel.SetDock(_dailyTasks, Dock.Bottom);
+            _timeGridWithTasks.Children.Add(_dailyTasks);
+            _timeGridWithTasks.Children.Add(_timeGrid);
+        }
+
+        return _timeGridWithTasks;
+    }
+
+    /// <summary>
+    /// Fills the band: what is due on each of the days the grid is showing.
+    /// </summary>
+    /// <remarks>
+    /// Due date, not start date — the reference's band is what has to be done that day, and a
+    /// task that began last week and is due on Friday belongs under Friday. A task with no due
+    /// date belongs under no day and is left to the to-do list, which is where a reader looks for
+    /// what is not yet urgent.
+    /// </remarks>
+    private void RefreshDailyTasks()
+    {
+        if (!ShowDailyTasks) return;
+
+        _dailyTasks.Minimized = _dailyTaskList == DailyTaskListMode.Minimized;
+        _dailyTasks.RulerWidth = TimeGridView.RulerSpanFor(_options.SecondTimeZone is not null);
+
+        var days = _timeGrid.Days();
+        _dailyTasks.Days = days;
+
+        if (_dailyTaskList == DailyTaskListMode.Minimized || days.Count == 0)
+        {
+            _dailyTasks.Tasks = [];
+            return;
+        }
+
+        try
+        {
+            var wanted = days.ToHashSet();
+            var tasks = new List<DailyTask>();
+
+            foreach (var row in new TaskBook(_repository).Rows(Today, includeCompleted: true))
+            {
+                if (row.Task.Due is not { } due) continue;
+                var day = DateOnly.FromDateTime(due.Wall);
+                if (!wanted.Contains(day)) continue;
+                tasks.Add(new DailyTask(day, row.Summary, row.IsComplete, row.IsOverdue));
+            }
+
+            _dailyTasks.Tasks = tasks;
+        }
+        catch (Microsoft.Data.Sqlite.SqliteException ex)
+        {
+            Log.Warn("The task store could not be read for the Daily Task List.", ex);
+            _dailyTasks.Tasks = [];
+        }
     }
 
     private string TitleText() => _kind switch

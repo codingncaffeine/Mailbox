@@ -22,6 +22,7 @@ public sealed class CalendarOptions(SettingsStore settings)
     public const string DefaultReminderKey = "calendar.reminder.default";
     public const string DefaultColourKey = "calendar.colour.default";
     public const string ColourEveryCalendarKey = "calendar.colour.all";
+    public const string DailyTaskListKey = "calendar.dailytasks";
     public const string ShowBellKey = "calendar.showbell";
     public const string TimeScaleKey = "calendar.timescale";
     public const string DefaultViewKey = "calendar.view.default";
@@ -93,21 +94,46 @@ public sealed class CalendarOptions(SettingsStore settings)
     /// <summary>Whether a reminder shows a bell against the appointment.</summary>
     public bool ShowBell => _settings.GetBool(ShowBellKey, true);
 
+    /// <summary>
+    /// The colours a calendar can be given, in the order the Options combo and the bar's Colour
+    /// menu both list them.
+    /// </summary>
+    /// <remarks>
+    /// One table because there are two ways to set the same thing: the page that chooses what a
+    /// new calendar starts as, and the button that recolours the one in front of the reader. Two
+    /// lists would drift the first time either grew an entry, and "Purple" would mean two
+    /// different purples depending on where it was chosen.
+    /// </remarks>
+    public static IReadOnlyList<(string Name, string Hex)> Palette { get; } =
+    [
+        ("Blue", ""), ("Green", "#107C10"), ("Orange", "#CA5010"), ("Purple", "#8764B8"),
+        ("Red", "#D13438"), ("Grey", "#69797E"), ("Yellow", "#C19C00"), ("Teal", "#038387"),
+    ];
+
     /// <summary>The colour a calendar with none of its own is drawn in — the combo's order.</summary>
-    public string DefaultColour => (int)_settings.GetNumber(DefaultColourKey, 0) switch
+    public string DefaultColour
     {
-        1 => "#107C10",
-        2 => "#CA5010",
-        3 => "#8764B8",
-        4 => "#D13438",
-        5 => "#69797E",
-        6 => "#C19C00",
-        7 => "#038387",
-        _ => string.Empty,
-    };
+        get
+        {
+            var at = (int)_settings.GetNumber(DefaultColourKey, 0);
+            return at >= 0 && at < Palette.Count ? Palette[at].Hex : string.Empty;
+        }
+    }
 
     /// <summary>Whether that colour is forced on every calendar rather than only the new ones.</summary>
     public bool ColourEveryCalendar => _settings.GetBool(ColourEveryCalendarKey, false);
+
+    /// <summary>
+    /// Whether the day's tasks are drawn in a band under the day and week grids, and how much
+    /// of it shows — the reference's Normal, Minimized and Off.
+    /// </summary>
+    public DailyTaskListMode DailyTaskList
+        => (int)_settings.GetNumber(DailyTaskListKey, (double)(int)DailyTaskListMode.Off) switch
+        {
+            (int)DailyTaskListMode.Normal => DailyTaskListMode.Normal,
+            (int)DailyTaskListMode.Minimized => DailyTaskListMode.Minimized,
+            _ => DailyTaskListMode.Off,
+        };
 
     /// <summary>Minutes a row of the day and week views covers: 5, 6, 10, 15, 30 or 60.</summary>
     public int TimeScaleMinutes => (int)_settings.GetNumber(TimeScaleKey, 30) switch
@@ -155,4 +181,19 @@ public sealed class CalendarOptions(SettingsStore settings)
     /// </summary>
     public TimeZoneInfo? SecondTimeZone
         => ShowSecondTimeZone ? TimeZoneChoices.Find(_settings.GetString(SecondTimeZoneIdKey, string.Empty)) : null;
+}
+
+/// <summary>
+/// How much of the Daily Task List shows under the day and week grids.
+/// </summary>
+/// <remarks>
+/// The reference's own three, and its own default: a reader who has never asked for the band
+/// does not get one. Minimized keeps the header row so the band can be brought back without
+/// going to the menu again, which is what "minimized" means there.
+/// </remarks>
+public enum DailyTaskListMode
+{
+    Off,
+    Normal,
+    Minimized,
 }

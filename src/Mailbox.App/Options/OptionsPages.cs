@@ -583,8 +583,8 @@ public static class OptionsPages
     private static readonly string[] Reminders =
         ["0 minutes", "5 minutes", "10 minutes", "15 minutes", "30 minutes", "1 hour", "2 hours"];
 
-    private static readonly string[] Colours =
-        ["Blue", "Green", "Orange", "Purple", "Red", "Grey", "Yellow", "Teal"];
+    /// <summary>The calendar palette's names, so the page and the bar's menu cannot disagree.</summary>
+    private static readonly string[] Colours = [.. CalendarOptions.Palette.Select(c => c.Name)];
 
     private static readonly string[] Times = BuildTimes();
 

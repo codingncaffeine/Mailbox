@@ -23,6 +23,9 @@ public static class ICalendarCodec
 
     private const string BusyProperty = "X-MICROSOFT-CDO-BUSYSTATUS";
 
+    /// <summary>What CLASS says about an appointment the reference calls Private.</summary>
+    private const string PrivateClass = "PRIVATE";
+
     /// <summary>One VEVENT block — <c>BEGIN:VEVENT</c> to <c>END:VEVENT</c> — as the store keeps a row.</summary>
     public static string Serialize(CalendarEvent calendarEvent)
     {
@@ -123,6 +126,12 @@ public static class ICalendarCodec
             });
         }
         foreach (var c in e.Categories) ical.Categories.Add(c);
+
+        // CLASS and PRIORITY are written only when they say something. PUBLIC and 5 are the
+        // standard's own defaults, so writing them would add a property to every appointment in
+        // the file to state what its absence already states.
+        if (e.IsPrivate) ical.Class = PrivateClass;
+        if (e.Urgency != TaskUrgency.Normal) ical.Priority = e.PriorityNumber;
         ical.Properties.Add(new CalendarProperty(BusyProperty, e.Busy switch
         {
             BusyStatus.Free => "FREE",
@@ -186,6 +195,11 @@ public static class ICalendarCodec
             RecurrenceId = ical.RecurrenceIdentifier is { } rid ? FromCal(rid.StartTime) : null,
             Busy = busy,
             ReminderMinutes = reminder,
+            // CONFIDENTIAL reads as private for the reason a task's does: both mean "not for
+            // whoever else can see this calendar", and the reference offers only the one mark.
+            IsPrivate = ical.Class is { Length: > 0 } klass
+                && !string.Equals(klass, "PUBLIC", StringComparison.OrdinalIgnoreCase),
+            Urgency = TaskItem.UrgencyFor(ical.Priority),
             Categories = ical.Categories.Where(c => !string.IsNullOrWhiteSpace(c)).ToList(),
             Attendees = ical.Attendees.Select(a => new EventAttendee(
                 WithoutMailto(a.Value?.ToString() ?? string.Empty),

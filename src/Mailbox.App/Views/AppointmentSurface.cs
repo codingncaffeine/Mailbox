@@ -5,6 +5,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Mailbox.Core.Diagnostics;
 using Mailbox.Core.Commands;
 using Mailbox.Scheduling;
 using Mailbox.Store.Pim;
@@ -87,6 +88,26 @@ public sealed class AppointmentSurface : UserControl
     private readonly Border _infoBar;
     private readonly StackPanel _meetingRows = new() { Spacing = 0 };
 
+    /// <summary>
+    /// What the Tags group has put on this appointment — the categories as chips, a padlock when
+    /// it is private, and the importance mark.
+    /// </summary>
+    /// <remarks>
+    /// Authored: no capture shows the reference's window with any of the three set, so the strip
+    /// is this application's reading of where they would show. It earns its place because the
+    /// ribbon draws no pressed state for a toggle — without it, three of the four Tags buttons
+    /// would change something the reader cannot see. The chips are drawn as the message list's
+    /// are, from the same token per category.
+    /// </remarks>
+    private readonly StackPanel _tagStrip = new()
+    {
+        Orientation = Orientation.Horizontal,
+        Spacing = 6,
+        VerticalAlignment = VerticalAlignment.Center,
+    };
+
+    private readonly Border _tags;
+
     private readonly CalendarEvent _original;
     private readonly IReadOnlyList<Collection> _calendars;
     private readonly bool _meeting;
@@ -94,6 +115,9 @@ public sealed class AppointmentSurface : UserControl
     private int _showAs;
     private int? _reminderMinutes;
     private long _collectionId;
+    private IReadOnlyList<string> _categories;
+    private bool _private;
+    private TaskUrgency _urgency;
 
     public AppointmentSurface(CalendarEvent appointment, IReadOnlyList<Collection> calendars, long collectionId, bool meeting)
     {
@@ -104,6 +128,9 @@ public sealed class AppointmentSurface : UserControl
         _rrule = appointment.Rrule;
         _collectionId = collectionId;
         _reminderMinutes = appointment.ReminderMinutes;
+        _categories = appointment.Categories;
+        _private = appointment.IsPrivate;
+        _urgency = appointment.Urgency;
         _showAs = appointment.Busy switch
         {
             BusyStatus.Free => 0,
@@ -136,7 +163,9 @@ public sealed class AppointmentSurface : UserControl
         Bind(_timeZones, TemplatedControl.ForegroundProperty, "compose.header.text.brush");
 
         _infoBar = BuildInfoBar();
+        _tags = BuildTagStrip();
         Content = BuildRoot();
+        RefreshTags();
         ApplyAllDay();
     }
 
@@ -216,6 +245,8 @@ public sealed class AppointmentSurface : UserControl
         var root = new DockPanel();
         DockPanel.SetDock(_infoBar, Dock.Top);
         root.Children.Add(_infoBar);
+        DockPanel.SetDock(_tags, Dock.Top);
+        root.Children.Add(_tags);
         DockPanel.SetDock(band, Dock.Top);
         root.Children.Add(band);
         root.Children.Add(body);
@@ -249,6 +280,79 @@ public sealed class AppointmentSurface : UserControl
         };
         Bind(bar, BackgroundProperty, "list.background.brush");
         return bar;
+    }
+
+    private Border BuildTagStrip()
+    {
+        var bar = new Border
+        {
+            Padding = new Thickness(30, 6),
+            IsVisible = false,
+            Child = _tagStrip,
+        };
+        Bind(bar, BackgroundProperty, "list.background.brush");
+        return bar;
+    }
+
+    /// <summary>
+    /// Redraws the strip from what the Tags group has set, and hides it when nothing is.
+    /// </summary>
+    private void RefreshTags()
+    {
+        _tagStrip.Children.Clear();
+
+        if (_private) _tagStrip.Children.Add(TagMark("private", "Private", "text.primary"));
+        if (_urgency == TaskUrgency.High) _tagStrip.Children.Add(TagMark("importance", "High importance", "status.danger"));
+        if (_urgency == TaskUrgency.Low) _tagStrip.Children.Add(TagMark("importance-low", "Low importance", "ribbon.icon.blue"));
+
+        foreach (var name in _categories) _tagStrip.Children.Add(CategoryChip(name));
+
+        _tags.IsVisible = _tagStrip.Children.Count > 0;
+    }
+
+    /// <summary>One category, drawn as the message list draws it: its colour behind its name.</summary>
+    private static Control CategoryChip(string name)
+    {
+        var token = App.Categories.Named(name)?.ColourToken;
+
+        var text = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Text = name };
+        Bind(text, TextBlock.ForegroundProperty, "text.primary.brush");
+
+        var chip = new Border
+        {
+            Padding = new Thickness(7, 1),
+            CornerRadius = new CornerRadius(2),
+            BorderThickness = new Thickness(1),
+            Child = text,
+        };
+        Bind(chip, Border.BorderBrushProperty, "border.subtle.brush");
+        if (token is { Length: > 0 }) Bind(chip, BackgroundProperty, token + ".brush");
+        return chip;
+    }
+
+    /// <summary>The padlock and the two importance marks, each the icon its own button carries.</summary>
+    private static Control TagMark(string icon, string caption, string tint)
+    {
+        var glyph = new TextBlock
+        {
+            Text = IconGlyphs.GetOrEmpty(icon, 16),
+            FontFamily = IconFont.Family,
+            FontSize = 14,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        // The same tint the command's own icon carries, so the strip and the button that set it
+        // cannot end up two different reds.
+        Bind(glyph, TextBlock.ForegroundProperty, tint + ".brush");
+
+        var text = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Text = caption };
+        Bind(text, TextBlock.ForegroundProperty, "compose.header.text.brush");
+
+        return new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 5,
+            Children = { glyph, text },
+        };
     }
 
     /// <summary>Save &amp; Close on an appointment, Send on a meeting: the same 60×80 slot.</summary>
@@ -471,7 +575,66 @@ public sealed class AppointmentSurface : UserControl
         if (id == AppointmentCommands.ShowAs.Id) { Cycle(ref _showAs, ShowAs.Length); return null; }
         if (id == AppointmentCommands.Reminder.Id) { CycleReminder(); return null; }
         if (id == AppointmentCommands.InviteAttendees.Id) { return "Invite Attendees turns this into a meeting — open New Meeting instead for now."; }
+
+        // The Tags group. Each writes onto the appointment being edited rather than into the
+        // store: nothing here is saved until the big button is pressed, and a tag set on a
+        // window that is then abandoned must go with it.
+        if (id == AppointmentCommands.Categorize.Id) { ShowCategories(); return null; }
+        if (id == AppointmentCommands.Private.Id) { SetPrivate(!_private); return null; }
+        if (id == AppointmentCommands.HighImportance.Id) { SetUrgency(TaskUrgency.High); return null; }
+        if (id == AppointmentCommands.LowImportance.Id) { SetUrgency(TaskUrgency.Low); return null; }
         return null;
+    }
+
+    /// <summary>The categories the form now carries — what Copy and Forward read.</summary>
+    public IReadOnlyList<string> Categories => _categories;
+
+    private void ShowCategories()
+        => ItemCategoryMenu.Show(
+            App.Categories,
+            this,
+            _title.Text is { Length: > 0 } named ? named : "Untitled",
+            _categories,
+            SetCategories,
+            allCategories: null);
+
+    /// <summary>What the menu came back with, whole.</summary>
+    public void SetCategories(IReadOnlyList<string> categories)
+    {
+        _categories = categories ?? [];
+        RefreshTags();
+        Changed?.Invoke(this, EventArgs.Empty);
+        Log.Info($"Appointment: categories are now {(_categories.Count == 0 ? "none" : string.Join(", ", _categories))}.");
+    }
+
+    public void SetPrivate(bool value)
+    {
+        _private = value;
+        RefreshTags();
+        Changed?.Invoke(this, EventArgs.Empty);
+        Log.Info($"Appointment: {(value ? "private" : "not private")}.");
+    }
+
+    /// <summary>High or Low, each a toggle back to normal — the way the Tasks bar's two are.</summary>
+    public void SetUrgency(TaskUrgency urgency)
+    {
+        _urgency = _urgency == urgency ? TaskUrgency.Normal : urgency;
+        RefreshTags();
+        Changed?.Invoke(this, EventArgs.Empty);
+        Log.Info($"Appointment: {_urgency.ToString().ToLowerInvariant()} importance (PRIORITY {TaskItem.PriorityFor(_urgency)}).");
+    }
+
+    /// <summary>What the Show As picker offers, and what choosing one does.</summary>
+    public void SetShowAs(int index)
+    {
+        _showAs = Math.Clamp(index, 0, ShowAs.Length - 1);
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void SetReminder(int? minutes)
+    {
+        _reminderMinutes = minutes;
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
     private void Cycle(ref int index, int length)
@@ -557,6 +720,9 @@ public sealed class AppointmentSurface : UserControl
                 _ => BusyStatus.Busy,
             },
             ReminderMinutes = _reminderMinutes,
+            Categories = _categories,
+            IsPrivate = _private,
+            Urgency = _urgency,
             Attendees = attendees,
             // A change is a change the server has to be told about, and iTIP says so with the
             // sequence. Bumped here rather than in the store, which does not know what changed.

@@ -124,7 +124,13 @@ public sealed class PimFileImporter(PimRepository pim, Action<PimItem>? queuePut
     private readonly PimRepository _pim = pim ?? throw new ArgumentNullException(nameof(pim));
 
     /// <summary>Imports an .ics file's events, tasks and journal entries.</summary>
-    public PimImportReport Ics(string text)
+    /// <param name="text">The file.</param>
+    /// <param name="intoEvents">
+    /// The calendar the events go on. Null for the default one, which is what importing means;
+    /// Open Calendar names a calendar of its own instead, so a file opened to be looked at does
+    /// not land among the reader's own appointments with no way to tell them apart again.
+    /// </param>
+    public PimImportReport Ics(string text, Collection? intoEvents = null)
     {
         ArgumentNullException.ThrowIfNull(text);
         var notes = new List<string>();
@@ -132,7 +138,7 @@ public sealed class PimFileImporter(PimRepository pim, Action<PimItem>? queuePut
 
         foreach (var calendarEvent in Safe(() => ICalendarCodec.Parse(text), notes, "events"))
         {
-            var collection = Default(CollectionKind.Events, "Calendar");
+            var collection = intoEvents ?? Default(CollectionKind.Events, "Calendar");
             if (Save(PimEventCodec.ToItem(calendarEvent, collection.Id, Existing(collection.Id, calendarEvent.Uid)), out var wrote) && wrote) events++;
             else already++;
         }

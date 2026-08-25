@@ -106,6 +106,27 @@ public sealed record CalendarEvent
     /// <summary>Minutes before the start a reminder is due, or null for none.</summary>
     public int? ReminderMinutes { get; init; }
     public IReadOnlyList<string> Categories { get; init; } = [];
+
+    /// <summary>
+    /// Kept to oneself when the calendar is shared — RFC 5545's <c>CLASS:PRIVATE</c>, which the
+    /// reference's own Private button sets on an appointment exactly as it does on a task.
+    /// </summary>
+    /// <remarks>
+    /// Same caveat as a task's: CLASS is a request to whoever renders the calendar, not
+    /// encryption. A server that ignores it shows the appointment to everyone it shows the
+    /// calendar to, and that is what the property means in the standard.
+    /// </remarks>
+    public bool IsPrivate { get; init; }
+
+    /// <summary>
+    /// The reference's two Importance buttons, over RFC 5545's PRIORITY — the same three states a
+    /// task carries, reconciled with the standard's nine by <see cref="PriorityNumber"/>.
+    /// </summary>
+    public TaskUrgency Urgency { get; init; } = TaskUrgency.Normal;
+
+    /// <summary>The PRIORITY a VEVENT carries: 1 for high, 5 for normal, 9 for low.</summary>
+    public int PriorityNumber => TaskItem.PriorityFor(Urgency);
+
     public IReadOnlyList<EventAttendee> Attendees { get; init; } = [];
     public string Organizer { get; init; } = string.Empty;
     public int Sequence { get; init; }
@@ -127,6 +148,7 @@ public sealed record CalendarEvent
            && ExceptionDates.SequenceEqual(other.ExceptionDates)
            && Equals(RecurrenceId, other.RecurrenceId)
            && Busy == other.Busy && ReminderMinutes == other.ReminderMinutes
+           && IsPrivate == other.IsPrivate && Urgency == other.Urgency
            && Categories.SequenceEqual(other.Categories, StringComparer.Ordinal)
            && Attendees.SequenceEqual(other.Attendees)
            && Organizer == other.Organizer && Sequence == other.Sequence && Status == other.Status

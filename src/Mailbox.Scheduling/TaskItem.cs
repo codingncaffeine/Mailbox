@@ -114,7 +114,14 @@ public sealed record TaskItem
     }
 
     /// <summary>The PRIORITY a VTODO carries: 1 for high, 5 for normal, 9 for low.</summary>
-    public int PriorityNumber => Urgency switch
+    public int PriorityNumber => PriorityFor(Urgency);
+
+    /// <summary>
+    /// The three the reference offers written as one of RFC 5545's nine. Static, because an
+    /// appointment carries the same three and the two must not disagree about which number
+    /// "high" is — a task and an appointment marked alike have to sort alike.
+    /// </summary>
+    public static int PriorityFor(TaskUrgency urgency) => urgency switch
     {
         TaskUrgency.High => 1,
         TaskUrgency.Low => 9,

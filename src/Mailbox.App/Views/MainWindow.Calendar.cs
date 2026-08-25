@@ -2,9 +2,11 @@ using System.Globalization;
 using Avalonia.Controls;
 using Avalonia;
 using Avalonia.Layout;
+using Avalonia.Media;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Threading;
 using Mailbox.App.Options;
+using Mailbox.Core.Settings;
 using Mailbox.App.ViewModels;
 using Mailbox.Controls.Calendar;
 using Mailbox.Core.Commands;
@@ -134,6 +136,7 @@ public partial class MainWindow
         var workspace = new CalendarWorkspace(App.Pim, App.CalendarOptions, CalendarToday, CalendarNow)
         {
             IsNavVisible = shell.NavVisible,
+            DailyTasks = App.CalendarOptions.DailyTaskList,
         };
 
         workspace.Changed += (_, _) => shell.ModuleStatusLeft = workspace.Status;
@@ -195,8 +198,283 @@ public partial class MainWindow
         if (id == CalendarCommands.OpenFromInternet.Id) { _ = SubscribeAsync(shell); return true; }
         if (id == CalendarCommands.DeleteCalendar.Id) { _ = DeleteCalendarAsync(shell); return true; }
 
+        // The Share group's own two buttons, beside the menu that also holds them: the reference
+        // puts E-mail Calendar and Publish Online on the classic bar as well, and a button and a
+        // menu entry with one label must do one thing.
+        if (id == CalendarCommands.EmailCalendar.Id) { SwitchModule(shell, MailboxModule.Calendar); _ = EmailCalendarAsync(shell); return true; }
+        if (id == CalendarCommands.PublishCalendar.Id)
+        {
+            shell.StatusRight = "Publishing a calendar wants CalDAV publishing, which is still to come.";
+            return true;
+        }
+
+        if (id == CalendarCommands.CalendarColour.Id) { ShowCalendarColourMenu(shell); return true; }
+        if (id == CalendarCommands.Overlay.Id) { ToggleOverlay(shell); return true; }
+        if (id == CalendarCommands.DailyTaskList.Id) { ShowDailyTaskListMenu(shell); return true; }
+        if (id == CalendarCommands.OpenFromFile.Id) { _ = OpenCalendarFileAsync(shell); return true; }
+        if (id == CalendarCommands.NewItems.Id) { SwitchModule(shell, MailboxModule.Calendar); ShowNewItemsMenu(); return true; }
+        if (id == CalendarCommands.Recurrence.Id) { _ = EditSelectedRecurrenceAsync(shell); return true; }
+
         return false;
     }
+
+    /// <summary>
+    /// The Colour button's menu: the palette, ticked at what the calendar in front of the reader
+    /// already is.
+    /// </summary>
+    /// <remarks>
+    /// It recolours <em>the calendar the selected appointment is on</em>, or the default one when
+    /// nothing is selected — the reference's own button acts on whichever calendar the reader is
+    /// looking at, and this is the nearest thing a single grid has to that. The name of the one
+    /// being recoloured goes in the log and the status line so the answer is never a guess.
+    /// </remarks>
+    private void ShowCalendarColourMenu(ShellViewModel shell)
+    {
+        SwitchModule(shell, MailboxModule.Calendar);
+        if (TargetCalendar(shell) is not { } calendar)
+        {
+            shell.StatusRight = "There is no calendar to recolour.";
+            return;
+        }
+
+        void Apply((string Name, string Hex) colour)
+        {
+            App.Pim.SetCollectionColor(calendar.Id, colour.Hex);
+            shell.StatusRight = $"“{calendar.DisplayName}” is {colour.Name.ToLowerInvariant()}.";
+            Log.Info($"Calendar: collection {calendar.Id} colour = {(colour.Hex.Length == 0 ? "default" : colour.Hex)}.");
+            AfterStoreChange(shell);
+        }
+
+        // A menu is a surface no capture can show, so the harness picks an entry instead.
+        if (Environment.GetEnvironmentVariable("MAILBOX_CALENDAR_COLOUR") is { Length: > 0 } posed)
+        {
+            var wanted = posed.Trim();
+            var hit = CalendarOptions.Palette.FirstOrDefault(c => c.Name.Contains(wanted, StringComparison.OrdinalIgnoreCase));
+            if (hit.Name is null) Log.Info($"Harness: no calendar colour reads “{wanted}”.");
+            else Apply(hit);
+            return;
+        }
+
+        var flyout = new MenuFlyout();
+        foreach (var colour in CalendarOptions.Palette)
+        {
+            var chosen = colour;
+            var item = new MenuItem
+            {
+                Header = colour.Name,
+                Icon = string.Equals(calendar.Color, colour.Hex, StringComparison.OrdinalIgnoreCase)
+                    ? MenuIcon("mark-complete")
+                    : ColourSwatch(colour.Hex),
+            };
+            item.Click += (_, _) => Apply(chosen);
+            flyout.Items.Add(item);
+        }
+
+        _ribbon.OpenMenuUnder(CalendarCommands.CalendarColour.Id, flyout, this);
+    }
+
+    /// <summary>Which calendar the bar's Colour and Delete act on.</summary>
+    private Collection? TargetCalendar(ShellViewModel shell)
+    {
+        if (_calendar?.SelectedEntry is { } selected
+            && App.Pim.Item(selected.ItemId) is { } item
+            && App.Pim.Collection(item.CollectionId) is { } owning)
+        {
+            return owning;
+        }
+
+        var calendars = App.Pim.Collections(CollectionKind.Events);
+        return calendars.FirstOrDefault(c => c.IsDefault) ?? calendars.FirstOrDefault();
+    }
+
+    private static Control ColourSwatch(string hex)
+    {
+        var swatch = new Border { Width = 12, Height = 12, CornerRadius = new CornerRadius(2) };
+        if (hex.Length > 0 && Color.TryParse(hex, out var colour)) swatch.Background = new SolidColorBrush(colour);
+        else swatch[!Border.BackgroundProperty] = new DynamicResourceExtension("accent.rest.brush");
+        return swatch;
+    }
+
+    /// <summary>
+    /// Open Calendar: an <c>.ics</c> file on a calendar of its own, named after the file.
+    /// </summary>
+    /// <remarks>
+    /// A calendar of its own rather than the default one, which is the difference between opening
+    /// a file and importing it — the reference's Open Calendar puts what it read where the reader
+    /// can see it beside their own and take it away again in one gesture, and Backstage's Import
+    /// Files is still the door for merging. Local, so nothing tries to push it at a server: a file
+    /// somebody sent is not a subscription.
+    /// </remarks>
+    private async Task OpenCalendarFileAsync(ShellViewModel shell)
+    {
+        SwitchModule(shell, MailboxModule.Calendar);
+
+        var picked = await StorageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
+        {
+            Title = "Open Calendar",
+            AllowMultiple = false,
+            FileTypeFilter = [new Avalonia.Platform.Storage.FilePickerFileType("iCalendar") { Patterns = ["*.ics", "*.ical", "*.ifb"] }],
+        });
+
+        if (picked.FirstOrDefault()?.Path.LocalPath is not { Length: > 0 } path) return;
+
+        try
+        {
+            var name = Path.GetFileNameWithoutExtension(path);
+            var calendar = App.Pim.AddCollection(
+                CollectionKind.Events,
+                name.Length > 0 ? name : "Calendar",
+                App.CalendarOptions.DefaultColour);
+
+            var report = new Mailbox.Import.PimFileImporter(App.Pim, App.PimSync.QueuePut)
+                .Ics(await File.ReadAllTextAsync(path), calendar);
+
+            // A file that held nothing takes its empty calendar away with it: an "Untitled"
+            // calendar left behind by a failed open is litter the reader has to clean up.
+            if (report.Imported == 0)
+            {
+                App.Pim.RemoveCollection(calendar.Id);
+                shell.StatusRight = $"{Path.GetFileName(path)} holds nothing this reads.";
+                Log.Info($"Calendar: {path} imported nothing; the empty collection was removed.");
+                return;
+            }
+
+            shell.StatusRight = $"“{calendar.DisplayName}” opened — {report.Summary}";
+            Log.Info($"Calendar: {path} opened as collection {calendar.Id} — {report.Summary}");
+            AfterStoreChange(shell);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FormatException)
+        {
+            Log.Warn($"The calendar file {path} could not be opened.", ex);
+            shell.StatusRight = $"That calendar could not be opened: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Make Recurring from the module's own bar: the selected appointment's pattern, edited in
+    /// the same dialog the appointment window opens.
+    /// </summary>
+    /// <remarks>
+    /// The series' master, never the occurrence in front of the reader: a recurrence rule belongs
+    /// to the series, and asking "every week" of one Tuesday would either mean nothing or quietly
+    /// turn that Tuesday into a series of its own. An override says so rather than editing the
+    /// master behind the reader's back.
+    /// </remarks>
+    private async Task EditSelectedRecurrenceAsync(ShellViewModel shell)
+    {
+        SwitchModule(shell, MailboxModule.Calendar);
+
+        if (_calendar?.SelectedEntry is not { } entry)
+        {
+            shell.StatusRight = "Select an appointment first.";
+            return;
+        }
+
+        if (App.Pim.Item(entry.ItemId) is not { } stored)
+        {
+            shell.StatusRight = "That appointment is no longer in the calendar.";
+            return;
+        }
+
+        var master = PimEventCodec.FromItem(stored);
+        if (master.IsOverride)
+        {
+            shell.StatusRight = "That one was changed on its own; open the series to change how it repeats.";
+            return;
+        }
+
+        var start = master.Start.Wall;
+        var dialog = new RecurrenceDialog(master.Rrule, DateOnly.FromDateTime(start), master.End.Wall - start);
+        await dialog.ShowDialog(this);
+        if (dialog.Cancelled) return;
+
+        var changed = master with
+        {
+            Rrule = string.IsNullOrEmpty(dialog.Rrule) ? null : dialog.Rrule,
+            Sequence = master.Sequence + 1,
+            LastModified = DateTimeOffset.UtcNow,
+        };
+
+        SaveAppointment(changed, stored, stored.CollectionId);
+        shell.StatusRight = changed.Rrule is null
+            ? $"“{Named(changed)}” no longer repeats."
+            : $"“{Named(changed)}” {RecurrenceText.Describe(changed.Rrule, changed.Start, changed.End).ToLowerInvariant()}";
+        Log.Info($"Calendar: item {stored.Id} RRULE = {changed.Rrule ?? "(none)"}.");
+        AfterStoreChange(shell);
+    }
+
+    /// <summary>
+    /// The Daily Task List: the day's tasks in a band under the day and week grids, and the menu
+    /// that turns it on and off.
+    /// </summary>
+    /// <remarks>
+    /// The reference's own three entries — Normal, Minimized, Off — over one setting. The band
+    /// belongs to the time grids: a month cell has no room under it and the reference draws none
+    /// there either, so the menu says so rather than drawing a band nobody asked for.
+    /// </remarks>
+    private void ShowDailyTaskListMenu(ShellViewModel shell)
+    {
+        SwitchModule(shell, MailboxModule.Calendar);
+
+        void Apply(DailyTaskListMode mode)
+        {
+            App.Settings.Set(CalendarOptions.DailyTaskListKey, (double)(int)mode);
+            if (_calendar is { } calendar) calendar.DailyTasks = mode;
+            shell.StatusRight = mode switch
+            {
+                DailyTaskListMode.Off => "The Daily Task List is off.",
+                DailyTaskListMode.Minimized => "The Daily Task List is minimized.",
+                _ => "The Daily Task List is showing.",
+            };
+            Log.Info($"Calendar: daily task list = {mode}.");
+        }
+
+        if (Environment.GetEnvironmentVariable("MAILBOX_DAILY_TASKS") is { Length: > 0 } posed)
+        {
+            if (Enum.TryParse<DailyTaskListMode>(posed.Trim(), ignoreCase: true, out var mode)) Apply(mode);
+            else Log.Info($"Harness: no daily task list mode reads “{posed}”.");
+            return;
+        }
+
+        var current = _calendar?.DailyTasks ?? DailyTaskListMode.Off;
+        var flyout = new MenuFlyout();
+        foreach (var (label, mode) in new[]
+        {
+            ("_Normal", DailyTaskListMode.Normal),
+            ("Mi_nimized", DailyTaskListMode.Minimized),
+            ("_Off", DailyTaskListMode.Off),
+        })
+        {
+            var chosen = mode;
+            var item = new MenuItem { Header = label, Icon = current == mode ? MenuIcon("mark-complete") : null };
+            item.Click += (_, _) => Apply(chosen);
+            flyout.Items.Add(item);
+        }
+
+        _ribbon.OpenMenuUnder(CalendarCommands.DailyTaskList.Id, flyout, this);
+    }
+
+    /// <summary>
+    /// Overlay: what this calendar already does, said out loud.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Divergence, stated.</strong> The reference draws several shown calendars side by
+    /// side and its Overlay button stacks them into one grid; this one has only the stacked form,
+    /// every visible calendar being drawn into the same grid in its own colour. So the button
+    /// cannot toggle — there is nothing to toggle back to — and saying so is better than a press
+    /// that appears to do nothing. Side-by-side is a second layout rather than a setting: it
+    /// wants a grid per calendar sharing one time axis, each under its own tab.
+    /// </remarks>
+    private void ToggleOverlay(ShellViewModel shell)
+    {
+        SwitchModule(shell, MailboxModule.Calendar);
+        var shown = App.Pim.Collections(CollectionKind.Events).Count(c => c.IsVisible);
+        shell.StatusRight = shown > 1
+            ? $"All {shown} shown calendars are already overlaid in one grid; side-by-side is not a layout here."
+            : "Overlay stacks several calendars in one grid; only one is shown.";
+        Log.Info($"Calendar: overlay — {shown} calendar(s) shown, always overlaid.");
+    }
+
 
     /// <summary>
     /// The Add button's menu, in the reference's own order: the two address-book entries, the
@@ -540,6 +818,7 @@ public partial class MainWindow
         if (calendars.Count == 0) calendars = [App.Pim.DefaultCalendar()];
 
         var window = new AppointmentWindow(App.Commands, fresh, calendars, calendars[0].Id, meeting);
+        WireAppointmentWindow(shell, window);
         await window.ShowDialog(this);
         if (window.Result is not { Deleted: false } result) return;
 
@@ -549,6 +828,83 @@ public partial class MainWindow
 
         if (result.Sent) SendMeetingRequest(shell, result.Event);
         AfterStoreChange(shell);
+    }
+
+    /// <summary>
+    /// The two bar buttons that leave the appointment window: Copy to My Calendar and Forward.
+    /// </summary>
+    /// <remarks>
+    /// Both act on the appointment <em>as the form states it</em> rather than on what the store
+    /// holds — a reader who has typed a title and then forwards means the one they typed. Neither
+    /// saves the window's own appointment: copying makes a second, forwarding sends a picture of
+    /// it, and the original is still unsaved until the big button is pressed.
+    /// </remarks>
+    private void WireAppointmentWindow(ShellViewModel shell, AppointmentWindow window)
+    {
+        window.CopyRequested += (_, appointment) => CopyToMyCalendar(shell, appointment);
+        window.ForwardRequested += (_, appointment) => ForwardAppointment(shell, appointment);
+    }
+
+    /// <summary>
+    /// Copy to My Calendar: the same appointment on the default calendar, under a UID of its own.
+    /// </summary>
+    /// <remarks>
+    /// A new UID because it is a second appointment, not the same one in two places: keeping the
+    /// UID would make the two collide the moment either calendar syncs, and whichever server saw
+    /// it second would take it for an edit of the first. Attendees do not come along — a copy
+    /// kept for oneself is not a meeting anybody was asked to a second time.
+    /// </remarks>
+    private void CopyToMyCalendar(ShellViewModel shell, CalendarEvent appointment)
+    {
+        var mine = App.Pim.DefaultCalendar();
+        var copy = appointment with
+        {
+            Uid = CalendarEvent.NewUid(),
+            Attendees = [],
+            Organizer = string.Empty,
+            RecurrenceId = null,
+            Sequence = 0,
+            LastModified = DateTimeOffset.UtcNow,
+        };
+
+        var written = SaveAppointment(copy, existing: null, mine.Id);
+        shell.StatusRight = $"“{Named(copy)}” copied to {mine.DisplayName}.";
+        Log.Info($"Calendar: item {written.Id} copied to collection {mine.Id}.");
+        AfterStoreChange(shell);
+    }
+
+    /// <summary>
+    /// Forward: a message with the appointment attached as an iCalendar file.
+    /// </summary>
+    /// <remarks>
+    /// <c>METHOD:PUBLISH</c> rather than REQUEST, which is the whole difference between showing
+    /// somebody an appointment and asking them to one: a REQUEST puts the recipient on the
+    /// attendee list and asks them to answer, and forwarding is neither. Their client offers to
+    /// add it to their own calendar, which is what the gesture means.
+    /// </remarks>
+    private void ForwardAppointment(ShellViewModel shell, CalendarEvent appointment)
+    {
+        var payload = ICalendarCodec.SerializeCalendar([appointment], "PUBLISH");
+
+        var attachment = new MimeKit.TextPart("calendar") { Text = payload };
+        attachment.ContentType.Parameters["method"] = "PUBLISH";
+        attachment.ContentType.Parameters["charset"] = "utf-8";
+        attachment.ContentType.Name = SafeName(Named(appointment), "appointment") + ".ics";
+        attachment.ContentDisposition = new MimeKit.ContentDisposition(MimeKit.ContentDisposition.Attachment)
+        {
+            FileName = attachment.ContentType.Name,
+        };
+
+        var draft = new Mailbox.Rendering.ReplyDraft
+        {
+            Subject = "FW: " + Named(appointment),
+            QuotedText = Imip.Describe(new ItipMessage(ItipMethod.Publish, appointment, payload)),
+            Attachments = [new Mailbox.Rendering.CarriedPart(attachment.ContentType.Name, "text/calendar", attachment)],
+        };
+
+        NewMessage(draft, Mailbox.Rendering.ReplyKind.Forward);
+        shell.StatusRight = $"“{Named(appointment)}” is attached to a new message.";
+        Log.Info($"Calendar: forwarding “{Named(appointment)}” as {attachment.ContentType.Name}.");
     }
 
     /// <summary>
@@ -635,6 +991,7 @@ public partial class MainWindow
             : master;
 
         var window = new AppointmentWindow(App.Commands, editing, calendars, stored.CollectionId, meeting: editing.Attendees.Count > 0);
+        WireAppointmentWindow(shell, window);
         await window.ShowDialog(this);
         if (window.Result is not { } result) return;
 
@@ -1218,6 +1575,7 @@ public partial class MainWindow
 
         var calendars = App.Pim.Collections(CollectionKind.Events);
         var window = new AppointmentWindow(App.Commands, master, calendars, stored.CollectionId, master.Attendees.Count > 0);
+        WireAppointmentWindow(shell, window);
         await window.ShowDialog(this);
         if (window.Result is not { } result) return;
 

@@ -32,73 +32,13 @@ public partial class MainWindow
         string subject,
         IReadOnlyList<string> carried,
         Action<IReadOnlyList<string>> apply)
-    {
-        var categories = App.Categories.All();
-
-        // A menu is a surface no capture can show, so the harness presses one of its entries
-        // instead: MAILBOX_CATEGORIZE names a category — or "clear" — and what the store holds
-        // afterwards is the claim.
-        if (Environment.GetEnvironmentVariable("MAILBOX_CATEGORIZE") is { Length: > 0 } posed)
-        {
-            var wanted = posed.Trim();
-            if (wanted.Equals("clear", StringComparison.OrdinalIgnoreCase))
-            {
-                apply([]);
-                Log.Info($"Harness: categories cleared on “{subject}”.");
-                return;
-            }
-
-            if (categories.FirstOrDefault(c => c.Name.Contains(wanted, StringComparison.OrdinalIgnoreCase)) is not { } pick)
-            {
-                Log.Info($"Harness: no category matching “{wanted}” is in the set.");
-                return;
-            }
-
-            var had = carried.Contains(pick.Name, StringComparer.OrdinalIgnoreCase);
-            apply(CategoryBook.Rewrite(had ? carried : [.. carried, pick.Name], pick.Name, had ? null : pick.Name));
-            Log.Info($"Harness: “{subject}” {(had ? "loses" : "takes")} {pick.Name}.");
-            return;
-        }
-
-        var flyout = new MenuFlyout();
-
-        var clear = new MenuItem { Header = "Clear All Categories", IsEnabled = carried.Count > 0 };
-        clear.Click += (_, _) => apply([]);
-        flyout.Items.Add(clear);
-        flyout.Items.Add(new Separator());
-
-        if (categories.Count == 0)
-        {
-            flyout.Items.Add(new MenuItem { Header = "No categories are defined", IsEnabled = false });
-        }
-
-        foreach (var category in categories)
-        {
-            var has = carried.Contains(category.Name, StringComparer.OrdinalIgnoreCase);
-            var item = new MenuItem
-            {
-                Header = category.Name,
-                Icon = has ? Tick() : CategorySwatch(category.ColourToken),
-            };
-
-            var chosen = category;
-            item.Click += (_, _) => apply(CategoryBook.Rewrite(
-                has ? carried : [.. carried, chosen.Name],
-                chosen.Name,
-                has ? null : chosen.Name));
-
-            flyout.Items.Add(item);
-        }
-
-        flyout.Items.Add(new Separator());
-
-        var all = new MenuItem { Header = "All Categories…", Icon = CategorizeArtwork() };
-        all.Click += (_, _) => _ = new ColorCategoriesDialog(App.Categories, RewriteCategoryOnItems).ShowDialog(this);
-        flyout.Items.Add(all);
-
-        Log.Info($"Categorize: “{subject}” carries {(carried.Count == 0 ? "nothing" : string.Join(", ", carried))}.");
-        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
-    }
+        => ItemCategoryMenu.Show(
+            App.Categories,
+            _ribbon ?? (Control)this,
+            subject,
+            carried,
+            apply,
+            () => _ = new ColorCategoriesDialog(App.Categories, RewriteCategoryOnItems).ShowDialog(this));
 
     /// <summary>
     /// Puts a renamed or removed category right on the items that carried it.
