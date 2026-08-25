@@ -25,10 +25,11 @@ public partial class MainWindow
     /// <summary>
     /// How a pose states a drag: <c>move:+2d</c>, <c>end:+30m</c>, <c>start:-1h</c>, and
     /// <c>move:band</c> for the one gesture no offset can say — into the all-day band, which is
-    /// what turns a timed appointment into an all-day one.
+    /// what turns a timed appointment into an all-day one. <c>move:+1r</c> is Schedule View's
+    /// own axis: a row down, which is the next calendar.
     /// </summary>
     private static readonly Regex DragSpec = new(
-        @"^(?<grip>move|start|end)\s*:\s*(?:(?<sign>[+-])(?<count>\d+)(?<unit>[dhm])|(?<band>band))$",
+        @"^(?<grip>move|start|end)\s*:\s*(?:(?<sign>[+-])(?<count>\d+)(?<unit>[dhmr])|(?<band>band))$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     /// <summary>
@@ -70,7 +71,9 @@ public partial class MainWindow
             ? MonthDrag(month, entry, grip, count, unit)
             : calendar.TimeGrid is { } grid
                 ? TimeGridDrag(grid, entry, grip, count, unit)
-                : null;
+                : calendar.Schedule is { } schedule
+                    ? ScheduleDrag(schedule, entry, grip, count, unit)
+                    : null;
 
         if (pressed is not { } drag)
         {
@@ -90,8 +93,65 @@ public partial class MainWindow
 
         foreach (var after in calendar.Entries.Where(e => e.Occurrence.Event.Uid == entry.Occurrence.Event.Uid))
         {
-            Log.Info($"Harness: “{after.Summary}” is now {after.StartWall:yyyy-MM-dd HH:mm}–{after.EndWall:yyyy-MM-dd HH:mm}.");
+            Log.Info($"Harness: “{after.Summary}” is now {after.StartWall:yyyy-MM-dd HH:mm}–{after.EndWall:yyyy-MM-dd HH:mm}"
+                + $" on {after.CollectionName}.");
         }
+    }
+
+    /// <summary>
+    /// Schedule View's drag: time along the row, and rows are calendars — so <c>r</c> is the unit
+    /// this view has and the others do not.
+    /// </summary>
+    /// <remarks>
+    /// The destination row is taken from what the view actually drew rather than from the
+    /// collection list, because a hidden calendar has no row to drop onto and the pose has to
+    /// fail the way the pointer would.
+    /// </remarks>
+    private static (Control Control, Point View, Point To)? ScheduleDrag(ScheduleView schedule, CalendarEntry entry, string grip, int count, char unit)
+    {
+        if (schedule.BoxOf(entry) is not { } box) return null;
+
+        var from = grip switch
+        {
+            "start" => new Point(box.X + 2, box.Center.Y),
+            "end" => new Point(box.Right - 2, box.Center.Y),
+            _ => box.Center,
+        };
+
+        if (unit == 'r')
+        {
+            if (grip != "move") return null;
+
+            var rows = schedule.DrawnRows;
+            var at = -1;
+            for (var i = 0; i < rows.Count; i++)
+            {
+                if (rows[i].CollectionId == entry.CollectionId) at = i;
+            }
+
+            var to = at + count;
+            if (at < 0 || to < 0 || to >= rows.Count) return null;
+            if (schedule.LaneOf(rows[to].CollectionId) is not { } lane) return null;
+
+            // Straight down the row: the same time, a different calendar, which is the whole of
+            // what this axis means.
+            return (schedule, from, new Point(from.X, lane.Center.Y));
+        }
+
+        var shift = unit switch
+        {
+            'h' => TimeSpan.FromHours(count),
+            'm' => TimeSpan.FromMinutes(count),
+            _ => TimeSpan.Zero,
+        };
+
+        if (shift == TimeSpan.Zero) return null;
+
+        var edge = grip == "end" ? entry.EndWall : entry.StartWall;
+        var wanted = edge.TimeOfDay + shift;
+        if (schedule.PointAt(wanted, entry.CollectionId) is not { } target) return null;
+
+        return (schedule, from, new Point(target.X, from.Y));
     }
 
     private static (Control Control, Point View, Point To)? MonthDrag(MonthView month, CalendarEntry entry, string grip, int count, char unit)

@@ -1045,6 +1045,29 @@ public partial class MainWindow
             return;
         }
 
+        // Which calendar it is on and when it happens are two different changes, and a drag in
+        // Schedule View can make both at once. The calendar goes first: MoveItem writes the rows
+        // into the destination, queues a PUT there and a DELETE where they were, and the new
+        // times are then written onto what came back.
+        var moved = string.Empty;
+        if (move.ToCollectionId is { } target && target != stored.CollectionId)
+        {
+            if (App.Pim.Collection(target) is not { IsReadOnly: false } destination)
+            {
+                shell.StatusRight = "That calendar is read-only.";
+                AfterStoreChange(shell);
+                return;
+            }
+
+            // A series and its overrides go together — an override cannot sit on a different
+            // calendar from the master it belongs to — so one occurrence dragged across takes
+            // the whole series with it. The one place this drag means more than the chip under
+            // the pointer, and the status line says so.
+            stored = App.Pim.MoveItem(stored, target);
+            moved = $" on {destination.DisplayName}";
+            Log.Info($"Calendar: item {entry.ItemId} moved to collection {target} ({destination.DisplayName}).");
+        }
+
         var master = PimEventCodec.FromItem(stored);
         var start = move.AllDay ? EventTime.Date(DateOnly.FromDateTime(move.Start)) : Stated(master.Start, move.Start, entry.Zone);
         var end = move.AllDay ? EventTime.Date(DateOnly.FromDateTime(move.End)) : Stated(master.Start, move.End, entry.Zone);
@@ -1064,7 +1087,7 @@ public partial class MainWindow
         var name = Named(master);
         shell.StatusRight = move.Resized
             ? $"“{name}” now runs {Span(move)}."
-            : $"“{name}” moved to {Moment(move)}.";
+            : $"“{name}” moved to {Moment(move)}{moved}.";
         Log.Info($"Calendar: item {written.Id} {(move.Resized ? "resized" : "moved")} to {start.ToLocalText()}–{end.ToLocalText()}{(occurrence ? ", as an override" : string.Empty)}.");
         AfterStoreChange(shell);
     }

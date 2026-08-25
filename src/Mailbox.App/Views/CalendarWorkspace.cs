@@ -146,6 +146,9 @@ public sealed class CalendarWorkspace : Border
     internal TimeGridView? TimeGrid
         => _kind is CalendarViewKind.Day or CalendarViewKind.WorkWeek or CalendarViewKind.Week ? _timeGrid : null;
 
+    /// <summary>The schedule, when it is the one on show.</summary>
+    internal ScheduleView? Schedule => _kind == CalendarViewKind.Schedule ? _schedule : null;
+
     public event EventHandler? Changed;
 
     /// <summary>A double click on empty time, or the New Appointment command with a day chosen.</summary>
@@ -427,12 +430,14 @@ public sealed class CalendarWorkspace : Border
         _schedule.EntrySelected += (_, entry) => SelectedEntry = entry;
         _schedule.EntryActivated += (_, entry) => EntryOpened?.Invoke(this, entry);
 
-        // A drag means the same thing in whichever view it happened, so both hand it on through
-        // one event rather than each being wired to its own handler. Schedule View is left out:
-        // its second axis is which calendar a row belongs to, so a drag down it means moving an
-        // appointment to another calendar, which is a different operation from changing when it is.
+        // A drag means the same thing in whichever view it happened, so all three hand it on
+        // through one event rather than each being wired to its own handler. Schedule View's
+        // second axis is which calendar a row belongs to, so its drag can also say to move the
+        // appointment to another calendar — carried on the same move, in a field the other two
+        // leave null.
         _month.EntryMoved += (_, move) => EntryMoved?.Invoke(this, move);
         _timeGrid.EntryMoved += (_, move) => EntryMoved?.Invoke(this, move);
+        _schedule.EntryMoved += (_, move) => EntryMoved?.Invoke(this, move);
     }
 
     // ---- Moving about -------------------------------------------------------------------------
@@ -643,7 +648,7 @@ public sealed class CalendarWorkspace : Border
                 _schedule.WorkDayEnd = _options.WorkDayEnd;
                 _schedule.Rows = _source.Calendars()
                     .Where(c => c.IsVisible)
-                    .Select(c => new ScheduleRow(c.Id, c.DisplayName, ParseColour(c.Color)))
+                    .Select(c => new ScheduleRow(c.Id, c.DisplayName, ParseColour(c.Color), c.IsReadOnly))
                     .ToList();
                 _schedule.Entries = _entries;
                 view = _schedule;

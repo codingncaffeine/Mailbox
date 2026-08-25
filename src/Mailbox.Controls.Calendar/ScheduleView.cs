@@ -7,7 +7,15 @@ using Mailbox.Theming.Tokens;
 namespace Mailbox.Controls.Calendar;
 
 /// <summary>One row of the schedule: a calendar, and what is on it that day.</summary>
-public sealed record ScheduleRow(long CollectionId, string Name, Avalonia.Media.Color? Colour);
+/// <param name="IsReadOnly">
+/// True for a subscription or a shared calendar nobody here may write to. The row is drawn like
+/// any other and read like any other; what it is not is a place to drop an appointment.
+/// </param>
+public sealed record ScheduleRow(
+    long CollectionId,
+    string Name,
+    Avalonia.Media.Color? Colour,
+    bool IsReadOnly = false);
 
 /// <summary>
 /// Schedule View: one day laid out sideways, a row per calendar, so several calendars can be
@@ -42,7 +50,21 @@ public sealed class ScheduleView : CalendarSurface
     /// <summary>The scroll bar across the foot, which is how the reference moves through the day.</summary>
     private const double ScrollBarHeight = 17;
 
+    /// <summary>
+    /// What a dragged time is rounded to. A quarter of an hour, because this view shows a whole
+    /// day across a pane and a finer snap would be finer than the pixels under it.
+    /// </summary>
+    private const double SnapMinutes = 15;
+
     private readonly List<(Rect Box, CalendarEntry Entry)> _entryHits = [];
+
+    /// <summary>Each calendar's band, so a drag can be asked which row it is over.</summary>
+    private readonly List<(Rect Lane, ScheduleRow Row)> _rowHits = [];
+
+    /// <summary>The lanes and the scale, kept from the last render so a pointer can be read.</summary>
+    private Rect _lanes;
+    private double _perHour = 1;
+    private ChipDrag? _drag;
 
     private DateOnly _day = DateOnly.FromDateTime(DateTime.Today);
     private DateOnly _today = DateOnly.FromDateTime(DateTime.Today);
@@ -142,6 +164,7 @@ public sealed class ScheduleView : CalendarSurface
     public override void Render(DrawingContext context)
     {
         _entryHits.Clear();
+        _rowHits.Clear();
         var header = DateBandHeight + RulerHeight + AllDayHeight + 4;
         if (Bounds.Width < NameWidth + 80 || Bounds.Height < header + MinimumRowHeight) return;
 
@@ -173,6 +196,8 @@ public sealed class ScheduleView : CalendarSurface
         var rowsHeight = Math.Max(0, Bounds.Height - rowsTop - ScrollBarHeight);
         var lanes = new Rect(NameWidth, rowsTop, Bounds.Width - NameWidth, rowsHeight);
         var perHour = lanes.Width / HoursShown;
+        _lanes = lanes;
+        _perHour = perHour;
 
         Fill(context, new Rect(0, rowsTop, NameWidth, rowsHeight), headerFill);
 
@@ -216,8 +241,11 @@ public sealed class ScheduleView : CalendarSurface
                 top + 20);
 
             Fill(context, new Rect(0, top + height, Bounds.Width, 1), gridLine);
+            _rowHits.Add((row, Rows[r]));
             DrawRowEntries(context, Rows[r], row, perHour);
         }
+
+        DrawGhost(context);
 
         Fill(context, new Rect(NameWidth, 0, 1, Bounds.Height - ScrollBarHeight), gridLine);
         DrawNow(context, lanes, perHour);
@@ -298,13 +326,215 @@ public sealed class ScheduleView : CalendarSurface
         for (var i = _entryHits.Count - 1; i >= 0; i--)
         {
             if (!_entryHits[i].Box.Contains(point)) continue;
-            var entry = _entryHits[i].Entry;
+            var (box, entry) = _entryHits[i];
             SelectedEntry = entry;
             EntrySelected?.Invoke(this, entry);
-            if (e.ClickCount >= 2) EntryActivated?.Invoke(this, entry);
+
+            if (e.ClickCount >= 2)
+            {
+                EntryActivated?.Invoke(this, entry);
+            }
+            else if (ChipDrag.CanDrag(entry) && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            {
+                // Time runs sideways here, so an edge grip is a left or right edge — the one
+                // place this view's geometry differs from the time grid's for a drag.
+                _drag = new ChipDrag
+                {
+                    Entry = entry,
+                    Grip = ChipDrag.GripAt(box, point, horizontal: true),
+                    Origin = point,
+                    Box = box,
+                    Start = entry.StartWall,
+                    End = entry.EndWall,
+                    AllDay = entry.AllDay,
+                    ToCollectionId = entry.CollectionId,
+                };
+                e.Pointer.Capture(this);
+            }
+
             e.Handled = true;
             return;
         }
+    }
+
+    protected override void OnPointerMoved(PointerEventArgs e)
+    {
+        base.OnPointerMoved(e);
+        if (_drag is not { } drag) return;
+
+        if (!drag.Live)
+        {
+            var far = Math.Abs(e.GetPosition(this).X - drag.Origin.X) > ChipDrag.Threshold
+                      || Math.Abs(e.GetPosition(this).Y - drag.Origin.Y) > ChipDrag.Threshold;
+            if (!far) return;
+            drag.Live = true;
+            Cursor = new Cursor(StandardCursorType.SizeAll);
+        }
+
+        Propose(drag, e.GetPosition(this));
+        InvalidateVisual();
+        e.Handled = true;
+    }
+
+    protected override void OnPointerReleased(PointerReleasedEventArgs e)
+    {
+        base.OnPointerReleased(e);
+        var drag = _drag;
+        _drag = null;
+        Cursor = Cursor.Default;
+        if (drag is null) return;
+
+        e.Pointer.Capture(null);
+        if (!drag.Live) return;
+
+        InvalidateVisual();
+        if (!drag.Moved) return;
+
+        RaiseMoved(new EntryMove(drag.Entry, drag.Start, drag.End, drag.AllDay)
+        {
+            Resized = drag.Grip != DragGrip.Move,
+
+            // Only when it actually changed rows: a drag within one calendar must not queue a
+            // move to the calendar it is already on.
+            ToCollectionId = drag.ToCollectionId is { } to && to != drag.Entry.CollectionId ? to : null,
+        });
+        e.Handled = true;
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.Key != Key.Escape || _drag is null) return;
+
+        // A drag let go of: nothing is written and the chip is where it was.
+        _drag = null;
+        Cursor = Cursor.Default;
+        InvalidateVisual();
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Where the drag now proposes to leave the appointment: when, from the pointer's distance
+    /// along the day, and on which calendar, from the row it is over.
+    /// </summary>
+    /// <remarks>
+    /// Read off the pointer each time rather than accumulated, for the reason the time grid's is:
+    /// an accumulated delta drifts by whatever the snapping rounded away on each step.
+    /// <para>
+    /// A row belonging to a calendar nobody may write to is not a place to drop one, so the
+    /// proposal stays on the last row that was — the drag is refused where it would fail rather
+    /// than accepted and then undone.
+    /// </para>
+    /// </remarks>
+    private void Propose(ChipDrag drag, Point point)
+    {
+        if (_lanes.Width <= 0 || _perHour <= 0) return;
+
+        var entry = drag.Entry;
+        var dayStart = Day.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
+        var least = TimeSpan.FromMinutes(SnapMinutes);
+
+        // An all-day appointment has no place along the ruler, so a drag across one moves it
+        // between calendars and leaves the day alone.
+        if (!entry.AllDay)
+        {
+            if (drag.Grip == DragGrip.Move)
+            {
+                var at = TimeAt(point.X - (drag.Origin.X - drag.Box.X));
+                drag.Start = dayStart + at;
+                drag.End = drag.Start + (entry.EndWall - entry.StartWall);
+            }
+            else if (drag.Grip == DragGrip.Start)
+            {
+                var at = dayStart + TimeAt(point.X);
+                drag.Start = at <= drag.End - least ? at : drag.End - least;
+            }
+            else
+            {
+                var at = dayStart + TimeAt(point.X);
+                drag.End = at >= drag.Start + least ? at : drag.Start + least;
+            }
+        }
+
+        // Resizing is about when, not about whose: an edge dragged off the row it started on is
+        // still that appointment's edge.
+        if (drag.Grip != DragGrip.Move) return;
+
+        foreach (var (lane, row) in _rowHits)
+        {
+            if (point.Y < lane.Y || point.Y >= lane.Bottom) continue;
+            if (row.IsReadOnly) return;
+            drag.ToCollectionId = row.CollectionId;
+            return;
+        }
+    }
+
+    /// <summary>The time a distance along the lanes reads as, snapped and kept inside the day.</summary>
+    private TimeSpan TimeAt(double x)
+    {
+        var hours = StartHour + ((x - _lanes.X) / _perHour);
+        var minutes = Math.Round(hours * 60 / SnapMinutes) * SnapMinutes;
+        return TimeSpan.FromMinutes(Math.Clamp(minutes, 0, (24 * 60) - SnapMinutes));
+    }
+
+    /// <summary>
+    /// The chip a drag is proposing, drawn where it would land while the original stays put — so
+    /// the two can be compared, which is the whole point of showing it.
+    /// </summary>
+    private void DrawGhost(DrawingContext context)
+    {
+        if (_drag is not { Live: true } drag || !drag.Moved) return;
+        if (_rowHits.FirstOrDefault(r => r.Row.CollectionId == (drag.ToCollectionId ?? drag.Entry.CollectionId)) is not { Row: not null } target) return;
+
+        var dayStart = Day.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
+        var left = _lanes.X + (((drag.Start - dayStart).TotalHours - StartHour) * _perHour);
+        var right = _lanes.X + (((drag.End - dayStart).TotalHours - StartHour) * _perHour);
+        if (right < _lanes.X || left > _lanes.Right) return;
+
+        var box = new Rect(
+            Math.Max(_lanes.X, left),
+            target.Lane.Y + 1,
+            Math.Max(12, Math.Min(_lanes.Right, right) - Math.Max(_lanes.X, left) - 1),
+            Math.Max(ChipHeight(1), target.Lane.Height - 2));
+
+        var entry = drag.Entry;
+        var lines = Wrap(entry.Summary, box.Width - ChipTextInset - 2, 1, ChipTextSize, SemiBoldFace);
+        using var clip = context.PushClip(_lanes);
+        using var fade = context.PushOpacity(0.65);
+        DrawChip(context, box, Palette.Chip(entry.Colour ?? target.Row.Colour, entry.Busy), lines, selected: true, boldFirstLine: true);
+    }
+
+    /// <summary>Where an entry was drawn, for a harness that has to press a real drag.</summary>
+    public Rect? BoxOf(CalendarEntry entry)
+    {
+        for (var i = _entryHits.Count - 1; i >= 0; i--)
+        {
+            if (ReferenceEquals(_entryHits[i].Entry, entry)) return _entryHits[i].Box;
+        }
+
+        return null;
+    }
+
+    /// <summary>The band a calendar was drawn in, or null when it is not on show.</summary>
+    public Rect? LaneOf(long collectionId)
+    {
+        foreach (var (lane, row) in _rowHits)
+        {
+            if (row.CollectionId == collectionId) return lane;
+        }
+
+        return null;
+    }
+
+    /// <summary>The calendars this view is drawing, in the order it drew them.</summary>
+    public IReadOnlyList<ScheduleRow> DrawnRows => [.. _rowHits.Select(r => r.Row)];
+
+    /// <summary>The point a time of day sits at, or null when that hour is not on show.</summary>
+    public Point? PointAt(TimeSpan at, long collectionId)
+    {
+        if (LaneOf(collectionId) is not { } lane || _perHour <= 0) return null;
+        var x = _lanes.X + ((at.TotalHours - StartHour) * _perHour);
+        return x < _lanes.X || x > _lanes.Right ? null : new Point(x, lane.Center.Y);
     }
 
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)

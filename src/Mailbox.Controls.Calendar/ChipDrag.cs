@@ -24,6 +24,17 @@ public sealed record EntryMove(CalendarEntry Entry, DateTime Start, DateTime End
 {
     /// <summary>True when only the length changed, which is worth saying differently.</summary>
     public bool Resized { get; init; }
+
+    /// <summary>
+    /// The calendar it should now be on, or null for the one it is already on.
+    /// </summary>
+    /// <remarks>
+    /// Set only by Schedule View, whose second axis is which calendar a row belongs to. Moving an
+    /// appointment between calendars is a different operation from changing when it is — it
+    /// leaves one server and joins another — so it is carried as its own field rather than
+    /// smuggled into the times.
+    /// </remarks>
+    public long? ToCollectionId { get; init; }
 }
 
 /// <summary>
@@ -64,8 +75,22 @@ internal sealed class ChipDrag
     /// <summary>Which side of the view it is over: the all-day band or the timed grid.</summary>
     public bool AllDay { get; set; }
 
+    /// <summary>
+    /// Which calendar the drag proposes to leave it on, in a view that has that axis.
+    /// </summary>
+    /// <remarks>
+    /// Only Schedule View does: its rows are calendars, so a drag down one means something no
+    /// other view's drag can mean. Null everywhere else, which is what keeps <see cref="Moved"/>
+    /// answering the same question it always did.
+    /// </remarks>
+    public long? ToCollectionId { get; set; }
+
     /// <summary>True once the proposal differs from where the appointment already is.</summary>
-    public bool Moved => Start != Entry.StartWall || End != Entry.EndWall || AllDay != Entry.AllDay;
+    public bool Moved =>
+        Start != Entry.StartWall
+        || End != Entry.EndWall
+        || AllDay != Entry.AllDay
+        || (ToCollectionId is { } to && to != Entry.CollectionId);
 
     /// <summary>
     /// Which part of a chip a point is on. An edge grip needs the chip to be big enough to have
