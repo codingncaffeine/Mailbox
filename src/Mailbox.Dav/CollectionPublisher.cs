@@ -1,3 +1,4 @@
+using Mailbox.Contacts;
 using Mailbox.Scheduling;
 using Mailbox.Store.Pim;
 
@@ -12,7 +13,8 @@ public sealed record PublishResult(int Written, string? Refused = null)
 }
 
 /// <summary>
-/// Publishing a calendar: everything on it, written to one address as one document.
+/// Publishing a calendar or an address book: everything in it, written to one address as one
+/// document.
 /// </summary>
 /// <remarks>
 /// The mirror of a subscription, and deliberately so — what this writes is exactly what
@@ -25,15 +27,16 @@ public sealed record PublishResult(int Written, string? Refused = null)
 /// half its meetings.
 /// </para>
 /// <para>
-/// <b>METHOD:PUBLISH</b>, per RFC 5546 — this is a calendar being made available to read, not an
-/// invitation and not a request for anything back. Overrides ride with their masters, since a
-/// series is only correct with them.
+/// A calendar goes up with <b>METHOD:PUBLISH</b>, per RFC 5546 — this is a calendar being made
+/// available to read, not an invitation and not a request for anything back. Overrides ride with
+/// their masters, since a series is only correct with them. An address book is the same idea in
+/// vCard: every card in the book, one after another, in the version the store keeps.
 /// </para>
 /// </remarks>
-public static class CalendarPublisher
+public static class CollectionPublisher
 {
     /// <summary>
-    /// Writes a calendar's events to an address.
+    /// Writes a collection's contents to an address, in whichever text its kind is written in.
     /// </summary>
     /// <remarks>
     /// No <c>If-Match</c>: this machine is the author of what is there, and a precondition would
@@ -44,24 +47,32 @@ public static class CalendarPublisher
     public static async Task<PublishResult> PublishAsync(
         DavClient client,
         PimRepository repository,
-        Collection calendar,
+        Collection collection,
         Uri url,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(repository);
-        ArgumentNullException.ThrowIfNull(calendar);
+        ArgumentNullException.ThrowIfNull(collection);
 
-        var events = repository.Items(calendar.Id)
+        var rows = repository.Items(collection.Id)
             .Where(i => i.SyncState != PimSyncState.Deleted)
-            .Select(PimEventCodec.FromItem)
             .ToList();
 
-        var document = ICalendarCodec.SerializeCalendar(events, "PUBLISH");
-        var written = await client.PutAsync(url, document, cancellationToken: cancellationToken).ConfigureAwait(false);
+        // A deleted row is one this machine has said goodbye to and not yet told a server about.
+        // Publishing it would put it in front of every subscriber as though it were still there.
+        var (document, type) = collection.Kind == CollectionKind.Contacts
+            ? (VCardCodec.SerializeMany([.. rows.Select(PimContactCodec.FromItem)], PimContactCodec.StoredVersion),
+               "text/vcard; charset=utf-8")
+            : (ICalendarCodec.SerializeCalendar([.. rows.Select(PimEventCodec.FromItem)], "PUBLISH"),
+               "text/calendar; charset=utf-8");
+
+        var written = await client
+            .PutAsync(url, document, contentType: type, cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
 
         return written.Ok
-            ? new PublishResult(events.Count)
+            ? new PublishResult(rows.Count)
             : new PublishResult(0, $"{(int)written.Status} {written.Status}");
     }
 }

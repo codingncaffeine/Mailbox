@@ -4,6 +4,7 @@ using Avalonia.Threading;
 using Mailbox.App.ViewModels;
 using Mailbox.Contacts;
 using Mailbox.Controls.People;
+using Mailbox.Core.Calendars;
 using Mailbox.Core.Commands;
 using Mailbox.Core.Diagnostics;
 using Mailbox.Core.Ribbon;
@@ -78,6 +79,7 @@ public partial class MainWindow
         if (id == ViewCommands.SearchPeople.Id) { _ = SearchPeopleAsync(shell); return true; }
         if (id == PeopleCommands.Private.Id) { PrivateContact(shell); return true; }
         if (id == PeopleCommands.FollowUp.Id) { FlagContact(shell); return true; }
+        if (id == PeopleCommands.ShareContacts.Id) { SwitchModule(shell, MailboxModule.People); ShowShareContactsMenu(shell); return true; }
 
         // The Current View group: five arrangements over the same rows.
         if (ArrangementFor(id) is { } arrangement)
@@ -642,10 +644,82 @@ public partial class MainWindow
     {
         if (id == PeopleCommands.MoreCommunicate.Id) return "The other ways to reach somebody arrive with the module's actions.";
         if (id == PeopleCommands.MailMerge.Id) return "Mail merge arrives with Phase 16.";
-        if (id == PeopleCommands.ShareContacts.Id) return "Sharing an address book wants CardDAV publishing, which is still to come.";
+
         if (id == PeopleCommands.OpenSharedContacts.Id) return "A shared address book is a CardDAV account — add one in Account Settings.";
         if (id == PeopleCommands.NewItems.Id) return "New Items arrives with the rest of the modules.";
         return null;
+    }
+
+    /// <summary>
+    /// Share Contacts: publishing an address book, which is the Linux-native reading of it.
+    /// </summary>
+    /// <remarks>
+    /// The reference's own Share Contacts sends a sharing invitation, and the thing it invites
+    /// somebody into is a tenant's directory — out of scope by §3, and there is nothing here to
+    /// invite them to. Rule 2 translates it: publish the book to an address, the same way a
+    /// calendar is published, and whoever wants it fetches it. What goes up is every card in the
+    /// book as one vCard document.
+    /// <para>
+    /// A menu rather than a button because the reference draws a chevron here, and because
+    /// publishing has a second thing to say once it has started: where it goes, and how to stop.
+    /// </para>
+    /// </remarks>
+    private void ShowShareContactsMenu(ShellViewModel shell)
+    {
+        var book = App.Contacts.Default();
+        var already = App.Published.For(book.Id);
+
+        var flyout = new MenuFlyout();
+
+        void Entry(string header, Action run, bool enabled = true)
+        {
+            var item = new MenuItem { Header = header, IsEnabled = enabled };
+            item.Click += (_, _) => run();
+            flyout.Items.Add(item);
+        }
+
+        Entry(already is null ? "_Publish This Address Book…" : "_Change Where It Is Published…",
+            () => _ = PublishAddressBookAsync(shell, book));
+
+        Entry("_Stop Publishing", () =>
+        {
+            App.Published.Remove(book.Id);
+            shell.StatusRight = $"“{book.DisplayName}” is no longer published. What is already at {already?.Url} stays there.";
+            Log.Info($"People: collection {book.Id} is no longer published.");
+        }, already is not null);
+
+        flyout.Items.Add(new Separator());
+        Entry("_Open Shared Contacts…", () =>
+            shell.StatusRight = "A shared address book is a CardDAV account — add one in Account Settings.");
+
+        if (already is { } entry)
+        {
+            flyout.Items.Add(new Separator());
+            flyout.Items.Add(new MenuItem { Header = $"Published to {entry.Url}", IsEnabled = false });
+        }
+
+        _ribbon.OpenMenuUnder(PeopleCommands.ShareContacts.Id, flyout, this);
+    }
+
+    private async Task PublishAddressBookAsync(ShellViewModel shell, Mailbox.Store.Pim.Collection book)
+    {
+        var already = App.Published.For(book.Id);
+        var typed = await Prompt.AskAsync(
+            this,
+            "Publish Address Book",
+            $"Address to publish “{book.DisplayName}” to:",
+            already?.Url ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(typed)) return;
+
+        if (!CalendarSubscription.TryAddress(typed, out var address))
+        {
+            await Confirm.TellAsync(this, "Publish Address Book", "That is not an address a book can be written to.");
+            return;
+        }
+
+        App.Published.Set(book.Id, address.ToString(), book.DisplayName);
+        shell.StatusRight = $"Publishing “{book.DisplayName}” to {address.Host}…";
+        shell.StatusRight = await App.PimSync.PublishAsync(book.Id).ConfigureAwait(true);
     }
 
     // ---- Contacts -------------------------------------------------------------------------------

@@ -56,7 +56,7 @@ public sealed class PimSyncService(
     /// The calendars this reader publishes. Set by the shell; null in a test or a seed, where
     /// publishing is nobody's business.
     /// </summary>
-    public Mailbox.Core.Calendars.PublishedCalendars? Published { get; set; }
+    public Mailbox.Core.Calendars.PublishedCollections? Published { get; set; }
 
     /// <summary>
     /// Writes one published calendar to its address and says how it went, in a sentence fit for
@@ -77,7 +77,7 @@ public sealed class PimSyncService(
         try
         {
             using var client = new DavClient();
-            var outcome = await CalendarPublisher
+            var outcome = await CollectionPublisher
                 .PublishAsync(client, _repository, calendar, url, cancellationToken)
                 .ConfigureAwait(false);
 

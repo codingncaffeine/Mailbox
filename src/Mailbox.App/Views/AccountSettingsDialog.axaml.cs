@@ -911,11 +911,19 @@ public sealed class AccountSettingsDialog : Window
             new Panel { Children = { At(paragraph, 8, 9) } });
     }
 
+    /// <summary>
+    /// What this tab lists: the published calendars. The store keeps address books beside them —
+    /// one mechanism, one list — and the reference's tab is called Published Calendars, so an
+    /// address book belongs on the People module's own Share menu and not here.
+    /// </summary>
+    private static IEnumerable<Mailbox.Core.Calendars.PublishedCollection> PublishedCalendarsOnly()
+        => App.Published.All.Where(p => App.Pim.Collection(p.CollectionId) is { Kind: CollectionKind.Events });
+
     private void FillPublished()
     {
         _publishedList.SetRows(
         [
-            .. App.Published.All.Select(p => new ClassicRow(
+            .. PublishedCalendarsOnly().Select(p => new ClassicRow(
                 [
                     // The calendar's name now, not the one recorded when it was published — a
                     // renamed calendar is the same calendar, and a list showing the old name

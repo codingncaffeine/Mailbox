@@ -577,7 +577,11 @@ public partial class MainWindow
         }
 
         Entry("_E-mail Calendar…", "email-calendar", () => _ = EmailCalendarAsync(shell));
-        Entry("_Share Calendar…", "share", () => shell.StatusRight = "Sharing a calendar wants CalDAV publishing, which is still to come.");
+        // Not publishing, and not waiting on it: the reference's Share Calendar sends an
+        // invitation into a tenant's own free/busy service, which §3 puts out of scope. Publish
+        // Online below is what this application has instead, and it says so.
+        Entry("_Share Calendar…", "share", () => shell.StatusRight =
+            "Sharing invites somebody into a tenant's calendar service, which Mailbox does not have. Publish Online writes the calendar where anyone can subscribe to it.");
         Entry("_Publish Online…", "publish-calendar", () => _ = PublishCalendarAsync(shell));
         flyout.Items.Add(new Separator());
         Entry("Calendar _Permissions…", "permission", () => shell.StatusRight = "Permissions belong to the server a calendar is published on.");

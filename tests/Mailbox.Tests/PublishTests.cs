@@ -53,8 +53,9 @@ internal sealed class PublishingWebServer : HttpMessageHandler
     }
 }
 
-/// <summary>Publishing a calendar: the whole of it, to one address, as one document.</summary>
-public class CalendarPublishTests
+/// <summary>Publishing a calendar or an address book: the whole of it, to one address, as one
+/// document — which is exactly what a subscription reads back.</summary>
+public class PublishTests
 {
     private static readonly DateTimeOffset Start = new(2026, 8, 16, 9, 0, 0, TimeSpan.Zero);
 
@@ -88,7 +89,7 @@ public class CalendarPublishTests
         Add(repository, calendar.Id, "a@example.com", "Stand-up");
         Add(repository, calendar.Id, "b@example.com", "Retro", 1);
 
-        var result = await CalendarPublisher.PublishAsync(
+        var result = await CollectionPublisher.PublishAsync(
             client, repository, calendar, server.Url, TestContext.Current.CancellationToken);
 
         Assert.True(result.Ok);
@@ -118,7 +119,7 @@ public class CalendarPublishTests
 
         Add(repository, calendar.Id, "a@example.com", "Stand-up");
         Add(repository, calendar.Id, "b@example.com", "Retro", 1);
-        await CalendarPublisher.PublishAsync(client, repository, calendar, server.Url, TestContext.Current.CancellationToken);
+        await CollectionPublisher.PublishAsync(client, repository, calendar, server.Url, TestContext.Current.CancellationToken);
 
         // A second machine, subscribing to the address the first one published to.
         using var reader = PimStore.Transient();
@@ -135,6 +136,40 @@ public class CalendarPublishTests
             theirs.Items(subscription.Id).Select(i => i.Summary).OrderBy(s => s, StringComparer.Ordinal));
     }
 
+    /// <summary>
+    /// An address book goes up the same way, in vCard rather than iCalendar — one mechanism, and
+    /// the collection's own kind is what picks the text and the type.
+    /// </summary>
+    [Fact]
+    public async Task AnAddressBookPublishesAsVcard()
+    {
+        using var server = new PublishingWebServer();
+        using var client = new DavClient(handler: server);
+        using var store = PimStore.Transient();
+        var repository = new PimRepository(store);
+        var book = repository.AddCollection(CollectionKind.Contacts, "Contacts");
+
+        var contacts = new Mailbox.Contacts.ContactBook(repository);
+        contacts.Save(new Mailbox.Contacts.Contact { Uid = "alice@example.com", FirstName = "Alice", LastName = "Chen" }, book.Id);
+        contacts.Save(new Mailbox.Contacts.Contact { Uid = "bob@example.com", FirstName = "Bob", LastName = "Ndlovu" }, book.Id);
+
+        var result = await CollectionPublisher.PublishAsync(
+            client, repository, book, server.Url, TestContext.Current.CancellationToken);
+
+        Assert.True(result.Ok);
+        Assert.Equal(2, result.Written);
+        Assert.Equal("text/vcard", server.ContentType);
+
+        var document = Assert.IsType<string>(server.Stored);
+        Assert.Equal(2, Occurrences(document, "BEGIN:VCARD"));
+        Assert.Contains("Alice", document, StringComparison.Ordinal);
+        Assert.Contains("Ndlovu", document, StringComparison.Ordinal);
+
+        // No METHOD: that is an iCalendar property, and a book of cards is not a scheduling
+        // message however it is served.
+        Assert.DoesNotContain("METHOD:", document, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task AServerThatRefusesTheWriteIsReportedRatherThanRecordedAsPublished()
     {
@@ -145,7 +180,7 @@ public class CalendarPublishTests
 
         Add(repository, calendar.Id, "a@example.com", "Stand-up");
 
-        var result = await CalendarPublisher.PublishAsync(
+        var result = await CollectionPublisher.PublishAsync(
             client, repository, calendar, server.Url, TestContext.Current.CancellationToken);
 
         Assert.False(result.Ok);
@@ -158,7 +193,7 @@ public class CalendarPublishTests
     public void WhereACalendarIsPublishedSurvivesARestartAndIsOnePlacePerCalendar()
     {
         var settings = SettingsStore.Transient();
-        var published = new PublishedCalendars(settings);
+        var published = new PublishedCollections(settings);
 
         published.Set(7, "https://example.com/a.ics", "Team");
 
@@ -172,14 +207,14 @@ public class CalendarPublishTests
         published.Published(7, new DateTimeOffset(2026, 8, 16, 9, 0, 0, TimeSpan.Zero));
         published.Renamed(7, "The Team");
 
-        var again = new PublishedCalendars(settings);
+        var again = new PublishedCollections(settings);
         Assert.Equal(2, again.All.Count);
         Assert.Equal("The Team", again.For(7)!.Name);
         Assert.Equal(new DateTimeOffset(2026, 8, 16, 9, 0, 0, TimeSpan.Zero), again.For(7)!.LastPublished);
 
         Assert.True(again.Remove(7));
-        Assert.Null(new PublishedCalendars(settings).For(7));
-        Assert.NotNull(new PublishedCalendars(settings).For(9));
+        Assert.Null(new PublishedCollections(settings).For(7));
+        Assert.NotNull(new PublishedCollections(settings).For(9));
     }
 
     private static int Occurrences(string text, string needle)

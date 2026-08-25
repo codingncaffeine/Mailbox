@@ -5,18 +5,18 @@ using Mailbox.Core.Settings;
 
 namespace Mailbox.Core.Calendars;
 
-/// <summary>One published calendar: which one, where it is put, and when it last went.</summary>
-/// <param name="CollectionId">The calendar in the PIM store, which is what tells two entries apart.</param>
+/// <summary>One published collection: which one, where it is put, and when it last went.</summary>
+/// <param name="CollectionId">The collection in the PIM store, which is what tells two entries apart.</param>
 /// <param name="Url">Where the document is written — an HTTP address that takes a PUT.</param>
-/// <param name="Name">What the calendar was called when it was published, for a list to draw.</param>
-public sealed record PublishedCalendar(
+/// <param name="Name">What it was called when it was published, for a list to draw.</param>
+public sealed record PublishedCollection(
     long CollectionId,
     string Url,
     string Name,
     DateTimeOffset? LastPublished = null);
 
 /// <summary>
-/// The calendars this reader publishes, and where each one goes.
+/// The calendars and address books this reader publishes, and where each one goes.
 /// </summary>
 /// <remarks>
 /// Kept in the settings file beside the feed subscriptions and the certificate pins, for the same
@@ -30,14 +30,14 @@ public sealed record PublishedCalendar(
 /// is the part of its own dialog that survives the difference.
 /// </para>
 /// </remarks>
-public sealed class PublishedCalendars
+public sealed class PublishedCollections
 {
-    public const string Key = "calendar.published";
+    public const string Key = "pim.published";
 
     private readonly SettingsStore _settings;
-    private readonly List<PublishedCalendar> _published = [];
+    private readonly List<PublishedCollection> _published = [];
 
-    public PublishedCalendars(SettingsStore settings)
+    public PublishedCollections(SettingsStore settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
         _settings = settings;
@@ -47,24 +47,27 @@ public sealed class PublishedCalendars
     /// <summary>Raised after the list changes, so a pane or a dialog can rebuild.</summary>
     public event EventHandler? Changed;
 
-    public IReadOnlyList<PublishedCalendar> All => _published;
+    public IReadOnlyList<PublishedCollection> All => _published;
 
-    public PublishedCalendar? For(long collectionId)
+    public PublishedCollection? For(long collectionId)
         => _published.FirstOrDefault(p => p.CollectionId == collectionId);
 
     /// <summary>
-    /// Publishes a calendar to an address, or moves an already-published one to a new address.
+    /// Publishes a collection to an address, or moves an already-published one to a new address.
     /// </summary>
     /// <remarks>
-    /// One entry per calendar rather than one per address: publishing the same calendar to a
+    /// One entry per collection rather than one per address: publishing the same calendar to a
     /// second place is a second subscription for whoever reads it, and Change… in the reference's
     /// own dialog changes where a calendar goes rather than adding somewhere else it also goes.
+    /// Calendars and address books share the list because they share the mechanism and because a
+    /// collection id is a collection id — which one a row is about is a question its own kind
+    /// answers.
     /// </remarks>
-    public PublishedCalendar Set(long collectionId, string url, string name)
+    public PublishedCollection Set(long collectionId, string url, string name)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(url);
 
-        var entry = new PublishedCalendar(collectionId, url.Trim(), name.Trim(), For(collectionId)?.LastPublished);
+        var entry = new PublishedCollection(collectionId, url.Trim(), name.Trim(), For(collectionId)?.LastPublished);
         var at = _published.FindIndex(p => p.CollectionId == collectionId);
         if (at < 0) _published.Add(entry);
         else _published[at] = entry;
@@ -88,7 +91,7 @@ public sealed class PublishedCalendars
         return removed;
     }
 
-    /// <summary>Records that a calendar has just gone up, which is what the dialog's column shows.</summary>
+    /// <summary>Records that one has just gone up, which is what the dialog's column shows.</summary>
     public void Published(long collectionId, DateTimeOffset when)
     {
         var at = _published.FindIndex(p => p.CollectionId == collectionId);
@@ -98,7 +101,7 @@ public sealed class PublishedCalendars
         Save();
     }
 
-    /// <summary>Keeps the listed name in step when the calendar itself is renamed.</summary>
+    /// <summary>Keeps the listed name in step when the collection itself is renamed.</summary>
     public void Renamed(long collectionId, string name)
     {
         var at = _published.FindIndex(p => p.CollectionId == collectionId);
@@ -126,7 +129,7 @@ public sealed class PublishedCalendars
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
-    private static IEnumerable<PublishedCalendar> Parse(string json)
+    private static IEnumerable<PublishedCollection> Parse(string json)
     {
         if (string.IsNullOrWhiteSpace(json)) yield break;
 
@@ -137,9 +140,9 @@ public sealed class PublishedCalendars
         }
         catch (JsonException ex)
         {
-            // A hand-edited settings file should not cost somebody their published calendars
-            // silently, as it should not cost them their feeds.
-            Log.Warn($"The published calendars could not be read: {ex.Message}");
+            // A hand-edited settings file should not cost somebody what they publish silently,
+            // as it should not cost them their feeds.
+            Log.Warn($"The published collections could not be read: {ex.Message}");
         }
 
         if (node is not JsonArray array) yield break;
@@ -151,7 +154,7 @@ public sealed class PublishedCalendars
 
             var name = entry["name"]?.GetValue<string>() ?? url;
             var when = entry["published"]?.GetValue<long?>();
-            yield return new PublishedCalendar(
+            yield return new PublishedCollection(
                 collection, url, name, when is { } seconds ? DateTimeOffset.FromUnixTimeSeconds(seconds) : null);
         }
     }

@@ -67,7 +67,7 @@ public partial class App : Application
     public static Mailbox.Core.Feeds.FeedSubscriptions Feeds { get; private set; } = null!;
 
     /// <summary>The calendars this reader publishes, and where each one goes.</summary>
-    public static Mailbox.Core.Calendars.PublishedCalendars Published { get; private set; } = null!;
+    public static Mailbox.Core.Calendars.PublishedCollections Published { get; private set; } = null!;
 
     public static Mailbox.Protocols.FeedReceiver FeedReader { get; private set; } = null!;
 
@@ -639,7 +639,7 @@ public partial class App : Application
 
         // Built here with the other settings-backed lists, and handed to the sync service, which
         // was made further up before this existed.
-        Published = new Mailbox.Core.Calendars.PublishedCalendars(Settings);
+        Published = new Mailbox.Core.Calendars.PublishedCollections(Settings);
         PimSync.Published = Published;
         FeedReader = new Mailbox.Protocols.FeedReceiver(Feeds);
         Stationery = new StationeryFonts(Settings);
