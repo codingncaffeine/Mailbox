@@ -60,6 +60,7 @@ public static class NoteCommands
         Scope = ModuleScope.Notes,
         KeyTip = "D",
         DefaultGesture = "Delete",
+        RequiresSelection = true,
     };
 
     public static readonly MailboxCommand Open = new()
@@ -72,6 +73,7 @@ public static class NoteCommands
         Scope = ModuleScope.Notes,
         KeyTip = "O",
         DefaultGesture = "Ctrl+O",
+        RequiresSelection = true,
     };
 
     public static readonly MailboxCommand Forward = new()
@@ -83,6 +85,7 @@ public static class NoteCommands
         Category = "Actions",
         Scope = ModuleScope.Notes,
         KeyTip = "FW",
+        RequiresSelection = true,
     };
 
     public static readonly MailboxCommand MoveTo = new()
@@ -94,6 +97,7 @@ public static class NoteCommands
         Category = "Actions",
         Scope = ModuleScope.Notes,
         KeyTip = "MV",
+        RequiresSelection = true,
     };
 
     public static readonly MailboxCommand Categorize = new()
@@ -105,6 +109,7 @@ public static class NoteCommands
         Category = "Tags",
         Scope = ModuleScope.Notes,
         KeyTip = "G",
+        RequiresSelection = true,
     };
 
     // ---- The views the Current View group offers ---------------------------------------------

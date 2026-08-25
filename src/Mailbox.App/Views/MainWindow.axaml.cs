@@ -55,6 +55,11 @@ public partial class MainWindow : Window
 
         _ribbon = new RibbonView(App.Commands, layout);
         RibbonDisplayMemory.Wire(_ribbon, RibbonWindow.Shell, Environment.GetEnvironmentVariable("MAILBOX_RIBBON"));
+
+        // What is usable given what is selected. The inline reply strip layers the compose
+        // window's own answer over this one and puts it back afterwards, so the two compose
+        // rather than replace each other.
+        _ribbon.CommandEnabled = IsCommandUsable;
         _ribbon.CommandInvoked += OnRibbonCommand;
         _ribbon.BackstageRequested += (_, _) => ShowBackstage();
         _ribbon.FloatingBodyChanged += (_, e) => ShowFloatingRibbon(e.Body);
@@ -2474,6 +2479,13 @@ public partial class MainWindow : Window
             {
                 case nameof(ShellViewModel.SelectedMessage):
                     ShowSelectedMessage(shell);
+                    RefreshCommandEnablement();
+                    break;
+
+                // Another module has a selection of its own, and a different set of commands
+                // asking about it.
+                case nameof(ShellViewModel.Module):
+                    RefreshCommandEnablement();
                     break;
 
                 case nameof(ShellViewModel.ReadingFontSize):
@@ -4126,8 +4138,19 @@ public partial class MainWindow : Window
         // handler that throws disables its plugin rather than the window.
         if (App.Plugins.TryRun(id)) return;
 
-        // Everything left is recorded in §20 with what it waits for; the status line names
-        // the command so the plan can be checked against the window rather than the reverse.
+        // A command that acts on a selection, pressed with nothing selected. The button for it
+        // is greyed, so this is the keyboard's way in — Delete in an empty folder — and the
+        // answer is what is missing rather than a developer string about the command itself.
+        if ((command.RequiresSelection || command.RequiresSingleSelection) && !IsCommandUsable(id))
+        {
+            shell.StatusRight = command.RequiresSingleSelection && SelectionCount() > 1
+                ? $"{command.Label} works on one item at a time."
+                : $"Nothing is selected, and {command.Label} acts on what is.";
+            return;
+        }
+
+        // Everything left is a command with no handler, which is a defect rather than a state:
+        // the status line names it so it can be found and wired.
         shell.StatusRight = $"{command.Label} — not wired yet ({command.Id})";
     }
 
@@ -4660,6 +4683,23 @@ public partial class MainWindow : Window
     /// <summary>The View tab's toggles that have state behind them.</summary>
     private static bool RunViewCommand(ShellViewModel shell, CommandId id)
     {
+        // Two the shell places and cannot do, each saying what is absent rather than answering
+        // with a developer string. The message window says the same two things in its own words
+        // because it can say them in an InfoBar; here it is the status line.
+        if (id == ViewCommands.ImmersiveReader.Id)
+        {
+            shell.StatusRight = "Immersive Reader is a second way of laying the document out, "
+                + "and the reading pane lays it out one way.";
+            return true;
+        }
+
+        if (id == ViewCommands.ReadAloud.Id)
+        {
+            shell.StatusRight = "There is no speech engine here, and nothing that reads a message "
+                + "aloud without sending it off this machine.";
+            return true;
+        }
+
         if (id == ViewCommands.ReverseSort.Id) { shell.SortDescending = !shell.SortDescending; return true; }
         if (id == ViewCommands.TighterSpacing.Id) { shell.CompactRows = !shell.CompactRows; return true; }
         if (id == ViewCommands.ShowFocusedInbox.Id)
@@ -5571,6 +5611,47 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Whether a command can act on what is selected right now.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="MailboxCommand.RequiresSelection"/> and its single-selection sibling are set on
+    /// forty-one commands and were read by nobody: the ribbon dimmed only what the host's
+    /// <c>CommandEnabled</c> said to, and the shell set that for the lifetime of an inline reply
+    /// and at no other time. So Reply, Delete, Move, Categorize and the rest stayed lit with
+    /// nothing selected and did nothing when pressed — the reference greys them, and a control
+    /// that ships looking interactive while doing nothing unannounced is the thing this
+    /// application is not supposed to have.
+    /// <para>
+    /// Selection means what it means in the module on screen: the rows chosen in the list, the
+    /// appointment or the card or the row in the other five. A command that asks for neither is
+    /// always usable, which is nearly all of them.
+    /// </para>
+    /// </remarks>
+    private bool IsCommandUsable(CommandId id)
+    {
+        if (!App.Commands.TryGet(id, out var command)) return true;
+        if (!command.RequiresSelection && !command.RequiresSingleSelection) return true;
+
+        var selected = SelectionCount();
+        return command.RequiresSingleSelection ? selected == 1 : selected > 0;
+    }
+
+    /// <summary>How many items are selected in the module on screen.</summary>
+    private int SelectionCount() => (DataContext as ShellViewModel)?.Module switch
+    {
+        MailboxModule.Mail => SelectedRows().Count,
+        MailboxModule.Calendar => _calendar?.SelectedEntry is null ? 0 : 1,
+        MailboxModule.People => _people?.Selected is null ? 0 : 1,
+        MailboxModule.Tasks => _taskModule?.Selected is null ? 0 : 1,
+        MailboxModule.Notes => _noteModule?.Selected is null ? 0 : 1,
+        MailboxModule.Journal => _journalModule?.Selected is null ? 0 : 1,
+        _ => 0,
+    };
+
+    /// <summary>Re-reads enablement, for a selection or a module that has just changed.</summary>
+    private void RefreshCommandEnablement() => _ribbon?.RefreshEnablement();
+
+    /// <summary>
     /// Writes to the store, and says so when the write will not go.
     /// </summary>
     /// <remarks>
@@ -6425,6 +6506,12 @@ public partial class MainWindow : Window
         // reference's "use compact layout in widths smaller than N characters".
         list.SizeChanged += (_, e) => shell.ListWidth = e.NewSize.Width;
         shell.ListWidth = list.Bounds.Width;
+
+        // What is selected decides what is usable, so the bar is re-read whenever it changes.
+        // On the list rather than on the view model's SelectedRow: adding a second row to the
+        // selection with Control leaves SelectedRow where it was, and the difference between
+        // one row and two is exactly what the single-selection commands turn on.
+        list.SelectionChanged += (_, _) => RefreshCommandEnablement();
 
         // Home and End go to the first and last message, which in a grouped list is not the
         // first and last row: the list's own Home lands on a group header, and selecting one

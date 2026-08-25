@@ -51,6 +51,7 @@ public static class JournalCommands
         Scope = ModuleScope.Journal,
         KeyTip = "D",
         DefaultGesture = "Delete",
+        RequiresSelection = true,
     };
 
     public static readonly MailboxCommand Open = new()
@@ -63,6 +64,7 @@ public static class JournalCommands
         Scope = ModuleScope.Journal,
         KeyTip = "O",
         DefaultGesture = "Ctrl+O",
+        RequiresSelection = true,
     };
 
     public static readonly MailboxCommand Forward = new()
@@ -74,6 +76,7 @@ public static class JournalCommands
         Category = "Actions",
         Scope = ModuleScope.Journal,
         KeyTip = "FW",
+        RequiresSelection = true,
     };
 
     public static readonly MailboxCommand Categorize = new()
@@ -85,6 +88,7 @@ public static class JournalCommands
         Category = "Tags",
         Scope = ModuleScope.Journal,
         KeyTip = "G",
+        RequiresSelection = true,
     };
 
     // ---- Moving through time -------------------------------------------------------------------

@@ -33,7 +33,14 @@ public partial class MainWindow
             IsNavVisible = shell.NavVisible,
         };
 
-        workspace.Changed += (_, _) => shell.ModuleStatusLeft = workspace.Status;
+        workspace.Changed += (_, _) =>
+        {
+            shell.ModuleStatusLeft = workspace.Status;
+
+            // A module's own selection decides what its ribbon can do, the same way the message
+            // list's does.
+            RefreshCommandEnablement();
+        };
         workspace.EntryOpened += (_, row) => _ = OpenJournalEntryAsync(shell, row);
 
         _journalModule = workspace;

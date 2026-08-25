@@ -135,6 +135,9 @@ public sealed class CalendarOptions(SettingsStore settings)
             _ => DailyTaskListMode.Off,
         };
 
+    /// <summary>The minute scales the reference offers, longest first as its menu lists them.</summary>
+    public static IReadOnlyList<int> TimeScales { get; } = [60, 30, 15, 10, 6, 5];
+
     /// <summary>Minutes a row of the day and week views covers: 5, 6, 10, 15, 30 or 60.</summary>
     public int TimeScaleMinutes => (int)_settings.GetNumber(TimeScaleKey, 30) switch
     {

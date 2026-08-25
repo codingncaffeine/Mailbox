@@ -263,10 +263,13 @@ public sealed class MessageWindow : Window
         }
 
         if (id == ViewCommands.Zoom.Id) { _ = ZoomAsync(); return; }
-        if (id == ViewCommands.FindInMessage.Id) { Notice("Finding inside a message arrives with Phase 16's polish."); return; }
-        if (id == ViewCommands.ReadAloud.Id) { Notice("Read Aloud arrives with Phase 16's accessibility pass."); return; }
-        if (id == ViewCommands.ImmersiveReader.Id) { Notice("Immersive Reader arrives with Phase 16's accessibility pass."); return; }
-        if (id == ViewCommands.Translate.Id) { Notice("Translate arrives with Phase 16's language work."); return; }
+        // What each of these waits on is what is absent, not a date. A note naming a phase tells
+        // the reader to wait for something that may already have arrived — which is exactly what
+        // these four did — and a phase is not a reason anyway.
+        if (id == ViewCommands.FindInMessage.Id) { Notice("The reading pane renders the message in a web engine, and nothing here can drive that engine's own find."); return; }
+        if (id == ViewCommands.ReadAloud.Id) { Notice("There is no speech engine here, and nothing that reads a message aloud without sending it off this machine."); return; }
+        if (id == ViewCommands.ImmersiveReader.Id) { Notice("Immersive Reader is a second way of laying the document out, and the reading pane lays it out one way."); return; }
+        if (id == ViewCommands.Translate.Id) { Notice("Translating means sending the message to a translation service, and no service has been chosen."); return; }
 
         if (id == ViewCommands.Apps.Id)
         {

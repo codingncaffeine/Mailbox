@@ -36,7 +36,14 @@ public partial class MainWindow
             IsNavVisible = shell.NavVisible,
         };
 
-        workspace.Changed += (_, _) => shell.ModuleStatusLeft = workspace.Status;
+        workspace.Changed += (_, _) =>
+        {
+            shell.ModuleStatusLeft = workspace.Status;
+
+            // A module's own selection decides what its ribbon can do, the same way the message
+            // list's does.
+            RefreshCommandEnablement();
+        };
         workspace.ContactOpened += (_, row) => _ = OpenContactAsync(shell, row);
         workspace.ContactMenuRequested += (_, row) => ShowContactMenu(shell, row);
         workspace.NewRequested += (_, _) => _ = NewContactAsync(shell);

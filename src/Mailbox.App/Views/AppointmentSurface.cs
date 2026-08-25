@@ -583,7 +583,25 @@ public sealed class AppointmentSurface : UserControl
         if (id == AppointmentCommands.Private.Id) { SetPrivate(!_private); return null; }
         if (id == AppointmentCommands.HighImportance.Id) { SetUrgency(TaskUrgency.High); return null; }
         if (id == AppointmentCommands.LowImportance.Id) { SetUrgency(TaskUrgency.Low); return null; }
-        return null;
+
+        // The two this window places and cannot do. Both ask a server for a directory of
+        // resources or of who has answered, and no account here offers one.
+        if (id == AppointmentCommands.Rooms.Id)
+        {
+            return "A room list is a directory of resources on a server, which no account here offers.";
+        }
+
+        if (id == AppointmentCommands.ResponseOptions.Id)
+        {
+            return "Response options are the server's — who may propose a new time, and whether "
+                + "replies come back to it. There is no server here to hold them.";
+        }
+
+        // Anything else at all. The summary above this method promised as much and the method
+        // did the opposite: a command with no branch left no status line, no log line and no
+        // InfoBar, so a button that did nothing looked exactly like one that had worked.
+        Log.Warn($"The appointment window has no handler for {id}.");
+        return $"{id} is not something this window can do.";
     }
 
     /// <summary>The categories the form now carries — what Copy and Forward read.</summary>

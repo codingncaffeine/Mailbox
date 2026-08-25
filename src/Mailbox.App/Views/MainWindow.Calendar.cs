@@ -140,7 +140,14 @@ public partial class MainWindow
             DailyTasks = App.CalendarOptions.DailyTaskList,
         };
 
-        workspace.Changed += (_, _) => shell.ModuleStatusLeft = workspace.Status;
+        workspace.Changed += (_, _) =>
+        {
+            shell.ModuleStatusLeft = workspace.Status;
+
+            // A module's own selection decides what its ribbon can do, the same way the message
+            // list's does.
+            RefreshCommandEnablement();
+        };
         workspace.NewRequested += (_, when) => _ = NewAppointmentAsync(shell, when.Start, when.AllDay);
         workspace.EntryOpened += (_, entry) => _ = OpenAppointmentAsync(shell, entry);
         workspace.EntryMoved += (_, move) => MoveAppointment(shell, move);
@@ -211,6 +218,8 @@ public partial class MainWindow
         }
 
         if (id == CalendarCommands.CalendarColour.Id) { ShowCalendarColourMenu(shell); return true; }
+        if (id == CalendarCommands.TimeScale.Id) { ShowTimeScaleMenu(shell); return true; }
+        if (id == CalendarCommands.CalendarGroups.Id) { SwitchModule(shell, MailboxModule.Calendar); shell.StatusRight = CalendarGroupsNote; return true; }
         if (id == CalendarCommands.Overlay.Id) { ToggleOverlay(shell); return true; }
         if (id == CalendarCommands.DailyTaskList.Id) { ShowDailyTaskListMenu(shell); return true; }
         if (id == CalendarCommands.OpenFromFile.Id) { _ = OpenCalendarFileAsync(shell); return true; }
@@ -230,6 +239,67 @@ public partial class MainWindow
     /// looking at, and this is the nearest thing a single grid has to that. The name of the one
     /// being recoloured goes in the log and the status line so the answer is never a guess.
     /// </remarks>
+    /// <summary>
+    /// What a calendar group is, and why there is not one.
+    /// </summary>
+    /// <remarks>
+    /// Said in one place because two controls ask — the ribbon's Calendar Groups and the Add ⌄
+    /// menu's entry — and two wordings of the same absence is how one of them ends up naming a
+    /// phase that has already shipped, which is what the menu's own note used to do.
+    /// </remarks>
+    internal const string CalendarGroupsNote =
+        "A calendar group is a server's list of other people's calendars, which no account here "
+        + "offers. Calendars you have are all shown together in the pane.";
+
+    /// <summary>
+    /// Time Scale: how many minutes a row of the day and week views covers.
+    /// </summary>
+    /// <remarks>
+    /// The reference's own six, longest first as its menu has them. The setting existed and was
+    /// read by the views from the day it was written; what was missing was any way to reach it
+    /// but the Options page, because this button had no handler at all and answered a press with
+    /// a developer string.
+    /// </remarks>
+    private void ShowTimeScaleMenu(ShellViewModel shell)
+    {
+        SwitchModule(shell, MailboxModule.Calendar);
+
+        void Apply(int minutes)
+        {
+            App.CalendarOptions.SetTimeScale(minutes);
+            shell.StatusRight = $"The time scale is {minutes} minutes.";
+            Log.Info($"Calendar: time scale = {minutes} minutes.");
+            WithCalendar(shell, c => c.Reload());
+        }
+
+        // A menu never appears in a capture, so the harness presses an entry instead.
+        if (Environment.GetEnvironmentVariable("MAILBOX_CALENDAR_SCALE") is { Length: > 0 } posed
+            && int.TryParse(posed.Trim(), out var wanted))
+        {
+            if (CalendarOptions.TimeScales.Contains(wanted)) Apply(wanted);
+            else Log.Info($"Harness: {wanted} is not one of the time scales the reference offers.");
+            return;
+        }
+
+        var flyout = new MenuFlyout();
+        var current = App.CalendarOptions.TimeScaleMinutes;
+
+        foreach (var minutes in CalendarOptions.TimeScales)
+        {
+            var chosen = minutes;
+            var item = new MenuItem
+            {
+                Header = $"{minutes} Minutes",
+                Icon = minutes == current ? MenuIcon("mark-complete") : null,
+            };
+
+            item.Click += (_, _) => Apply(chosen);
+            flyout.Items.Add(item);
+        }
+
+        _ribbon.OpenMenuUnder(CalendarCommands.TimeScale.Id, flyout, this);
+    }
+
     private void ShowCalendarColourMenu(ShellViewModel shell)
     {
         SwitchModule(shell, MailboxModule.Calendar);
@@ -502,7 +572,7 @@ public partial class MainWindow
         Entry("From _Address Book…", "contact-card", () => _ = OpenSomebodysCalendarAsync(shell));
         Entry("From _Room List…", "room-list", () => shell.StatusRight = "A room list is a directory of resources on a server, which no account here offers.");
         Entry("From _Internet…", "publish-calendar", () => _ = SubscribeAsync(shell));
-        Entry("_Calendar Groups", "calendar-groups", () => shell.StatusRight = "Calendar groups arrive with the People module.");
+        Entry("_Calendar Groups", "calendar-groups", () => shell.StatusRight = CalendarGroupsNote);
         flyout.Items.Add(new Separator());
         Entry("Create New _Blank Calendar…", null, () => _ = NewCalendarAsync(shell));
         Entry("_Open Shared Calendar…", "share", () => shell.StatusRight = "A shared calendar is a subscription — use From Internet… with its address.");

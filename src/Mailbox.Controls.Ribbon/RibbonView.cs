@@ -68,6 +68,17 @@ public sealed class RibbonView : ContentControl
     private readonly List<(RibbonTab Tab, Control Control)> _tabControls = [];
     private readonly Dictionary<CommandId, List<Control>> _itemControls = [];
 
+    /// <summary>
+    /// Commands the layout itself marks unusable, whatever the host's enablement says.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="RibbonItem.IsDisabled"/> had no reader, so the one entry that sets it — Read
+    /// Aloud on the classic View tab — drew as an ordinary button and answered a press with a
+    /// developer string. A layout that says a control is greyed is the strongest statement about
+    /// it there is, so it wins over the host.
+    /// </remarks>
+    private readonly HashSet<CommandId> _disabled = [];
+
     // Groups that have degraded to a popup button, and the button they degraded to. Their
     // commands have no control on the bar, so this is the only thing Alt can adorn for them.
     private readonly List<(RibbonGroup Group, Button Button)> _collapsedGroups = [];
@@ -320,6 +331,7 @@ public sealed class RibbonView : ContentControl
     {
         _tabControls.Clear();
         _itemControls.Clear();
+        CollectDisabled();
         _splitLighters.Clear();
         _menuOpeners.Clear();
         _collapsedGroups.Clear();
@@ -844,11 +856,12 @@ public sealed class RibbonView : ContentControl
     /// </remarks>
     public void RefreshEnablement()
     {
-        if (CommandEnabled is not { } enabled) return;
+        var enabled = CommandEnabled;
+        if (enabled is null && _disabled.Count == 0) return;
 
         foreach (var (id, controls) in _itemControls)
         {
-            var usable = enabled(id);
+            var usable = !_disabled.Contains(id) && (enabled?.Invoke(id) ?? true);
             foreach (var control in controls) control.IsEnabled = usable;
         }
     }
@@ -1084,9 +1097,27 @@ public sealed class RibbonView : ContentControl
         };
     }
 
+    /// <summary>Everything the layout draws greyed, gathered before anything is built.</summary>
+    private void CollectDisabled()
+    {
+        _disabled.Clear();
+
+        foreach (var item in Layout.Tabs.SelectMany(tab => tab.Groups).SelectMany(group => group.Items))
+        {
+            if (item.IsDisabled) _disabled.Add(item.Command);
+        }
+
+        foreach (var item in Layout.SimplifiedRows.Values.SelectMany(row => row))
+        {
+            if (item.IsDisabled) _disabled.Add(item.Command);
+        }
+    }
+
     /// <summary>One command can have several controls; Alt traversal takes whichever is shown.</summary>
     private void Record(CommandId id, Control control)
     {
+        if (_disabled.Contains(id)) control.IsEnabled = false;
+
         if (!_itemControls.TryGetValue(id, out var built))
         {
             built = [];

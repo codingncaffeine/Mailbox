@@ -71,6 +71,7 @@ public static class TaskCommands
         Scope = ModuleScope.Tasks,
         KeyTip = "D",
         DefaultGesture = "Delete",
+        RequiresSelection = true,
     };
 
     public static readonly MailboxCommand Open = new()
@@ -83,6 +84,7 @@ public static class TaskCommands
         Scope = ModuleScope.Tasks,
         KeyTip = "O",
         DefaultGesture = "Ctrl+O",
+        RequiresSelection = true,
     };
 
     public static readonly MailboxCommand MarkComplete = new()
@@ -94,6 +96,7 @@ public static class TaskCommands
         Category = "Manage Task",
         Scope = ModuleScope.Tasks,
         KeyTip = "MC",
+        RequiresSelection = true,
     };
 
     public static readonly MailboxCommand RemoveFromList = new()
@@ -105,6 +108,7 @@ public static class TaskCommands
         Category = "Manage Task",
         Scope = ModuleScope.Tasks,
         KeyTip = "RL",
+        RequiresSelection = true,
     };
 
     public static readonly MailboxCommand FollowUp = new()
@@ -116,6 +120,7 @@ public static class TaskCommands
         Category = "Tags",
         Scope = ModuleScope.Tasks,
         KeyTip = "U",
+        RequiresSelection = true,
     };
 
     public static readonly MailboxCommand Categorize = new()
@@ -127,6 +132,7 @@ public static class TaskCommands
         Category = "Tags",
         Scope = ModuleScope.Tasks,
         KeyTip = "G",
+        RequiresSelection = true,
     };
 
     public static readonly MailboxCommand Private = new()
@@ -138,6 +144,7 @@ public static class TaskCommands
         Category = "Tags",
         Scope = ModuleScope.Tasks,
         KeyTip = "PV",
+        RequiresSelection = true,
     };
 
     public static readonly MailboxCommand HighImportance = new()
@@ -150,6 +157,7 @@ public static class TaskCommands
         Category = "Tags",
         Scope = ModuleScope.Tasks,
         KeyTip = "IH",
+        RequiresSelection = true,
     };
 
     public static readonly MailboxCommand LowImportance = new()
@@ -162,6 +170,7 @@ public static class TaskCommands
         Category = "Tags",
         Scope = ModuleScope.Tasks,
         KeyTip = "IL",
+        RequiresSelection = true,
     };
 
     // ---- What a task can be done with --------------------------------------------------------
@@ -175,6 +184,7 @@ public static class TaskCommands
         Category = "Respond",
         Scope = ModuleScope.Tasks,
         KeyTip = "R",
+        RequiresSelection = true,
     };
 
     public static readonly MailboxCommand ReplyAll = new()
@@ -186,6 +196,7 @@ public static class TaskCommands
         Category = "Respond",
         Scope = ModuleScope.Tasks,
         KeyTip = "RA",
+        RequiresSelection = true,
     };
 
     public static readonly MailboxCommand Forward = new()
@@ -197,6 +208,7 @@ public static class TaskCommands
         Category = "Respond",
         Scope = ModuleScope.Tasks,
         KeyTip = "FW",
+        RequiresSelection = true,
     };
 
     public static readonly MailboxCommand MoveTo = new()
@@ -208,6 +220,7 @@ public static class TaskCommands
         Category = "Actions",
         Scope = ModuleScope.Tasks,
         KeyTip = "MV",
+        RequiresSelection = true,
     };
 
     // ---- The views the Current View group offers ---------------------------------------------
