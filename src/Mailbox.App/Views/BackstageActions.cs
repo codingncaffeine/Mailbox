@@ -102,6 +102,10 @@ internal static class BackstageActions
                 host.Report(await UpdateCheck.CheckAsync());
                 break;
 
+            case "tools.archivefolder":
+                await SetArchiveFolderAsync(host);
+                break;
+
             case "tools.recover":
                 await new RecoverDeletedItemsDialog().ShowDialog(host.Owner);
                 host.Refresh();
@@ -141,6 +145,52 @@ internal static class BackstageActions
         var account = App.Accounts.Default?.Account;
         if (account is null) host.Report("No account is set up yet. File, Add Account.");
         return account;
+    }
+
+    /// <summary>
+    /// Where the Archive button files, per account: the reference's Set Archive Folder.
+    /// </summary>
+    /// <remarks>
+    /// Per account rather than once, because a folder is one account's and naming another's
+    /// would archive into a mailbox the reader was not looking at. The account's own Archive is
+    /// offered first and is what an empty choice means, so there is a way back to the default
+    /// without a Reset button — the same rule the sound rows follow.
+    /// <para>
+    /// This is the one-press archive alone. AutoArchive keeps its own destination, and moving a
+    /// decade of mail somewhere nobody asked for is what conflating the two would do.
+    /// </para>
+    /// </remarks>
+    private static async Task SetArchiveFolderAsync(BackstageHost host)
+    {
+        if (App.Accounts.Default is not { } account)
+        {
+            host.Report("No account is set up yet. File, Add Account.");
+            return;
+        }
+
+        const string Default = "Archive (the account's own)";
+        var folders = account.Mail.Folders(account.Account.Id)
+            .Where(f => f.Role is not (FolderRole.Outbox or FolderRole.Drafts))
+            .Select(f => new Choice(f.Name, f.Name))
+            .ToList();
+
+        var choices = new List<Choice> { new(Default, string.Empty) };
+        choices.AddRange(folders);
+
+        var current = AccountSettings.ArchiveFolderName(App.Settings, account.Account.Address);
+        var picked = await Chooser.AskAsync(
+            host.Owner,
+            "Set Archive Folder",
+            $"Archive in {account.Account.Address} files into:",
+            choices,
+            current.Length == 0 ? Default : current);
+
+        if (picked is null) return;
+
+        AccountSettings.SetArchiveFolderName(App.Settings, account.Account.Address, picked);
+        host.Report(picked.Length == 0
+            ? $"Archive files into the account's own Archive folder for {account.Account.Address}."
+            : $"Archive files into “{picked}” for {account.Account.Address}.");
     }
 
     /// <summary>

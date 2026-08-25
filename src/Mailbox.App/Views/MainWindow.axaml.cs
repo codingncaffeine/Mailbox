@@ -945,10 +945,20 @@ public partial class MainWindow : Window
                 Opened += (_, _) =>
                 {
                     ShowBackstage();
-                    if (Environment.GetEnvironmentVariable("MAILBOX_BACKSTAGE") is { Length: > 0 } page
-                        && this.FindControl<ContentControl>("BackstageHost")!.Content is BackstageView view)
+                    if (this.FindControl<ContentControl>("BackstageHost")!.Content is not BackstageView view) return;
+
+                    if (Environment.GetEnvironmentVariable("MAILBOX_BACKSTAGE") is { Length: > 0 } page)
                     {
                         view.Open(page.Trim().ToLowerInvariant());
+                    }
+
+                    // MAILBOX_BACKSTAGE_MENU=tools|settings[:<action>] names what the menu holds
+                    // and presses one of its entries — a flyout never appears in a capture, so
+                    // this is the only way either is checked.
+                    if (Environment.GetEnvironmentVariable("MAILBOX_BACKSTAGE_MENU") is { Length: > 0 } menu)
+                    {
+                        var (which, press) = menu.Split(':', 2) is [var head, var tail] ? (head, tail) : (menu, null);
+                        Dispatcher.UIThread.Post(() => view.PoseMenu(which, press), DispatcherPriority.Background);
                     }
                 };
                 break;

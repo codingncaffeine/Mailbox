@@ -2613,6 +2613,29 @@ public sealed partial class ShellViewModel : ObservableObject
     }
 
     /// <summary>Moves rows into another folder of the same account.</summary>
+    /// <summary>
+    /// Where a role move lands: the folder the account names for it when it names one, else the
+    /// folder wearing the role.
+    /// </summary>
+    /// <remarks>
+    /// Only Archive can be renamed — the reference's Set Archive Folder, which is about the
+    /// one-press archive alone. A named folder that has since been deleted or renamed falls back
+    /// to the role rather than refusing to archive, because a button that stops working because
+    /// a folder moved is a button nobody can fix without knowing why.
+    /// </remarks>
+    private static Folder? ArchiveTarget(OpenAccount owner, FolderRole role)
+    {
+        if (role == FolderRole.Archive
+            && AccountSettings.ArchiveFolderName(App.Settings, owner.Account.Address) is { Length: > 0 } named
+            && owner.Mail.Folders(owner.Account.Id)
+                .FirstOrDefault(f => string.Equals(f.Name, named, StringComparison.OrdinalIgnoreCase)) is { } chosen)
+        {
+            return chosen;
+        }
+
+        return owner.Mail.FolderWithRole(owner.Account.Id, role);
+    }
+
     public void MoveTo(IReadOnlyList<MessageRow> rows, FolderRole role)
     {
         if (Split(rows, group => MoveTo(group, role))) return;
@@ -2621,8 +2644,7 @@ public sealed partial class ShellViewModel : ObservableObject
 
         // The target folder belongs to the rows' own account, not to the folder on screen —
         // which in a unified folder is nobody's.
-        if (AccountOf(rows) is not { } owner
-            || owner.Mail.FolderWithRole(owner.Account.Id, role) is not { } target)
+        if (AccountOf(rows) is not { } owner || ArchiveTarget(owner, role) is not { } target)
         {
             return;
         }

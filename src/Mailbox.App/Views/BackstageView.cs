@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Mailbox.Core.Diagnostics;
 using Mailbox.Theming.Icons;
 
 namespace Mailbox.App.Views;
@@ -462,6 +463,32 @@ public sealed class BackstageView : Border
     /// these two menus takes. Built rather than templated so both lines take their own token —
     /// a detail line in the primary colour reads as a second title.
     /// </summary>
+    /// <summary>
+    /// Names what one of the Info page's menus holds, and presses one of its entries.
+    /// </summary>
+    /// <remarks>
+    /// A flyout never appears in a capture, so a menu transcribed from a reference shot is a
+    /// claim with nothing behind it until something reads it back. This walks the real
+    /// <see cref="MenuFlyout"/> the page built — not a second list written for the harness,
+    /// which would agree with the page right up until somebody edited one of them.
+    /// </remarks>
+    internal void PoseMenu(string which, string? press)
+    {
+        var menu = which.StartsWith("settings", StringComparison.OrdinalIgnoreCase)
+            ? AccountSettingsMenu()
+            : ToolsMenu();
+
+        foreach (var item in menu.ItemsSource?.OfType<MenuItem>() ?? [])
+        {
+            var lines = (item.Header as StackPanel)?.Children.OfType<StackPanel>().FirstOrDefault();
+            var title = lines?.Children.OfType<TextBlock>().FirstOrDefault()?.Text ?? "(no title)";
+            var detail = lines?.Children.OfType<TextBlock>().Skip(1).FirstOrDefault()?.Text ?? string.Empty;
+            Log.Info($"Harness: {which} menu — “{title}” · {detail}{(item.IsEnabled ? string.Empty : "  [greyed]")}");
+        }
+
+        if (press is { Length: > 0 }) ActionRequested?.Invoke(this, press);
+    }
+
     private MenuItem MenuEntry(string icon, string title, string detail, string action,
         bool enabled = true)
     {
@@ -521,12 +548,20 @@ public sealed class BackstageView : Border
         Placement = PlacementMode.BottomEdgeAlignedLeft,
         ItemsSource = new[]
         {
+            // The capture's own four, in its own order and wording (rules and alerts/tools.png);
+            // only Clean Up Old Items is reworded, its description there naming a file format
+            // this application does not write.
             MenuEntry("cleanup", "Mailbox Cleanup…",
-                "See what is taking up room and clear it.", "tools.cleanup"),
-            MenuEntry("archive", "Clean Up Old Items…",
-                "Move old items to the Archive folder now, by folder or by the AutoArchive settings.", "tools.archive"),
+                "Manage mailbox size with advanced tools.", "tools.cleanup"),
             MenuEntry("delete", "Empty Deleted Items Folder",
-                "Permanently delete everything in Deleted Items.", "tools.emptydeleted"),
+                "Permanently delete all items in the Deleted Items folder.", "tools.emptydeleted"),
+            MenuEntry("archive", "Clean Up Old Items…",
+                "Move old items to the Archive folder.", "tools.archive"),
+            MenuEntry("folder-open", "Set Archive Folder…",
+                "Set the destination folder for quick archiving.", "tools.archivefolder"),
+
+            // An addition, and last so the reference's four read as its four. Nothing else here
+            // brings back what was permanently deleted, and the holding area exists.
             MenuEntry("undo", "Recover Deleted Items…",
                 "Bring back mail that was permanently deleted recently.", "tools.recover"),
         },

@@ -82,6 +82,28 @@ public sealed record AccountSettings(
     /// </summary>
     private static string Key(string address, string field) => $"account.{address}.{field}";
 
+    /// <summary>
+    /// The folder the Archive button files into, by name, or empty for the account's own Archive.
+    /// </summary>
+    /// <remarks>
+    /// The reference's Set Archive Folder, which is about the one-press archive and not about
+    /// AutoArchive — those are two destinations and conflating them would move a decade of mail
+    /// somewhere nobody asked for. Kept by <b>name</b> rather than by id, as the cleaned-up items
+    /// folder is: a folder id is this store's own numbering and does not survive an account being
+    /// removed and added back, where the name the reader chose does.
+    /// </remarks>
+    public static string ArchiveFolderName(SettingsStore settings, string address)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        return settings.GetString(Key(address, "archive.folder"));
+    }
+
+    public static void SetArchiveFolderName(SettingsStore settings, string address, string name)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        settings.Set(Key(address, "archive.folder"), name);
+    }
+
     public static AccountSettings? Load(SettingsStore settings, string address)
     {
         var accountKey = address;
