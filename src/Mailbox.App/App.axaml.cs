@@ -143,6 +143,13 @@ public partial class App : Application
     public static IReadOnlyList<(string Address, MailRepository Mail)> Mailboxes()
         => [.. Accounts.All.Select(a => (a.Account.Address, a.Mail))];
 
+    /// <summary>
+    /// What acts on a message as it arrives: the junk filter, the rules, the plugins. Held so a
+    /// feed poll can run the same pipeline when the Options tick asks it to — a feed item that
+    /// rules apply to has to meet the same handlers in the same order as any other message.
+    /// </summary>
+    public static ArrivalPipeline Arrival { get; private set; } = new();
+
     /// <summary>The Rules and Alerts wizard's rules, run on arrival and by Run Rules Now.</summary>
     public static RulesHandler Rules { get; private set; } = null!;
 
@@ -593,8 +600,9 @@ public partial class App : Application
         // the plugins — last, so a hook sees where the application's own handlers left it. Both
         // protocols run the same pipeline, so all of it means the same thing on POP3 and IMAP.
         Rules = new RulesHandler();
-        var arrival = new ArrivalPipeline(
+        Arrival = new ArrivalPipeline(
             Junk, new IgnoreHandler(), new FocusedInboxHandler(), Rules, Plugins.Arrivals);
+        var arrival = Arrival;
 
         // Read at the moment a collector is made, which is per run — so the Options page's
         // choice applies to the next send/receive rather than the next launch. IMAP and POP3
@@ -606,7 +614,7 @@ public partial class App : Application
                 Authentication = signatures,
                 OnArrival = arrival,
             },
-            mail => new SmtpSender(mail) { FileSentCopies = MailOptions.SaveCopiesInSent },
+            mail => new SmtpSender(mail) { FileSentCopies = MailOptions.SaveCopiesInSent, OnSent = Rules },
             mail => new ImapSynchronizer(mail)
             {
                 Authentication = signatures,

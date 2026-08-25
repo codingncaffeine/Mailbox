@@ -77,6 +77,7 @@ public sealed class MailOptions(SettingsStore settings)
     public const string DesktopAlertKey = "mail.arrival.alert";
     public const string ArrivalSoundKey = "mail.arrival.sound";
     public const string ArrivalSoundFileKey = "mail.arrival.sound.file";
+    public const string RulesOnFeedsKey = "rules.rss";
     public const string RequestDeliveryReceiptKey = "mail.tracking.delivery";
     public const string RequestReadReceiptKey = "mail.tracking.read";
     public const string EmptyDeletedOnExitKey = "mail.exit.emptydeleted";
@@ -231,6 +232,21 @@ public sealed class MailOptions(SettingsStore settings)
 
     /// <summary>Whether mail arriving plays a sound. On, as the reference has it.</summary>
     public bool PlayArrivalSound => _settings.GetBool(ArrivalSoundKey, true);
+
+    /// <summary>
+    /// Whether rules run over items downloaded from RSS feeds. Off, as the reference has it.
+    /// </summary>
+    /// <remarks>
+    /// The tick at the foot of Rules and Alerts. Off out of the box for a good reason: a feed
+    /// already files itself into a folder of its own, and a rule written for mail — "move
+    /// anything from this week into Reading" — would sweep up a hundred articles the first time
+    /// it saw them.
+    /// </remarks>
+    public bool RulesOnFeeds
+    {
+        get => _settings.GetBool(RulesOnFeedsKey, false);
+        set => _settings.Set(RulesOnFeedsKey, value);
+    }
 
     /// <summary>
     /// A sound file to play instead of the desktop's own new-mail sound, or empty for the

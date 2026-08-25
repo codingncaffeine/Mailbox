@@ -95,12 +95,12 @@ internal static class SystemDialogKit
 
     private static Button ToolButton(string icon, string text)
     {
-        var glyph = new ClassicIcon(icon) { VerticalAlignment = VerticalAlignment.Center };
-        var content = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Children = { glyph },
-        };
+        // No icon named is a button the reference draws as a word alone — Run Rules Now and
+        // Options on the rules toolbar. An empty ClassicIcon would still take an icon's width and
+        // push the end of the bar off the dialog.
+        var glyph = icon.Length > 0 ? new ClassicIcon(icon) { VerticalAlignment = VerticalAlignment.Center } : null;
+        var content = new StackPanel { Orientation = Orientation.Horizontal };
+        if (glyph is not null) content.Children.Add(glyph);
 
         // The move arrows carry no word: an icon alone in a button the width of the icon and
         // its padding, which is how the reference spaces them.
@@ -110,7 +110,7 @@ internal static class SystemDialogKit
             {
                 Text = text,
                 VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(4, 0, 0, 1),
+                Margin = new Thickness(glyph is null ? 0 : 4, 0, 0, 1),
             });
         }
 
@@ -122,11 +122,14 @@ internal static class SystemDialogKit
 
         // The icon follows the button's enabled state rather than being told: a button whose
         // icon stayed coloured after it went grey is what an owner notices first.
-        glyph[!ClassicIcon.IsDisabledProperty] = new Avalonia.Data.Binding("IsEnabled")
+        if (glyph is not null)
         {
-            Source = button,
-            Converter = new Avalonia.Data.Converters.FuncValueConverter<bool, bool>(enabled => !enabled),
-        };
+            glyph[!ClassicIcon.IsDisabledProperty] = new Avalonia.Data.Binding("IsEnabled")
+            {
+                Source = button,
+                Converter = new Avalonia.Data.Converters.FuncValueConverter<bool, bool>(enabled => !enabled),
+            };
+        }
 
         // A label wants the button's text at rest and the disabled ink otherwise; the stylesheet
         // handles both, but only when the label carries no ink of its own.

@@ -10,8 +10,17 @@ namespace Mailbox.App.Views;
 /// <summary>A column of a <see cref="ClassicListView"/>: its heading and its width.</summary>
 public sealed record ClassicColumn(string Header, double Width);
 
-/// <summary>One row: its cells in column order, and whether it carries the marker icon.</summary>
-public sealed record ClassicRow(IReadOnlyList<string> Cells, bool Marked = false, object? Tag = null);
+/// <summary>
+/// One row: its cells in column order, whether it carries the marker icon, and — where the list
+/// is a list of things that can be switched off — whether its tick box is on.
+/// </summary>
+/// <param name="Checked">
+/// Null for a list with no tick boxes, which is every one but the rules. A list that has them
+/// draws one on every row, so a rule with no tick would read as a rule that cannot be switched
+/// off rather than as one that is on.
+/// </param>
+public sealed record ClassicRow(
+    IReadOnlyList<string> Cells, bool Marked = false, object? Tag = null, bool? Checked = null);
 
 /// <summary>
 /// The report-style list of a system dialog: column headings over rows, with full-row selection.
@@ -66,6 +75,9 @@ public sealed class ClassicListView : Border
 
     /// <summary>Raised when a row is double-clicked or Enter is pressed on it.</summary>
     public event EventHandler? ItemActivated;
+
+    /// <summary>A row's tick box was clicked; the argument is the row's index.</summary>
+    public event EventHandler<int>? RowToggled;
 
     public IReadOnlyList<ClassicColumn> Columns
     {
@@ -244,6 +256,13 @@ public sealed class ClassicListView : Border
                         ClassicIcon.Draw(context, "default", ClassicIcon.Palette.Mono(ink, paper));
                     }
                 }
+                else if (row.Checked is { } ticked)
+                {
+                    using (context.PushTransform(Matrix.CreateTranslation(MarkerInset, top + 0.5)))
+                    {
+                        ClassicIcon.Draw(context, ticked ? "tick" : "untick", ClassicIcon.Palette.Mono(ink, paper));
+                    }
+                }
 
                 var x = 0.0;
                 for (var c = 0; c < _owner._columns.Count && c < row.Cells.Count; c++)
@@ -268,8 +287,20 @@ public sealed class ClassicListView : Border
             base.OnPointerPressed(e);
             if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
             Focus();
-            var hit = RowAt(e.GetPosition(this));
+            var at = e.GetPosition(this);
+            var hit = RowAt(at);
             _owner.SelectedIndex = hit;
+
+            // A click in the tick box toggles it rather than opening the row, which is what the
+            // desktop's own list does and what anybody switching a rule off expects.
+            if (hit >= 0 && _owner._rows[hit].Checked is not null
+                && at.X >= MarkerInset && at.X <= MarkerInset + MarkerWidth)
+            {
+                _owner.RowToggled?.Invoke(_owner, hit);
+                e.Handled = true;
+                return;
+            }
+
             if (hit >= 0 && e.ClickCount == 2) _owner.ItemActivated?.Invoke(_owner, EventArgs.Empty);
             e.Handled = true;
         }

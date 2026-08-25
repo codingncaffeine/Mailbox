@@ -131,7 +131,9 @@ public partial class MainWindow
             var name = parts.Length > 1 && parts[1].Length > 0 ? parts[1] : channel.Title;
             var feed = App.Feeds.Add(path, name);
 
-            var delivered = Mailbox.Protocols.FeedReceiver.Deliver(account, feed, channel, DateTimeOffset.UtcNow);
+            var delivered = Mailbox.Protocols.FeedReceiver.Deliver(
+                account, feed, channel, DateTimeOffset.UtcNow,
+                App.MailOptions.RulesOnFeeds ? App.Arrival : null);
             shell.Refresh();
 
             Log.Info($"Harness: feed “{channel.Title}” delivered {delivered} of {channel.Items.Count} item(s) "

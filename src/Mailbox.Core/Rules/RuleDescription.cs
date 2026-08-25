@@ -22,7 +22,12 @@ public static class RuleDescription
     {
         ArgumentNullException.ThrowIfNull(rule);
 
-        var clauses = new List<Clause> { new("Apply this rule after the message arrives") };
+        // The reference opens a send rule's description with its own line, and it is the only
+        // thing on screen that says which of the two kinds of rule this is.
+        var clauses = new List<Clause>
+        {
+            new(rule.AppliesToSent ? "Apply this rule after I send the message" : "Apply this rule after the message arrives"),
+        };
 
         foreach (var condition in rule.Conditions) clauses.Add(ForCondition(condition));
         foreach (var action in rule.Actions) clauses.Add(ForAction(action));
@@ -76,7 +81,38 @@ public static class RuleDescription
         RuleConditionKind.ReceivedBetween => "received in a specific date span",
         RuleConditionKind.AssignedToCategory => "assigned to category category",
         RuleConditionKind.Flagged => "flagged for action",
+        RuleConditionKind.FromFeed => "from an RSS Feed specified",
         _ => kind.ToString(),
+    };
+
+    /// <summary>
+    /// What the list's Actions column shows for a rule: its actions, shortest form, comma-joined.
+    /// </summary>
+    /// <remarks>
+    /// The reference puts this beside the name so a list of twenty rules can be read without
+    /// selecting each one. Stop processing is left out: it is not something the rule does to the
+    /// message, and in a narrow column it would crowd out the thing that is.
+    /// </remarks>
+    public static string Actions(MailRule rule)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+
+        var said = rule.Actions
+            .Where(a => a.Kind != RuleActionKind.StopProcessing)
+            .Select(Short)
+            .ToList();
+
+        return said.Count == 0 ? string.Empty : string.Join(", ", said);
+    }
+
+    private static string Short(RuleAction action) => action.Kind switch
+    {
+        RuleActionKind.MoveToFolder => $"move to {action.FolderName ?? "a folder"}",
+        RuleActionKind.CopyToFolder => $"copy to {action.FolderName ?? "a folder"}",
+        RuleActionKind.AssignCategory when action.Values.Count > 0 => "categorize " + string.Join(" and ", action.Values),
+        RuleActionKind.ForwardTo when action.Values.Count > 0 => "forward to " + string.Join(", ", action.Values),
+        RuleActionKind.RedirectTo when action.Values.Count > 0 => "redirect to " + string.Join(", ", action.Values),
+        _ => Template(action.Kind),
     };
 
     /// <summary>The label the wizard's checklist gives an action kind.</summary>
@@ -118,6 +154,7 @@ public static class RuleDescription
         RuleConditionKind.SizeBetween => new($"with a size {Size(c.Min, c.Max)}", Size(c.Min, c.Max)),
         RuleConditionKind.ReceivedBetween => new($"received {Span(c.After, c.Before)}", Span(c.After, c.Before)),
         RuleConditionKind.AssignedToCategory => new($"assigned to {Names(c.Values, "category")} category", Names(c.Values, "category")),
+        RuleConditionKind.FromFeed => new($"from the {Names(c.Values, "specified")} RSS Feed", Names(c.Values, "specified")),
         _ => new(Template(c.Kind)),
     };
 

@@ -88,7 +88,13 @@ public sealed class FeedReceiver
     /// Public so the harness can pose a feed without a network: what has to be provable is that an
     /// entry becomes a message in the right folder exactly once, not that HTTP works.
     /// </remarks>
-    public static int Deliver(OpenAccount account, FeedSubscription feed, FeedChannel channel, DateTimeOffset now)
+    /// <param name="arrival">
+    /// What to run over each item as it is filed, or null to file it and nothing more. Null is
+    /// the default and the reference's: its "Enable rules on all messages downloaded from RSS
+    /// Feeds" is off out of the box, and a folder-per-feed is already a kind of filing.
+    /// </param>
+    public static int Deliver(OpenAccount account, FeedSubscription feed, FeedChannel channel, DateTimeOffset now,
+        IArrivalHandler? arrival = null)
     {
         ArgumentNullException.ThrowIfNull(account);
         ArgumentNullException.ThrowIfNull(feed);
@@ -108,8 +114,14 @@ public sealed class FeedReceiver
             var raw = buffer.ToArray();
 
             var summary = MessageMapper.ToSummary(message, item.Id, raw.Length, item.Published ?? now);
-            account.Mail.AddMessage(folder.Id, summary, raw);
+            var id = account.Mail.AddMessage(folder.Id, summary, raw);
             delivered++;
+
+            // Rules over feed items are off unless asked for, and a rule that moves one has to
+            // see it where it was filed — so the pipeline runs after the message exists, not on
+            // the way in. A null id is a message this store already had, which is nothing new to
+            // run anything over.
+            if (arrival is not null && id is { } stored) arrival.Handle(account.Mail, folder, stored, message);
         }
 
         return delivered;
@@ -150,6 +162,10 @@ public sealed class FeedReceiver
             Subject = item.Title is { Length: > 0 } title ? title : "(no subject)",
             Date = item.Published ?? DateTimeOffset.UtcNow,
         };
+
+        // Which feed this came from. Nothing else in the message says: every feed on a host
+        // sends as rss@<host>, so a rule matching the sender would catch a site's whole set.
+        message.Headers.Add("X-Mailbox-Feed", feed.Url);
 
         message.From.Add(new MailboxAddress(who, $"rss@{host}"));
         message.To.Add(new MailboxAddress(channel.Title is { Length: > 0 } named ? named : feed.Name, $"subscriber@{host}"));

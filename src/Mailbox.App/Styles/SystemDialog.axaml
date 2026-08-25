@@ -19,6 +19,33 @@
         <Setter Property="Foreground" Value="{DynamicResource systemdialog.foreground.brush}" />
     </Style>
 
+    <!-- ==============================  Tick box  ============================== -->
+    <!--
+        The desktop's check box: a 13px white square in a 1px grey line, its tick in the
+        dialog's own ink. Without this a tick box under a system dialog is drawn by the
+        application's dark palette and reads as a hole in a light page.
+    -->
+    <Style Selector="Border.systemdialogroot CheckBox">
+        <Setter Property="Foreground" Value="{DynamicResource systemdialog.foreground.brush}" />
+        <Setter Property="Background" Value="{DynamicResource systemdialog.list.background.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource systemdialog.field.border.brush}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
+    <!-- The templated parts, where the control theme in use exposes them by name. Both are
+         written because the setters above reach a template that binds them and this one reaches
+         a template that does not; whichever applies, the box ends up white in a grey line. -->
+    <Style Selector="Border.systemdialogroot CheckBox /template/ Border">
+        <Setter Property="Background" Value="{DynamicResource systemdialog.list.background.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource systemdialog.field.border.brush}" />
+        <Setter Property="CornerRadius" Value="0" />
+    </Style>
+
+    <Style Selector="Border.systemdialogroot CheckBox /template/ Path">
+        <Setter Property="Fill" Value="{DynamicResource systemdialog.foreground.brush}" />
+        <Setter Property="Stroke" Value="{DynamicResource systemdialog.foreground.brush}" />
+    </Style>
+
     <!-- ============================== Push button ============================== -->
     <!--
         The desktop's push button, measured off the capture: 21px tall in a 1px line with

@@ -415,4 +415,45 @@ public class RulesTests
             return act(mail, folder, messageId);
         }
     }
+
+    [Fact]
+    public void AFeedRuleMatchesItsOwnFeedAndNoOther()
+    {
+        // Every feed on a host sends as rss@<host>, so matching the sender would sweep up a
+        // whole site's worth. The receiver stamps the address and this is what reads it.
+        var rule = new MailRule
+        {
+            Conditions = [new RuleCondition(RuleConditionKind.FromFeed) { Values = ["https://example.com/news.xml"] }],
+        };
+
+        Assert.True(RuleEvaluator.Matches(rule, new RuleFacts { FeedUrl = "https://example.com/news.xml" }));
+        Assert.False(RuleEvaluator.Matches(rule, new RuleFacts { FeedUrl = "https://example.com/jobs.xml" }));
+        Assert.False(RuleEvaluator.Matches(rule, new RuleFacts()));
+    }
+
+    [Fact]
+    public void ASendRuleAndAnArrivalRuleAreDifferentRules()
+    {
+        // The wizard starts them from different blank rules and they never mix: an inbox rule
+        // let loose on Sent Items is how somebody loses their own replies.
+        var arrival = new MailRule { Name = "Inbox" };
+        var sent = new MailRule { Name = "Outbox", AppliesToSent = true };
+
+        Assert.False(arrival.AppliesToSent);
+        Assert.True(sent.AppliesToSent);
+
+        // And it survives the document, which is where it is kept — there is no column for it.
+        Assert.True(MailRule.FromDefinition(1, "Outbox", true, 0, sent.DefinitionJson()).AppliesToSent);
+        Assert.False(MailRule.FromDefinition(1, "Inbox", true, 0, arrival.DefinitionJson()).AppliesToSent);
+    }
+
+    [Fact]
+    public void ARuleWrittenBeforeSendRulesExistedAppliesToArrivingMail()
+    {
+        // A definition with no AppliesToSent is every rule anybody wrote until now, and all of
+        // them were arrival rules. Reading one as a send rule would stop it running.
+        const string Old = "{\"Conditions\":[],\"Actions\":[],\"Exceptions\":[]}";
+
+        Assert.False(MailRule.FromDefinition(1, "Old", true, 0, Old).AppliesToSent);
+    }
 }

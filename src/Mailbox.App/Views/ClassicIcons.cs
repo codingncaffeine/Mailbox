@@ -165,10 +165,33 @@ public sealed class ClassicIcon : Control
             case "down": DrawArrow(context, p, up: false); break;
             case "folder": DrawFolder(context, p); break;
             case "book": DrawBook(context, p); break;
+            case "tick": DrawTickBox(context, p, ticked: true); break;
+            case "untick": DrawTickBox(context, p, ticked: false); break;
         }
     }
 
     // ---- The drawings ---------------------------------------------------------------------
+
+    /// <summary>
+    /// The list-view tick box the reference puts beside each rule: a 13px white square in a grey
+    /// line, with a black tick when it is on.
+    /// </summary>
+    /// <remarks>
+    /// Drawn rather than templated because it lives inside a list that draws itself. 13px is the
+    /// desktop's own size and it sits one pixel down of centre in a 16px slot, which is where the
+    /// capture puts it against a 17px row.
+    /// </remarks>
+    private static void DrawTickBox(DrawingContext c, Palette p, bool ticked)
+    {
+        c.DrawRectangle(p.Hole, new Pen(p.Ink, 1), new Rect(1.5, 1.5, 12, 12));
+        if (!ticked) return;
+
+        // Two strokes, the short one down-right and the long one up-right, as a tick is drawn.
+        var pen = new Pen(p.Ink, 2);
+        c.DrawLine(pen, new Point(4, 8), new Point(6.5, 10.5));
+        c.DrawLine(pen, new Point(6.5, 10.5), new Point(11, 5));
+    }
+
     // Each is composed on a 16x16 grid. Outlines are 1px and sit on pixel edges so they stay
     // crisp at 1x; the diagonals are the exception, and are meant to anti-alias.
 

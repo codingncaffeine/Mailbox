@@ -31,6 +31,9 @@ public sealed record RuleFacts
 
     /// <summary>The reader's own addresses, for the "my name" conditions.</summary>
     public IReadOnlyList<string> OwnAddresses { get; init; } = [];
+
+    /// <summary>The feed this arrived from, when it arrived from one — the receiver's own stamp.</summary>
+    public string FeedUrl { get; init; } = string.Empty;
 }
 
 /// <summary>Decides whether a rule applies to a message. Pure.</summary>
@@ -80,6 +83,12 @@ public static class RuleEvaluator
                 && (condition.Before is not { } before || facts.Received <= before),
             RuleConditionKind.AssignedToCategory => condition.Values.Any(v => facts.Categories.Contains(v, StringComparer.OrdinalIgnoreCase)),
             RuleConditionKind.Flagged => facts.IsFlagged,
+
+            // A feed is named by its address, and a reader picks it from the subscribed list, so
+            // an exact match is the whole of it — no substring, or one feed on a site would
+            // catch its siblings.
+            RuleConditionKind.FromFeed => facts.FeedUrl.Length > 0
+                && condition.Values.Any(v => string.Equals(v.Trim(), facts.FeedUrl, StringComparison.OrdinalIgnoreCase)),
             _ => false,
         };
     }

@@ -51,6 +51,17 @@ public sealed class SmtpSender(MailRepository repository)
     /// </remarks>
     public bool FileSentCopies { get; set; } = true;
 
+    /// <summary>
+    /// What runs over the copy filed in Sent Items, or null for nothing — the send-side half of
+    /// the rules.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not the arrival pipeline. The junk filter, the Focused Inbox and the plugins'
+    /// arrival hooks all have opinions about mail that came from somewhere else, and none of them
+    /// is right about a message this machine just wrote.
+    /// </remarks>
+    public ISentHandler? OnSent { get; set; }
+
     /// <summary>How long to wait before each retry. After the last, the item is failed.</summary>
     /// <summary>
     /// Puts a copy of what went into Sent Items, already read.
@@ -68,7 +79,11 @@ public sealed class SmtpSender(MailRepository repository)
             if (_repository.FolderWithRole(accountId, FolderRole.Sent) is not { } sentFolder) return;
 
             var summary = MessageMapper.ToSummary(message, null, raw.Length, now) with { IsRead = true };
-            _repository.AddMessage(sentFolder.Id, summary, raw);
+            var id = _repository.AddMessage(sentFolder.Id, summary, raw);
+
+            // The rules written for messages I send, over the copy just filed — after the send,
+            // so a rule can file a sent message but can never stop one going.
+            if (id is { } stored) OnSent?.Handle(_repository, sentFolder, stored, message);
         }
         catch (Exception ex)
         {

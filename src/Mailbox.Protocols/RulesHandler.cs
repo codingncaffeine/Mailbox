@@ -26,7 +26,7 @@ public sealed record RuleAlert(RuleActionKind Kind, string Text, string Address,
 /// need a screen or a speaker are collected in <see cref="Alerts"/> for the shell to show once
 /// the run is over, because a rule runs on the send/receive thread and a toast does not.
 /// </remarks>
-public sealed class RulesHandler(Func<DateTimeOffset>? now = null) : IArrivalHandler
+public sealed class RulesHandler(Func<DateTimeOffset>? now = null) : IArrivalHandler, ISentHandler
 {
     private readonly Func<DateTimeOffset> _now = now ?? (() => DateTimeOffset.UtcNow);
 
@@ -39,10 +39,37 @@ public sealed class RulesHandler(Func<DateTimeOffset>? now = null) : IArrivalHan
         // A rule that runs on the server has already run by the time the message is here — as
         // long as the server has the current script. While it is behind, the rule runs here too.
         var serverCurrent = mail.ServerRulesCurrent();
-        var rules = mail.Rules().Where(r => r.Enabled && !(r.ServerSide && serverCurrent)).ToList();
+        var rules = mail.Rules()
+            .Where(r => r.Enabled && !r.AppliesToSent && !(r.ServerSide && serverCurrent))
+            .ToList();
         if (rules.Count == 0) return folder.Id;
 
         return Apply(mail, folder, messageId, message, rules, mail.GetMessage(messageId)).FolderId;
+    }
+
+    /// <summary>
+    /// Runs the rules written for messages being sent, over the copy just filed in Sent Items.
+    /// </summary>
+    /// <remarks>
+    /// After the message has gone, never before: a rule is a filing instruction, and one that
+    /// could stop a send would turn a typo in a condition into mail that silently never left.
+    /// Only rules marked <see cref="MailRule.AppliesToSent"/> run here, and never the ones that
+    /// run on arrival — the reference's wizard starts those two from different blank rules, and
+    /// a rule meant for an inbox let loose on Sent Items is how a person loses their own replies.
+    /// <para>
+    /// Server-side rules are not consulted at all. Sieve runs at delivery on somebody else's
+    /// machine, and this copy is never delivered anywhere.
+    /// </para>
+    /// </remarks>
+    public long? HandleSent(MailRepository mail, Folder sent, long messageId, MimeMessage message)
+    {
+        ArgumentNullException.ThrowIfNull(mail);
+        ArgumentNullException.ThrowIfNull(sent);
+
+        var rules = mail.Rules().Where(r => r.Enabled && r.AppliesToSent && !r.ServerSide).ToList();
+        if (rules.Count == 0) return sent.Id;
+
+        return Apply(mail, sent, messageId, message, rules, mail.GetMessage(messageId)).FolderId;
     }
 
     /// <summary>
@@ -160,6 +187,7 @@ public sealed class RulesHandler(Func<DateTimeOffset>? now = null) : IArrivalHan
             Categories = categories,
             IsFlagged = summary?.IsFlagged ?? false,
             OwnAddresses = mail.OwnAddress() is { } own ? [own] : [],
+            FeedUrl = (message.Headers["X-Mailbox-Feed"] ?? string.Empty).Trim(),
         };
     }
 

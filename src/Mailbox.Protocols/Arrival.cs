@@ -28,6 +28,21 @@ public interface IArrivalHandler
     long? Handle(MailRepository mail, Folder folder, long messageId, MimeMessage message);
 }
 
+/// <summary>
+/// Acts on the copy of a message this machine has just sent, filed in Sent Items.
+/// </summary>
+/// <remarks>
+/// Its own interface rather than <see cref="IArrivalHandler"/> so the two cannot be wired into
+/// each other by accident: the handlers that act on arriving mail — the junk filter, the Focused
+/// Inbox, a plugin's arrival hook — are all wrong about a message the reader wrote themselves,
+/// and a single interface is an invitation to hand one this.
+/// </remarks>
+public interface ISentHandler
+{
+    /// <returns>The id of the folder the copy is in afterwards, or null when it was deleted.</returns>
+    long? Handle(MailRepository mail, Folder sent, long messageId, MimeMessage message);
+}
+
 /// <summary>Runs several handlers in order, each seeing where the last one left the message.</summary>
 public sealed class ArrivalPipeline(params IArrivalHandler[] handlers) : IArrivalHandler
 {

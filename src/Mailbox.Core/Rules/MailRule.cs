@@ -65,6 +65,17 @@ public enum RuleConditionKind
 
     /// <summary>Flagged for action — likewise.</summary>
     Flagged,
+
+    /// <summary>
+    /// From a specific RSS feed: <see cref="RuleCondition.Values"/> hold feed addresses.
+    /// </summary>
+    /// <remarks>
+    /// A feed item is a message like any other by the time a rule sees it, and nothing in its
+    /// headers said which feed it came from — so the receiver stamps one (<c>X-Mailbox-Feed</c>)
+    /// and this reads it. Matching on the sender instead would have caught every feed on a host
+    /// at once, every one of them being <c>rss@&lt;host&gt;</c>.
+    /// </remarks>
+    FromFeed,
 }
 
 /// <summary>What an action does.</summary>
@@ -191,6 +202,17 @@ public sealed record MailRule
 
     public IReadOnlyList<RuleCondition> Exceptions { get; init; } = [];
 
+    /// <summary>
+    /// Whether this rule runs over messages being sent rather than messages arriving.
+    /// </summary>
+    /// <remarks>
+    /// The reference's wizard starts a blank rule one of two ways — on messages I receive, or on
+    /// messages I send — and they are not the same rule run twice: a send rule sees the copy
+    /// being filed in Sent Items, after the message has gone. The two sets never mix, so a rule
+    /// written for one is never evaluated by the other.
+    /// </remarks>
+    public bool AppliesToSent { get; init; }
+
     /// <summary>Whether the rule stops the ones after it once it has fired.</summary>
     public bool StopsProcessing => Actions.Any(a => a.Kind == RuleActionKind.StopProcessing);
 
@@ -204,8 +226,14 @@ public sealed record MailRule
     };
 
     /// <summary>The conditions, actions and exceptions as one JSON document, for the store.</summary>
+    /// <remarks>
+    /// <see cref="AppliesToSent"/> rides in here rather than in a column of its own: the shape of
+    /// a rule belongs in the document, a reader that predates the field sees a rule that applies
+    /// to arriving mail — which is what every rule written before it was — and the store needs no
+    /// migration for it.
+    /// </remarks>
     public string DefinitionJson() => JsonSerializer.Serialize(
-        new Definition(Conditions, Actions, Exceptions), Json);
+        new Definition(Conditions, Actions, Exceptions, AppliesToSent), Json);
 
     /// <summary>Reads a definition back. A document that will not parse yields an empty rule, which matches nothing.</summary>
     public static MailRule FromDefinition(long id, string name, bool enabled, int ordinal, string json, bool serverSide = false)
@@ -230,11 +258,13 @@ public sealed record MailRule
             Conditions = definition?.Conditions ?? [],
             Actions = definition?.Actions ?? [],
             Exceptions = definition?.Exceptions ?? [],
+            AppliesToSent = definition?.AppliesToSent ?? false,
         };
     }
 
     private sealed record Definition(
         IReadOnlyList<RuleCondition> Conditions,
         IReadOnlyList<RuleAction> Actions,
-        IReadOnlyList<RuleCondition> Exceptions);
+        IReadOnlyList<RuleCondition> Exceptions,
+        bool AppliesToSent = false);
 }

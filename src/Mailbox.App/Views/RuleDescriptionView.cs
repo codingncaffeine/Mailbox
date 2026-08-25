@@ -21,6 +21,28 @@ public sealed class RuleDescriptionView : Border
 {
     private readonly StackPanel _lines = new() { Spacing = 3 };
 
+    /// <summary>Which ink the plain words take — the app's chrome, or a system dialog's.</summary>
+    private string _ink = "dialog.surface.text.brush";
+
+    /// <summary>What is on show, so a palette change can redraw it.</summary>
+    private MailRule? _rule;
+
+    /// <summary>
+    /// Draws the description on a system dialog's page instead of the application's chrome.
+    /// </summary>
+    /// <remarks>
+    /// Rules and Alerts and the wizard are system dialogs — the reference draws both with the
+    /// desktop's own controls — and a description keeping the dark chrome's ink inside a light
+    /// box would be unreadable in exactly the place a rule is checked.
+    /// </remarks>
+    public void UseSystemPalette()
+    {
+        _ink = "systemdialog.foreground.brush";
+        Bind(this, BackgroundProperty, "systemdialog.list.background.brush");
+        Bind(this, BorderBrushProperty, "systemdialog.field.border.brush");
+        Show(_rule);
+    }
+
     private static void Bind(AvaloniaObject target, AvaloniaProperty property, string key)
         => target[!property] = new DynamicResourceExtension(key);
 
@@ -32,6 +54,7 @@ public sealed class RuleDescriptionView : Border
         Child = new ScrollViewer { Content = _lines };
         Bind(this, BackgroundProperty, "dialog.surface.brush");
         Bind(this, BorderBrushProperty, "dialog.border.brush");
+        _ink = "dialog.surface.text.brush";
     }
 
     /// <summary>
@@ -43,6 +66,7 @@ public sealed class RuleDescriptionView : Border
     /// <summary>Redraws the pane for a rule, or clears it for none.</summary>
     public void Show(MailRule? rule)
     {
+        _rule = rule;
         _lines.Children.Clear();
         if (rule is null) return;
 
@@ -95,10 +119,10 @@ public sealed class RuleDescriptionView : Border
         return row;
     }
 
-    private static TextBlock Plain(string text)
+    private TextBlock Plain(string text)
     {
         var block = new TextBlock { Text = text };
-        Bind(block, TextBlock.ForegroundProperty, "dialog.surface.text.brush");
+        Bind(block, TextBlock.ForegroundProperty, _ink);
         return block;
     }
 }
