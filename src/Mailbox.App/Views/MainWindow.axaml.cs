@@ -5616,16 +5616,27 @@ public partial class MainWindow : Window
     {
         if (_transferring) return;
 
+        // Claimed here rather than after the accounts are gathered, because gathering them is
+        // the first await: AccountConnectionsAsync reads a password per account out of the
+        // keyring over D-Bus, which takes seconds and can put a prompt on the screen. Two
+        // presses inside that window — F9 twice, F9 while the interval timer fires, the IDLE
+        // watcher landing on a manual press — both used to get past a guard that had not been
+        // set yet, and the second run would then overwrite _tasks and _cancellation and dispose
+        // the token source the first was still using.
+        _transferring = true;
+
         var accounts = InGroup(await AccountConnectionsAsync(), group);
         if (accounts.Count == 0)
         {
+            // Released on the way out: everything below this point releases it in the finally,
+            // and this is the one path that never reaches the try.
+            _transferring = false;
+
             shell.StatusRight = group is null
                 ? "No account is set up yet. File, Add Account."
                 : $"No account in \u201c{group.Name}\u201d is set up.";
             return;
         }
-
-        _transferring = true;
 
         // The dialog from the last run goes first. It is bound to that run's tasks, and this line
         // replaces them — so a dialog left open by a failure would sit there showing the failure

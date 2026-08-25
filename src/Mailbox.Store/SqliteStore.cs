@@ -13,11 +13,52 @@ namespace Mailbox.Store;
 /// which matters because a send/receive is long and the list must stay live through it.
 /// Migrations are forward-only and additive, and a file from a newer build is refused rather
 /// than run against a schema this build does not understand.
+/// <para>
+/// <b>One writer, a reader per thread.</b> A poll runs on a thread-pool thread while the list,
+/// the folder counts and the reading pane read from the interface thread, and the two used to
+/// share a single connection with nothing between them. Two things came of that: a connection
+/// used from two threads at once, which is not something the provider promises to survive, and
+/// — worse — a write from the interface thread that started while the poll had a transaction
+/// open would see the re-entrancy counter above zero, skip opening one of its own, and quietly
+/// join the poll's. If the poll then threw, the reader's flag or move was rolled back with it,
+/// with nothing said.
+/// </para>
+/// <para>
+/// So: every write and every transaction goes through one writer connection under a lock that a
+/// transaction holds for its whole life — a second thread wanting to write waits rather than
+/// joining — and reads go to a connection belonging to the calling thread, which under WAL means
+/// the interface never waits on the poll to draw a list. A read made by the thread that is
+/// inside a transaction goes to the writer instead, because it has to see what that transaction
+/// has done so far. An in-memory store has no second connection to give: <c>:memory:</c> with a
+/// private cache means a second connection is a second database, so those serialise on the same
+/// lock, which is what a store that exists for the length of one test wants anyway.
+/// </para>
 /// </remarks>
 public abstract class SqliteStore : IDisposable
 {
     private readonly SqliteConnection _connection;
     private readonly IReadOnlyList<string> _steps;
+    private readonly string _connectionString;
+    private readonly Lock _gate = new();
+
+    /// <summary>One connection per thread that reads, or null for a store that has only the one.</summary>
+    private readonly ThreadLocal<SqliteConnection>? _readers;
+
+    /// <summary>Transaction depth, and the thread that owns it. Both are written under the gate.</summary>
+    private volatile int _depth;
+    private volatile int _owner;
+
+    /// <summary>
+    /// The row id of the last insert this thread made in this store.
+    /// </summary>
+    /// <remarks>
+    /// Captured inside the same lock as the insert, rather than asked of the connection
+    /// afterwards: the connection's own <c>last_insert_rowid()</c> belongs to whichever thread
+    /// wrote last, so an insert on the poll thread landing between another thread's insert and
+    /// its read of the id would hand back the wrong row.
+    /// </remarks>
+    [ThreadStatic]
+    private static (SqliteStore? Store, long Id) _lastInsert;
 
     /// <summary>Path that opens a store that never touches disk. For tests.</summary>
     public const string InMemory = ":memory:";
@@ -34,7 +75,7 @@ public abstract class SqliteStore : IDisposable
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
         }
 
-        _connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        _connectionString = new SqliteConnectionStringBuilder
         {
             DataSource = path,
             Mode = path == InMemory ? SqliteOpenMode.Memory : SqliteOpenMode.ReadWriteCreate,
@@ -43,11 +84,19 @@ public abstract class SqliteStore : IDisposable
             // preview beside the real thing — would silently be one.
             Cache = SqliteCacheMode.Private,
             ForeignKeys = true,
-        }.ToString());
+        }.ToString();
 
+        _connection = new SqliteConnection(_connectionString);
         _connection.Open();
         Configure();
         Migrate();
+
+        // After the migration, so that everything the constructor does goes through the writer:
+        // a reader opened against a file that has not been created yet would have nothing to
+        // read, and a migration read on another connection would not see the step in flight.
+        _readers = path == InMemory
+            ? null
+            : new ThreadLocal<SqliteConnection>(OpenReader, trackAllValues: true);
     }
 
     public string Path { get; }
@@ -112,31 +161,86 @@ public abstract class SqliteStore : IDisposable
         }
     }
 
-    /// <summary>Runs a statement that returns nothing.</summary>
+    /// <summary>Runs a statement that returns nothing. Always on the writer, under the gate.</summary>
     public int Execute(string sql, params (string Name, object? Value)[] parameters)
     {
-        using var command = Command(sql, parameters);
-        return command.ExecuteNonQuery();
+        lock (_gate)
+        {
+            using var command = Command(_connection, sql, parameters);
+            var rows = command.ExecuteNonQuery();
+
+            // Read back inside the same lock as the insert that produced it, so that
+            // LastInsertId belongs to this thread's row and not to whatever the poll wrote
+            // between the two calls.
+            if (Inserts(sql))
+            {
+                using var id = Command(_connection, "SELECT last_insert_rowid()");
+                _lastInsert = (this, Convert.ToInt64(id.ExecuteScalar()));
+            }
+
+            return rows;
+        }
     }
 
     /// <summary>Runs a statement and returns the first column of the first row as a long.</summary>
     public long ScalarLong(string sql, params (string Name, object? Value)[] parameters)
-    {
-        using var command = Command(sql, parameters);
-        var value = command.ExecuteScalar();
-        return value is null or DBNull ? 0 : Convert.ToInt64(value);
-    }
+        => Read(connection =>
+        {
+            using var command = Command(connection, sql, parameters);
+            var value = command.ExecuteScalar();
+            return value is null or DBNull ? 0 : Convert.ToInt64(value);
+        });
 
     /// <summary>Runs a query and projects each row.</summary>
     public List<T> Query<T>(string sql, Func<SqliteDataReader, T> read,
         params (string Name, object? Value)[] parameters)
-    {
-        using var command = Command(sql, parameters);
-        using var reader = command.ExecuteReader();
+        => Read(connection =>
+        {
+            using var command = Command(connection, sql, parameters);
+            using var reader = command.ExecuteReader();
 
-        var rows = new List<T>();
-        while (reader.Read()) rows.Add(read(reader));
-        return rows;
+            var rows = new List<T>();
+            while (reader.Read()) rows.Add(read(reader));
+            return rows;
+        });
+
+    /// <summary>
+    /// Runs a read on the connection this thread should be reading from: the writer while this
+    /// thread is inside a transaction, or where there is no second connection to use, and this
+    /// thread's own reader otherwise.
+    /// </summary>
+    private T Read<T>(Func<SqliteConnection, T> work)
+    {
+        if (_readers is null || (_depth > 0 && _owner == Environment.CurrentManagedThreadId))
+        {
+            // Re-entrant for the thread already holding it, which is what a read inside a
+            // transaction is.
+            lock (_gate) return work(_connection);
+        }
+
+        return work(_readers.Value!);
+    }
+
+    /// <summary>Whether a statement can move <c>last_insert_rowid()</c>.</summary>
+    private static bool Inserts(string sql)
+    {
+        var text = sql.AsSpan().TrimStart();
+        return text.StartsWith("INSERT", StringComparison.OrdinalIgnoreCase)
+            || text.StartsWith("REPLACE", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>A connection of this thread's own, for reading while another thread writes.</summary>
+    private SqliteConnection OpenReader()
+    {
+        var reader = new SqliteConnection(_connectionString);
+        reader.Open();
+
+        // The pragmas that are the connection's rather than the file's. WAL is the file's and is
+        // already set; a reader that met a checkpoint would otherwise fail instead of waiting.
+        using (var foreignKeys = Command(reader, "PRAGMA foreign_keys = ON")) foreignKeys.ExecuteNonQuery();
+        using (var busy = Command(reader, "PRAGMA busy_timeout = 5000")) busy.ExecuteNonQuery();
+
+        return reader;
     }
 
     /// <summary>
@@ -152,33 +256,39 @@ public abstract class SqliteStore : IDisposable
     /// </remarks>
     public T InTransaction<T>(Func<T> work)
     {
-        if (_depth > 0)
+        // Already inside one, on this thread: join it, which is what nesting means. Another
+        // thread's transaction is not ours to join — it waits for the gate below instead.
+        if (_depth > 0 && _owner == Environment.CurrentManagedThreadId)
         {
             _depth++;
             try { return work(); }
             finally { _depth--; }
         }
 
-        using var transaction = _connection.BeginTransaction();
-        _depth = 1;
+        lock (_gate)
+        {
+            using var transaction = _connection.BeginTransaction();
+            _depth = 1;
+            _owner = Environment.CurrentManagedThreadId;
 
-        try
-        {
-            var result = work();
-            transaction.Commit();
-            return result;
-        }
-        finally
-        {
-            _depth = 0;
+            try
+            {
+                var result = work();
+                transaction.Commit();
+                return result;
+            }
+            finally
+            {
+                _depth = 0;
+                _owner = 0;
+            }
         }
     }
 
-    private int _depth;
-
-    public SqliteCommand Command(string sql, params (string Name, object? Value)[] parameters)
+    private static SqliteCommand Command(
+        SqliteConnection connection, string sql, params (string Name, object? Value)[] parameters)
     {
-        var command = _connection.CreateCommand();
+        var command = connection.CreateCommand();
         command.CommandText = sql;
         foreach (var (name, value) in parameters)
         {
@@ -192,10 +302,30 @@ public abstract class SqliteStore : IDisposable
     /// Copies this store into another connection using SQLite's online backup, which is safe
     /// while the store is in use.
     /// </summary>
-    public void BackupTo(SqliteConnection target) => _connection.BackupDatabase(target);
+    public void BackupTo(SqliteConnection target)
+    {
+        lock (_gate) _connection.BackupDatabase(target);
+    }
 
-    /// <summary>Row id the last insert produced on this connection.</summary>
-    public long LastInsertId => ScalarLong("SELECT last_insert_rowid()");
+    /// <summary>Row id of the last insert this thread made in this store.</summary>
+    /// <remarks>
+    /// This thread's rather than this connection's: see <see cref="_lastInsert"/>. A thread that
+    /// has inserted nothing here asks the writer, which is what the property used to do for
+    /// everybody.
+    /// </remarks>
+    public long LastInsertId
+    {
+        get
+        {
+            if (_lastInsert.Store == this) return _lastInsert.Id;
+
+            lock (_gate)
+            {
+                using var command = Command(_connection, "SELECT last_insert_rowid()");
+                return Convert.ToInt64(command.ExecuteScalar());
+            }
+        }
+    }
 
     /// <summary>
     /// Checks the file over. Runs on demand rather than at startup: it reads every page, which
@@ -228,7 +358,14 @@ public abstract class SqliteStore : IDisposable
 
     public void Dispose()
     {
+        if (_readers is not null)
+        {
+            foreach (var reader in _readers.Values) reader.Dispose();
+            _readers.Dispose();
+        }
+
         _connection.Dispose();
         SqliteConnection.ClearPool(_connection);
+        GC.SuppressFinalize(this);
     }
 }
