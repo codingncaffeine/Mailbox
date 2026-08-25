@@ -213,6 +213,30 @@ public sealed class MailRepository(MailStore store)
     }
 
     /// <summary>Removes a folder and everything in it. A server folder that has gone.</summary>
+    /// <summary>
+    /// Puts a parent's children in this order — Move Up, Move Down and Sort Subfolders A to Z.
+    /// </summary>
+    /// <remarks>
+    /// The ordinal is local to a parent, and the folder pane reads it before the id, so a folder
+    /// that has never been moved keeps the order it arrived in. Written whole rather than as a
+    /// swap: two rows trading ordinals is the same statement twice and leaves a gap behind if a
+    /// sibling was deleted between them, and the list is short enough that rewriting it costs
+    /// nothing.
+    /// </remarks>
+    public void OrderFolders(IReadOnlyList<long> ids)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        _store.InTransaction(() =>
+        {
+            for (var i = 0; i < ids.Count; i++)
+            {
+                _store.Execute("UPDATE folders SET ordinal = $ordinal WHERE id = $id", ("$ordinal", i), ("$id", ids[i]));
+            }
+
+            return 0;
+        });
+    }
+
     public void RemoveFolder(long folderId) => _store.InTransaction(() =>
     {
         var ids = _store.Query(

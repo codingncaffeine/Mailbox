@@ -126,12 +126,16 @@ public sealed class TodayWorkspace : Border
         foreach (var row in outstanding.Take(8))
         {
             var id = row.ItemId;
-            var message = row.IsMessage;
+
+            // A borrowed row is a message or a contact, and its id belongs to another store's
+            // numbering: asking the task module to open one would open whatever task happened to
+            // share the number.
+            var borrowed = row.IsBorrowed;
             rows.Add(Line(
                 row.Task.Due is { } due ? $"{row.Summary}   ({due.Wall:d})" : row.Summary,
                 () =>
                 {
-                    if (!message) TaskRequested?.Invoke(this, id);
+                    if (!borrowed) TaskRequested?.Invoke(this, id);
                 }));
         }
 

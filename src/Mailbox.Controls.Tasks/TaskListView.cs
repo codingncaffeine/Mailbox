@@ -313,6 +313,11 @@ public sealed class TaskListView : DrawnSurface
                         DrawEnvelope(context, new Rect(start, box.Y + 5, 13, 10), quiet);
                         start += 18;
                     }
+                    else if (row.IsContact)
+                    {
+                        DrawPerson(context, new Rect(start, box.Y + 5, 13, 10), quiet);
+                        start += 18;
+                    }
 
                     var room = cell.Width - (start - left);
                     var text = Ink(Ellipsize(row.Summary, room, TextSize), TextSize, ink);
@@ -430,9 +435,14 @@ public sealed class TaskListView : DrawnSurface
         // two apart on a list that otherwise treats them alike — and who sent it after the
         // subject, as the reference writes it.
         var left = box.X + SubjectLeft;
-        if (row.Message is { } message)
+        if (row.Message is not null)
         {
             DrawEnvelope(context, new Rect(left, box.Y + 5, 13, 10), Colour(TokenKeys.List.PreviewText));
+            left += 18;
+        }
+        else if (row.IsContact)
+        {
+            DrawPerson(context, new Rect(left, box.Y + 5, 13, 10), Colour(TokenKeys.List.PreviewText));
             left += 18;
         }
 
@@ -464,6 +474,35 @@ public sealed class TaskListView : DrawnSurface
         context.DrawRectangle(null, pen, box);
         context.DrawLine(pen, box.TopLeft, new Point(box.Center.X, box.Center.Y));
         context.DrawLine(pen, new Point(box.Center.X, box.Center.Y), box.TopRight);
+    }
+
+    /// <summary>A head and shoulders, where a flagged message wears an envelope.</summary>
+    /// <remarks>
+    /// Outlined rather than filled, and on the envelope's own 13×10 so the subjects of all three
+    /// kinds of row start at the same place — a list whose text stepped left and right depending
+    /// on what each row was would read as ragged rather than as informative.
+    /// </remarks>
+    private void DrawPerson(DrawingContext context, Rect box, Color colour)
+    {
+        var pen = new Pen(Brush(colour), 1);
+        var head = Math.Min(box.Width, box.Height) / 3;
+
+        context.DrawEllipse(null, pen, new Point(box.Center.X, box.Y + head), head, head);
+
+        var shoulders = new StreamGeometry();
+        using (var draw = shoulders.Open())
+        {
+            draw.BeginFigure(new Point(box.X + 1, box.Bottom), isFilled: false);
+            draw.ArcTo(
+                new Point(box.Right - 1, box.Bottom),
+                new Size(box.Width / 2, head * 1.6),
+                0,
+                isLargeArc: false,
+                SweepDirection.Clockwise);
+            draw.EndFigure(false);
+        }
+
+        context.DrawGeometry(null, pen, shoulders);
     }
 
     /// <summary>The completion box: empty, or ticked once the task is done.</summary>

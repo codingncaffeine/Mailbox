@@ -575,6 +575,30 @@ public sealed class PimRepository(PimStore store)
         => _store.Execute("DELETE FROM categories WHERE id = $id", ("$id", id));
 
     /// <summary>
+    /// The flagged contacts, for the to-do list — the same join the flagged mail makes, over
+    /// this store instead of an account's.
+    /// </summary>
+    /// <remarks>
+    /// A contact is flagged when it has a due date, because on anything whose flag <em>is</em> a
+    /// due date, No Date and Clear Flag settle the same way — the rule the task list already
+    /// works by. There is no <c>is_flagged</c> beside it as there is on a message, and there is
+    /// nothing for one to say.
+    /// <para>
+    /// Bounded, as <see cref="MailRepository.FlaggedMessages"/> is: the to-do list is a list a
+    /// person reads, and an address book that somebody has flagged five thousand of is a
+    /// scrolling problem rather than a to-do list.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<PimItem> FlaggedContacts(bool includeComplete = false, int limit = 500)
+        => _store.Query(
+            ItemSelect
+            + " WHERE kind = 'vcard' AND follow_up_due IS NOT NULL AND sync_state <> 'deleted'"
+            + (includeComplete ? string.Empty : " AND follow_up_complete = 0")
+            + " ORDER BY follow_up_due, id LIMIT $limit",
+            ReadItem,
+            ("$limit", limit));
+
+    /// <summary>
     /// Every item carrying a category by that name, whichever module it belongs to.
     /// </summary>
     /// <remarks>

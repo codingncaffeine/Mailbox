@@ -165,6 +165,89 @@ public class TaskBookTests
         return id;
     }
 
+    /// <summary>
+    /// A contact carries its flag beside the card, so a flagged one is a row on this list the
+    /// same way a flagged message is — the same join, over this store rather than an account's.
+    /// </summary>
+    private static long FlagContact(PimRepository repository, long bookId, string fileAs, DateOnly? due, bool complete = false)
+        => repository.AddItem(new PimItem
+        {
+            CollectionId = bookId,
+            Uid = fileAs,
+            Kind = CollectionKind.Contacts,
+            RawPayload = $"BEGIN:VCARD\r\nVERSION:3.0\r\nFN:{fileAs}\r\nEND:VCARD\r\n",
+            Summary = fileAs,
+            FileAs = fileAs,
+
+            // Built at the local offset so the date survives .LocalDateTime in any zone the
+            // tests happen to run in.
+            FollowUpDue = due is { } d
+                ? new DateTimeOffset(d.ToDateTime(new TimeOnly(12, 0)), DateTimeOffset.Now.Offset)
+                : null,
+            FollowUpComplete = complete,
+        }).Id;
+
+    [Fact]
+    public void FlaggedContactsAreOnTheListBesideTheTasks()
+    {
+        var (pim, repository, _, list) = Fresh();
+        using var _p = pim;
+        var book = repository.AddCollection(CollectionKind.Contacts, "Contacts");
+
+        Add(repository, list.Id, "A task due today", Today);
+        FlagContact(repository, book.Id, "Chen, Alice", Today.AddDays(1));
+
+        var rows = new TaskBook(repository).Rows(Today);
+
+        Assert.Equal(["A task due today", "Chen, Alice"], rows.Select(r => r.Summary));
+        Assert.Equal([TaskBand.Today, TaskBand.Tomorrow], rows.Select(r => r.Band));
+
+        var contact = rows[1];
+        Assert.True(contact.IsContact);
+        Assert.False(contact.IsMessage);
+        Assert.True(contact.IsBorrowed);
+        Assert.Equal("Chen, Alice", contact.Contact!.Name);
+
+        // A contact and a task come out of one store and share its numbering, so the letter is
+        // the whole of what tells their keys apart.
+        Assert.StartsWith("c:", contact.Key);
+        Assert.StartsWith("t:", rows[0].Key);
+        Assert.False(rows[0].IsBorrowed);
+    }
+
+    [Fact]
+    public void AnUnflaggedOrFinishedContactStaysOffTheList()
+    {
+        var (pim, repository, _, _) = Fresh();
+        using var _p = pim;
+        var book = repository.AddCollection(CollectionKind.Contacts, "Contacts");
+
+        FlagContact(repository, book.Id, "Never flagged", null);
+        FlagContact(repository, book.Id, "Rung back", Today, complete: true);
+        FlagContact(repository, book.Id, "Still owed", Today);
+
+        Assert.Equal(["Still owed"], new TaskBook(repository).Rows(Today).Select(r => r.Summary));
+
+        // The Simple List shows what is done, and a completed contact is on it.
+        Assert.Equal(
+            ["Rung back", "Still owed"],
+            new TaskBook(repository).Rows(Today, includeCompleted: true).Select(r => r.Summary).OrderBy(s => s));
+    }
+
+    [Fact]
+    public void ALateContactIsOverdueAsALateTaskIs()
+    {
+        var (pim, repository, _, _) = Fresh();
+        using var _p = pim;
+        var book = repository.AddCollection(CollectionKind.Contacts, "Contacts");
+
+        FlagContact(repository, book.Id, "Owed a week", Today.AddDays(-7));
+
+        var row = Assert.Single(new TaskBook(repository).Rows(Today));
+        Assert.True(row.IsOverdue);
+        Assert.Equal(TaskBand.Today, row.Band);
+    }
+
     [Fact]
     public void FlaggedMailIsOnTheListBesideTheTasks()
     {

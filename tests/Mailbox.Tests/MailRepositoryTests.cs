@@ -18,6 +18,42 @@ public class MailRepositoryTests
         0, 0, uid, $"<{uid}@example.com>", "Alice", from, subject, "Preview text",
         DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, 1024, read, false, false);
 
+    /// <summary>
+    /// Sort Subfolders A to Z, Move Up and Move Down, which are the folder pane's own order and
+    /// nobody else's — no mail server has an opinion about the order its folders are drawn in.
+    /// </summary>
+    [Fact]
+    public void FoldersKeepTheOrderTheyWerePutIn()
+    {
+        var (store, repo, inbox) = Fresh();
+        using var _ = store;
+
+        var zebra = repo.AddFolder(inbox.AccountId, "Zebra", parentId: inbox.Id);
+        var apple = repo.AddFolder(inbox.AccountId, "Apple", parentId: inbox.Id);
+        var mango = repo.AddFolder(inbox.AccountId, "Mango", parentId: inbox.Id);
+
+        IEnumerable<string> Under(long parent) => repo.Folders(inbox.AccountId)
+            .Where(f => f.ParentId == parent)
+            .Select(f => f.Name);
+
+        // Added order until somebody says otherwise.
+        Assert.Equal(["Zebra", "Apple", "Mango"], Under(inbox.Id));
+
+        // Sort Subfolders A to Z.
+        repo.OrderFolders([apple.Id, mango.Id, zebra.Id]);
+        Assert.Equal(["Apple", "Mango", "Zebra"], Under(inbox.Id));
+
+        // Move Down on Apple: the run is written whole, so the two that did not move keep theirs.
+        repo.OrderFolders([mango.Id, apple.Id, zebra.Id]);
+        Assert.Equal(["Mango", "Apple", "Zebra"], Under(inbox.Id));
+
+        // An order is local to its parent: a sibling elsewhere is not renumbered by it.
+        var other = repo.AddFolder(inbox.AccountId, "Elsewhere");
+        repo.OrderFolders([zebra.Id, apple.Id, mango.Id]);
+        Assert.Equal("Elsewhere", repo.GetFolder(other.Id)!.Name);
+        Assert.Equal(["Zebra", "Apple", "Mango"], Under(inbox.Id));
+    }
+
     [Fact]
     public void AnAccountGetsTheStandardFolders()
     {

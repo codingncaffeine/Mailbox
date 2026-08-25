@@ -327,15 +327,19 @@ public partial class MainWindow
                 return true;
 
             // Delete deletes the thing; Remove from List takes it off the list without deleting
-            // it. The two differ only on a flagged message — a task is nothing but its own entry
-            // on the list, so removing one is deleting it.
+            // it. A task is nothing but its own entry on the list, so removing one is deleting
+            // it, and the two only part company on a borrowed row. On a contact they meet again
+            // for a different reason — see MainWindow.FlaggedContacts: deleting a person because
+            // a to-do was ticked is not something to do on a guess.
             case "tasks.delete" when tasks.Selected is { } gone:
                 if (gone.IsMessage) DeleteFlaggedMessage(shell, gone);
+                else if (gone.IsContact) FlagFlaggedContact(shell, gone, null);
                 else DeleteTask(shell, gone);
                 return true;
 
             case "tasks.remove" when tasks.Selected is { } removed:
                 if (removed.IsMessage) RemoveFlaggedMessage(shell, removed);
+                else if (removed.IsContact) FlagFlaggedContact(shell, removed, null);
                 else DeleteTask(shell, removed);
                 return true;
 
@@ -485,7 +489,8 @@ public partial class MainWindow
     /// <summary>Opening a row: the task window, or the message the flag is on.</summary>
     private void OpenToDo(ShellViewModel shell, TaskRow row)
     {
-        if (row.IsMessage) OpenFlaggedMessage(shell, row);
+        if (row.IsContact) OpenFlaggedContact(shell, row);
+        else if (row.IsMessage) OpenFlaggedMessage(shell, row);
         else _ = OpenTaskAsync(shell, row);
     }
 
@@ -493,6 +498,7 @@ public partial class MainWindow
     private void ToggleToDo(ShellViewModel shell, TaskRow row, bool? complete = null)
     {
         if (row.IsMessage) ToggleFlaggedMessage(shell, row, complete);
+        else if (row.IsContact) ToggleFlaggedContact(shell, row, complete);
         else ToggleTask(shell, row, complete);
     }
 

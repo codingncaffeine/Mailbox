@@ -217,6 +217,12 @@ public partial class MainWindow
             return;
         }
 
+        if (row.IsContact)
+        {
+            FlagFlaggedContact(shell, row, due);
+            return;
+        }
+
         if (App.Pim.Item(row.ItemId) is not { } item) return;
         var task = PimTodoCodec.FromItem(item);
 
@@ -260,6 +266,19 @@ public partial class MainWindow
 
             AfterFlaggedChange(shell);
             shell.StatusRight = $"“{row.Summary}” flagged.";
+            return;
+        }
+
+        // A card's flag is a due date and nothing else, so the dialog's start date and reminder
+        // have nowhere to go — the same shape as its "Flag to" line, which a task has no field
+        // for either. What it is for is picking a date that is not one of the five presets.
+        if (row.IsContact)
+        {
+            var picked = new CustomFlagDialog(null);
+            await picked.ShowDialog(this);
+
+            if (picked.Cleared) FlagFlaggedContact(shell, row, null);
+            else if (picked.Result is { } chosen) FlagFlaggedContact(shell, row, chosen.Due);
             return;
         }
 
@@ -328,12 +347,14 @@ public partial class MainWindow
             return;
         }
 
-        // A message's own privacy is a header its sender wrote, not a mark its reader sets; the
-        // reference greys the button for one, and this says the same thing in words.
-        if (row.IsMessage)
+        // Private is CLASS on a VTODO. A message's own privacy is a header its sender wrote and
+        // not a mark its reader sets, and a contact's Private is on the card and means something
+        // else — so a borrowed row says so in words, where the reference greys the button.
+        if (row.IsBorrowed)
         {
-            shell.StatusRight = "Private marks a task; this row is a flagged message.";
-            Log.Info($"Private: “{row.Summary}” is a flagged message — nothing set.");
+            var kind = row.IsContact ? "a flagged contact" : "a flagged message";
+            shell.StatusRight = $"Private marks a task; this row is {kind}.";
+            Log.Info($"Private: “{row.Summary}” is {kind} — nothing set.");
             return;
         }
 
@@ -382,6 +403,15 @@ public partial class MainWindow
             return;
         }
 
+        // A card has no importance: a person is not high or low priority, and the reference's
+        // own contact form offers no such field.
+        if (row.IsContact)
+        {
+            shell.StatusRight = "Importance marks a task or a message; this row is a flagged contact.";
+            Log.Info($"Importance: “{row.Summary}” is a flagged contact — nothing set.");
+            return;
+        }
+
         if (App.Pim.Item(row.ItemId) is not { } item) return;
         var task = PimTodoCodec.FromItem(item);
         var next = task.Urgency == urgency ? TaskUrgency.Normal : urgency;
@@ -413,6 +443,15 @@ public partial class MainWindow
             Log.Info($"Harness: “{after.Subject}” is now "
                 + $"{(after.FollowUpComplete ? "complete" : after.IsFlagged ? "flagged" : "unflagged")}, "
                 + $"due {after.FollowUpDue?.LocalDateTime.ToString("yyyy-MM-dd") ?? "—"}.");
+            return;
+        }
+
+        if (row.Contact is { } flagged)
+        {
+            if (App.Contacts.Repository.Item(flagged.ItemId) is not { } card) return;
+            Log.Info($"Harness: “{flagged.Name}” is now "
+                + $"{(card.FollowUpComplete ? "complete" : card.FollowUpDue is not null ? "flagged" : "unflagged")}, "
+                + $"due {card.FollowUpDue?.LocalDateTime.ToString("yyyy-MM-dd") ?? "—"}.");
             return;
         }
 

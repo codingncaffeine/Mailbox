@@ -2593,8 +2593,52 @@ public partial class MainWindow : Window
             return Task.CompletedTask;
         });
 
+        // Sort Subfolders A to Z orders this folder's children; Move Up and Move Down move this
+        // folder among its own siblings. All three are local and nothing is sent: the ordinal is
+        // how the pane draws an account's tree, and no mail server has an opinion about the order
+        // its folders are shown in.
+        var tree = account.Mail.Folders(account.Account.Id);
+        var children = tree.Where(f => f.ParentId == folder.Id).ToList();
+        var siblings = tree.Where(f => f.ParentId == folder.ParentId).ToList();
+        var at = siblings.FindIndex(f => f.Id == folder.Id);
+
+        flyout.Items.Add(new Separator());
+        Entry("Sort Subfolders A to Z", () =>
+        {
+            account.Mail.OrderFolders([.. children.OrderBy(f => f.Name, StringComparer.CurrentCultureIgnoreCase).Select(f => f.Id)]);
+            shell.Refresh();
+            shell.StatusRight = $"The {children.Count} folders under “{folder.Name}” sorted.";
+            return Task.CompletedTask;
+        }, children.Count > 1);
+        Entry("Move Up", () => ReorderSibling(shell, account, siblings, at, -1), at > 0);
+        Entry("Move Down", () => ReorderSibling(shell, account, siblings, at, 1), at >= 0 && at < siblings.Count - 1);
+
         flyout.Items.Add(new Separator());
         Entry("Properties…", () => FolderPropertiesAsync(shell, account, folder));
+    }
+
+    /// <summary>
+    /// Move Up and Move Down: lifts the folder out of its run of siblings, puts it back one place
+    /// along, and writes the whole run's ordinals.
+    /// </summary>
+    /// <remarks>
+    /// Not a swap of two ordinals. Folders that have never been reordered all sit at 0 and are
+    /// drawn by id after it, so swapping would move nothing the first time it was asked for;
+    /// writing the run gives every sibling a place and the next press has something to trade.
+    /// </remarks>
+    private static Task ReorderSibling(ShellViewModel shell, OpenAccount account, List<Folder> siblings, int at, int by)
+    {
+        var to = at + by;
+        if (at < 0 || to < 0 || to >= siblings.Count) return Task.CompletedTask;
+
+        var moved = siblings[at];
+        siblings.RemoveAt(at);
+        siblings.Insert(to, moved);
+        account.Mail.OrderFolders([.. siblings.Select(f => f.Id)]);
+
+        shell.Refresh();
+        shell.StatusRight = $"“{moved.Name}” moved {(by < 0 ? "up" : "down")}.";
+        return Task.CompletedTask;
     }
 
     /// <summary>The account's connection for a folder operation on the server — null for POP3, whose folders live here.</summary>

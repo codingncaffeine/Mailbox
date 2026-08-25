@@ -34,6 +34,17 @@ public enum TaskBand
 /// <param name="From">Who sent it, which is what the reference writes beside the subject.</param>
 public sealed record FlaggedMessage(string Account, long MessageId, string From);
 
+/// <summary>
+/// The contact a to-do row stands for, when the row is a flagged contact.
+/// </summary>
+/// <remarks>
+/// One field beyond the id, and it is the name: a contact's row says who it is where a message's
+/// says what it is about, so the name is the row's own summary rather than something written
+/// after it the way a sender is.
+/// </remarks>
+/// <param name="ItemId">Its row in the PIM store, which is the same numbering a task's uses.</param>
+public sealed record FlaggedContact(long ItemId, string Name);
+
 /// <summary>One line of the to-do list: the row it came from and everything drawing it needs.</summary>
 /// <remarks>
 /// A task or a flagged message, because the reference's own To-Do List holds both and treats them
@@ -54,7 +65,19 @@ public sealed record TaskRow
     /// <summary>Set when this row is a flagged message rather than a task of its own.</summary>
     public FlaggedMessage? Message { get; init; }
 
+    /// <summary>Set when this row is a flagged contact.</summary>
+    public FlaggedContact? Contact { get; init; }
+
     public bool IsMessage => Message is not null;
+
+    public bool IsContact => Contact is not null;
+
+    /// <summary>True for a row that is somebody else's item, borrowed onto this list.</summary>
+    /// <remarks>
+    /// What the Tags group asks before it writes: Private is CLASS on a VTODO and Importance is
+    /// PRIORITY, and neither a message nor a contact has anywhere to keep one.
+    /// </remarks>
+    public bool IsBorrowed => Message is not null || Contact is not null;
 
     public string Summary => Task.Summary.Length > 0 ? Task.Summary : "(No subject)";
 
@@ -64,7 +87,15 @@ public sealed record TaskRow
     /// What tells two rows apart, since a task and a message are numbered by different stores and
     /// their ids collide as readily as not.
     /// </summary>
-    public string Key => Message is { } message ? $"m:{message.Account}:{message.MessageId}" : $"t:{ItemId}";
+    public string Key => this switch
+    {
+        { Message: { } message } => $"m:{message.Account}:{message.MessageId}",
+
+        // A contact and a task are numbered by the same store, so the letter is the whole of
+        // what tells them apart.
+        { Contact: not null } => $"c:{ItemId}",
+        _ => $"t:{ItemId}",
+    };
 
     /// <summary>The due date as the list writes it, or nothing at all for a task with no date.</summary>
     public string DueText(IFormatProvider? culture = null)
@@ -142,6 +173,7 @@ public sealed class TaskBook(PimRepository repository, Func<IReadOnlyList<(strin
         }
 
         rows.AddRange(FlaggedMail(today, includeCompleted));
+        rows.AddRange(FlaggedContacts(today, includeCompleted));
         rows.Sort(Compare);
         return rows;
     }
@@ -187,6 +219,50 @@ public sealed class TaskBook(PimRepository repository, Func<IReadOnlyList<(strin
                     Message = new FlaggedMessage(address, message.Id, message.DisplayFrom),
                 };
             }
+        }
+    }
+
+    /// <summary>
+    /// The flagged contacts, beside the tasks and the flagged mail — the same join, over this
+    /// store rather than an account's.
+    /// </summary>
+    /// <remarks>
+    /// Carried as a task for the same reason a message is: what the list draws is a summary, a
+    /// due date and a tick, and a row that had to be asked which of three things it was before
+    /// any of that could be worked out would put the whole list in the business of knowing about
+    /// three stores. The contact's File As is the summary, because what a flagged contact means
+    /// is "ring this person" and the person is the whole of it.
+    /// </remarks>
+    private IEnumerable<TaskRow> FlaggedContacts(DateOnly today, bool includeCompleted)
+    {
+        foreach (var item in _repository.FlaggedContacts(includeCompleted))
+        {
+            var due = item.FollowUpDue?.LocalDateTime;
+            var name = item.FileAs.Length > 0 ? item.FileAs : item.Summary;
+
+            var task = new TaskItem
+            {
+                Uid = $"contact-{item.Id}@mailbox",
+                Summary = name.Length > 0 ? name : "(No name)",
+                Due = due is { } when ? EventTime.Date(DateOnly.FromDateTime(when)) : null,
+                Progress = item.FollowUpComplete ? TaskProgress.Completed : TaskProgress.NotStarted,
+                PercentComplete = item.FollowUpComplete ? 100 : 0,
+                CompletedUtc = item.FollowUpComplete ? item.FollowUpDue : null,
+                LastModified = item.FollowUpDue ?? DateTimeOffset.UnixEpoch,
+            };
+
+            var band = BandOf(task, today);
+            if (band == TaskBand.Completed && !includeCompleted) continue;
+
+            yield return new TaskRow
+            {
+                ItemId = item.Id,
+                CollectionId = item.CollectionId,
+                Task = task,
+                Band = band,
+                IsOverdue = !item.FollowUpComplete && task.Due is { } date && Date(date) < today,
+                Contact = new FlaggedContact(item.Id, task.Summary),
+            };
         }
     }
 
