@@ -73,8 +73,13 @@ EOF
 chmod +x "$BIN/mailbox-diagnostics"
 
 echo "── icons and desktop entries"
+# The panel's icon is the mailbox itself — the drawing the reader gave us for the taskbar —
+# rather than the tile the application wears inside its own title bar. Two icons on purpose:
+# the tile identifies the window from within, and the panel wants the thing it is a picture of.
+# mailbox-app-* is that drawing; the fallback keeps an older tree installable.
 for size in 16 24 32 48 64 128 256 512; do
-    src="assets/icons/mailbox-${size}.png"
+    src="assets/icons/mailbox-app-${size}.png"
+    [ -f "$src" ] || src="assets/icons/mailbox-${size}.png"
     [ -f "$src" ] || continue
     install -Dm644 "$src" "$ICONS/${size}x${size}/apps/mailbox.png"
 done

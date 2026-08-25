@@ -15,8 +15,13 @@ ICONS="$DESTDIR$PREFIX/share/icons/hicolor"
 
 install -Dm644 "$HERE/mailbox.desktop" "$APPS/mailbox.desktop"
 
+# The panel's icon is the mailbox itself — the drawing the reader gave us for the taskbar —
+# rather than the tile the application wears inside its own title bar. Two icons on purpose:
+# the tile identifies the window from within, and the panel wants the thing it is a picture of.
+# mailbox-app-* is that drawing; the fallback keeps an older tree installable.
 for size in 16 24 32 48 64 128 256 512; do
-    src="$ROOT/assets/icons/mailbox-${size}.png"
+    src="$ROOT/assets/icons/mailbox-app-${size}.png"
+    [ -f "$src" ] || src="$ROOT/assets/icons/mailbox-${size}.png"
     [ -f "$src" ] || continue
     install -Dm644 "$src" "$ICONS/${size}x${size}/apps/mailbox.png"
 done
