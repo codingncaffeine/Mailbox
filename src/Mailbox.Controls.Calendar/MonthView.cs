@@ -242,7 +242,7 @@ public sealed class MonthView : CalendarSurface
         var entry = drag.Entry;
         var lines = Wrap(entry.MonthLabel(Culture), box.Width - ChipTextInset - 2, 1, ChipTextSize);
         using var fade = context.PushOpacity(0.65);
-        DrawChip(context, box, Palette.Chip(entry.Colour, entry.Busy), lines, selected: true);
+        DrawChip(context, box, Palette.Chip(entry.Colour, entry.Busy), lines, selected: true, reminder: entry.HasReminder);
     }
 
     private Rect? CellOf(DateOnly date)
@@ -334,7 +334,7 @@ public sealed class MonthView : CalendarSurface
             var box = new Rect(left, y, Math.Max(0, right - left), bandHeight);
             var paint = Palette.Chip(band.Item.Colour, band.Item.Busy);
             var lines = Wrap(band.Item.MonthLabel(Culture), box.Width - ChipTextInset - 2, 1, ChipTextSize);
-            DrawChip(context, box, paint, lines, ReferenceEquals(band.Item, SelectedEntry));
+            DrawChip(context, box, paint, lines, ReferenceEquals(band.Item, SelectedEntry), reminder: band.Item.HasReminder);
             _entryHits.Add((box, band.Item));
             bandsBottom = Math.Max(bandsBottom, (band.Lane + 1) * (bandHeight + 1));
         }
@@ -414,7 +414,7 @@ public sealed class MonthView : CalendarSurface
             var maxLines = (int)Math.Floor((room - ChipPadding) / ChipLineHeight);
             var lines = Wrap(entry.MonthLabel(Culture), textWidth, Math.Max(1, maxLines), ChipTextSize);
             var box = new Rect(cell.X, y, width, ChipHeight(lines.Count));
-            DrawChip(context, box, Palette.Chip(entry.Colour, entry.Busy), lines, ReferenceEquals(entry, SelectedEntry));
+            DrawChip(context, box, Palette.Chip(entry.Colour, entry.Busy), lines, ReferenceEquals(entry, SelectedEntry), reminder: entry.HasReminder);
             _entryHits.Add((box, entry));
             y = box.Bottom + 1;
         }

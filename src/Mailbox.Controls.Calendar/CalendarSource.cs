@@ -18,6 +18,19 @@ public sealed class CalendarSource(PimRepository repository)
 {
     private readonly PimRepository _repository = repository ?? throw new ArgumentNullException(nameof(repository));
 
+    /// <summary>
+    /// One colour for every calendar, whatever each says about itself — the Options page's
+    /// "Use this colour on all calendars".
+    /// </summary>
+    /// <remarks>
+    /// Applied here rather than written into the collections, because the setting is a way of
+    /// looking at the calendars rather than a change to them: turning it off has to give every
+    /// calendar its own colour back, and a sweep that overwrote them would have nothing to give.
+    /// Empty means the default chip colour, which is what a calendar with no colour of its own
+    /// already draws as.
+    /// </remarks>
+    public string? ForcedColour { get; set; }
+
     /// <summary>The calendars, in the order the navigation pane lists them.</summary>
     public IReadOnlyList<Collection> Calendars() => _repository.Collections(CollectionKind.Events);
 
@@ -44,7 +57,7 @@ public sealed class CalendarSource(PimRepository repository)
             var items = _repository.ItemsBetween(fromUtc, toUtc, [calendar.Id]);
             if (items.Count == 0) continue;
 
-            var colour = Colour(calendar.Color);
+            var colour = Colour(ForcedColour ?? calendar.Color);
             var events = new List<CalendarEvent>(items.Count);
             var ids = new Dictionary<(string Uid, string Recurrence), long>();
 

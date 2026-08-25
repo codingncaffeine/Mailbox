@@ -306,7 +306,7 @@ public sealed class ScheduleView : CalendarSurface
 
             var entry = box.Item;
             var lines = Wrap(entry.Summary, rect.Width - ChipTextInset - 2, 1, ChipTextSize, SemiBoldFace);
-            DrawChip(context, rect, Palette.Chip(entry.Colour ?? row.Colour, entry.Busy), lines, ReferenceEquals(entry, SelectedEntry), boldFirstLine: true);
+            DrawChip(context, rect, Palette.Chip(entry.Colour ?? row.Colour, entry.Busy), lines, ReferenceEquals(entry, SelectedEntry), boldFirstLine: true, reminder: entry.HasReminder);
             _entryHits.Add((rect, entry));
         }
     }
@@ -501,7 +501,7 @@ public sealed class ScheduleView : CalendarSurface
         var lines = Wrap(entry.Summary, box.Width - ChipTextInset - 2, 1, ChipTextSize, SemiBoldFace);
         using var clip = context.PushClip(_lanes);
         using var fade = context.PushOpacity(0.65);
-        DrawChip(context, box, Palette.Chip(entry.Colour ?? target.Row.Colour, entry.Busy), lines, selected: true, boldFirstLine: true);
+        DrawChip(context, box, Palette.Chip(entry.Colour ?? target.Row.Colour, entry.Busy), lines, selected: true, boldFirstLine: true, reminder: entry.HasReminder);
     }
 
     /// <summary>Where an entry was drawn, for a harness that has to press a real drag.</summary>

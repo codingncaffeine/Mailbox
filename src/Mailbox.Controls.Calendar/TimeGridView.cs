@@ -389,7 +389,7 @@ public sealed class TimeGridView : CalendarSurface
             var right = columnX[bar.EndColumn] + columns[bar.EndColumn];
             var box = new Rect(left + 1, top + 2 + (bar.Lane * (laneHeight + 1)), Math.Max(0, right - left - 2), laneHeight);
             var lines = Wrap(bar.Item.Summary, box.Width - ChipTextInset - 2, 1, ChipTextSize);
-            DrawChip(context, box, Palette.Chip(bar.Item.Colour, bar.Item.Busy), lines, ReferenceEquals(bar.Item, SelectedEntry));
+            DrawChip(context, box, Palette.Chip(bar.Item.Colour, bar.Item.Busy), lines, ReferenceEquals(bar.Item, SelectedEntry), reminder: bar.Item.HasReminder);
             _entryHits.Add((box, bar.Item, true));
         }
 
@@ -578,7 +578,7 @@ public sealed class TimeGridView : CalendarSurface
                 lines.AddRange(Wrap(entry.Location, box.Width - ChipTextInset - 2, maxLines - lines.Count, ChipTextSize));
             }
 
-            DrawChip(context, box, Palette.Chip(entry.Colour, entry.Busy), lines, ReferenceEquals(entry, SelectedEntry), boldFirstLine: true);
+            DrawChip(context, box, Palette.Chip(entry.Colour, entry.Busy), lines, ReferenceEquals(entry, SelectedEntry), boldFirstLine: true, reminder: entry.HasReminder);
             _entryHits.Add((box, entry, false));
         }
     }
@@ -642,7 +642,7 @@ public sealed class TimeGridView : CalendarSurface
         var lines = Wrap(entry.Summary, box.Width - ChipTextInset - 2, Math.Max(1, (int)((box.Height - ChipPadding) / ChipLineHeight)), ChipTextSize, SemiBoldFace);
         using var clip = context.PushClip(new Rect(0, _bandTop, width, Bounds.Height - _bandTop));
         using var fade = context.PushOpacity(0.65);
-        DrawChip(context, box, Palette.Chip(entry.Colour, entry.Busy), lines, selected: true, boldFirstLine: true);
+        DrawChip(context, box, Palette.Chip(entry.Colour, entry.Busy), lines, selected: true, boldFirstLine: true, reminder: entry.HasReminder);
     }
 
     /// <summary>Where the ghost goes: the band for an all-day proposal, the grid for a timed one.</summary>

@@ -40,6 +40,9 @@ public sealed record CalendarEntry
     /// </remarks>
     public TimeZoneInfo Zone { get; init; } = TimeZoneInfo.Local;
 
+    /// <summary>Whether this occurrence asks to be reminded of, which the views draw a bell for.</summary>
+    public bool HasReminder => Occurrence.Event.ReminderMinutes is not null;
+
     public string Summary => Occurrence.Event.Summary;
     public string Location => Occurrence.Event.Location;
     public BusyStatus Busy => Occurrence.Event.Busy;

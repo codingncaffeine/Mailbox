@@ -568,6 +568,14 @@ public sealed class CalendarWorkspace : Border
         var from = new DateTimeOffset(first.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified), zone.GetUtcOffset(first.ToDateTime(TimeOnly.MinValue))).ToUniversalTime();
         var to = new DateTimeOffset(last.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified), zone.GetUtcOffset(last.AddDays(1).ToDateTime(TimeOnly.MinValue))).ToUniversalTime();
 
+        // Two Options rows that used to persist and change nothing, read on every reload so a
+        // change on the page shows on the next draw: whether every calendar takes the default
+        // colour, and whether a reminder draws a bell.
+        _source.ForcedColour = _options.ColourEveryCalendar ? _options.DefaultColour : null;
+        _month.ShowBell = _options.ShowBell;
+        _timeGrid.ShowBell = _options.ShowBell;
+        _schedule.ShowBell = _options.ShowBell;
+
         try
         {
             _entries = _source.Between(from, to);
