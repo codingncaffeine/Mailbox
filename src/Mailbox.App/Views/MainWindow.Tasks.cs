@@ -397,9 +397,87 @@ public partial class MainWindow
                 RunCommand(MailCommands.NewEmail.Id);
                 return true;
 
+            case "tasks.new.items":
+                ShowNewItemsMenu();
+                return true;
+
+            case "tasks.moveto":
+                MoveTask(shell);
+                return true;
+
             default:
                 return false;
         }
+    }
+
+    /// <summary>
+    /// Move: the selected task to another task list.
+    /// </summary>
+    /// <remarks>
+    /// The same shape the Notes module's Move has, and the same reason for it: a move between
+    /// server-backed lists is a delete on one and a create on the other, so it goes through
+    /// <c>PimSync.Move</c> rather than a column edit — which is what makes the change reach both
+    /// servers instead of quietly relabelling the row here. A flagged message is not a task and
+    /// has no list to move to; the button says so rather than moving the mail somewhere.
+    /// </remarks>
+    private void MoveTask(ShellViewModel shell)
+    {
+        var tasks = EnsureTasks(shell);
+        if (tasks.Selected is not { } row)
+        {
+            shell.StatusRight = "Select a task first.";
+            return;
+        }
+
+        if (row.IsMessage)
+        {
+            shell.StatusRight = "Move acts on a task; this row is a flagged message.";
+            Log.Info($"Move: “{row.Summary}” is a flagged message — nothing moved.");
+            return;
+        }
+
+        if (App.Pim.Item(row.ItemId) is not { } item) return;
+
+        var lists = App.Pim.Collections(CollectionKind.Tasks).Where(l => l.Id != item.CollectionId).ToList();
+        if (lists.Count == 0)
+        {
+            shell.StatusRight = "There is nowhere else to keep a task: this is the only list.";
+            return;
+        }
+
+        void MoveTo(Collection list)
+        {
+            var moved = App.PimSync.Move(item, list.Id);
+            _taskModule?.Reload();
+            RebuildToDoBar(shell);
+            shell.StatusRight = $"“{row.Summary}” moved to {list.DisplayName}.";
+            Log.Info($"Task {item.Id} moved to {list.DisplayName} as {moved.Id}; "
+                + $"the old row is {(App.Pim.Item(item.Id) is { } old ? old.SyncState.ToString() : "gone")}.");
+        }
+
+        // A menu is a surface no capture can show, so the harness names the list instead.
+        if (Environment.GetEnvironmentVariable("MAILBOX_MOVE")?.Trim() is { Length: > 0 } posed)
+        {
+            if (lists.FirstOrDefault(l => l.DisplayName.Contains(posed, StringComparison.OrdinalIgnoreCase)) is not { } wanted)
+            {
+                Log.Info($"Harness: no task list matching “{posed}” to move “{row.Summary}” to.");
+                return;
+            }
+
+            MoveTo(wanted);
+            return;
+        }
+
+        var flyout = new MenuFlyout();
+        foreach (var list in lists)
+        {
+            var entry = new MenuItem { Header = list.DisplayName };
+            var chosen = list;
+            entry.Click += (_, _) => MoveTo(chosen);
+            flyout.Items.Add(entry);
+        }
+
+        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
     }
 
     // ---- A row is a task or a flagged message ---------------------------------------------------

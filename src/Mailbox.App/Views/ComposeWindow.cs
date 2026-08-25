@@ -92,6 +92,11 @@ public sealed class ComposeWindow : Window
         };
         _ribbon.BackstageRequested += (_, _) => ShowBackstage();
 
+        // All Apps' last entry. The Options window is the host's to open, so the surface asks
+        // rather than reaching for one of its own.
+        _surface.ManageAddInsRequested += async (_, _) =>
+            await new OptionsWindow(App.Themes, "addins").ShowDialog<bool>(this);
+
         // The bar's "…" and what it would list, for the harness — a flyout is a separate
         // surface and never appears in a capture.
         OverflowMenu = () => _ribbon.OpenOverflowMenu();

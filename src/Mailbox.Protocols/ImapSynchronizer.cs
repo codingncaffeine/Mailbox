@@ -56,10 +56,16 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
     /// </summary>
     public IArrivalHandler? OnArrival { get; set; }
 
+    /// <param name="onlyFolder">
+    /// The one folder to pull, by the name the store keeps it under. Null for every folder worth
+    /// pulling, which is what a send/receive does; Update Folder names one, and the reference's
+    /// own button checks the folder in front of the reader rather than the whole account.
+    /// </param>
     public async Task<SyncResult> SyncAsync(
         AccountConnection account,
         IProgress<PollProgress>? progress = null,
-        CancellationToken cancellation = default)
+        CancellationToken cancellation = default,
+        string? onlyFolder = null)
     {
         var session = SessionFactory?.Invoke() ?? new MailKitImapSession();
 
@@ -71,6 +77,13 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
 
             var mapped = await MapFoldersAsync(session, account, cancellation);
             var played = await PlayJournalAsync(session, account, cancellation);
+
+            // The journal is played whatever is being pulled: an operation made offline belongs
+            // on the server whether or not the folder it touched is the one being looked at.
+            if (onlyFolder is { Length: > 0 })
+            {
+                mapped = [.. mapped.Where(f => string.Equals(f.Name, onlyFolder, StringComparison.OrdinalIgnoreCase))];
+            }
 
             var downloaded = 0;
             var removed = 0;

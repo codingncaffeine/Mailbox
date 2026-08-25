@@ -220,9 +220,11 @@ public class ComposeRibbonTests
     [Fact]
     public void TheWorkingCountIsWhatSomebodyLastDecidedItWas()
     {
-        // 51 as of Phase 15's outgoing side: Encrypt and Sign both act.
-        Assert.Equal(51, ComposeAvailability.WorkingCount);
-        Assert.Equal(44, ComposeAvailability.BlockedCount);
+        // 54 after the three the table was stale about: Address Book and Plain Text had been
+        // running for some time with the table still calling them blocked, and All Apps now
+        // opens the installed plugins here as it does in the shell.
+        Assert.Equal(54, ComposeAvailability.WorkingCount);
+        Assert.Equal(41, ComposeAvailability.BlockedCount);
         Assert.Equal(95, ComposeAvailability.All.Count);
     }
 

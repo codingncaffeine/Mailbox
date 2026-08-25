@@ -114,6 +114,10 @@ public partial class MainWindow
                 shell.ModuleStatusLeft = journal.Status;
                 return true;
 
+            case "journal.new.items":
+                ShowNewItemsMenu();
+                return true;
+
             case "journal.categorize":
                 CategorizeJournalEntry(shell);
                 return true;

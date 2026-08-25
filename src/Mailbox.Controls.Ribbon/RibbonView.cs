@@ -157,6 +157,18 @@ public sealed class RibbonView : ContentControl
     /// </remarks>
     public event EventHandler? QuickAccessVisibilityToggled;
 
+    /// <summary>
+    /// Full-screen mode was chosen — or chosen again, which comes out of it.
+    /// </summary>
+    /// <remarks>
+    /// Raised rather than done here because it is the window's state, not the bar's: the ribbon
+    /// collapses, but so does the caption the host draws, and only the host knows it has one.
+    /// </remarks>
+    public event EventHandler? FullScreenToggled;
+
+    /// <summary>Whether the host says it is full screen, so the menu can tick the entry.</summary>
+    public bool IsFullScreen { get; set; }
+
     /// <summary>Whether the host is showing the toolbar, so the menu can say the right thing.</summary>
     public bool IsQuickAccessVisible
     {
@@ -1362,7 +1374,14 @@ public sealed class RibbonView : ContentControl
         flyout.Items.Add(ModeItem("Simplified Ribbon", RibbonDisplayMode.Simplified));
 
         flyout.Items.Add(SectionHeader("Show Ribbon"));
-        flyout.Items.Add(new MenuItem { Header = "Full-screen mode" });
+
+        var fullScreen = new MenuItem
+        {
+            Header = "Full-screen mode",
+            Icon = IsFullScreen ? Tick() : null,
+        };
+        fullScreen.Click += (_, _) => FullScreenToggled?.Invoke(this, EventArgs.Empty);
+        flyout.Items.Add(fullScreen);
         flyout.Items.Add(ModeItem("Show tabs only", RibbonDisplayMode.Collapsed));
 
         // Back to the layout the ribbon was collapsed from, not to the default one: a reader

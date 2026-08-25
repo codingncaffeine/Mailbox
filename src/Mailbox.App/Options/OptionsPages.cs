@@ -427,7 +427,11 @@ public static class OptionsPages
         [
             new OptionSection("Mailbox panes",
             [
-                new ActionRow("layout", "Customize Mailbox panes.", "Navigation...",
+                // Measured off the Advanced capture: the reference's row here carries one button
+                // and it is Reading Pane…, not the Navigation… of older versions. It was drawn
+                // as Navigation… and did nothing; the capture is the answer and the dialog it
+                // wants already exists.
+                new ActionRow("layout", "Customize Mailbox panes.", "Reading Pane...",
                 [
                     new CheckRow("Show the To-Do Bar", true),
                     new CheckRow("Show the Reading Pane", true) { Key = Keys.ShowReadingPane },
@@ -459,7 +463,9 @@ public static class OptionsPages
 
             new OptionSection("Export",
             [
-                new ActionRow("archive", "Export Mailbox information to a file.", "Export..."),
+                // The capture's own wording, and its own button: "Export", not "Export…". It
+                // opens the Backstage's Open & Export page, which is where every exporter is.
+                new ActionRow("archive", "Export Mailbox information to a file for use in other programs.", "Export"),
             ]),
 
             new OptionSection("Send and receive",

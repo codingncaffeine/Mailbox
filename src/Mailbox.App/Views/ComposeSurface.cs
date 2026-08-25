@@ -1211,6 +1211,9 @@ public sealed class ComposeSurface : UserControl
     /// through, so the same command from a window's ribbon, the shell's ribbon or a keystroke
     /// arrives at one place.
     /// </summary>
+    /// <summary>Manage Add-ins… — the Options window is the host's, not this surface's.</summary>
+    public event EventHandler? ManageAddInsRequested;
+
     public void Invoke(CommandId id)
     {
         if (!_catalog.TryGet(id, out var command))
@@ -1276,6 +1279,17 @@ public sealed class ComposeSurface : UserControl
         if (id == ComposeCommands.AttachFile.Id) { _ = AttachAsync(); return true; }
         if (id == ComposeCommands.CheckNames.Id) { CheckNames(); return true; }
         if (id == MailCommands.AddressBook.Id) { _ = PickNamesAsync(); return true; }
+
+        // All Apps opens what is really installed, through this window's own dispatcher — the
+        // same menu the shell's button opens, so a plugin's command is one command whichever
+        // window ran it. Manage Add-ins… belongs to the shell, which owns the Options window.
+        if (id == ViewCommands.Apps.Id)
+        {
+            AllAppsMenu.Build(Invoke, () => ManageAddInsRequested?.Invoke(this, EventArgs.Empty))
+                .ShowAt(this, showAtPointer: true);
+            return true;
+        }
+
         if (id == ComposeCommands.Find.Id || id == ComposeCommands.Replace.Id)
         {
             _ = FindAsync(replace: id == ComposeCommands.Replace.Id);

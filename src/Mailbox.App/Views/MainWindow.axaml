@@ -419,7 +419,13 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:ModuleTab">
+                                    <!-- The same command the rail's own buttons run: this strip
+                                         is the pre-rail arrangement and is not shown, but a
+                                         template with no command is a dead control the day
+                                         somebody turns it on. -->
                                     <Button Padding="5,2"
+                                            AutomationProperties.Name="{Binding Module}"
+                                            Command="{Binding Activate}"
                                             Classes.active="{Binding IsActive}"
                                             ToolTip.Tip="{Binding Tip}">
                                         <TextBlock Text="{Binding Glyph}"

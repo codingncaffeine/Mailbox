@@ -6,6 +6,27 @@ namespace Mailbox.Protocols;
 /// <summary>An account to transfer for, and the store its mail is filed in.</summary>
 public sealed record TransferTarget(AccountConnection Connection, MailRepository Mail);
 
+/// <summary>
+/// What a run does: the whole thing, the outbox alone, or one folder.
+/// </summary>
+/// <remarks>
+/// The reference's Send/Receive group has three buttons over one operation, and they differ only
+/// in how much of it they do. One enum rather than three entry points, so a change to the run —
+/// the certificate handling, the progress reports, the journal — cannot land in one and miss the
+/// other two.
+/// </remarks>
+public enum TransferMode
+{
+    /// <summary>Send what is waiting, then receive. The Send/Receive All Folders button.</summary>
+    SendAndReceive,
+
+    /// <summary>Drain the outbox and stop. Nothing is downloaded.</summary>
+    SendOnly,
+
+    /// <summary>Receive one folder and stop. Nothing is sent.</summary>
+    Folder,
+}
+
 /// <summary>What one account's turn in a send/receive did.</summary>
 public sealed record AccountRunResult(
     string Address,
@@ -99,7 +120,9 @@ public sealed class SendReceiveService(
     public async Task<SendReceiveResult> RunAsync(
         IReadOnlyList<TransferTarget> accounts,
         DateTimeOffset now,
-        CancellationToken cancellation = default)
+        CancellationToken cancellation = default,
+        TransferMode mode = TransferMode.SendAndReceive,
+        string? folder = null)
     {
         if (WorkOffline)
         {
@@ -112,7 +135,7 @@ public sealed class SendReceiveService(
         foreach (var target in accounts)
         {
             cancellation.ThrowIfCancellationRequested();
-            results.Add(await RunOneAsync(target, now, cancellation));
+            results.Add(await RunOneAsync(target, now, cancellation, mode, folder));
         }
 
         var result = new SendReceiveResult(results);
@@ -121,28 +144,36 @@ public sealed class SendReceiveService(
     }
 
     private async Task<AccountRunResult> RunOneAsync(TransferTarget target,
-        DateTimeOffset now, CancellationToken cancellation)
+        DateTimeOffset now, CancellationToken cancellation,
+        TransferMode mode, string? folder)
     {
         var account = target.Connection;
         var sent = 0;
         string? error = null;
 
-        try
+        // Update Folder checks; it does not send. A reader who pressed it to see whether an
+        // answer had arrived did not also ask for the half-written message in the outbox to go.
+        if (mode != TransferMode.Folder)
         {
-            Progress?.Invoke(this, new PollProgress(account.Address, 0, 0, "Sending"));
-            sent = await _sender(target.Mail).DrainAsync(account, now, cancellation);
+            try
+            {
+                Progress?.Invoke(this, new PollProgress(account.Address, 0, 0, "Sending"));
+                sent = await _sender(target.Mail).DrainAsync(account, now, cancellation);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // Recorded and carried on with: a failure to send must not also cost the user the
+                // mail waiting to be received.
+                Log.Warn($"Sending failed for {account.Address}.", ex);
+                error = SmtpSender.Classify(ex).Error;
+            }
         }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            // Recorded and carried on with: a failure to send must not also cost the user the
-            // mail waiting to be received.
-            Log.Warn($"Sending failed for {account.Address}.", ex);
-            error = SmtpSender.Classify(ex).Error;
-        }
+
+        if (mode == TransferMode.SendOnly) return new AccountRunResult(account.Address, 0, sent, error);
 
         // A relay of our own rather than System.Progress<T>, which posts each report to the
         // captured synchronization context — or, where there is none, to the thread pool. That
@@ -159,7 +190,8 @@ public sealed class SendReceiveService(
         // authoritative (§4) is what lets these share one send path and one outbox.
         if (account.Protocol == MailProtocol.Imap)
         {
-            var sync = await _synchronizer(target.Mail).SyncAsync(account, progress, cancellation);
+            var sync = await _synchronizer(target.Mail).SyncAsync(
+                account, progress, cancellation, mode == TransferMode.Folder ? folder : null);
             return new AccountRunResult(account.Address, sync.Downloaded, sent, error ?? sync.Error)
             {
                 Arrived = sync.Arrived,

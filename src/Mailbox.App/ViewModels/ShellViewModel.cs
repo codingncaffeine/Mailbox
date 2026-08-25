@@ -3104,6 +3104,21 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>The selected message as it arrived, or null when there is no such thing.</summary>
     public byte[]? SelectedRaw => SelectedMessage is { } row ? CurrentMail?.LoadRaw(row.Id) : null;
 
+    /// <summary>
+    /// One row's bytes as they arrived, from that row's own store.
+    /// </summary>
+    /// <remarks>
+    /// Through <see cref="AccountFor"/> rather than <see cref="CurrentMail"/> for the reason
+    /// every row command goes through <c>Split</c>: in a unified folder the row's id means
+    /// nothing without the account it was numbered in, and reading the wrong store would hand
+    /// back somebody else's message under this one's name.
+    /// </remarks>
+    public byte[]? RawOf(MessageRow row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        return AccountFor(row)?.Mail.LoadRaw(row.Id);
+    }
+
     private static string Describe(int count)
         => count == 1 ? "1 message" : $"{count:N0} messages";
 

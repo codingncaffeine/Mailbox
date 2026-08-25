@@ -124,9 +124,9 @@ public static class ComposeAvailability
         new(ComposeCommands.StylesDialog.Id, ComposeCommandState.Blocked,
             "The editor does not offer named paragraph styles — it carries headings and quotes " +
             "and no style sheet."),
-        new(ComposeCommands.FormatPlainText.Id, ComposeCommandState.Blocked,
-            "Phase 6 — composing as plain text only. Every message already carries a plain text " +
-            "alternative beside its HTML, so a recipient who wants text gets text."),
+        new(ComposeCommands.FormatPlainText.Id, ComposeCommandState.Working,
+            "Sends this message as plain text alone. The document keeps its formatting on "
+            + "screen — what changes is what leaves — and the window says so."),
         new(ComposeCommands.FormatHtml.Id, ComposeCommandState.Working,
             "The format this window composes in, and says so."),
         new(ComposeCommands.FormatRichText.Id, ComposeCommandState.Blocked,
@@ -141,7 +141,8 @@ public static class ComposeAvailability
         new(ComposeCommands.Zoom.Id, ComposeCommandState.Working, "Scales the body text."),
 
         // ---- Names --------------------------------------------------------------------
-        new(MailCommands.AddressBook.Id, ComposeCommandState.Blocked, People),
+        new(MailCommands.AddressBook.Id, ComposeCommandState.Working,
+            "Opens Select Names: the address book, and the three lines to put people on."),
         new(ComposeCommands.CheckNames.Id, ComposeCommandState.Working,
             "Checks that every address in To, Cc and Bcc parses, and says which do not. " +
             "Resolving a bare name against contacts is Phase 12."),
@@ -171,8 +172,9 @@ public static class ComposeAvailability
         new(ComposeCommands.Dictate.Id, ComposeCommandState.Blocked,
             "No decision on record. Rule 1 says build it; no speech engine has been chosen, " +
             "and doing it without one sending audio off the machine is the open question."),
-        new(ViewCommands.Apps.Id, ComposeCommandState.Blocked,
-            "Phase 15 — the plugin host. There are no add-ins to list."),
+        new(ViewCommands.Apps.Id, ComposeCommandState.Working,
+            "Opens the installed plugins' commands, grouped by plugin, through the same "
+            + "dispatcher as everywhere else."),
         new(ComposeCommands.Editor.Id, ComposeCommandState.Working,
             "Runs the spelling check over the message."),
         new(ViewCommands.ImmersiveReader.Id, ComposeCommandState.Blocked, I18n),

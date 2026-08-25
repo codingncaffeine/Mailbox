@@ -799,7 +799,8 @@ public partial class MainWindow
         DateTime start,
         bool allDay,
         bool meeting = false,
-        IReadOnlyList<string>? asked = null)
+        IReadOnlyList<string>? asked = null,
+        string subject = "")
     {
         var zone = TimeZoneInfo.Local.Id;
         var fresh = new CalendarEvent
@@ -807,6 +808,7 @@ public partial class MainWindow
             Uid = CalendarEvent.NewUid(),
             Start = allDay ? EventTime.Date(DateOnly.FromDateTime(start)) : EventTime.At(start, zone),
             End = allDay ? EventTime.Date(DateOnly.FromDateTime(start).AddDays(1)) : EventTime.At(start.AddMinutes(30), zone),
+            Summary = subject,
             Busy = BusyStatus.Busy,
             ReminderMinutes = App.CalendarOptions.DefaultReminderMinutes,
             Attendees = asked is { Count: > 0 }

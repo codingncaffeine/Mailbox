@@ -112,6 +112,8 @@ public partial class MainWindow : Window
             shell.RaiseQuickAccessPlacement();
         };
 
+        _ribbon.FullScreenToggled += (_, _) => ToggleFullScreen(shell);
+
         WireQuickAccess(shell);
         WireSearchBoxToListEdge();
         if (this.FindControl<ViewHeaderStrip>("HeaderStrip") is { } strip)
@@ -1858,7 +1860,8 @@ public partial class MainWindow : Window
             : Avalonia.Input.Key.A + (char.ToUpperInvariant(character) - 'A');
 
     /// <summary>Opens the File view over everything, with its back arrow to return.</summary>
-    private void ShowBackstage()
+    /// <param name="page">A rail page to open on, or null for the Backstage's own first one.</param>
+    private void ShowBackstage(string? page = null)
     {
         var host = this.FindControl<ContentControl>("BackstageHost")!;
         var backstage = new BackstageView();
@@ -1873,6 +1876,8 @@ public partial class MainWindow : Window
 
         host.Content = backstage;
         host.IsVisible = true;
+
+        if (page is { Length: > 0 }) backstage.Open(page);
     }
 
     private void CloseBackstage()
@@ -2962,6 +2967,14 @@ public partial class MainWindow : Window
         var dialog = new OptionsWindow(App.Themes, page);
         await dialog.ShowDialog<bool>(this);
 
+        // The Advanced page's Export button closes Options and opens the Backstage page that
+        // holds the exporters, which is the reference's own Import and Export door.
+        if (dialog.ExportRequested)
+        {
+            ShowBackstage("openexport");
+            return;
+        }
+
         if (!dialog.CustomizationChanged) return;
 
         _ribbon.Layout = App.MailRibbon();
@@ -3650,7 +3663,7 @@ public partial class MainWindow : Window
             shell.AccountInitial,
             // Both go where the Backstage already goes. They were writing "not wired yet" at a
             // point where the thing they needed had been built for two phases.
-            onViewAccount: ShowBackstage,
+            onViewAccount: () => ShowBackstage(),
             onAddAccount: () => _ = AddAccountAsync());
     }
 
@@ -3827,6 +3840,45 @@ public partial class MainWindow : Window
            && (ReferenceEquals(node, ancestor) || node.GetVisualAncestors().Contains(ancestor));
 
     /// <summary>
+    /// Full-screen mode: the caption and the ribbon body go, and the window fills the screen.
+    /// </summary>
+    /// <remarks>
+    /// The reference's own reading of it — everything that is not the mail goes away, and one
+    /// press of the same entry brings it all back. The ribbon collapses rather than disappears
+    /// so the tab strip is still there to bring the body back for one command without leaving
+    /// full screen, which is what makes the mode usable rather than a trap.
+    /// <para>
+    /// Escape leaves as well. A window with no caption buttons and no title bar has no other way
+    /// out with the mouse, and a reader who cannot find one thinks the application has hung.
+    /// </para>
+    /// </remarks>
+    private void ToggleFullScreen(ShellViewModel shell)
+    {
+        var going = WindowState != WindowState.FullScreen;
+
+        if (going)
+        {
+            _ribbonBeforeFullScreen = _ribbon.DisplayMode;
+            _ribbon.DisplayMode = RibbonDisplayMode.Collapsed;
+            WindowState = WindowState.FullScreen;
+        }
+        else
+        {
+            WindowState = WindowState.Normal;
+            _ribbon.DisplayMode = _ribbonBeforeFullScreen ?? RibbonDisplayMode.Simplified;
+            _ribbonBeforeFullScreen = null;
+        }
+
+        _ribbon.IsFullScreen = going;
+        if (this.FindControl<Border>("TitleBar") is { } bar) bar.IsVisible = !going;
+
+        shell.StatusRight = going ? "Full-screen mode. Escape or the Ribbon Display Options menu leaves it." : string.Empty;
+        Log.Info($"Full-screen mode {(going ? "on" : "off")}.");
+    }
+
+    private RibbonDisplayMode? _ribbonBeforeFullScreen;
+
+    /// <summary>
     /// The single place a command arrives, whichever control raised it. Phases 2 onward replace
     /// the placeholder with real handlers; until then every route reports the same thing, which
     /// is at least honest about what is and is not built.
@@ -3839,6 +3891,8 @@ public partial class MainWindow : Window
         Log.Debug($"Command invoked: {command.Id}");
 
         if (id == MailCommands.SendReceiveAll.Id) { _ = SendReceiveAsync(shell); return; }
+        if (id == ViewCommands.SendAll.Id) { _ = SendReceiveAsync(shell, mode: TransferMode.SendOnly); return; }
+        if (id == ViewCommands.UpdateFolder.Id) { _ = UpdateFolderAsync(shell); return; }
         if (id == MailCommands.WorkOffline.Id) { _ = ToggleWorkOfflineAsync(shell); return; }
         if (id == ViewCommands.Refresh.Id) { shell.Refresh(); return; }
         if (id == MailCommands.Search.Id) { FocusSearchBox(shell); return; }
@@ -3897,6 +3951,8 @@ public partial class MainWindow : Window
         if (id == MailCommands.Reply.Id) { Respond(shell, ReplyKind.Reply); return; }
         if (id == MailCommands.ReplyAll.Id) { Respond(shell, ReplyKind.ReplyAll); return; }
         if (id == MailCommands.Forward.Id) { Respond(shell, ReplyKind.Forward); return; }
+        if (id == MailCommands.Meeting.Id) { ReplyWithMeeting(shell); return; }
+        if (id == MailCommands.MoreRespond.Id) { ShowMoreRespondMenu(shell); return; }
 
         if (RunCalendarCommand(shell, id)) return;
         if (RunPeopleCommand(shell, id)) return;
@@ -3928,6 +3984,138 @@ public partial class MainWindow : Window
     /// The protected header fields of <paramref name="message"/>, when its own pane has them —
     /// a message window's reply must address from those exactly as the shell's does.
     /// </param>
+    /// <summary>
+    /// Reply with Meeting: the meeting window, already asking everyone the message was between.
+    /// </summary>
+    /// <remarks>
+    /// Reply All's rule for who, not Reply's: a meeting about a conversation is a meeting for the
+    /// people in it, which is what the reference's own button does. The reader's own addresses
+    /// come out — nobody invites themselves — and the subject carries over, because the meeting
+    /// is about the thing the message was about.
+    /// </remarks>
+    private void ReplyWithMeeting(ShellViewModel shell)
+    {
+        if (_openMessage is not { } original)
+        {
+            shell.StatusRight = "Select a message to meet about.";
+            return;
+        }
+
+        var covered = _reading?.Protected;
+        if (covered is not null) original = HeaderProtection.Addressed(original, covered, original.Body);
+
+        var draft = Reply.Build(original, ReplyKind.ReplyAll, new ReplyOptions
+        {
+            OwnAddresses = [.. App.Accounts.All.Select(a => a.Account.Address)],
+            Style = QuoteStyle.None,
+        });
+
+        var asked = draft.To.Concat(draft.Cc).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (asked.Count == 0)
+        {
+            shell.StatusRight = "That message names nobody to meet.";
+            return;
+        }
+
+        var calendar = EnsureCalendar(shell);
+        _ = NewAppointmentAsync(
+            shell,
+            calendar.Anchor.ToDateTime(NextHalfHour()),
+            allDay: false,
+            meeting: true,
+            asked: asked,
+            subject: original.Subject ?? string.Empty);
+
+        Log.Info($"Reply with Meeting: asking {asked.Count} — {string.Join(", ", asked)}.");
+    }
+
+    /// <summary>
+    /// The Respond group's "More" menu: the answers that are not one of the three big buttons.
+    /// </summary>
+    /// <remarks>
+    /// The reference's own set. Reply with Meeting is on it as well as on the bar, because the
+    /// bar sheds it first at narrow widths and a reader who has lost the button looks here.
+    /// </remarks>
+    private void ShowMoreRespondMenu(ShellViewModel shell)
+    {
+        var flyout = new MenuFlyout();
+
+        void Entry(string header, string? icon, Action run, bool enabled = true)
+        {
+            var item = new MenuItem { Header = header, Icon = MenuIcon(icon), IsEnabled = enabled };
+            item.Click += (_, _) => run();
+            flyout.Items.Add(item);
+        }
+
+        var one = SelectedRows() is { Count: 1 };
+
+        // The reference's own set, less the two that reach an instant-messaging service — Reply
+        // with IM and Call. Absent rather than greyed, for the same reason Send to OneNote is:
+        // a button that cannot do what it says is worse than one that is not there.
+        Entry("Reply with _Meeting", "meeting", () => ReplyWithMeeting(shell), one);
+        Entry("_Forward as Attachment", "forward", () => ForwardAsAttachment(shell), SelectedRows().Count > 0);
+
+        _ribbon.OpenMenuUnder(MailCommands.MoreRespond.Id, flyout, this);
+    }
+
+    /// <summary>
+    /// Forward as Attachment: the original as a <c>message/rfc822</c> part rather than quoted.
+    /// </summary>
+    /// <remarks>
+    /// The bytes as they arrived, which is the point of the gesture — a quoted forward is a
+    /// retyping of a message and an attached one is the message, headers, signatures and all.
+    /// Somebody asked to look at a header, or at whether a signature verifies, needs the second.
+    /// </remarks>
+    private void ForwardAsAttachment(ShellViewModel shell)
+    {
+        var rows = SelectedRows();
+        if (rows.Count == 0)
+        {
+            shell.StatusRight = "Select a message to forward.";
+            return;
+        }
+
+        var carried = new List<CarriedPart>();
+        foreach (var row in rows)
+        {
+            if (shell.RawOf(row) is not { Length: > 0 } raw) continue;
+
+            try
+            {
+                using var buffer = new MemoryStream(raw);
+                var message = MimeKit.MimeMessage.Load(buffer);
+                var subject = message.Subject is { Length: > 0 } s ? s : "(no subject)";
+                carried.Add(new CarriedPart(
+                    SafeName(subject, "message") + ".eml",
+                    "message/rfc822",
+                    new MimeKit.MessagePart { Message = message }));
+            }
+            catch (FormatException ex)
+            {
+                Log.Warn($"Message {row.Id} could not be attached.", ex);
+            }
+        }
+
+        if (carried.Count == 0)
+        {
+            shell.StatusRight = "Those messages could not be read to attach.";
+            return;
+        }
+
+        NewMessage(
+            new ReplyDraft
+            {
+                Subject = "FW: " + (rows.Count == 1 ? rows[0].Subject : $"{rows.Count} messages"),
+                Attachments = carried,
+            },
+            ReplyKind.Forward);
+
+        shell.StatusRight = carried.Count == 1
+            ? "The message is attached to a new one."
+            : $"{carried.Count} messages are attached to a new one.";
+        Log.Info($"Forward as Attachment: {carried.Count} message(s).");
+    }
+
     private void Respond(ShellViewModel shell, ReplyKind kind, MimeKit.MimeMessage? message = null,
         IReadOnlyList<string>? to = null, ProtectedHeaders? covered = null)
     {
@@ -5260,7 +5448,8 @@ public partial class MainWindow : Window
     /// was refused. It stops a server that refuses whatever it is shown from asking forever.
     /// </param>
     private async Task SendReceiveAsync(
-        ShellViewModel shell, SendReceiveGroup? group = null, bool retrying = false)
+        ShellViewModel shell, SendReceiveGroup? group = null, bool retrying = false,
+        TransferMode mode = TransferMode.SendAndReceive, string? folder = null)
     {
         if (_transferring) return;
 
@@ -5311,7 +5500,7 @@ public partial class MainWindow : Window
         try
         {
             var result = await Task.Run(() =>
-                App.Transfer.RunAsync(accounts, DateTimeOffset.UtcNow, _cancellation.Token));
+                App.Transfer.RunAsync(accounts, DateTimeOffset.UtcNow, _cancellation.Token, mode, folder));
 
             _tasks.Finish(result);
             shell.StatusRight = result.Summary();
@@ -5337,12 +5526,18 @@ public partial class MainWindow : Window
             _ = SieveSync.RepublishStaleAsync();
 
             // Send/Receive is one button in the reference and it covers the calendars too, so the
-            // DAV engine runs on the same press (§7.5) rather than on a second one.
-            await SyncCalendarsAsync(shell, _cancellation.Token);
+            // DAV engine runs on the same press (§7.5) rather than on a second one. Send All and
+            // Update Folder are narrower presses by definition and do not drag the whole world
+            // along with them — a reader checking one folder did not ask for every calendar and
+            // every feed as well.
+            if (mode == TransferMode.SendAndReceive)
+            {
+                await SyncCalendarsAsync(shell, _cancellation.Token);
 
-            // And the feeds, for the same reason: the reference checks a subscription once per
-            // download interval, which is this press.
-            await PollFeedsAsync(shell, _cancellation.Token);
+                // And the feeds, for the same reason: the reference checks a subscription once per
+                // download interval, which is this press.
+                await PollFeedsAsync(shell, _cancellation.Token);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -5381,6 +5576,42 @@ public partial class MainWindow : Window
         // second host for the same account, a renewal, a provider that moved — was refused with
         // nothing but a line in the log, and no way to answer from inside the application at all.
         if (!retrying) await AskAboutRefusedCertificatesAsync(shell, group);
+    }
+
+    /// <summary>
+    /// Update Folder: check the folder in front of the reader, and nothing else.
+    /// </summary>
+    /// <remarks>
+    /// Scoped to the folder's <em>own</em> account rather than every account, which is the whole
+    /// point of the button — a reader looking at one folder and asking whether anything has
+    /// arrived in it is asking about that folder. IMAP only: POP3 downloads into one folder and
+    /// has no notion of any other, so the button says that rather than running a whole poll under
+    /// a narrower name.
+    /// </remarks>
+    private async Task UpdateFolderAsync(ShellViewModel shell)
+    {
+        if (shell.CurrentFolder is not { } folder || shell.CurrentAccountForCategories() is not { } account)
+        {
+            shell.StatusRight = "Choose a folder to update.";
+            return;
+        }
+
+        if (account.Account.Protocol != MailProtocol.Imap)
+        {
+            shell.StatusRight = $"{account.Account.Address} is a POP3 account, which has only its delivery folder — use Send/Receive.";
+            Log.Info($"Update Folder: {account.Account.Address} is POP3; nothing folder-scoped to do.");
+            return;
+        }
+
+        Log.Info($"Update Folder: {folder.Name} on {account.Account.Address}.");
+
+        // A group of one, made here rather than looked up: this is "that account" rather than any
+        // group the reader has defined, and the run's own filter already speaks that language.
+        await SendReceiveAsync(
+            shell,
+            new SendReceiveGroup { Name = account.Account.Address, Accounts = [account.Account.Address] },
+            mode: TransferMode.Folder,
+            folder: folder.Name);
     }
 
     /// <summary>
@@ -5640,6 +5871,15 @@ public partial class MainWindow : Window
         // Ctrl+Shift+1..9 run the Quick Step with that shortcut.
         if (control && shift && RunQuickStepShortcut(shell, e.Key))
         {
+            e.Handled = true;
+            return;
+        }
+
+        // Esc leaves full-screen mode first: a window with no caption has no other way out with
+        // the mouse, and that has to beat every other meaning Escape has.
+        if (e.Key is Avalonia.Input.Key.Escape && WindowState == WindowState.FullScreen)
+        {
+            ToggleFullScreen(shell);
             e.Handled = true;
             return;
         }

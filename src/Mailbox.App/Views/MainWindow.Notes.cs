@@ -90,6 +90,10 @@ public partial class MainWindow
                 CategorizeNote(shell);
                 return true;
 
+            case "notes.new.items":
+                ShowNewItemsMenu();
+                return true;
+
             case "notes.moveto":
                 MoveNote(shell);
                 return true;

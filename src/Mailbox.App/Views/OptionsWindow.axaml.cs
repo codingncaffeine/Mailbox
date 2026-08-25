@@ -234,6 +234,9 @@ public sealed class OptionsWindow : Window
     /// True when the ribbon or the toolbar was edited while the dialog was open, so the shell
     /// knows to take them back.
     /// </summary>
+    /// <summary>Set when the Advanced page's Export button was pressed, so the shell opens it.</summary>
+    public bool ExportRequested { get; private set; }
+
     public bool CustomizationChanged { get; private set; }
 
     private void ShowPage(string id)
@@ -412,6 +415,13 @@ public sealed class OptionsWindow : Window
 
             case "Reading Pane...":
                 _ = new ReadingPaneOptionsDialog(App.MailOptions).ShowDialog(this);
+                break;
+
+            // Export leaves this window for the Backstage page that holds every exporter — one
+            // door, rather than a second one here that would have to grow the same four entries.
+            case "Export":
+                ExportRequested = true;
+                Close();
                 break;
         }
     }
