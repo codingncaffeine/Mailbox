@@ -430,6 +430,8 @@ public static class OfficeThemes
         // light themes': the panel under it is #BDBDBD rather than white, and the reference
         // deepens the artwork to keep it readable there rather than reusing one set.
         t.Set(TokenKeys.RibbonIcon.Outline, "#4D4D4D");
+        t.Set(TokenKeys.RibbonIcon.Fill, "#E0E0E0");
+        t.Set(TokenKeys.RibbonIcon.Plus, "#0C5E0C");
         t.Set(TokenKeys.RibbonIcon.Magenta, "#91005A");
         t.Set(TokenKeys.RibbonIcon.Blue, "#005BA1");
         t.Set(TokenKeys.RibbonIcon.Green, "#094509");
@@ -616,6 +618,10 @@ public static class OfficeThemes
         // as the outline and the saturated one as the fill, so the shape reads as a lit edge
         // rather than a dark blob. Lifting the light values wholesale would not have found this.
         t.Set(TokenKeys.RibbonIcon.Outline, "#D4D4D4");
+        // No fill here: on near-black the reference leaves an icon's interior as the surface and
+        // lets the light outline carry the shape. Every other theme paints one.
+        t.Set(TokenKeys.RibbonIcon.Fill, "#00000000");
+        t.Set(TokenKeys.RibbonIcon.Plus, "#73DD83");
         t.Set(TokenKeys.RibbonIcon.Magenta, "#D471D8");
         t.Set(TokenKeys.RibbonIcon.Blue, "#3B9ADC");
         t.Set(TokenKeys.RibbonIcon.Green, "#A1DDAA");
@@ -949,6 +955,8 @@ public static class OfficeThemes
         // themes draw it identically, both having a white ribbon under it. Dark Gray darkens
         // every value for its mid-grey ribbon and Black inverts each pair; both override below.
         t.Set(TokenKeys.RibbonIcon.Outline, "#3A3A38");
+        t.Set(TokenKeys.RibbonIcon.Fill, "#FAFAFA");
+        t.Set(TokenKeys.RibbonIcon.Plus, "#379E4E");
         t.Set(TokenKeys.RibbonIcon.Magenta, "#A846B2");
         t.Set(TokenKeys.RibbonIcon.Blue, "#1E8BCD");
         t.Set(TokenKeys.RibbonIcon.Green, "#309048");

@@ -234,6 +234,26 @@ public static class TokenKeys
         /// </remarks>
         public const string Outline = "ribbon.icon.outline";
 
+        /// <summary>
+        /// The light fill inside an outlined icon — the other half of the reference's two-tone
+        /// look, and what a monochrome glyph cannot carry.
+        /// </summary>
+        /// <remarks>
+        /// Measured off the ribbon captures: the fill is not the panel behind it. It is
+        /// <c>#FAFAFA</c> on the light themes' white panel, <c>#E0E0E0</c> on Dark Gray's
+        /// <c>#BDBDBD</c> one, and nothing at all on Black, where the reference leaves the
+        /// interior as the surface and lets the light outline carry the shape.
+        /// </remarks>
+        public const string Fill = "ribbon.icon.fill";
+
+        /// <summary>New Email's green cross, the one badge with a colour of its own.</summary>
+        /// <remarks>
+        /// Not <see cref="Green"/> and not <see cref="SwatchGreen"/>: measured against both in
+        /// all four themes and equal to neither. Archive's lid, by contrast, is exactly the
+        /// green swatch pair, so it takes those rather than a token of its own.
+        /// </remarks>
+        public const string Plus = "ribbon.icon.plus";
+
         /// <summary>Reply and Reply All — the magenta arrows.</summary>
         public const string Magenta = "ribbon.icon.magenta";
 
@@ -260,7 +280,7 @@ public static class TokenKeys
 
         public static readonly IReadOnlyList<string> All =
         [
-            Outline, Magenta, Blue, Green, Flag, FlagOutline, FlagPole,
+            Outline, Fill, Plus, Magenta, Blue, Green, Flag, FlagOutline, FlagPole,
             SwatchBlue, SwatchBlueOutline, SwatchGrey, SwatchGreyOutline,
             SwatchGold, SwatchGoldOutline, SwatchGreen, SwatchGreenOutline,
         ];
