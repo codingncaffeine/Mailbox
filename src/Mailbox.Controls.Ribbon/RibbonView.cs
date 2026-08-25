@@ -738,17 +738,38 @@ public sealed class RibbonView : ContentControl
         Grid.SetColumn(chevron, 1);
         grid.Children.Add(chevron);
 
+        // The shadow is cast by a border of its own, behind the one holding the commands, and
+        // the two are the same shape and size.
+        //
+        // Not decoration: a BoxShadow makes its border render through an intermediate surface,
+        // and above a render scale of about 1.25 that surface comes back empty — the panel's own
+        // background and shadow draw and every child inside it disappears. On a display at 150%
+        // or 200% that is the whole ribbon gone, which is what a sweep at
+        // MAILBOX_CAPTURE_SCALE=1.5 found. Casting the shadow from a childless border keeps the
+        // measured shadow and leaves the commands on a surface that renders at every scale.
+        // The height and the insets stay on the wrapper, and both borders simply fill it, so the
+        // panel is the same rectangle in the same place it always was.
+        var shadow = new Border
+        {
+            CornerRadius = new CornerRadius(RibbonMetrics.BodyCornerRadius),
+            BoxShadow = BoxShadows.Parse("0 1 3 0 #94000000"),
+        };
+        Bind(shadow, Border.BackgroundProperty, "ribbon.background.brush");
+
         var host = new Border
         {
-            Height = height,
             Child = grid,
             ClipToBounds = clip,
             CornerRadius = new CornerRadius(RibbonMetrics.BodyCornerRadius),
-            BoxShadow = BoxShadows.Parse("0 1 3 0 #94000000"),
-            Margin = new Thickness(0, 0, RibbonMetrics.BodyRightInset, RibbonMetrics.BodyBottomGap),
         };
         Bind(host, Border.BackgroundProperty, "ribbon.background.brush");
-        return host;
+
+        return new Panel
+        {
+            Height = height,
+            Margin = new Thickness(0, 0, RibbonMetrics.BodyRightInset, RibbonMetrics.BodyBottomGap),
+            Children = { shadow, host },
+        };
     }
 
     /// <summary>

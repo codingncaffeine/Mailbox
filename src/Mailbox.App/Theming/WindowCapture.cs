@@ -126,7 +126,20 @@ public static class WindowCapture
         window.WindowStartupLocation = WindowStartupLocation.Manual;
         window.Width = Math.Max(width, window.MinWidth);
         window.Height = Math.Max(height, window.MinHeight);
+        Requested = new Size(window.Width, window.Height);
     }
+
+    /// <summary>
+    /// The size <c>MAILBOX_SIZE</c> asked for, in device-independent pixels, or null.
+    /// </summary>
+    /// <remarks>
+    /// Kept because the window may not get it. A window is bounded by the screen it is on, and
+    /// at <c>MAILBOX_CAPTURE_SCALE=1.5</c> a 1000-tall pose wants 1500 physical pixels — more
+    /// than a 1440-tall display has, so the platform hands back a shorter window and the capture
+    /// photographs a layout nobody asked for. That is exactly the silent mismatch this file's own
+    /// size check exists to prevent, one level further down.
+    /// </remarks>
+    public static Size? Requested { get; private set; }
 
     /// <summary>
     /// Keeps the capture from shooting and exiting while a pose's work is still running.
@@ -186,7 +199,12 @@ public static class WindowCapture
                 if (AnotherWindowWillBeCaptured) return;
 
                 await Dispatcher.UIThread.InvokeAsync(() => Capture(window, path, Scale));
-                Console.WriteLine($"Captured {path}");
+
+                // The size it was really taken at, so a note made from a capture cannot record a
+                // size the capture did not have.
+                Console.WriteLine(
+                    $"Captured {path} at {window.ClientSize.Width:0}x{window.ClientSize.Height:0}"
+                    + (Scale is > 1.0001 or < 0.9999 ? $" ×{Scale}" : string.Empty));
             }
             catch (Exception ex)
             {
@@ -266,6 +284,31 @@ public static class WindowCapture
         {
             throw new InvalidOperationException(
                 "Window has no client size yet; capture ran before the first layout pass.");
+        }
+
+        // A window is bounded by the screen it is on, and the screen is consulted in *physical*
+        // pixels — so MAILBOX_CAPTURE_SCALE=1.5 over a 1000-tall pose wants 1500 of them, and a
+        // 1440-tall display hands back a shorter window. Photographing that would be a
+        // measurement of a layout nobody asked for, which is the one thing this harness must not
+        // do; laying the window out at the requested size and rendering that does not work
+        // either — the render uses the arrangement the platform gave it, so the bitmap comes out
+        // the right size with the content still laid out for the wrong one, which looks correct
+        // and is not. The honest answer is to refuse: run under an output big enough
+        // (WIDTH x SCALE by HEIGHT x SCALE — see the harness section's nested compositor) or ask
+        // for a smaller pose.
+        // Said, not thrown, for the same reason the minimum-size check above says rather than
+        // throws: the pixel gate captures at a fixed size on whatever CI gives it, and a run that
+        // refused would turn a smaller build agent into a failing build. The line is the point —
+        // a measurement taken off a capture that says this is a measurement of the wrong layout.
+        if (Requested is { } wanted
+            && (Math.Abs(wanted.Width - size.Width) > 1 || Math.Abs(wanted.Height - size.Height) > 1))
+        {
+            Console.Error.WriteLine(
+                $"{SizeVariable}: the screen gave {size.Width:0}x{size.Height:0} for a requested "
+                + $"{wanted.Width:0}x{wanted.Height:0} at {scale}x — a window cannot exceed its "
+                + $"output. This pose needs an output of at least "
+                + $"{wanted.Width * scale:0}x{wanted.Height * scale:0} physical pixels; measurements "
+                + "off this capture are of the size it actually got.");
         }
 
         var pixelSize = new PixelSize(
