@@ -136,8 +136,30 @@ internal static class SystemDialogKit
         return button;
     }
 
+    /// <summary>
+    /// The upright rule a toolbar puts between two groups of buttons.
+    /// </summary>
+    /// <remarks>
+    /// The reference draws one after the move arrows, which is what makes the arrows read as
+    /// belonging to the list rather than to Run Rules Now beside them. A <see cref="Border"/>
+    /// rather than a character, so it lines up with the buttons instead of sitting on their
+    /// baseline.
+    /// </remarks>
+    internal static Border ToolSeparator()
+    {
+        var rule = new Border
+        {
+            Width = 1,
+            Height = 16,
+            Margin = new Thickness(5, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Bind(rule, Border.BackgroundProperty, "systemdialog.border.brush");
+        return rule;
+    }
+
     /// <summary>A row of toolbar buttons, 6px in from the page's left edge; its icons stand 15px under the page's top edge.</summary>
-    internal static StackPanel Toolbar(params Button[] buttons)
+    internal static StackPanel Toolbar(params Control[] buttons)
     {
         var bar = new StackPanel
         {

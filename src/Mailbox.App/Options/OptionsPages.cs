@@ -463,7 +463,8 @@ public static class OptionsPages
                 // reason — a CheckRow and a BrowseRow would stack.
                 new SlotRow("remindersound"),
                 new CheckRow("Show reminders on top of other windows", true) { Key = MailOptions.RemindersOnTopKey },
-            ]),
+                new CheckRow("Automatically dismiss reminders for past calendar events") { Key = MailOptions.DismissPastRemindersKey },
+            ], Icon: "reminder"),
 
             new OptionSection("Export",
             [

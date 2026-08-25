@@ -15,9 +15,11 @@ tools/Mailbox.Fidelity/diffs/
 
 # Reference captures live outside the repo; docs/ holds only our own screenshots.
 
-# Internal working documents — the plan and the session handoff stay local.
-docs/PLAN.md
-docs/HANDOFF.md
+# Internal working documents — the plan and the session handoff stay local. Globbed rather
+# than named: an archived HANDOFF-2026-08-25.md is the same document with a date on it, and
+# the one that gets committed by accident is always the copy somebody made before a rewrite.
+docs/PLAN*.md
+docs/HANDOFF*.md
 
 # Downloaded format specifications — reference material, not ours to redistribute.
 specs/

@@ -4833,7 +4833,7 @@ public partial class MainWindow : Window
 
         // Appointments join the same queue, as §9 asks: one window over every module, with one
         // Dismiss All, rather than a second window for the calendar.
-        foreach (var appointment in Mailbox.Scheduling.AppointmentReminders.Due(App.Pim, now))
+        foreach (var appointment in Mailbox.Scheduling.AppointmentReminders.Due(App.Pim, now, dismissPast: App.MailOptions.DismissPastReminders))
         {
             due.Add(DueReminder.ForAppointment(appointment));
         }
@@ -4908,7 +4908,7 @@ public partial class MainWindow : Window
         }
 
         var now = DateTimeOffset.UtcNow;
-        var appointments = Mailbox.Scheduling.AppointmentReminders.Due(App.Pim, now).Count;
+        var appointments = Mailbox.Scheduling.AppointmentReminders.Due(App.Pim, now, dismissPast: App.MailOptions.DismissPastReminders).Count;
         var tasks = Mailbox.Scheduling.TaskReminders.Due(App.Pim, now).Count;
         var mail = App.Accounts.All.Sum(a => a.Mail.DueReminders(now).Count);
 

@@ -98,7 +98,11 @@ public sealed record BrowseRow(string Label, string Value = "", double LabelWidt
 public sealed record SlotRow(string SlotId) : OptionRow;
 
 /// <summary>Bold heading followed by a rule running to the right edge.</summary>
-public sealed record OptionSection(string Heading, IReadOnlyList<OptionRow> Rows);
+/// <param name="Icon">
+/// The glyph the reference stands to the left of a group's rows — the bell beside Reminders, the
+/// envelope beside Conversation Clean Up. Empty for a group it draws without one.
+/// </param>
+public sealed record OptionSection(string Heading, IReadOnlyList<OptionRow> Rows, string Icon = "");
 
 /// <summary>One page in the Options rail.</summary>
 public sealed record OptionsPage(

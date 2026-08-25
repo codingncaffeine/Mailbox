@@ -29,7 +29,19 @@ public static class AppointmentReminders
     private static readonly TimeSpan Horizon = TimeSpan.FromDays(2);
 
     /// <summary>Everything whose reminder has come and not been dealt with, soonest first.</summary>
-    public static IReadOnlyList<DueAppointment> Due(PimRepository repository, DateTimeOffset nowUtc, TimeZoneInfo? zone = null)
+    /// <param name="dismissPast">
+    /// What to do with a reminder for an appointment that has already finished: leave it in the
+    /// list, or answer it and move on. The reference's "Automatically dismiss reminders for past
+    /// calendar events", which is <b>off</b> out of the box — coming back from a week away to a
+    /// list of what was missed is the default, and clearing it automatically is the choice.
+    /// </param>
+    /// <remarks>
+    /// Dismissing writes: the reminder is recorded as answered so it does not queue up again on
+    /// the next pass. That is the whole point of the setting, and a version that merely hid them
+    /// would show the lot again the moment it was switched off.
+    /// </remarks>
+    public static IReadOnlyList<DueAppointment> Due(
+        PimRepository repository, DateTimeOffset nowUtc, TimeZoneInfo? zone = null, bool dismissPast = false)
     {
         ArgumentNullException.ThrowIfNull(repository);
 
@@ -61,8 +73,13 @@ public static class AppointmentReminders
                 var at = snoozed ?? occurrence.StartUtc.AddMinutes(-minutes);
                 if (at > nowUtc) continue;
 
-                // The appointment is over and was never answered: the reference stops showing it.
-                if (occurrence.EndUtc <= nowUtc) continue;
+                // The appointment is over and was never answered. Whether that reminder is still
+                // worth showing is the reader's call, and off by default it is.
+                if (occurrence.EndUtc <= nowUtc && dismissPast)
+                {
+                    repository.SetReminderState(item.Id, occurrence.StartUtc, null);
+                    continue;
+                }
 
                 due.Add(new DueAppointment(item.Id, master.Summary, master.Location, occurrence));
                 break;

@@ -62,6 +62,7 @@ public sealed class MailOptions(SettingsStore settings)
     public const string ShowRemindersKey = "reminders.show";
     public const string ReminderSoundKey = "reminders.sound";
     public const string ReminderSoundFileKey = "reminders.sound.file";
+    public const string DismissPastRemindersKey = "reminders.dismisspast";
     public const string RemindersOnTopKey = "reminders.ontop";
     public const string FocusedInboxKey = "view.focusedinbox";
     public const string CleanUpKeepUnreadKey = "mail.cleanup.keepunread";
@@ -377,6 +378,17 @@ public sealed class MailOptions(SettingsStore settings)
         get => _settings.GetString(ReminderSoundFileKey);
         set => _settings.Set(ReminderSoundFileKey, value);
     }
+
+    /// <summary>
+    /// Whether a reminder for a calendar event that has already finished is dismissed instead of
+    /// shown. Off, as the reference has it.
+    /// </summary>
+    /// <remarks>
+    /// The reference's fifth Reminders row. It is about calendar events alone: a task's reminder
+    /// stays whether or not its due date has gone, because an overdue task is precisely the one
+    /// worth being told about, where a meeting that ended on Tuesday is not.
+    /// </remarks>
+    public bool DismissPastReminders => _settings.GetBool(DismissPastRemindersKey, false);
 
     /// <summary>Whether the Reminders window stays above other windows. On.</summary>
     public bool RemindersOnTop => _settings.GetBool(RemindersOnTopKey, true);

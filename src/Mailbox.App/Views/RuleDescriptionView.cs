@@ -39,6 +39,7 @@ public sealed class RuleDescriptionView : Border
     {
         _ink = "systemdialog.foreground.brush";
         Bind(this, BackgroundProperty, "systemdialog.list.background.brush");
+
         Bind(this, BorderBrushProperty, "systemdialog.field.border.brush");
         Show(_rule);
     }

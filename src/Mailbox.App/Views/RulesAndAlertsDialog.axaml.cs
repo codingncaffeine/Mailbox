@@ -163,6 +163,7 @@ public sealed class RulesAndAlertsDialog : Window
             SystemDialogKit.ToolButton("remove", "Delete", DeleteAsync),
             SystemDialogKit.ToolButton("up", string.Empty, () => Move(-1)),
             SystemDialogKit.ToolButton("down", string.Empty, () => Move(1)),
+            SystemDialogKit.ToolSeparator(),
             SystemDialogKit.ToolButton(string.Empty, "Run Rules Now...", RunNowAsync),
             SystemDialogKit.ToolButton(string.Empty, "Options", OptionsAsync));
 
@@ -171,19 +172,10 @@ public sealed class RulesAndAlertsDialog : Window
         _empty.Margin = new Thickness(0, 30, 0, 0);
         SystemDialogKit.Bind(_empty, TextBlock.ForegroundProperty, "systemdialog.foreground.brush");
 
-        var described = new Border
-        {
-            Height = 120,
-            BorderThickness = new Thickness(1),
-            Child = new ScrollViewer
-            {
-                Content = _description,
-                Padding = new Thickness(4),
-                VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
-            },
-        };
-        SystemDialogKit.Bind(described, Border.BackgroundProperty, "systemdialog.list.background.brush");
-        SystemDialogKit.Bind(described, Border.BorderBrushProperty, "systemdialog.field.border.brush");
+        // The description draws its own frame and carries its own scroller, so it is the box —
+        // wrapping it in a second one put a 120-tall border inside a 120-tall viewport, which is
+        // exactly enough overflow for a scrollbar to stand beside an empty description.
+        _description.Height = 120;
 
         SystemDialogKit.Bind(_rss, TemplatedControl.ForegroundProperty, "systemdialog.foreground.brush");
         _rss.Margin = new Thickness(0, 12, 0, 0);
@@ -202,7 +194,7 @@ public sealed class RulesAndAlertsDialog : Window
                     Margin = new Thickness(0, 12, 0, 4),
                     [!TextBlock.ForegroundProperty] = new DynamicResourceExtension("systemdialog.foreground.brush"),
                 },
-                described,
+                _description,
                 _rss,
             },
         };

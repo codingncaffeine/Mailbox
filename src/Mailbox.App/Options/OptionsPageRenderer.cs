@@ -73,7 +73,10 @@ public sealed class OptionsPageRenderer
         foreach (var section in page.Sections)
         {
             stack.Children.Add(SectionHeading(section.Heading));
-            foreach (var row in section.Rows) stack.Children.Add(RenderRow(row));
+
+            var rows = section.Rows.Select(RenderRow).ToList();
+            if (section.Icon is { Length: > 0 } icon) stack.Children.Add(WithSectionIcon(icon, rows));
+            else foreach (var row in rows) stack.Children.Add(row);
         }
 
         if (!page.IsAuthored) stack.Children.Add(NotYetTranscribed());
@@ -421,6 +424,39 @@ public sealed class OptionsPageRenderer
         row.Children.Add(text);
 
         return row;
+    }
+
+    /// <summary>
+    /// A group's rows with the reference's glyph standing to their left.
+    /// </summary>
+    /// <remarks>
+    /// One icon for the whole group rather than one per row, which is how the reference draws
+    /// them — it sits against the top of the run, not centred on it, so a group of five rows and
+    /// a group of two put their icon in the same place.
+    /// </remarks>
+    private Control WithSectionIcon(string icon, IReadOnlyList<Control> rows)
+    {
+        var glyph = new TextBlock
+        {
+            Text = IconGlyphs.GetOrEmpty(icon, 24),
+            FontFamily = IconFont.Family,
+            FontSize = 19,
+            Margin = new Thickness(0, 2, 10, 0),
+            VerticalAlignment = VerticalAlignment.Top,
+        };
+
+        // The accent, as the ActionRow glyphs on the same pages take: the ribbon's own outline
+        // ink is a dark grey and all but disappears against the Options page behind it.
+        Bind(glyph, TextBlock.ForegroundProperty, "accent.rest.brush");
+
+        var lines = new StackPanel();
+        foreach (var row in rows) lines.Children.Add(row);
+
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
+        grid.Children.Add(glyph);
+        Grid.SetColumn(lines, 1);
+        grid.Children.Add(lines);
+        return grid;
     }
 
     private Control SectionHeading(string text)

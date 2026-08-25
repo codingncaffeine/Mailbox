@@ -412,13 +412,15 @@ public class CalendarPhaseTests
             At("series", today.AddDays(-7), rrule: "FREQ=DAILY") with { ReminderMinutes = 15 },
             calendar.Id));
 
-        var first = Assert.Single(AppointmentReminders.Due(repository, DateTimeOffset.UtcNow));
+        // dismissPast, so the backlog a week-old series has behind it is cleared and what is left
+        // is the one occurrence this test is about.
+        var first = Assert.Single(AppointmentReminders.Due(repository, DateTimeOffset.UtcNow, dismissPast: true));
         AppointmentReminders.Dismiss(repository, first);
 
-        Assert.Empty(AppointmentReminders.Due(repository, DateTimeOffset.UtcNow));
+        Assert.Empty(AppointmentReminders.Due(repository, DateTimeOffset.UtcNow, dismissPast: true));
 
         // Tomorrow's occurrence is a different reminder and still comes round.
-        var tomorrow = AppointmentReminders.Due(repository, DateTimeOffset.UtcNow.AddDays(1));
+        var tomorrow = AppointmentReminders.Due(repository, DateTimeOffset.UtcNow.AddDays(1), dismissPast: true);
         Assert.Single(tomorrow);
         Assert.Equal(item.Id, tomorrow[0].ItemId);
     }
@@ -539,4 +541,30 @@ public class CalendarPhaseTests
 
     private static DateTimeOffset Instant(DateTime wall)
         => new DateTimeOffset(DateTime.SpecifyKind(wall, DateTimeKind.Unspecified), TimeZoneInfo.Local.GetUtcOffset(wall)).ToUniversalTime();
+
+    /// <summary>
+    /// The reference's "Automatically dismiss reminders for past calendar events", which is off
+    /// out of the box: coming back from a week away to a list of what was missed is the default,
+    /// and clearing it automatically is the choice.
+    /// </summary>
+    [Fact]
+    public void AReminderForAMeetingThatHasFinishedShowsUnlessItIsSetToDismiss()
+    {
+        using var store = PimStore.Transient();
+        var repository = new PimRepository(store);
+        var calendar = repository.AddCollection(CollectionKind.Events, "Work");
+
+        // Yesterday, and long over.
+        var over = DateTime.Today.AddDays(-1).AddHours(9);
+        repository.AddItem(PimEventCodec.ToItem(
+            At("missed", over) with { ReminderMinutes = 15 }, calendar.Id));
+
+        var now = DateTimeOffset.UtcNow;
+        Assert.Single(AppointmentReminders.Due(repository, now));
+
+        // Switched on it is answered rather than listed — and stays answered, which is the whole
+        // point: a version that merely hid them would show the lot again the moment it went off.
+        Assert.Empty(AppointmentReminders.Due(repository, now, dismissPast: true));
+        Assert.Empty(AppointmentReminders.Due(repository, now));
+    }
 }

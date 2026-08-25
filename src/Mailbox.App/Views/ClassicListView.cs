@@ -60,7 +60,10 @@ public sealed class ClassicListView : Border
         {
             Content = _body,
             HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
-            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+            // Reserved rather than shown when needed: the reference keeps the gutter down every
+            // one of these lists whether or not it has anything to scroll, so the rows below the
+            // header do not change width the moment a list outgrows its box.
+            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Visible,
         };
 
         var stack = new DockPanel();
