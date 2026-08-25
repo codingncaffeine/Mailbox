@@ -24,9 +24,35 @@ public sealed class RuleWizard : Window
     private readonly long _accountId;
     private readonly ContentControl _page = new();
     private readonly RuleDescriptionView _description = new();
-    private readonly Button _back = new() { Content = "< Back", Width = 84 };
-    private readonly Button _next = new() { Content = "Next >", Width = 84 };
-    private readonly Button _finish = new() { Content = "Finish", Width = 84 };
+    private readonly Button _back = SystemDialogKit.PushButton("< Back", () => { }, 84);
+    private readonly Button _next = SystemDialogKit.PushButton("Next >", () => { }, 84);
+    private readonly Button _finish = SystemDialogKit.PushButton("Finish", () => { }, 84);
+
+    /// <summary>
+    /// The line above Step 1, which is the only thing that says a rule need not start from a
+    /// template at all.
+    /// </summary>
+    private readonly TextBlock _intro = new()
+    {
+        Text = "Start from a template or from a blank rule",
+        Margin = new Thickness(0, 0, 0, 6),
+    };
+
+    /// <summary>
+    /// The reference's example under Step 2, in the same place and the same weight.
+    /// </summary>
+    /// <remarks>
+    /// It reads as decoration and is not: a description written in slots — "from people or public
+    /// group / move it to the specified folder" — is hard to picture until one is shown filled
+    /// in, and this is the only filled-in one anywhere in the wizard.
+    /// </remarks>
+    private readonly TextBlock _example = new()
+    {
+        Text = "Example: Move mail from my manager to my High Importance folder",
+        FontWeight = FontWeight.Bold,
+        Margin = new Thickness(0, 8, 0, 0),
+        IsVisible = false,
+    };
     private readonly TextBlock _heading = new() { FontWeight = FontWeight.SemiBold };
 
     private int _step;
@@ -71,16 +97,19 @@ public sealed class RuleWizard : Window
         Height = 620;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
+        _description.UseSystemPalette();
         _description.ValueClicked += async (_, index) => await EditClauseAsync(index);
 
         _back.Click += (_, _) => Go(_step - 1);
         _next.Click += (_, _) => Go(_step + 1);
         _finish.Click += (_, _) => Finish();
 
-        var cancel = new Button { Content = "Cancel", Width = 84, IsCancel = true };
-        cancel.Click += (_, _) => Close();
+        var cancel = SystemDialogKit.PushButton("Cancel", Close, 84);
+        cancel.IsCancel = true;
 
-        Bind(_heading, TextBlock.ForegroundProperty, "dialog.foreground.brush");
+        Bind(_heading, TextBlock.ForegroundProperty, "systemdialog.foreground.brush");
+        Bind(_intro, TextBlock.ForegroundProperty, "systemdialog.foreground.brush");
+        Bind(_example, TextBlock.ForegroundProperty, "systemdialog.foreground.brush");
 
         var body = new DockPanel
         {
@@ -100,8 +129,7 @@ public sealed class RuleWizard : Window
             },
         };
 
-        DialogChrome.Apply(this, body);
-        Bind(this, BackgroundProperty, "dialog.background.brush");
+        SystemDialogChrome.Apply(this, body);
         Go(_step);
     }
 
@@ -148,6 +176,11 @@ public sealed class RuleWizard : Window
             Conditions = [new RuleCondition(RuleConditionKind.From)],
             Actions = [new RuleAction(RuleActionKind.FlagForFollowUp) { Level = 0 }],
         }),
+        ("Stay Organized", "Move RSS items from a specific RSS Feed to a folder", () => new MailRule
+        {
+            Conditions = [new RuleCondition(RuleConditionKind.FromFeed)],
+            Actions = [new RuleAction(RuleActionKind.MoveToFolder), new RuleAction(RuleActionKind.StopProcessing)],
+        }),
         ("Stay Up to Date", "Display mail from someone in the New Item Alert Window", () => new MailRule
         {
             Conditions = [new RuleCondition(RuleConditionKind.From)],
@@ -158,7 +191,11 @@ public sealed class RuleWizard : Window
             Conditions = [new RuleCondition(RuleConditionKind.From)],
             Actions = [new RuleAction(RuleActionKind.PlaySound)],
         }),
+        // The reference's third entry here — an alert to a mobile device — is absent rather than
+        // greyed. It reaches a paging service §3 puts out of scope, and a button that cannot do
+        // what it says is worse than one that is not there. Same reasoning as Send to OneNote.
         ("Start from a blank rule", "Apply rule on messages I receive", () => new MailRule()),
+        ("Start from a blank rule", "Apply rule on messages I send", () => new MailRule { AppliesToSent = true }),
     ];
 
     private Control TemplatePage()
@@ -166,8 +203,8 @@ public sealed class RuleWizard : Window
         _heading.Text = "Step 1: Select a template";
 
         var list = new ListBox { Height = 250 };
-        Bind(list, TemplatedControl.BackgroundProperty, "dialog.surface.brush");
-        Bind(list, TemplatedControl.BorderBrushProperty, "dialog.border.brush");
+        Bind(list, TemplatedControl.BackgroundProperty, "systemdialog.list.background.brush");
+        Bind(list, TemplatedControl.BorderBrushProperty, "systemdialog.field.border.brush");
 
         var items = new List<object>();
         string? group = null;
@@ -177,12 +214,12 @@ public sealed class RuleWizard : Window
             {
                 group = template.Group;
                 var header = new TextBlock { Text = group, FontWeight = FontWeight.SemiBold, Margin = new Thickness(2, 6, 0, 2) };
-                Bind(header, TextBlock.ForegroundProperty, "dialog.surface.text.brush");
+                Bind(header, TextBlock.ForegroundProperty, "systemdialog.foreground.brush");
                 items.Add(new ListBoxItem { Content = header, IsEnabled = false });
             }
 
             var label = new TextBlock { Text = template.Label, Margin = new Thickness(16, 1, 0, 1) };
-            Bind(label, TextBlock.ForegroundProperty, "dialog.surface.text.brush");
+            Bind(label, TextBlock.ForegroundProperty, "systemdialog.foreground.brush");
             items.Add(new ListBoxItem { Content = label, Tag = template });
         }
 
@@ -245,7 +282,7 @@ public sealed class RuleWizard : Window
                 Content = (exceptions ? "except if " : string.Empty) + RuleDescription.Template(kind),
                 IsChecked = current.Any(c => c.Kind == kind),
             };
-            Bind(box, TemplatedControl.ForegroundProperty, "dialog.surface.text.brush");
+            Bind(box, TemplatedControl.ForegroundProperty, "systemdialog.foreground.brush");
             box.IsCheckedChanged += async (_, _) =>
             {
                 var list = (exceptions ? _rule.Exceptions : _rule.Conditions).ToList();
@@ -293,7 +330,7 @@ public sealed class RuleWizard : Window
                 Content = RuleDescription.Template(kind),
                 IsChecked = _rule.Actions.Any(a => a.Kind == kind),
             };
-            Bind(box, TemplatedControl.ForegroundProperty, "dialog.surface.text.brush");
+            Bind(box, TemplatedControl.ForegroundProperty, "systemdialog.foreground.brush");
             box.IsCheckedChanged += async (_, _) =>
             {
                 var list = _rule.Actions.ToList();
@@ -343,8 +380,8 @@ public sealed class RuleWizard : Window
         _name = new TextBox { Text = _rule.Name.Length > 0 ? _rule.Name : SuggestedName(), Width = 360 };
         _runNow = new CheckBox { Content = "Run this rule now on messages already in \"Inbox\"" };
         _turnOn = new CheckBox { Content = "Turn on this rule", IsChecked = _rule.Enabled };
-        Bind(_runNow, TemplatedControl.ForegroundProperty, "dialog.foreground.brush");
-        Bind(_turnOn, TemplatedControl.ForegroundProperty, "dialog.foreground.brush");
+        Bind(_runNow, TemplatedControl.ForegroundProperty, "systemdialog.foreground.brush");
+        Bind(_turnOn, TemplatedControl.ForegroundProperty, "systemdialog.foreground.brush");
 
         var stack = new StackPanel { Spacing = 8 };
         stack.Children.Add(Label("Step 1: Specify a name for this rule"));
@@ -361,8 +398,8 @@ public sealed class RuleWizard : Window
         {
             _onServer = new CheckBox { Content = "Run this rule on the mail server, so it works while Mailbox is closed", IsChecked = _rule.ServerSide };
             _serverNote = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(28, -2, 0, 0), MaxWidth = 540, HorizontalAlignment = HorizontalAlignment.Left };
-            Bind(_onServer, TemplatedControl.ForegroundProperty, "dialog.foreground.brush");
-            Bind(_serverNote, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
+            Bind(_onServer, TemplatedControl.ForegroundProperty, "systemdialog.foreground.brush");
+            Bind(_serverNote, TextBlock.ForegroundProperty, "systemdialog.foreground.disabled.brush");
             _onServer.IsCheckedChanged += async (_, _) => await ServerCheckedAsync(account);
             stack.Children.Add(_onServer);
             stack.Children.Add(_serverNote);
@@ -531,22 +568,31 @@ public sealed class RuleWizard : Window
 
     private Control Page(Control top, string descriptionHeading)
     {
-        var grid = new Grid { RowDefinitions = new RowDefinitions("Auto,*,Auto,220") };
+        var grid = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,*,Auto,180,Auto") };
 
-        Grid.SetRow(_heading, 0);
+        // The intro belongs to the template page alone; every later step is a step, not a start.
+        _intro.IsVisible = _step == 0;
+        Grid.SetRow(_intro, 0);
+        grid.Children.Add(_intro);
+
+        Grid.SetRow(_heading, 1);
         _heading.Margin = new Thickness(0, 0, 0, 6);
         grid.Children.Add(_heading);
 
-        Grid.SetRow(top, 1);
+        Grid.SetRow(top, 2);
         grid.Children.Add(top);
 
         var label = Label(descriptionHeading);
         label.Margin = new Thickness(0, 10, 0, 6);
-        Grid.SetRow(label, 2);
+        Grid.SetRow(label, 3);
         grid.Children.Add(label);
 
-        Grid.SetRow(_description, 3);
+        Grid.SetRow(_description, 4);
         grid.Children.Add(_description);
+
+        _example.IsVisible = _step == 0;
+        Grid.SetRow(_example, 5);
+        grid.Children.Add(_example);
 
         return grid;
     }
@@ -554,15 +600,15 @@ public sealed class RuleWizard : Window
     private static Border Boxed(Control content)
     {
         var box = new Border { BorderThickness = new Thickness(1), Child = new ScrollViewer { Content = content } };
-        Bind(box, Border.BackgroundProperty, "dialog.surface.brush");
-        Bind(box, Border.BorderBrushProperty, "dialog.border.brush");
+        Bind(box, Border.BackgroundProperty, "systemdialog.list.background.brush");
+        Bind(box, Border.BorderBrushProperty, "systemdialog.field.border.brush");
         return box;
     }
 
     private static TextBlock Label(string text)
     {
         var block = new TextBlock { Text = text, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap };
-        Bind(block, TextBlock.ForegroundProperty, "dialog.foreground.brush");
+        Bind(block, TextBlock.ForegroundProperty, "systemdialog.foreground.brush");
         return block;
     }
 }

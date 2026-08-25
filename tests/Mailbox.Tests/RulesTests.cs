@@ -456,4 +456,66 @@ public class RulesTests
 
         Assert.False(MailRule.FromDefinition(1, "Old", true, 0, Old).AppliesToSent);
     }
+
+    // ---- Rules over what this machine sends -------------------------------------------------
+
+    [Fact]
+    public void ASendRuleFilesTheCopyInSentItemsAndAnArrivalRuleNeverSeesIt()
+    {
+        var (store, repo, inbox) = Fresh();
+        using var _ = store;
+
+        var accountId = repo.Accounts()[0].Id;
+        var sent = repo.FolderWithRole(accountId, FolderRole.Sent)!;
+        var filed = repo.AddFolder(accountId, "Filed");
+
+        // Two rules that would both fire on the same message, told apart only by which set they
+        // belong to. Only the send one may act on a copy in Sent Items.
+        repo.AddRule(new MailRule
+        {
+            Name = "Arrival",
+            AppliesToSent = false,
+            Actions = [new RuleAction(RuleActionKind.MarkImportance) { Level = 2 }],
+        }, DateTimeOffset.UtcNow);
+
+        repo.AddRule(new MailRule
+        {
+            Name = "Send",
+            AppliesToSent = true,
+            Conditions = [new RuleCondition(RuleConditionKind.SubjectContains) { Values = ["invoice"] }],
+            Actions = [new RuleAction(RuleActionKind.MoveToFolder) { FolderId = filed.Id, FolderName = "Filed" }],
+        }, DateTimeOffset.UtcNow);
+
+        var (id, message) = Deliver(repo, sent, "you@example.com", "Your invoice");
+        var handler = new RulesHandler();
+
+        Assert.Equal(filed.Id, handler.HandleSent(repo, sent, id, message));
+
+        // And the arrival path leaves a send rule alone: a copy delivered to the Inbox does not
+        // move, because the only rule that files is the one written for messages I send.
+        var (arrived, arrivedMessage) = Deliver(repo, inbox, "someone@example.com", "Your invoice");
+        Assert.Equal(inbox.Id, handler.Handle(repo, inbox, arrived, arrivedMessage));
+    }
+
+    [Fact]
+    public void ASendRuleThatIsOffDoesNothing()
+    {
+        var (store, repo, _) = Fresh();
+        using var _s = store;
+
+        var accountId = repo.Accounts()[0].Id;
+        var sent = repo.FolderWithRole(accountId, FolderRole.Sent)!;
+        var filed = repo.AddFolder(accountId, "Filed");
+
+        repo.AddRule(new MailRule
+        {
+            Name = "Send",
+            Enabled = false,
+            AppliesToSent = true,
+            Actions = [new RuleAction(RuleActionKind.MoveToFolder) { FolderId = filed.Id, FolderName = "Filed" }],
+        }, DateTimeOffset.UtcNow);
+
+        var (id, message) = Deliver(repo, sent, "you@example.com", "Anything");
+        Assert.Equal(sent.Id, new RulesHandler().HandleSent(repo, sent, id, message));
+    }
 }
