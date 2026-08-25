@@ -142,7 +142,8 @@ public static class OptionsPages
             new OptionSection("Message arrival",
             [
                 new SubHeadingRow("When new messages arrive:"),
-                new CheckRow("Play a sound", true) { Indent = 1 },
+                new CheckRow("Play a sound", true) { Indent = 1, Key = MailOptions.ArrivalSoundKey },
+                new SlotRow("arrivalsound") { Indent = 2 },
                 new CheckRow("Briefly change the mouse pointer") { Indent = 1 },
                 new CheckRow("Show an envelope icon in the taskbar", true) { Indent = 1 },
                 new CheckRow("Display a Desktop Alert", true) { Indent = 1, Key = MailOptions.DesktopAlertKey },
@@ -457,7 +458,10 @@ public static class OptionsPages
             new OptionSection("Reminders",
             [
                 new CheckRow("Show reminders", true) { Key = MailOptions.ShowRemindersKey },
-                new CheckRow("Play reminder sound", true) { Key = MailOptions.ReminderSoundKey },
+                // One row in the reference: the tick, "Play reminder sound:", the file and a
+                // Browse… all on a line (options/advanced1.png). Built in the slot for that
+                // reason — a CheckRow and a BrowseRow would stack.
+                new SlotRow("remindersound"),
                 new CheckRow("Show reminders on top of other windows", true) { Key = MailOptions.RemindersOnTopKey },
             ]),
 

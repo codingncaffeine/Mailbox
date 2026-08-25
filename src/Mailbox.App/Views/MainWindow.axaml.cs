@@ -578,6 +578,15 @@ public partial class MainWindow : Window
             Opened += (_, _) => Dispatcher.UIThread.Post(() => PoseNotification(notify), DispatcherPriority.Background);
         }
 
+        // What either sound would be: MAILBOX_SOUND=arrival|reminder names the file the rule
+        // picks and plays it, and arrival:<path> / reminder:<path> chooses that file first, as
+        // the Options row's Browse… does. A capture cannot hear anything, so what is checked is
+        // which file was chosen and which player took it — both of which the log says.
+        if (Environment.GetEnvironmentVariable("MAILBOX_SOUND") is { Length: > 0 } sound)
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(() => PoseSound(sound), DispatcherPriority.Background);
+        }
+
         // Which folder is open. Set after the window opens rather than with the rest of the
         // posed state: the folder pane's list pushes its own selection back as it binds, so a
         // folder chosen in the constructor is overwritten the moment it lays out.
@@ -2177,6 +2186,51 @@ public partial class MainWindow : Window
                     break;
             }
         }
+    }
+
+    /// <summary>
+    /// The Options page's "Play a sound": mail arriving is announced once, however much of it
+    /// arrived.
+    /// </summary>
+    /// <remarks>
+    /// Once per run and not once per message — a poll that brings twenty would otherwise make
+    /// twenty overlapping noises. It is deliberately not tied to the Desktop Alert switch: the
+    /// reference draws them as two rows because they are two answers to the same question, and
+    /// somebody who wants to be told without being shown is exactly who turns one off.
+    /// <para>
+    /// A reminder is not routed here. It has a chime of its own (<c>reminders.sound</c>) and its
+    /// own switch, and a flag coming due is not mail arriving.
+    /// </para>
+    /// </remarks>
+    private static void AnnounceArrival(int arrived)
+    {
+        if (arrived <= 0 || !App.MailOptions.PlayArrivalSound) return;
+        Notifications.Sounds.PlayArrival(App.MailOptions.ArrivalSoundFile);
+    }
+
+    /// <summary>Names the sound one of the two occasions would make, then makes it.</summary>
+    private static void PoseSound(string pose)
+    {
+        var (occasion, path) = pose.Split(':', 2) is [var head, var tail] ? (head, tail) : (pose, null);
+        var reminder = occasion.StartsWith("reminder", StringComparison.OrdinalIgnoreCase);
+
+        if (path is { Length: > 0 })
+        {
+            if (reminder) App.MailOptions.ReminderSoundFile = path;
+            else App.MailOptions.ArrivalSoundFile = path;
+        }
+
+        var chosen = reminder ? App.MailOptions.ReminderSoundFile : App.MailOptions.ArrivalSoundFile;
+        var name = Notifications.Sounds.NameFor(chosen, reminder ? "reminder.ogg" : "new-mail.ogg");
+        var on = reminder ? App.MailOptions.PlayReminderSound : App.MailOptions.PlayArrivalSound;
+
+        Log.Info($"Harness: {(reminder ? "reminder" : "arrival")} sound — "
+                 + $"chosen “{(chosen.Length == 0 ? "(none)" : chosen)}”, page says “{name}”, "
+                 + $"switch {(on ? "on" : "off")}.");
+
+        if (!on) return;
+        if (reminder) Notifications.Sounds.PlayReminder(chosen);
+        else AnnounceArrival(1);
     }
 
     /// <summary>What a new-mail toast says about one message, read back from its account's store.</summary>
@@ -4805,7 +4859,7 @@ public partial class MainWindow : Window
 
         if (fresh.Count == 0) return;
 
-        if (App.MailOptions.PlayReminderSound) Notifications.Sounds.PlayAlarm();
+        if (App.MailOptions.PlayReminderSound) Notifications.Sounds.PlayReminder(App.MailOptions.ReminderSoundFile);
 
         if (App.MailOptions.DisplayDesktopAlert)
         {
@@ -5376,7 +5430,10 @@ public partial class MainWindow : Window
     private void WakeSnoozed(ShellViewModel shell)
     {
         var woken = shell.WakeSnoozed(DateTimeOffset.UtcNow);
-        if (woken.Count == 0 || !App.MailOptions.DisplayDesktopAlert) return;
+        if (woken.Count == 0) return;
+
+        AnnounceArrival(woken.Count);
+        if (!App.MailOptions.DisplayDesktopAlert) return;
 
         var result = new SendReceiveResult(
         [
@@ -5573,6 +5630,8 @@ public partial class MainWindow : Window
                     _notifier.Notify(ToastFor(toast));
                 }
             }
+
+            AnnounceArrival(result.Received);
 
             ShowRuleAlerts();
 

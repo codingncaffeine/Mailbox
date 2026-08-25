@@ -51,6 +51,18 @@ public sealed class OptionsPageRenderer
     /// </remarks>
     public IReadOnlyDictionary<Control, string> Keys => _keys;
 
+    /// <summary>
+    /// Registers a control a slot built itself, so a press on it reads back like any other row's.
+    /// </summary>
+    /// <remarks>
+    /// A slot that draws a real setting — the reminder sound's tick box, which the reference puts
+    /// on one line with a field and a Browse… — is invisible to the harness otherwise, and
+    /// <c>MAILBOX_OPTIONS_PRESS</c> would report "the row carries no key" for a row that carries
+    /// one. That is worse than no answer: it reads as §20's hundred-odd waiting rows rather than
+    /// as a wired one.
+    /// </remarks>
+    public void Remember(Control control, string key) => _keys[control] = key;
+
     public Control Render(OptionsPage page)
     {
         _slots.Clear();

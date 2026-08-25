@@ -61,6 +61,7 @@ public sealed class MailOptions(SettingsStore settings)
     public const string RecoverDaysKey = "mail.recover.days";
     public const string ShowRemindersKey = "reminders.show";
     public const string ReminderSoundKey = "reminders.sound";
+    public const string ReminderSoundFileKey = "reminders.sound.file";
     public const string RemindersOnTopKey = "reminders.ontop";
     public const string FocusedInboxKey = "view.focusedinbox";
     public const string CleanUpKeepUnreadKey = "mail.cleanup.keepunread";
@@ -74,6 +75,8 @@ public sealed class MailOptions(SettingsStore settings)
     public const string ReadingPaneMarkOnChangeKey = "mail.readingpane.markonchange";
     public const string IgnoreConfirmKey = "mail.ignore.confirm";
     public const string DesktopAlertKey = "mail.arrival.alert";
+    public const string ArrivalSoundKey = "mail.arrival.sound";
+    public const string ArrivalSoundFileKey = "mail.arrival.sound.file";
     public const string RequestDeliveryReceiptKey = "mail.tracking.delivery";
     public const string RequestReadReceiptKey = "mail.tracking.read";
     public const string EmptyDeletedOnExitKey = "mail.exit.emptydeleted";
@@ -226,6 +229,41 @@ public sealed class MailOptions(SettingsStore settings)
     /// <summary>Whether a send/receive that brought new mail shows a desktop notification.</summary>
     public bool DisplayDesktopAlert => _settings.GetBool(DesktopAlertKey, true);
 
+    /// <summary>Whether mail arriving plays a sound. On, as the reference has it.</summary>
+    public bool PlayArrivalSound => _settings.GetBool(ArrivalSoundKey, true);
+
+    /// <summary>
+    /// A sound file to play instead of the desktop's own new-mail sound, or empty for the
+    /// desktop's.
+    /// </summary>
+    /// <remarks>
+    /// <b>A stated divergence.</b> The reference's Message-arrival group has no such row: its
+    /// "Play a sound" is a switch over whatever the system's own sound scheme names for new
+    /// mail, and the sound itself is chosen in the desktop's control panel. Linux has the first
+    /// half of that — the freedesktop sound theme's <c>message-new-email</c>, which an empty
+    /// value here asks for — and not the second: no desktop offers a per-application new-mail
+    /// sound to set. So the choice lives where the switch is, under rule 2.
+    /// </remarks>
+    public string ArrivalSoundFile
+    {
+        get => _settings.GetString(ArrivalSoundFileKey);
+        set => _settings.Set(ArrivalSoundFileKey, value);
+    }
+
+    /// <summary>
+    /// Which sound to play: the file the settings name, else the one the build ships, else null
+    /// for the desktop's own sound for the occasion.
+    /// </summary>
+    /// <remarks>
+    /// One rule for both sounds this application makes — mail arriving and a reminder coming
+    /// due. In that order because each is more specific than the last, and each falls through
+    /// when it is not there rather than failing: a chosen file that has since been deleted or
+    /// sits on an unmounted disk quietly becomes the shipped sound again, which is what somebody
+    /// who moved a file wants, and the alternative is silence they cannot explain.
+    /// </remarks>
+    public static string? SoundFor(string? chosen, string? bundled)
+        => File.Exists(chosen) ? chosen : File.Exists(bundled) ? bundled : null;
+
     public bool RequestDeliveryReceipt => _settings.GetBool(RequestDeliveryReceiptKey, false);
 
     public bool RequestReadReceipt => _settings.GetBool(RequestReadReceiptKey, false);
@@ -306,8 +344,23 @@ public sealed class MailOptions(SettingsStore settings)
     /// <summary>Whether the Reminders window opens when a flag's reminder time comes. On.</summary>
     public bool ShowReminders => _settings.GetBool(ShowRemindersKey, true);
 
-    /// <summary>Whether a reminder plays the desktop's alarm sound. On.</summary>
+    /// <summary>Whether a reminder coming due plays a sound. On.</summary>
     public bool PlayReminderSound => _settings.GetBool(ReminderSoundKey, true);
+
+    /// <summary>
+    /// The sound a reminder plays, or empty for the one the build ships and the desktop's
+    /// <c>alarm-clock-elapsed</c> behind it.
+    /// </summary>
+    /// <remarks>
+    /// The reference draws this one: its Reminders group reads "Play reminder sound:" with a
+    /// field and a Browse… beside it, so unlike the arrival sound this is fidelity rather than a
+    /// divergence. Both go through <see cref="SoundFor"/> all the same.
+    /// </remarks>
+    public string ReminderSoundFile
+    {
+        get => _settings.GetString(ReminderSoundFileKey);
+        set => _settings.Set(ReminderSoundFileKey, value);
+    }
 
     /// <summary>Whether the Reminders window stays above other windows. On.</summary>
     public bool RemindersOnTop => _settings.GetBool(RemindersOnTopKey, true);

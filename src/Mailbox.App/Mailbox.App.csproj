@@ -33,6 +33,16 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The arrival sound, if this build ships one. A file rather than an embedded resource
+         because it is handed to an external player, which needs a path; beside the binary rather
+         than under assets/ because the .deb keeps this directory and drops that one. The glob
+         matching nothing is a build with no sound of its own, which falls back to the desktop's
+         own message-new-email — see Notifications/Sounds. -->
+    <Content Include="..\..\assets\sounds\*.ogg" Link="sounds\%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Mailbox.Core\Mailbox.Core.csproj" />
     <ProjectReference Include="..\Mailbox.Dav\Mailbox.Dav.csproj" />
     <ProjectReference Include="..\Mailbox.Google\Mailbox.Google.csproj" />

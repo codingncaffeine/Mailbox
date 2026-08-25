@@ -14,6 +14,8 @@ public class MailOptionsTests : IDisposable
     private readonly string _path =
         Path.Combine(Path.GetTempPath(), $"mailbox-mailopts-{Guid.NewGuid():n}.json");
 
+    private readonly List<string> _made = [];
+
     private SettingsStore Store() => new(_path);
 
     private MailOptions Fresh() => new(Store());
@@ -33,6 +35,10 @@ public class MailOptionsTests : IDisposable
         Assert.True(options.CommasSeparateRecipients);
         Assert.True(options.AutomaticNameChecking);
         Assert.True(options.CtrlEnterSends);
+        Assert.True(options.PlayArrivalSound);
+        Assert.Equal(string.Empty, options.ArrivalSoundFile);
+        Assert.True(options.PlayReminderSound);
+        Assert.Equal(string.Empty, options.ReminderSoundFile);
         Assert.False(options.RequestDeliveryReceipt);
         Assert.False(options.RequestReadReceipt);
         Assert.False(options.EmptyDeletedItemsOnExit);
@@ -106,5 +112,78 @@ public class MailOptionsTests : IDisposable
     {
         GC.SuppressFinalize(this);
         try { if (File.Exists(_path)) File.Delete(_path); } catch (Exception) { }
+        foreach (var made in _made) { try { File.Delete(made); } catch (Exception) { } }
+    }
+
+    [Fact]
+    public void TheChosenSoundWinsOverTheOneTheBuildShips()
+    {
+        var chosen = Touch("chosen.ogg");
+        var bundled = Touch("bundled.ogg");
+
+        Assert.Equal(chosen, MailOptions.SoundFor(chosen, bundled));
+    }
+
+    [Fact]
+    public void ASoundThatHasGoneMissingFallsBackRatherThanGoingSilent()
+    {
+        // Somebody moved the file, or it lives on a disk that is not mounted this morning. The
+        // sound they picked is gone either way, and silence they cannot explain is the worst of
+        // the three answers — so the shipped one takes over, and the Options page says so.
+        var bundled = Touch("bundled.ogg");
+
+        Assert.Equal(bundled, MailOptions.SoundFor("/nowhere/gone.ogg", bundled));
+        Assert.Equal(bundled, MailOptions.SoundFor(string.Empty, bundled));
+        Assert.Equal(bundled, MailOptions.SoundFor(null, bundled));
+    }
+
+    [Fact]
+    public void ABuildThatShipsNoSoundAsksTheDesktopForOne()
+    {
+        // Null is not a failure: it is the caller's cue to ask the freedesktop sound theme for
+        // message-new-email, which is the right last word on a desktop that has one.
+        Assert.Null(MailOptions.SoundFor(null, "/nowhere/bundled.ogg"));
+        Assert.Null(MailOptions.SoundFor("/nowhere/chosen.ogg", null));
+    }
+
+    [Fact]
+    public void EitherSoundIsRememberedAndCanBePutBack()
+    {
+        // Clearing the field is the reset — there is no Reset button, the reference drawing
+        // none — so empty has to mean "the one the build ships" rather than "no sound".
+        var options = new MailOptions(Store())
+        {
+            ArrivalSoundFile = "/sounds/mail.ogg",
+            ReminderSoundFile = "/sounds/bell.ogg",
+        };
+
+        Assert.Equal("/sounds/mail.ogg", new MailOptions(Store()).ArrivalSoundFile);
+        Assert.Equal("/sounds/bell.ogg", new MailOptions(Store()).ReminderSoundFile);
+
+        options.ArrivalSoundFile = string.Empty;
+        options.ReminderSoundFile = string.Empty;
+
+        Assert.Equal(string.Empty, new MailOptions(Store()).ArrivalSoundFile);
+        Assert.Equal(string.Empty, new MailOptions(Store()).ReminderSoundFile);
+    }
+
+    [Fact]
+    public void TheTwoSoundsAreKeptApart()
+    {
+        // One rule picks both, and one key for the pair would make choosing a reminder chime
+        // change what mail sounds like.
+        var options = new MailOptions(Store()) { ArrivalSoundFile = "/sounds/mail.ogg" };
+
+        Assert.Equal(string.Empty, options.ReminderSoundFile);
+        Assert.NotEqual(MailOptions.ArrivalSoundFileKey, MailOptions.ReminderSoundFileKey);
+    }
+
+    /// <summary>An empty file that really exists, for the rule that asks whether one does.</summary>
+    private string Touch(string name)
+    {
+        var path = Path.Combine(Path.GetDirectoryName(_path)!, Path.GetFileNameWithoutExtension(_path) + "-" + name);
+        File.WriteAllBytes(path, []);
+        _made.Add(path);
+        return path;
     }
 }

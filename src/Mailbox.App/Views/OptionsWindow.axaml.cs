@@ -4,6 +4,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
 using Avalonia.LogicalTree;
 using Mailbox.App.Options;
 using Mailbox.App.Theming;
@@ -489,6 +490,16 @@ public sealed class OptionsWindow : Window
             cleanupFolder.Content = CleanUpFolderRow();
         }
 
+        if (renderer.Slots.TryGetValue("arrivalsound", out var arrivalSound))
+        {
+            arrivalSound.Content = ArrivalSoundRow();
+        }
+
+        if (renderer.Slots.TryGetValue("remindersound", out var reminderSound))
+        {
+            reminderSound.Content = ReminderSoundRow(renderer);
+        }
+
         if (renderer.Slots.TryGetValue("display", out var display))
         {
             display.Content = DisplayRows();
@@ -555,6 +566,122 @@ public sealed class OptionsWindow : Window
     }
 
     /// <summary>"Cleaned-up items will go to this folder": the name, and Browse… over the default account's folders.</summary>
+    /// <summary>Which sound mail arriving plays, under the switch that decides whether it plays one.</summary>
+    /// <remarks>
+    /// <b>A stated divergence.</b> The reference's Message-arrival group has no sound picker
+    /// (options/mail1.png ends at "Display a Desktop Alert"): on its platform the sound is chosen
+    /// in the desktop's control panel and the application only decides whether to make it. No
+    /// Linux desktop offers a per-application new-mail sound to set, so under rule 2 the choice
+    /// comes to where the switch is — drawn in the idiom the reference uses for the one sound
+    /// picker it does have, the reminder's.
+    /// </remarks>
+    private Control ArrivalSoundRow()
+        => SoundPicker(
+            "Sound to play:",
+            () => App.MailOptions.ArrivalSoundFile,
+            chosen => App.MailOptions.ArrivalSoundFile = chosen,
+            chosen => Notifications.Sounds.NameFor(chosen, "new-mail.ogg"),
+            Notifications.Sounds.PlayArrival);
+
+    /// <summary>
+    /// The reference's reminder row: the tick, the label, the file and a Browse…, all on a line.
+    /// </summary>
+    /// <remarks>
+    /// Measured off options/advanced1.png, where it reads "Play reminder sound:" with
+    /// <c>reminder.wav</c> in a field beside it. A <c>CheckRow</c> and a <c>BrowseRow</c> would
+    /// stack into two lines, so the whole row is built here — and the tick box is handed back to
+    /// the renderer (<see cref="OptionsPageRenderer.Remember"/>) so the harness reads a press on
+    /// it back like any other row's.
+    /// </remarks>
+    private Control ReminderSoundRow(OptionsPageRenderer renderer)
+    {
+        var tick = new CheckBox
+        {
+            Content = "Play reminder sound:",
+            IsChecked = App.MailOptions.PlayReminderSound,
+            VerticalAlignment = VerticalAlignment.Center,
+            MinWidth = 150,
+        };
+        tick.IsCheckedChanged += (_, _) => App.Settings.Set(MailOptions.ReminderSoundKey, tick.IsChecked == true);
+        renderer.Remember(tick, MailOptions.ReminderSoundKey);
+
+        // The renderer binds every tick box it makes to this; one built here has to say so too,
+        // or it draws a shade dimmer than the rows above and below it.
+        Bind(tick, Avalonia.Controls.Primitives.TemplatedControl.ForegroundProperty, "dialog.foreground.brush");
+
+        return SoundPicker(
+            tick,
+            () => App.MailOptions.ReminderSoundFile,
+            chosen => App.MailOptions.ReminderSoundFile = chosen,
+            chosen => Notifications.Sounds.NameFor(chosen, "reminder.ogg"),
+            Notifications.Sounds.PlayReminder);
+    }
+
+    private Control SoundPicker(
+        string caption,
+        Func<string> read,
+        Action<string> write,
+        Func<string, string> name,
+        Action<string> play)
+    {
+        var label = new TextBlock { Text = caption, VerticalAlignment = VerticalAlignment.Center, Width = 150 };
+        Bind(label, TextBlock.ForegroundProperty, "dialog.foreground.brush");
+        return SoundPicker(label, read, write, name, play);
+    }
+
+    /// <summary>
+    /// A sound: the path in a field, a Browse… beside it, and what plays when the field is empty
+    /// written into the field as its watermark.
+    /// </summary>
+    /// <remarks>
+    /// The field is editable and empty means default, which is how there is a way back without a
+    /// Reset button the reference does not draw — clearing it is the reset. The watermark is
+    /// asked of the same rule that picks the file, so a chosen sound that has since been deleted
+    /// is described by what now actually plays rather than by a name that no longer resolves.
+    /// <para>
+    /// Choosing one plays it. Hearing it is the only way to know it is the right sound, and the
+    /// only way to find out this machine cannot make one — and it costs no button.
+    /// </para>
+    /// </remarks>
+    private Control SoundPicker(
+        Control caption,
+        Func<string> read,
+        Action<string> write,
+        Func<string, string> name,
+        Action<string> play)
+    {
+        var field = new TextBox { Width = 240, Text = read(), VerticalAlignment = VerticalAlignment.Center };
+        void Describe() => field.PlaceholderText = name(string.Empty);
+        Describe();
+
+        field.LostFocus += (_, _) => write(field.Text ?? string.Empty);
+
+        var browse = new Button { Content = "Browse…" };
+        browse.Click += async (_, _) =>
+        {
+            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "Select a sound",
+                AllowMultiple = false,
+                // Ogg, WAVE and FLAC are what the players here decode. MP3 is not offered:
+                // nothing in the chain reads one, so choosing it would be choosing silence.
+                FileTypeFilter = [new FilePickerFileType("Sound files") { Patterns = ["*.ogg", "*.oga", "*.wav", "*.flac"] }],
+            });
+
+            if (files.Count == 0 || files[0].TryGetLocalPath() is not { } path) return;
+            write(path);
+            field.Text = path;
+            play(path);
+        };
+
+        return new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            Children = { caption, field, browse },
+        };
+    }
+
     private Control CleanUpFolderRow()
     {
         var caption = new TextBlock { Text = "Cleaned-up items will go to this folder:", VerticalAlignment = VerticalAlignment.Center, Width = 240 };
