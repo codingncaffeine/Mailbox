@@ -205,7 +205,8 @@ public partial class MainWindow
         if (id == CalendarCommands.EmailCalendar.Id) { SwitchModule(shell, MailboxModule.Calendar); _ = EmailCalendarAsync(shell); return true; }
         if (id == CalendarCommands.PublishCalendar.Id)
         {
-            shell.StatusRight = "Publishing a calendar wants CalDAV publishing, which is still to come.";
+            SwitchModule(shell, MailboxModule.Calendar);
+            _ = PublishCalendarAsync(shell);
             return true;
         }
 
@@ -577,7 +578,7 @@ public partial class MainWindow
 
         Entry("_E-mail Calendar…", "email-calendar", () => _ = EmailCalendarAsync(shell));
         Entry("_Share Calendar…", "share", () => shell.StatusRight = "Sharing a calendar wants CalDAV publishing, which is still to come.");
-        Entry("_Publish Online…", "publish-calendar", () => shell.StatusRight = "Publishing a calendar wants CalDAV publishing, which is still to come.");
+        Entry("_Publish Online…", "publish-calendar", () => _ = PublishCalendarAsync(shell));
         flyout.Items.Add(new Separator());
         Entry("Calendar _Permissions…", "permission", () => shell.StatusRight = "Permissions belong to the server a calendar is published on.");
 
@@ -643,6 +644,54 @@ public partial class MainWindow
 
         shell.StatusRight = $"“{calendar.DisplayName}” subscribed. It fills on the next send/receive.";
         Log.Info($"Calendar: subscribed to {address} as collection {calendar.Id}.");
+        AfterStoreChange(shell);
+    }
+
+    /// <summary>
+    /// Publish Online: the calendar in front of the reader, written to an address they name.
+    /// </summary>
+    /// <remarks>
+    /// The reference publishes to its own service and to a WebDAV address. The service is a
+    /// tenant service and out of scope (§3); the address is the half that survives, and it is
+    /// also the half that is worth having — what goes up is the document a subscription reads,
+    /// so publishing from here and subscribing from another machine needs nothing in between but
+    /// a web server that takes a PUT.
+    /// <para>
+    /// Where it goes is remembered, and every send/receive puts it up again — which is what makes
+    /// it publishing rather than an export with extra steps.
+    /// </para>
+    /// </remarks>
+    private async Task PublishCalendarAsync(ShellViewModel shell)
+    {
+        var calendar = EnsureCalendar(shell);
+        var chosen = calendar.SelectedEntry?.CollectionId is { } selected
+            ? App.Pim.Collection(selected)
+            : App.Pim.DefaultCalendar();
+        if (chosen is null)
+        {
+            shell.StatusRight = "There is no calendar to publish.";
+            return;
+        }
+
+        var already = App.Published.For(chosen.Id);
+        var typed = await Prompt.AskAsync(
+            this,
+            "Publish Calendar",
+            $"Address to publish “{chosen.DisplayName}” to:",
+            already?.Url ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(typed)) return;
+
+        if (!CalendarSubscription.TryAddress(typed, out var address))
+        {
+            await Confirm.TellAsync(this, "Publish Calendar", "That is not an address a calendar can be written to.");
+            return;
+        }
+
+        App.Published.Set(chosen.Id, address.ToString(), chosen.DisplayName);
+        shell.StatusRight = $"Publishing “{chosen.DisplayName}” to {address.Host}…";
+
+        var outcome = await App.PimSync.PublishAsync(chosen.Id).ConfigureAwait(true);
+        shell.StatusRight = outcome;
         AfterStoreChange(shell);
     }
 

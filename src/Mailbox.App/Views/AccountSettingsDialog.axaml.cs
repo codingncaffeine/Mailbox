@@ -35,10 +35,12 @@ namespace Mailbox.App.Views;
 /// file; Remove closes one and leaves it on disk, as the reference's does.
 /// </para>
 /// <para>
-/// RSS Feeds, Internet Calendars and Address Books all act: each lists what the store holds,
-/// adds one, renames one and removes one. A button that still cannot do its job — Published
-/// Calendars, which wants CalDAV publishing — is live and says what it is waiting for, rather
-/// than being greyed with no explanation or left off the toolbar the reference shows.
+/// RSS Feeds, Internet Calendars, Published Calendars and Address Books all act: each lists what
+/// this machine holds, and changes or removes an entry. Published Calendars has no New… because
+/// the reference has none — a calendar is published from the calendar itself, which is where the
+/// reader knows which one they mean. What is left is Address Books' Change…, which wants an LDAP
+/// directory to change the settings of; it is live and says so rather than being greyed with no
+/// explanation or left off the toolbar the reference shows.
 /// </para>
 /// </remarks>
 public sealed class AccountSettingsDialog : Window
@@ -63,6 +65,11 @@ public sealed class AccountSettingsDialog : Window
     private readonly Button _changeFolder;
     private readonly TextBlock _deliveryPath = Label(string.Empty, bold: true);
     private readonly TextBlock _deliveryFile = Label(string.Empty);
+
+    // Published Calendars
+    private readonly ClassicListView _publishedList = new();
+    private readonly Button _publishedChange;
+    private readonly Button _publishedRemove;
 
     // Internet Calendars
     private readonly ClassicListView _calendars = new();
@@ -120,6 +127,9 @@ public sealed class AccountSettingsDialog : Window
         _fileSettings = ToolButton("change", "Settings...", FileSettingsAsync);
         _fileDefault = ToolButton("default", "Set as Default", SetDefaultFile);
         _fileRemove = ToolButton("remove", "Remove", DetachSelectedAsync);
+
+        _publishedChange = ToolButton("change", "Change...", ChangePublishedAsync);
+        _publishedRemove = ToolButton("remove", "Remove", RemovePublishedAsync);
 
         _calendarNew = ToolButton("new", "New...", NewSubscriptionAsync);
         _calendarChange = ToolButton("change", "Change...", ChangeSubscriptionAsync);
@@ -883,22 +893,90 @@ public sealed class AccountSettingsDialog : Window
 
     private Control PublishedCalendarsTab()
     {
-        var list = new ClassicListView
-        {
-            Columns = [new ClassicColumn("Calendar", 282), new ClassicColumn("Location", 301)],
-        };
+        _publishedList.Columns = [new ClassicColumn("Calendar", 282), new ClassicColumn("Location", 301)];
+        _publishedList.SelectionChanged += (_, _) => EnablePublishedButtons();
+        FillPublished();
 
-        var change = ToolButton("change", "Change...", () => Task.CompletedTask);
-        var remove = ToolButton("remove", "Remove", () => { });
-        change.IsEnabled = false;
-        remove.IsEnabled = false;
-
+        // No New… on this tab, as the reference has none: a calendar is published from the
+        // calendar itself, which is where the reader knows which one they mean.
         var paragraph = Paragraph(
-            "Publishing a calendar arrives with the calendar module, over CalDAV. A calendar you "
-            + "publish will be listed here.");
+            "A calendar is published from the Calendar module — Share, then Publish Online. What "
+            + "goes up is the whole calendar as one file, written again on every send/receive, "
+            + "and anyone can subscribe to it at the address below.");
         paragraph.Width = 560;
 
-        return Page(Toolbar(change, remove), list, new Panel { Children = { At(paragraph, 8, 9) } });
+        return Page(
+            Toolbar(_publishedChange, _publishedRemove),
+            _publishedList,
+            new Panel { Children = { At(paragraph, 8, 9) } });
+    }
+
+    private void FillPublished()
+    {
+        _publishedList.SetRows(
+        [
+            .. App.Published.All.Select(p => new ClassicRow(
+                [
+                    // The calendar's name now, not the one recorded when it was published — a
+                    // renamed calendar is the same calendar, and a list showing the old name
+                    // would be the only place the old one survived.
+                    App.Pim.Collection(p.CollectionId)?.DisplayName ?? p.Name,
+                    p.Url,
+                ],
+                Tag: p.CollectionId)),
+        ]);
+
+        EnablePublishedButtons();
+    }
+
+    private void EnablePublishedButtons()
+    {
+        var chosen = _publishedList.SelectedRow is not null;
+        _publishedChange.IsEnabled = chosen;
+        _publishedRemove.IsEnabled = chosen;
+    }
+
+    private async Task ChangePublishedAsync()
+    {
+        if (_publishedList.SelectedRow?.Tag is not long id || App.Published.For(id) is not { } entry) return;
+
+        var name = App.Pim.Collection(id)?.DisplayName ?? entry.Name;
+        var typed = await Prompt.AskAsync(this, "Publish Calendar", $"Address to publish “{name}” to:", entry.Url);
+        if (string.IsNullOrWhiteSpace(typed)) return;
+
+        if (!CalendarSubscription.TryAddress(typed, out var address))
+        {
+            await Confirm.TellAsync(this, "Publish Calendar", "That is not an address a calendar can be written to.");
+            return;
+        }
+
+        App.Published.Set(id, address.ToString(), name);
+        Changed = true;
+        FillPublished();
+        Mailbox.Core.Diagnostics.Log.Info($"Account Settings: collection {id} now publishes to {address}.");
+    }
+
+    private async Task RemovePublishedAsync()
+    {
+        if (_publishedList.SelectedRow?.Tag is not long id || App.Published.For(id) is not { } entry) return;
+
+        var name = App.Pim.Collection(id)?.DisplayName ?? entry.Name;
+        if (!await Confirm.AskAsync(
+                this,
+                "Account Settings",
+                $"Stop publishing “{name}”? Nothing more will be written to {entry.Url}. What is "
+                + "already there stays where it is — taking it down is the publisher's to do, and "
+                + "deleting it here would take the calendar away from everybody subscribed to it.",
+                "Stop Publishing",
+                destructive: false))
+        {
+            return;
+        }
+
+        App.Published.Remove(id);
+        Changed = true;
+        FillPublished();
+        Mailbox.Core.Diagnostics.Log.Info($"Account Settings: collection {id} is no longer published.");
     }
 
     // ---- Address Books --------------------------------------------------------------------

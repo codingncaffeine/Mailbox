@@ -66,6 +66,9 @@ public partial class App : Application
     /// <summary>The RSS subscriptions, and the reader that delivers them into mail folders.</summary>
     public static Mailbox.Core.Feeds.FeedSubscriptions Feeds { get; private set; } = null!;
 
+    /// <summary>The calendars this reader publishes, and where each one goes.</summary>
+    public static Mailbox.Core.Calendars.PublishedCalendars Published { get; private set; } = null!;
+
     public static Mailbox.Protocols.FeedReceiver FeedReader { get; private set; } = null!;
 
     /// <summary>Personal Stationery: the fonts new mail, replies and plain text are written in.</summary>
@@ -633,6 +636,11 @@ public partial class App : Application
         ContactFavourites = new Mailbox.Core.People.ContactFavourites(Settings);
         Security = new SecurityOptions(Settings);
         Feeds = new Mailbox.Core.Feeds.FeedSubscriptions(Settings);
+
+        // Built here with the other settings-backed lists, and handed to the sync service, which
+        // was made further up before this existed.
+        Published = new Mailbox.Core.Calendars.PublishedCalendars(Settings);
+        PimSync.Published = Published;
         FeedReader = new Mailbox.Protocols.FeedReceiver(Feeds);
         Stationery = new StationeryFonts(Settings);
         Groups = new SendReceiveGroups(Settings);

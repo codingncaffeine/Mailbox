@@ -131,8 +131,21 @@ public sealed class EditorOptionsDialog : Window
         stack.Children.Add(ViewDialogKit.Label("Specify how Mailbox corrects and formats the contents of your e-mails.", bold: true));
 
         stack.Children.Add(Section("AutoCorrect options"));
-        var autocorrect = new Button { Content = "AutoCorrect Options…", IsEnabled = false };
-        ToolTip.SetTip(autocorrect, "There is no autocorrect yet.");
+
+        // Live and saying what it waits on, rather than greyed with no explanation — the rule
+        // every other blocked control here follows. And what it waits on is not a phase: the
+        // editor is a library (§7.3), and correcting a word as it is finished needs a caret
+        // position and a way to replace a range, neither of which it offers. Find and Replace
+        // works because it replaces every match; a correction has to replace exactly one.
+        var autocorrect = new Button { Content = "AutoCorrect Options…" };
+        autocorrect.Click += async (_, _) => await Confirm.TellAsync(
+            this,
+            "AutoCorrect",
+            "The editor does not offer it. Correcting a word as it is finished means replacing "
+            + "the one just typed, and the editor exposes the caret's line and column but no way "
+            + "to replace a range — only a find-and-replace over every match, which would rewrite "
+            + "the same letters everywhere else in the message. Find and Replace and the spelling "
+            + "check both work for that reason, and both act on the whole body on purpose.");
         stack.Children.Add(new StackPanel
         {
             Orientation = Orientation.Horizontal,

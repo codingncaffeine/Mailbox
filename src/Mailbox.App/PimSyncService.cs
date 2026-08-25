@@ -52,6 +52,79 @@ public sealed class PimSyncService(
     /// <summary>Where a Google Tasks account's own client registration is kept (§5).</summary>
     public static string ClientIdSetting(string account) => $"pim.google.{account}.client";
 
+    /// <summary>
+    /// The calendars this reader publishes. Set by the shell; null in a test or a seed, where
+    /// publishing is nobody's business.
+    /// </summary>
+    public Mailbox.Core.Calendars.PublishedCalendars? Published { get; set; }
+
+    /// <summary>
+    /// Writes one published calendar to its address and says how it went, in a sentence fit for
+    /// the status bar.
+    /// </summary>
+    /// <remarks>
+    /// Anonymous: a published calendar is written to whatever address the reader gave, and this
+    /// does not yet ask for a sign-in to go with one. A server that wants one answers 401 and is
+    /// told so plainly rather than failing quietly — which is the difference between a feature
+    /// with a stated limit and a button that does nothing.
+    /// </remarks>
+    public async Task<string> PublishAsync(long collectionId, CancellationToken cancellationToken = default)
+    {
+        if (Published?.For(collectionId) is not { } entry) return "That calendar is not published.";
+        if (_repository.Collection(collectionId) is not { } calendar) return "That calendar is no longer here.";
+        if (!Uri.TryCreate(entry.Url, UriKind.Absolute, out var url)) return "That is not an address a calendar can be written to.";
+
+        try
+        {
+            using var client = new DavClient();
+            var outcome = await CalendarPublisher
+                .PublishAsync(client, _repository, calendar, url, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!outcome.Ok)
+            {
+                Log.Warn($"Publish: “{calendar.DisplayName}” refused by {url.Host} — {outcome.Refused}.");
+                return outcome.Refused?.StartsWith("401", StringComparison.Ordinal) == true
+                    ? $"{url.Host} wants a sign-in, and publishing does not ask for one yet."
+                    : $"“{calendar.DisplayName}” was not published: {outcome.Refused}.";
+            }
+
+            Published.Published(collectionId, DateTimeOffset.UtcNow);
+            Log.Info($"Publish: “{calendar.DisplayName}” — {outcome.Written} event(s) to {url}.");
+            return $"“{calendar.DisplayName}” published: {outcome.Written} appointment{(outcome.Written == 1 ? string.Empty : "s")}.";
+        }
+        catch (HttpRequestException ex)
+        {
+            Log.Warn($"Publish: “{calendar.DisplayName}” could not be written.", ex);
+            return $"“{calendar.DisplayName}” could not be published: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Puts every published calendar up again, which is what makes it publishing rather than an
+    /// export somebody has to remember to repeat.
+    /// </summary>
+    private async Task PublishAllAsync(CancellationToken cancellationToken)
+    {
+        if (Published is not { All.Count: > 0 } published) return;
+
+        foreach (var entry in published.All.ToList())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            // A calendar that has since been deleted stops being published with it: leaving the
+            // entry would keep writing a document nothing here can account for.
+            if (_repository.Collection(entry.CollectionId) is null)
+            {
+                published.Remove(entry.CollectionId);
+                Log.Info($"Publish: collection {entry.CollectionId} is gone; it is no longer published.");
+                continue;
+            }
+
+            await PublishAsync(entry.CollectionId, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
     /// <summary>Syncs every calendar that has a server behind it.</summary>
     public async Task<CalendarSyncReport> SyncAsync(CancellationToken cancellationToken = default)
     {
@@ -59,6 +132,11 @@ public sealed class PimSyncService(
         // PROPFIND to a JSON API, so the two are told apart once, here, by the only thing that
         // could tell them apart: the host in the URL.
         var google = await SyncGoogleAsync(cancellationToken).ConfigureAwait(false);
+
+        // What this machine sends out goes before what it fetches, for the reason the mail
+        // journal plays before its fetch: a reader subscribed to a calendar published here sees
+        // the change on their next poll rather than the one after it.
+        await PublishAllAsync(cancellationToken).ConfigureAwait(false);
 
         var collections = _repository.Collections()
             .Where(c => c.DavUrl is { Length: > 0 } && !GoogleTasks.Owns(c))
