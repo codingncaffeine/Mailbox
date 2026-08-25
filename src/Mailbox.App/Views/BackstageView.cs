@@ -208,6 +208,11 @@ public sealed class BackstageView : Border
     internal void Open(string id)
     {
         _selected = id;
+
+        // The rail as well as the page: a click rebuilds it so the entry it landed on is the
+        // one drawn selected, and a posed open that skipped that left the mark on Info while
+        // another page was showing — which is what every capture of this window then showed.
+        BuildRail();
         ShowPage(id);
     }
 
@@ -217,8 +222,129 @@ public sealed class BackstageView : Border
             "info" => BuildAccountInformation(),
             "openexport" => BuildOpenExport(),
             "saveas" => BuildSaveAs(),
+            "print" => BuildPrint(),
+            "account" => BuildAccount(),
             _ => Placeholder(id),
         };
+
+    // ------------------------------------------------------------------------------------
+    // Print — the reference's own page, translated to a desktop that owns the print dialog
+    // ------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Print: the message, the folder as a list, or a PDF.
+    /// </summary>
+    /// <remarks>
+    /// Both rail entries used to fall through to a placeholder that wrote "print — not built
+    /// yet" into the page — in the shell, the compose window and the message window alike, on
+    /// the most-used page the Backstage has. The commands behind it were all built; only the
+    /// page was missing.
+    /// <para>
+    /// <b>A stated translation.</b> The reference's page carries a printer picker, a copies box
+    /// and a preview, because on Windows the application owns the print dialog. Here the desktop
+    /// owns it: the preview opens in its own window and its Print button hands over to the
+    /// system's dialog, which is where the printer, the copies and the paper are chosen. A
+    /// second picker in this page would be a second answer to a question the desktop has already
+    /// asked.
+    /// </para>
+    /// </remarks>
+    private Control BuildPrint()
+    {
+        var stack = new StackPanel { Spacing = 0, MaxWidth = 720, HorizontalAlignment = HorizontalAlignment.Left };
+        stack.Children.Add(Heading("Print"));
+
+        stack.Children.Add(BuildSection(
+            "print", "Print", hasDropdown: false,
+            "Print the message",
+            "Opens the selected message as it will appear on paper, and hands over to the "
+            + "desktop's own print dialog for the printer, the copies and the paper.",
+            action: "print.message"));
+
+        stack.Children.Add(BuildSection(
+            "table", "Print List", hasDropdown: false,
+            "Print the folder as a list",
+            "The messages in this folder as a table — who from, subject, received — which is "
+            + "the reference's other print style.",
+            action: "print.list"));
+
+        stack.Children.Add(BuildSection(
+            "print", "Print to PDF", hasDropdown: false,
+            "Write it to a PDF",
+            "Straight to a file, without going through a print dialog. Not something the "
+            + "reference offers: on Windows it prints to whatever the system provides, and here "
+            + "the engine can write the PDF itself.",
+            action: "print.pdf"));
+
+        return stack;
+    }
+
+    // ------------------------------------------------------------------------------------
+    // Mailbox Account — the reference's Office Account page
+    // ------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Who is signed in, what the application is wearing, and what it is.
+    /// </summary>
+    /// <remarks>
+    /// The reference's page shows a signed-in identity, a theme picker and an About panel. There
+    /// is no identity to show — nothing here signs in to a vendor's service, which is §3 — so
+    /// the accounts themselves stand in its place, which is what a reader would look for on a
+    /// page called Mailbox Account anyway.
+    /// </remarks>
+    private Control BuildAccount()
+    {
+        var stack = new StackPanel { Spacing = 0, MaxWidth = 720, HorizontalAlignment = HorizontalAlignment.Left };
+        stack.Children.Add(Heading("Mailbox Account"));
+
+        var accounts = App.Accounts.All;
+
+        stack.Children.Add(BuildSection(
+            "people", "Accounts", hasDropdown: false,
+            accounts.Count switch
+            {
+                0 => "No account yet",
+                1 => accounts[0].Account.Address,
+                _ => $"{accounts.Count} accounts",
+            },
+            accounts.Count == 0
+                ? "Nothing is set up yet. Add Account walks through a server, or finds one from "
+                  + "the address."
+                : string.Join(", ", accounts.Select(a => a.Account.Address))
+                  + ". Passwords are kept in the desktop's keyring and never in a file.",
+            action: "account.settings"));
+
+        stack.Children.Add(BuildSection(
+            "theme-colors", "Theme", hasDropdown: false,
+            "Mailbox theme",
+            "The four the reference ships — Colorful, White, Dark Gray and Black — and any theme "
+            + "file of your own. Chosen on the Options page's General tab, where the reference "
+            + "puts it too.",
+            action: "options.general"));
+
+        stack.Children.Add(BuildSection(
+            "info", "About", hasDropdown: false,
+            $"Mailbox {typeof(BackstageView).Assembly.GetName().Version?.ToString(3) ?? "0.0.0"}",
+            "A mail, calendar and contacts client for Linux, under the GNU General Public "
+            + "Licence version 3. Your mail is one SQLite file per account under this machine's "
+            + "own data directory; nothing is sent anywhere but to the servers you set up.",
+            action: "about"));
+
+        return stack;
+    }
+
+    /// <summary>A page's title, in the size every Backstage page uses.</summary>
+    private Control Heading(string text)
+    {
+        var heading = new TextBlock
+        {
+            Text = text,
+            FontSize = 21,
+            Margin = new Thickness(0, 0, 0, 14),
+        };
+
+        Bind(heading, TextBlock.ForegroundProperty, "text.primary.brush");
+        return heading;
+    }
 
     // ------------------------------------------------------------------------------------
     // Save As — what leaves the store leaves it verbatim (§7.6a)

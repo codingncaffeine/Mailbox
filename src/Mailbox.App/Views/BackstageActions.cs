@@ -115,6 +115,22 @@ internal static class BackstageActions
                 await new RulesAndAlertsDialog().ShowDialog(host.Owner);
                 host.Refresh();
                 break;
+
+            // The Mailbox Account page's About panel. What a reader wants from it is what this
+            // is, what licence it is under and where their mail actually lives — the last
+            // being the thing nobody can guess and everybody eventually needs.
+            case "about":
+                await Confirm.TellAsync(
+                    host.Owner,
+                    "About Mailbox",
+                    $"Mailbox {typeof(BackstageActions).Assembly.GetName().Version?.ToString(3) ?? "0.0.0"}\n\n"
+                    + "A mail, calendar and contacts client for Linux, under the GNU General "
+                    + "Public Licence version 3.\n\n"
+                    + $"Your mail: {Mailbox.Store.AccountStores.DefaultDirectory()}\n"
+                    + $"Your calendar and contacts: {Mailbox.Store.Pim.PimStore.DefaultPath()}\n"
+                    + $"Your preferences: {Mailbox.Core.Settings.SettingsStore.DefaultPath()}\n\n"
+                    + "Passwords are kept in the desktop's keyring and never in a file.");
+                break;
         }
     }
 

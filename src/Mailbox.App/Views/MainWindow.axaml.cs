@@ -959,7 +959,20 @@ public partial class MainWindow : Window
 
                     if (Environment.GetEnvironmentVariable("MAILBOX_BACKSTAGE") is { Length: > 0 } page)
                     {
-                        view.Open(page.Trim().ToLowerInvariant());
+                        // `page` or `page:action` — the second form presses one of the page's
+                        // own buttons, which is the only way to audit what a section does: they
+                        // are not menu entries and a capture cannot click them.
+                        var (which, press) = page.Trim().ToLowerInvariant().Split(':', 2) is [var head, var tail]
+                            ? (head, tail)
+                            : (page.Trim().ToLowerInvariant(), null);
+
+                        view.Open(which);
+
+                        if (press is { Length: > 0 })
+                        {
+                            Dispatcher.UIThread.Post(
+                                () => _ = BackstageActionAsync(press), DispatcherPriority.Background);
+                        }
                     }
 
                     // MAILBOX_BACKSTAGE_MENU=tools|settings[:<action>] names what the menu holds
@@ -6112,6 +6125,15 @@ public partial class MainWindow : Window
         {
             switch (action)
             {
+                // Print, from the page rather than the bar. Each closes the Backstage first,
+                // because what they open is a window over the shell and the reference's page
+                // closes behind its own Print button too.
+                case "print.message": CloseBackstage(); RunCommand(MailCommands.Print.Id); return;
+                case "print.list": CloseBackstage(); RunCommand(MailCommands.PrintList.Id); return;
+                case "print.pdf": CloseBackstage(); RunCommand(MailCommands.PrintToPdf.Id); return;
+
+                case "options.general": CloseBackstage(); await ShowOptions("general"); return;
+
                 case "export.eml": CloseBackstage(); await ExportEmlAsync(shell); return;
                 case "export.mbox": CloseBackstage(); await ExportMboxAsync(shell); return;
                 case "export.ics": CloseBackstage(); await ExportIcsAsync(shell); return;
