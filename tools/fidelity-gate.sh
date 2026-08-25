@@ -42,13 +42,51 @@ MAILBOX_SEED="$work/seed" MAILBOX_TODAY=2026-08-16 \
   dotnet test "$root/tests/Mailbox.Tests" --filter SeedOnRequest -v quiet >"$work/seed.log" 2>&1 \
   || { echo "fidelity-gate: seeding failed"; cat "$work/seed.log"; exit 1; }
 
+# Every Avalonia application on Linux can print an unhandled TaskCanceledException on the way
+# out: Avalonia.FreeDesktop tears its own D-Bus connection down after the dispatcher has already
+# stopped, so that connection's blocking Send onto the dispatcher is cancelled. It is upstream,
+# it is cosmetic, and the process still exits 0 — which is why this check reads the log instead
+# of the exit code, and equally why the trace has to be let back through it. It is a race, so it
+# appears in some runs and not others: CI has no session bus under xvfb and has never printed
+# one, but a local run has a bus, and failing a capture there for something the application did
+# not do is a bad reason to distrust a picture.
+#
+# That one trace goes and nothing else does. A block qualifies only when it is a
+# TaskCanceledException raised through Tmds.DBus — which nothing under src/ binds, so those
+# frames can only be Avalonia's own — and names nothing of ours anywhere in it. Every other
+# exception, and any trace at all carrying one of our frames, still fails the capture.
+app_exceptions() { # log -> the lines naming an exception, that one trace excluded
+  awk '
+    /^Unhandled exception\./ { settle(); block = $0; held = 1; next }
+    held && /^[[:space:]]/   { block = block "\n" $0; next }
+                             { settle(); print }
+    END                      { settle() }
+    function settle(   upstream) {
+      if (!held) return
+      upstream = block ~ /TaskCanceledException/ &&
+                 block ~ /Tmds\.DBus\.Protocol\.DBusConnection/ &&
+                 block !~ /Mailbox\./
+      if (!upstream) print block
+      held = 0
+    }
+  ' "$1" | { grep -i exception || true; }
+}
+
 capture() { # theme, output
   MAILBOX_STORE="$work/seed/accounts" MAILBOX_TODAY=2026-08-16 MAILBOX_THEME="$1" \
     MAILBOX_STATE=no-reading MAILBOX_SIZE=1600x1000 MAILBOX_CAPTURE="$2" \
     dotnet run --project "$root/src/Mailbox.App" >"$work/$1.log" 2>&1 \
     || { echo "fidelity-gate: the $1 capture run failed"; tail -40 "$work/$1.log"; return 1; }
-  if grep -qi exception "$work/$1.log"; then
-    echo "fidelity-gate: the $1 capture logged an exception"; grep -i exception "$work/$1.log" | head -5; return 1
+  # Declared apart from the assignment on purpose: `local x=$(...)` reports local's status, not
+  # the command's, and a filter that broke would then read as a capture with nothing to report —
+  # a check that passes because it stopped running, which is the failure this gate exists to
+  # avoid making.
+  local logged
+  if ! logged="$(app_exceptions "$work/$1.log")"; then
+    echo "fidelity-gate: the exception filter failed to read the $1 capture log"; return 1
+  fi
+  if [[ -n "$logged" ]]; then
+    echo "fidelity-gate: the $1 capture logged an exception"; printf '%s\n' "$logged" | head -5; return 1
   fi
 }
 
