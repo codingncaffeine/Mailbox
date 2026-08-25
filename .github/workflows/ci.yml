@@ -1,8 +1,11 @@
 # The whole suite, and Phase 10's pixel gate (§8): the four built-in themes stay
 # pixel-identical to their reference captures. The runner image is pinned because the
 # references are rasterised by this environment's own font stack; a runner bump that shifts
-# antialiasing is a real change and regenerating the references (download the fidelity
-# artifact from a green run, commit as tests/fidelity/*.png) is the deliberate answer to it.
+# antialiasing is a real change, and regenerating the references is the deliberate answer to
+# it: download the fidelity artifact and commit its four PNGs as tests/fidelity/*.png. The run
+# that produces them is the red one — a deliberate change is what made it red — so read its log
+# first. Only "differs from its reference" is the drift being refreshed; "two captures in one
+# run differ" is the capture having stopped being deterministic, and no reference fixes that.
 name: CI
 
 on:
