@@ -337,6 +337,8 @@ public partial class App : Application
             // Left-click brings the window forward, as a tray icon is expected to.
             _tray.Clicked += (_, _) => window.BringForward();
 
+            Log.Info("The notification-area icon is up.");
+
             // The count is drawn onto the icon as it changes, and the tooltip says it in words.
             if (window.DataContext is ShellViewModel shell)
             {
@@ -353,6 +355,11 @@ public partial class App : Application
                     try
                     {
                         _tray.Icon = Notifications.TrayBadge.For(art, unread);
+
+                        // The one part of this nobody can photograph from a harness run: what
+                        // the panel was handed, and why.
+                        Log.Info($"Tray icon: {Mailbox.Core.Notifications.TrayArtwork.For(unread)} "
+                                 + $"({unread} unread).");
                     }
                     catch (Exception ex)
                     {

@@ -158,6 +158,17 @@ public partial class MainWindow : Window
 
         DataContext = shell;
 
+        // The taskbar entry carries the same two mailboxes the notification area does: full
+        // while there is unread post in an inbox, empty once it has been read. The title bar
+        // draws its own icon from its own asset, so the chrome the pixel gate holds does not
+        // move with this.
+        shell.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ShellViewModel.TotalUnread)) ShowUnreadOnTaskbar(shell);
+        };
+
+        ShowUnreadOnTaskbar(shell);
+
         // The toasts stay with the notification server; what goes is the watch on their buttons.
         Closed += (_, _) => _notifier.Dispose();
 
@@ -5650,6 +5661,38 @@ public partial class MainWindow : Window
         // Dropped from the ribbon control that raised it where there is one, and from the
         // window otherwise — a menu with nothing to hang off still has to appear somewhere.
         flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+    }
+
+    /// <summary>Which mailbox the taskbar is showing, so it is only set when it changes.</summary>
+    private string? _taskbarArt;
+
+    /// <summary>
+    /// Puts the full or the empty mailbox on the window, which is what a taskbar draws.
+    /// </summary>
+    /// <remarks>
+    /// Only when it changes: setting a window icon goes to the window manager, and doing that on
+    /// every count change would be a round trip per message read. Logged when it does, because
+    /// an icon in a panel is the one part of this nobody can screenshot from here — the log is
+    /// how a run says which mailbox it put up.
+    /// </remarks>
+    private void ShowUnreadOnTaskbar(ShellViewModel shell)
+    {
+        var art = Mailbox.Core.Notifications.TrayArtwork.For(shell.TotalUnread);
+        if (art == _taskbarArt) return;
+
+        try
+        {
+            Icon = new WindowIcon(new Avalonia.Media.Imaging.Bitmap(
+                Avalonia.Platform.AssetLoader.Open(new Uri($"avares://mailbox/Assets/Icons/{art}-256.png"))));
+
+            _taskbarArt = art;
+            Log.Info($"Taskbar icon: {art} ({shell.TotalUnread} unread).");
+        }
+        catch (Exception ex)
+        {
+            // The window keeps whatever icon it had; a panel drawing is not worth a crash.
+            Log.Warn("The taskbar icon could not be set.", ex);
+        }
     }
 
     /// <summary>
