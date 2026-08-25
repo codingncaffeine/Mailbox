@@ -50,7 +50,7 @@ public class GoogleTasksTests
     [Fact]
     public void ATaskListOnGooglesHostIsOurs()
     {
-        var google = new Collection(1, "you@gmail.com", CollectionKind.Tasks, "My Tasks", "", GoogleTasks.UrlFor("list-1"), null, null, true, false, false, 0);
+        var google = new Collection(1, "you@gmail.com", CollectionKind.Tasks, "My Tasks", "", GoogleTasks.UrlFor("list-1"), null, null, null, true, false, false, 0);
         var dav = google with { DavUrl = "https://dav.example.net/calendars/you/tasks/" };
         var local = google with { DavUrl = null };
 
@@ -66,7 +66,7 @@ public class GoogleTasksTests
     public void AListIdIsReadBackOutOfItsUrl()
     {
         var url = GoogleTasks.UrlFor("MTIzNDU2Nzg5/OjA");
-        var collection = new Collection(1, "you@gmail.com", CollectionKind.Tasks, "x", "", url, null, null, true, false, false, 0);
+        var collection = new Collection(1, "you@gmail.com", CollectionKind.Tasks, "x", "", url, null, null, null, true, false, false, 0);
 
         Assert.Equal("MTIzNDU2Nzg5/OjA", GoogleTasks.ListId(collection));
     }

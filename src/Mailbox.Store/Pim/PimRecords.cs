@@ -20,6 +20,12 @@ public enum PimSyncState
 }
 
 /// <summary>A calendar, a task list, a note list or an address book.</summary>
+/// <param name="LastCheckedUtc">
+/// When this machine last reached the server for it and was answered, or null for never — which
+/// is what the Internet Calendars tab's "Last Updated on" column reads. Not the same as
+/// <paramref name="Ctag"/> moving: a collection that has not changed in a month is still being
+/// checked, and the check is what says the subscription is alive.
+/// </param>
 public sealed record Collection(
     long Id,
     string Account,
@@ -29,6 +35,7 @@ public sealed record Collection(
     string? DavUrl,
     string? Ctag,
     string? SyncToken,
+    DateTimeOffset? LastCheckedUtc,
     bool IsVisible,
     bool IsReadOnly,
     bool IsDefault,

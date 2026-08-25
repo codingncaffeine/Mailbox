@@ -205,6 +205,19 @@ public static class PimMigrations
         """
         ALTER TABLE pim_items ADD COLUMN links TEXT NOT NULL DEFAULT '';
         """,
+
+        // ---- 8: when a collection was last checked -------------------------------------------
+        // The Internet Calendars tab draws a "Last Updated on" column, and there was nothing
+        // truthful to put in it: ctag and sync_token say what the server last showed, not when
+        // this machine last looked, and the two part company exactly where the column is read.
+        // A subscription nobody has published to for a month is still being checked every
+        // download interval, and "is this still live?" is a question about the check.
+        //
+        // NULL is never checked, which is not the epoch: a subscription added a moment ago has
+        // not been anywhere yet, and the column has to be able to say so.
+        """
+        ALTER TABLE collections ADD COLUMN last_checked_utc INTEGER;
+        """,
     ];
 
     public static int Latest => Steps.Count;

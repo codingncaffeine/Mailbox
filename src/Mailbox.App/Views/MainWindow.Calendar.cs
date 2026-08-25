@@ -9,6 +9,7 @@ using Mailbox.App.Options;
 using Mailbox.Core.Settings;
 using Mailbox.App.ViewModels;
 using Mailbox.Controls.Calendar;
+using Mailbox.Core.Calendars;
 using Mailbox.Core.Commands;
 using Mailbox.Core.Diagnostics;
 using Mailbox.Core.Ribbon;
@@ -626,18 +627,14 @@ public partial class MainWindow
         var url = await Prompt.AskAsync(this, "New Internet Calendar Subscription", "Address of the calendar:");
         if (string.IsNullOrWhiteSpace(url)) return;
 
-        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var address)
-            || address.Scheme is not ("http" or "https" or "webcal"))
+        if (!CalendarSubscription.TryAddress(url, out var address))
         {
             await Confirm.TellAsync(this, "New Internet Calendar Subscription", "That is not a calendar address.");
             return;
         }
 
-        // webcal: is the same URL over HTTP; every publisher writes it that way and no client has
-        // ever spoken a webcal protocol.
-        if (address.Scheme == "webcal") address = new UriBuilder(address) { Scheme = "https", Port = -1 }.Uri;
-
-        var name = await Prompt.AskAsync(this, "New Internet Calendar Subscription", "Name:", address.Host);
+        var name = await Prompt.AskAsync(
+            this, "New Internet Calendar Subscription", "Name:", CalendarSubscription.SuggestedName(address));
         if (string.IsNullOrWhiteSpace(name)) return;
 
         var calendar = App.Pim.AddCollection(

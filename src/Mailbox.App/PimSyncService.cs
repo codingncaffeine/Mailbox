@@ -74,7 +74,11 @@ public sealed class PimSyncService(
 
         foreach (var account in collections)
         {
-            var password = await _secrets.LoadAsync(account.Key, Purpose, cancellationToken).ConfigureAwait(false);
+            // Subscriptions group under the empty account: nobody signed in to get one, so there
+            // is no password to find and asking the keyring wakes it for nothing.
+            var password = account.Key is { Length: > 0 }
+                ? await _secrets.LoadAsync(account.Key, Purpose, cancellationToken).ConfigureAwait(false)
+                : null;
             using var client = new DavClient(new DavCredentials(account.Key, password));
 
             foreach (var collection in account)
@@ -84,13 +88,20 @@ public sealed class PimSyncService(
                 {
                     // A collection with nothing queued and an unmoved CTag needs no further
                     // requests at all.
+                    //
+                    // Both ways out of here are a successful check, and the Internet Calendars
+                    // tab reports the check rather than the change — so the stamp is written on
+                    // the cheap path too, which is the path that otherwise writes nothing and is
+                    // also the path a healthy subscription takes nearly every time.
                     if (_repository.Queued(collection.Id).Count == 0
                         && await DavSync.For(client, _repository, collection).IsUnchangedAsync(collection, cancellationToken).ConfigureAwait(false))
                     {
+                        _repository.SetCollectionChecked(collection.Id, DateTimeOffset.UtcNow);
                         continue;
                     }
 
                     var result = await DavSync.For(client, _repository, collection).SyncAsync(collection, cancellationToken).ConfigureAwait(false);
+                    _repository.SetCollectionChecked(collection.Id, DateTimeOffset.UtcNow);
                     pulled += result.Pulled;
                     removed += result.Removed;
                     pushed += result.Pushed;

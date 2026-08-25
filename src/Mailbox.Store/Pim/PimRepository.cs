@@ -16,7 +16,7 @@ public sealed class PimRepository(PimStore store)
     // ---- Collections ------------------------------------------------------------------------
 
     private const string CollectionSelect =
-        "SELECT id, account, kind, display_name, color, dav_url, ctag, sync_token, is_visible, is_readonly, is_default, ordinal FROM collections";
+        "SELECT id, account, kind, display_name, color, dav_url, ctag, sync_token, last_checked_utc, is_visible, is_readonly, is_default, ordinal FROM collections";
 
     public IReadOnlyList<Collection> Collections(CollectionKind? kind = null)
         => kind is { } k
@@ -74,6 +74,18 @@ public sealed class PimRepository(PimStore store)
 
     public void SetCollectionSync(long id, string? ctag, string? syncToken)
         => _store.Execute("UPDATE collections SET ctag = $ctag, sync_token = $token WHERE id = $id", ("$ctag", ctag), ("$token", syncToken), ("$id", id));
+
+    /// <summary>
+    /// Files when the server was last reached for this collection and answered — separate from
+    /// <see cref="SetCollectionSync"/>, which only fires when something moved.
+    /// </summary>
+    /// <remarks>
+    /// A poll that finds nothing changed is still a successful check, and it is the check the
+    /// Internet Calendars tab reports. Writing this from the sync's own stamp rather than from
+    /// this machine's clock would be wrong the other way — the question is when we last looked.
+    /// </remarks>
+    public void SetCollectionChecked(long id, DateTimeOffset when)
+        => _store.Execute("UPDATE collections SET last_checked_utc = $when WHERE id = $id", ("$when", when.ToUnixTimeSeconds()), ("$id", id));
 
     /// <summary>Removes a collection and everything in it.</summary>
     public void RemoveCollection(long id)
@@ -725,7 +737,8 @@ public sealed class PimRepository(PimStore store)
     private static Collection ReadCollection(SqliteDataReader r) => new(
         r.GetInt64(0), r.GetString(1), ParseKind(r.GetString(2)), r.GetString(3), r.GetString(4),
         r.IsDBNull(5) ? null : r.GetString(5), r.IsDBNull(6) ? null : r.GetString(6), r.IsDBNull(7) ? null : r.GetString(7),
-        r.GetInt32(8) != 0, r.GetInt32(9) != 0, r.GetInt32(10) != 0, r.GetInt32(11));
+        r.IsDBNull(8) ? null : DateTimeOffset.FromUnixTimeSeconds(r.GetInt64(8)),
+        r.GetInt32(9) != 0, r.GetInt32(10) != 0, r.GetInt32(11) != 0, r.GetInt32(12));
 
     private static string KindText(CollectionKind kind) => kind switch
     {

@@ -80,6 +80,33 @@ public class PimRepositoryTests
         Assert.Equal(("ctag-1", "token-1"), (repo.Collection(work.Id)!.Ctag, repo.Collection(work.Id)!.SyncToken));
     }
 
+    /// <summary>
+    /// When a collection was last checked is not when it last changed, and the Internet
+    /// Calendars tab reports the first. A subscription nobody has published to for a month is
+    /// still being polled, and a column that went by the CTag would call it stale.
+    /// </summary>
+    [Fact]
+    public void WhenACollectionWasLastCheckedIsSeparateFromWhetherItMoved()
+    {
+        var (store, repo) = Fresh();
+        using var _ = store;
+        var holidays = repo.AddCollection(
+            CollectionKind.Events, "Holidays", davUrl: "https://example.com/holidays.ics", readOnly: true);
+
+        // Never checked is the state one starts in, and it is not the epoch.
+        Assert.Null(repo.Collection(holidays.Id)!.LastCheckedUtc);
+
+        // The path that writes this is the one where nothing moved, so it writes nothing else.
+        repo.SetCollectionChecked(holidays.Id, Now);
+        var checkedOnly = repo.Collection(holidays.Id)!;
+        Assert.Equal(Now, checkedOnly.LastCheckedUtc);
+        Assert.Null(checkedOnly.Ctag);
+
+        // And filing a CTag leaves the check alone, so neither can overwrite the other.
+        repo.SetCollectionSync(holidays.Id, "ctag-9", "token-9");
+        Assert.Equal(Now, repo.Collection(holidays.Id)!.LastCheckedUtc);
+    }
+
     [Fact]
     public void AnItemRoundTripsWithEveryColumn()
     {

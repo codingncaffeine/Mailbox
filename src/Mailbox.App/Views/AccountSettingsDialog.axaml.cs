@@ -4,8 +4,10 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using Mailbox.Core.Calendars;
 using Mailbox.Protocols;
 using Mailbox.Store;
+using Mailbox.Store.Pim;
 using static Mailbox.App.Views.SystemDialogKit;
 
 namespace Mailbox.App.Views;
@@ -33,9 +35,10 @@ namespace Mailbox.App.Views;
 /// file; Remove closes one and leaves it on disk, as the reference's does.
 /// </para>
 /// <para>
-/// A button whose feature belongs to a later phase — a feed, a calendar subscription, an
-/// address book — is live and says which part of the application brings it, rather than being
-/// greyed with no explanation or left off the toolbar the reference shows.
+/// RSS Feeds, Internet Calendars and Address Books all act: each lists what the store holds,
+/// adds one, renames one and removes one. A button that still cannot do its job — Published
+/// Calendars, which wants CalDAV publishing — is live and says what it is waiting for, rather
+/// than being greyed with no explanation or left off the toolbar the reference shows.
 /// </para>
 /// </remarks>
 public sealed class AccountSettingsDialog : Window
@@ -60,6 +63,12 @@ public sealed class AccountSettingsDialog : Window
     private readonly Button _changeFolder;
     private readonly TextBlock _deliveryPath = Label(string.Empty, bold: true);
     private readonly TextBlock _deliveryFile = Label(string.Empty);
+
+    // Internet Calendars
+    private readonly ClassicListView _calendars = new();
+    private readonly Button _calendarNew;
+    private readonly Button _calendarChange;
+    private readonly Button _calendarRemove;
 
     // Data Files
     private readonly ClassicListView _files = new();
@@ -111,6 +120,10 @@ public sealed class AccountSettingsDialog : Window
         _fileSettings = ToolButton("change", "Settings...", FileSettingsAsync);
         _fileDefault = ToolButton("default", "Set as Default", SetDefaultFile);
         _fileRemove = ToolButton("remove", "Remove", DetachSelectedAsync);
+
+        _calendarNew = ToolButton("new", "New...", NewSubscriptionAsync);
+        _calendarChange = ToolButton("change", "Change...", ChangeSubscriptionAsync);
+        _calendarRemove = ToolButton("remove", "Remove", RemoveSubscriptionAsync);
 
         _tabs.AddTab(TabNames[0], EmailTab());
         _tabs.AddTab(TabNames[1], DataFilesTab());
@@ -721,34 +734,15 @@ public sealed class AccountSettingsDialog : Window
 
     private Control InternetCalendarsTab()
     {
-        var list = new ClassicListView
-        {
-            Columns =
-            [
-                new ClassicColumn("Internet Calendar", 282),
-                new ClassicColumn("Size", 84),
-                new ClassicColumn("Last Updated on", 217),
-            ],
-        };
+        _calendars.Columns =
+        [
+            new ClassicColumn("Internet Calendar", 282),
+            new ClassicColumn("Size", 84),
+            new ClassicColumn("Last Updated on", 217),
+        ];
 
-        var change = ToolButton("change", "Change...", () => Task.CompletedTask);
-        var remove = ToolButton("remove", "Remove", () => { });
-        change.IsEnabled = false;
-        remove.IsEnabled = false;
-
-        var toolbar = Toolbar(
-            ToolButton("new", "New...", async () =>
-            {
-                var dialog = new SubscriptionDialog(
-                    "New Internet Calendar Subscription",
-                    "Enter the location of the Internet Calendar you want to add to Mailbox:",
-                    "Example: webcal://www.example.com/calendars/Calendar.ics");
-                await dialog.ShowDialog(this);
-                if (dialog.Location is null) return;
-                await Later("Internet Calendars",
-                    "Subscribed calendars arrive with the calendar module. Nothing was added.");
-            }),
-            change, remove);
+        _calendars.SelectionChanged += (_, _) => EnableSubscriptionButtons();
+        FillSubscriptions();
 
         var paragraph = Paragraph(
             "Subscribed Internet Calendars are checked once during each download interval. This "
@@ -756,7 +750,133 @@ public sealed class AccountSettingsDialog : Window
             + "Calendar.");
         paragraph.Width = 560;
 
-        return Page(toolbar, list, new Panel { Children = { At(paragraph, 8, 9) } });
+        return Page(
+            Toolbar(_calendarNew, _calendarChange, _calendarRemove),
+            _calendars,
+            new Panel { Children = { At(paragraph, 8, 9) } });
+    }
+
+    /// <summary>
+    /// The subscribed calendars: a read-only collection with an address of its own. Nothing else
+    /// in the store is both — a calendar made here has no address, and one belonging to an
+    /// account is not read-only — so the pair is what tells a subscription apart.
+    /// </summary>
+    private static IReadOnlyList<Collection> Subscriptions()
+        => [.. App.Pim.Collections(CollectionKind.Events).Where(c => c.IsReadOnly && c.DavUrl is { Length: > 0 })];
+
+    private void FillSubscriptions()
+    {
+        _calendars.SetRows(
+        [
+            .. Subscriptions().Select(c => new ClassicRow(
+                [
+                    c.DisplayName,
+                    MailboxCleanupDialog.Size(
+                        App.Pim.Items(c.Id).Sum(i => (long)System.Text.Encoding.UTF8.GetByteCount(i.RawPayload))),
+
+                    // Never checked is not the same as checked and found empty, and the column
+                    // is the only place a reader can tell a dead subscription from a quiet one.
+                    c.LastCheckedUtc is { } when
+                        ? when.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)
+                        : "(never)",
+                ],
+                Tag: c.Id)),
+        ]);
+
+        EnableSubscriptionButtons();
+    }
+
+    private void EnableSubscriptionButtons()
+    {
+        var chosen = _calendars.SelectedRow is not null;
+        _calendarChange.IsEnabled = chosen;
+        _calendarRemove.IsEnabled = chosen;
+    }
+
+    private async Task NewSubscriptionAsync()
+    {
+        var dialog = new SubscriptionDialog(
+            "New Internet Calendar Subscription",
+            "Enter the location of the Internet Calendar you want to add to Mailbox:",
+            "Example: webcal://www.example.com/calendars/Calendar.ics");
+        await dialog.ShowDialog(this);
+        if (dialog.Location is not { Length: > 0 } location) return;
+
+        if (Subscribe(location) is null)
+        {
+            await Confirm.TellAsync(
+                this, "New Internet Calendar Subscription", "That is not a calendar address.");
+        }
+    }
+
+    /// <summary>
+    /// Subscribes and refreshes the list, or null when what was typed is not an address. Apart
+    /// from the button because a modal question is what the harness cannot press.
+    /// </summary>
+    private Collection? Subscribe(string location)
+    {
+        if (!CalendarSubscription.TryAddress(location, out var address)) return null;
+
+        // Read-only, as the calendar module's own subscribe makes it: what a publisher sends is
+        // theirs, and an edit here would queue a PUT to a server that never offered one.
+        var calendar = App.Pim.AddCollection(
+            CollectionKind.Events,
+            CalendarSubscription.SuggestedName(address),
+            App.CalendarOptions.DefaultColour,
+            account: string.Empty,
+            davUrl: address.ToString(),
+            readOnly: true);
+
+        Changed = true;
+        FillSubscriptions();
+        Mailbox.Core.Diagnostics.Log.Info($"Account Settings: subscribed to {address} as collection {calendar.Id}.");
+        return calendar;
+    }
+
+    private async Task ChangeSubscriptionAsync()
+    {
+        if (_calendars.SelectedRow?.Tag is not long id || App.Pim.Collection(id) is not { } calendar) return;
+
+        // The reference opens a Subscription Options dialog here. No capture of it exists, and
+        // of what it carries only the name has anywhere to go — the download limit and the
+        // attachment switch describe a service this does not talk to — so this asks for the one
+        // field, the way the RSS tab beside it asks for a feed's.
+        var named = await Prompt.AskAsync(this, "Internet Calendar Options", "Folder Name:", calendar.DisplayName);
+        if (string.IsNullOrWhiteSpace(named)) return;
+
+        RenameSubscription(id, named);
+    }
+
+    private void RenameSubscription(long id, string name)
+    {
+        App.Pim.RenameCollection(id, name.Trim());
+        Changed = true;
+        FillSubscriptions();
+    }
+
+    private async Task RemoveSubscriptionAsync()
+    {
+        if (_calendars.SelectedRow?.Tag is not long id || App.Pim.Collection(id) is not { } calendar) return;
+
+        if (!await Confirm.AskAsync(
+                this,
+                "Account Settings",
+                $"Remove the \u201c{calendar.DisplayName}\u201d Internet Calendar? What was downloaded from it "
+                + "goes too. The calendar itself belongs to whoever publishes it and is left alone.",
+                "Remove"))
+        {
+            return;
+        }
+
+        RemoveSubscription(id);
+    }
+
+    private void RemoveSubscription(long id)
+    {
+        App.Pim.RemoveCollection(id);
+        Changed = true;
+        FillSubscriptions();
+        Mailbox.Core.Diagnostics.Log.Info($"Account Settings: subscription {id} removed.");
     }
 
     // ---- Published Calendars --------------------------------------------------------------
@@ -844,9 +964,11 @@ public sealed class AccountSettingsDialog : Window
     /// Presses a button for the fidelity harness, which cannot click, and says what the store
     /// holds afterwards. <c>MAILBOX_ACCOUNTS_ACTION</c>: <c>select:&lt;n&gt;</c> then one of
     /// <c>setdefault</c>, <c>up</c>, <c>down</c>, <c>changefolder:&lt;name&gt;</c>,
-    /// <c>filedefault</c>, <c>detach</c>, <c>attach:&lt;path&gt;</c>, <c>compact</c>. The two
-    /// that ask a question first are answered here rather than through their dialog, because a
-    /// modal question is what a harness cannot press.
+    /// <c>filedefault</c>, <c>detach</c>, <c>attach:&lt;path&gt;</c>, <c>compact</c>; and for the
+    /// Internet Calendars tab <c>subscribe:&lt;url&gt;</c>, <c>calendar:&lt;n&gt;</c>,
+    /// <c>renamecalendar:&lt;name&gt;</c>, <c>removecalendar</c>. The ones that ask a question
+    /// first are answered here rather than through their dialog, because a modal question is
+    /// what a harness cannot press.
     /// </summary>
     internal void Harness(string actions)
     {
@@ -884,6 +1006,19 @@ public sealed class AccountSettingsDialog : Window
                 case "compact":
                     if (SelectedFile is { } target) Mailbox.Core.Diagnostics.Log.Info($"Harness: compacted to {target.Store.Compact():N0} bytes");
                     break;
+                case "calendar":
+                    _calendars.SelectedIndex = int.Parse(argument, CultureInfo.InvariantCulture);
+                    break;
+                case "subscribe":
+                    Mailbox.Core.Diagnostics.Log.Info(
+                        $"Harness: subscribe {(Subscribe(argument) is { } added ? $"added collection {added.Id}" : "refused")}.");
+                    break;
+                case "renamecalendar":
+                    if (_calendars.SelectedRow?.Tag is long toRename) RenameSubscription(toRename, argument);
+                    break;
+                case "removecalendar":
+                    if (_calendars.SelectedRow?.Tag is long toRemove) RemoveSubscription(toRemove);
+                    break;
             }
         }
 
@@ -897,7 +1032,16 @@ public sealed class AccountSettingsDialog : Window
         }
         Mailbox.Core.Diagnostics.Log.Info($"Harness: buttons — change {(_change.IsEnabled ? "on" : "off")}, "
             + $"set default {(_setDefault.IsEnabled ? "on" : "off")}, up {(_up.IsEnabled ? "on" : "off")}, "
-            + $"down {(_down.IsEnabled ? "on" : "off")}, change folder {(_changeFolder.IsEnabled ? "on" : "off")}.");
+            + $"down {(_down.IsEnabled ? "on" : "off")}, change folder {(_changeFolder.IsEnabled ? "on" : "off")}, "
+            + $"calendar change {(_calendarChange.IsEnabled ? "on" : "off")}, "
+            + $"calendar remove {(_calendarRemove.IsEnabled ? "on" : "off")}.");
+
+        foreach (var subscription in Subscriptions())
+        {
+            Mailbox.Core.Diagnostics.Log.Info(
+                $"Harness: subscription \u201c{subscription.DisplayName}\u201d \u2192 {subscription.DavUrl}, last checked "
+                + (subscription.LastCheckedUtc is { } at ? at.ToString("u", CultureInfo.InvariantCulture) : "never") + ".");
+        }
     }
 
     private static void Press(Button button)

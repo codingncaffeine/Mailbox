@@ -80,10 +80,118 @@ public sealed class DavSync(DavClient client, PimRepository repository, IDavPayl
             return DavSyncResult.Nothing;
         }
 
+        // A subscription is one document at an address, not a collection: there is no queue to
+        // push, no CTag to file, and neither pull path below can see it.
+        if (IsSubscription(collection))
+        {
+            var (got, gone) = await FetchDocumentAsync(collection, root, cancellationToken).ConfigureAwait(false);
+            return new DavSyncResult(got, gone, 0, []);
+        }
+
         var (pushed, conflicts) = await PushAsync(collection, root, cancellationToken).ConfigureAwait(false);
         var (pulled, removed) = await PullAsync(collection, root, cancellationToken).ConfigureAwait(false);
         await RememberCtagAsync(collection, root, moved: pushed + pulled + removed > 0, cancellationToken).ConfigureAwait(false);
         return new DavSyncResult(pulled, removed, pushed, conflicts);
+    }
+
+    /// <summary>
+    /// True for an internet calendar subscription: a read-only collection of this machine's own
+    /// with an address.
+    /// </summary>
+    /// <remarks>
+    /// A shared CalDAV calendar is read-only too, and the account is what tells the two apart —
+    /// a subscription belongs to nobody's account because nobody signed in to get it. One is a
+    /// document to fetch; the other is a collection to sync.
+    /// </remarks>
+    internal static bool IsSubscription(Collection collection)
+        => collection is { IsReadOnly: true, DavUrl: { Length: > 0 } } && collection.IsLocal;
+
+    /// <summary>
+    /// Fills a subscription: fetch the document at its address and make the collection say what
+    /// the document says.
+    /// </summary>
+    /// <remarks>
+    /// An internet calendar is not CalDAV, and this is why it needs a path of its own. What is at
+    /// the end of a <c>webcal:</c> address is a static <c>.ics</c> file on a web server, and
+    /// neither pull path can read one: <c>sync-collection</c> is a REPORT the server will not
+    /// answer, and the ETag diff is a PROPFIND of a collection that is not one. Both come back
+    /// with nothing, which is what a subscription used to fill with.
+    /// <para>
+    /// The document is the whole truth of that calendar, so this replaces rather than merges: an
+    /// event the publisher dropped is dropped here. That is safe for a subscription and for
+    /// nothing else — it is read-only, so there is no local edit for a replace to lose, which is
+    /// the very thing <see cref="StoreCalendar"/> goes to such lengths to protect.
+    /// </para>
+    /// <para>
+    /// Fetched whole every poll. A conditional GET would save the body on an unchanged calendar
+    /// and wants an <c>If-None-Match</c> the client does not send yet; a published calendar is
+    /// small and the interval is minutes, so the cost is worth less than the surface.
+    /// </para>
+    /// </remarks>
+    public async Task<(int Pulled, int Removed)> FetchDocumentAsync(
+        Collection collection, Uri url, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(collection);
+
+        var response = await _client.GetAsync(url, cancellationToken).ConfigureAwait(false);
+        if (!response.Ok) return (0, 0);
+
+        IReadOnlyList<CalendarEvent> events;
+        try
+        {
+            events = ICalendarCodec.Parse(response.Body);
+        }
+        catch (FormatException)
+        {
+            // A publisher serving an error page rather than a calendar empties nothing: the
+            // collection keeps what it last had, which is better than a calendar that vanishes
+            // whenever the far end has a bad day.
+            return (0, 0);
+        }
+
+        if (events.Count == 0) return (0, 0);
+
+        var href = url.ToString();
+        var pulled = 0;
+        var kept = new HashSet<string>(StringComparer.Ordinal);
+
+        // By UID, because a published document holds many unrelated events where a CalDAV
+        // resource holds one series — which is the assumption StoreCalendar is built on and the
+        // reason it cannot be used here.
+        foreach (var series in events.GroupBy(e => e.Uid, StringComparer.Ordinal))
+        {
+            kept.Add(series.Key);
+            var existing = _repository.ItemsByUid(collection.Id, series.Key);
+
+            foreach (var calendarEvent in series)
+            {
+                var match = existing.FirstOrDefault(i =>
+                    i.IsOverride == calendarEvent.IsOverride
+                    && (!calendarEvent.IsOverride
+                        || string.Equals(i.RecurrenceId, ICalendarCodec.RecurrenceIdText(calendarEvent.RecurrenceId!), StringComparison.Ordinal)));
+
+                var row = PimEventCodec.ToItem(calendarEvent, collection.Id, match, PimSyncState.Synced) with
+                {
+                    DavHref = href,
+                    Etag = response.Etag,
+                    RawPayload = ICalendarCodec.Serialize(calendarEvent),
+                };
+
+                if (match is null) _repository.AddItem(row);
+                else _repository.UpdateItem(row);
+                pulled++;
+            }
+        }
+
+        var removed = 0;
+        foreach (var item in _repository.Items(collection.Id))
+        {
+            if (kept.Contains(item.Uid)) continue;
+            _repository.DeleteItem(item.Id);
+            removed++;
+        }
+
+        return (pulled, removed);
     }
 
     // ---- Push --------------------------------------------------------------------------------
