@@ -5,6 +5,7 @@ using Mailbox.Theming.Tokens;
 
 namespace Mailbox.Tests;
 
+[Collection("theme state")]
 public class TokenSetTests
 {
     [Fact]
@@ -87,6 +88,7 @@ public class TokenSetTests
         => Assert.Equal(expected, TokenLayerExtensions.InferLayer(key));
 }
 
+[Collection("theme state")]
 public class OfficeThemeTests
 {
     public static TheoryData<string> AllThemes()
@@ -200,6 +202,7 @@ public class OfficeThemeTests
         => Assert.Throws<ArgumentException>(() => OfficeThemes.Build("teal"));
 }
 
+[Collection("theme state")]
 public class ThemeServiceTests
 {
     private static ThemeService Service()

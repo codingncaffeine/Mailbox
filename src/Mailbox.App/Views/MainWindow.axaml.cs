@@ -2445,7 +2445,7 @@ public partial class MainWindow : Window
     {
         if (shell.RevealMessage(address, id) is not { } row) return false;
 
-        var list = this.FindControl<ListBox>("MessageList");
+        var list = List;
         Dispatcher.UIThread.Post(() =>
         {
             shell.SelectedRow = row;
@@ -6594,7 +6594,7 @@ public partial class MainWindow : Window
     /// </remarks>
     private void WireListInteraction(ShellViewModel shell)
     {
-        if (this.FindControl<ListBox>("MessageList") is not { } list) return;
+        if (List is not { } list) return;
 
         // The list's width decides whether the Compact view draws the card or the line — the
         // reference's "use compact layout in widths smaller than N characters".
@@ -6828,11 +6828,24 @@ public partial class MainWindow : Window
     private static ViewModels.FolderNode? FolderUnder(DragEventArgs e)
         => (e.Source as Control)?.DataContext as ViewModels.FolderNode;
 
+    /// <summary>
+    /// The list, found once and kept.
+    /// </summary>
+    /// <remarks>
+    /// Enablement asks what is selected for every drawn control on the bar — a hundred of them —
+    /// each time the selection changes, and a tree search per question is a hundred tree walks
+    /// per keystroke in the list. Not the generated <c>MessageList</c> property: it resolves
+    /// through a name scope and answered null from here, which made every command think nothing
+    /// was selected.
+    /// </remarks>
+    private ListBox? _list;
+
+    private ListBox? List => _list ??= this.FindControl<ListBox>("MessageList");
+
     /// <summary>What the list has highlighted, headers excluded.</summary>
     private IReadOnlyList<ViewModels.MessageRow> SelectedRows()
     {
-        var list = this.FindControl<ListBox>("MessageList");
-        if (list?.SelectedItems is not { } selected) return [];
+        if (List?.SelectedItems is not { } selected) return [];
 
         return [.. selected.OfType<ViewModels.MessageRow>()];
     }

@@ -11,6 +11,21 @@ namespace Mailbox.Tests;
 /// a name resolves to, and the choice rides the <c>icons.set</c> token so a five-line theme
 /// swaps the whole set. The active set is process state, so every test here puts it back.
 /// </summary>
+/// <summary>
+/// The icon set and the applied theme are process-wide, so the classes that touch them are
+/// kept out of each other's way.
+/// </summary>
+/// <remarks>
+/// <see cref="Mailbox.Theming.Icons.IconSets.Active"/> is one value for the whole application —
+/// which is right, a running window wears one set — and the test runner runs classes in
+/// parallel. A class that switches to the filled set while another is asking what a glyph looks
+/// like made the suite fail about once in a hundred runs, on whichever test happened to read
+/// during the switch. Naming one collection puts them in a queue instead.
+/// </remarks>
+[CollectionDefinition("theme state", DisableParallelization = true)]
+public sealed class ThemeStateCollection;
+
+[Collection("theme state")]
 public class IconSetTests : IDisposable
 {
     public void Dispose() => IconSets.Apply(IconSets.Regular);

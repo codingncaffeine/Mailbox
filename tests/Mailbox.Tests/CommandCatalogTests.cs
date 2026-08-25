@@ -5,6 +5,7 @@ using Mailbox.Core.Ribbon;
 
 namespace Mailbox.Tests;
 
+[Collection("theme state")]
 public class CommandIdTests
 {
     [Theory]
@@ -38,6 +39,7 @@ public class CommandIdTests
     }
 }
 
+[Collection("theme state")]
 public class CommandCatalogTests
 {
     private static CommandCatalog Loaded()
@@ -318,6 +320,7 @@ public class CommandCatalogTests
 }
 
 /// <summary>The letter drawn on the account disc when there is no photograph.</summary>
+[Collection("theme state")]
 public class AccountIdentityTests
 {
     [Theory]

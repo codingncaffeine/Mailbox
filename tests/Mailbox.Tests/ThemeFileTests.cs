@@ -7,6 +7,7 @@ using Mailbox.Theming.Tokens;
 namespace Mailbox.Tests;
 
 /// <summary>A theme as a file: the format, the library that reads a directory of them, and the built-ins as files.</summary>
+[Collection("theme state")]
 public class ThemeFileTests
 {
     private static ThemeFile Parse(string json) => ThemeFileFormat.Parse(json, "test.mailbox-theme.json");
