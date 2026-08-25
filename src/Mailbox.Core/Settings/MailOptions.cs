@@ -120,6 +120,64 @@ public sealed class MailOptions(SettingsStore settings)
     public bool SpellingIgnoresAddresses => _settings.GetBool(IgnoreAddressesKey, true);
     public bool SpellingFlagsRepeated => _settings.GetBool(FlagRepeatedKey, true);
 
+    // ---- AutoCorrect ------------------------------------------------------------------------
+    //
+    // The reference's AutoCorrect dialog, which is two tabs: what it does to words, and what it
+    // does to marks and paragraphs. Declared here as keys and read as bools, as the Proofing
+    // switches above are, because the rules themselves live in the editor and Core cannot see
+    // them — the compose surface is where the two meet.
+    //
+    // On by default, every one of them, which is how the reference ships and what somebody who
+    // has never opened the dialog expects. The two exceptions are the reference's own: the maths
+    // table applies inside equations there and there are none here, and hyperlinking is the
+    // editor's switch rather than a rule of ours.
+
+    public const string AutocorrectReplaceKey = "mail.autocorrect.replace";
+    public const string AutocorrectTwoInitialsKey = "mail.autocorrect.twoinitials";
+    public const string AutocorrectSentencesKey = "mail.autocorrect.sentences";
+    public const string AutocorrectTableCellsKey = "mail.autocorrect.tablecells";
+    public const string AutocorrectDaysKey = "mail.autocorrect.days";
+    public const string AutocorrectCapsLockKey = "mail.autocorrect.capslock";
+    public const string AutocorrectSuggestionsKey = "mail.autocorrect.suggestions";
+    public const string AutocorrectMathKey = "mail.autocorrect.math";
+    public const string AutoformatQuotesKey = "mail.autoformat.quotes";
+    public const string AutoformatFractionsKey = "mail.autoformat.fractions";
+    public const string AutoformatDashesKey = "mail.autoformat.dashes";
+    public const string AutoformatEmphasisKey = "mail.autoformat.emphasis";
+    public const string AutoformatHyperlinksKey = "mail.autoformat.hyperlinks";
+    public const string AutoformatBulletsKey = "mail.autoformat.bullets";
+    public const string AutoformatNumberingKey = "mail.autoformat.numbering";
+    public const string AutoformatBordersKey = "mail.autoformat.borders";
+
+    /// <summary>The reader's own Replace/With rows, as the difference from the shipped table.</summary>
+    public const string AutocorrectTableKey = "mail.autocorrect.table";
+
+    /// <summary>The words the two capital rules leave alone, as one JSON object of two lists.</summary>
+    public const string AutocorrectExceptionsKey = "mail.autocorrect.exceptions";
+
+    public bool AutocorrectReplaces => _settings.GetBool(AutocorrectReplaceKey, true);
+    public bool AutocorrectTwoInitials => _settings.GetBool(AutocorrectTwoInitialsKey, true);
+    public bool AutocorrectSentences => _settings.GetBool(AutocorrectSentencesKey, true);
+    public bool AutocorrectTableCells => _settings.GetBool(AutocorrectTableCellsKey, true);
+    public bool AutocorrectDays => _settings.GetBool(AutocorrectDaysKey, true);
+    public bool AutocorrectCapsLock => _settings.GetBool(AutocorrectCapsLockKey, true);
+    public bool AutocorrectSuggestions => _settings.GetBool(AutocorrectSuggestionsKey, true);
+    public bool AutocorrectMath => _settings.GetBool(AutocorrectMathKey, false);
+    public bool AutoformatQuotes => _settings.GetBool(AutoformatQuotesKey, true);
+    public bool AutoformatFractions => _settings.GetBool(AutoformatFractionsKey, true);
+    public bool AutoformatDashes => _settings.GetBool(AutoformatDashesKey, true);
+    public bool AutoformatEmphasis => _settings.GetBool(AutoformatEmphasisKey, true);
+    public bool AutoformatHyperlinks => _settings.GetBool(AutoformatHyperlinksKey, true);
+    public bool AutoformatBullets => _settings.GetBool(AutoformatBulletsKey, true);
+    public bool AutoformatNumbering => _settings.GetBool(AutoformatNumberingKey, true);
+    public bool AutoformatBorders => _settings.GetBool(AutoformatBordersKey, true);
+
+    /// <summary>The Replace/With table's stored difference, for the editor to read back.</summary>
+    public string AutocorrectTable => _settings.GetString(AutocorrectTableKey, string.Empty);
+
+    /// <summary>The exception lists as stored, or empty for this build's own.</summary>
+    public string AutocorrectExceptions => _settings.GetString(AutocorrectExceptionsKey, string.Empty);
+
     /// <summary>How often a message being written is saved to Drafts. Zero is never.</summary>
     public int AutosaveMinutes => Math.Clamp((int)_settings.GetNumber(AutosaveMinutesKey, 3), 0, 99);
 

@@ -1421,6 +1421,32 @@ public partial class MainWindow : Window
                 };
                 break;
 
+            // AutoCorrect and its exceptions, which are Editor Options' own children.
+            // MAILBOX_AUTOCORRECT_TAB names which of the three to open on.
+            case "autocorrect":
+                Opened += async (_, _) =>
+                {
+                    CaptureNextWindow();
+                    var tab = int.TryParse(
+                        Environment.GetEnvironmentVariable("MAILBOX_AUTOCORRECT_TAB"), out var which)
+                        ? which
+                        : 0;
+
+                    await new AutocorrectDialog(App.Settings, tab).ShowDialog(this);
+                };
+                break;
+
+            case "autocorrectexceptions":
+                Opened += async (_, _) =>
+                {
+                    CaptureNextWindow();
+                    var exceptions = Mailbox.Editor.AutocorrectExceptions.FromJson(
+                        App.Settings.GetString(MailOptions.AutocorrectExceptionsKey));
+
+                    await new AutocorrectExceptionsDialog(exceptions, () => { }).ShowDialog(this);
+                };
+                break;
+
             case "newfolder":
             case "folderprops":
             case "folderarchive":
@@ -1784,6 +1810,21 @@ public partial class MainWindow : Window
                         {
                             Console.WriteLine($"  offers {entry}");
                         }
+                    }, DispatcherPriority.Background);
+                }
+
+                // Types into the body a character at a time and reads the body back. Autocorrect
+                // fires on a keystroke and on nothing else, so posing text into the document
+                // would prove nothing about it: the only way to audit a correction is to type
+                // the word and look at what is there afterwards.
+                if (Environment.GetEnvironmentVariable("MAILBOX_COMPOSE_TYPE") is { Length: > 0 } keys)
+                {
+                    compose.Opened += (_, _) => Dispatcher.UIThread.Post(() =>
+                    {
+                        compose.PoseBodyTyping(keys.Replace("\\n", "\n"));
+                        Console.WriteLine($"Typed \"{keys}\"");
+                        Console.WriteLine($"  body: {compose.BodyText.Replace("\n", "\\n")}");
+                        Console.WriteLine($"  html: {compose.BodyHtml.Replace("\n", " ")}");
                     }, DispatcherPriority.Background);
                 }
 

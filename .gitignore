@@ -21,6 +21,12 @@ tools/Mailbox.Fidelity/diffs/
 docs/PLAN*.md
 docs/HANDOFF*.md
 
+# The audits are internal working documents too: one lists what is missing or broken, the
+# other what a user would ask for next. Both are written against the reference and neither
+# is ours to publish.
+docs/MISSING-BROKEN*.md
+docs/USER-REQUESTS*.md
+
 # Downloaded format specifications — reference material, not ours to redistribute.
 specs/
 packaging/out/

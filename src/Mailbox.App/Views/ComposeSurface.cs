@@ -109,7 +109,7 @@ public sealed class ComposeSurface : UserControl
     private readonly TextBox _cc = Field();
     private readonly TextBox _bcc = Field();
     private readonly TextBox _subject = Field();
-    private readonly RichEditor _body;
+    private readonly ComposeEditor _body;
     /// <summary>
     /// The sending account, shown as plain text beside the From button.
     /// </summary>
@@ -264,7 +264,7 @@ public sealed class ComposeSurface : UserControl
         // status bar of its own, and a host already has a ribbon. Two bars disagreeing about the
         // same document is the mistake the compose window made once already with its caption
         // buttons.
-        _body = new RichEditor
+        _body = new ComposeEditor
         {
             AllowRemoteImagesOnPaste = false,
             AllowLocalFileImages = false,
@@ -304,6 +304,8 @@ public sealed class ComposeSurface : UserControl
         _plainText = App.MailOptions.ComposeFormat == ComposeFormat.PlainText;
         UseFont(App.Stationery.Get(_plainText ? StationeryUse.PlainText : StationeryUse.NewMessages));
 
+        ApplyAutocorrect();
+
         Content = BuildSurface();
         Focusable = true;
         UpdateStatus();
@@ -340,6 +342,13 @@ public sealed class ComposeSurface : UserControl
         // the reading pane into a window (where it briefly detaches and re-attaches) keeps saving.
         AttachedToVisualTree += (_, _) => { if (!_sent) _autosave?.Start(); };
         DetachedFromVisualTree += (_, _) => _autosave?.Stop();
+
+        // The AutoCorrect dialog writes as it goes, and what it writes has to reach a message
+        // already being written — the reference's switches take effect on the next word, not
+        // the next message. Attached to the tree for the same reason the timer is: a surface
+        // that has been closed must not still be listening to the settings store.
+        AttachedToVisualTree += (_, _) => App.Settings.Changed += OnSettingChanged;
+        DetachedFromVisualTree += (_, _) => App.Settings.Changed -= OnSettingChanged;
 
         _body.TextChanged += (_, _) => _dirty = true;
         foreach (var field in new[] { _to, _cc, _bcc, _subject }) field.TextChanged += (_, _) => _dirty = true;
@@ -607,6 +616,53 @@ public sealed class ComposeSurface : UserControl
             + "<p>After the picture.</p>");
         RaiseEnablementChanged();
     }
+
+    /// <summary>
+    /// Types into the body one character at a time, as a person would, for the harness.
+    /// </summary>
+    /// <remarks>
+    /// Through the editor's own input events rather than through <see cref="RichEditor.InsertText"/>,
+    /// because what is being checked is what happens <em>while</em> somebody types: autocorrect
+    /// fires on a keystroke and nothing else. A newline is Return, for the rules that answer to
+    /// it. The claim a run makes is the body read back afterwards.
+    /// </remarks>
+    public void PoseBodyTyping(string text)
+    {
+        _body.Focus();
+
+        foreach (var ch in text)
+        {
+            if (ch is '\n')
+            {
+                _body.RaiseEvent(new KeyEventArgs
+                {
+                    Key = Key.Enter,
+                    RoutedEvent = InputElement.KeyDownEvent,
+                    Source = _body,
+                });
+
+                continue;
+            }
+
+            _body.RaiseEvent(new TextInputEventArgs
+            {
+                Text = ch.ToString(),
+                RoutedEvent = InputElement.TextInputEvent,
+                Source = _body,
+            });
+        }
+
+        RaiseEnablementChanged();
+    }
+
+    /// <summary>The body as text, for a run that has to read back what typing did to it.</summary>
+    public string BodyText => _body.GetPlainText();
+
+    /// <summary>
+    /// The body as markup, so a run can see the formatting a correction carried — a bold word
+    /// is not something plain text can show.
+    /// </summary>
+    public string BodyHtml => _body.ToHtml();
 
     /// <summary>Presses Send, for the harness.</summary>
     public void PressSend() => Invoke(ComposeCommands.Send.Id);
@@ -1370,6 +1426,7 @@ public sealed class ComposeSurface : UserControl
         if (id == ComposeCommands.FormatHtml.Id)
         {
             _plainText = false;
+            ApplyAutocorrect();
             UpdateTitle();
             Report("This message will be sent as HTML.");
             return true;
@@ -1381,6 +1438,7 @@ public sealed class ComposeSurface : UserControl
             // so matters, because a writer who bolded a word and sees it still bold would
             // otherwise assume it is going out that way.
             _plainText = true;
+            ApplyAutocorrect();
             UpdateTitle();
             Report("This message will be sent as plain text. Formatting stays on screen and "
                 + "is not sent.");
@@ -1969,9 +2027,9 @@ public sealed class ComposeSurface : UserControl
     /// </param>
     private async Task CheckSpellingAsync(bool quietWhenClean = false)
     {
-        _spelling ??= await SpellCheck.LoadAsync(personalPath: PersonalDictionaryPath());
+        await EnsureSpellingAsync();
 
-        if (!_spelling.IsAvailable)
+        if (_spelling is null || !_spelling.IsAvailable)
         {
             if (quietWhenClean) return;
 
@@ -1981,13 +2039,6 @@ public sealed class ComposeSurface : UserControl
                 + "your language — and it will be found next time.");
             return;
         }
-
-        // The Proofing switches, read each pass so an Options change shows on the next F7.
-        _spelling.Options = new SpellCheckOptions(
-            App.MailOptions.SpellingIgnoresUppercase,
-            App.MailOptions.SpellingIgnoresNumbers,
-            App.MailOptions.SpellingIgnoresAddresses,
-            App.MailOptions.SpellingFlagsRepeated);
 
         var text = _body.GetPlainText();
         var found = _spelling.Check(text);
@@ -2052,6 +2103,95 @@ public sealed class ComposeSurface : UserControl
         Report(corrected == 0
             ? "The spelling check is complete."
             : $"The spelling check is complete. {corrected} replaced.");
+    }
+
+    /// <summary>
+    /// Loads the dictionary once, for the F7 pass and for autocorrect's suggestions.
+    /// </summary>
+    /// <remarks>
+    /// One checker rather than two: they would each hold a few megabytes of word list, and the
+    /// words taught to one would be unknown to the other.
+    /// </remarks>
+    private async Task EnsureSpellingAsync()
+    {
+        _spelling ??= await SpellCheck.LoadAsync(personalPath: PersonalDictionaryPath());
+
+        // The Proofing switches, read each time so an Options change shows on the next word.
+        _spelling.Options = new SpellCheckOptions(
+            App.MailOptions.SpellingIgnoresUppercase,
+            App.MailOptions.SpellingIgnoresNumbers,
+            App.MailOptions.SpellingIgnoresAddresses,
+            App.MailOptions.SpellingFlagsRepeated);
+    }
+
+    /// <summary>
+    /// The AutoCorrect dialog's switches, its table and its exceptions, as the body's corrector.
+    /// </summary>
+    /// <remarks>
+    /// Rebuilt rather than patched whenever any of them changes: the table and the two exception
+    /// lists are read from JSON, which is cheap next to how rarely somebody presses OK in that
+    /// dialog, and one construction path means the switches cannot drift out of step with the
+    /// lists they act on.
+    /// <para>
+    /// The suggestion rule reads the same checker the F7 pass uses, through a delegate rather
+    /// than a reference, so that a machine with no dictionary — or one where it has not finished
+    /// loading — simply never fires that rule.
+    /// </para>
+    /// </remarks>
+    private void ApplyAutocorrect()
+    {
+        var mail = App.MailOptions;
+
+        var options = new AutocorrectOptions
+        {
+            ReplaceAsYouType = mail.AutocorrectReplaces,
+            TwoInitialCapitals = mail.AutocorrectTwoInitials,
+            CapitalizeSentences = mail.AutocorrectSentences,
+            CapitalizeTableCells = mail.AutocorrectTableCells,
+            CapitalizeDays = mail.AutocorrectDays,
+            CapsLock = mail.AutocorrectCapsLock,
+            UseSpellingSuggestions = mail.AutocorrectSuggestions,
+            MathReplacements = mail.AutocorrectMath,
+            SmartQuotes = mail.AutoformatQuotes,
+            Fractions = mail.AutoformatFractions,
+            Dashes = mail.AutoformatDashes,
+            BoldAndItalic = mail.AutoformatEmphasis,
+            Hyperlinks = mail.AutoformatHyperlinks,
+            BulletedLists = mail.AutoformatBullets,
+            NumberedLists = mail.AutoformatNumbering,
+            BorderLines = mail.AutoformatBorders,
+        };
+
+        _body.Autocorrect = new Autocorrect(
+            options,
+            AutocorrectTable.FromJson(mail.AutocorrectTable),
+            AutocorrectExceptions.FromJson(mail.AutocorrectExceptions),
+            word => _spelling?.IsCorrect(word) ?? true,
+            word => _spelling?.Suggest(word) ?? []);
+
+        // Formatting a correction carries is only ever formatting this message can send: in
+        // plain text the stars stay as stars, which is what the recipient would have seen.
+        _body.AllowFormatting = !_plainText;
+
+        // "Internet and network paths with hyperlinks" is the editor's own switch rather than a
+        // rule of ours, so the dialog's checkbox is passed straight through to it.
+        _body.AutoLinkOnType = options.Hyperlinks;
+
+        // The dictionary, in the background: one of the rules is the checker's own suggestion,
+        // and waiting for the first F7 to load it would mean that rule never fires while the
+        // first message is being written.
+        if (options.UseSpellingSuggestions && _spelling is null) _ = EnsureSpellingAsync();
+    }
+
+    /// <summary>A settings change that the corrector has to hear about.</summary>
+    private void OnSettingChanged(object? sender, string key)
+    {
+        if (key.StartsWith("mail.autocorrect", StringComparison.Ordinal)
+            || key.StartsWith("mail.autoformat", StringComparison.Ordinal)
+            || key.StartsWith("mail.spelling", StringComparison.Ordinal))
+        {
+            Dispatcher.UIThread.Post(ApplyAutocorrect);
+        }
     }
 
     /// <summary>Beside the mail, not in the system dictionary, which is not ours to edit.</summary>

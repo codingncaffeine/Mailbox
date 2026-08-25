@@ -14,11 +14,11 @@ namespace Mailbox.App.Views;
 /// addresses and repeated words, and the words it has been taught.
 /// </summary>
 /// <remarks>
-/// The switches that act are the four the checker has; the rest of the reference's page says
-/// what it waits on rather than pretending — there is no autocorrect yet, no grammar checker,
-/// and the editor cannot underline as you type (§7.3). Accessibility and Advanced are the
-/// reference's other two pages, and both are notes here until their phases. Every switch writes
-/// as it goes; OK and Cancel both close.
+/// The switches that act are the four the checker has and everything behind AutoCorrect
+/// Options…; the rest of the reference's page says what it waits on rather than pretending —
+/// there is no grammar checker, and the editor cannot underline as you type (§7.3).
+/// Accessibility and Advanced are the reference's other two pages, and both are notes here
+/// until their phases. Every switch writes as it goes; OK and Cancel both close.
 /// </remarks>
 public sealed class EditorOptionsDialog : Window
 {
@@ -132,20 +132,8 @@ public sealed class EditorOptionsDialog : Window
 
         stack.Children.Add(Section("AutoCorrect options"));
 
-        // Live and saying what it waits on, rather than greyed with no explanation — the rule
-        // every other blocked control here follows. And what it waits on is not a phase: the
-        // editor is a library (§7.3), and correcting a word as it is finished needs a caret
-        // position and a way to replace a range, neither of which it offers. Find and Replace
-        // works because it replaces every match; a correction has to replace exactly one.
         var autocorrect = new Button { Content = "AutoCorrect Options…" };
-        autocorrect.Click += async (_, _) => await Confirm.TellAsync(
-            this,
-            "AutoCorrect",
-            "The editor does not offer it. Correcting a word as it is finished means replacing "
-            + "the one just typed, and the editor exposes the caret's line and column but no way "
-            + "to replace a range — only a find-and-replace over every match, which would rewrite "
-            + "the same letters everywhere else in the message. Find and Replace and the spelling "
-            + "check both work for that reason, and both act on the whole body on purpose.");
+        autocorrect.Click += async (_, _) => await new AutocorrectDialog(_settings).ShowDialog(this);
         stack.Children.Add(new StackPanel
         {
             Orientation = Orientation.Horizontal,

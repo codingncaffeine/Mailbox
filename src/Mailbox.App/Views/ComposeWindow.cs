@@ -170,6 +170,14 @@ public sealed class ComposeWindow : Window
     /// <summary>A body with one of everything the serializer handles, for the harness to send.</summary>
     public void PoseRichBody() => _surface.PoseRichBody();
 
+    /// <summary>Types into the body a character at a time, as a person would, for the harness.</summary>
+    public void PoseBodyTyping(string text) => _surface.PoseBodyTyping(text);
+
+    /// <summary>The body as text and as markup, for a run to read back what typing did.</summary>
+    public string BodyText => _surface.BodyText;
+
+    public string BodyHtml => _surface.BodyHtml;
+
     /// <summary>Presses Send, for the harness.</summary>
     public void PressSend() => _surface.PressSend();
 
