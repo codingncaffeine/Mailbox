@@ -1,8 +1,16 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Mailbox.Core.Commands;
 using Mailbox.Core.Diagnostics;
 using Mailbox.Core.Settings;
 
 namespace Mailbox.Core.Ribbon;
+
+/// <summary>
+/// What Modify… changed about one command on the bar: a name of its own, an icon of its own, or
+/// both. Null in either means "whatever the command itself says".
+/// </summary>
+public sealed record QuickAccessOverride(string? Name, string? Icon);
 
 /// <summary>Where the Quick Access Toolbar sits, which the reference makes a user choice.</summary>
 public enum QuickAccessPlacement
@@ -33,12 +41,16 @@ public sealed class QuickAccessLayout
     public const string CommandsKey = "ribbon.qat.commands";
     public const string PlacementKey = "ribbon.qat.placement";
     public const string VisibleKey = "ribbon.qat.visible";
+    public const string LabelsKey = "ribbon.qat.labels";
+    public const string OverridesKey = "ribbon.qat.overrides";
 
     private readonly SettingsStore _settings;
     private readonly List<CommandId> _commands;
+    private readonly Dictionary<string, QuickAccessOverride> _overrides;
 
     private QuickAccessPlacement _placement;
     private bool _visible;
+    private bool _labels;
 
     public QuickAccessLayout(SettingsStore settings, IReadOnlyList<CommandId> shipped)
     {
@@ -57,6 +69,8 @@ public sealed class QuickAccessLayout
             : QuickAccessPlacement.AboveRibbon;
 
         _visible = settings.GetBool(VisibleKey, fallback: true);
+        _labels = settings.GetBool(LabelsKey, fallback: false);
+        _overrides = settings.Has(OverridesKey) ? ParseOverrides(settings.GetString(OverridesKey)) : [];
     }
 
     /// <summary>
@@ -96,6 +110,49 @@ public sealed class QuickAccessLayout
             _visible = value;
             _settings.Set(VisibleKey, value);
         }
+    }
+
+    /// <summary>
+    /// Whether the bar writes each command's name beside its icon, which is what the reference's
+    /// "Always show command labels" means.
+    /// </summary>
+    /// <remarks>
+    /// Off by shipped default, as the reference's is. What a label says is the command's own
+    /// name unless <see cref="Modify"/> gave it another — which is the only reason the reference
+    /// offers a display name at all.
+    /// </remarks>
+    public bool ShowLabels
+    {
+        get => _labels;
+        set
+        {
+            _labels = value;
+            _settings.Set(LabelsKey, value);
+        }
+    }
+
+    /// <summary>What Modify… changed about one command, or null for a command left alone.</summary>
+    public QuickAccessOverride? OverrideFor(CommandId id)
+        => _overrides.TryGetValue(id.Value, out var found) ? found : null;
+
+    /// <summary>
+    /// Modify…: gives one command its own name on the bar, its own icon, or both.
+    /// </summary>
+    /// <remarks>
+    /// Kept against the command's stable id rather than against its position, so reordering the
+    /// bar does not move somebody's choice onto a different button. Passing null for both is how
+    /// the dialog says "put it back", and it removes the entry rather than storing two nulls.
+    /// </remarks>
+    public void Modify(CommandId id, string? name, string? icon)
+    {
+        var wanted = new QuickAccessOverride(
+            string.IsNullOrWhiteSpace(name) ? null : name.Trim(),
+            string.IsNullOrWhiteSpace(icon) ? null : icon.Trim());
+
+        if (wanted is { Name: null, Icon: null }) _overrides.Remove(id.Value);
+        else _overrides[id.Value] = wanted;
+
+        SaveOverrides();
     }
 
     public bool Contains(CommandId id) => _commands.Contains(id);
@@ -197,6 +254,60 @@ public sealed class QuickAccessLayout
 
     private void Save()
         => _settings.Set(CommandsKey, string.Join(",", _commands.Select(c => c.Value)));
+
+    private void SaveOverrides()
+    {
+        if (_overrides.Count == 0)
+        {
+            _settings.Set(OverridesKey, "{}");
+            return;
+        }
+
+        var written = new JsonObject();
+        foreach (var (id, entry) in _overrides.OrderBy(o => o.Key, StringComparer.Ordinal))
+        {
+            var row = new JsonObject();
+            if (entry.Name is { Length: > 0 } name) row["name"] = name;
+            if (entry.Icon is { Length: > 0 } icon) row["icon"] = icon;
+            written[id] = row;
+        }
+
+        _settings.Set(OverridesKey, written.ToJsonString());
+    }
+
+    /// <summary>
+    /// Reads what Modify… stored, forgiving a hand-edited file the way the command list is.
+    /// </summary>
+    private static Dictionary<string, QuickAccessOverride> ParseOverrides(string json)
+    {
+        var found = new Dictionary<string, QuickAccessOverride>(StringComparer.Ordinal);
+        if (string.IsNullOrWhiteSpace(json)) return found;
+
+        JsonNode? node = null;
+        try
+        {
+            node = JsonNode.Parse(json);
+        }
+        catch (JsonException ex)
+        {
+            Log.Warn($"The toolbar's Modify… settings could not be read: {ex.Message}");
+        }
+
+        if (node is not JsonObject entries) return found;
+
+        foreach (var (id, value) in entries)
+        {
+            if (value is not JsonObject row) continue;
+
+            var name = row["name"]?.GetValue<string>();
+            var icon = row["icon"]?.GetValue<string>();
+            if (name is null && icon is null) continue;
+
+            found[id] = new QuickAccessOverride(name, icon);
+        }
+
+        return found;
+    }
 
     /// <summary>
     /// Reads the stored ids, dropping any the id format rejects.

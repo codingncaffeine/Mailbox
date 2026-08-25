@@ -17,6 +17,57 @@ public class QuickAccessLayoutTests
     public void StartsFromTheShippedToolbarWhenNothingIsStored()
         => Assert.Equal([SendReceive, Undo], Fresh().Commands);
 
+    /// <summary>
+    /// Modify…: a name of this reader's own, an icon of their own, or both — kept against the
+    /// command's stable id, so reordering the bar cannot move somebody's choice onto a different
+    /// button.
+    /// </summary>
+    [Fact]
+    public void ModifyKeepsANameAndAnIconAgainstTheCommandAndSurvivesARestart()
+    {
+        var settings = SettingsStore.Transient();
+        var layout = Fresh(settings);
+
+        Assert.Null(layout.OverrideFor(SendReceive));
+
+        layout.Modify(SendReceive, "Get Mail", "arrow-sync");
+        layout.Modify(Undo, name: null, icon: "arrow-undo");
+
+        var again = Fresh(settings);
+        Assert.Equal(new QuickAccessOverride("Get Mail", "arrow-sync"), again.OverrideFor(SendReceive));
+        Assert.Equal(new QuickAccessOverride(null, "arrow-undo"), again.OverrideFor(Undo));
+
+        // Reordering the bar leaves both where they were: the entry is against the id.
+        again.Add(NewEmail);
+        again.MoveAt(0, 1);
+        Assert.Equal("Get Mail", again.OverrideFor(SendReceive)!.Name);
+    }
+
+    /// <summary>Reset is both fields empty, which takes the entry out rather than storing nulls.</summary>
+    [Fact]
+    public void ModifyingBackToNothingForgetsTheCommandEntirely()
+    {
+        var settings = SettingsStore.Transient();
+        var layout = Fresh(settings);
+
+        layout.Modify(SendReceive, "Get Mail", "arrow-sync");
+        layout.Modify(SendReceive, null, null);
+
+        Assert.Null(Fresh(settings).OverrideFor(SendReceive));
+    }
+
+    [Fact]
+    public void ShowingCommandLabelsIsOffUntilItIsAskedForAndThenSurvivesARestart()
+    {
+        var settings = SettingsStore.Transient();
+        Assert.False(Fresh(settings).ShowLabels);
+
+        var layout = Fresh(settings);
+        layout.ShowLabels = true;
+
+        Assert.True(Fresh(settings).ShowLabels);
+    }
+
     [Fact]
     public void AddedCommandsGoOnTheEnd()
     {

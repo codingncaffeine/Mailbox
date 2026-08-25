@@ -105,10 +105,19 @@
                                         IsVisible="{Binding !IsSeparator}"
                                         Command="{Binding Invoke}"
                                         ToolTip.Tip="{Binding Tip}">
-                                    <TextBlock Text="{Binding Glyph}"
-                                               FontFamily="{Binding IconFamily}"
-                                               FontSize="14"
-                                               Foreground="{DynamicResource titlebar.foreground.brush}" />
+                                    <!-- Always show command labels: the name beside the icon. -->
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <TextBlock Text="{Binding Glyph}"
+                                                   FontFamily="{Binding IconFamily}"
+                                                   FontSize="14"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource titlebar.foreground.brush}" />
+                                        <TextBlock Text="{Binding Label}"
+                                                   IsVisible="{Binding ShowLabel}"
+                                                   FontSize="12"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource titlebar.foreground.brush}" />
+                                    </StackPanel>
                                 </Button>
                             </Panel>
                         </DataTemplate>
@@ -265,10 +274,18 @@
                                                 IsVisible="{Binding !IsSeparator}"
                                                 Command="{Binding Invoke}"
                                                 ToolTip.Tip="{Binding Tip}">
-                                            <TextBlock Text="{Binding Glyph}"
-                                                       FontFamily="{Binding IconFamily}"
-                                                       FontSize="14"
-                                                       Foreground="{DynamicResource text.primary.brush}" />
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <TextBlock Text="{Binding Glyph}"
+                                                           FontFamily="{Binding IconFamily}"
+                                                           FontSize="14"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource text.primary.brush}" />
+                                                <TextBlock Text="{Binding Label}"
+                                                           IsVisible="{Binding ShowLabel}"
+                                                           FontSize="12"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource text.primary.brush}" />
+                                            </StackPanel>
                                         </Button>
                                     </Panel>
                                 </DataTemplate>

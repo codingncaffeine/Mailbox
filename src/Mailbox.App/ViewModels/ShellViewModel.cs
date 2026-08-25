@@ -128,9 +128,41 @@ public sealed class QuickAccessButton(MailboxCommand command)
 
     public bool IsSeparator { get; private init; }
 
-    public string Label { get; } = command.Label;
-    public string Glyph { get; } = IconGlyphs.GetOrEmpty(command.Icon, 16);
+    /// <summary>
+    /// What the button says and draws — the command's own name and icon unless Modify… gave it
+    /// others.
+    /// </summary>
+    /// <remarks>
+    /// Read once, when the bar is built, because that is when it is rebuilt: every path that
+    /// changes a toolbar goes through <c>RebuildQuickAccess</c>, so there is nothing here that
+    /// has to notice a change on its own.
+    /// </remarks>
+    public string Label { get; private init; } = command.Label;
+
+    public string Glyph { get; private init; } = IconGlyphs.GetOrEmpty(command.Icon, 16);
+
+    /// <summary>True when the bar is set to write names beside the icons.</summary>
+    public bool ShowLabel { get; private init; }
+
     public FontFamily IconFamily { get; } = IconFont.Family;
+
+    /// <summary>This button as the toolbar's own settings want it drawn.</summary>
+    /// <remarks>
+    /// An icon the set does not have falls back to the command's own rather than to nothing. The
+    /// picker cannot offer one, but the settings file is meant to be edited by hand and is
+    /// therefore allowed to be wrong — and a button drawn blank looks like a bug in the toolbar
+    /// rather than a typo in a file.
+    /// </remarks>
+    public QuickAccessButton As(QuickAccessOverride? modified, bool labels) => new(command)
+    {
+        IsSeparator = IsSeparator,
+        Label = modified?.Name is { Length: > 0 } named ? named : Label,
+        Glyph = modified?.Icon is { Length: > 0 } icon && IconGlyphs.Has(icon)
+            ? IconGlyphs.GetOrEmpty(icon, 16)
+            : Glyph,
+        ShowLabel = labels,
+        Invoke = Invoke,
+    };
 
     /// <summary>
     /// The command this button stands for. It routes through the catalogue exactly as the
@@ -477,7 +509,7 @@ public sealed partial class ShellViewModel : ObservableObject
             themes.Library.Ids.Select(themes.DisplayName));
 
         QuickAccess = new ObservableCollection<QuickAccessButton>(
-            ToolbarButtons(catalog, quickAccess?.Commands ?? layout.QuickAccess));
+            ToolbarButtons(catalog, quickAccess?.Commands ?? layout.QuickAccess, quickAccess));
 
         ReadingPaneActions = new ObservableCollection<QuickAccessButton>(
             new[] { MailCommands.Reply.Id, MailCommands.ReplyAll.Id, MailCommands.Forward.Id }
@@ -608,7 +640,7 @@ public sealed partial class ShellViewModel : ObservableObject
         if (QuickAccessCustomization is not { } customization) return;
 
         QuickAccess.Clear();
-        foreach (var button in ToolbarButtons(_catalog, customization.Commands))
+        foreach (var button in ToolbarButtons(_catalog, customization.Commands, customization))
         {
             QuickAccess.Add(button);
         }
@@ -622,12 +654,19 @@ public sealed partial class ShellViewModel : ObservableObject
     /// exists, and that costs one button rather than the toolbar.
     /// </summary>
     private static IEnumerable<QuickAccessButton> ToolbarButtons(
-        CommandCatalog catalog, IEnumerable<CommandId> ids)
+        CommandCatalog catalog, IEnumerable<CommandId> ids, QuickAccessLayout? customization = null)
     {
+        var labels = customization?.ShowLabels ?? false;
+
         foreach (var id in ids)
         {
+            // A rule is not a command and Modify… cannot reach one: there is no name to change
+            // and no icon to pick, and several of them share one id.
             if (id == RibbonItem.SeparatorId) yield return QuickAccessButton.Separator;
-            else if (catalog.TryGet(id, out var command)) yield return new QuickAccessButton(command);
+            else if (catalog.TryGet(id, out var command))
+            {
+                yield return new QuickAccessButton(command).As(customization?.OverrideFor(id), labels);
+            }
         }
     }
 

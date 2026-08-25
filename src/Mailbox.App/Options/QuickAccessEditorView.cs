@@ -22,6 +22,7 @@ public sealed class QuickAccessEditorView : CustomizationEditor
     private readonly RibbonCustomization _ribbon;
     private readonly RibbonLayout _shipped;
     private readonly ListBox _placed = new();
+    private Button? _modify;
 
     public QuickAccessEditorView(
         CommandCatalog catalog,
@@ -47,7 +48,11 @@ public sealed class QuickAccessEditorView : CustomizationEditor
     protected override Control BuildTarget()
     {
         _placed.ItemTemplate = new FuncDataTemplate<GalleryEntry>((entry, _) => PlacedRow(entry));
-        _placed.SelectionChanged += (_, _) => RefreshButtons();
+        _placed.SelectionChanged += (_, _) =>
+        {
+            RefreshButtons();
+            RefreshModify();
+        };
         Plain(_placed);
 
         RebuildPlaced();
@@ -156,6 +161,73 @@ public sealed class QuickAccessEditorView : CustomizationEditor
     protected override void OnExport(string path)
         => RibbonCustomization.Export(path, _ribbon.Load(_shipped), _toolbar.Commands);
 
+    /// <summary>
+    /// Modify… under the placed list, as the reference puts it: the symbol a command is drawn
+    /// with and the name written beside it.
+    /// </summary>
+    /// <remarks>
+    /// Disabled on a rule, which has neither. Disabled on nothing selected, because Modify… with
+    /// no button chosen has nothing to modify — which is what the reference's own greying says.
+    /// </remarks>
+    protected override Control BuildTargetFooter()
+    {
+        _modify = DialogButton("Modify...");
+        _modify.Click += async (_, _) => await ModifyAsync();
+        RefreshModify();
+
+        return new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 6,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Children = { _modify },
+        };
+    }
+
+    private void RefreshModify()
+    {
+        if (_modify is null) return;
+        _modify.IsEnabled = Placed() is not null;
+    }
+
+    /// <summary>The command the placed list has selected, or null for a rule or no selection.</summary>
+    private CommandId? Placed()
+    {
+        var index = _placed.SelectedIndex;
+        if (index < 0 || index >= _toolbar.Commands.Count) return null;
+
+        var id = _toolbar.Commands[index];
+        return id == RibbonItem.SeparatorId ? null : id;
+    }
+
+    private async Task ModifyAsync()
+    {
+        if (Placed() is not { } id || !Catalog.TryGet(id, out var command)) return;
+        if (TopLevel.GetTopLevel(this) is not Window owner) return;
+
+        var modified = _toolbar.OverrideFor(id);
+        var dialog = new Views.ModifyButtonDialog(
+            modified?.Name ?? command.Label,
+            modified?.Icon ?? command.Icon);
+
+        await dialog.ShowDialog(owner);
+        if (dialog.Result is not { } chosen) return;
+
+        // Reset means "back to the command's own", which is the entry going rather than the
+        // command's own name being stored as though somebody had typed it.
+        if (dialog.Reset) _toolbar.Modify(id, null, null);
+        else
+        {
+            _toolbar.Modify(
+                id,
+                string.Equals(chosen.Name, command.Label, StringComparison.Ordinal) ? null : chosen.Name,
+                string.Equals(chosen.Icon, command.Icon, StringComparison.Ordinal) ? null : chosen.Icon);
+        }
+
+        RebuildPlaced();
+        RaiseEdited();
+    }
+
     // ---- The three settings under the gallery ----------------------------------------------
 
     protected override Control BuildGalleryFooter()
@@ -193,10 +265,15 @@ public sealed class QuickAccessEditorView : CustomizationEditor
         positionRow.Children.Add(position);
         stack.Children.Add(positionRow);
 
-        // The reference's third setting hides the labels on a toolbar below the ribbon. Ours
-        // has never drawn them — the bar is icons in both placements — so it would be a
-        // checkbox that changes nothing, and a control that lies is worse than one that is
-        // absent.
+        var labels = new CheckBox { Content = "Always show command labels", IsChecked = _toolbar.ShowLabels };
+        Bind(labels, ForegroundProperty, "dialog.foreground.brush");
+        labels.IsCheckedChanged += (_, _) =>
+        {
+            _toolbar.ShowLabels = labels.IsChecked == true;
+            RaiseEdited();
+        };
+        stack.Children.Add(labels);
+
         return stack;
     }
 }
