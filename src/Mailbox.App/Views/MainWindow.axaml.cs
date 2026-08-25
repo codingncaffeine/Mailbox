@@ -5628,6 +5628,52 @@ public partial class MainWindow : Window
     /// </remarks>
     private void LogRowMenu(ShellViewModel shell)
     {
+        // First the wiring, then the contents. A menu whose entries are right but which never
+        // opens is the failure that reads as "there is no menu" — so the pose asks the list for
+        // its context menu exactly as a right-click does, and says whether one appeared.
+        if (List is { } list)
+        {
+            // A real right-click: press and release, the way a mouse does it. Raising
+            // ContextRequested directly proves only that the flyout can open — the question is
+            // whether the buttons a reader actually presses get that far.
+            var pointer = new Avalonia.Input.Pointer(0, Avalonia.Input.PointerType.Mouse, isPrimary: true);
+            var at = new Point(24, 24);
+
+            // On the row rather than on the list: a real right-click lands on the container and
+            // bubbles, and a container that handles the press or the release is exactly how a
+            // menu ends up never opening.
+            var target = list.ContainerFromIndex(0) as Control ?? list;
+            Log.Info($"Harness: right-clicking a {target.GetType().Name}.");
+
+            target.RaiseEvent(new Avalonia.Input.PointerPressedEventArgs(
+                target, pointer, list, at, 0,
+                new Avalonia.Input.PointerPointProperties(
+                    Avalonia.Input.RawInputModifiers.RightMouseButton,
+                    Avalonia.Input.PointerUpdateKind.RightButtonPressed),
+                Avalonia.Input.KeyModifiers.None));
+
+            target.RaiseEvent(new Avalonia.Input.PointerReleasedEventArgs(
+                target, pointer, list, at, 0,
+                new Avalonia.Input.PointerPointProperties(
+                    Avalonia.Input.RawInputModifiers.None,
+                    Avalonia.Input.PointerUpdateKind.RightButtonReleased),
+                Avalonia.Input.KeyModifiers.None,
+                Avalonia.Input.MouseButton.Right));
+
+            Log.Info($"Harness: after a right-click the menu is open: "
+                     + $"{(list.ContextFlyout as MenuFlyout)?.IsOpen == true}");
+
+            // And the same question asked the other way, in case the press never becomes a
+            // context request at all.
+            list.RaiseEvent(new Avalonia.Input.ContextRequestedEventArgs());
+            Log.Info($"Harness: after ContextRequested the menu is open: "
+                     + $"{(list.ContextFlyout as MenuFlyout)?.IsOpen == true}");
+        }
+        else
+        {
+            Log.Warn("Harness: the message list was not found, so the row menu cannot be checked.");
+        }
+
         var flyout = new MenuFlyout();
         FillRowMenu(flyout, shell);
 
