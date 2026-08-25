@@ -997,6 +997,17 @@ public partial class MainWindow : Window
                 };
                 break;
 
+            // The menu over a message: seventeen entries and six submenus, none of which a
+            // capture can show. MAILBOX_SELECT picks what it acts on.
+            case "rowmenu":
+                Opened += (_, _) => Dispatcher.UIThread.Post(
+                    () =>
+                    {
+                        if (DataContext is ShellViewModel rowShell) LogRowMenu(rowShell);
+                    },
+                    DispatcherPriority.Background);
+                break;
+
             // The bar's "…": what it lists at this width, which a capture cannot show.
             case "overflow":
                 Opened += (_, _) => Dispatcher.UIThread.Post(() =>
@@ -4772,14 +4783,17 @@ public partial class MainWindow : Window
     /// Follow Up opens.
     /// </summary>
     private void ShowFollowUpMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
+        => FollowUpMenu(shell, rows).ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+
+    /// <summary>The Follow Up entries, for the bar's flyout and the row menu's submenu alike.</summary>
+    private MenuFlyout FollowUpMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
     {
         var flyout = new MenuFlyout();
 
         if (rows.Count == 0)
         {
             flyout.Items.Add(new MenuItem { Header = "Select a message first", IsEnabled = false });
-            flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
-            return;
+            return flyout;
         }
 
         var now = DateTimeOffset.Now;
@@ -4835,7 +4849,7 @@ public partial class MainWindow : Window
         quick.Click += async (_, _) => await new SetQuickClickFlagDialog(App.QuickClick).ShowDialog(this);
         flyout.Items.Add(quick);
 
-        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+        return flyout;
     }
 
     /// <summary>
@@ -5086,6 +5100,10 @@ public partial class MainWindow : Window
     /// menu keeps its shape whatever the selection.
     /// </remarks>
     private void ShowCategorizeMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
+        => CategorizeMenu(shell, rows).ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+
+    /// <summary>The Categorize entries, shared by the bar and the row menu.</summary>
+    private MenuFlyout CategorizeMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
     {
         var flyout = new MenuFlyout();
         var categories = shell.Categories();
@@ -5134,7 +5152,7 @@ public partial class MainWindow : Window
             await new SetQuickClickCategoryDialog(App.QuickClick, shell.Categories()).ShowDialog(this);
         flyout.Items.Add(quick);
 
-        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+        return flyout;
     }
 
     /// <summary>
@@ -5194,6 +5212,10 @@ public partial class MainWindow : Window
     /// button, greyed unless the selection is in the Junk folder.
     /// </remarks>
     private void ShowJunkMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
+        => JunkMenu(shell, rows).ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+
+    /// <summary>The Junk entries, shared by the bar and the row menu.</summary>
+    private MenuFlyout JunkMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
     {
         var flyout = new MenuFlyout();
         var inJunk = shell.CurrentFolderRole == FolderRole.Junk;
@@ -5225,7 +5247,7 @@ public partial class MainWindow : Window
         options.Click += (_, _) => RunCommand(MailCommands.JunkOptions.Id);
         flyout.Items.Add(options);
 
-        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+        return flyout;
     }
 
     /// <summary>Junk Email Options, on the current account's lists.</summary>
@@ -5246,6 +5268,10 @@ public partial class MainWindow : Window
     /// Rules &amp; Alerts.
     /// </summary>
     private void ShowRulesMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
+        => RulesMenu(shell, rows).ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+
+    /// <summary>The Rules entries, shared by the bar and the row menu.</summary>
+    private MenuFlyout RulesMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
     {
         var flyout = new MenuFlyout();
         var account = shell.CurrentAccountForCategories();
@@ -5287,7 +5313,7 @@ public partial class MainWindow : Window
             shell.Refresh();
         });
 
-        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+        return flyout;
     }
 
     /// <summary>
@@ -5327,6 +5353,10 @@ public partial class MainWindow : Window
 
     /// <summary>The Move menu: every folder of the account the selection is in.</summary>
     private void ShowMoveMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
+        => MoveMenu(shell, rows).ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+
+    /// <summary>The Move entries, shared by the bar and the row menu.</summary>
+    private MenuFlyout MoveMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
     {
         var flyout = new MenuFlyout();
 
@@ -5345,7 +5375,19 @@ public partial class MainWindow : Window
             }
         }
 
-        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+        // The reference closes this menu with the two that reach past the list of folders: one
+        // that asks for any folder, and one that copies rather than moves.
+        flyout.Items.Add(new Separator());
+
+        var other = new MenuItem { Header = "_Other Folder…", IsEnabled = rows.Count > 0 };
+        other.Click += (_, _) => _ = MoveToOtherFolderAsync(shell, rows);
+        flyout.Items.Add(other);
+
+        var copy = new MenuItem { Header = "_Copy to Folder…", IsEnabled = rows.Count > 0 };
+        copy.Click += (_, _) => _ = CopyToFolderAsync(shell, rows);
+        flyout.Items.Add(copy);
+
+        return flyout;
     }
 
     /// <summary>New Items: a new message today, and the other kinds when their modules exist.</summary>
@@ -5444,70 +5486,379 @@ public partial class MainWindow : Window
     /// selection. Anything on it that has no command behind it yet is greyed with the phase in
     /// its tooltip, which is what the ribbon does for the same commands.
     /// </remarks>
+    /// <summary>
+    /// The menu over a message, transcribed from the reference's own.
+    /// </summary>
+    /// <remarks>
+    /// Seventeen entries in six groups, in the reference's order, with its access keys and its
+    /// submenus: Copy and Quick Print; the three responses; Mark as Unread, Categorize and
+    /// Follow Up; Find Related on its own; Quick Steps, Rules and Move; Send to OneNote on its
+    /// own; then Ignore, Junk, Delete and Archive.
+    /// <para>
+    /// Every submenu is the flyout the bar's own button opens, hung off a menu item instead of
+    /// shown at a control — one implementation each, so the menu and the ribbon cannot come to
+    /// disagree about what Follow Up offers.
+    /// </para>
+    /// <para>
+    /// Each icon is the command's own, tint included, which is how the ribbon draws it. One
+    /// entry does nothing: Send to OneNote reaches a product this application deliberately has
+    /// no part of (§3), and it is drawn greyed with a tooltip saying so rather than left out,
+    /// because the reader asked for the menu the capture shows.
+    /// </para>
+    /// </remarks>
     private MenuFlyout RowMenu(ShellViewModel shell)
     {
         var flyout = new MenuFlyout();
+        flyout.Opening += (_, _) => FillRowMenu(flyout, shell);
+        return flyout;
+    }
 
-        flyout.Opening += (_, _) =>
+    /// <summary>
+    /// Builds the row menu into a flyout. Split from opening it so the harness can read it back:
+    /// a popup never appears in a capture, so what a menu holds is checked by asking it.
+    /// </summary>
+    private void FillRowMenu(MenuFlyout flyout, ShellViewModel shell)
+    {
         {
             flyout.Items.Clear();
             var rows = SelectedRows();
+            var some = rows.Count > 0;
 
-            void Command(string label, CommandId id, bool works = true, string? waitsOn = null)
+            void Rule() => flyout.Items.Add(new Separator());
+
+            MenuItem Entry(string header, Control? icon, Action run, bool enabled = true)
             {
-                var item = new MenuItem { Header = label, IsEnabled = works && rows.Count > 0 };
-                if (!works && waitsOn is not null) ToolTip.SetTip(item, waitsOn);
-                item.Click += (_, _) => RunCommand(id);
+                var item = new MenuItem { Header = header, Icon = icon, IsEnabled = enabled };
+                item.Click += (_, _) => run();
+                flyout.Items.Add(item);
+                return item;
+            }
+
+            void Command(string header, MailboxCommand command, bool enabled = true)
+                => Entry(header, CommandIcon(command), () => RunCommand(command.Id), enabled);
+
+            // A submenu built from the flyout the ribbon's own button opens: the items are moved
+            // across, so both routes run the same handlers.
+            void Submenu(string header, Control? icon, MenuFlyout source, bool enabled = true)
+            {
+                var item = new MenuItem { Header = header, Icon = icon, IsEnabled = enabled };
+                foreach (var child in source.Items.Cast<Control>().ToList())
+                {
+                    source.Items.Remove(child);
+                    item.Items.Add(child);
+                }
+
                 flyout.Items.Add(item);
             }
 
-            Command("Reply", MailCommands.Reply.Id);
-            Command("Reply All", MailCommands.ReplyAll.Id);
-            Command("Forward", MailCommands.Forward.Id);
-            flyout.Items.Add(new Separator());
+            Entry("_Copy", MenuIcon("copy"), () => _ = CopyRowsAsync(shell, rows), some);
+            Command("_Quick Print", MailCommands.Print, some);
+            Rule();
 
-            var read = new MenuItem
+            Command("_Reply", MailCommands.Reply, some);
+            Command("Reply _All", MailCommands.ReplyAll, some);
+            Command("For_ward", MailCommands.Forward, some);
+            Rule();
+
+            // The reference names the state the press would move to, so a read message offers
+            // to make it unread and an unread one offers the opposite.
+            Command(rows.Any(r => r.IsUnread) ? "Mark as _Read" : "Mark as _Unread", MailCommands.Unread, some);
+            Submenu("Cat_egorize", CategorizeArtwork(), CategorizeMenu(shell, rows), some);
+            Submenu("Follow _Up", FlagArtwork(), FollowUpMenu(shell, rows), some);
+            Rule();
+
+            Submenu("_Find Related", MenuIcon("mail"), FindRelatedMenu(shell, rows), some);
+            Rule();
+
+            Submenu("_Quick Steps", MenuIcon("quicksteps"), QuickStepsMenu(shell, rows));
+            Submenu("Rule_s", MenuIcon("rules"), RulesMenu(shell, rows), some);
+            Submenu("_Move", MenuIcon("move"), MoveMenu(shell, rows), some);
+            Rule();
+
+            var oneNote = Entry("Send to One_Note", MenuIcon("notes"), () => { }, enabled: false);
+            ToolTip.SetTip(oneNote,
+                "Send to OneNote reaches a product this application has no part of: nothing here "
+                + "signs in to a vendor's service. Notes are a module of its own on the rail.");
+            Rule();
+
+            Command(shell.IsIgnored(rows) ? "Stop Ignoring Conversation" : "Ignore", MailCommands.Ignore, some);
+            Submenu("_Junk", CommandIcon(MailCommands.Junk), JunkMenu(shell, rows), some);
+            Command("_Delete", MailCommands.Delete, some);
+            Entry("_Archive…", CommandIcon(MailCommands.Archive), () => _ = ArchiveRowsAsync(shell, rows), some);
+        }
+    }
+
+    /// <summary>What a harness press reports afterwards: the status line, once the press has run.</summary>
+    private static Action? Pressed { get; set; }
+
+    /// <summary>Harness only: presses a menu entry by name, descending into submenus.</summary>
+    private static void PressMenuEntry(IEnumerable<Control> items, string[] path, int depth)
+    {
+        if (depth >= path.Length) return;
+
+        var wanted = path[depth].Replace("_", string.Empty, StringComparison.Ordinal);
+
+        foreach (var item in items.OfType<MenuItem>())
+        {
+            var header = (item.Header as string ?? string.Empty).Replace("_", string.Empty, StringComparison.Ordinal);
+            if (!header.StartsWith(wanted, StringComparison.OrdinalIgnoreCase)) continue;
+
+            if (depth == path.Length - 1)
             {
-                Header = rows.Any(r => r.IsUnread) ? "Mark as Read" : "Mark as Unread",
-                IsEnabled = rows.Count > 0,
-            };
-            read.Click += (_, _) => RunCommand(MailCommands.Unread.Id);
-            flyout.Items.Add(read);
-
-            Command("Categorize…", MailCommands.Categorize.Id);
-            Command(rows.Any(r => !r.IsFlagged) ? "Follow Up" : "Clear Flag", MailCommands.FollowUp.Id);
-            Command("Snooze", MailCommands.Snooze.Id);
-            flyout.Items.Add(new Separator());
-
-            Command("Rules…", MailCommands.Rules.Id);
-            Command("Move…", MailCommands.MoveTo.Id);
-
-            // With Focused Inbox on, the reference offers the other half and its "always".
-            if (shell.ShowFocusedPivot)
-            {
-                Command(shell.ShowOther ? "Move to Focused" : "Move to Other",
-                    shell.ShowOther ? MailCommands.MoveToFocused.Id : MailCommands.MoveToOther.Id);
-                Command(shell.ShowOther ? "Always Move to Focused" : "Always Move to Other",
-                    shell.ShowOther ? MailCommands.AlwaysMoveToFocused.Id : MailCommands.AlwaysMoveToOther.Id);
+                Log.Info($"Harness: pressing “{header}”.");
+                item.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                Pressed?.Invoke();
+                return;
             }
 
-            Command(shell.IsIgnored(rows) ? "Stop Ignoring Conversation" : "Ignore", MailCommands.Ignore.Id);
-            Command("Junk", MailCommands.Junk.Id);
-            flyout.Items.Add(new Separator());
+            PressMenuEntry(item.Items.Cast<Control>(), path, depth + 1);
+            return;
+        }
 
-            Command("Delete", MailCommands.Delete.Id);
-            Command("Archive", MailCommands.Archive.Id);
-        };
+        Log.Warn($"Harness: the row menu has no entry “{wanted}”.");
+    }
+
+    /// <summary>
+    /// Harness only: what the row menu holds, one line each, with its submenus opened out.
+    /// </summary>
+    /// <remarks>
+    /// The reference's menu is a capture and this is the only way to compare ours with it
+    /// entry by entry — a menu is a separate surface and never appears in a photograph of the
+    /// window.
+    /// </remarks>
+    private void LogRowMenu(ShellViewModel shell)
+    {
+        var flyout = new MenuFlyout();
+        FillRowMenu(flyout, shell);
+
+        // MAILBOX_ROWMENU=<entry> presses one of them — "Copy", or "Find Related/Messages from
+        // Sender" for something inside a submenu. A menu item cannot be clicked by a capture,
+        // and a menu whose entries are never pressed is a menu nobody has checked.
+        if (Environment.GetEnvironmentVariable("MAILBOX_ROWMENU") is { Length: > 0 } press)
+        {
+            // The press is asynchronous where it opens a dialog, so the read-back is posted
+            // below it rather than taken on the next line.
+            Pressed = () => Dispatcher.UIThread.Post(
+                () => Log.Info($"Harness: status \u201c{shell.StatusRight}\u201d, "
+                               + $"search \u201c{shell.SearchText}\u201d, {shell.Messages.Count} row(s)."),
+                DispatcherPriority.Background);
+
+            PressMenuEntry(flyout.Items.Cast<Control>(), press.Split('/', StringSplitOptions.TrimEntries), 0);
+            return;
+        }
+
+        Log.Info($"Harness: the row menu over {SelectedRows().Count} selected message(s):");
+
+        foreach (var child in flyout.Items.Cast<Control>())
+        {
+            if (child is Separator)
+            {
+                Log.Info("  ───");
+                continue;
+            }
+
+            if (child is not MenuItem item) continue;
+
+            var icon = item.Icon switch
+            {
+                Mailbox.Controls.Ribbon.RibbonArtwork art => $"drawn:{art.Drawing}",
+                TextBlock => "glyph",
+                Border => "swatch",
+                _ => "none",
+            };
+
+            Log.Info($"  {item.Header}{(item.Items.Count > 0 ? " ▸" : string.Empty)}"
+                     + $" [{icon}]{(item.IsEnabled ? string.Empty : " (greyed)")}");
+
+            foreach (var sub in item.Items.Cast<Control>())
+            {
+                Log.Info(sub is Separator
+                    ? "      ───"
+                    : $"      {(sub as MenuItem)?.Header}{((sub as MenuItem)?.IsEnabled == false ? " (greyed)" : string.Empty)}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// A command's icon as the ribbon draws it: its own drawing where it has one, its own glyph
+    /// otherwise, in its own tint.
+    /// </summary>
+    private static Control? CommandIcon(MailboxCommand command)
+    {
+        if (command.IconArtwork is { Length: > 0 } artwork)
+        {
+            return new Mailbox.Controls.Ribbon.RibbonArtwork(artwork, 16);
+        }
+
+        var icon = MenuIcon(command.Icon);
+
+        if (icon is TextBlock glyph && command.IconTint is { Length: > 0 } tint)
+        {
+            glyph[!TextBlock.ForegroundProperty] = new DynamicResourceExtension(tint);
+        }
+
+        return icon;
+    }
+
+    /// <summary>
+    /// Find Related: the reference's two searches — the rest of this conversation, and
+    /// everything else from whoever sent it.
+    /// </summary>
+    /// <remarks>
+    /// Both are the search box's own query language rather than a second search: what the reader
+    /// gets is a search they can see, edit and clear, which is the search this application
+    /// already has.
+    /// </remarks>
+    private MenuFlyout FindRelatedMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
+    {
+        var flyout = new MenuFlyout();
+        var row = rows.Count == 1 ? rows[0] : null;
+
+        void Entry(string header, string query, bool enabled)
+        {
+            var item = new MenuItem { Header = header, IsEnabled = enabled };
+            item.Click += (_, _) => shell.SearchText = query;
+            flyout.Items.Add(item);
+        }
+
+        // The thread key is the subject with its Re: and Fw: already taken off, which is what
+        // threads a conversation here — so the search finds the same set the list groups.
+        var conversation = row?.ThreadKey is { Length: > 0 } key ? key : row?.Subject ?? string.Empty;
+        var sender = row is null ? string.Empty : shell.SenderAddresses([row]).FirstOrDefault() ?? string.Empty;
+
+        Entry("Messages in this _Conversation",
+            conversation.Length > 0 ? $"subject:\"{conversation}\"" : string.Empty,
+            conversation.Length > 0);
+
+        Entry("Messages from _Sender",
+            sender.Length > 0 ? $"from:{sender}" : string.Empty,
+            sender.Length > 0);
 
         return flyout;
     }
 
-    /// <summary>A category's colour, as a small square, from its token.</summary>
+    /// <summary>The Quick Steps the reader has, and the way to edit them.</summary>
+    private MenuFlyout QuickStepsMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
+    {
+        var flyout = new MenuFlyout();
+
+        foreach (var step in App.QuickSteps.All)
+        {
+            var item = new MenuItem
+            {
+                Header = step.Name,
+                Icon = MenuIcon(step.Icon),
+                IsEnabled = rows.Count > 0,
+            };
+
+            var chosen = step;
+            item.Click += (_, _) => _ = RunQuickStepAsync(shell, chosen, rows);
+            flyout.Items.Add(item);
+        }
+
+        if (App.QuickSteps.All.Count == 0)
+        {
+            flyout.Items.Add(new MenuItem { Header = "No Quick Steps yet", IsEnabled = false });
+        }
+
+        flyout.Items.Add(new Separator());
+
+        var manage = new MenuItem { Header = "_Manage Quick Steps…" };
+        manage.Click += (_, _) => _ = ManageQuickStepsAsync(shell);
+        flyout.Items.Add(manage);
+
+        return flyout;
+    }
+
+    /// <summary>
+    /// Move ▸ Other Folder…: any folder in any account, chosen from the picker.
+    /// </summary>
+    /// <remarks>
+    /// The submenu above it lists the folders of the selection's own account, which is what the
+    /// reference lists; this is the way past that — including into another account, where a move
+    /// is a copy and a delete because two stores share no row.
+    /// </remarks>
+    private async Task MoveToOtherFolderAsync(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
+    {
+        if (rows.Count == 0) return;
+
+        var dialog = FolderPicker("Move Items", "Move the selected items to the folder:", null, allowRoot: false);
+        await dialog.ShowDialog(this);
+
+        if (dialog.Result is not { Folder: { } folder } chosen) return;
+        if (shell.NodeFor(chosen.Account, folder.Id) is { } node) shell.MoveToFolder([.. rows.Select(r => r.Id)], node);
+        else shell.MoveToStoreFolder(rows, chosen.Account, folder);
+    }
+
+    /// <summary>Move ▸ Copy to Folder…: the same picker, leaving the originals where they are.</summary>
+    private async Task CopyToFolderAsync(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
+    {
+        if (rows.Count == 0) return;
+
+        var dialog = FolderPicker("Copy Items", "Copy the selected items to the folder:", null, allowRoot: false);
+        await dialog.ShowDialog(this);
+
+        if (dialog.Result is { Folder: { } folder }) shell.CopyTo(rows, folder);
+    }
+
+    /// <summary>
+    /// Copy: the selected messages on the clipboard, as text.
+    /// </summary>
+    /// <remarks>
+    /// The reference copies the items themselves, to be pasted into another folder — which is
+    /// what Move ▸ Copy to Folder does here, and what a clipboard shared with every other
+    /// application cannot carry. What it can carry is the message as somebody would paste it
+    /// into a document: who it is from, what it is about, when it came, and what it says.
+    /// </remarks>
+    private async Task CopyRowsAsync(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
+    {
+        if (rows.Count == 0 || TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard) return;
+
+        var text = new System.Text.StringBuilder();
+
+        foreach (var row in rows)
+        {
+            if (text.Length > 0) text.AppendLine().AppendLine("————————").AppendLine();
+
+            text.AppendLine($"From: {row.From}");
+            if (row.ToLine is { Length: > 0 }) text.AppendLine($"To: {row.ToLine}");
+            text.AppendLine($"Sent: {row.Received.LocalDateTime:f}");
+            text.AppendLine($"Subject: {row.Subject}");
+            text.AppendLine();
+            text.AppendLine(row.Body);
+        }
+
+        await Avalonia.Input.Platform.ClipboardExtensions.SetValueAsync(
+            clipboard, Avalonia.Input.DataFormat.Text, text.ToString());
+        shell.StatusRight = $"{(rows.Count == 1 ? "Message" : $"{rows.Count} messages")} copied.";
+    }
+
+    /// <summary>
+    /// Archive…: to the account's archive folder, asking which it is the first time.
+    /// </summary>
+    /// <remarks>
+    /// The ellipsis in the reference's label is the ask: an account that has never been told
+    /// where its archive is has nowhere to put the message, and the reference's own Set Archive
+    /// Folder is what answers that. Once answered it never asks again.
+    /// </remarks>
+    private async Task ArchiveRowsAsync(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
+    {
+        if (rows.Count == 0) return;
+
+        if (!shell.HasArchiveFolder(rows))
+        {
+            await BackstageActions.RunAsync(BackstageContext(), "tools.archivefolder");
+            if (!shell.HasArchiveFolder(rows)) return;
+        }
+
+        shell.MoveTo(rows, FolderRole.Archive);
+    }
+
+    /// <summary>A category's colour, as the square the reference draws beside its name.</summary>
     private static Control CategorySwatch(string token)
     {
         var swatch = new Border { Width = 12, Height = 12, CornerRadius = new CornerRadius(2) };
-        swatch[!Border.BackgroundProperty] =
-            new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(token + ".brush");
+        swatch[!Border.BackgroundProperty] = new DynamicResourceExtension(token + ".brush");
         return swatch;
     }
 

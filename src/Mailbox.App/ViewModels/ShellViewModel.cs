@@ -2624,12 +2624,17 @@ public sealed partial class ShellViewModel : ObservableObject
 
         var here = SelectedFolder;
 
+        // One entry per folder. A favourite is drawn twice in the pane — under Favourites and
+        // in its account's tree — and both rows are registered here, so a Move menu built
+        // straight off this map offered "Inbox" twice and left the reader to guess.
         return
         [
             .. _folderIds
                 .Where(kv => ReferenceEquals(kv.Value.Account, account) && !ReferenceEquals(kv.Key, here))
                 .Where(kv => kv.Value.Role != FolderRole.Outbox)
-                .Select(kv => kv.Key),
+                .GroupBy(kv => kv.Value.FolderId)
+                .Select(group => group.FirstOrDefault(kv => kv.Key.Kind != FolderNodeKind.Favourite).Key
+                                 ?? group.First().Key),
         ];
     }
 
@@ -2853,6 +2858,35 @@ public sealed partial class ShellViewModel : ObservableObject
         var copied = mail.CopyMessages([.. rows.Select(r => r.Id)], target.Id);
         RefreshCounts();
         StatusRight = $"{Describe(copied)} copied to {target.Name}.";
+    }
+
+    /// <summary>
+    /// Moves rows into a folder of their own account named by the store rather than by the pane.
+    /// </summary>
+    /// <remarks>
+    /// The pane does not draw every folder — a collapsed tree, a folder hidden from Favourites —
+    /// so a picker can name one that has no node. Moving into another account's folder is not
+    /// this: two stores share no row, and a message would have to be copied and deleted.
+    /// </remarks>
+    public void MoveToStoreFolder(IReadOnlyList<MessageRow> rows, OpenAccount account, Folder target)
+    {
+        if (Split(rows, group => MoveToStoreFolder(group, account, target))) return;
+        if (rows.Count == 0 || AccountOf(rows) is not { } owner) return;
+
+        if (!ReferenceEquals(owner, account))
+        {
+            StatusRight = $"“{target.Name}” belongs to {account.Account.Address}; "
+                + "a message can only be moved within its own account.";
+            return;
+        }
+
+        var from = Where(rows);
+        owner.Mail.MoveMessages([.. rows.Select(r => r.Id)], target.Id);
+        RemoveRows(rows);
+        RefreshCounts();
+        StatusRight = $"{Describe(rows.Count)} moved to {target.Name}.";
+
+        Undo.Push("Move", () => PutBack(from), () => MoveToStoreFolder(rows, account, target));
     }
 
     /// <summary>Sets the importance the list's column shows.</summary>
@@ -3180,6 +3214,20 @@ public sealed partial class ShellViewModel : ObservableObject
     }
 
     /// <summary>The distinct sender addresses of the rows, lower-cased, read from the store.</summary>
+    /// <summary>Who sent these, for a menu that offers to find the rest of their mail.</summary>
+    public IReadOnlyList<string> SenderAddresses(IReadOnlyList<MessageRow> rows) => Senders(rows);
+
+    /// <summary>
+    /// Whether the account these rows came from has somewhere to archive to.
+    /// </summary>
+    /// <remarks>
+    /// The reference's Archive… asks the first time and never again, so the menu has to know
+    /// whether the asking is still owed.
+    /// </remarks>
+    public bool HasArchiveFolder(IReadOnlyList<MessageRow> rows)
+        => AccountOf(rows) is { } owner
+           && owner.Mail.FolderWithRole(owner.Account.Id, FolderRole.Archive) is not null;
+
     private List<string> Senders(IReadOnlyList<MessageRow> rows)
     {
         if (Mail(rows) is not { } mail) return [];
