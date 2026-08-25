@@ -30,6 +30,9 @@ public sealed record DavResponse(HttpStatusCode Status, string Body, IReadOnlyLi
 {
     public bool Ok => (int)Status is >= 200 and < 300;
 
+    /// <summary>The server still has the version that was asked about: nothing to read.</summary>
+    public bool NotModified => Status == HttpStatusCode.NotModified;
+
     /// <summary>The 207 read into its responses.</summary>
     public DavXml.MultiStatus MultiStatus => DavXml.ReadMultiStatus(Body);
 }
@@ -187,11 +190,32 @@ public sealed class DavClient : IDisposable
         return new DavWriteResult(response.StatusCode, null, false);
     }
 
-    /// <summary>Reads one item's payload, for a server whose multiget cannot be trusted.</summary>
-    public async Task<DavResponse> GetAsync(Uri url, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Reads one item's payload, for a server whose multiget cannot be trusted.
+    /// </summary>
+    /// <param name="etag">
+    /// What was read last time, if anything. A server that still has that version answers 304
+    /// and sends no body at all, which is the difference between a poll costing a header and a
+    /// poll costing a whole calendar — some published calendars are megabytes and are checked
+    /// on every send/receive.
+    /// </param>
+    public async Task<DavResponse> GetAsync(
+        Uri url, string? etag = null, CancellationToken cancellationToken = default)
     {
-        using var response = await _http.GetAsync(url, cancellationToken).ConfigureAwait(false);
-        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+
+        if (etag is { Length: > 0 })
+        {
+            request.Headers.TryAddWithoutValidation("If-None-Match", Quote(etag));
+        }
+
+        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+
+        // 304 carries no body by definition, and reading one would be reading nothing.
+        var body = response.StatusCode == HttpStatusCode.NotModified
+            ? string.Empty
+            : await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
         return new DavResponse(response.StatusCode, body, [], response.Headers.ETag?.Tag.Trim('"'));
     }
 

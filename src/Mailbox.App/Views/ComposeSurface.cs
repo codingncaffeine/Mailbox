@@ -105,10 +105,12 @@ public sealed class ComposeSurface : UserControl
     /// <summary>The address book, which the recipient lines offer beside what has been written to before.</summary>
     private readonly Mailbox.Contacts.ContactBook? _contacts;
 
-    private readonly TextBox _to = Field();
-    private readonly TextBox _cc = Field();
-    private readonly TextBox _bcc = Field();
-    private readonly TextBox _subject = Field();
+    // Named for a screen reader: the labels beside these are buttons that open the address
+    // book, so a reader tabbing into the field heard "edit" and nothing else.
+    private readonly TextBox _to = Field("To");
+    private readonly TextBox _cc = Field("Cc");
+    private readonly TextBox _bcc = Field("Bcc");
+    private readonly TextBox _subject = Field("Subject");
     private readonly ComposeEditor _body;
     /// <summary>
     /// The sending account, shown as plain text beside the From button.
@@ -266,6 +268,7 @@ public sealed class ComposeSurface : UserControl
         // buttons.
         _body = new ComposeEditor
         {
+            [Avalonia.Automation.AutomationProperties.NameProperty] = "Message body",
             AllowRemoteImagesOnPaste = false,
             AllowLocalFileImages = false,
             AutoLinkOnType = true,
@@ -1046,7 +1049,12 @@ public sealed class ComposeSurface : UserControl
     /// <summary>The body's inset from the window edge, measured at 5px either side.</summary>
     private const double BodyGutter = 5;
 
-    private static TextBox Field() => new() { MinWidth = 200 };
+    private static TextBox Field(string? spoken = null)
+    {
+        var box = new TextBox { MinWidth = 200 };
+        if (spoken is { Length: > 0 }) Avalonia.Automation.AutomationProperties.SetName(box, spoken);
+        return box;
+    }
 
     private readonly List<RecipientAutocomplete> _completions = [];
 

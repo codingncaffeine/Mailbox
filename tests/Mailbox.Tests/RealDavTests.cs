@@ -156,7 +156,7 @@ public class RealDavTests
         Assert.NotNull(stored.DavHref);
 
         // The server's own copy, read back through GET rather than through our own store.
-        var theirs = await fixture.Client.GetAsync(new Uri(fixture.Url, stored.DavHref!), token);
+        var theirs = await fixture.Client.GetAsync(new Uri(fixture.Url, stored.DavHref!), cancellationToken: token);
         Assert.True(theirs.Ok);
         Assert.Contains("Review", theirs.Body, StringComparison.Ordinal);
 
@@ -177,7 +177,7 @@ public class RealDavTests
 
         Assert.Equal(1, third.Pushed);
         Assert.Empty(repository.Items(fixture.Calendar.Id));
-        var gone = await fixture.Client.GetAsync(new Uri(fixture.Url, stored.DavHref!), token);
+        var gone = await fixture.Client.GetAsync(new Uri(fixture.Url, stored.DavHref!), cancellationToken: token);
         Assert.False(gone.Ok);
     }
 
@@ -258,7 +258,7 @@ public class RealDavTests
 
         Assert.Equal(1, settled.Pushed);
         Assert.Empty(settled.Conflicts);
-        var theirs = await fixture.Client.GetAsync(href, token);
+        var theirs = await fixture.Client.GetAsync(href, cancellationToken: token);
         Assert.Contains("Review moved here", theirs.Body, StringComparison.Ordinal);
     }
 
@@ -340,7 +340,7 @@ public class RealDavTests
         var stored = repository.Item(written.Id)!;
         Assert.NotNull(stored.Etag);
 
-        var theirs = await fixture.Client.GetAsync(new Uri(fixture.Url, stored.DavHref!), token);
+        var theirs = await fixture.Client.GetAsync(new Uri(fixture.Url, stored.DavHref!), cancellationToken: token);
         Assert.True(theirs.Ok, $"GET answered {(int)theirs.Status}.");
         Assert.Contains("BEGIN:VCARD", theirs.Body, StringComparison.Ordinal);
         Assert.Contains("A. Person", theirs.Body, StringComparison.Ordinal);

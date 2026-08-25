@@ -23,6 +23,15 @@ internal sealed class PublishedCalendarServer : HttpMessageHandler
     /// <summary>Every method the engine used, so a test can prove it did not go looking for DAV.</summary>
     public List<string> Methods { get; } = [];
 
+    /// <summary>What the document's current version is called, for the conditional fetch.</summary>
+    public string Etag { get; set; } = "doc-1";
+
+    /// <summary>What each GET carried as If-None-Match, or null where it carried none.</summary>
+    public List<string?> Conditions { get; } = [];
+
+    /// <summary>How many times the body was actually sent, as against answered with a 304.</summary>
+    public int BodiesSent { get; private set; }
+
     public Uri Url { get; } = new("https://example.com/calendars/holidays.ics");
 
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -34,11 +43,28 @@ internal sealed class PublishedCalendarServer : HttpMessageHandler
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.MethodNotAllowed));
         }
 
+        var condition = request.Headers.TryGetValues("If-None-Match", out var values)
+            ? values.FirstOrDefault()?.Trim('"')
+            : null;
+
+        Conditions.Add(condition);
+
+        // What a static file server does with a version it still has: no body, no content type,
+        // nothing to parse.
+        if (condition == Etag && Status == HttpStatusCode.OK)
+        {
+            var unchanged = new HttpResponseMessage(HttpStatusCode.NotModified);
+            unchanged.Headers.ETag = new System.Net.Http.Headers.EntityTagHeaderValue($"\"{Etag}\"");
+            return Task.FromResult(unchanged);
+        }
+
+        BodiesSent++;
+
         var response = new HttpResponseMessage(Status)
         {
             Content = new StringContent(Document, Encoding.UTF8, "text/calendar"),
         };
-        response.Headers.ETag = new System.Net.Http.Headers.EntityTagHeaderValue("\"doc-1\"");
+        response.Headers.ETag = new System.Net.Http.Headers.EntityTagHeaderValue($"\"{Etag}\"");
         return Task.FromResult(response);
     }
 }
@@ -115,6 +141,68 @@ public class CalendarSubscriptionSyncTests
 
         // The whole point: no PROPFIND and no REPORT, which a static file server refuses anyway.
         Assert.Equal(["GET"], server.Methods.Distinct());
+    }
+
+    /// <summary>
+    /// A calendar that has not changed costs a header rather than a body.
+    /// </summary>
+    /// <remarks>
+    /// The fetch used to GET the whole document on every send/receive and send no condition at
+    /// all — and a published calendar can be megabytes, checked every few minutes, for ever.
+    /// The second poll here asks about the version it holds and is told there is nothing new.
+    /// </remarks>
+    [Fact]
+    public async Task AnUnchangedCalendarIsNotFetchedTwice()
+    {
+        using var server = new PublishedCalendarServer
+        {
+            Document = Calendar(("a@example.com", "New Year")),
+        };
+        using var client = new DavClient(handler: server);
+        var (store, repository, subscription) = Fresh(server);
+        using var _ = store;
+
+        var sync = DavSync.For(client, repository, subscription);
+        await sync.SyncAsync(subscription, TestContext.Current.CancellationToken);
+
+        // The version the first fetch read has to be kept, or the second cannot ask about it.
+        var afterFirst = repository.Collection(subscription.Id)!;
+        Assert.Equal("doc-1", afterFirst.Ctag);
+
+        var second = await sync.SyncAsync(afterFirst, TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, second.Pulled);
+        Assert.Equal(0, second.Removed);
+        Assert.Equal([null, "doc-1"], server.Conditions);
+        Assert.Equal(1, server.BodiesSent);
+
+        // And what was pulled the first time is still there: a 304 changes nothing.
+        Assert.Single(repository.Items(subscription.Id));
+    }
+
+    [Fact]
+    public async Task ADocumentThatHasChangedIsFetchedAgain()
+    {
+        using var server = new PublishedCalendarServer
+        {
+            Document = Calendar(("a@example.com", "New Year")),
+        };
+        using var client = new DavClient(handler: server);
+        var (store, repository, subscription) = Fresh(server);
+        using var _ = store;
+
+        var sync = DavSync.For(client, repository, subscription);
+        await sync.SyncAsync(subscription, TestContext.Current.CancellationToken);
+
+        server.Document = Calendar(("a@example.com", "New Year"), ("b@example.com", "May Day"));
+        server.Etag = "doc-2";
+
+        var second = await sync.SyncAsync(
+            repository.Collection(subscription.Id)!, TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, second.Pulled);
+        Assert.Equal(2, server.BodiesSent);
+        Assert.Equal("doc-2", repository.Collection(subscription.Id)!.Ctag);
     }
 
     /// <summary>

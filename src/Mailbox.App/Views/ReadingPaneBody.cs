@@ -39,7 +39,15 @@ public sealed class ReadingPaneBody : UserControl, IDisposable
     private readonly Func<MailRepository?> _mail;
 
     private readonly StackPanel _bars = new();
-    private readonly ContentControl _surface = new();
+
+    /// <summary>
+    /// The message itself. Named, because what is inside it is a web engine or a block of text
+    /// and neither says what it is: a reader landing here was told "custom" or nothing.
+    /// </summary>
+    private readonly ContentControl _surface = new()
+    {
+        [Avalonia.Automation.AutomationProperties.NameProperty] = "Message",
+    };
     private readonly TextBlock _fallback = new()
     {
         TextWrapping = TextWrapping.Wrap,

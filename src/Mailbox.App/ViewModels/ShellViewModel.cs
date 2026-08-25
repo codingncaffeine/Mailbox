@@ -67,6 +67,9 @@ public sealed class FolderNode(string name, int depth, int unread, bool bold = f
     public Thickness IndentMargin { get; } = new(depth * 14, 0, 0, 0);
     public FontWeight Weight { get; } = bold || unread > 0 ? FontWeight.SemiBold : FontWeight.Normal;
     public string UnreadDisplay { get; } = unread > 0 ? unread.ToString() : string.Empty;
+
+    /// <summary>The folder as a screen reader should say it: its name, and what is waiting in it.</summary>
+    public string Spoken { get; } = unread > 0 ? $"{name}, {unread} unread" : name;
     public override string ToString() => Name;
 }
 
@@ -407,6 +410,34 @@ public sealed class MessageRow(
     /// <summary>How the row writes its date: a time today, a weekday this week, else the date — or as Format Columns says.</summary>
     public string ReceivedLabel => DateLabel(Received, Mailbox.Core.Views.ViewFields.Received);
 
+    /// <summary>
+    /// The row as a screen reader should say it.
+    /// </summary>
+    /// <remarks>
+    /// A row is a grid of eight or nine drawn cells, several of them glyphs, and a reader
+    /// traversing it heard the parts in layout order or nothing at all — the accessibility pass
+    /// had reached the ribbon and no list. What is said is what somebody would say if asked what
+    /// the row is: whether it has been read, who it is from, what it is about, when it came, and
+    /// then the marks that would otherwise be silent glyphs.
+    /// </remarks>
+    public string Spoken
+    {
+        get
+        {
+            var said = new System.Text.StringBuilder();
+
+            if (IsUnread) said.Append("Unread. ");
+            said.Append(From).Append(". ").Append(Subject.Length > 0 ? Subject : "No subject").Append(". ");
+            said.Append(ReceivedLabel).Append('.');
+
+            if (HasAttachment) said.Append(" With attachment.");
+            if (IsFlagged) said.Append(" Flagged.");
+            if (FolderLabel.Length > 0) said.Append(" In ").Append(FolderLabel).Append('.');
+
+            return said.ToString();
+        }
+    }
+
     /// <summary>A date the way the view's format for that column writes it.</summary>
     internal static string DateLabel(DateTimeOffset when, string field)
     {
@@ -456,6 +487,9 @@ public sealed class ConversationRow(MessageRow newest, int count, bool expanded,
     public string Preview => Newest.Preview;
     public string ReceivedLabel => Newest.ReceivedLabel;
     public bool IsUnread => Newest.IsUnread;
+
+    /// <summary>The thread as a screen reader should say it: the newest message, and how many.</summary>
+    public string Spoken => $"Conversation of {Count}. {Newest.Spoken}";
     public FontWeight SenderWeight => IsUnread ? FontWeight.Bold : FontWeight.Normal;
     public FontWeight SubjectWeight => IsUnread ? FontWeight.SemiBold : FontWeight.Normal;
 }
@@ -472,6 +506,10 @@ public sealed class GroupHeaderRow(string header, int count, bool collapsed)
 
     public string Glyph => IsCollapsed ? "\u203A" : "\u2304";
     public string CountLabel => $"({Count})";
+
+    /// <summary>The header as a screen reader should say it, including whether it is folded.</summary>
+    public string Spoken => $"{Header}, {Count} {(Count == 1 ? "message" : "messages")}"
+        + (IsCollapsed ? ", collapsed" : string.Empty);
 }
 
 /// <summary>

@@ -133,7 +133,14 @@ public sealed class DavSync(DavClient client, PimRepository repository, IDavPayl
     {
         ArgumentNullException.ThrowIfNull(collection);
 
-        var response = await _client.GetAsync(url, cancellationToken).ConfigureAwait(false);
+        // What was read last time, so an unchanged calendar costs a header rather than a body.
+        // Some published calendars are megabytes and are fetched on every send/receive; a
+        // server that still has this version answers 304 and sends nothing.
+        var response = await _client
+            .GetAsync(url, collection.Ctag, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (response.NotModified) return (0, 0);
         if (!response.Ok) return (0, 0);
 
         IReadOnlyList<CalendarEvent> events;
@@ -191,6 +198,13 @@ public sealed class DavSync(DavClient client, PimRepository repository, IDavPayl
             removed++;
         }
 
+        // Kept against the collection, which is where a CalDAV collection's own version tag
+        // lives: for a document the two mean the same thing — the version this store holds.
+        if (response.Etag is { Length: > 0 })
+        {
+            _repository.SetCollectionSync(collection.Id, response.Etag, collection.SyncToken);
+        }
+
         return (pulled, removed);
     }
 
@@ -234,7 +248,7 @@ public sealed class DavSync(DavClient client, PimRepository repository, IDavPayl
                 {
                     // The server's copy is fetched here too, so a refused delete is a choice
                     // between two things the reader can see rather than a bare complaint.
-                    var theirs = await _client.GetAsync(url, cancellationToken).ConfigureAwait(false);
+                    var theirs = await _client.GetAsync(url, cancellationToken: cancellationToken).ConfigureAwait(false);
                     var local = change.ItemId is { } deleting ? _repository.Item(deleting) : null;
                     conflicts.Add(new DavConflict(
                         change.ItemId ?? 0, collection.Id, gone, local?.Summary ?? string.Empty,
@@ -270,7 +284,7 @@ public sealed class DavSync(DavClient client, PimRepository repository, IDavPayl
                 var etag = write.Etag;
                 if (etag is null)
                 {
-                    var reread = await _client.GetAsync(target, cancellationToken).ConfigureAwait(false);
+                    var reread = await _client.GetAsync(target, cancellationToken: cancellationToken).ConfigureAwait(false);
                     etag = reread.Etag;
                 }
 
@@ -280,7 +294,7 @@ public sealed class DavSync(DavClient client, PimRepository repository, IDavPayl
             }
             else if (write.Conflict)
             {
-                var server = await _client.GetAsync(target, cancellationToken).ConfigureAwait(false);
+                var server = await _client.GetAsync(target, cancellationToken: cancellationToken).ConfigureAwait(false);
                 conflicts.Add(new DavConflict(
                     item.Id, collection.Id, href, item.Summary,
                     server.Ok ? server.Body : null, server.Etag));

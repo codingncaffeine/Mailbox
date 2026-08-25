@@ -467,6 +467,7 @@
 
                     <ListBox ItemsSource="{Binding Folders}"
                              Name="FolderList"
+                             AutomationProperties.Name="Folder pane"
                              SelectedItem="{Binding SelectedFolder}"
                              Background="Transparent"
                              BorderThickness="0"
@@ -479,7 +480,8 @@
                         </ListBox.Styles>
                         <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="vm:FolderNode">
-                                <Grid ColumnDefinitions="*,Auto">
+                                <Grid AutomationProperties.Name="{Binding Spoken}"
+                                      ColumnDefinitions="*,Auto">
                                     <TextBlock Grid.Column="0"
                                                Text="{Binding Name}"
                                                Margin="{Binding IndentMargin}"
@@ -614,6 +616,7 @@
                              SelectedItem="{Binding SelectedRow}"
                              SelectionMode="Multiple"
                              Name="MessageList"
+                             AutomationProperties.Name="Message list"
                              Background="Transparent"
                              BorderThickness="0"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
@@ -642,7 +645,8 @@
                             <views:RowTemplateSelector.Header>
                             <!-- A group header. -->
                             <DataTemplate x:DataType="vm:GroupHeaderRow">
-                                <Border Background="{DynamicResource list.group.header.background.brush}"
+                                <Border AutomationProperties.Name="{Binding Spoken}"
+                                        Background="{DynamicResource list.group.header.background.brush}"
                                         Height="{DynamicResource list.group.header.height.value}"
                                         Padding="8,0">
                                     <StackPanel Orientation="Horizontal" Spacing="6"
@@ -665,7 +669,8 @@
                             <!-- A folded conversation: the newest message, a count, and the
                                  marker for a thread whose messages are in more than one folder. -->
                             <DataTemplate x:DataType="vm:ConversationRow">
-                                <Grid ColumnDefinitions="4,*"
+                                <Grid AutomationProperties.Name="{Binding Spoken}"
+                                      ColumnDefinitions="4,*"
                                       Classes="row"
                                       Height="{DynamicResource list.row.height.value}">
                                     <Rectangle Grid.Column="0"
@@ -723,7 +728,8 @@
                             <!-- A message in the line layout: the view's columns as cells, the
                                  preview beneath when the view has one. -->
                             <DataTemplate x:DataType="vm:MessageRow">
-                                <Grid ColumnDefinitions="4,*"
+                                <Grid AutomationProperties.Name="{Binding Spoken}"
+                                      ColumnDefinitions="4,*"
                                       Classes="row"
                                       Height="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).RowHeight}">
                                     <!-- The unread bar. 4px, accent, only when unread. -->
@@ -797,7 +803,8 @@
                                  categories and flag, the preview beneath — the reference's Compact
                                  view in a list narrower than its threshold. -->
                             <DataTemplate x:DataType="vm:MessageRow">
-                                <Grid ColumnDefinitions="4,*"
+                                <Grid AutomationProperties.Name="{Binding Spoken}"
+                                      ColumnDefinitions="4,*"
                                       Classes="row"
                                       Height="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).RowHeight}">
                                     <Rectangle Grid.Column="0"
