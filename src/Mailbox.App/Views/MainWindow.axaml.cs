@@ -5611,6 +5611,40 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Says when an operation has been refused by a server often enough to stop being replayed.
+    /// </summary>
+    /// <remarks>
+    /// A move to a folder that no longer exists, or a flag on a message whose server id will not
+    /// parse, used to be replayed on every send/receive for ever: the attempts were counted, the
+    /// error was kept, and nothing read either. The store stops offering one after five tries;
+    /// this tells the reader, because a change that will never go is theirs to sort out.
+    /// </remarks>
+    private void ReportStuckOperations(ShellViewModel shell)
+    {
+        var stuck = 0;
+        var first = string.Empty;
+
+        foreach (var account in App.Accounts.All)
+        {
+            foreach (var op in account.Mail.StuckOps())
+            {
+                stuck++;
+                if (first.Length == 0 && op.LastError is { Length: > 0 } why) first = why;
+
+                Log.Warn($"{account.Account.Address}: the {op.Kind} operation has been refused "
+                         + $"{op.Attempts} times and is no longer being replayed. {op.LastError}");
+            }
+        }
+
+        if (stuck == 0) return;
+
+        var detail = first.Length > 0 ? $" {first}" : string.Empty;
+        shell.StatusRight = stuck == 1
+            ? $"One change could not be sent to the server and is no longer being retried.{detail}"
+            : $"{stuck} changes could not be sent to the server and are no longer being retried.{detail}";
+    }
+
+    /// <summary>
     /// Whether a command can act on what is selected right now.
     /// </summary>
     /// <remarks>
@@ -5798,6 +5832,7 @@ public partial class MainWindow : Window
             _tasks.Finish(result);
             shell.StatusRight = result.Summary();
             shell.Refresh();
+            ReportStuckOperations(shell);
 
             // The Options page's "Display a Desktop Alert": a toast when a run brought new mail.
             // One per message while there are few, naming the sender and subject with Reply,

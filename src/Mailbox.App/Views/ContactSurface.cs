@@ -47,7 +47,6 @@ public sealed class ContactSurface : UserControl
     private const double PhotoSize = 92;
 
     private readonly Contact _original;
-    private readonly IReadOnlyList<Collection> _books;
     private readonly bool _group;
 
     private readonly TextBox _name = Field();
@@ -74,7 +73,6 @@ public sealed class ContactSurface : UserControl
     private readonly ListBox _members = new();
     private readonly List<GroupMember> _memberList = [];
     private readonly Border _photo = new();
-    private readonly ComboBox _book = new();
 
     private ContactPhoto? _picture;
 
@@ -90,7 +88,16 @@ public sealed class ContactSurface : UserControl
     public ContactSurface(Contact contact, IReadOnlyList<Collection> books, long collectionId)
     {
         _original = contact ?? throw new ArgumentNullException(nameof(contact));
-        _books = books is { Count: > 0 } ? books : throw new ArgumentException("A contact needs an address book.", nameof(books));
+        // The books are checked and not kept. There was a combo here that was built, never
+        // filled, never laid out and never read — the form the reference draws has no book
+        // picker on it either, and a contact made in the wrong book is moved with Home · Move
+        // as it is there. What the argument is for is this check: a window that cannot say
+        // where a contact would be kept has nowhere to save it.
+        if (books is not { Count: > 0 })
+        {
+            throw new ArgumentException("A contact needs an address book.", nameof(books));
+        }
+
         _group = contact.IsGroup;
         _picture = contact.Photo;
         Chosen = collectionId;

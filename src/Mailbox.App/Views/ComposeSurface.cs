@@ -328,14 +328,7 @@ public sealed class ComposeSurface : UserControl
         // is built, because it goes into the document and the document is part of that tree.
         InsertDefaultSignature();
 
-        // Autosave, on the Options page's interval. Zero is off. Only when something has
-        // changed since the last save, so an idle surface does not rewrite its draft every few
-        // minutes for nothing.
-        if (App.MailOptions.AutosaveMinutes is > 0 and var minutes)
-        {
-            _autosave = new DispatcherTimer { Interval = TimeSpan.FromMinutes(minutes) };
-            _autosave.Tick += (_, _) => { if (_dirty && !_sent && HasContent()) SaveDraft(); };
-        }
+        ApplyAutosaveInterval();
 
         // The timer runs while the surface is in the tree and stops when it leaves — so a closed
         // window or a dismissed inline strip does not keep one alive, and a surface popped out of
@@ -1295,15 +1288,20 @@ public sealed class ComposeSurface : UserControl
         if (id == ComposeCommands.Discard.Id) { RequestClose(); return true; }
 
         // Paste goes through the editor, which reads the clipboard's HTML flavour and keeps
-        // the formatting. Cut, Copy and Select All are the editor's own key handling and it
-        // exposes no method for them, so the buttons say where they are rather than pretending.
+        // the formatting. Cut, Copy and Select All are its own key handling, pressed into it.
         if (id == ComposeCommands.Paste.Id) { _ = _body.PasteFromClipboardAsync(); return true; }
 
         if (id == ComposeCommands.Cut.Id || id == ComposeCommands.Copy.Id
             || id == ComposeCommands.SelectAll.Id)
         {
+            // Pressed into the editor rather than announced: it answers these as keys and has
+            // no method for them, and a button that names its own shortcut instead of doing
+            // what its label says is a button that does not work.
             _body.Focus();
-            Report("Cut, Copy and Select All are on Ctrl+X, Ctrl+C and Ctrl+A.");
+
+            if (id == ComposeCommands.Cut.Id) _body.Cut();
+            else if (id == ComposeCommands.Copy.Id) _body.Copy();
+            else _body.SelectAll();
             return true;
         }
 
@@ -2183,7 +2181,36 @@ public sealed class ComposeSurface : UserControl
         if (options.UseSpellingSuggestions && _spelling is null) _ = EnsureSpellingAsync();
     }
 
-    /// <summary>A settings change that the corrector has to hear about.</summary>
+    /// <summary>
+    /// Autosave, on the Options page's interval. Zero is off.
+    /// </summary>
+    /// <remarks>
+    /// Only when something has changed since the last save, so an idle surface does not rewrite
+    /// its draft every few minutes for nothing. Rebuilt rather than read once: the interval was
+    /// taken at construction, so changing it on the Options page reached the next window and no
+    /// window already open — including the one somebody had just been told to change it for.
+    /// </remarks>
+    private void ApplyAutosaveInterval()
+    {
+        var minutes = App.MailOptions.AutosaveMinutes;
+
+        _autosave?.Stop();
+        _autosave = null;
+
+        if (minutes <= 0) return;
+
+        _autosave = new DispatcherTimer { Interval = TimeSpan.FromMinutes(minutes) };
+        _autosave.Tick += (_, _) => { if (_dirty && !_sent && HasContent()) SaveDraft(); };
+
+        // Started here when the surface is already on screen: the attach handler that usually
+        // starts it has long since run.
+        if (!_sent && IsAttachedToVisualTree()) _autosave.Start();
+    }
+
+    /// <summary>Whether this surface is on screen, which is when its timer should be running.</summary>
+    private bool IsAttachedToVisualTree() => VisualRoot is not null;
+
+    /// <summary>A settings change this surface has to hear about.</summary>
     private void OnSettingChanged(object? sender, string key)
     {
         if (key.StartsWith("mail.autocorrect", StringComparison.Ordinal)
@@ -2192,6 +2219,8 @@ public sealed class ComposeSurface : UserControl
         {
             Dispatcher.UIThread.Post(ApplyAutocorrect);
         }
+
+        if (key == MailOptions.AutosaveMinutesKey) Dispatcher.UIThread.Post(ApplyAutosaveInterval);
     }
 
     /// <summary>Beside the mail, not in the system dictionary, which is not ours to edit.</summary>

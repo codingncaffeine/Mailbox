@@ -654,11 +654,50 @@ public sealed class PimRepository(PimStore store)
             return queued;
         });
 
+    /// <summary>
+    /// How many times a change is retried before it is left alone.
+    /// </summary>
+    /// <remarks>
+    /// A server that refuses a change once will usually refuse it again — a 400 on a payload it
+    /// dislikes, a 403 on a calendar whose permission has changed — and the attempts were being
+    /// counted and never read, so such a change was pushed again on every send/receive for as
+    /// long as the account existed. Five is enough to ride out the reasons that do pass: a
+    /// network that dropped, a token being refreshed, a server restarting.
+    /// </remarks>
+    public const int MaxAttempts = 5;
+
     /// <summary>What is waiting to go, oldest first; a collection's own when one is named.</summary>
+    /// <remarks>
+    /// Changes that have failed <see cref="MaxAttempts"/> times are not offered: they are still
+    /// in the queue, still carrying what went wrong, and <see cref="Stuck"/> is what reports
+    /// them. Retrying them forever is what made a permanent refusal invisible.
+    /// </remarks>
     public IReadOnlyList<QueuedChange> Queued(long? collectionId = null)
         => collectionId is { } id
-            ? _store.Query(QueueSelect + " WHERE q.state = 'queued' AND q.collection_id = $c ORDER BY q.id", ReadQueued, ("$c", id))
-            : _store.Query(QueueSelect + " WHERE q.state = 'queued' ORDER BY q.id", ReadQueued);
+            ? _store.Query(
+                QueueSelect + " WHERE q.state = 'queued' AND q.attempts < $max AND q.collection_id = $c ORDER BY q.id",
+                ReadQueued, ("$max", MaxAttempts), ("$c", id))
+            : _store.Query(
+                QueueSelect + " WHERE q.state = 'queued' AND q.attempts < $max ORDER BY q.id",
+                ReadQueued, ("$max", MaxAttempts));
+
+    /// <summary>
+    /// The changes that have been refused often enough to be left alone, with what was said.
+    /// </summary>
+    public IReadOnlyList<QueuedChange> Stuck(long? collectionId = null)
+        => collectionId is { } id
+            ? _store.Query(
+                QueueSelect + " WHERE q.state = 'queued' AND q.attempts >= $max AND q.collection_id = $c ORDER BY q.id",
+                ReadQueued, ("$max", MaxAttempts), ("$c", id))
+            : _store.Query(
+                QueueSelect + " WHERE q.state = 'queued' AND q.attempts >= $max ORDER BY q.id",
+                ReadQueued, ("$max", MaxAttempts));
+
+    /// <summary>
+    /// Puts a stuck change back in the queue, for a reader who has fixed whatever refused it.
+    /// </summary>
+    public void Retry(long id)
+        => _store.Execute("UPDATE dav_queue SET attempts = 0 WHERE id = $id", ("$id", id));
 
     public void Dequeue(long id) => _store.Execute("DELETE FROM dav_queue WHERE id = $id", ("$id", id));
 

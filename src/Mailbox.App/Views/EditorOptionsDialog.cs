@@ -22,7 +22,6 @@ namespace Mailbox.App.Views;
 /// </remarks>
 public sealed class EditorOptionsDialog : Window
 {
-    private readonly MailOptions _options;
     private readonly SettingsStore _settings;
     private readonly ContentControl _page = new();
     private readonly StackPanel _rail = new() { Spacing = 2 };
@@ -30,7 +29,6 @@ public sealed class EditorOptionsDialog : Window
 
     public EditorOptionsDialog(MailOptions options, SettingsStore settings)
     {
-        _options = options;
         _settings = settings;
 
         Title = "Editor Options";

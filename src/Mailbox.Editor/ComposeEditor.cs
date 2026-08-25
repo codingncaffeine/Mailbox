@@ -194,10 +194,27 @@ public class ComposeEditor : RichEditor
     }
 
     /// <summary>One Backspace, as the reader would have pressed it.</summary>
-    private void Backspace() => base.OnKeyDown(new KeyEventArgs
+    private void Backspace() => Press(Key.Back);
+
+    /// <summary>
+    /// Cut, Copy and Select All, which the editor answers as keys and exposes no method for.
+    /// </summary>
+    /// <remarks>
+    /// The buttons used to name the shortcut and do nothing — honest, and still three buttons on
+    /// a ribbon that did not do what their labels say. Pressing the key into the editor is what
+    /// a reader would have done, and it is the same path the autocorrection uses to delete a
+    /// word: the editor's own handler, with its own clipboard, undo and selection behind it.
+    /// </remarks>
+    public void Cut() => Press(Key.X, KeyModifiers.Control);
+
+    public void Copy() => Press(Key.C, KeyModifiers.Control);
+
+    public void SelectAll() => Press(Key.A, KeyModifiers.Control);
+
+    private void Press(Key key, KeyModifiers modifiers = KeyModifiers.None) => base.OnKeyDown(new KeyEventArgs
     {
-        Key = Key.Back,
-        KeyModifiers = KeyModifiers.None,
+        Key = key,
+        KeyModifiers = modifiers,
         RoutedEvent = InputElement.KeyDownEvent,
         Source = this,
     });

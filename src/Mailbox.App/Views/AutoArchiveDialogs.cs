@@ -16,7 +16,6 @@ namespace Mailbox.App.Views;
 /// </summary>
 public sealed class AutoArchiveSettingsDialog : Window
 {
-    private readonly AutoArchiveOptions _options;
 
     /// <summary>True when OK saved something.</summary>
     public bool Saved { get; private set; }
@@ -26,7 +25,6 @@ public sealed class AutoArchiveSettingsDialog : Window
 
     public AutoArchiveSettingsDialog(AutoArchiveOptions options)
     {
-        _options = options;
 
         Title = "AutoArchive";
         Width = 520;

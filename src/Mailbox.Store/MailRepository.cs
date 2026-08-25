@@ -1348,9 +1348,34 @@ public sealed class MailRepository(MailStore store)
         SyncOpSelect + " WHERE kind = 'move' AND message_id = $id", ReadSyncOp, ("$id", messageId))
         .FirstOrDefault();
 
-    /// <summary>Everything waiting to be played, oldest first.</summary>
+    /// <summary>
+    /// How many times an operation is replayed to the server before it is left alone.
+    /// </summary>
+    /// <remarks>
+    /// The attempts were counted and never read, so an op the server will always refuse — a
+    /// move to a folder that no longer exists, a flag on a message whose id will not parse —
+    /// was replayed on every send/receive for ever, and nothing said so. Five rides out the
+    /// failures that do pass: a dropped connection, a token being refreshed, a server restart.
+    /// </remarks>
+    public const int MaxOpAttempts = 5;
+
+    /// <summary>
+    /// The operations still to be played to the server, oldest first.
+    /// </summary>
+    /// <remarks>
+    /// Ones that have failed <see cref="MaxOpAttempts"/> times are not offered. They stay in the
+    /// table with what went wrong, and <see cref="StuckOps"/> reports them.
+    /// </remarks>
     public IReadOnlyList<SyncOp> PendingOps() => _store.Query(
-        SyncOpSelect + " ORDER BY id", ReadSyncOp);
+        SyncOpSelect + " WHERE attempts < $max ORDER BY id", ReadSyncOp, ("$max", MaxOpAttempts));
+
+    /// <summary>The operations the server has refused often enough to be left alone.</summary>
+    public IReadOnlyList<SyncOp> StuckOps() => _store.Query(
+        SyncOpSelect + " WHERE attempts >= $max ORDER BY id", ReadSyncOp, ("$max", MaxOpAttempts));
+
+    /// <summary>Puts a stuck operation back, for a reader who has fixed what refused it.</summary>
+    public void RetryOp(long id)
+        => _store.Execute("UPDATE sync_ops SET attempts = 0 WHERE id = $id", ("$id", id));
 
     /// <summary>
     /// The server ids in a folder that a pending op still refers to. The sync leaves these

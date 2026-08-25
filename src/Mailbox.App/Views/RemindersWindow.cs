@@ -117,6 +117,20 @@ public sealed class RemindersWindow : Window
         ShowInTaskbar = true;
         Topmost = App.MailOptions.RemindersOnTop;
 
+        // And it follows the switch: the window stays up for as long as there are reminders in
+        // it, so a reader who turns "show reminders on top" on because this window is behind
+        // something has to see it come forward now rather than the next time one is due.
+        void OnSetting(object? sender, string key)
+        {
+            if (key == Mailbox.Core.Settings.MailOptions.RemindersOnTopKey)
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => Topmost = App.MailOptions.RemindersOnTop);
+            }
+        }
+
+        App.Settings.Changed += OnSetting;
+        Closed += (_, _) => App.Settings.Changed -= OnSetting;
+
         // A template is asked about a null item as the list settles — which is what dismissing the
         // last reminder does — so it is pattern-matched rather than dereferenced.
         _list.ItemTemplate = new FuncDataTemplate<DueReminder>((item, _) => item is { } due ? Row(due) : new Panel());

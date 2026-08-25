@@ -260,6 +260,44 @@ public class Pop3ReceiverTests
         Assert.Equal(2, repo.Messages(inbox.Id).Count);   // filed before removal
     }
 
+    /// <summary>
+    /// The cap bounds what is downloaded, not what is looked at.
+    /// </summary>
+    /// <remarks>
+    /// It used to bound the walk itself, so a poll that filled up on new mail never reached the
+    /// messages after it — and the two rules that take mail off the server, "remove after n
+    /// days" and "do not leave a copy", quietly stopped applying to the tail of the mailbox for
+    /// as long as the backlog lasted. The order matters here: the known messages sit after the
+    /// new ones, which is where the old loop stopped looking.
+    /// </remarks>
+    [Fact]
+    public async Task TheRemovalSweepReachesPastTheDownloadCap()
+    {
+        var (store, repo, inbox) = Fresh();
+        using var _ = store;
+
+        // Four collected on an earlier poll, with the server keeping its copies.
+        var first = new FakePop3();
+        for (var i = 0; i < 4; i++) first.With($"old-{i}");
+        await Receiver(repo, first).PollAsync(
+            Connection(new Pop3Policy { LeaveOnServer = true }), inbox, null, Ct);
+
+        // Now six new ones arrive ahead of them in the listing, and the reader has since said
+        // not to leave copies. The cap is four.
+        var second = new FakePop3();
+        for (var i = 0; i < 6; i++) second.With($"new-{i}");
+        for (var i = 0; i < 4; i++) second.With($"old-{i}");
+
+        var result = await Receiver(repo, second).PollAsync(
+            Connection(new Pop3Policy { MaxPerPoll = 4, LeaveOnServer = false }), inbox, null, Ct);
+
+        Assert.Equal(4, result.Downloaded);
+
+        // The four downloaded, and the four already held: everything the policy says to remove,
+        // including the ones the cap stopped this poll from downloading.
+        Assert.Equal(["new-0", "new-1", "new-2", "new-3", "old-0", "old-1", "old-2", "old-3"], second.Deleted);
+    }
+
     [Fact]
     public async Task APollStopsAtTheCap()
     {

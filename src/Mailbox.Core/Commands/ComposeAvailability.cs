@@ -70,9 +70,9 @@ public static class ComposeAvailability
         new(ComposeCommands.Paste.Id, ComposeCommandState.Working,
             "Pastes, keeping the formatting where the clipboard carries any."),
         new(ComposeCommands.Cut.Id, ComposeCommandState.Working,
-            "On Ctrl+X. The editor handles it and exposes no method for the button to call."),
+            "Cuts the selection. The editor answers this as a key, so the button presses it."),
         new(ComposeCommands.Copy.Id, ComposeCommandState.Working,
-            "On Ctrl+C. The editor handles it and exposes no method for the button to call."),
+            "Copies the selection, the same way."),
         new(ComposeCommands.FormatPainter.Id, ComposeCommandState.Working,
             "Picks up the formatting at the caret, then paints the next selection with it."),
 

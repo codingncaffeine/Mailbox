@@ -133,7 +133,11 @@ public sealed class Pop3Receiver(MailRepository repository, Func<DateTimeOffset>
         var arrived = new List<long>();
         var expired = Expired(inbox, account.Policy);
 
-        for (var index = 0; index < uids.Count && downloaded < account.Policy.MaxPerPoll; index++)
+        // The cap bounds the downloads, not the walk. It used to bound the loop itself, so once
+        // a backlog filled a poll no later UIDL was looked at — and the two rules that decide
+        // what comes off the server, "remove after n days" and "do not leave a copy", silently
+        // stopped applying to the tail of the mailbox for as long as the backlog lasted.
+        for (var index = 0; index < uids.Count; index++)
         {
             cancellation.ThrowIfCancellationRequested();
 
@@ -144,6 +148,10 @@ public sealed class Pop3Receiver(MailRepository repository, Func<DateTimeOffset>
                 if (ShouldRemove(account.Policy) || expired.Contains(uid)) toRemove.Add(index);
                 continue;
             }
+
+            // Everything past the cap is left where it is, to be collected by the next poll.
+            // The walk carries on so that the rules above still see it.
+            if (downloaded >= account.Policy.MaxPerPoll) continue;
 
             progress?.Report(new PollProgress(
                 account.Address, downloaded + 1, uids.Count - known.Count, "Receiving"));

@@ -1322,6 +1322,33 @@ public partial class MainWindow
     /// copies and asked. Nothing is overwritten before the answer, and an unanswered conflict
     /// stays queued rather than being dropped.
     /// </remarks>
+    /// <summary>
+    /// Says when a change has been refused often enough to stop being retried.
+    /// </summary>
+    /// <remarks>
+    /// The attempts and the error were written on every failure and read by nobody, so a change
+    /// a server will always refuse was pushed again on every send/receive, for ever, in silence.
+    /// The queue stops offering one after five tries; this is the other half — the reader is
+    /// told, once per poll, with what the server actually said, because a change that will never
+    /// go is something only they can do anything about.
+    /// </remarks>
+    private void ReportStuckChanges(ShellViewModel shell)
+    {
+        var stuck = App.Pim.Stuck();
+        if (stuck.Count == 0) return;
+
+        foreach (var change in stuck)
+        {
+            Log.Warn($"Calendar: {change.Op} on collection {change.CollectionId} has been refused "
+                     + $"{change.Attempts} times and is no longer being retried. {change.LastError}");
+        }
+
+        var first = stuck[0].LastError is { Length: > 0 } why ? $" {why}" : string.Empty;
+        shell.StatusRight = stuck.Count == 1
+            ? $"One calendar change could not be sent and is no longer being retried.{first}"
+            : $"{stuck.Count} calendar changes could not be sent and are no longer being retried.{first}";
+    }
+
     internal async Task SyncCalendarsAsync(ShellViewModel shell, CancellationToken cancellationToken)
     {
         try
@@ -1340,6 +1367,8 @@ public partial class MainWindow
             {
                 shell.StatusRight = $"Calendars updated: {report.Pulled} in, {report.Pushed} out.";
             }
+
+            ReportStuckChanges(shell);
         }
         catch (OperationCanceledException)
         {
