@@ -19,6 +19,53 @@
         <Setter Property="Foreground" Value="{DynamicResource systemdialog.foreground.brush}" />
     </Style>
 
+    <!-- ============================ Drop-down list ============================ -->
+    <!--
+        A combo box on a system dialog's page. Without this it keeps the application's own
+        palette, which on the Black theme is a black box in a light dialog — the one place a
+        borrowed control shows up as a hole rather than as a shade.
+    -->
+    <Style Selector="Border.systemdialogroot ComboBox">
+        <Setter Property="Background" Value="{DynamicResource systemdialog.list.background.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource systemdialog.field.border.brush}" />
+        <Setter Property="Foreground" Value="{DynamicResource systemdialog.foreground.brush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="0" />
+    </Style>
+
+    <Style Selector="Border.systemdialogroot ComboBox /template/ Border">
+        <Setter Property="Background" Value="{DynamicResource systemdialog.list.background.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource systemdialog.field.border.brush}" />
+        <Setter Property="CornerRadius" Value="0" />
+    </Style>
+
+    <Style Selector="Border.systemdialogroot ComboBox /template/ Path">
+        <Setter Property="Fill" Value="{DynamicResource systemdialog.foreground.brush}" />
+        <Setter Property="Stroke" Value="{DynamicResource systemdialog.foreground.brush}" />
+    </Style>
+
+    <Style Selector="Border.systemdialogroot ComboBoxItem">
+        <Setter Property="Foreground" Value="{DynamicResource systemdialog.foreground.brush}" />
+    </Style>
+
+    <!-- ============================== Scroll bar ============================== -->
+    <!--
+        The same story: the application's scrollbar is dark, and a dark track down the side of
+        a white box is the first thing an owner spots.
+    -->
+    <Style Selector="Border.systemdialogroot ScrollBar">
+        <Setter Property="Background" Value="{DynamicResource systemdialog.background.brush}" />
+        <Setter Property="Foreground" Value="{DynamicResource systemdialog.foreground.brush}" />
+    </Style>
+
+    <Style Selector="Border.systemdialogroot ScrollBar /template/ Border">
+        <Setter Property="Background" Value="{DynamicResource systemdialog.background.brush}" />
+    </Style>
+
+    <Style Selector="Border.systemdialogroot ScrollBar Thumb">
+        <Setter Property="Background" Value="{DynamicResource systemdialog.border.brush}" />
+    </Style>
+
     <!-- ==============================  Tick box  ============================== -->
     <!--
         The desktop's check box: a 13px white square in a 1px grey line, its tick in the
