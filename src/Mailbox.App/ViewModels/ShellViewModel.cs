@@ -2425,6 +2425,99 @@ public sealed partial class ShellViewModel : ObservableObject
     private static int Countable(List<object> rows)
         => rows.Count(r => r is ConversationRow || (r is MessageRow m && m.Depth == 0));
 
+    // ---- Undo --------------------------------------------------------------------------------
+
+    /// <summary>
+    /// What Ctrl+Z takes back: the shell's own actions, in the order they were done.
+    /// </summary>
+    /// <remarks>
+    /// Every command below that changes mail records a step before it acts. What is recorded is
+    /// the state it is about to overwrite — which folder each message was in, whether it was
+    /// read, what its flag said — because the store commits the change immediately and there is
+    /// nothing left to read afterwards. Anything that cannot be put back records nothing:
+    /// a permanent delete is permanent, and an undo that quietly did not work would be worse
+    /// than a Ctrl+Z that says there is nothing to undo.
+    /// </remarks>
+    public UndoStack Undo { get; } = new();
+
+    /// <summary>Where each of these messages is now, so a move can be put back.</summary>
+    private List<(OpenAccount Account, long Id, long FolderId)> Where(IReadOnlyList<MessageRow> rows)
+    {
+        var places = new List<(OpenAccount, long, long)>(rows.Count);
+
+        foreach (var row in rows)
+        {
+            if (AccountFor(row) is not { } account) continue;
+            if (account.Mail.GetMessage(row.Id) is not { } message) continue;
+
+            places.Add((account, row.Id, message.FolderId));
+        }
+
+        return places;
+    }
+
+    /// <summary>Puts every message back where it was, one move per folder it came from.</summary>
+    private void PutBack(List<(OpenAccount Account, long Id, long FolderId)> places)
+    {
+        foreach (var group in places.GroupBy(p => (p.Account.Account.Address, p.FolderId)))
+        {
+            var account = group.First().Account;
+            account.Mail.MoveMessages([.. group.Select(p => p.Id)], group.Key.FolderId);
+        }
+
+        AfterUndo();
+    }
+
+    /// <summary>What every undone step ends with: the list and the counts as they now are.</summary>
+    private void AfterUndo()
+    {
+        ReloadCurrentView();
+        RefreshCounts();
+    }
+
+    /// <summary>What each of these messages carries now, so a flag or a read mark can be put back.</summary>
+    private List<(OpenAccount Account, MessageSummary Message)> State(IReadOnlyList<MessageRow> rows)
+    {
+        var state = new List<(OpenAccount, MessageSummary)>(rows.Count);
+
+        foreach (var row in rows)
+        {
+            if (AccountFor(row) is not { } account) continue;
+            if (account.Mail.GetMessage(row.Id) is { } message) state.Add((account, message));
+        }
+
+        return state;
+    }
+
+    /// <summary>Puts back the flag each message had, whatever it was.</summary>
+    private void RestoreFlags(List<(OpenAccount Account, MessageSummary Message)> state)
+    {
+        foreach (var (account, message) in state)
+        {
+            if (message.FollowUpComplete) account.Mail.CompleteFollowUp([message.Id]);
+            else if (message.IsFlagged)
+            {
+                account.Mail.SetCustomFollowUp(
+                    [message.Id], message.FollowUpType, message.FollowUpStart, message.FollowUpDue, message.Reminder);
+            }
+            else account.Mail.ClearFollowUp([message.Id]);
+        }
+
+        AfterUndo();
+    }
+
+    /// <summary>Puts back whether each message had been read.</summary>
+    private void RestoreRead(List<(OpenAccount Account, MessageSummary Message)> state)
+    {
+        foreach (var group in state.GroupBy(s => (s.Account.Account.Address, s.Message.IsRead)))
+        {
+            var account = group.First().Account;
+            account.Mail.SetRead([.. group.Select(s => s.Message.Id)], group.Key.IsRead);
+        }
+
+        AfterUndo();
+    }
+
     // ---- Acting on a selection -------------------------------------------------------------
     // Every one of these takes the rows explicitly rather than reading a selection property.
     // The list owns the selection, and a command that reaches back for it can act on something
@@ -2437,8 +2530,20 @@ public sealed partial class ShellViewModel : ObservableObject
 
         if (rows.Count == 0) return;
 
+        // Read by looking is not an action somebody took, so it records nothing: a Ctrl+Z that
+        // marked a message unread again because the reader glanced at it would be a surprise.
+        var before = quiet ? [] : State(rows);
+
         Mail(rows)?.SetRead([.. rows.Select(r => r.Id)], read);
         foreach (var row in rows) row.IsUnread = !read;
+
+        if (!quiet)
+        {
+            Undo.Push(
+                read ? "Mark as Read" : "Mark as Unread",
+                () => RestoreRead(before),
+                () => SetRead(rows, read));
+        }
 
         // Read by looking happens in the middle of a selection change; the pane's counts can
         // wait a moment rather than being rebuilt under it.
@@ -2609,13 +2714,19 @@ public sealed partial class ShellViewModel : ObservableObject
 
         if (permanently || deleted is null || inDeletedItems)
         {
+            // Nothing is recorded for this one: the rows are gone from the store and there is
+            // nothing left to put back. An undo that quietly did nothing would be worse than
+            // Ctrl+Z saying there is nothing to undo.
             mail.DeleteMessages(ids);
             StatusRight = $"{Describe(rows.Count)} permanently deleted.";
         }
         else
         {
+            var from = Where(rows);
             mail.MoveMessages(ids, deleted.Id);
             StatusRight = $"{Describe(rows.Count)} moved to Deleted Items.";
+
+            Undo.Push("Delete", () => PutBack(from), () => Delete(rows, permanently: false));
         }
 
         RemoveRows(rows);
@@ -2659,10 +2770,13 @@ public sealed partial class ShellViewModel : ObservableObject
             return;
         }
 
+        var from = Where(rows);
         mail.MoveMessages([.. rows.Select(r => r.Id)], target.Id);
         RemoveRows(rows);
         RefreshCounts();
         StatusRight = $"{Describe(rows.Count)} moved to {target.Name}.";
+
+        Undo.Push(role == FolderRole.Archive ? "Archive" : "Move", () => PutBack(from), () => MoveTo(rows, role));
     }
 
     /// <summary>
@@ -2676,10 +2790,13 @@ public sealed partial class ShellViewModel : ObservableObject
         var rows = Messages.Where(m => ids.Contains(m.Id)).ToList();
         if (rows.Count == 0) return;
 
+        var from = Where(rows);
         where.Account.Mail.MoveMessages(ids, where.FolderId);
         RemoveRows(rows);
         RefreshCounts();
         StatusRight = $"{Describe(rows.Count)} moved to {target.Name}.";
+
+        Undo.Push("Move", () => PutBack(from), () => MoveToFolder(ids, target));
     }
 
     /// <summary>The pane's node for a folder of an account, or null when it is not shown.</summary>
@@ -2831,9 +2948,11 @@ public sealed partial class ShellViewModel : ObservableObject
 
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
+        var before = State(rows);
         mail.SetFollowUp([.. rows.Select(r => r.Id)], due);
         ReloadCurrentView();
         RefreshCounts();
+        Undo.Push("Follow Up", () => RestoreFlags(before), () => FlagForFollowUp(rows, due));
         StatusRight = due is { } d
             ? $"{Describe(rows.Count)} flagged, due {d.LocalDateTime:ddd d MMM}."
             : $"{Describe(rows.Count)} flagged for follow-up.";
@@ -2849,9 +2968,11 @@ public sealed partial class ShellViewModel : ObservableObject
 
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
+        var before = State(rows);
         mail.SetCustomFollowUp([.. rows.Select(r => r.Id)], flag.Type, flag.Start, flag.Due, flag.Reminder);
         ReloadCurrentView();
         RefreshCounts();
+        Undo.Push("Follow Up", () => RestoreFlags(before), () => SetCustomFlag(rows, flag));
         StatusRight = flag.Reminder is { } when
             ? $"{Describe(rows.Count)} flagged; reminder {SnoozeLabel(when)}."
             : flag.Due is { } d ? $"{Describe(rows.Count)} flagged, due {d.LocalDateTime:ddd d MMM}." : $"{Describe(rows.Count)} flagged.";
@@ -2864,9 +2985,11 @@ public sealed partial class ShellViewModel : ObservableObject
 
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
+        var before = State(rows);
         mail.CompleteFollowUp([.. rows.Select(r => r.Id)]);
         ReloadCurrentView();
         RefreshCounts();
+        Undo.Push("Mark Complete", () => RestoreFlags(before), () => MarkFollowUpComplete(rows));
         StatusRight = $"{Describe(rows.Count)} marked complete.";
     }
 
@@ -2877,9 +3000,11 @@ public sealed partial class ShellViewModel : ObservableObject
 
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
+        var before = State(rows);
         mail.ClearFollowUp([.. rows.Select(r => r.Id)]);
         ReloadCurrentView();
         RefreshCounts();
+        Undo.Push("Clear Flag", () => RestoreFlags(before), () => ClearFollowUpFlag(rows));
         StatusRight = $"Flag cleared.";
     }
 

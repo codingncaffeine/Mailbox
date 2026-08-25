@@ -56,9 +56,9 @@ public partial class MainWindow : Window
         _ribbon = new RibbonView(App.Commands, layout);
         RibbonDisplayMemory.Wire(_ribbon, RibbonWindow.Shell, Environment.GetEnvironmentVariable("MAILBOX_RIBBON"));
 
-        // What is usable given what is selected. The inline reply strip layers the compose
-        // window's own answer over this one and puts it back afterwards, so the two compose
-        // rather than replace each other.
+        // What is usable given what is selected — and, for Undo and Redo, what has been done.
+        // The inline reply strip layers the compose window's own answer over this one and puts
+        // it back afterwards, so the two compose rather than replace each other.
         _ribbon.CommandEnabled = IsCommandUsable;
         _ribbon.CommandInvoked += OnRibbonCommand;
         _ribbon.BackstageRequested += (_, _) => ShowBackstage();
@@ -151,6 +151,11 @@ public partial class MainWindow : Window
 
         // The summary page, which an account's heading in the folder pane opens.
         shell.TodayRequested += (_, address) => ShowToday(shell, address);
+
+        // Undo and Redo are greyed while there is nothing to take back, so the bar has to hear
+        // about a step being pushed, undone or redone.
+        shell.Undo.Changed += (_, _) => Dispatcher.UIThread.Post(RefreshCommandEnablement);
+
         DataContext = shell;
 
         // The toasts stay with the notification server; what goes is the watch on their buttons.
@@ -3909,7 +3914,11 @@ public partial class MainWindow : Window
         // reader can file mail behind a reply without discarding it.
         if (_inlineCompose is { } surface
             && App.Commands.TryGet(e.Command, out var invoked)
-            && invoked.Surface == CommandSurface.Compose)
+            && (invoked.Surface == CommandSurface.Compose
+                // Undo belongs to whatever is being written while a reply is open: somebody
+                // with a caret in a reply means the sentence they just typed, not the message
+                // they filed before opening it. The compose window answers it the same way.
+                || e.Command == MailCommands.Undo.Id))
         {
             surface.Invoke(e.Command);
             return;
@@ -4683,6 +4692,26 @@ public partial class MainWindow : Window
     /// <summary>The View tab's toggles that have state behind them.</summary>
     private static bool RunViewCommand(ShellViewModel shell, CommandId id)
     {
+        // Undo and Redo. Undo is one of the two buttons on the shipped Quick Access Toolbar and
+        // had no handler at all until now, which meant Ctrl+Z after deleting the wrong message
+        // answered with "not wired yet" — the most reflexive gesture in a mail client reporting
+        // a defect in the application.
+        if (id == MailCommands.Undo.Id)
+        {
+            shell.StatusRight = shell.Undo.Undo() is { } undone
+                ? $"{undone} undone."
+                : "There is nothing to undo.";
+            return true;
+        }
+
+        if (id == ViewCommands.Redo.Id)
+        {
+            shell.StatusRight = shell.Undo.Redo() is { } redone
+                ? $"{redone} done again."
+                : "There is nothing to redo.";
+            return true;
+        }
+
         // Two the shell places and cannot do, each saying what is absent rather than answering
         // with a developer string. The message window says the same two things in its own words
         // because it can say them in an InfoBar; here it is the status line.
@@ -5663,6 +5692,14 @@ public partial class MainWindow : Window
     /// </remarks>
     private bool IsCommandUsable(CommandId id)
     {
+        // Undo and Redo answer to the stack rather than to the selection, and the reference
+        // greys them when it is empty.
+        if (DataContext is ShellViewModel shell)
+        {
+            if (id == MailCommands.Undo.Id) return _inlineCompose is not null || shell.Undo.CanUndo;
+            if (id == ViewCommands.Redo.Id) return shell.Undo.CanRedo;
+        }
+
         if (!App.Commands.TryGet(id, out var command)) return true;
         if (!command.RequiresSelection && !command.RequiresSingleSelection) return true;
 
