@@ -749,12 +749,16 @@ public sealed class RibbonView : ContentControl
         // measured shadow and leaves the commands on a surface that renders at every scale.
         // The height and the insets stay on the wrapper, and both borders simply fill it, so the
         // panel is the same rectangle in the same place it always was.
+        // No background on the caster. A shadow is drawn outside the border's shape, so the
+        // caster needs the shape and not the fill — and two filled rounded rectangles stacked
+        // would blend their antialiased corners into something a pixel or two off what one
+        // border draws, which is exactly what the pixel gate is there to notice.
         var shadow = new Border
         {
             CornerRadius = new CornerRadius(RibbonMetrics.BodyCornerRadius),
             BoxShadow = BoxShadows.Parse("0 1 3 0 #94000000"),
+            Background = Brushes.Transparent,
         };
-        Bind(shadow, Border.BackgroundProperty, "ribbon.background.brush");
 
         var host = new Border
         {
