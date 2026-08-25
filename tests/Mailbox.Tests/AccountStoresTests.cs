@@ -37,6 +37,43 @@ public class AccountStoresTests : IDisposable
         Assert.Equal(2, stores.All.Count);
     }
 
+    /// <summary>
+    /// A file in the accounts directory that is not a mail store is left exactly as it was.
+    /// </summary>
+    /// <remarks>
+    /// Opening a store migrates it, and a migration commits step by step — so a <c>pim.db</c>
+    /// that lands here, which a mis-posed harness run will do, used to be half-rewritten with
+    /// the mail schema before anything noticed it held no accounts, and left at a version
+    /// neither schema could open. It is asked about before it is opened now.
+    /// </remarks>
+    [Fact]
+    public void AFileThatIsNotAMailStoreIsNotMigrated()
+    {
+        Directory.CreateDirectory(Accounts);
+        var intruder = Path.Combine(Accounts, "pim.db");
+
+        using (var pim = new Mailbox.Store.Pim.PimStore(intruder))
+        {
+            _ = new Mailbox.Store.Pim.PimRepository(pim)
+                .AddCollection(Mailbox.Store.Pim.CollectionKind.Events, "Calendar");
+        }
+
+        var before = File.ReadAllBytes(intruder);
+
+        using (var stores = new AccountStores(Accounts, Order()))
+        {
+            stores.Add("one@example.com", "One", MailProtocol.Pop3);
+            Assert.Single(stores.All);
+        }
+
+        // Byte for byte: not migrated, not stamped, not touched.
+        Assert.Equal(before, File.ReadAllBytes(intruder));
+
+        // And still openable as what it is.
+        using var reopened = new Mailbox.Store.Pim.PimStore(intruder);
+        Assert.Single(new Mailbox.Store.Pim.PimRepository(reopened).Collections(Mailbox.Store.Pim.CollectionKind.Events));
+    }
+
     /// <summary>The file names are the label someone looks for when backing one up.</summary>
     [Theory]
     [InlineData("you@example.com", "you@example.com.db")]

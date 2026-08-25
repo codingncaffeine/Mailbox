@@ -267,6 +267,13 @@ public sealed class AccountStores : IDisposable
     {
         foreach (var path in System.IO.Directory.EnumerateFiles(_directory, "*.db").OrderBy(p => p))
         {
+            // Asked before it is opened, because opening migrates: see MailStore.LooksLikeOurs.
+            if (!MailStore.LooksLikeOurs(path))
+            {
+                Log.Warn($"{path} is not a mail store and was left alone.");
+                continue;
+            }
+
             try
             {
                 var store = new MailStore(path);
