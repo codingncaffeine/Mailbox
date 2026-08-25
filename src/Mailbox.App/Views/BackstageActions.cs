@@ -123,7 +123,7 @@ internal static class BackstageActions
                 await Confirm.TellAsync(
                     host.Owner,
                     "About Mailbox",
-                    $"Mailbox {typeof(BackstageActions).Assembly.GetName().Version?.ToString(3) ?? "0.0.0"}\n\n"
+                    $"Mailbox {Program.ThisAssembly.Stamp}\n\n"
                     + "A mail, calendar and contacts client for Linux, under the GNU General "
                     + "Public Licence version 3.\n\n"
                     + $"Your mail: {Mailbox.Store.AccountStores.DefaultDirectory()}\n"

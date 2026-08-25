@@ -323,7 +323,7 @@ public sealed class BackstageView : Border
 
         stack.Children.Add(BuildSection(
             "info", "About", hasDropdown: false,
-            $"Mailbox {typeof(BackstageView).Assembly.GetName().Version?.ToString(3) ?? "0.0.0"}",
+            $"Mailbox {Program.ThisAssembly.Stamp}",
             "A mail, calendar and contacts client for Linux, under the GNU General Public "
             + "Licence version 3. Your mail is one SQLite file per account under this machine's "
             + "own data directory; nothing is sent anywhere but to the servers you set up.",

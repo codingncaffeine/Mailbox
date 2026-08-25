@@ -129,6 +129,16 @@ echo "Installed Mailbox v$VER for $USER."
 echo "  run:          mailbox"
 echo "  diagnostics:  mailbox-diagnostics   (protocol + debug logging, keeps a terminal open)"
 echo "  shortcuts:    $DESKTOP"
+echo "  built:        $("$LIB/mailbox" --version | sed 's/^Mailbox //')   — File · Mailbox Account · About says the same"
+
+# The failure this catches is not a build failure. Mailbox is single-instance: with a copy
+# already running, the shortcut hands it the command line and brings its window forward, so a
+# fresh install goes untested and looks like a build that did nothing.
+if pgrep -f "$LIB/mailbox" >/dev/null 2>&1; then
+    echo
+    echo "  ⚠ Mailbox is running. Quit it before launching the shortcut — until you do, the"
+    echo "    shortcut brings the running copy forward and you will be testing the old build."
+fi
 echo
 case ":$PATH:" in
     *":$BIN:"*) ;;

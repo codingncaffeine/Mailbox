@@ -1,3 +1,4 @@
+using System.Reflection;
 using Avalonia;
 using Mailbox.App.Diagnostics;
 using Mailbox.Core.Diagnostics;
@@ -9,7 +10,15 @@ internal static class Program
     [STAThread]
     public static int Main(string[] args)
     {
-        Log.Initialize(ThisAssembly.Version);
+        // Before the log opens: --version is one line on standard output and nothing else, so a
+        // script can read it. The installer does exactly that.
+        if (args.Length > 0 && string.Equals(args[0], "--version", StringComparison.OrdinalIgnoreCase))
+        {
+            Console.WriteLine($"Mailbox {ThisAssembly.Stamp}");
+            return 0;
+        }
+
+        Log.Initialize(ThisAssembly.Stamp);
         CrashHandler.Install();
 
         // `mailbox --export-theme <id> [path]` writes a built-in as a theme file and exits: the
@@ -79,10 +88,34 @@ internal static class Program
         }
     }
 
-    private static class ThisAssembly
+    internal static class ThisAssembly
     {
         public static string Version =>
             typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+
+        /// <summary>
+        /// The version, and when this build was made: "0.1.0 (built 2026-08-25 15:46)".
+        /// </summary>
+        /// <remarks>
+        /// Every build of a working session carries the same version number, so the number alone
+        /// cannot say whether what is running is the build that was just installed. The stamp
+        /// can, and it is written to the log at startup and shown on the About panel.
+        /// </remarks>
+        public static string Stamp
+        {
+            get
+            {
+                var informational = typeof(Program).Assembly
+                    .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()
+                    ?.InformationalVersion;
+
+                // SourceLink appends the commit to the build metadata, so the stamp is the
+                // part before it: "0.1.0+2026-08-25 15:51.<sha>" reads as 0.1.0 (built …15:51).
+                return informational?.Split('+') is [var version, var built]
+                    ? $"{version} (built {built.Split('.')[0]})"
+                    : Version;
+            }
+        }
     }
 
     /// <summary>

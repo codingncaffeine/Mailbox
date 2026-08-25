@@ -9,6 +9,18 @@
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
 
+  <!--
+    When this build was made, stamped into the assembly and shown by `Mailbox 0.1.0 (built …)`
+    in the log and on the Backstage's About panel.
+
+    The question it answers is the one that costs a session when it goes unasked: "am I looking
+    at the build you just made, or the one that was already running?" A version number alone
+    cannot answer it — every build of a working session carries the same one.
+  -->
+  <PropertyGroup>
+    <InformationalVersion>$(VersionPrefix)+$([System.DateTime]::Now.ToString('yyyy-MM-dd HH:mm'))</InformationalVersion>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />
     <PackageReference Include="Avalonia.Controls.WebView" Version="12.0.1" />
