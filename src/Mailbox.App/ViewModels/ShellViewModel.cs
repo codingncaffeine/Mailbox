@@ -2597,7 +2597,17 @@ public sealed partial class ShellViewModel : ObservableObject
             ? owner.Mail.FolderWithRole(owner.Account.Id, FolderRole.Deleted)
             : null;
 
-        if (permanently || deleted is null || SelectedFolder?.Name == deleted.Name)
+        // By id, not by name. The rule is "these rows are already in their own account's
+        // Deleted Items, so there is nowhere left to move them"; comparing names made it "the
+        // folder on screen is called the same thing as some account's Deleted Items", which a
+        // nested folder or an imported tree from a Maildir or a .pst can easily be — and the
+        // difference between the two readings is a message moved and a message gone for good,
+        // reached by the Delete key with no prompt.
+        var inDeletedItems = SelectedFolder is { } selected
+            && _folderIds.TryGetValue(selected, out var where)
+            && where.FolderId == deleted?.Id;
+
+        if (permanently || deleted is null || inDeletedItems)
         {
             mail.DeleteMessages(ids);
             StatusRight = $"{Describe(rows.Count)} permanently deleted.";

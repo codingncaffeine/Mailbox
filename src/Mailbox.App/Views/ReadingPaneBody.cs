@@ -33,7 +33,7 @@ namespace Mailbox.App.Views;
 /// text, which is what the pane did before this phase and is better than a crash.
 /// </para>
 /// </remarks>
-public sealed class ReadingPaneBody : UserControl
+public sealed class ReadingPaneBody : UserControl, IDisposable
 {
     private readonly ThemeService _themes;
     private readonly Func<MailRepository?> _mail;
@@ -546,6 +546,40 @@ public sealed class ReadingPaneBody : UserControl
         }
     }
 
+    /// <summary>
+    /// Lets the web engine go.
+    /// </summary>
+    /// <remarks>
+    /// The pane in the shell lives as long as the window does and never needs this. A message
+    /// opened in its own window is the case that matters: double-clicking is the ordinary way to
+    /// read mail, and each window builds a pane of its own with an engine behind it. The engine
+    /// is torn down when its view leaves the visual tree, so this stops the load, takes the view
+    /// out of the tree and drops the last reference to it — at the moment the window closes,
+    /// rather than whenever a collection happens to notice.
+    /// </remarks>
+    public void Dispose()
+    {
+        if (_web is not { } web) return;
+
+        _web = null;
+
+        try
+        {
+            web.Stop();
+            web.EnvironmentRequested -= OnEnvironmentRequested;
+            web.NavigationStarted -= OnNavigationStarted;
+            web.NewWindowRequested -= OnNewWindowRequested;
+        }
+        catch (Exception ex)
+        {
+            // A window is closing; there is nobody left to tell.
+            Log.Debug($"The reading pane's engine did not stop cleanly: {ex.Message}");
+        }
+
+        // Out of the tree, which is what the engine's own teardown waits for.
+        if (ReferenceEquals(_surface.Content, web)) _surface.Content = null;
+    }
+
     private void Load(string html)
     {
         if (_web is null)
@@ -564,7 +598,10 @@ public sealed class ReadingPaneBody : UserControl
         {
             Log.Warn("The web engine would not load the message; showing text instead.", ex);
             _surface.Content = _fallbackHost;
-            _web = null;
+
+            // Dispose rather than just forgetting it: an engine dropped while still in the tree
+            // is one nothing will ever take out of it again.
+            Dispose();
             ShowText(_message?.TextBody ?? _fallbackText);
         }
     }

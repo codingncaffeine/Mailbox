@@ -64,7 +64,7 @@ public class SettingsStoreTests : IDisposable
     }
 
     [Fact]
-    public void ACorruptFileStartsFromDefaultsAndIsNotDestroyed()
+    public void ACorruptFileStartsFromDefaultsAndIsKept()
     {
         Directory.CreateDirectory(_directory);
         File.WriteAllText(Path_, "{ this is not json");
@@ -72,7 +72,41 @@ public class SettingsStoreTests : IDisposable
         var store = new SettingsStore(Path_);
 
         Assert.False(store.Has("anything"));
-        Assert.Equal("{ this is not json", File.ReadAllText(Path_));
+
+        // Moved aside rather than left where it was. This test used to assert the file was
+        // still at its own path, which was true for exactly as long as it took anything to
+        // write a setting: the shell writes several while it starts, and each one rewrote the
+        // file from an empty object, taking the ribbon customization, the Quick Steps and every
+        // Options choice with it. What has to survive is the content, not the path.
+        Assert.Equal("{ this is not json", File.ReadAllText(Path_ + ".corrupt"));
+    }
+
+    [Fact]
+    public void TheKeptCopySurvivesTheNextSettingChange()
+    {
+        Directory.CreateDirectory(_directory);
+        File.WriteAllText(Path_, "{ this is not json");
+
+        var store = new SettingsStore(Path_);
+        store.Set("view.zoom", 120);
+
+        Assert.Equal("{ this is not json", File.ReadAllText(Path_ + ".corrupt"));
+        Assert.Equal(120, new SettingsStore(Path_).GetNumber("view.zoom", 0));
+    }
+
+    [Fact]
+    public void ASecondUnreadableFileDoesNotOverwriteTheFirstKeptCopy()
+    {
+        Directory.CreateDirectory(_directory);
+        File.WriteAllText(Path_, "{ the original");
+        _ = new SettingsStore(Path_);
+
+        // A later run that meets a second bad file keeps the first copy, which is the one from
+        // before anything went wrong.
+        File.WriteAllText(Path_, "{ the second");
+        _ = new SettingsStore(Path_);
+
+        Assert.Equal("{ the original", File.ReadAllText(Path_ + ".corrupt"));
     }
 
     [Fact]

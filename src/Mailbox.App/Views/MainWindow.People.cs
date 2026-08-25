@@ -356,7 +356,8 @@ public partial class MainWindow
     /// <summary>Writes a contact over its own row, queues it, and shows it again.</summary>
     private void SaveContactRow(ShellViewModel shell, Contact contact, PimItem stored)
     {
-        App.PimSync.QueuePut(App.Contacts.Save(contact, stored.CollectionId, stored));
+        App.PimSync.QueuePut(
+            Persisted("The contact", () => App.Contacts.Save(contact, stored.CollectionId, stored)));
         var people = EnsurePeople(shell);
         people.Reload();
         people.Select(stored.Id);

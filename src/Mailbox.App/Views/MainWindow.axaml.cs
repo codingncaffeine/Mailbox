@@ -5571,6 +5571,44 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Writes to the store, and says so when the write will not go.
+    /// </summary>
+    /// <remarks>
+    /// The save paths in the five item modules had no error handling of their own, which left
+    /// the crash handler to catch a failed write on the interface thread — and its whole job is
+    /// to keep the window standing, so a locked database or a full disk became a line on a
+    /// standard error stream that a desktop launch does not have. The window then closed as
+    /// though the note had been saved. This is the missing half: the reader is told, the status
+    /// line says it, and the exception carries on so that whatever was going to close on the
+    /// strength of a successful save does not.
+    /// </remarks>
+    internal T Persisted<T>(string what, Func<T> write)
+    {
+        ArgumentNullException.ThrowIfNull(write);
+
+        try
+        {
+            return write();
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"{what} could not be saved.", ex);
+
+            if (DataContext is ShellViewModel shell) shell.StatusRight = $"{what} could not be saved.";
+
+            // Fire and forget: this is on its way out through the crash handler, and awaiting a
+            // dialog from a method that is about to throw would mean showing it after the throw.
+            _ = Confirm.TellAsync(
+                this,
+                "Not saved",
+                $"{what} could not be saved.\n\n{ex.Message}\n\nNothing you have written has been "
+                + "lost — the window is still open. The log has the details.");
+
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Every account, for the groups dialog.
     /// </summary>
     /// <remarks>

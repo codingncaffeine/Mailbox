@@ -114,6 +114,10 @@ public sealed class MessageWindow : Window
         TextRendering.Apply(this);
 
         _body = new ReadingPaneBody(themes, mail);
+
+        // The engine goes when the window does. Reading mail by double-clicking is the ordinary
+        // gesture, so without this a morning's reading is a morning's worth of web processes.
+        Closed += (_, _) => _body.Dispose();
         _subject = Line(20, "text.primary.brush");
         _from = Line(null, "text.primary.brush");
         _to = Line(null, "text.secondary.brush");

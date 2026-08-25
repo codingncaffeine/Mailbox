@@ -134,7 +134,7 @@ public partial class MainWindow
     {
         var journal = collectionId ?? EnsureJournal((ShellViewModel)DataContext!).DefaultJournal().Id;
         var row = PimJournalCodec.ToItem(entry, journal, existing);
-        var written = existing is null ? App.Pim.AddItem(row) : Store(row);
+        var written = Persisted("The journal entry", () => existing is null ? App.Pim.AddItem(row) : Store(row));
 
         App.PimSync.QueuePut(written);
         _journalModule?.Reload();

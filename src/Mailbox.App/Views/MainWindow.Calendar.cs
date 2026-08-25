@@ -821,7 +821,7 @@ public partial class MainWindow
     {
         var calendar = collectionId ?? App.Pim.DefaultCalendar().Id;
         var row = PimEventCodec.ToItem(calendarEvent, calendar, existing);
-        var written = existing is null ? App.Pim.AddItem(row) : Store(row);
+        var written = Persisted("The appointment", () => existing is null ? App.Pim.AddItem(row) : Store(row));
 
         // A calendar with a server behind it gets the change queued rather than sent now: an
         // edit made with the network down is a longer queue, not a lost edit (§7.5).

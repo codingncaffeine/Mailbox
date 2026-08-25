@@ -518,7 +518,7 @@ public partial class MainWindow
     {
         var list = collectionId ?? EnsureTasks((ShellViewModel)DataContext!).DefaultList().Id;
         var row = PimTodoCodec.ToItem(task, list, existing);
-        var written = existing is null ? App.Pim.AddItem(row) : Store(row);
+        var written = Persisted("The task", () => existing is null ? App.Pim.AddItem(row) : Store(row));
 
         App.PimSync.QueuePut(written);
         _taskModule?.Reload();

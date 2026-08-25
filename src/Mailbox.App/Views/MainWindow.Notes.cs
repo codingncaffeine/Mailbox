@@ -116,7 +116,10 @@ public partial class MainWindow
     {
         var folder = collectionId ?? EnsureNotes((ShellViewModel)DataContext!).DefaultFolder().Id;
         var row = PimJournalCodec.ToItem(note, folder, existing);
-        var written = existing is null ? App.Pim.AddItem(row) : Store(row);
+
+        // Guarded, because a write that will not go must not look like one that did: see
+        // MainWindow.Persisted.
+        var written = Persisted("The note", () => existing is null ? App.Pim.AddItem(row) : Store(row));
 
         App.PimSync.QueuePut(written);
         _noteModule?.Reload();

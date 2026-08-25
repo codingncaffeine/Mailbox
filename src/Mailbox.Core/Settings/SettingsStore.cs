@@ -152,10 +152,42 @@ public sealed class SettingsStore
         }
         catch (Exception ex)
         {
-            // A corrupt settings file must not stop the application starting. Keep the bad file
-            // rather than overwriting it, so it can be looked at.
+            // A corrupt settings file must not stop the application starting, and it must not be
+            // thrown away either: the very next setting anything writes — and the shell writes
+            // several while it starts — would otherwise overwrite it with defaults, taking the
+            // ribbon customization, the Quick Steps, the view definitions and every Options
+            // choice with it. So it is moved aside first, under a name that says what it is,
+            // and the comment promising it was kept is now true.
             Log.Warn($"Could not read {path}; starting from defaults.", ex);
+            Preserve(path, ex);
             return new JsonObject();
+        }
+    }
+
+    /// <summary>
+    /// Moves a file that would not parse out of the way, so the next write cannot destroy it.
+    /// </summary>
+    /// <remarks>
+    /// One copy, not a series: the interesting file is the one from before anything went wrong,
+    /// and a run that fails to parse it twice would otherwise overwrite the good copy with the
+    /// second reading of the same bad one. Nothing is reported if this fails — the application is
+    /// already starting from defaults, and a dialog about the recovery copy of a settings file is
+    /// not the thing to open a session with.
+    /// </remarks>
+    private static void Preserve(string path, Exception cause)
+    {
+        var kept = path + ".corrupt";
+
+        try
+        {
+            if (File.Exists(kept)) return;
+
+            File.Move(path, kept);
+            Log.Warn($"The unreadable settings file was kept as {kept}.", cause);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Could not keep the unreadable settings file aside as {kept}.", ex);
         }
     }
 

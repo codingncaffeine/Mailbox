@@ -49,6 +49,18 @@ public sealed class PrintPreviewWindow : Window
             _web.NavigationCompleted += (_, e) => Log.Info(
                 e.IsSuccess ? $"Print preview: {rows.Count} rows." : "The print preview would not load.");
             root.Children.Add(_web);
+
+            // The same reason the message window releases its own: a preview holds a whole
+            // engine, and printing twice should not cost two.
+            var engine = _web;
+            var host = root;
+            Closed += (_, _) =>
+            {
+                try { engine.Stop(); }
+                catch (Exception ex) { Log.Debug($"The preview's engine did not stop cleanly: {ex.Message}"); }
+
+                host.Children.Remove(engine);
+            };
         }
         catch (Exception ex)
         {

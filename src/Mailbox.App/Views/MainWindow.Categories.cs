@@ -260,8 +260,9 @@ public partial class MainWindow
     }
 
     /// <summary>Writes a contact and queues it, which is what every other path here does.</summary>
-    private static void SaveContact(Contact contact, long collectionId, PimItem existing)
-        => App.PimSync.QueuePut(App.Contacts.Save(contact, collectionId, existing));
+    private void SaveContact(Contact contact, long collectionId, PimItem existing)
+        => App.PimSync.QueuePut(
+            Persisted("The contact", () => App.Contacts.Save(contact, collectionId, existing)));
 
     /// <summary>Categorize on the selected appointment.</summary>
     private void CategorizeAppointment(ShellViewModel shell)
