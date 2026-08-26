@@ -45,13 +45,18 @@ public class RibbonLayoutTests
     }
 
     /// <summary>
-    /// Current the reference application builds ship File, Home, Send/Receive, View, Help — no Folder tab.
-    /// File is leftmost and opens the Backstage rather than swapping the ribbon beneath.
+    /// File, Home, Send/Receive, Folder, View, Help — the six the reference's own tab strip
+    /// shows, in that order. File is leftmost and opens the Backstage rather than swapping the
+    /// ribbon beneath.
     /// </summary>
+    /// <remarks>
+    /// This used to say there was no Folder tab, on the strength of a capture that did not show
+    /// one. The tab strip in the Folder, View and Send/Receive captures shows all six.
+    /// </remarks>
     [Fact]
     public void TabsAreInOutlookOrder()
     {
-        string[] expected = ["file", "home", "sendreceive", "view", "help"];
+        string[] expected = ["file", "home", "sendreceive", "folder", "view", "help"];
         Assert.Equal(expected, DefaultRibbonLayouts.Mail.Tabs.Select(t => t.Id).ToArray());
     }
 

@@ -165,7 +165,7 @@ public class MailStoreTests : IDisposable
     {
         // Not a behavioural test: a reminder in executable form. Editing a shipped step leaves
         // stores already migrated past it differing from a fresh one, undetectably.
-        Assert.Equal(25, Migrations.Steps.Count);
+        Assert.Equal(26, Migrations.Steps.Count);
         Assert.Equal(Migrations.Steps.Count, Migrations.Latest);
     }
 }

@@ -585,6 +585,18 @@ public static class Migrations
         ALTER TABLE messages ADD COLUMN expires_utc INTEGER;
         ALTER TABLE folders ADD COLUMN autoarchive_json TEXT;
         """,
+
+        // ---- 26: headers without their messages ------------------------------------------------
+        //
+        // Send/Receive's Server group. `header_only` marks a row the server has told us about and
+        // whose message has not been fetched — sender, subject, size and date, with no blob under
+        // it; `marked_download` is the reader saying they want that one after all. Both are false
+        // for every row an ordinary sync writes, which is why they default to 0 rather than being
+        // backfilled.
+        """
+        ALTER TABLE messages ADD COLUMN header_only INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE messages ADD COLUMN marked_download INTEGER NOT NULL DEFAULT 0;
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>

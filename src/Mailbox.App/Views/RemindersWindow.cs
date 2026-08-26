@@ -226,7 +226,12 @@ public sealed class RemindersWindow : Window
     }
 
     /// <summary>Puts what is due on show, selects the first, and brings the window up if it was hidden.</summary>
-    public void Show(IReadOnlyList<DueReminder> due)
+    /// <param name="evenWhenEmpty">
+    /// True for a reader who asked for the window: an empty list then says so rather than
+    /// hiding, which is what the reference does. The timer passes false, so nothing pops up
+    /// when the last reminder is dismissed.
+    /// </param>
+    public void Show(IReadOnlyList<DueReminder> due, bool evenWhenEmpty = false)
     {
         ArgumentNullException.ThrowIfNull(due);
 
@@ -236,7 +241,7 @@ public sealed class RemindersWindow : Window
         _heading.Text = _due.Count == 1 ? "1 Reminder" : $"{_due.Count} Reminders";
         Topmost = App.MailOptions.RemindersOnTop;
 
-        if (_due.Count == 0)
+        if (_due.Count == 0 && !evenWhenEmpty)
         {
             Hide();
             return;

@@ -12,7 +12,7 @@ public class RibbonTreeTests
     {
         var tree = RibbonTree.From(Shipped);
 
-        Assert.Equal(["home", "sendreceive", "view", "help"], tree.Tabs.Select(t => t.Id).ToArray());
+        Assert.Equal(["home", "sendreceive", "folder", "view", "help"], tree.Tabs.Select(t => t.Id).ToArray());
         Assert.DoesNotContain(tree.Tabs, t => t.Id == "file");
     }
 

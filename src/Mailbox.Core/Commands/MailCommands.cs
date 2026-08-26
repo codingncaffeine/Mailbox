@@ -201,7 +201,6 @@ public static class MailCommands
         Icon = "cleanup",
         Category = "Delete",
         Scope = ModuleScope.Mail,
-        InDefaultLayout = false,
     };
 
     public static readonly MailboxCommand CleanUpFolderAndSubfolders = new()
@@ -659,7 +658,6 @@ public static class MailCommands
         Icon = "undo",
         Category = "Delete",
         Scope = ModuleScope.Mail,
-        InDefaultLayout = false,
     };
 
     // Focused Inbox's four: on the row's menu when the view is on, and in the catalogue always.
@@ -720,7 +718,6 @@ public static class MailCommands
         Icon = "search",
         Category = "Find",
         Scope = ModuleScope.Mail,
-        InDefaultLayout = false,
     };
 
     public static readonly MailboxCommand AuthenticationDetails = new()
@@ -733,6 +730,172 @@ public static class MailCommands
         Scope = ModuleScope.Mail,
         RequiresSingleSelection = true,
         InDefaultLayout = false,
+    };
+
+    // ---- The Folder tab ----------------------------------------------------------------------
+    // Every one of these has been reachable from the folder pane's own menu since Phase 3; what
+    // the reference also gives them is a tab, so a reader who is looking at a folder rather than
+    // at a message has somewhere to look. Same handlers, second placement.
+
+    public static readonly MailboxCommand NewFolder = new()
+    {
+        Id = new("folder.new"),
+        Label = "New Folder",
+        Description = "Make a folder inside the one selected.",
+        Icon = "new-folder",
+        IconTint = "ribbon.icon.plus",
+        Category = "Folder",
+        Scope = ModuleScope.Mail,
+        KeyTip = "NF",
+        DefaultGesture = "Ctrl+Shift+E",
+    };
+
+    public static readonly MailboxCommand RenameFolder = new()
+    {
+        Id = new("folder.rename"),
+        Label = "Rename Folder",
+        Description = "Give the selected folder another name.",
+        Icon = "folder-rename",
+        Category = "Folder",
+        Scope = ModuleScope.Mail,
+        KeyTip = "RF",
+    };
+
+    public static readonly MailboxCommand CopyFolder = new()
+    {
+        Id = new("folder.copy"),
+        Label = "Copy Folder",
+        Description = "Copy the selected folder, and everything in it, into another folder.",
+        Icon = "folder-copy",
+        Category = "Folder",
+        Scope = ModuleScope.Mail,
+        KeyTip = "CF",
+    };
+
+    public static readonly MailboxCommand MoveFolder = new()
+    {
+        Id = new("folder.move"),
+        Label = "Move Folder",
+        Description = "Move the selected folder into another folder.",
+        Icon = "folder-move",
+        IconTint = "ribbon.icon.move",
+        Category = "Folder",
+        Scope = ModuleScope.Mail,
+        KeyTip = "MF",
+    };
+
+    public static readonly MailboxCommand DeleteFolder = new()
+    {
+        Id = new("folder.delete"),
+        Label = "Delete Folder",
+        Description = "Delete the selected folder and everything in it.",
+        Icon = "folder-delete",
+        IconTint = "ribbon.icon.delete",
+        Category = "Folder",
+        Scope = ModuleScope.Mail,
+        KeyTip = "DF",
+    };
+
+    public static readonly MailboxCommand MarkAllAsRead = new()
+    {
+        Id = new("folder.markallread"),
+        Label = "Mark All as Read",
+        Description = "Mark every message in this folder as read.",
+        Icon = "mark-all-read",
+        Category = "Clean Up",
+        Scope = ModuleScope.Mail,
+        KeyTip = "MA",
+    };
+
+    public static readonly MailboxCommand RunRulesNow = new()
+    {
+        Id = new("folder.runrules"),
+        Label = "Run Rules Now",
+        Description = "Apply the rules you choose to the messages already in this folder.",
+        Icon = "run-rules",
+        IconTint = "ribbon.icon.green",
+        Category = "Clean Up",
+        Scope = ModuleScope.Mail,
+        KeyTip = "RR",
+    };
+
+    public static readonly MailboxCommand ShowAllFoldersAtoZ = new()
+    {
+        Id = new("folder.sortatoz"),
+        Label = "Show All Folders A to Z",
+        Description = "Sort the folder pane alphabetically instead of in the order folders were made.",
+        Icon = "sort-az",
+        IconTint = "ribbon.icon.blue",
+        Category = "Clean Up",
+        Scope = ModuleScope.Mail,
+        KeyTip = "AZ",
+    };
+
+    public static readonly MailboxCommand DeleteAll = new()
+    {
+        Id = new("folder.deleteall"),
+        Label = "Delete All",
+        Description = "Move everything in this folder to Deleted Items.",
+        Icon = "delete-all",
+        IconTint = "ribbon.icon.blue",
+        Category = "Clean Up",
+        Scope = ModuleScope.Mail,
+        KeyTip = "DA",
+    };
+
+    /// <summary>
+    /// Add to Favorites, which the reference draws pressed while the folder is one — a state
+    /// rather than an action, and the label stays the same either way.
+    /// </summary>
+    public static readonly MailboxCommand AddToFavorites = new()
+    {
+        Id = new("folder.favorites"),
+        Label = "Add to Favorites",
+        Description = "Keep the selected folder at the top of the folder pane.",
+        Icon = "favorite-folder",
+        IconTint = "ribbon.icon.swatch.gold",
+        Category = "Favorites",
+        Scope = ModuleScope.Mail,
+        KeyTip = "AF",
+    };
+
+    public static readonly MailboxCommand AutoArchiveSettings = new()
+    {
+        Id = new("folder.autoarchive"),
+        Label = "AutoArchive Settings",
+        Description = "Decide what this folder does with mail old enough to file away.",
+        Icon = "autoarchive",
+        IconTint = "ribbon.icon.blue",
+        Category = "Properties",
+        Scope = ModuleScope.Mail,
+        KeyTip = "AS",
+    };
+
+    /// <summary>
+    /// Folder Permissions. Greyed, and it stays greyed: sharing a folder with somebody else is
+    /// the tenant service §3 puts out of scope, and a button that opened an empty dialog would
+    /// be worse than one that says it cannot.
+    /// </summary>
+    public static readonly MailboxCommand FolderPermissions = new()
+    {
+        Id = new("folder.permissions"),
+        Label = "Folder Permissions",
+        Description = "Sharing a folder with other people needs a server that offers it; this one is a personal mailbox.",
+        Icon = "folder-permissions",
+        Category = "Properties",
+        Scope = ModuleScope.Mail,
+        KeyTip = "FM",
+    };
+
+    public static readonly MailboxCommand FolderProperties = new()
+    {
+        Id = new("folder.properties"),
+        Label = "Folder Properties",
+        Description = "What this folder holds, where it is kept, and what it is called on the server.",
+        Icon = "folder-properties",
+        Category = "Properties",
+        Scope = ModuleScope.Mail,
+        KeyTip = "FP",
     };
 
     public static IEnumerable<MailboxCommand> All =>
@@ -751,5 +914,8 @@ public static class MailCommands
         RecoverDeleted, NewSearchFolder,
         MoveToOther, MoveToFocused, AlwaysMoveToOther, AlwaysMoveToFocused,
         OpenItem, ToggleFlag, NextMessage, PreviousMessage,
+        NewFolder, RenameFolder, CopyFolder, MoveFolder, DeleteFolder,
+        MarkAllAsRead, RunRulesNow, ShowAllFoldersAtoZ, DeleteAll,
+        AddToFavorites, AutoArchiveSettings, FolderPermissions, FolderProperties,
     ];
 }

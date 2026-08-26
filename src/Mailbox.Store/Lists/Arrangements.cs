@@ -24,6 +24,10 @@ public enum Arrangement
     Categories,
     Account,
     Type,
+
+    /// <summary>When a follow-up starts, and when it is due — the reference lists both.</summary>
+    FlagStart,
+    FlagDue,
 }
 
 /// <summary>The properties an arrangement needs, so the same engine serves mail, tasks and notes.</summary>
@@ -40,6 +44,12 @@ public interface IArrangeable
     bool IsFlagged { get; }
 
     bool HasAttachment { get; }
+
+    /// <summary>When the follow-up on this row starts, or null for no flag or no start.</summary>
+    DateTimeOffset? FollowUpStart => null;
+
+    /// <summary>When the follow-up on this row is due, or null for no flag or no date.</summary>
+    DateTimeOffset? FollowUpDue => null;
 }
 
 /// <summary>One group of rows, with the header the list draws above them.</summary>
@@ -63,7 +73,8 @@ public static class Arrangements
     public static readonly IReadOnlyList<Arrangement> All =
     [
         Arrangement.Date, Arrangement.From, Arrangement.To, Arrangement.Categories,
-        Arrangement.Flag, Arrangement.Size, Arrangement.Subject, Arrangement.Type,
+        Arrangement.Flag, Arrangement.FlagStart, Arrangement.FlagDue, Arrangement.Size,
+        Arrangement.Subject, Arrangement.Type,
         Arrangement.Attachments, Arrangement.Account, Arrangement.Importance,
     ];
 
@@ -72,6 +83,9 @@ public static class Arrangements
         Arrangement.Attachments => "Attachments",
         Arrangement.Categories => "Categories",
         Arrangement.Importance => "Importance",
+        Arrangement.Flag => "Flag Status",
+        Arrangement.FlagStart => "Flag: Start Date",
+        Arrangement.FlagDue => "Flag: Due Date",
         _ => arrangement.ToString(),
     };
 
@@ -128,6 +142,11 @@ public static class Arrangements
                 StringComparer.CurrentCultureIgnoreCase),
             Arrangement.Size => Direction(rows, r => r.SizeBytes, descending),
             Arrangement.Flag => Direction(rows, r => r.IsFlagged, descending),
+
+            // A row with no date sorts last in either direction rather than first in one of
+            // them: an unflagged message is not "the oldest start date", it has none.
+            Arrangement.FlagStart => Direction(rows, r => r.FollowUpStart ?? Undated(descending), descending),
+            Arrangement.FlagDue => Direction(rows, r => r.FollowUpDue ?? Undated(descending), descending),
             Arrangement.Attachments => Direction(rows, r => r.HasAttachment, descending),
             _ => Direction(rows, r => r.Received, descending),
         };
@@ -150,6 +169,8 @@ public static class Arrangements
             Arrangement.Subject => FirstLetter(NormalisedSubject(row.Subject)),
             Arrangement.Size => SizeBand(row.SizeBytes),
             Arrangement.Flag => row.IsFlagged ? "Flagged" : "Unflagged",
+            Arrangement.FlagStart => row.FollowUpStart is { } start ? DateBand(start, now) : "None",
+            Arrangement.FlagDue => row.FollowUpDue is { } due ? DateBand(due, now) : "None",
             Arrangement.Attachments => row.HasAttachment ? "With attachments" : "No attachments",
             Arrangement.Categories => "No category",
             Arrangement.Importance => "Normal",
@@ -187,6 +208,12 @@ public static class Arrangements
 
         return day.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
     }
+
+    /// <summary>
+    /// Where a row with no date sorts: the far end, whichever way round the list is.
+    /// </summary>
+    private static DateTimeOffset Undated(bool descending)
+        => descending ? DateTimeOffset.MinValue : DateTimeOffset.MaxValue;
 
     internal static string SizeBand(long bytes) => bytes switch
     {

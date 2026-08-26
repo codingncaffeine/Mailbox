@@ -215,6 +215,11 @@ public sealed class ReadingPaneBody : UserControl, IDisposable
             HeaderSubject = null;
             HeaderFrom = null;
             HeaderChanged?.Invoke(this, EventArgs.Empty);
+
+            // A header with nothing under it is not an empty message: the server has one and it
+            // has not been fetched. Say which, and offer to fetch it.
+            if (HeaderOnly) _bars.Children.Add(HeaderOnlyBar());
+
             ShowText(_fallbackText);
             return;
         }
@@ -388,6 +393,44 @@ public sealed class ReadingPaneBody : UserControl, IDisposable
     }
 
     /// <summary>The bar above a message in Junk whose links have been drawn inert.</summary>
+    /// <summary>
+    /// True when the row behind the pane is a header whose message has not been downloaded —
+    /// Send/Receive's Download Headers wrote it, and only the reader can say it is wanted.
+    /// </summary>
+    public bool HeaderOnly { get; set; }
+
+    /// <summary>Raised by the header bar's own button: fetch this one now.</summary>
+    public event EventHandler? DownloadRequested;
+
+    private Control HeaderOnlyBar()
+    {
+        var bar = Bar("reading.infobar.background.brush");
+        var row = Row();
+
+        var glyph = Glyph("download-headers");
+        Grid.SetColumn(glyph, 0);
+        row.Children.Add(glyph);
+
+        var text = new TextBlock
+        {
+            Text = "Only this message's header has been downloaded. "
+                   + "The message itself is still on the server.",
+            TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+        Bind(text, TextBlock.ForegroundProperty, "reading.infobar.text.brush");
+        Grid.SetColumn(text, 1);
+        row.Children.Add(text);
+
+        var download = BarButton("Download");
+        download.Click += (_, _) => DownloadRequested?.Invoke(this, EventArgs.Empty);
+        Grid.SetColumn(download, 2);
+        row.Children.Add(download);
+
+        bar.Child = row;
+        return bar;
+    }
+
     private Control JunkBar()
     {
         var bar = Bar("reading.infobar.background.brush");

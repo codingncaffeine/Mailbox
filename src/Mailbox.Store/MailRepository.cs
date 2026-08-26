@@ -309,11 +309,13 @@ public sealed class MailRepository(MailStore store)
                 INSERT OR IGNORE INTO messages
                     (folder_id, blob_id, server_uid, message_id, in_reply_to, thread_key,
                      from_name, from_address, subject, preview, body_text, sent_utc, received_utc,
-                     size_bytes, is_read, is_flagged, has_attachment, importance, to_addresses, cc_addresses, expires_utc)
+                     size_bytes, is_read, is_flagged, has_attachment, importance, to_addresses, cc_addresses, expires_utc,
+                     header_only)
                 VALUES
                     ($folder, $blob, $uid, $messageId, NULL, $thread,
                      $fromName, $fromAddress, $subject, $preview, $bodyText, $sent, $received,
-                     $size, $read, $flagged, $attachment, $importance, $to, $cc, $expires)
+                     $size, $read, $flagged, $attachment, $importance, $to, $cc, $expires,
+                     $headerOnly)
                 """,
                 ("$folder", folderId),
                 ("$blob", blobId),
@@ -334,7 +336,8 @@ public sealed class MailRepository(MailStore store)
                 ("$importance", message.Importance),
                 ("$to", string.Join(',', message.To)),
                 ("$cc", string.Join(',', message.Cc)),
-                ("$expires", message.Expires?.ToUnixTimeSeconds()));
+                ("$expires", message.Expires?.ToUnixTimeSeconds()),
+                ("$headerOnly", message.HeaderOnly ? 1 : 0));
 
             if (inserted != 0)
             {
@@ -913,6 +916,97 @@ public sealed class MailRepository(MailStore store)
         return _store.Execute(
             $"UPDATE messages SET importance = $importance WHERE id IN ({Ids(messageIds)})",
             ("$importance", Math.Clamp(importance, 0, 2)));
+    }
+
+    // ---- Headers without their messages (Send/Receive's Server group) ----------------------
+
+    /// <summary>
+    /// Marks headers for download, or takes the mark off. Returns how many rows changed.
+    /// </summary>
+    /// <remarks>
+    /// Only a header can be marked: a message that is already here has nothing left to fetch,
+    /// and a mark on it would be a promise the next send/receive could not keep.
+    /// </remarks>
+    public int MarkForDownload(IReadOnlyCollection<long> messageIds, bool marked)
+    {
+        ArgumentNullException.ThrowIfNull(messageIds);
+        if (messageIds.Count == 0) return 0;
+
+        return _store.Execute(
+            $"UPDATE messages SET marked_download = $marked WHERE header_only = 1 AND id IN ({Ids(messageIds)})",
+            ("$marked", marked ? 1 : 0));
+    }
+
+    /// <summary>The headers in a folder whose messages have not been fetched.</summary>
+    public IReadOnlyList<MessageSummary> Headers(long folderId) => _store.Query(
+        MessageSelect + " WHERE folder_id = $folder AND header_only = 1 ORDER BY received_utc DESC",
+        ReadMessage, ("$folder", folderId));
+
+    /// <summary>
+    /// Every header marked for download in an account, with the folder each is in.
+    /// </summary>
+    /// <remarks>
+    /// Across the account rather than one folder: the reference's Process Marked Headers works
+    /// on what has been marked wherever it was marked, and a reader who marked in three folders
+    /// expects one press to fetch all three.
+    /// </remarks>
+    public IReadOnlyList<(Folder Folder, MessageSummary Message)> MarkedForDownload(long accountId)
+    {
+        var folders = Folders(accountId).ToDictionary(f => f.Id, f => f);
+
+        return
+        [
+            .. _store.Query(
+                    MessageSelect + " WHERE header_only = 1 AND marked_download = 1"
+                    + " AND folder_id IN (SELECT id FROM folders WHERE account_id = $account)"
+                    + " ORDER BY received_utc DESC",
+                    ReadMessage, ("$account", accountId))
+                .Where(m => folders.ContainsKey(m.FolderId))
+                .Select(m => (folders[m.FolderId], m)),
+        ];
+    }
+
+    /// <summary>
+    /// Puts a message under a header: the raw bytes, and the fields only the body could fill.
+    /// </summary>
+    /// <remarks>
+    /// The row stays where it is and keeps its id, so a flag, a category or a follow-up put on
+    /// the header while it was only a header survives the message arriving under it.
+    /// </remarks>
+    public bool FillHeader(long messageId, MessageSummary filled, byte[] raw)
+    {
+        ArgumentNullException.ThrowIfNull(filled);
+        ArgumentNullException.ThrowIfNull(raw);
+
+        return _store.InTransaction(() =>
+        {
+            var blobId = StoreBlob(raw);
+            var changed = _store.Execute(
+                """
+                UPDATE messages
+                   SET blob_id = $blob, preview = $preview, body_text = $bodyText,
+                       size_bytes = $size, has_attachment = $attachment, importance = $importance,
+                       to_addresses = $to, cc_addresses = $cc, expires_utc = $expires,
+                       header_only = 0, marked_download = 0
+                 WHERE id = $id AND header_only = 1
+                """,
+                ("$blob", blobId),
+                ("$preview", filled.Preview),
+                ("$bodyText", filled.BodyText),
+                ("$size", raw.LongLength),
+                ("$attachment", filled.HasAttachment ? 1 : 0),
+                ("$importance", filled.Importance),
+                ("$to", string.Join(',', filled.To)),
+                ("$cc", string.Join(',', filled.Cc)),
+                ("$expires", filled.Expires?.ToUnixTimeSeconds()),
+                ("$id", messageId));
+
+            // Nothing filled means the row was not a header any more — another window, or a
+            // sync, got there first. The blob written above then has nothing pointing at it.
+            if (changed == 0) _store.Execute("DELETE FROM blobs WHERE id = $id", ("$id", blobId));
+
+            return changed != 0;
+        });
     }
 
     /// <summary>
@@ -2660,6 +2754,8 @@ public sealed class MailRepository(MailStore store)
         To = Split(r.GetString(r.GetOrdinal("to_addresses"))),
         Cc = Split(r.GetString(r.GetOrdinal("cc_addresses"))),
         Expires = NullableLong(r, "expires_utc") is { } expires ? DateTimeOffset.FromUnixTimeSeconds(expires) : null,
+        HeaderOnly = r.GetInt32(r.GetOrdinal("header_only")) != 0,
+        MarkedForDownload = r.GetInt32(r.GetOrdinal("marked_download")) != 0,
     };
 
     private static IReadOnlyList<string> Split(string joined)

@@ -121,6 +121,7 @@ public class ImapIdleTests
         public Task<IReadOnlyList<long>> SearchByMessageIdAsync(string messageId, CancellationToken c) => Task.FromResult<IReadOnlyList<long>>([]);
         public Task<IReadOnlyList<RemoteMessageInfo>> FetchInfoAsync(IReadOnlyList<long> uids, CancellationToken c) => Task.FromResult<IReadOnlyList<RemoteMessageInfo>>([]);
         public Task<IReadOnlyList<RemoteMessageInfo>> FetchFlagsChangedSinceAsync(long modSeq, CancellationToken c) => Task.FromResult<IReadOnlyList<RemoteMessageInfo>>([]);
+        public Task<IReadOnlyList<RemoteHeader>> FetchHeadersAsync(IReadOnlyList<long> uids, CancellationToken c) => Task.FromResult<IReadOnlyList<RemoteHeader>>([]);
         public Task<MimeKit.MimeMessage?> GetMessageAsync(long uid, CancellationToken c) => Task.FromResult<MimeKit.MimeMessage?>(null);
         public Task StoreFlagsAsync(IReadOnlyList<long> uids, MailKit.MessageFlags flags, bool set, CancellationToken c) => Task.CompletedTask;
         public Task<IReadOnlyDictionary<long, long>> MoveAsync(IReadOnlyList<long> uids, string destinationPath, CancellationToken c) => Task.FromResult<IReadOnlyDictionary<long, long>>(new Dictionary<long, long>());

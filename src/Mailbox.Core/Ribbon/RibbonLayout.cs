@@ -70,6 +70,17 @@ public enum RibbonItemKind
     BoxedButton,
 
     /// <summary>
+    /// A tick and a label, for a command that is a state rather than an action — the View tab's
+    /// Show as Conversations, which the reference draws as a check box on the ribbon itself.
+    /// </summary>
+    /// <remarks>
+    /// Not a button that happens to look pressed: the reference gives this one an actual box,
+    /// and a reader looking for whether conversations are on reads the box rather than the fill
+    /// behind a word.
+    /// </remarks>
+    CheckBox,
+
+    /// <summary>
     /// The "…" that ends a cluster on the Simplified bar, opening the commands that cluster has
     /// no room for. Distinct from the bar's own overflow at the far right: this one belongs to
     /// one cluster, and the reference draws both on the same row.
@@ -122,6 +133,17 @@ public sealed record RibbonItem
     public bool IsDisabled { get; init; }
 
     /// <summary>
+    /// Drawn inside the group's gallery box rather than beside it.
+    /// </summary>
+    /// <remarks>
+    /// The View tab's Arrangement is one group holding three things: Message Preview, a boxed
+    /// grid of the fields a folder can be arranged by, and three ordinary small buttons. The box
+    /// is a run of items rather than the whole group — which is what <see cref="RibbonGroup.IsGallery"/>
+    /// says — so it is marked on the items that are in it. Consecutive marked items make one box.
+    /// </remarks>
+    public bool InGallery { get; init; }
+
+    /// <summary>
     /// What the chevron half of a <see cref="RibbonItemKind.SplitButton"/> runs, when that is not
     /// the item's own command.
     /// </summary>
@@ -172,6 +194,25 @@ public sealed record RibbonItem
             Size = RibbonItemSize.Small,
             Kind = kind,
             LabelRank = SheddableLabelRank,
+        };
+
+    /// <summary>One entry of a group's gallery box: a small labelled button inside the border.</summary>
+    public static RibbonItem Gallery(CommandId command)
+        => new()
+        {
+            Command = command,
+            Size = RibbonItemSize.Small,
+            Kind = RibbonItemKind.Button,
+            InGallery = true,
+        };
+
+    /// <summary>A tick and a label, for a switch the reference draws as a check box.</summary>
+    public static RibbonItem Check(CommandId command)
+        => new()
+        {
+            Command = command,
+            Size = RibbonItemSize.Small,
+            Kind = RibbonItemKind.CheckBox,
         };
 
     /// <summary>A small button showing its icon only.</summary>
@@ -295,6 +336,27 @@ public sealed record RibbonGroup
     /// showing several entries, not several controls side by side.
     /// </summary>
     public bool IsGallery { get; init; }
+
+    /// <summary>
+    /// How many entries a gallery lays across before it starts another row.
+    /// </summary>
+    /// <remarks>
+    /// One for a list — Quick Steps, which the reference stacks three deep and scrolls. Four for
+    /// the View tab's Arrangement, which is a grid two rows deep: Date, From, To and Categories
+    /// over Flag Status, Flag: Start Date, Flag: Due Date and Size, filled left to right.
+    /// </remarks>
+    public int GalleryColumns { get; init; } = 1;
+
+    /// <summary>
+    /// What the chevron at the gallery's right-hand edge opens, when the box shows fewer entries
+    /// than there are. Null lists the entries in the box instead.
+    /// </summary>
+    /// <remarks>
+    /// The reference's Arrangement gallery holds every field a folder can be arranged by and
+    /// scrolls; ours shows the eight the capture shows and sends the chevron to Arrange By,
+    /// which is the same list with the current one ticked.
+    /// </remarks>
+    public CommandId? GalleryMore { get; init; }
 
     /// <summary>
     /// Position in the collapse order. Groups with a higher number degrade to a popup button

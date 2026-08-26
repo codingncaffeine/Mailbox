@@ -18,10 +18,49 @@ public class ArrangementTests
         DateTimeOffset Received,
         long SizeBytes = 1024,
         bool IsFlagged = false,
-        bool HasAttachment = false) : IArrangeable;
+        bool HasAttachment = false,
+        DateTimeOffset? FollowUpStart = null,
+        DateTimeOffset? FollowUpDue = null) : IArrangeable;
 
     private static Row At(int daysAgo, string from = "Alice", string subject = "Subject")
         => new(from, subject, Now.AddDays(-daysAgo));
+
+    /// <summary>
+    /// Flag: Start Date and Flag: Due Date, which the reference's Arrangement gallery lists
+    /// beside Flag Status. A row with no flag has no date, and sorts at the far end either way
+    /// rather than reading as the oldest.
+    /// </summary>
+    [Fact]
+    public void TheFlagDatesGroupByTheirOwnDatesAndPutTheUnflaggedLast()
+    {
+        var due = new Row("Alice", "Due today", Now, FollowUpDue: Now);
+        var later = new Row("Bob", "Due tomorrow", Now, FollowUpDue: Now.AddDays(1));
+        var none = new Row("Carol", "No flag", Now);
+
+        var groups = Arrangements.Group([none, later, due], Arrangement.FlagDue, descending: false, today: Now);
+
+        Assert.Equal(["Today", "Later", "None"], groups.Select(g => g.Header));
+        Assert.Equal(["Due today"], groups[0].Items.Select(i => i.Subject));
+        Assert.Equal(["No flag"], groups[^1].Items.Select(i => i.Subject));
+
+        // The other way round, the dated rows reverse and the undated one stays at the end.
+        var down = Arrangements.Group([none, due, later], Arrangement.FlagDue, descending: true, today: Now);
+        Assert.Equal(["Later", "Today", "None"], down.Select(g => g.Header));
+
+        // Start dates read the other column: the same rows arrange differently under it.
+        var starts = Arrangements.Group(
+            [new Row("Alice", "Starts today", Now, FollowUpStart: Now), none],
+            Arrangement.FlagStart, descending: false, today: Now);
+        Assert.Equal(["Today", "None"], starts.Select(g => g.Header));
+    }
+
+    [Fact]
+    public void TheFlagArrangementsAreNamedAsTheGalleryNamesThem()
+    {
+        Assert.Equal("Flag Status", Arrangements.Label(Arrangement.Flag));
+        Assert.Equal("Flag: Start Date", Arrangements.Label(Arrangement.FlagStart));
+        Assert.Equal("Flag: Due Date", Arrangements.Label(Arrangement.FlagDue));
+    }
 
     [Theory]
     [InlineData(0, "Today")]

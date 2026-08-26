@@ -149,7 +149,7 @@ public static class ViewCommands
     public static readonly MailboxCommand OpenViewSettings = new()
     {
         Id = new("view.viewsettings"),
-        Label = "View Settings…",
+        Label = "View Settings",
         Description = "Advanced View Settings: columns, grouping, sorting, filtering and conditional formatting.",
         Icon = "view-settings",
         Category = "Current View",
@@ -431,6 +431,244 @@ public static class ViewCommands
         return null;
     }
 
+    // ---- The View tab's Messages group ------------------------------------------------------
+
+    /// <summary>
+    /// Show as Conversations. A tick on the ribbon rather than a button, which is how the
+    /// reference draws the one switch on that tab that has a state rather than an action.
+    /// </summary>
+    public static readonly MailboxCommand ShowAsConversations = new()
+    {
+        Id = new("view.conversations"),
+        Label = "Show as Conversations",
+        Description = "Fold replies under the message they answer, so a thread is one row.",
+        Icon = "conversation",
+        Category = "Messages",
+        Scope = ModuleScope.Mail,
+        KeyTip = "SC",
+    };
+
+    public static readonly MailboxCommand ConversationSettings = new()
+    {
+        Id = new("view.conversations.settings"),
+        Label = "Conversation Settings",
+        Description = "Choose what a conversation shows: messages from other folders, senders above the subject, and the rest.",
+        Icon = "conversation-settings",
+        Category = "Messages",
+        Scope = ModuleScope.Mail,
+        KeyTip = "CS",
+    };
+
+    // ---- Arrangement ------------------------------------------------------------------------
+
+    /// <summary>
+    /// The number of lines of the message's own text the list shows under its subject.
+    /// </summary>
+    public static readonly MailboxCommand MessagePreview = new()
+    {
+        Id = new("view.messagepreview"),
+        Label = "Message Preview",
+        Description = "Show one, two or three lines of each message under its subject, or none at all.",
+        Icon = "message-preview",
+        IconTint = "ribbon.icon.blue",
+        Category = "Arrangement",
+        Scope = ModuleScope.Mail,
+        KeyTip = "PV",
+    };
+
+    /// <summary>
+    /// One entry of the Arrangement gallery. The reference's gallery is a grid of the fields a
+    /// folder can be arranged by, with the current one boxed.
+    /// </summary>
+    private static MailboxCommand Arrange(string id, string label, string icon, string keyTip) => new()
+    {
+        Id = new($"view.arrange.{id}"),
+        Label = label,
+        Description = $"Arrange the message list by {label.ToLowerInvariant()}.",
+        Icon = icon,
+        IconTint = "ribbon.icon.blue",
+        Category = "Arrangement",
+        Scope = ModuleScope.Mail,
+        KeyTip = keyTip,
+    };
+
+    public static readonly MailboxCommand ArrangeByDate = Arrange("date", "Date", "arrange-date", "AD");
+    public static readonly MailboxCommand ArrangeByFrom = Arrange("from", "From", "arrange-from", "AF");
+    public static readonly MailboxCommand ArrangeByTo = Arrange("to", "To", "arrange-to", "AT");
+    public static readonly MailboxCommand ArrangeBySize = Arrange("size", "Size", "arrange-size", "AZ");
+
+    /// <summary>Categorize's four swatches, which no monochrome glyph can carry.</summary>
+    public static readonly MailboxCommand ArrangeByCategories = Arrange("categories", "Categories", "categorize", "AC")
+        with { IconArtwork = "categorize", IconTint = null };
+
+    public static readonly MailboxCommand ArrangeByFlagStatus = Arrange("flagstatus", "Flag Status", "flag", "AL")
+        with { IconArtwork = "followup", IconTint = null };
+
+    public static readonly MailboxCommand ArrangeByFlagStart = Arrange("flagstart", "Flag: Start Date", "flag", "AS")
+        with { IconArtwork = "followup", IconTint = null };
+
+    public static readonly MailboxCommand ArrangeByFlagDue = Arrange("flagdue", "Flag: Due Date", "flag", "AU")
+        with { IconArtwork = "followup", IconTint = null };
+
+    /// <summary>The gallery in the order the reference lists it, the boxed one first.</summary>
+    public static IReadOnlyList<MailboxCommand> Arrangements =>
+    [
+        ArrangeByDate, ArrangeByFrom, ArrangeByTo, ArrangeByCategories,
+        ArrangeByFlagStatus, ArrangeByFlagStart, ArrangeByFlagDue, ArrangeBySize,
+    ];
+
+    public static readonly MailboxCommand AddColumns = new()
+    {
+        Id = new("view.addcolumns"),
+        Label = "Add Columns",
+        Description = "Choose which columns the message list shows, and in what order.",
+        Icon = "add-columns",
+        IconTint = "ribbon.icon.green",
+        Category = "Arrangement",
+        Scope = ModuleScope.Mail,
+        KeyTip = "AA",
+    };
+
+    public static readonly MailboxCommand ExpandCollapse = new()
+    {
+        Id = new("view.expandcollapse"),
+        Label = "Expand/Collapse",
+        Description = "Open or close the groups the current arrangement divides the list into.",
+        Icon = "expand-collapse",
+        IconTint = "ribbon.icon.green",
+        Category = "Arrangement",
+        Scope = ModuleScope.Mail,
+        KeyTip = "EC",
+    };
+
+    // ---- Layout -----------------------------------------------------------------------------
+
+    public static readonly MailboxCommand FolderPane = new()
+    {
+        Id = new("view.folderpane"),
+        Label = "Folder Pane",
+        Description = "Show the folder pane in full, minimised to its icons, or not at all.",
+        Icon = "folder-pane",
+        IconTint = "ribbon.icon.blue",
+        Category = "Layout",
+        KeyTip = "FP",
+    };
+
+    public static readonly MailboxCommand ReadingPane = new()
+    {
+        Id = new("view.readingpane"),
+        Label = "Reading Pane",
+        Description = "Put the reading pane to the right of the list, under it, or turn it off.",
+        Icon = "reading-pane",
+        IconTint = "ribbon.icon.blue",
+        Category = "Layout",
+        KeyTip = "PN",
+    };
+
+    public static readonly MailboxCommand ToDoBar = new()
+    {
+        Id = new("view.todobar"),
+        Label = "To-Do Bar",
+        Description = "Dock the calendar, tasks or people down the right-hand side.",
+        Icon = "todo-bar",
+        IconTint = "ribbon.icon.blue",
+        Category = "Layout",
+        KeyTip = "TB",
+    };
+
+    // ---- Window -----------------------------------------------------------------------------
+
+    public static readonly MailboxCommand RemindersWindow = new()
+    {
+        Id = new("view.reminders"),
+        Label = "Reminders Window",
+        Description = "Show what is due: the reminders waiting across mail, the calendar and tasks.",
+        Icon = "reminders-window",
+        Category = "Window",
+        KeyTip = "RW",
+    };
+
+    public static readonly MailboxCommand OpenInNewWindow = new()
+    {
+        Id = new("view.newwindow"),
+        Label = "Open in New Window",
+        Description = "Open the current folder in a second window of its own.",
+        Icon = "new-window",
+        IconTint = "ribbon.icon.green",
+        Category = "Window",
+        KeyTip = "NW",
+    };
+
+    public static readonly MailboxCommand CloseAllItems = new()
+    {
+        Id = new("view.closeall"),
+        Label = "Close All Items",
+        Description = "Close every message, appointment and contact window this one has opened.",
+        Icon = "close-all",
+        IconTint = "ribbon.icon.delete",
+        Category = "Window",
+        KeyTip = "CL",
+    };
+
+    // ---- The Send/Receive tab's Server group -------------------------------------------------
+
+    /// <summary>
+    /// Headers without their messages, for a folder the reader would rather choose from than
+    /// download whole. The three that follow act on what this brings back.
+    /// </summary>
+    public static readonly MailboxCommand DownloadHeaders = new()
+    {
+        Id = new("app.downloadheaders"),
+        Label = "Download Headers",
+        Description = "Fetch the sender, subject and size of everything in this folder, without the messages themselves.",
+        Icon = "download-headers",
+        IconTint = "ribbon.icon.blue",
+        Category = "Server",
+        Scope = ModuleScope.Mail,
+        KeyTip = "DH",
+    };
+
+    public static readonly MailboxCommand MarkToDownload = new()
+    {
+        Id = new("app.markdownload"),
+        Label = "Mark to Download",
+        Description = "Mark the selected headers so the next send/receive fetches their messages.",
+        Icon = "mark-download",
+        IconTint = "ribbon.icon.blue",
+        Category = "Server",
+        Scope = ModuleScope.Mail,
+        RequiresSelection = true,
+        KeyTip = "MD",
+    };
+
+    public static readonly MailboxCommand UnmarkToDownload = new()
+    {
+        Id = new("app.unmarkdownload"),
+        Label = "Unmark to Download",
+        Description = "Take the download mark off the selected headers.",
+        Icon = "unmark-download",
+        IconTint = "ribbon.icon.delete",
+        Category = "Server",
+        Scope = ModuleScope.Mail,
+        RequiresSelection = true,
+
+        // Not "UD": Update Folder is "U" in the same tab, and a single letter fires before a
+        // second one can be typed.
+        KeyTip = "MU",
+    };
+
+    public static readonly MailboxCommand ProcessMarkedHeaders = new()
+    {
+        Id = new("app.processheaders"),
+        Label = "Process Marked Headers",
+        Description = "Fetch the messages behind every header marked for download.",
+        Icon = "process-headers",
+        IconTint = "ribbon.icon.green",
+        Category = "Server",
+        Scope = ModuleScope.Mail,
+        KeyTip = "PH",
+    };
+
     public static IEnumerable<MailboxCommand> All =>
     [
         GoToMail, GoToCalendar, GoToPeople, GoToTasks, GoToNotes, GoToJournal,
@@ -442,5 +680,11 @@ public static class ViewCommands
         Redo, Apps, SearchPeople, ReadAloud, KeyboardShortcuts,
         MoveToQuick, ToManager, TeamEmail,
         Zoom, Translate, FindInMessage,
+        ShowAsConversations, ConversationSettings, MessagePreview,
+        .. Arrangements,
+        AddColumns, ExpandCollapse,
+        FolderPane, ReadingPane, ToDoBar,
+        RemindersWindow, OpenInNewWindow, CloseAllItems,
+        DownloadHeaders, MarkToDownload, UnmarkToDownload, ProcessMarkedHeaders,
     ];
 }

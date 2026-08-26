@@ -40,6 +40,25 @@ internal sealed class FakePop3 : IPop3Session
     public Task<IList<string>> GetUidsAsync(CancellationToken c)
         => Task.FromResult<IList<string>>([.. _messages.Select(m => m.Uid)]);
 
+    /// <summary>Download Headers over POP3: TOP, which is the headers and the size.</summary>
+    public Task<RemoteHeader?> GetHeadersAsync(int index, string uid, CancellationToken c)
+    {
+        var message = _messages[index].Message;
+        var from = message.From.Mailboxes.FirstOrDefault();
+
+        return Task.FromResult<RemoteHeader?>(new RemoteHeader(
+            uid,
+            message.MessageId,
+            from?.Name ?? string.Empty,
+            from?.Address ?? string.Empty,
+            message.Subject ?? string.Empty,
+            message.Date,
+            message.Date,
+            100,
+            false,
+            false));
+    }
+
     public Task<MimeMessage> GetMessageAsync(int index, CancellationToken c)
     {
         Fetches++;

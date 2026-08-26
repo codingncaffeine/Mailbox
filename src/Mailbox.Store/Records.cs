@@ -180,6 +180,15 @@ public sealed record MessageSummary(
 
     /// <summary>When the message says it expires (its Expires header), or null — what AutoArchive's "delete expired items" reads.</summary>
     public DateTimeOffset? Expires { get; init; }
+
+    /// <summary>
+    /// True for a row the server described and whose message has not been fetched: Send/Receive's
+    /// Download Headers writes these, and Process Marked Headers turns them into whole messages.
+    /// </summary>
+    public bool HeaderOnly { get; init; }
+
+    /// <summary>True when the reader has asked for this header's message on the next send/receive.</summary>
+    public bool MarkedForDownload { get; init; }
 }
 
 /// <summary>

@@ -160,6 +160,31 @@ public static class DefaultRibbonLayouts
                     RibbonItem.Small(ViewCommands.LayoutMenu.Id, RibbonItemKind.DropDown),
                     RibbonItem.Small(ViewCommands.ImmersiveReader.Id))),
 
+            // The Folder tab's Simplified row: the same commands in the same order, as one flat
+            // run. No capture of this one exists — the reference's Simplified rows are its
+            // classic groups condensed, and this follows that rule rather than inventing an
+            // order of its own.
+            ["folder"] = Bar(
+                Cluster("foldernew", "New",
+                    RibbonItem.Small(MailCommands.NewFolder.Id),
+                    RibbonItem.Small(MailCommands.NewSearchFolder.Id)),
+
+                Cluster("folderactions", "Actions",
+                    RibbonItem.Small(MailCommands.RenameFolder.Id),
+                    RibbonItem.Small(MailCommands.CopyFolder.Id),
+                    RibbonItem.Small(MailCommands.MoveFolder.Id),
+                    RibbonItem.Small(MailCommands.DeleteFolder.Id)),
+
+                Cluster("foldercleanup", "Clean Up",
+                    RibbonItem.Small(MailCommands.MarkAllAsRead.Id),
+                    RibbonItem.Small(MailCommands.RunRulesNow.Id),
+                    RibbonItem.Small(MailCommands.CleanUpFolder.Id, RibbonItemKind.DropDown),
+                    RibbonItem.Small(MailCommands.DeleteAll.Id)),
+
+                Cluster("folderproperties", "Properties",
+                    RibbonItem.Small(MailCommands.AddToFavorites.Id),
+                    RibbonItem.Small(MailCommands.FolderProperties.Id))),
+
             ["help"] = new SimplifiedBar { Groups = [] },
         },
         Tabs =
@@ -328,6 +353,8 @@ public static class DefaultRibbonLayouts
                 ],
             },
 
+            // Transcribed from the reference's own Send / Receive tab: four groups, and the
+            // large button of each leads a stack of three or stands alone.
             new RibbonTab
             {
                 Id = "sendreceive",
@@ -341,7 +368,43 @@ public static class DefaultRibbonLayouts
                         Label = "Send & Receive",
                         KeyTip = "ZE",
                         CollapsePriority = 1,
-                        Items = [RibbonItem.Large(MailCommands.SendReceiveAll.Id)],
+                        Items =
+                        [
+                            RibbonItem.Large(MailCommands.SendReceiveAll.Id),
+                            RibbonItem.Small(ViewCommands.UpdateFolder.Id),
+                            RibbonItem.Small(ViewCommands.SendAll.Id),
+                            RibbonItem.Small(ViewCommands.SendReceiveGroups.Id, RibbonItemKind.DropDown),
+                        ],
+                    },
+                    new RibbonGroup
+                    {
+                        Id = "download",
+                        Label = "Download",
+                        KeyTip = "ZD",
+                        CollapsePriority = 3,
+                        Items =
+                        [
+                            RibbonItem.Large(ViewCommands.ShowProgress.Id),
+                            RibbonItem.Large(ViewCommands.CancelAll.Id),
+                        ],
+                    },
+
+                    // Headers without their messages, and the three commands that act on what
+                    // came back. Each of the small three carries its own chevron in the
+                    // reference, because each asks whether it means the selection or the folder.
+                    new RibbonGroup
+                    {
+                        Id = "server",
+                        Label = "Server",
+                        KeyTip = "ZV",
+                        CollapsePriority = 4,
+                        Items =
+                        [
+                            RibbonItem.Large(ViewCommands.DownloadHeaders.Id),
+                            RibbonItem.Small(ViewCommands.MarkToDownload.Id, RibbonItemKind.DropDown),
+                            RibbonItem.Small(ViewCommands.UnmarkToDownload.Id, RibbonItemKind.DropDown),
+                            RibbonItem.Small(ViewCommands.ProcessMarkedHeaders.Id, RibbonItemKind.DropDown),
+                        ],
                     },
                     new RibbonGroup
                     {
@@ -354,14 +417,191 @@ public static class DefaultRibbonLayouts
                 ],
             },
 
-            // No Folder tab: current the reference application builds ship File, Home, Send/Receive,
-            // View and Help, with the folder commands folded elsewhere.
+            // The Folder tab, transcribed from the reference: five groups, and every command in
+            // it has been reachable from the folder pane's own menu since Phase 3.
+            new RibbonTab
+            {
+                Id = "folder",
+                Label = "Folder",
+                KeyTip = "O",
+                Groups =
+                [
+                    new RibbonGroup
+                    {
+                        Id = "foldernew",
+                        Label = "New",
+                        KeyTip = "ZN",
+                        CollapsePriority = 4,
+                        Items =
+                        [
+                            RibbonItem.Large(MailCommands.NewFolder.Id),
+                            RibbonItem.Large(MailCommands.NewSearchFolder.Id),
+                        ],
+                    },
+                    new RibbonGroup
+                    {
+                        Id = "folderactions",
+                        Label = "Actions",
+                        KeyTip = "ZA",
+                        CollapsePriority = 3,
+                        Items =
+                        [
+                            RibbonItem.Large(MailCommands.RenameFolder.Id),
+                            RibbonItem.Small(MailCommands.CopyFolder.Id),
+                            RibbonItem.Small(MailCommands.MoveFolder.Id),
+                            RibbonItem.Small(MailCommands.DeleteFolder.Id),
+                        ],
+                    },
+                    new RibbonGroup
+                    {
+                        Id = "foldercleanup",
+                        Label = "Clean Up",
+                        KeyTip = "ZC",
+                        CollapsePriority = 2,
+                        Items =
+                        [
+                            RibbonItem.Large(MailCommands.MarkAllAsRead.Id),
+                            RibbonItem.Large(MailCommands.RunRulesNow.Id),
+                            RibbonItem.Large(MailCommands.ShowAllFoldersAtoZ.Id),
+                            RibbonItem.Small(MailCommands.CleanUpFolder.Id, RibbonItemKind.DropDown),
+                            RibbonItem.Small(MailCommands.DeleteAll.Id),
+                            RibbonItem.Small(MailCommands.RecoverDeleted.Id),
+                        ],
+                    },
+                    new RibbonGroup
+                    {
+                        Id = "folderfavorites",
+                        Label = "Favorites",
+                        KeyTip = "ZF",
+                        CollapsePriority = 5,
+                        Items = [RibbonItem.Large(MailCommands.AddToFavorites.Id)],
+                    },
+                    new RibbonGroup
+                    {
+                        Id = "folderproperties",
+                        Label = "Properties",
+                        KeyTip = "ZP",
+                        CollapsePriority = 1,
+                        Items =
+                        [
+                            RibbonItem.Large(MailCommands.AutoArchiveSettings.Id),
+                            new RibbonItem
+                            {
+                                Command = MailCommands.FolderPermissions.Id,
+                                Size = RibbonItemSize.Large,
+                                IsDisabled = true,
+                            },
+                            RibbonItem.Large(MailCommands.FolderProperties.Id),
+                        ],
+                    },
+                ],
+            },
+
+            // The View tab, transcribed from the reference: Current View, Messages, Arrangement
+            // — whose middle is a boxed grid rather than buttons — Layout, Window, and the one
+            // greyed group at the end.
             new RibbonTab
             {
                 Id = "view",
                 Label = "View",
                 KeyTip = "V",
-                Groups = [],
+                Groups =
+                [
+                    new RibbonGroup
+                    {
+                        Id = "currentview",
+                        Label = "Current View",
+                        KeyTip = "ZC",
+                        CollapsePriority = 4,
+                        Items =
+                        [
+                            RibbonItem.Large(ViewCommands.ChangeView.Id, RibbonItemKind.DropDown),
+                            RibbonItem.Large(ViewCommands.OpenViewSettings.Id),
+                            RibbonItem.Large(ViewCommands.ResetView.Id),
+                        ],
+                    },
+                    new RibbonGroup
+                    {
+                        Id = "messages",
+                        Label = "Messages",
+                        KeyTip = "ZM",
+                        CollapsePriority = 5,
+                        Items =
+                        [
+                            RibbonItem.Check(ViewCommands.ShowAsConversations.Id),
+                            new RibbonItem
+                            {
+                                Command = ViewCommands.ConversationSettings.Id,
+                                Size = RibbonItemSize.Small,
+                                Kind = RibbonItemKind.DropDown,
+                                IsDisabled = true,
+                            },
+                        ],
+                    },
+
+                    // The gallery is the middle of this group, not the whole of it: Message
+                    // Preview stands to its left and three small buttons to its right.
+                    new RibbonGroup
+                    {
+                        Id = "arrangement",
+                        Label = "Arrangement",
+                        KeyTip = "ZA",
+                        CollapsePriority = 1,
+                        GalleryColumns = 4,
+                        GalleryMore = ViewCommands.ArrangeBy.Id,
+                        Items =
+                        [
+                            RibbonItem.Large(ViewCommands.MessagePreview.Id, RibbonItemKind.DropDown),
+                            .. ViewCommands.Arrangements.Select(c => RibbonItem.Gallery(c.Id)),
+                            RibbonItem.Small(ViewCommands.ReverseSort.Id),
+                            RibbonItem.Small(ViewCommands.AddColumns.Id),
+                            RibbonItem.Small(ViewCommands.ExpandCollapse.Id, RibbonItemKind.DropDown),
+                        ],
+                    },
+                    new RibbonGroup
+                    {
+                        Id = "layout",
+                        Label = "Layout",
+                        KeyTip = "ZL",
+                        CollapsePriority = 2,
+                        Items =
+                        [
+                            RibbonItem.Large(ViewCommands.TighterSpacing.Id),
+                            RibbonItem.Large(ViewCommands.FolderPane.Id, RibbonItemKind.DropDown),
+                            RibbonItem.Large(ViewCommands.ReadingPane.Id, RibbonItemKind.DropDown),
+                            RibbonItem.Large(ViewCommands.ToDoBar.Id, RibbonItemKind.DropDown),
+                        ],
+                    },
+                    new RibbonGroup
+                    {
+                        Id = "window",
+                        Label = "Window",
+                        KeyTip = "ZW",
+                        CollapsePriority = 3,
+                        Items =
+                        [
+                            RibbonItem.Large(ViewCommands.RemindersWindow.Id),
+                            RibbonItem.Large(ViewCommands.OpenInNewWindow.Id),
+                            RibbonItem.Large(ViewCommands.CloseAllItems.Id),
+                        ],
+                    },
+                    new RibbonGroup
+                    {
+                        Id = "immersivereader",
+                        Label = "Immersive Reader",
+                        KeyTip = "ZI",
+                        CollapsePriority = 6,
+                        Items =
+                        [
+                            new RibbonItem
+                            {
+                                Command = ViewCommands.ImmersiveReader.Id,
+                                Size = RibbonItemSize.Large,
+                                IsDisabled = true,
+                            },
+                        ],
+                    },
+                ],
             },
 
             new RibbonTab

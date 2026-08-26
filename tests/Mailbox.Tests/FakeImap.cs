@@ -179,6 +179,21 @@ internal sealed class FakeImap : IImapSession
             [.. Open.Messages.Where(m => uids.Contains(m.Uid))
                 .Select(m => new RemoteMessageInfo(m.Uid, m.Flags, m.Internal, 100))]);
 
+    /// <summary>Download Headers: the envelope of each message, without its body.</summary>
+    public Task<IReadOnlyList<RemoteHeader>> FetchHeadersAsync(IReadOnlyList<long> uids, CancellationToken c)
+        => Task.FromResult<IReadOnlyList<RemoteHeader>>(
+            [.. Open.Messages.Where(m => uids.Contains(m.Uid)).Select(m => new RemoteHeader(
+                m.Uid.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                m.Message.MessageId,
+                m.Message.From.Mailboxes.FirstOrDefault()?.Name ?? string.Empty,
+                m.Message.From.Mailboxes.FirstOrDefault()?.Address ?? string.Empty,
+                m.Message.Subject ?? string.Empty,
+                m.Message.Date,
+                m.Internal is { } arrived ? arrived : m.Message.Date,
+                100,
+                m.Flags.HasFlag(MailKit.MessageFlags.Seen),
+                m.Flags.HasFlag(MailKit.MessageFlags.Flagged)))]);
+
     public Task<IReadOnlyList<RemoteMessageInfo>> FetchFlagsChangedSinceAsync(long modSeq, CancellationToken c)
         => Task.FromResult<IReadOnlyList<RemoteMessageInfo>>(
             [.. Open.Messages.Select(m => new RemoteMessageInfo(m.Uid, m.Flags, m.Internal, 100))]);

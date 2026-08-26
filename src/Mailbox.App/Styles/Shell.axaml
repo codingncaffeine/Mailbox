@@ -61,6 +61,28 @@
         <Setter Property="BorderBrush" Value="Transparent" />
     </Style>
 
+    <!--
+        A button whose command is on. The reference boxes it: measured off the Folder tab's Add
+        to Favorites, a #CCCCCC face inside a #5C5C5C line on Dark Gray's #BDBDBD ribbon — the
+        same pair a dropdown wears while its menu is open, because both mean "this one".
+
+        Declared above the hover rule on purpose, so a checked button under the pointer still
+        lights: the line is what says "on", and the fill is free to answer the pointer.
+    -->
+    <Style Selector="Button.ribbonbutton.checked">
+        <Setter Property="Background" Value="{DynamicResource ribbon.button.open.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ribbon.button.open.border.brush}" />
+    </Style>
+
+    <!--
+        The same state inside a gallery box, which the reference fills a shade lighter: #D1D1D1,
+        measured off the View tab's Arrangement with Date the current one.
+    -->
+    <Style Selector="Button.ribbonbutton.galleryentry.checked">
+        <Setter Property="Background" Value="{DynamicResource ribbon.button.hover.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ribbon.button.open.border.brush}" />
+    </Style>
+
     <Style Selector="Button.ribbonbutton:pointerover">
         <Setter Property="Background" Value="{DynamicResource ribbon.button.hover.brush}" />
     </Style>

@@ -53,6 +53,27 @@ public sealed record FolderState(long UidValidity, long UidNext, long HighestMod
 public sealed record RemoteMessageInfo(long Uid, MessageFlags Flags, DateTimeOffset? InternalDate, long Size);
 
 /// <summary>
+/// A message described but not fetched: what Download Headers brings back.
+/// </summary>
+/// <remarks>
+/// Everything a list row draws and nothing a reading pane needs — which is the point of the
+/// feature: a mailbox with a hundred large messages in it can be looked through over a slow
+/// line, and only the ones wanted cost their size. <see cref="Uid"/> is the server's own
+/// identifier: an IMAP UID, or a POP3 UIDL.
+/// </remarks>
+public sealed record RemoteHeader(
+    string Uid,
+    string? MessageId,
+    string FromName,
+    string FromAddress,
+    string Subject,
+    DateTimeOffset? Sent,
+    DateTimeOffset Received,
+    long Size,
+    bool IsRead,
+    bool IsFlagged);
+
+/// <summary>
 /// The part of IMAP this application uses.
 /// </summary>
 /// <remarks>
@@ -106,6 +127,16 @@ public interface IImapSession : IDisposable
 
     /// <summary>Flags for every message whose flags changed since a modification sequence. Needs CONDSTORE.</summary>
     Task<IReadOnlyList<RemoteMessageInfo>> FetchFlagsChangedSinceAsync(long modSeq, CancellationToken cancellation);
+
+    /// <summary>
+    /// Sender, subject, date and size for these UIDs in the open folder, without their messages.
+    /// </summary>
+    /// <remarks>
+    /// One fetch of the envelope rather than one fetch of each message, which is the whole
+    /// saving: a thousand headers cost a few kilobytes and a thousand messages cost whatever
+    /// they weigh.
+    /// </remarks>
+    Task<IReadOnlyList<RemoteHeader>> FetchHeadersAsync(IReadOnlyList<long> uids, CancellationToken cancellation);
 
     /// <summary>The whole message, or null if it has gone since it was listed.</summary>
     Task<MimeMessage?> GetMessageAsync(long uid, CancellationToken cancellation);
@@ -383,6 +414,40 @@ public sealed class MailKitImapSession : IImapSession
             cancellation);
 
         return [.. summaries.Select(Info)];
+    }
+
+    public async Task<IReadOnlyList<RemoteHeader>> FetchHeadersAsync(IReadOnlyList<long> uids, CancellationToken cancellation)
+    {
+        ArgumentNullException.ThrowIfNull(uids);
+        if (uids.Count == 0) return [];
+
+        var summaries = await Open.FetchAsync(
+            [.. uids.Select(u => new UniqueId((uint)u))],
+            MessageSummaryItems.UniqueId | MessageSummaryItems.Envelope | MessageSummaryItems.Flags
+            | MessageSummaryItems.InternalDate | MessageSummaryItems.Size,
+            cancellation);
+
+        return [.. summaries.Select(Header)];
+    }
+
+    /// <summary>The envelope as a header row: the sender's first mailbox, the subject, the dates.</summary>
+    private static RemoteHeader Header(IMessageSummary summary)
+    {
+        var envelope = summary.Envelope;
+        var from = envelope?.From.Mailboxes.FirstOrDefault();
+        var flags = summary.Flags ?? MessageFlags.None;
+
+        return new RemoteHeader(
+            Uid: summary.UniqueId.Id.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            MessageId: string.IsNullOrWhiteSpace(envelope?.MessageId) ? null : envelope!.MessageId,
+            FromName: from?.Name ?? string.Empty,
+            FromAddress: from?.Address ?? string.Empty,
+            Subject: envelope?.Subject ?? string.Empty,
+            Sent: envelope?.Date,
+            Received: summary.InternalDate ?? envelope?.Date ?? DateTimeOffset.UtcNow,
+            Size: summary.Size ?? 0,
+            IsRead: flags.HasFlag(MessageFlags.Seen),
+            IsFlagged: flags.HasFlag(MessageFlags.Flagged));
     }
 
     private static RemoteMessageInfo Info(IMessageSummary summary) => new(

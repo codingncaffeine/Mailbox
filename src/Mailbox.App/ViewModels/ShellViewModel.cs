@@ -396,6 +396,15 @@ public sealed class MessageRow(
     /// <summary>When a follow-up is due, for the tooltip and the flag menu's state.</summary>
     public DateTimeOffset? FollowUpDue { get; init; }
 
+    /// <summary>When the follow-up starts, for the arrangement that lists by it.</summary>
+    public DateTimeOffset? FollowUpStart { get; init; }
+
+    /// <summary>
+    /// True for a header whose message has not been downloaded — Send/Receive's Download
+    /// Headers wrote the row, and the reading pane says so rather than showing an empty message.
+    /// </summary>
+    public bool IsHeaderOnly { get; init; }
+
     /// <summary>When a snoozed message comes back, or null for one that is awake (§12).</summary>
     public DateTimeOffset? SnoozedUntil { get; init; }
 
@@ -1219,6 +1228,8 @@ public sealed partial class ShellViewModel : ObservableObject
                 IsFlagged = summary.IsFlagged,
                 FollowUpComplete = summary.FollowUpComplete,
                 FollowUpDue = summary.FollowUpDue,
+                FollowUpStart = summary.FollowUpStart,
+                IsHeaderOnly = summary.HeaderOnly,
                 SnoozedUntil = summary.SnoozedUntil,
                 Importance = summary.Importance,
                 ThreadKey = Store.Lists.Arrangements.NormalisedSubject(summary.Subject),
@@ -1299,6 +1310,8 @@ public sealed partial class ShellViewModel : ObservableObject
                     IsFlagged = summary.IsFlagged,
                     FollowUpComplete = summary.FollowUpComplete,
                     FollowUpDue = summary.FollowUpDue,
+                FollowUpStart = summary.FollowUpStart,
+                IsHeaderOnly = summary.HeaderOnly,
                     SnoozedUntil = summary.SnoozedUntil,
                     Importance = summary.Importance,
                     ThreadKey = Store.Lists.Arrangements.NormalisedSubject(summary.Subject),
@@ -1577,6 +1590,8 @@ public sealed partial class ShellViewModel : ObservableObject
                     IsFlagged = summary.IsFlagged,
                     FollowUpComplete = summary.FollowUpComplete,
                     FollowUpDue = summary.FollowUpDue,
+                FollowUpStart = summary.FollowUpStart,
+                IsHeaderOnly = summary.HeaderOnly,
                     Importance = summary.Importance,
                     ThreadKey = Store.Lists.Arrangements.NormalisedSubject(summary.Subject),
                     FolderId = summary.FolderId,
@@ -1633,6 +1648,8 @@ public sealed partial class ShellViewModel : ObservableObject
                 IsFlagged = summary.IsFlagged,
                 FollowUpComplete = summary.FollowUpComplete,
                 FollowUpDue = summary.FollowUpDue,
+                FollowUpStart = summary.FollowUpStart,
+                IsHeaderOnly = summary.HeaderOnly,
                 SnoozedUntil = summary.SnoozedUntil,
                 Importance = summary.Importance,
                 ThreadKey = Store.Lists.Arrangements.NormalisedSubject(summary.Subject),
@@ -2273,6 +2290,53 @@ public sealed partial class ShellViewModel : ObservableObject
     {
         if (!_collapsed.Remove(header)) _collapsed.Add(header);
         Rebuild();
+    }
+
+    /// <summary>Folds one group shut or opens it — the View tab's Expand/Collapse, on one group.</summary>
+    public void SetGroupCollapsed(string header, bool collapsed)
+    {
+        if (collapsed ? !_collapsed.Add(header) : !_collapsed.Remove(header)) return;
+
+        Rebuild();
+    }
+
+    /// <summary>
+    /// Every group of the list at once, which is the other half of Expand/Collapse.
+    /// </summary>
+    /// <remarks>
+    /// Over the headers on screen rather than every header ever seen: a collapse remembered for
+    /// a group that a change of arrangement has dissolved is a collapse nobody asked for.
+    /// </remarks>
+    public void SetAllGroupsCollapsed(bool collapsed)
+    {
+        var changed = false;
+        foreach (var header in VisibleRows.OfType<GroupHeaderRow>().Select(g => g.Header).ToList())
+        {
+            changed |= collapsed ? _collapsed.Add(header) : _collapsed.Remove(header);
+        }
+
+        if (changed) Rebuild();
+    }
+
+    /// <summary>
+    /// The group the selection sits in, for Expand/Collapse's first two entries. Null when the
+    /// list has no groups, or when nothing is selected.
+    /// </summary>
+    public string? SelectedGroupHeader
+    {
+        get
+        {
+            if (SelectedRow is GroupHeaderRow chosen) return chosen.Header;
+
+            string? header = null;
+            foreach (var row in VisibleRows)
+            {
+                if (row is GroupHeaderRow group) header = group.Header;
+                else if (ReferenceEquals(row, SelectedRow)) return header;
+            }
+
+            return null;
+        }
     }
 
     /// <summary>

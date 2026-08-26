@@ -848,6 +848,67 @@ public sealed class RibbonView : ContentControl
     }
 
     /// <summary>
+    /// Decides whether a command is currently on. Set by the host.
+    /// </summary>
+    /// <remarks>
+    /// The other half of <see cref="CommandEnabled"/>, and a different question: whether a
+    /// command <em>can</em> be run, and whether what it turns on is on. The reference draws the
+    /// second as a box round the button — Work Offline while offline, Add to Favorites on a
+    /// folder that is one, the arrangement the list is under — and a tick in a check box for the
+    /// switches it draws as one.
+    /// </remarks>
+    public Func<CommandId, bool>? CommandChecked
+    {
+        get;
+        set
+        {
+            field = value;
+            RefreshChecked();
+        }
+    }
+
+    /// <summary>
+    /// Re-evaluates every drawn control against <see cref="CommandChecked"/>.
+    /// </summary>
+    /// <remarks>
+    /// Walks the controls as <see cref="RefreshEnablement"/> does, and for the same reason: this
+    /// answers a selection change, and rebuilding the bar on one would be absurd.
+    /// </remarks>
+    public void RefreshChecked()
+    {
+        var checked_ = CommandChecked;
+        if (checked_ is null) return;
+
+        foreach (var (id, controls) in _itemControls)
+        {
+            var on = checked_(id);
+            foreach (var control in controls)
+            {
+                if (control is CheckBox box)
+                {
+                    // Set without running the handler: this is the state arriving, not a press.
+                    _settingCheck = true;
+                    box.IsChecked = on;
+                    _settingCheck = false;
+                    continue;
+                }
+
+                if (on) control.Classes.Add(CheckedClass);
+                else control.Classes.Remove(CheckedClass);
+            }
+        }
+    }
+
+    /// <summary>True while a tick is being set from the host's state rather than by a reader.</summary>
+    private bool _settingCheck;
+
+    /// <summary>The class a button wears while what it turns on is on.</summary>
+    public const string CheckedClass = "checked";
+
+    /// <summary>The class an entry inside a gallery box wears, which is boxed differently.</summary>
+    public const string GalleryEntryClass = "galleryentry";
+
+    /// <summary>
     /// Re-evaluates every drawn control against <see cref="CommandEnabled"/>.
     /// </summary>
     /// <remarks>
@@ -1723,8 +1784,10 @@ public sealed class RibbonView : ContentControl
 
         StackPanel? smallColumn = null;
 
-        foreach (var item in group.Items)
+        for (var index = 0; index < group.Items.Count; index++)
         {
+            var item = group.Items[index];
+
             if (item.Kind == RibbonItemKind.Separator)
             {
                 smallColumn = null;
@@ -1732,7 +1795,29 @@ public sealed class RibbonView : ContentControl
                 continue;
             }
 
+            // A run of gallery entries is one box, however many entries it holds.
+            if (item.InGallery)
+            {
+                var run = new List<RibbonItem>();
+                while (index < group.Items.Count && group.Items[index].InGallery) run.Add(group.Items[index++]);
+                index--;
+
+                smallColumn = null;
+                row.Children.Add(BuildGalleryCluster(group, run));
+                continue;
+            }
+
             if (!_catalog.TryGet(item.Command, out var command)) continue;
+
+            // A tick belongs in the small stack rather than beside it: the reference's Messages
+            // group is one narrow column with Show as Conversations over Conversation Settings,
+            // and a tick that started its own column made the group twice as wide.
+            if (item.Kind == RibbonItemKind.CheckBox)
+            {
+                smallColumn = Column(smallColumn, row);
+                smallColumn.Children.Add(BuildCheckBox(command, item));
+                continue;
+            }
 
             if (!compact && item.Size == RibbonItemSize.Large)
             {
@@ -1741,21 +1826,32 @@ public sealed class RibbonView : ContentControl
                 continue;
             }
 
-            if (smallColumn is null || smallColumn.Children.Count >= RibbonMetrics.SmallButtonsPerColumn)
-            {
-                smallColumn = new StackPanel
-                {
-                    Orientation = Orientation.Vertical,
-                    VerticalAlignment = VerticalAlignment.Top,
-                    Margin = new Thickness(0, RibbonMetrics.SmallStackTop, 0, 0),
-                };
-                row.Children.Add(smallColumn);
-            }
-
+            smallColumn = Column(smallColumn, row);
             smallColumn.Children.Add(BuildSmallButton(command, item, RibbonMetrics.SmallButtonHeight));
         }
 
         return row;
+    }
+
+    /// <summary>
+    /// The column a small control goes in: the one being filled, or a new one beside it once
+    /// that is three deep.
+    /// </summary>
+    private static StackPanel Column(StackPanel? filling, Panel row)
+    {
+        if (filling is not null && filling.Children.Count < RibbonMetrics.SmallButtonsPerColumn)
+        {
+            return filling;
+        }
+
+        var column = new StackPanel
+        {
+            Orientation = Orientation.Vertical,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, RibbonMetrics.SmallStackTop, 0, 0),
+        };
+        row.Children.Add(column);
+        return column;
     }
 
     private Button GalleryArrow(string glyph, string tip, Action onClick)
@@ -2197,10 +2293,16 @@ public sealed class RibbonView : ContentControl
         var button = new Button
         {
             Content = content,
-            Padding = padding,
+            // A 1px line that is transparent until the command is on, with the padding short
+            // by the same pixel: a button that grew when it was ticked would shove its
+            // neighbours along the bar, and the reference's boxed buttons sit exactly where
+            // their unboxed neighbours do.
+            Padding = new Thickness(
+                Math.Max(0, padding.Left - 1), Math.Max(0, padding.Top - 1),
+                Math.Max(0, padding.Right - 1), Math.Max(0, padding.Bottom - 1)),
             MinWidth = minWidth,
             Height = height,
-            BorderThickness = default,
+            BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(RibbonMetrics.ButtonCornerRadius),
             Classes = { RibbonButtonClass },
             HorizontalContentAlignment = HorizontalAlignment.Center,
@@ -2220,8 +2322,118 @@ public sealed class RibbonView : ContentControl
         Record(command.Id, button);
 
         if (CommandEnabled is { } enabled) button.IsEnabled = enabled(command.Id);
+        if (CommandChecked is { } on && on(command.Id)) button.Classes.Add(CheckedClass);
 
         return button;
+    }
+
+    /// <summary>
+    /// A tick and a label on the bar itself, for a command that is a state rather than an action.
+    /// </summary>
+    /// <remarks>
+    /// The reference draws Show as Conversations this way, and the box is the point: a reader
+    /// checking whether conversations are on looks for a tick, not for a fill behind a word.
+    /// </remarks>
+    private Control BuildCheckBox(MailboxCommand command, RibbonItem item)
+    {
+        var box = new CheckBox
+        {
+            Content = command.Label,
+            MinHeight = RibbonMetrics.SmallButtonHeight,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(4, 0),
+        };
+        Bind(box, TemplatedControl.FontSizeProperty, "type.ui.size.small.value");
+        Bind(box, TemplatedControl.ForegroundProperty, "text.primary.brush");
+
+        ToolTip.SetTip(box, Screentip(command));
+        Avalonia.Automation.AutomationProperties.SetName(box, command.Label);
+
+        // A press runs the command, which is what changes the state; the state then arrives
+        // back through RefreshChecked. Setting the tick here as well would fight it.
+        box.IsCheckedChanged += (_, _) =>
+        {
+            if (_settingCheck) return;
+            CommandInvoked?.Invoke(this, new RibbonCommandEventArgs(command.Id));
+        };
+
+        Record(command.Id, box);
+        if (CommandEnabled is { } enabled) box.IsEnabled = enabled(command.Id);
+        if (CommandChecked is { } on)
+        {
+            _settingCheck = true;
+            box.IsChecked = on(command.Id);
+            _settingCheck = false;
+        }
+
+        _ = item;
+        return box;
+    }
+
+    /// <summary>
+    /// A run of gallery entries inside a group: one bordered box, filled left to right across
+    /// <see cref="RibbonGroup.GalleryColumns"/> columns, with the More chevron down its right
+    /// edge that the reference gives every gallery.
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="BuildGallery"/>, which makes the <em>whole</em> group a gallery —
+    /// Quick Steps, a scrolling list of three. This one is a cluster among other items: the View
+    /// tab's Arrangement has Message Preview to the left of the box and three small buttons to
+    /// the right of it.
+    /// </remarks>
+    private Control BuildGalleryCluster(RibbonGroup group, IReadOnlyList<RibbonItem> entries)
+    {
+        var columns = Math.Max(1, group.GalleryColumns);
+        var grid = new Grid();
+        for (var c = 0; c < columns; c++)
+        {
+            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+        }
+
+        var placed = 0;
+        foreach (var item in entries)
+        {
+            if (!_catalog.TryGet(item.Command, out var command)) continue;
+
+            var row = placed / columns;
+            if (grid.RowDefinitions.Count <= row) grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+
+            var button = BuildSmallButton(command, item, RibbonMetrics.GallerySlotHeight);
+            button.Classes.Add(GalleryEntryClass);
+            Grid.SetRow(button, row);
+            Grid.SetColumn(button, placed % columns);
+            grid.Children.Add(button);
+            placed++;
+        }
+
+        var divider = new Border { Width = 1, Margin = new Thickness(2, 1) };
+        Bind(divider, Border.BackgroundProperty, "ribbon.gallery.border.brush");
+
+        var more = GalleryArrow("chevron-down", $"All {group.Label} commands", () =>
+        {
+            if (group.GalleryMore is { } opens) CommandInvoked?.Invoke(this, new RibbonCommandEventArgs(opens));
+        });
+        if (group.GalleryMore is null) more.Flyout = BuildGalleryMenu(group);
+        more.VerticalAlignment = VerticalAlignment.Center;
+
+        var inner = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Children = { grid, divider, more },
+        };
+
+        var box = new Border
+        {
+            Child = inner,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(2),
+            Padding = new Thickness(1, 0),
+            Margin = new Thickness(2, RibbonMetrics.GalleryTop, 2, 0),
+            VerticalAlignment = VerticalAlignment.Top,
+        };
+        Bind(box, Border.BorderBrushProperty, "ribbon.gallery.border.brush");
+        Bind(box, Border.BackgroundProperty, "ribbon.gallery.background.brush");
+        return box;
     }
 
     private static void Bind(AvaloniaObject target, AvaloniaProperty property, string resourceKey)

@@ -70,14 +70,15 @@ public class KeyMapTests : IDisposable
         Assert.True(keys.IsCustomised(MailCommands.Categorize.Id));
         Assert.True(keys.IsCustomised(MailCommands.MarkAsRead.Id));
 
-        // Assigning a free chord loses nothing.
-        Assert.Null(keys.Assign(MailCommands.Archive.Id, Chord.Parse("Ctrl+Shift+E")!));
+        // Assigning a free chord loses nothing. Not Ctrl+Shift+E: that is New Folder's, as it
+        // is in the reference.
+        Assert.Null(keys.Assign(MailCommands.Archive.Id, Chord.Parse("Ctrl+Alt+K")!));
 
         // Written to the settings, read back by a new map over them.
         var again = new KeyMap(new SettingsStore(Path.Combine(_root, "settings.json")), catalog);
         Assert.Equal(MailCommands.Categorize.Id, again.CommandFor(Chord.Parse("Ctrl+Q")!));
         Assert.Null(again.GestureFor(MailCommands.MarkAsRead.Id));
-        Assert.Equal("Ctrl+Shift+E", again.GestureFor(MailCommands.Archive.Id)!.ToString());
+        Assert.Equal("Ctrl+Alt+K", again.GestureFor(MailCommands.Archive.Id)!.ToString());
 
         // Reset one, then all.
         again.Reset(MailCommands.MarkAsRead.Id);

@@ -63,9 +63,15 @@ public class CommandEnablementTests
     public void TheLayoutsOnlyMarkGreyWhatCannotWork()
     {
         // IsDisabled is the layout's strongest statement about a control and now has a reader,
-        // so anything carrying it draws greyed for the life of the window. Read Aloud is the
-        // one entry that means it — there is no speech engine — and a second one appearing
-        // here without a reason is worth a second look.
+        // so anything carrying it draws greyed for the life of the window. Four entries mean it,
+        // and each has a reason nothing in the application can change:
+        //
+        //   mail.readaloud             — there is no speech engine here.
+        //   folder.permissions         — sharing a folder needs a server that offers it.
+        //   view.conversations.settings — there is no conversation options page behind it.
+        //   view.reader                — the reference greys Immersive Reader here too.
+        //
+        // A fifth appearing without a reason is worth a second look.
         var greyed = DefaultRibbonLayouts.Mail.Tabs
             .SelectMany(tab => tab.Groups)
             .SelectMany(group => group.Items)
@@ -73,7 +79,9 @@ public class CommandEnablementTests
             .Select(item => item.Command.Value)
             .ToList();
 
-        Assert.Equal(["mail.readaloud"], greyed);
+        Assert.Equal(
+            ["mail.readaloud", "folder.permissions", "view.conversations.settings", "view.reader"],
+            greyed);
     }
 
     [Fact]

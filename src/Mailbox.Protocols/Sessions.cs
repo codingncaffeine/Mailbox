@@ -2,6 +2,7 @@ using MailKit.Net.Pop3;
 using MailKit.Net.Smtp;
 using Mailbox.Protocols.OAuth;
 using MimeKit;
+using MimeKit.Utils;
 
 namespace Mailbox.Protocols;
 
@@ -29,6 +30,17 @@ public interface IPop3Session : IDisposable
     Task<IList<string>> GetUidsAsync(CancellationToken cancellation);
 
     Task<MimeMessage> GetMessageAsync(int index, CancellationToken cancellation);
+
+    /// <summary>
+    /// One message's headers and its size, without its body — POP3's TOP, which is what
+    /// Download Headers is over this protocol.
+    /// </summary>
+    /// <remarks>
+    /// The seam maps rather than returning MailKit's own header list, so a test double fakes a
+    /// record instead of a protocol type. The uid is the caller's: POP3 numbers messages by
+    /// position within a session, and the UIDL is what survives one.
+    /// </remarks>
+    Task<RemoteHeader?> GetHeadersAsync(int index, string uid, CancellationToken cancellation);
 
     Task DeleteAsync(IList<int> indexes, CancellationToken cancellation);
 
@@ -92,6 +104,33 @@ public sealed class MailKitPop3Session : IPop3Session
 
     public Task<MimeMessage> GetMessageAsync(int index, CancellationToken cancellation)
         => _client.GetMessageAsync(index, cancellation);
+
+    public async Task<RemoteHeader?> GetHeadersAsync(int index, string uid, CancellationToken cancellation)
+    {
+        var headers = await _client.GetMessageHeadersAsync(index, cancellation);
+        if (headers is null) return null;
+
+        var size = await _client.GetMessageSizeAsync(index, cancellation);
+        var from = InternetAddressList.TryParse(headers[HeaderId.From] ?? string.Empty, out var parsed)
+            ? parsed.Mailboxes.FirstOrDefault()
+            : null;
+
+        var sent = DateUtils.TryParse(headers[HeaderId.Date] ?? string.Empty, out var date) ? date : (DateTimeOffset?)null;
+
+        return new RemoteHeader(
+            Uid: uid,
+            MessageId: headers[HeaderId.MessageId] is { Length: > 0 } id
+                ? MimeUtils.EnumerateReferences(id).FirstOrDefault()
+                : null,
+            FromName: from?.Name ?? string.Empty,
+            FromAddress: from?.Address ?? string.Empty,
+            Subject: headers[HeaderId.Subject] ?? string.Empty,
+            Sent: sent,
+            Received: sent ?? DateTimeOffset.UtcNow,
+            Size: size,
+            IsRead: false,
+            IsFlagged: false);
+    }
 
     public Task DeleteAsync(IList<int> indexes, CancellationToken cancellation)
         => _client.DeleteMessagesAsync(indexes, cancellation);

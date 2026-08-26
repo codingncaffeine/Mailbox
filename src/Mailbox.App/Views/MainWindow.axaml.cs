@@ -56,10 +56,18 @@ public partial class MainWindow : Window
         _ribbon = new RibbonView(App.Commands, layout);
         RibbonDisplayMemory.Wire(_ribbon, RibbonWindow.Shell, Environment.GetEnvironmentVariable("MAILBOX_RIBBON"));
 
+        // MAILBOX_TAB=folder|view|sendreceive|home opens the strip on one tab, so a capture can
+        // photograph a tab other than the one the window remembers.
+        if (Environment.GetEnvironmentVariable("MAILBOX_TAB") is { Length: > 0 } posedTab)
+        {
+            _ribbon.ActiveTabId = posedTab.Trim();
+        }
+
         // What is usable given what is selected — and, for Undo and Redo, what has been done.
         // The inline reply strip layers the compose window's own answer over this one and puts
         // it back afterwards, so the two compose rather than replace each other.
         _ribbon.CommandEnabled = IsCommandUsable;
+        _ribbon.CommandChecked = IsCommandChecked;
         _ribbon.CommandInvoked += OnRibbonCommand;
         _ribbon.BackstageRequested += (_, _) => ShowBackstage();
         _ribbon.FloatingBodyChanged += (_, e) => ShowFloatingRibbon(e.Body);
@@ -190,8 +198,11 @@ public partial class MainWindow : Window
         // selection are in place: MAILBOX_RUN=mail.delete,mail.archive. A menu cannot be
         // photographed but what it does can, and this is how the audit checks that a button
         // does what §20 says rather than what its handler's name suggests.
-        if (Environment.GetEnvironmentVariable("MAILBOX_RUN") is { Length: > 0 } run)
+        // Once per run, not once per window: Open in New Window makes a second shell, and a
+        // second shell that ran the same command list again would open a third.
+        if (Environment.GetEnvironmentVariable("MAILBOX_RUN") is { Length: > 0 } run && !_harnessRan)
         {
+            _harnessRan = true;
             Opened += (_, _) => Dispatcher.UIThread.Post(() =>
             {
                 foreach (var id in run.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
@@ -2478,6 +2489,9 @@ public partial class MainWindow : Window
         return true;
     }
 
+    /// <summary>Whether <c>MAILBOX_RUN</c> has already fired in this process.</summary>
+    private static bool _harnessRan;
+
     private ReadingPaneBody? _reading;
     private readonly AttachmentStrip _attachments = new();
 
@@ -2506,6 +2520,10 @@ public partial class MainWindow : Window
         // An answered invitation is two things: a write into the calendar, which the bar has
         // already done, and a message to the organizer, which only the shell can queue.
         _reading.InvitationAnswered += (_, answer) => SendInvitationReply(shell, answer);
+
+        // The header bar's own button: mark this one and fetch it now, rather than making the
+        // reader find Mark to Download and then Process Marked Headers for a single message.
+        _reading.DownloadRequested += (_, _) => _ = DownloadSelectedHeaderAsync(shell);
 
         // The pane is the only thing that has opened the message, so it is the only thing that
         // knows whether the subject over it is the message's own or the placeholder an encrypted
@@ -2610,6 +2628,10 @@ public partial class MainWindow : Window
                 selected.Address, selected.Id, selected.FolderId, selected.Subject,
                 selected.From, selected.Received, !selected.IsUnread)
             : null;
+
+        // A header with nothing under it: the pane says so and offers to fetch it, rather than
+        // drawing an empty message the reader would take for a broken one.
+        _reading.HeaderOnly = shell.SelectedMessage?.IsHeaderOnly == true;
 
         // The pane first, then the strip from what the pane is showing: an encrypted message's
         // attachments are inside it, and the envelope has none worth offering.
@@ -3699,7 +3721,7 @@ public partial class MainWindow : Window
     private void ShowCurrentViewMenu(ShellViewModel shell)
     {
         var flyout = new MenuFlyout();
-        var settings = new MenuItem { Header = ViewCommands.OpenViewSettings.Label };
+        var settings = new MenuItem { Header = ViewCommands.OpenViewSettings.Label + "…" };
         settings.Click += (_, _) => _ = ShowViewSettingsAsync(shell);
         var reset = new MenuItem { Header = ViewCommands.ResetView.Label };
         reset.Click += (_, _) => shell.ResetView();
@@ -3709,47 +3731,66 @@ public partial class MainWindow : Window
     }
 
     /// <summary>Layout: the folder pane, the reading pane and the To-Do Bar, as the reference's menu has them.</summary>
+    /// <remarks>
+    /// The three are filled by the methods below rather than here, because the View tab gives
+    /// each of them a button of its own and the two surfaces must offer the same entries.
+    /// </remarks>
     private void ShowLayoutMenu(ShellViewModel shell)
     {
         var flyout = new MenuFlyout();
 
         MenuItem Sub(string header) { var item = new MenuItem { Header = header }; flyout.Items.Add(item); return item; }
-        void Entry(MenuItem parent, string header, Action run, bool ticked)
-        {
-            var item = new MenuItem { Header = header, Icon = ticked ? new TextBlock { Text = "\u2713" } : null };
-            item.Click += (_, _) => run();
-            parent.Items.Add(item);
-        }
 
-        var folder = Sub("Folder Pane");
-        Entry(folder, "Normal", () => shell.NavCollapsed = false, !shell.NavCollapsed);
-        Entry(folder, "Minimized", () => shell.NavCollapsed = true, shell.NavCollapsed);
+        FillFolderPaneMenu(Sub("Folder Pane").Items, shell);
+        FillReadingPaneMenu(Sub("Reading Pane").Items, shell);
+        FillToDoBarMenu(Sub("To-Do Bar").Items, shell);
 
-        var reading = Sub("Reading Pane");
-        Entry(reading, "Right", () => { shell.ReadingPaneAtBottom = false; shell.ReadingPaneVisible = true; }, shell.ReadingPaneVisible && !shell.ReadingPaneAtBottom);
-        Entry(reading, "Bottom", () => { shell.ReadingPaneAtBottom = true; shell.ReadingPaneVisible = true; }, shell.ReadingPaneVisible && shell.ReadingPaneAtBottom);
-        Entry(reading, "Off", () => shell.ReadingPaneVisible = false, !shell.ReadingPaneVisible);
-        reading.Items.Add(new Separator());
+        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+    }
+
+    /// <summary>One entry of a layout menu: a tick where it is the state, and what it sets.</summary>
+    private static void LayoutEntry(ItemCollection into, string header, Action run, bool ticked)
+    {
+        var item = new MenuItem { Header = header, Icon = ticked ? new TextBlock { Text = "\u2713" } : null };
+        item.Click += (_, _) => run();
+        into.Add(item);
+    }
+
+    private static void FillFolderPaneMenu(ItemCollection into, ShellViewModel shell)
+    {
+        LayoutEntry(into, "Normal", () => shell.NavCollapsed = false, !shell.NavCollapsed);
+        LayoutEntry(into, "Minimized", () => shell.NavCollapsed = true, shell.NavCollapsed);
+    }
+
+    private void FillReadingPaneMenu(ItemCollection into, ShellViewModel shell)
+    {
+        LayoutEntry(into, "Right", () => { shell.ReadingPaneAtBottom = false; shell.ReadingPaneVisible = true; }, shell.ReadingPaneVisible && !shell.ReadingPaneAtBottom);
+        LayoutEntry(into, "Bottom", () => { shell.ReadingPaneAtBottom = true; shell.ReadingPaneVisible = true; }, shell.ReadingPaneVisible && shell.ReadingPaneAtBottom);
+        LayoutEntry(into, "Off", () => shell.ReadingPaneVisible = false, !shell.ReadingPaneVisible);
+        into.Add(new Separator());
+
         var options = new MenuItem { Header = "Options…" };
         options.Click += async (_, _) => await new ReadingPaneOptionsDialog(App.MailOptions).ShowDialog(this);
-        reading.Items.Add(options);
+        into.Add(options);
+    }
 
-        // To-Do Bar · Calendar is the docked pane, not the popup: the menu's own tick reads
-        // "is the calendar docked", and it did not use to be what the entry set. Each entry is a
-        // section of the bar and switches only itself, as the reference's own three do.
-        var todo = Sub("To-Do Bar");
-        Entry(todo, "Calendar", () => { if (shell.IsCalendarDocked) UndockPeek(); else DockPeek(); }, shell.IsCalendarDocked);
-        Entry(todo, "Tasks", () => ShowToDoTasks(shell, !shell.AreTasksDocked), shell.AreTasksDocked);
-        Entry(todo, "People", () => ShowToDoPeople(shell, !shell.ArePeopleDocked), shell.ArePeopleDocked);
-        Entry(todo, "Off", () =>
+    /// <remarks>
+    /// To-Do Bar · Calendar is the docked pane, not the popup: the menu's own tick reads "is the
+    /// calendar docked", and it did not use to be what the entry set. Each entry is a section of
+    /// the bar and switches only itself, as the reference's own three do.
+    /// </remarks>
+    private void FillToDoBarMenu(ItemCollection into, ShellViewModel shell)
+    {
+        LayoutEntry(into, "Calendar", () => { if (shell.IsCalendarDocked) UndockPeek(); else DockPeek(); }, shell.IsCalendarDocked);
+        LayoutEntry(into, "Tasks", () => ShowToDoTasks(shell, !shell.AreTasksDocked), shell.AreTasksDocked);
+        LayoutEntry(into, "People", () => ShowToDoPeople(shell, !shell.ArePeopleDocked), shell.ArePeopleDocked);
+        LayoutEntry(into, "Off", () =>
         {
             shell.AreTasksDocked = false;
             shell.ArePeopleDocked = false;
             if (shell.IsCalendarDocked) UndockPeek();
             else RebuildToDoBar(shell);
         }, !shell.IsToDoBarVisible);
-
-        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
     }
 
     /// <summary>View Settings…: Advanced View Settings over the folder's view; OK applies, Reset Current View resets.</summary>
@@ -4187,6 +4228,9 @@ public partial class MainWindow : Window
         if (RunJournalCommand(shell, id)) return;
         if (RunOverSelection(shell, id)) return;
         if (RunViewCommand(shell, id)) return;
+        if (RunViewTabCommand(shell, id)) return;
+        if (RunFolderTabCommand(shell, id)) return;
+        if (RunServerCommand(shell, id)) return;
 
         // A plugin's command, found the way a Quick Step is: the host owns the handler, and a
         // handler that throws disables its plugin rather than the window.
@@ -6290,6 +6334,19 @@ public partial class MainWindow : Window
         {
             if (id == MailCommands.Undo.Id) return _inlineCompose is not null || shell.Undo.CanUndo;
             if (id == ViewCommands.Redo.Id) return shell.Undo.CanRedo;
+
+            // The Folder tab against the folder the pane has selected: the reference greys
+            // Rename, Move and Delete on a folder the account cannot do without, and every
+            // entry on the tab when nothing is selected at all.
+            if (IsFolderTabCommand(id))
+            {
+                if (SelectedFolderFor(shell) is not var (_, folder)) return false;
+
+                return id != MailCommands.RenameFolder.Id
+                       && id != MailCommands.MoveFolder.Id
+                       && id != MailCommands.DeleteFolder.Id
+                    || folder.Role == FolderRole.None;
+            }
         }
 
         if (!App.Commands.TryGet(id, out var command)) return true;
@@ -6312,7 +6369,11 @@ public partial class MainWindow : Window
     };
 
     /// <summary>Re-reads enablement, for a selection or a module that has just changed.</summary>
-    private void RefreshCommandEnablement() => _ribbon?.RefreshEnablement();
+    private void RefreshCommandEnablement()
+    {
+        _ribbon?.RefreshEnablement();
+        _ribbon?.RefreshChecked();
+    }
 
     /// <summary>
     /// Writes to the store, and says so when the write will not go.
@@ -7486,6 +7547,7 @@ public partial class MainWindow : Window
     {
         App.Transfer.SetWorkOffline(!App.Transfer.WorkOffline, await AccountConnectionsAsync());
         shell.StatusRight = App.Transfer.WorkOffline ? "Working offline." : "Working online.";
+        RefreshCommandChecked();
     }
 
     /// <summary>
