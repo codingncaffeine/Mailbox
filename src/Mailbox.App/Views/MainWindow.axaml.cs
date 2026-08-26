@@ -3005,7 +3005,6 @@ public partial class MainWindow : Window
     {
         if (this.FindControl<ListBox>("FolderList") is not { } folders) return;
 
-        var flyout = new MenuFlyout();
         ViewModels.FolderNode? pressed = null;
 
         folders.AddHandler(PointerPressedEvent, (object? _, PointerPressedEventArgs e) =>
@@ -3014,7 +3013,10 @@ public partial class MainWindow : Window
             pressed = (e.Source as Control)?.DataContext as ViewModels.FolderNode;
         }, RoutingStrategies.Tunnel);
 
-        flyout.Opening += (_, _) =>
+        // Built before it is shown, for the reason in RowMenu: a flyout filled from its own
+        // Opening event has already been measured empty by the time the entries arrive, and the
+        // popup keeps that size.
+        void FillFolderContextMenu(MenuFlyout flyout)
         {
             flyout.Items.Clear();
 
@@ -3070,9 +3072,17 @@ public partial class MainWindow : Window
                 shell.Refresh();
             };
             flyout.Items.Add(delete);
-        };
+        }
 
-        folders.ContextFlyout = flyout;
+        folders.AddHandler(ContextRequestedEvent, (object? _, ContextRequestedEventArgs e) =>
+        {
+            if (e.Handled) return;
+
+            var menu = new MenuFlyout();
+            FillFolderContextMenu(menu);
+            menu.ShowAt(folders, showAtPointer: true);
+            e.Handled = true;
+        });
     }
 
     private async Task ShowRecoverDeletedAsync(ShellViewModel shell)
@@ -5490,28 +5500,45 @@ public partial class MainWindow : Window
     /// The menu over a message, transcribed from the reference's own.
     /// </summary>
     /// <remarks>
-    /// Seventeen entries in six groups, in the reference's order, with its access keys and its
+    /// Sixteen entries in five groups, in the reference's order, with its access keys and its
     /// submenus: Copy and Quick Print; the three responses; Mark as Unread, Categorize and
-    /// Follow Up; Find Related on its own; Quick Steps, Rules and Move; Send to OneNote on its
-    /// own; then Ignore, Junk, Delete and Archive.
+    /// Follow Up; Find Related on its own; Quick Steps, Rules and Move; then Ignore, Junk,
+    /// Delete and Archive.
     /// <para>
     /// Every submenu is the flyout the bar's own button opens, hung off a menu item instead of
     /// shown at a control — one implementation each, so the menu and the ribbon cannot come to
     /// disagree about what Follow Up offers.
     /// </para>
     /// <para>
-    /// Each icon is the command's own, tint included, which is how the ribbon draws it. One
-    /// entry does nothing: Send to OneNote reaches a product this application deliberately has
-    /// no part of (§3), and it is drawn greyed with a tooltip saying so rather than left out,
-    /// because the reader asked for the menu the capture shows.
+    /// Each icon is the command's own, tint included, which is how the ribbon draws it. Every
+    /// entry does what it says: the reference's Send to OneNote reaches a product this
+    /// application deliberately has no part of (§3) and is left out rather than drawn greyed,
+    /// which is the reader's own instruction.
     /// </para>
     /// </remarks>
     private MenuFlyout RowMenu(ShellViewModel shell)
     {
+        // Filled here rather than from the flyout's own Opening event, and this is the whole
+        // reason the menu was invisible. A flyout creates its presenter once and binds it to the
+        // item collection as it stood at that moment; a run that adds the entries from Opening
+        // adds them after the popup has already measured, and the popup is sized from that
+        // measurement — two pixels of border around nothing. It opened every time, and every
+        // time it opened empty. Every other menu in this window was built before it was shown,
+        // which is why the ribbon's dropdowns were never affected and this one always was.
         var flyout = new MenuFlyout();
-        flyout.Opening += (_, _) => FillRowMenu(flyout, shell);
+        FillRowMenu(flyout, shell);
+
+        // The trail that found it, kept. A flyout that is asked to open, fills, and then closes
+        // again in the same breath looks exactly like one that never opened, and only the order
+        // of these says which happened. The size is here because it is the thing that was wrong
+        // and nothing on screen would have shown it.
+        flyout.Opened += (_, _) => Log.Debug($"Row menu opened with {flyout.Items.Count} entries.");
+        flyout.Closed += (_, _) => Log.Debug("Row menu closed.");
         return flyout;
     }
+
+    /// <summary>The row menu while it is up, so the harness can ask what is in the one on screen.</summary>
+    private MenuFlyout? _rowMenu;
 
     /// <summary>
     /// Builds the row menu into a flyout. Split from opening it so the harness can read it back:
@@ -5575,11 +5602,10 @@ public partial class MainWindow : Window
             Submenu("_Move", MenuIcon("move"), MoveMenu(shell, rows), some);
             Rule();
 
-            var oneNote = Entry("Send to One_Note", MenuIcon("notes"), () => { }, enabled: false);
-            ToolTip.SetTip(oneNote,
-                "Send to OneNote reaches a product this application has no part of: nothing here "
-                + "signs in to a vendor's service. Notes are a module of its own on the rail.");
-            Rule();
+            // Send to OneNote is the reference's next entry and is deliberately not here. It
+            // reaches a product this application has no part of, and the reader's instruction
+            // was to leave it out rather than draw it greyed: every entry in this menu does
+            // what it says. Notes are a module of their own on the rail.
 
             Command(shell.IsIgnored(rows) ? "Stop Ignoring Conversation" : "Ignore", MailCommands.Ignore, some);
             Submenu("_Junk", CommandIcon(MailCommands.Junk), JunkMenu(shell, rows), some);
@@ -5641,9 +5667,21 @@ public partial class MainWindow : Window
 
             // On the row rather than on the list: a real right-click lands on the container and
             // bubbles, and a container that handles the press or the release is exactly how a
-            // menu ends up never opening.
+            // menu ends up never opening. On a message rather than on a group header — the first
+            // container in a grouped list is the header, and a menu over one is a different
+            // question from the menu the reader asked about.
             var target = list.ContainerFromIndex(0) as Control ?? list;
+            for (var i = 0; i < list.ItemCount; i++)
+            {
+                if (list.ContainerFromIndex(i) is Control { DataContext: ViewModels.MessageRow } row)
+                {
+                    target = row;
+                    break;
+                }
+            }
+
             Log.Info($"Harness: right-clicking a {target.GetType().Name}.");
+
 
             target.RaiseEvent(new Avalonia.Input.PointerPressedEventArgs(
                 target, pointer, list, at, 0,
@@ -5660,14 +5698,19 @@ public partial class MainWindow : Window
                 Avalonia.Input.KeyModifiers.None,
                 Avalonia.Input.MouseButton.Right));
 
-            Log.Info($"Harness: after a right-click the menu is open: "
-                     + $"{(list.ContextFlyout as MenuFlyout)?.IsOpen == true}");
+            // How many entries, not just whether it opened. A menu that opens holding nothing is
+            // the failure this pose exists to catch: it was reported open for a fortnight while
+            // the popup on screen was two pixels of border around an empty presenter, because
+            // nothing here ever asked what was in the one the reader would see.
+            Log.Info($"Harness: after a right-click the menu is open: {_rowMenu?.IsOpen == true}, "
+                     + $"holding {_rowMenu?.Items.Count ?? 0} entries.");
+            _rowMenu?.Hide();
 
             // And the same question asked the other way, in case the press never becomes a
             // context request at all.
             list.RaiseEvent(new Avalonia.Input.ContextRequestedEventArgs());
-            Log.Info($"Harness: after ContextRequested the menu is open: "
-                     + $"{(list.ContextFlyout as MenuFlyout)?.IsOpen == true}");
+            Log.Info($"Harness: after ContextRequested the menu is open: {_rowMenu?.IsOpen == true}, "
+                     + $"holding {_rowMenu?.Items.Count ?? 0} entries.");
         }
         else
         {
@@ -5740,7 +5783,11 @@ public partial class MainWindow : Window
 
         if (icon is TextBlock glyph && command.IconTint is { Length: > 0 } tint)
         {
-            glyph[!TextBlock.ForegroundProperty] = new DynamicResourceExtension(tint);
+            // ".brush" on the end, as the ribbon's own BuildIcon does. A tint names a token,
+            // and a token without the suffix resolves to the colour as text — which a Foreground
+            // cannot be, and which threw the moment a menu had a visible glyph to draw. It never
+            // did while the popup came out two pixels wide, so this rode along behind that.
+            glyph[!TextBlock.ForegroundProperty] = new DynamicResourceExtension(tint + ".brush");
         }
 
         return icon;
@@ -6064,18 +6111,43 @@ public partial class MainWindow : Window
     private string? _taskbarArt;
 
     /// <summary>
-    /// Puts the full or the empty mailbox on the window, which is what a taskbar draws.
+    /// The icon the desktop draws for this application, which is the one the taskbar reads.
     /// </summary>
     /// <remarks>
-    /// Only when it changes: setting a window icon goes to the window manager, and doing that on
-    /// every count change would be a round trip per message read. Logged when it does, because
-    /// an icon in a panel is the one part of this nobody can screenshot from here — the log is
-    /// how a run says which mailbox it put up.
+    /// Handed the application's own embedded drawings; see <see cref="Mailbox.Core.Platform.PanelIcon"/>
+    /// for why the taskbar cannot be reached any other way.
+    /// </remarks>
+    private readonly Mailbox.Core.Platform.PanelIcon _panelIcon = new(
+        (art, size) => Avalonia.Platform.AssetLoader.Open(
+            new Uri($"avares://mailbox/Assets/Icons/{art}-{size}.png")));
+
+    /// <summary>
+    /// Puts the full or the empty mailbox on the window and on the panel.
+    /// </summary>
+    /// <remarks>
+    /// Both, because they are two different pictures on two different surfaces and only one of
+    /// them is the window's. The window icon is what a taskbar draws on the desktops that read
+    /// one, and it is set here. Plasma is not one of them — it draws the icon its desktop entry
+    /// names — so the entry's icon is rewritten as well, which is what
+    /// <see cref="Mailbox.Core.Platform.PanelIcon"/> does.
+    /// <para>
+    /// Only when it changes: setting a window icon goes to the window manager and rewriting the
+    /// theme goes to the disk, and doing either on every count change would be work per message
+    /// read. Off the UI thread, because the theme write ends in a process launch. Never during a
+    /// capture — a screenshot run has no business rewriting the reader's icon theme.
+    /// </para>
+    /// <para>
+    /// Logged when it happens, because an icon in a panel is the one part of this nobody can
+    /// screenshot from here — the log is how a run says which mailbox it put up, and whether the
+    /// desktop was told.
+    /// </para>
     /// </remarks>
     private void ShowUnreadOnTaskbar(ShellViewModel shell)
     {
         var art = Mailbox.Core.Notifications.TrayArtwork.For(shell.TotalUnread);
         if (art == _taskbarArt) return;
+
+        var unread = shell.TotalUnread;
 
         try
         {
@@ -6083,13 +6155,30 @@ public partial class MainWindow : Window
                 Avalonia.Platform.AssetLoader.Open(new Uri($"avares://mailbox/Assets/Icons/{art}-256.png"))));
 
             _taskbarArt = art;
-            Log.Info($"Taskbar icon: {art} ({shell.TotalUnread} unread).");
+            Log.Info($"Taskbar icon: {art} ({unread} unread).");
         }
         catch (Exception ex)
         {
             // The window keeps whatever icon it had; a panel drawing is not worth a crash.
             Log.Warn("The taskbar icon could not be set.", ex);
         }
+
+        if (WindowCapture.IsRequested) return;
+
+        Task.Run(() =>
+        {
+            try
+            {
+                var told = _panelIcon.Show(unread);
+                Log.Info(told
+                    ? $"Panel icon: the desktop entry's icon is now the {art} mailbox."
+                    : $"Panel icon: unchanged ({art}).");
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("The panel icon could not be written.", ex);
+            }
+        });
     }
 
     /// <summary>
@@ -7105,11 +7194,48 @@ public partial class MainWindow : Window
             OpenMessageWindow(shell);
         };
 
+        // Why a right-click did or did not become a menu. Three things decide it, and none of
+        // them can be seen from outside the event: which element the release landed on, whether
+        // something had already handled it, and which button began the press — Avalonia raises
+        // ContextRequested only from the element that is the source of an unhandled release
+        // whose press was the right button. Debug level, so the diagnostics launcher has it and
+        // an ordinary run does not.
+        list.AddHandler(PointerPressedEvent, (object? _, PointerPressedEventArgs e) =>
+        {
+            var point = e.GetCurrentPoint(list).Properties;
+            Log.Debug($"List press: {e.Source?.GetType().Name ?? "nothing"}, "
+                      + $"right: {point.IsRightButtonPressed}, handled: {e.Handled}.");
+        }, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+
+        list.AddHandler(PointerReleasedEvent, (object? _, PointerReleasedEventArgs e) =>
+        {
+            Log.Debug($"List release: {e.Source?.GetType().Name ?? "nothing"}, "
+                      + $"began with {e.InitialPressMouseButton}, handled: {e.Handled}.");
+        }, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+
+        list.AddHandler(ContextRequestedEvent, (object? _, ContextRequestedEventArgs e) =>
+        {
+            Log.Debug($"List context requested from {e.Source?.GetType().Name ?? "nothing"}, "
+                      + $"handled: {e.Handled}.");
+        }, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+
         // Right-click: the reference's menu over a message, in its order, over the selection.
         // Every entry runs the same command the ribbon button does, so a thing done from here
         // is the thing done from there. Entries whose command is not built yet say what they
         // wait for, the way the ribbon's do.
-        list.ContextFlyout = RowMenu(shell);
+        //
+        // Shown from the request rather than hung on ContextFlyout, because the menu is a
+        // different menu every time — what is selected decides which entries are usable — and a
+        // flyout that is filled after the popup has measured comes out empty. One menu per
+        // right-click, built and then shown, which is the shape every other menu here has.
+        list.AddHandler(ContextRequestedEvent, (object? _, ContextRequestedEventArgs e) =>
+        {
+            if (e.Handled) return;
+
+            _rowMenu = RowMenu(shell);
+            _rowMenu.ShowAt(list, showAtPointer: true);
+            e.Handled = true;
+        });
 
         // A right-click on a row that is not selected selects it first, as the reference does,
         // so the menu acts on what is under the pointer rather than on whatever was selected
