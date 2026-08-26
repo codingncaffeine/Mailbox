@@ -112,6 +112,14 @@ EOF
 command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database -q "$APPS" || true
 command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -qtf "$ICONS" || true
 
+# And tell KDE. Plasma resolves a desktop entry's icon once and holds it for the life of the
+# shell, so new artwork installed under an existing name is simply not seen: the panel goes on
+# drawing whatever it cached at login. Rebuilding the service database is what announces the
+# change, takes about a tenth of a second, and is what a package install runs anyway. Without
+# this, an install "did nothing" — which is exactly how it looked for a day.
+command -v kbuildsycoca6 >/dev/null 2>&1 && kbuildsycoca6 >/dev/null 2>&1 \
+    || { command -v kbuildsycoca5 >/dev/null 2>&1 && kbuildsycoca5 >/dev/null 2>&1; } || true
+
 echo "── desktop shortcuts"
 mkdir -p "$DESKTOP"
 for entry in mailbox mailbox-diagnostics; do
