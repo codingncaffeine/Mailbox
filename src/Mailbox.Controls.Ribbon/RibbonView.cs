@@ -919,6 +919,9 @@ public sealed class RibbonView : ContentControl
     /// <summary>The class an entry inside a gallery box wears, which is boxed differently.</summary>
     public const string GalleryEntryClass = "galleryentry";
 
+    /// <summary>The class a tick on the bar wears, so it is not painted as a dialog's.</summary>
+    public const string TickClass = "ribboncheck";
+
     /// <summary>
     /// Re-evaluates every drawn control against <see cref="CommandEnabled"/>.
     /// </summary>
@@ -2349,6 +2352,7 @@ public sealed class RibbonView : ContentControl
     {
         var box = new CheckBox
         {
+            Classes = { TickClass },
             Content = command.Label,
             MinHeight = RibbonMetrics.SmallButtonHeight,
             VerticalAlignment = VerticalAlignment.Center,

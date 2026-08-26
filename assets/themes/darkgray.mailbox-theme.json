@@ -264,6 +264,7 @@
     "ribbon.tab.underline": "{palette.brand.underline}",
     "ribbon.tabstrip.background": "{palette.chrome.tabstrip}",
     "ribbon.tabstrip.height": "29",
+    "ribbon.tick.border": "#666666",
     "statusbar.background": "{palette.chrome.statusbar}",
     "statusbar.foreground": "{palette.neutral.white}",
     "statusbar.height": "24",

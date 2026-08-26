@@ -141,6 +141,17 @@
     </Style>
 
     <!--
+        Except on the ribbon, where the box is not a dialog's. Measured off the View capture, the
+        reference leaves it transparent — the box is the bar's own colour — inside a line of its
+        own. A dialog's fill there reads as a hole in the bar, which on Black is exactly what it
+        was: a #1F1F1F square on a #292929 ribbon.
+    -->
+    <Style Selector="CheckBox.ribboncheck">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ribbon.tick.border.brush}" />
+    </Style>
+
+    <!--
         A radio's template paints Background over its whole root — label and all — so giving
         it the box fill drew a light bar the width of the row. The disc is the template's own
         ellipse, and it takes its fill by name.

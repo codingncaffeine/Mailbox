@@ -340,6 +340,11 @@ public static class OfficeThemes
         t.Set(TokenKeys.Ribbon.ButtonOpen, "#CCCCCC");
         t.Set(TokenKeys.Ribbon.ButtonOpenBorder, "#5C5C5C");
         t.Set(TokenKeys.Ribbon.ButtonHover, "#D1D1D1");
+
+        // Measured off the View capture: an unchecked box on this ribbon is the ribbon's own
+        // #BDBDBD inside a #666666 line. Not the gallery's #858585 and not the split button's
+        // #757575 — three lines on one bar, and the reference draws them differently.
+        t.Set(TokenKeys.Ribbon.TickBorder, "#666666");
         t.Set(TokenKeys.Ribbon.ButtonSplitBorder, "#757575");
 
         t.Set(TokenKeys.Calendar.ToolbarText, "#FFFFFF");
@@ -620,6 +625,10 @@ public static class OfficeThemes
         t.Set(TokenKeys.Ribbon.ButtonOpenBorder, "#6B6B6B");
         t.Set(TokenKeys.Ribbon.ButtonHover, "#383838");
         t.Set(TokenKeys.Ribbon.ButtonSplitBorder, "#4D4D4D");
+
+        // The strong rule rather than the split button's: a box outlined at #4D4D4D on a
+        // #292929 bar is a box nobody can see.
+        t.Set(TokenKeys.Ribbon.TickBorder, "{border.strong}");
 
         // The ribbon's coloured artwork, measured off the Black capture. Each pair is the light
         // themes' the other way round: on a #292929 ribbon the reference draws the light colour
@@ -958,6 +967,7 @@ public static class OfficeThemes
         t.Set(TokenKeys.Ribbon.ButtonOpenBorder, "{palette.neutral.tertiary}");
         t.Set(TokenKeys.Ribbon.ButtonHover, "{palette.neutral.lighter}");
         t.Set(TokenKeys.Ribbon.ButtonSplitBorder, "{palette.neutral.tertiary}");
+        t.Set(TokenKeys.Ribbon.TickBorder, "{border.strong}");
 
         // The ribbon's coloured artwork, measured off the Colorful and White captures — the two
         // themes draw it identically, both having a white ribbon under it. Dark Gray darkens

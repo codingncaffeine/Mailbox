@@ -256,6 +256,7 @@
     "ribbon.tab.underline": "{palette.brand.underline}",
     "ribbon.tabstrip.background": "#1A2126",
     "ribbon.tabstrip.height": "29",
+    "ribbon.tick.border": "{border.strong}",
     "statusbar.background": "#141414",
     "statusbar.foreground": "{palette.neutral.secondary}",
     "statusbar.height": "24",

@@ -193,6 +193,19 @@ public static class TokenKeys
         /// takes the fill.
         /// </summary>
         public const string ButtonSplitBorder = "ribbon.button.split.border";
+
+        /// <summary>
+        /// The line round a check box on the ribbon itself — View's Show as Conversations.
+        /// </summary>
+        /// <remarks>
+        /// Its own token because the box is <em>not</em> a dialog's. Measured off the View
+        /// capture, the reference draws it transparent inside a <c>#666666</c> line on Dark
+        /// Gray's <c>#BDBDBD</c> ribbon: the box takes the ribbon's own colour, and only the
+        /// line says it is a box. Every tick in this application used to be in a dialog, and a
+        /// dialog's fill on the ribbon reads as a hole in the bar — which is exactly what it
+        /// looked like on Black.
+        /// </remarks>
+        public const string TickBorder = "ribbon.tick.border";
         public const string Height = "ribbon.height";
         public const string TabStripHeight = "ribbon.tabstrip.height";
     }
@@ -790,6 +803,7 @@ public static class TokenKeys
         Ribbon.TabSelected, Ribbon.TabUnderline, Ribbon.TabText, Ribbon.TabTextSelected, Ribbon.GroupLabel,
         Ribbon.GroupSeparator, Ribbon.GalleryBackground, Ribbon.GalleryBorder,
         Ribbon.ButtonOpen, Ribbon.ButtonOpenBorder, Ribbon.ButtonHover, Ribbon.ButtonSplitBorder,
+        Ribbon.TickBorder,
         Ribbon.Height, Ribbon.TabStripHeight,
         .. RibbonIcon.All,
         Workspace.Inset,
