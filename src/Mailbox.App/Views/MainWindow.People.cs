@@ -915,10 +915,49 @@ public partial class MainWindow
     /// The Address Book window, which the ribbon's own button and Ctrl+Shift+B open: the contacts
     /// to look through, with no message to put them on.
     /// </summary>
+    /// <summary>
+    /// The Address Book, as the ribbon's button opens it: to look people up rather than to pick
+    /// them for a message.
+    /// </summary>
+    /// <remarks>
+    /// The window does its own work — new entries, properties, deletes — because it holds the
+    /// book and nothing else needs to know. The two it cannot do are the two that belong to the
+    /// shell: writing a message, and opening the page where address books are managed.
+    /// </remarks>
     private async Task ShowAddressBookAsync(ShellViewModel shell)
     {
         var dialog = new AddressBookDialog(App.Contacts, picking: false);
+
+        var write = false;
+        var options = false;
+        dialog.NewMessageRequested += (_, _) => write = true;
+        dialog.OptionsRequested += (_, _) => options = true;
+
+        // The harness presses its menus once it is up: MAILBOX_ADDRESSBOOK=select:0,properties.
+        if (Environment.GetEnvironmentVariable("MAILBOX_ADDRESSBOOK") is { Length: > 0 } actions)
+        {
+            dialog.Opened += (_, _) => _ = dialog.HarnessAsync(actions);
+        }
+
         await dialog.ShowDialog(this);
+
+        // After it has closed, not while it is open: a compose window opened over a modal one
+        // would be trapped behind it, and Account Settings is a window of the same rank.
+        // A blank message from the account the reader sends as by default, which is what
+        // NewMessage with no link opens — the same window the New Email button gives.
+        if (write)
+        {
+            NewMessage();
+            return;
+        }
+
+        if (options)
+        {
+            var accounts = new AccountSettingsDialog("Address Books");
+            await accounts.ShowDialog(this);
+            EnsurePeople(shell).Reload();
+        }
+
         shell.StatusRight = $"Address Book: {App.Contacts.Rows().Count} contact(s).";
     }
 

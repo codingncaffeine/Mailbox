@@ -31,14 +31,20 @@ internal static class SystemDialogChrome
     /// Wraps <paramref name="content"/> in the caption and the rounded, clipping surface, and
     /// sets it as the window's content. <see cref="Window.Title"/> must be set first.
     /// </summary>
-    internal static void Apply(Window window, Control content)
+    /// <param name="minimizable">
+    /// True for a window of this family the reference lets a reader minimise and maximise — the
+    /// Address Book, which is a window rather than a dialog and whose capture shows all three
+    /// buttons. False, and the default, for the dialogs: Account Settings and its children carry
+    /// a close button and nothing else.
+    /// </param>
+    internal static void Apply(Window window, Control content, bool minimizable = false)
     {
         ArgumentNullException.ThrowIfNull(window);
         ArgumentNullException.ThrowIfNull(content);
 
         WindowFrame.Apply(window);
 
-        var bar = TitleBar(window);
+        var bar = TitleBar(window, minimizable);
 
         var root = new Grid { RowDefinitions = new RowDefinitions($"{TitleBarHeight},*") };
         Grid.SetRow(bar, 0);
@@ -56,7 +62,7 @@ internal static class SystemDialogChrome
         WindowFrame.Drags(window, bar);
     }
 
-    private static Control TitleBar(Window window)
+    private static Control TitleBar(Window window, bool minimizable)
     {
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
 
@@ -71,7 +77,7 @@ internal static class SystemDialogChrome
         Grid.SetColumn(title, 0);
         grid.Children.Add(title);
 
-        var buttons = new CaptionButtons(window, dialog: true, system: true);
+        var buttons = new CaptionButtons(window, dialog: !minimizable, system: true);
         Grid.SetColumn(buttons, 1);
         grid.Children.Add(buttons);
 

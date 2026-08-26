@@ -93,6 +93,106 @@
         <Setter Property="Stroke" Value="{DynamicResource systemdialog.foreground.brush}" />
     </Style>
 
+    <!-- ============================== Radios ============================== -->
+    <!--
+        The Address Book's two search radios. Same reasoning as the tick above: the control
+        theme's disc takes the application's dark palette and reads as a hole in a light page.
+    -->
+    <Style Selector="Border.systemdialogroot RadioButton">
+        <Setter Property="Foreground" Value="{DynamicResource systemdialog.foreground.brush}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{DynamicResource systemdialog.field.border.brush}" />
+    </Style>
+
+    <Style Selector="Border.systemdialogroot RadioButton /template/ Ellipse#border">
+        <Setter Property="Fill" Value="{DynamicResource systemdialog.list.background.brush}" />
+        <Setter Property="Stroke" Value="{DynamicResource systemdialog.field.border.brush}" />
+    </Style>
+
+    <Style Selector="Border.systemdialogroot RadioButton /template/ Ellipse#dot">
+        <Setter Property="Fill" Value="{DynamicResource systemdialog.accent.brush}" />
+    </Style>
+
+    <!-- ============================== List boxes ============================== -->
+    <!--
+        A list box is not a report list: the desktop fills its selected row solid with the accent
+        and writes it in white, where the report's is the pale blue with its own ink. New Entry's
+        two entry types are the one list box in this family.
+    -->
+    <Style Selector="Border.systemdialogroot ListBoxItem">
+        <Setter Property="Foreground" Value="{DynamicResource systemdialog.foreground.brush}" />
+        <Setter Property="Padding" Value="4,1" />
+        <Setter Property="MinHeight" Value="0" />
+    </Style>
+
+    <Style Selector="Border.systemdialogroot ListBoxItem:selected /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource systemdialog.accent.brush}" />
+    </Style>
+
+    <Style Selector="Border.systemdialogroot ListBoxItem:selected">
+        <Setter Property="Foreground" Value="{DynamicResource systemdialog.selection.text.brush}" />
+    </Style>
+
+    <Style Selector="Border.systemdialogroot ListBoxItem:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource systemdialog.hover.brush}" />
+    </Style>
+
+    <!-- ============================== The menu bar ============================== -->
+    <!--
+        The Address Book carries File, Edit and Tools — the one menu bar in the application, and
+        it belongs to a window the desktop draws. The shell's own menu styles paint from the
+        theme, which on Dark Gray and Black would drop a dark popup out of a light window, so
+        every entry on this bar is classed and painted from the system family instead. Classed
+        rather than scoped to the root, because a menu's popup is a separate visual root and a
+        descendant selector does not reach it.
+    -->
+    <Style Selector="Border.systemdialogroot Menu">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+
+    <Style Selector="MenuItem.sysmenu">
+        <Setter Property="Foreground" Value="{DynamicResource systemdialog.foreground.brush}" />
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+
+    <Style Selector="MenuItem.sysmenu:pointerover">
+        <Setter Property="Background" Value="{DynamicResource systemdialog.hover.brush}" />
+    </Style>
+
+    <Style Selector="MenuItem.sysmenu:selected /template/ Border#root">
+        <Setter Property="Background" Value="{DynamicResource systemdialog.hover.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource systemdialog.hover.brush}" />
+    </Style>
+
+    <Style Selector="MenuItem.sysmenu /template/ Popup Border">
+        <Setter Property="Background" Value="{DynamicResource systemdialog.background.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource systemdialog.border.brush}" />
+    </Style>
+
+    <Style Selector="MenuItem.sysmenu:disabled">
+        <Setter Property="Foreground" Value="{DynamicResource systemdialog.foreground.disabled.brush}" />
+    </Style>
+
+    <!-- ============================== The link ============================== -->
+    <!--
+        Advanced Find, which the reference draws as a blue link rather than a button.
+    -->
+    <Style Selector="Button.syslink">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource systemdialog.accent.brush}" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+
+    <Style Selector="Button.syslink:pointerover">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+
+    <Style Selector="Button.syslink TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource systemdialog.accent.brush}" />
+    </Style>
+
     <!-- ============================== Push button ============================== -->
     <!--
         The desktop's push button, measured off the capture: 21px tall in a 1px line with

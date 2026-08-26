@@ -68,16 +68,21 @@ public sealed class CaptionButtons : StackPanel
     /// tokens rather than the title bar's.
     /// </param>
     /// <param name="system">
-    /// True for a system dialog — Account Settings and its children — whose caption is the
-    /// desktop's light one in every theme: shorter again, and painted from the system dialog
-    /// tokens. Implies <paramref name="dialog"/>.
+    /// True for a system window — Account Settings, the Address Book and their children — whose
+    /// caption is the desktop's light one in every theme: shorter again, and painted from the
+    /// system dialog tokens.
     /// </param>
+    /// <remarks>
+    /// <paramref name="system"/> used to imply <paramref name="dialog"/>, on the grounds that
+    /// every window in that family was a fixed dialog. The Address Book is not: the reference
+    /// draws it with all three buttons and lets it be resized, so the two are independent now —
+    /// system says which palette, dialog says which buttons.
+    /// </remarks>
     public CaptionButtons(Window window, bool dialog = false, bool system = false)
     {
         _window = window;
         Orientation = Orientation.Horizontal;
         VerticalAlignment = VerticalAlignment.Top;
-        dialog |= system;
 
         if (!dialog)
         {

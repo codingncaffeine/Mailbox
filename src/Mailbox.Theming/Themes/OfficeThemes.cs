@@ -827,6 +827,11 @@ public static class OfficeThemes
         t.Set(TokenKeys.SystemDialog.ListBorder, "#828790");
         t.Set(TokenKeys.SystemDialog.Selection, "#F0F0F0");
         t.Set(TokenKeys.SystemDialog.SelectionFocused, "#CCE8FF");
+
+        // A list box fills its selected row with the accent and writes it in white, where a
+        // report list takes the pale blue above: measured #0078D7 against white text in the New
+        // Entry capture.
+        t.Set(TokenKeys.SystemDialog.SelectionText, "#FFFFFF");
         t.Set(TokenKeys.SystemDialog.Hover, "#E5F1FB");
         t.Set(TokenKeys.SystemDialog.HoverBorder, "#CCE4F7");
         t.Set(TokenKeys.SystemDialog.Pressed, "#CCE4F7");

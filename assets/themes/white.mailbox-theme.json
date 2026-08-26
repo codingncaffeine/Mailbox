@@ -288,6 +288,7 @@
     "systemdialog.pressed": "#CCE4F7",
     "systemdialog.selection": "#F0F0F0",
     "systemdialog.selection.focused": "#CCE8FF",
+    "systemdialog.selection.text": "#FFFFFF",
     "systemdialog.surface": "#F9F9F9",
     "systemdialog.tab": "#F3F3F3",
     "systemdialog.titlebar": "#F3F3F3",

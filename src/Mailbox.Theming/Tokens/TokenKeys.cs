@@ -488,6 +488,18 @@ public static class TokenKeys
         /// <summary>A selected row while the list does not have the focus, and while it does.</summary>
         public const string Selection = "systemdialog.selection";
         public const string SelectionFocused = "systemdialog.selection.focused";
+
+        /// <summary>
+        /// The ink on a selected row of a <em>list box</em> — New Entry's two entry types.
+        /// </summary>
+        /// <remarks>
+        /// The desktop draws its report lists and its list boxes differently, and both are in
+        /// this family: a report's selected row is the pale <see cref="SelectionFocused"/> with
+        /// its own ink, measured off Account Settings, while a list box's is filled solid with
+        /// the accent and written in white — measured #0078D7 in the New Entry capture, which is
+        /// <see cref="Accent"/> to within three parts of blue.
+        /// </remarks>
+        public const string SelectionText = "systemdialog.selection.text";
         /// <summary>A toolbar button or row under the pointer.</summary>
         public const string Hover = "systemdialog.hover";
         public const string HoverBorder = "systemdialog.hover.border";
@@ -521,7 +533,7 @@ public static class TokenKeys
         public static readonly IReadOnlyList<string> All =
         [
             TitleBar, Background, Banner, BannerRule, Foreground, ForegroundDisabled,
-            Surface, Tab, Border, ListBackground, ListBorder, Selection, SelectionFocused,
+            Surface, Tab, Border, ListBackground, ListBorder, Selection, SelectionFocused, SelectionText,
             Hover, HoverBorder, Pressed, Accent, FieldBorder,
             Button, ButtonBorder, ButtonBorderBottom, ButtonDisabled, ButtonDisabledBorder,
             TooltipBorder,

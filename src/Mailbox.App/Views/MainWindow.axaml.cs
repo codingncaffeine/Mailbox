@@ -218,6 +218,14 @@ public partial class MainWindow : Window
                         CaptureNextWindow();
                     }
 
+                    // MAILBOX_CAPTURE_DIALOG=1 photographs whatever window the command opens
+                    // rather than the shell behind it, which is the only way to look at a dialog:
+                    // a modal is a window of its own and never appears in the shell's picture.
+                    if (Environment.GetEnvironmentVariable("MAILBOX_CAPTURE_DIALOG") == "1")
+                    {
+                        CaptureNextWindow();
+                    }
+
                     RunCommand(new CommandId(id));
 
                     // The status line and the windows: a press that opens a dialog writes no
@@ -841,9 +849,11 @@ public partial class MainWindow : Window
             await Task.Delay(700);
             await WindowCapture.WhileHeldAsync();
 
+            // The newest window rather than the oldest: a press that opens a dialog over a dialog
+            // — New Entry over the Address Book — means the one just opened, which is the last.
             var dialog = (Application.Current?.ApplicationLifetime
                     as IClassicDesktopStyleApplicationLifetime)
-                ?.Windows.FirstOrDefault(w => !ReferenceEquals(w, this));
+                ?.Windows.LastOrDefault(w => !ReferenceEquals(w, this));
 
             if (dialog is not null)
             {
