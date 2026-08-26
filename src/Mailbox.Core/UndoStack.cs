@@ -42,6 +42,11 @@ public sealed class UndoStack
     private readonly List<UndoStep> _done = [];
     private readonly List<UndoStep> _undone = [];
 
+    /// <summary>The steps a batch is collecting, or null when none is open.</summary>
+    private List<UndoStep>? _batch;
+    private string _batchDescription = string.Empty;
+    private int _batchDepth;
+
     /// <summary>Raised whenever what can be undone or redone changes.</summary>
     public event EventHandler? Changed;
 
@@ -72,6 +77,14 @@ public sealed class UndoStack
 
         if (IsReplaying) return;
 
+        // Inside a batch the step is held: what reaches the stack is the one step the batch
+        // closes with, so the reader takes back the command they pressed rather than its parts.
+        if (_batch is not null)
+        {
+            _batch.Add(new UndoStep(description, undo, redo));
+            return;
+        }
+
         _done.Add(new UndoStep(description, undo, redo));
         if (_done.Count > Depth) _done.RemoveAt(0);
 
@@ -94,7 +107,83 @@ public sealed class UndoStack
 
         _done.Clear();
         _undone.Clear();
+
+        // A batch collected against ids that are about to mean nothing goes with them.
+        _batch = null;
+        _batchDepth = 0;
+
         Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Collects everything recorded inside it into one step, for a command that is several.
+    /// </summary>
+    /// <remarks>
+    /// A Quick Step is one press to the reader and any number of operations underneath — move it,
+    /// mark it read, categorize it — each of which records itself. Without this, taking one back
+    /// means pressing Ctrl+Z once per operation, and how many that is is not something the reader
+    /// can see. Junk is the same shape for a different reason: it trains the filter and then
+    /// moves the message, and only both together are the thing that was done.
+    /// <para>
+    /// A batch opened inside another joins it and the outer description is the one kept, so a
+    /// command that batches for its own reasons is still one step inside a Quick Step. Nothing is
+    /// pushed for a batch that collected nothing.
+    /// </para>
+    /// </remarks>
+    public IDisposable Batch(string description)
+    {
+        // A replayed step records nothing, so there is nothing here to collect — and opening one
+        // would leave a batch across an undo that the caller never closes.
+        if (IsReplaying) return Nothing.Instance;
+
+        if (_batchDepth++ == 0)
+        {
+            _batch = [];
+            _batchDescription = description;
+        }
+
+        return new Scope(this);
+    }
+
+    private void CloseBatch()
+    {
+        if (_batchDepth == 0 || --_batchDepth > 0) return;
+
+        var collected = _batch ?? [];
+        _batch = null;
+
+        if (collected.Count == 0) return;
+
+        // Taken back newest first, as the stack itself takes steps back; done again oldest first,
+        // in the order they happened.
+        Push(
+            _batchDescription,
+            () => { for (var i = collected.Count - 1; i >= 0; i--) collected[i].Undo(); },
+            () => { foreach (var step in collected) step.Redo(); });
+    }
+
+    /// <summary>What a caller holds while a batch is open; disposing it closes the batch.</summary>
+    private sealed class Scope(UndoStack owner) : IDisposable
+    {
+        private bool _closed;
+
+        public void Dispose()
+        {
+            if (_closed) return;
+
+            _closed = true;
+            owner.CloseBatch();
+        }
+    }
+
+    /// <summary>The scope handed back when there is no batch to open, so callers need no branch.</summary>
+    private sealed class Nothing : IDisposable
+    {
+        public static readonly Nothing Instance = new();
+
+        public void Dispose()
+        {
+        }
     }
 
     private string? Replay(List<UndoStep> from, List<UndoStep> to, Func<UndoStep, Action> which)

@@ -141,6 +141,28 @@ public sealed class JunkService(MailOptions options, Mailbox.Contacts.ContactBoo
     public void Train(MailRepository mail, MimeMessage message, bool spam)
         => new JunkCorpus(mail).Train(Tokens(message), spam);
 
+    /// <summary>
+    /// The tokens a message would train on, so that a training can be taken back later without
+    /// keeping the message itself alive in a closure.
+    /// </summary>
+    public static IReadOnlyList<string> TokensOf(MimeMessage message) => Tokens(message);
+
+    /// <summary>Trains tokens already taken from a message — what an undone marking does again.</summary>
+    public void Train(MailRepository mail, IReadOnlyCollection<string> tokens, bool spam)
+        => new JunkCorpus(mail).Train(tokens, spam);
+
+    /// <summary>
+    /// Takes a training back out of the corpus.
+    /// </summary>
+    /// <remarks>
+    /// Not the same thing as re-marking a message the other way, which leaves both counts
+    /// standing on purpose (above) because the reader has said something new about the message.
+    /// This is for a marking that is being undone, where what the reader is saying is that it
+    /// never happened — so the count it added goes with it.
+    /// </remarks>
+    public void Untrain(MailRepository mail, IReadOnlyCollection<string> tokens, bool spam)
+        => new JunkCorpus(mail).Untrain(tokens, spam);
+
     private static IReadOnlyList<string> Tokens(MimeMessage message) => JunkTokenizer.Tokenize(
         From(message),
         message.Subject ?? string.Empty,

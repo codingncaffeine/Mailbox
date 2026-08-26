@@ -125,6 +125,85 @@ public class UndoStackTests
     }
 
     [Fact]
+    public void ABatchIsOneStep()
+    {
+        // A Quick Step is one press to the reader and any number of operations underneath, each
+        // of which records itself. One press has to take the whole of it back.
+        var stack = new UndoStack();
+        var done = new List<string>();
+
+        using (stack.Batch("Quick Step \u201cDone\u201d"))
+        {
+            stack.Push("Move", () => done.Add("undid move"), () => done.Add("redid move"));
+            stack.Push("Mark as Read", () => done.Add("undid read"), () => done.Add("redid read"));
+        }
+
+        Assert.Equal("Quick Step \u201cDone\u201d", stack.NextUndo);
+        Assert.Equal("Quick Step \u201cDone\u201d", stack.Undo());
+
+        // Taken back newest first, done again in the order they happened.
+        Assert.Equal(["undid read", "undid move"], done);
+        Assert.False(stack.CanUndo);
+
+        stack.Redo();
+        Assert.Equal(["undid read", "undid move", "redid move", "redid read"], done);
+    }
+
+    [Fact]
+    public void ABatchInsideABatchJoinsIt()
+    {
+        // Junk batches for its own reasons — it trains the filter and moves the message — and a
+        // Quick Step that junks is still one press.
+        var stack = new UndoStack();
+        var undone = 0;
+
+        using (stack.Batch("Quick Step"))
+        {
+            stack.Push("Move", () => undone++, () => { });
+            using (stack.Batch("Junk")) stack.Push("Junk", () => undone++, () => { });
+        }
+
+        Assert.Equal("Quick Step", stack.Undo());
+        Assert.Equal(2, undone);
+        Assert.False(stack.CanUndo);
+    }
+
+    [Fact]
+    public void ABatchThatDidNothingRecordsNothing()
+    {
+        var stack = new UndoStack();
+        var changes = 0;
+        stack.Changed += (_, _) => changes++;
+
+        using (stack.Batch("Quick Step"))
+        {
+        }
+
+        Assert.False(stack.CanUndo);
+        Assert.Equal(0, changes);
+    }
+
+    [Fact]
+    public void ABatchOpenedWhileUndoingCollectsNothing()
+    {
+        // Taking a batched command back runs the same code that recorded it, which opens a batch
+        // of its own. That batch has nothing to collect, and must not be left open.
+        var stack = new UndoStack();
+
+        void Undoing()
+        {
+            using var batch = stack.Batch("Quick Step");
+            stack.Push("Move", () => { }, () => { });
+        }
+
+        stack.Push("Quick Step", Undoing, () => { });
+        stack.Undo();
+
+        Assert.False(stack.CanUndo);
+        Assert.True(stack.CanRedo);
+    }
+
+    [Fact]
     public void ClearingAnEmptyStackSaysNothing()
     {
         var stack = new UndoStack();

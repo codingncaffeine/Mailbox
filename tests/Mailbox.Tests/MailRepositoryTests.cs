@@ -507,6 +507,83 @@ public class MailRepositoryTests
         Assert.Empty(repo.Snoozed(inbox.Id));
     }
 
+    /// <summary>
+    /// What Ctrl+Z after Snooze and after Unsnooze needs: the three columns snoozing writes, put
+    /// back together.
+    /// </summary>
+    /// <remarks>
+    /// Neither command is the other's inverse. Unsnoozing also marks a message unread and moves
+    /// its arrival to now, so that it comes back where the reader will see it — a step that took
+    /// it back by snoozing it again would leave both of those changed.
+    /// </remarks>
+    [Fact]
+    public void TakingASnoozeBackPutsAllThreeColumnsBack()
+    {
+        var (store, repo, inbox) = Fresh();
+        using var _ = store;
+
+        var arrived = DateTimeOffset.UnixEpoch.AddHours(3);
+        var id = repo.AddMessage(inbox.Id, Sample("uid-1", "One", read: true) with { Received = arrived })!.Value;
+        var original = repo.GetMessage(id)!;
+
+        var until = DateTimeOffset.UtcNow.AddDays(1);
+        repo.Snooze([id], until);
+        var snoozed = repo.GetMessage(id)!;
+
+        var now = DateTimeOffset.UtcNow;
+        repo.Unsnooze([id], now);
+
+        var woken = repo.GetMessage(id)!;
+        Assert.Null(woken.SnoozedUntil);
+        Assert.False(woken.IsRead);
+        Assert.Equal(now.ToUnixTimeSeconds(), woken.Received.ToUnixTimeSeconds());
+
+        // Taking the unsnooze back: asleep again, read again, its own arrival back.
+        repo.RestoreSnooze(id, snoozed.SnoozedUntil, snoozed.IsRead, snoozed.Received);
+
+        var asleep = repo.GetMessage(id)!;
+        Assert.Equal(until.ToUnixTimeSeconds(), asleep.SnoozedUntil!.Value.ToUnixTimeSeconds());
+        Assert.True(asleep.IsRead);
+        Assert.Equal(arrived.ToUnixTimeSeconds(), asleep.Received.ToUnixTimeSeconds());
+        Assert.Empty(repo.Messages(inbox.Id));
+
+        // And taking the snooze back leaves it exactly as it began.
+        repo.RestoreSnooze(id, original.SnoozedUntil, original.IsRead, original.Received);
+
+        var back = repo.GetMessage(id)!;
+        Assert.Null(back.SnoozedUntil);
+        Assert.True(back.IsRead);
+        Assert.Equal(arrived.ToUnixTimeSeconds(), back.Received.ToUnixTimeSeconds());
+        Assert.Equal([id], repo.Messages(inbox.Id).Select(m => m.Id));
+    }
+
+    /// <summary>
+    /// A copy is new rows over the same bytes, and their ids are the only thing that names them —
+    /// which is what taking a Copy To back has to delete.
+    /// </summary>
+    [Fact]
+    public void CopyingHandsBackTheIdsOfTheCopies()
+    {
+        var (store, repo, inbox) = Fresh();
+        using var _ = store;
+
+        var archive = repo.FolderWithRole(inbox.AccountId, FolderRole.Archive)!;
+        var one = repo.AddMessage(inbox.Id, Sample("uid-1", "One"))!.Value;
+        var two = repo.AddMessage(inbox.Id, Sample("uid-2", "Two"))!.Value;
+
+        var copies = repo.CopyMessages([one, two], archive.Id);
+
+        Assert.Equal(2, copies.Count);
+        Assert.Empty(copies.Intersect([one, two]));
+        Assert.Equal(copies.Order(), repo.Messages(archive.Id).Select(m => m.Id).Order());
+
+        // The originals never moved, and deleting the copies leaves them where they are.
+        repo.DeleteMessages(copies);
+
+        Assert.Empty(repo.Messages(archive.Id));
+        Assert.Equal([one, two], repo.Messages(inbox.Id).Select(m => m.Id).Order());
+    }
+
     [Fact]
     public void UnsnoozeBringsAMessageBackNowAndLeavesOthersAlone()
     {

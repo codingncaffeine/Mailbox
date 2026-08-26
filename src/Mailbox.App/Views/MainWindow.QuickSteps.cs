@@ -49,6 +49,11 @@ public partial class MainWindow
         // replies to what was selected, not to whatever the list settles on after the delete.
         var original = _openMessage;
 
+        // One press, one step to take back. Every action below goes through the shell command
+        // that records itself, so without this a Move-and-mark-read step would want two presses
+        // of Ctrl+Z — and the reader has no way of knowing that it was two.
+        using var undo = shell.Undo.Batch($"Quick Step “{step.Name}”");
+
         foreach (var action in step.Actions)
         {
             try

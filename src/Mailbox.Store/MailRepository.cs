@@ -684,6 +684,25 @@ public sealed class MailRepository(MailStore store)
     }
 
     /// <summary>
+    /// Puts a message's snooze back exactly as it was, for Undo.
+    /// </summary>
+    /// <remarks>
+    /// Neither <see cref="Snooze"/> nor <see cref="Unsnooze"/> is the other's inverse: unsnoozing
+    /// also marks a message unread and moves its arrival to now, so that it comes back at the top
+    /// of the folder where the reader will see it. Taking either of them back therefore means
+    /// writing the three columns together, with the values the row carried beforehand, rather
+    /// than calling the opposite command and leaving two of them changed. Local, like the rest of
+    /// snoozing: the server is never told.
+    /// </remarks>
+    public int RestoreSnooze(long messageId, DateTimeOffset? until, bool read, DateTimeOffset received)
+        => _store.Execute(
+            "UPDATE messages SET snooze_until = $until, is_read = $read, received_utc = $received WHERE id = $id",
+            ("$until", until?.ToUnixTimeSeconds()),
+            ("$read", read ? 1 : 0),
+            ("$received", received.ToUnixTimeSeconds()),
+            ("$id", messageId));
+
+    /// <summary>
     /// Brings back every message whose time has come: unread, at the top of its folder. Called
     /// on a timer; returns what woke, for the toast, and nothing when nothing did.
     /// </summary>
@@ -900,13 +919,17 @@ public sealed class MailRepository(MailStore store)
     /// Copies messages into another folder: a new row over the same raw bytes, with the read and
     /// flagged state of the original. On a synced folder the copy is appended to the server.
     /// </summary>
-    public int CopyMessages(IReadOnlyCollection<long> messageIds, long toFolderId)
+    /// <returns>
+    /// The ids of the copies, in the order they were made. Taking a copy back means deleting the
+    /// rows it made, and nothing else can name them: a copy is a new row, not a moved one.
+    /// </returns>
+    public IReadOnlyList<long> CopyMessages(IReadOnlyCollection<long> messageIds, long toFolderId)
     {
-        if (messageIds.Count == 0) return 0;
+        if (messageIds.Count == 0) return [];
 
-        return _store.InTransaction(() =>
+        return _store.InTransaction<IReadOnlyList<long>>(() =>
         {
-            var copied = 0;
+            var copies = new List<long>(messageIds.Count);
             foreach (var id in messageIds)
             {
                 var row = _store.Query(
@@ -944,10 +967,10 @@ public sealed class MailRepository(MailStore store)
 
                 var newId = _store.LastInsertId;
                 if (row[0] is not null && IsSyncedFolder(toFolderId)) JournalAppend(toFolderId, newId);
-                copied++;
+                copies.Add(newId);
             }
 
-            return copied;
+            return copies;
         });
     }
 

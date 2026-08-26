@@ -2471,10 +2471,26 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <remarks>
     /// Every command below that changes mail records a step before it acts. What is recorded is
     /// the state it is about to overwrite — which folder each message was in, whether it was
-    /// read, what its flag said — because the store commits the change immediately and there is
-    /// nothing left to read afterwards. Anything that cannot be put back records nothing:
-    /// a permanent delete is permanent, and an undo that quietly did not work would be worse
-    /// than a Ctrl+Z that says there is nothing to undo.
+    /// read, what its flag said, which categories it carried — because the store commits the
+    /// change immediately and there is nothing left to read afterwards.
+    /// <para>
+    /// The rule is that a command records or it cannot be reached by Ctrl+Z at all, because a
+    /// stack with holes in it is worse than none: a press that finds no step for the command just
+    /// used silently takes back the one before it, which is the mail the reader was not thinking
+    /// about. Four things deliberately record nothing, and each is safe from that because it
+    /// cannot be undone by anybody:
+    /// </para>
+    /// <list type="bullet">
+    /// <item>a permanent delete, and a message already handed to a server — there is nothing left
+    /// to put back;</item>
+    /// <item>Ignore Conversation, which is a standing instruction with Stop Ignoring as its own
+    /// reversal rather than a change to a message;</item>
+    /// <item>Focused and Other, which writes a preference about a sender.</item>
+    /// </list>
+    /// <para>
+    /// A command that is several operations — Junk, a Quick Step — opens
+    /// <see cref="UndoStack.Batch"/> so that one press takes back one press.
+    /// </para>
     /// </remarks>
     public UndoStack Undo { get; } = new();
 
@@ -2551,6 +2567,97 @@ public sealed partial class ShellViewModel : ObservableObject
         {
             var account = group.First().Account;
             account.Mail.SetRead([.. group.Select(s => s.Message.Id)], group.Key.IsRead);
+        }
+
+        AfterUndo();
+    }
+
+    /// <summary>Puts back the flag column, which is not the follow-up beside it.</summary>
+    /// <remarks>
+    /// <c>SetFlagged</c> writes one column and journals one flag to the server; the follow-up
+    /// paths write the type, the dates and the reminder. Taking a flag back through
+    /// <see cref="RestoreFlags"/> would therefore rewrite a follow-up the reader never touched.
+    /// </remarks>
+    private void RestoreFlagged(List<(OpenAccount Account, MessageSummary Message)> state)
+    {
+        foreach (var group in state.GroupBy(s => (s.Account.Account.Address, s.Message.IsFlagged)))
+        {
+            var account = group.First().Account;
+            account.Mail.SetFlagged([.. group.Select(s => s.Message.Id)], group.Key.IsFlagged);
+        }
+
+        AfterUndo();
+    }
+
+    /// <summary>Puts back the importance each message carried.</summary>
+    private void RestoreImportance(List<(OpenAccount Account, MessageSummary Message)> state)
+    {
+        foreach (var group in state.GroupBy(s => (s.Account.Account.Address, s.Message.Importance)))
+        {
+            var account = group.First().Account;
+            account.Mail.SetImportance([.. group.Select(s => s.Message.Id)], group.Key.Importance);
+        }
+
+        AfterUndo();
+    }
+
+    /// <summary>Puts back the snooze each message was under, or the absence of one.</summary>
+    /// <remarks>
+    /// One message at a time, because the three columns snoozing writes differ per message and
+    /// the row's own arrival time is one of them — see <c>MailRepository.RestoreSnooze</c>.
+    /// </remarks>
+    private void RestoreSnooze(List<(OpenAccount Account, MessageSummary Message)> state)
+    {
+        foreach (var (account, message) in state)
+        {
+            account.Mail.RestoreSnooze(message.Id, message.SnoozedUntil, message.IsRead, message.Received);
+        }
+
+        AfterUndo();
+    }
+
+    /// <summary>Which categories each of these messages carries, so a categorization can be put back.</summary>
+    private List<(OpenAccount Account, long Id, long[] Categories)> Categorised(IReadOnlyList<MessageRow> rows)
+    {
+        var state = new List<(OpenAccount, long, long[])>(rows.Count);
+
+        foreach (var group in rows.GroupBy(AccountFor))
+        {
+            if (group.Key is not { } account) continue;
+
+            var assigned = account.Mail.CategoriesFor([.. group.Select(r => r.Id)]);
+            foreach (var row in group)
+            {
+                state.Add((account, row.Id, assigned.TryGetValue(row.Id, out var list)
+                    ? [.. list.Select(c => c.Id)]
+                    : []));
+            }
+        }
+
+        return state;
+    }
+
+    /// <summary>
+    /// Puts back exactly the categories each message had.
+    /// </summary>
+    /// <remarks>
+    /// Everything off and the recorded set on again, rather than the difference: the commands
+    /// that record this one add, remove and clear, and one restore that always leaves the row as
+    /// it was found is worth more than three that each undo their own kind of change.
+    /// </remarks>
+    private void RestoreCategories(List<(OpenAccount Account, long Id, long[] Categories)> state)
+    {
+        foreach (var group in state.GroupBy(s => s.Account.Account.Address, StringComparer.OrdinalIgnoreCase))
+        {
+            var account = group.First().Account;
+            var ids = group.Select(s => s.Id).ToList();
+
+            foreach (var category in account.Mail.Categories()) account.Mail.Unassign(ids, category.Id);
+
+            foreach (var (_, id, categories) in group)
+            {
+                foreach (var category in categories) account.Mail.Assign([id], category);
+            }
         }
 
         AfterUndo();
@@ -2683,6 +2790,7 @@ public sealed partial class ShellViewModel : ObservableObject
 
         var ids = rows.Select(r => r.Id).ToList();
         var remove = AllHave(rows, category);
+        var before = Categorised(rows);
 
         if (remove) mail.Unassign(ids, mirrored.Id);
         else mail.Assign(ids, mirrored.Id);
@@ -2698,6 +2806,13 @@ public sealed partial class ShellViewModel : ObservableObject
         StatusRight = remove
             ? $"{category.Name} removed from {Describe(rows.Count)}."
             : $"{Describe(rows.Count)} categorised {category.Name}.";
+
+        // Redo goes back through the toggle rather than repeating the half it chose: put back as
+        // it was, the toggle reads the rows the same way again and takes the same branch.
+        Undo.Push(
+            remove ? "Clear Category" : "Categorize",
+            () => RestoreCategories(before),
+            () => ToggleCategory(rows, category));
     }
 
     /// <summary>Takes every category off the rows.</summary>
@@ -2708,24 +2823,37 @@ public sealed partial class ShellViewModel : ObservableObject
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
         var ids = rows.Select(r => r.Id).ToList();
+        var before = Categorised(rows);
+
         foreach (var category in mail.Categories()) mail.Unassign(ids, category.Id);
         foreach (var row in rows) row.CategoryTokens = [];
 
         StatusRight = $"Categories cleared on {Describe(rows.Count)}.";
+
+        Undo.Push("Clear Categories", () => RestoreCategories(before), () => ClearCategories(rows));
     }
 
     public void SetFlagged(IReadOnlyList<MessageRow> rows, bool flagged)
     {
         if (Split(rows, group => SetFlagged(group, flagged))) return;
 
-        if (rows.Count == 0) return;
+        // The store first, as every command here does: without one there is nothing to change,
+        // and a row that showed a flag the store never took would say so until the list reloaded.
+        if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
-        Mail(rows)?.SetFlagged([.. rows.Select(r => r.Id)], flagged);
+        var before = State(rows);
+
+        mail.SetFlagged([.. rows.Select(r => r.Id)], flagged);
         foreach (var row in rows) row.IsFlagged = flagged;
 
         StatusRight = flagged
             ? $"{Describe(rows.Count)} flagged for follow up."
             : $"Flag cleared on {Describe(rows.Count)}.";
+
+        Undo.Push(
+            flagged ? "Follow Up" : "Clear Flag",
+            () => RestoreFlagged(before),
+            () => SetFlagged(rows, flagged));
     }
 
     /// <summary>
@@ -2855,9 +2983,18 @@ public sealed partial class ShellViewModel : ObservableObject
 
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
-        var copied = mail.CopyMessages([.. rows.Select(r => r.Id)], target.Id);
+        var ids = rows.Select(r => r.Id).ToList();
+        var copies = mail.CopyMessages(ids, target.Id);
         RefreshCounts();
-        StatusRight = $"{Describe(copied)} copied to {target.Name}.";
+        StatusRight = $"{Describe(copies.Count)} copied to {target.Name}.";
+
+        // The copies are the only thing to take back — the originals never moved. Doing it again
+        // makes new rows with new ids, so the step keeps the ones it is holding up to date, or a
+        // second undo would go looking for rows that no longer exist.
+        Undo.Push(
+            "Copy",
+            () => { mail.DeleteMessages(copies); AfterUndo(); },
+            () => { copies = mail.CopyMessages(ids, target.Id); AfterUndo(); });
     }
 
     /// <summary>
@@ -2896,8 +3033,12 @@ public sealed partial class ShellViewModel : ObservableObject
 
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
+        var before = State(rows);
+
         mail.SetImportance([.. rows.Select(r => r.Id)], level);
         StatusRight = $"{Describe(rows.Count)} marked {level switch { 0 => "low", 2 => "high", _ => "normal" }} importance.";
+
+        Undo.Push("Importance", () => RestoreImportance(before), () => SetImportance(rows, level));
     }
 
     /// <summary>Puts named categories on the rows — the ones that exist; a name that does not is skipped.</summary>
@@ -2908,6 +3049,8 @@ public sealed partial class ShellViewModel : ObservableObject
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
         var ids = rows.Select(r => r.Id).ToList();
+        var before = Categorised(rows);
+
         foreach (var category in mail.Categories().Where(c => names.Contains(c.Name, StringComparer.OrdinalIgnoreCase)))
         {
             mail.Assign(ids, category.Id);
@@ -2918,6 +3061,8 @@ public sealed partial class ShellViewModel : ObservableObject
         {
             row.CategoryTokens = assigned.TryGetValue(row.Id, out var list) ? [.. list.Select(c => c.ColourToken)] : [];
         }
+
+        Undo.Push("Categorize", () => RestoreCategories(before), () => AssignCategories(rows, names));
     }
 
     /// <summary>Selects a folder by what it is for, which is what Ctrl+Shift+I and friends do.</summary>
@@ -3123,6 +3268,16 @@ public sealed partial class ShellViewModel : ObservableObject
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
         var notJunk = CurrentFolderRole == FolderRole.Junk;
+        var spam = !notJunk;
+
+        // One press, two changes to the machine's state: the corpus learns from the message and
+        // the message moves. Ctrl+Z has to take back both or it lies about what it did — so both
+        // are collected into the one step this batch closes with.
+        using var batch = Undo.Batch(notJunk ? "Not Junk" : "Junk");
+
+        // The tokens rather than the messages: a step lives as long as twenty-four others, and a
+        // mailbox full of attachments held in a closure is a different kind of defect.
+        var trained = new List<IReadOnlyList<string>>(rows.Count);
 
         foreach (var row in rows)
         {
@@ -3132,13 +3287,23 @@ public sealed partial class ShellViewModel : ObservableObject
             {
                 using var stream = new MemoryStream(raw);
                 var message = MimeKit.MimeMessage.Load(stream);
-                App.Junk.Train(mail, message, spam: !notJunk);
+                var tokens = JunkService.TokensOf(message);
+                App.Junk.Train(mail, tokens, spam);
+                trained.Add(tokens);
             }
             catch (Exception ex)
             {
                 // A message that will not parse cannot be trained on, but it can still be moved.
                 Log.Warn("Could not train the junk filter on a message.", ex);
             }
+        }
+
+        if (trained.Count > 0)
+        {
+            Undo.Push(
+                notJunk ? "Not Junk" : "Junk",
+                () => { foreach (var tokens in trained) App.Junk.Untrain(mail, tokens, spam); },
+                () => { foreach (var tokens in trained) App.Junk.Train(mail, tokens, spam); });
         }
 
         MoveTo(rows, notJunk ? FolderRole.Inbox : FolderRole.Junk);
@@ -3167,6 +3332,8 @@ public sealed partial class ShellViewModel : ObservableObject
 
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
+        var before = State(rows);
+
         mail.Snooze([.. rows.Select(r => r.Id)], until);
         RemoveRows(rows);
         RefreshCounts();
@@ -3174,6 +3341,8 @@ public sealed partial class ShellViewModel : ObservableObject
         var local = until.LocalDateTime;
         var when = local.Date == DateTime.Today ? local.ToString("h:mm tt") : local.ToString("ddd d MMM, h:mm tt");
         StatusRight = $"{Describe(rows.Count)} snoozed until {when}.";
+
+        Undo.Push("Snooze", () => RestoreSnooze(before), () => Snooze(rows, until));
     }
 
     /// <summary>Brings the rows back now, unread and at the top of the folder.</summary>
@@ -3183,10 +3352,16 @@ public sealed partial class ShellViewModel : ObservableObject
 
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
+        var before = State(rows);
+
         mail.Unsnooze([.. rows.Select(r => r.Id)], DateTimeOffset.UtcNow);
         ReloadCurrentView();
         RefreshCounts();
         StatusRight = $"{Describe(rows.Count)} back in the Inbox.";
+
+        // Not a re-snooze: bringing a message back also marks it unread and moves its arrival to
+        // now, and putting it back means putting all three columns back.
+        Undo.Push("Unsnooze", () => RestoreSnooze(before), () => Unsnooze(rows));
     }
 
     /// <summary>
