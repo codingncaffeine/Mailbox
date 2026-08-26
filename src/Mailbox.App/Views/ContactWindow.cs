@@ -8,6 +8,7 @@ using Mailbox.App.Theming;
 using Mailbox.Contacts;
 using Mailbox.Controls.Ribbon;
 using Mailbox.Core.Commands;
+using Mailbox.Core.Diagnostics;
 using Mailbox.Core.Ribbon;
 using Mailbox.Store.Pim;
 using Mailbox.Theming.Icons;
@@ -50,8 +51,10 @@ public sealed class ContactWindow : Window
         _surface = new ContactSurface(contact, books, collectionId);
 
         Title = _surface.Title;
-        Width = 1200;
-        Height = 700;
+        // The size the reference's own contact window is in the captures, which is the width its
+        // Insert tab needs before the Illustrations group degrades to a stack.
+        Width = 1400;
+        Height = 846;
         MinWidth = 720;
         MinHeight = 460;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -62,6 +65,17 @@ public sealed class ContactWindow : Window
 
         _ribbon = new RibbonView(commands, ContactRibbonLayout.Contact);
         RibbonDisplayMemory.Wire(_ribbon, RibbonWindow.Compose, Environment.GetEnvironmentVariable("MAILBOX_RIBBON"));
+
+        // A width the harness chose, since the ribbon's collapse ladder has a different answer
+        // every hundred pixels and this window has two tabs' worth of it.
+        Mailbox.App.Theming.WindowCapture.ApplyRequestedSize(this);
+
+        // MAILBOX_TAB opens the strip on one tab, as it does on the shell — a capture of the
+        // Insert tab is otherwise a capture of whichever tab the window remembers.
+        if (Environment.GetEnvironmentVariable("MAILBOX_TAB") is { Length: > 0 } posedTab)
+        {
+            _ribbon.ActiveTabId = posedTab.Trim();
+        }
 
         _ribbon.CommandInvoked += (_, e) =>
         {
@@ -95,6 +109,22 @@ public sealed class ContactWindow : Window
         if (Environment.GetEnvironmentVariable("MAILBOX_CONTACT_PAGE") is { Length: > 0 } posed)
         {
             Opened += (_, _) => ShowPage("contact.show." + posed.Trim().ToLowerInvariant());
+        }
+
+        // Presses this window's own commands, as MAILBOX_RUN does the shell's:
+        // MAILBOX_CONTACT_RUN=format.bold,insert.datetime. The note is a document now, and a
+        // document's commands are only provable by running them over one.
+        if (Environment.GetEnvironmentVariable("MAILBOX_CONTACT_RUN") is { Length: > 0 } run)
+        {
+            Opened += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                foreach (var id in run.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    Log.Info($"Harness: contact running {id}.");
+                    var refused = _surface.Invoke(new CommandId(id));
+                    Log.Info($"Harness: contact {id} → {refused ?? "acted"}; note is now “{_surface.NoteText}”.");
+                }
+            }, Avalonia.Threading.DispatcherPriority.Background);
         }
 
         KeyDown += (_, e) =>

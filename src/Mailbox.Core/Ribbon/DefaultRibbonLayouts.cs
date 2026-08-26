@@ -612,34 +612,7 @@ public static class DefaultRibbonLayouts
                 Id = "help",
                 Label = "Help",
                 KeyTip = "Y",
-                Groups =
-                [
-                    new RibbonGroup
-                    {
-                        Id = "help",
-                        Label = "Help",
-                        KeyTip = "ZH",
-                        CollapsePriority = 1,
-                        Items =
-                        [
-                            RibbonItem.Large(ViewCommands.Help.Id),
-                            RibbonItem.Large(ViewCommands.ContactSupport.Id),
-                            RibbonItem.Large(ViewCommands.Feedback.Id),
-                            RibbonItem.Large(ViewCommands.SuggestFeature.Id),
-                            RibbonItem.Large(ViewCommands.ShowTraining.Id),
-                            RibbonItem.Large(ViewCommands.WhatsNew.Id),
-                            RibbonItem.Large(ViewCommands.SupportTool.Id),
-                        ],
-                    },
-                    new RibbonGroup
-                    {
-                        Id = "helptools",
-                        Label = "Tools",
-                        KeyTip = "ZT",
-                        CollapsePriority = 2,
-                        Items = [RibbonItem.Large(ViewCommands.GetDiagnostics.Id)],
-                    },
-                ],
+                Groups = HelpGroups,
             },
         ],
     };
@@ -663,4 +636,45 @@ public static class DefaultRibbonLayouts
         MailboxModule.People => People,
         _ => new RibbonLayout { Module = module, Tabs = [] },
     };
+
+    /// <summary>
+    /// The Help tab's two groups, which every window that carries the tab carries.
+    /// </summary>
+    /// <remarks>
+    /// The reference's Help tab is the same tab wherever it appears — the shell, a message, a
+    /// contact — so it is written once. See the transcription note on the shell's own tab.
+    /// </remarks>
+    /// <remarks>
+    /// Built on each read rather than initialised once: the layouts above are static properties
+    /// too, and one initialised before this would have read a null.
+    /// </remarks>
+    internal static IReadOnlyList<RibbonGroup> HelpGroups =>
+    [
+        new RibbonGroup
+        {
+            Id = "help",
+            Label = "Help",
+            KeyTip = "ZH",
+            CollapsePriority = 1,
+            Items =
+            [
+                RibbonItem.Large(ViewCommands.Help.Id),
+                RibbonItem.Large(ViewCommands.ContactSupport.Id),
+                RibbonItem.Large(ViewCommands.Feedback.Id),
+                RibbonItem.Large(ViewCommands.SuggestFeature.Id),
+                RibbonItem.Large(ViewCommands.ShowTraining.Id),
+                RibbonItem.Large(ViewCommands.WhatsNew.Id),
+                RibbonItem.Large(ViewCommands.SupportTool.Id),
+            ],
+        },
+        new RibbonGroup
+        {
+            Id = "helptools",
+            Label = "Tools",
+            KeyTip = "ZT",
+            CollapsePriority = 2,
+            Items = [RibbonItem.Large(ViewCommands.GetDiagnostics.Id)],
+        },
+    ];
+
 }

@@ -273,6 +273,19 @@ WANTED = {
     "whats-new": "megaphone",
     "support-tool": "wrench_settings",
     "get-diagnostics": "briefcase",
+
+    # The contact window's Insert tab.
+    "screenshot": "screenshot",
+    "quick-parts": "document_one_page_columns",
+    "wordart": "text_effects",
+    "object": "square_multiple",
+
+    # The contact window's classic Insert tab.
+    "bookmark": "bookmark",
+    "text-box": "textbox",
+    "drop-cap": "text_paragraph",
+    "date-time": "calendar_clock",
+    "horizontal-line": "line_horizontal_1",
 }
 
 SIZES = (16, 20, 24, 32)

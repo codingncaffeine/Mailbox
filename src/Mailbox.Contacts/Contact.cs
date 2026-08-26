@@ -145,7 +145,20 @@ public sealed record Contact
     public IReadOnlyList<string> InstantMessaging { get; init; } = [];
     public IReadOnlyList<string> Categories { get; init; } = [];
 
+    /// <summary>The note, as text. What every other client reads, and what a search indexes.</summary>
     public string Notes { get; init; } = string.Empty;
+
+    /// <summary>
+    /// The note as the reader wrote it, with its formatting — or empty for one that has none.
+    /// </summary>
+    /// <remarks>
+    /// The reference's contact notes are rich text and its Insert and Format Text tabs act on
+    /// them, so ours are too. <c>NOTE</c> is plain text in every version of vCard, so this rides
+    /// beside it in an extension property and <see cref="Notes"/> keeps the plain reading: a
+    /// CardDAV server stores the card as it is given it, so the formatting survives a round
+    /// trip, and any other client reading the same card still sees the note — as text.
+    /// </remarks>
+    public string NotesHtml { get; init; } = string.Empty;
     public DateOnly? Birthday { get; init; }
     public DateOnly? Anniversary { get; init; }
     public ContactPhoto? Photo { get; init; }
@@ -270,7 +283,7 @@ public sealed record Contact
            && FirstName == other.FirstName && MiddleName == other.MiddleName && LastName == other.LastName
            && Prefix == other.Prefix && Suffix == other.Suffix && NickName == other.NickName
            && FileAs == other.FileAs && Company == other.Company && Department == other.Department
-           && JobTitle == other.JobTitle && Notes == other.Notes
+           && JobTitle == other.JobTitle && Notes == other.Notes && NotesHtml == other.NotesHtml
            && Birthday == other.Birthday && Anniversary == other.Anniversary
            && IsGroup == other.IsGroup && Equals(Photo, other.Photo)
            && Emails.SequenceEqual(other.Emails) && Phones.SequenceEqual(other.Phones)

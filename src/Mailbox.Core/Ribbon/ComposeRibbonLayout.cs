@@ -145,63 +145,11 @@ internal static class ComposeRibbonLayout
 
             // Separators measured at x = 111, 761, 1119, 1367, 1454. The font and paragraph runs
             // are icon-only; only Styles, Change Styles, Find and Zoom carry text.
-            ["formattext"] =
-            [
-                RibbonItem.Glyph(ComposeCommands.Paste.Id, RibbonItemKind.SplitButton),
-                RibbonItem.Glyph(ComposeCommands.FormatPainter.Id),
-                Sep,
-                RibbonItem.Combo(ComposeCommands.Font.Id, FontFieldWidth, DefaultBodyFont),
-                RibbonItem.Combo(ComposeCommands.FontSize.Id, FontSizeFieldWidth, DefaultBodySize),
-                RibbonItem.Glyph(ComposeCommands.GrowFont.Id),
-                RibbonItem.Glyph(ComposeCommands.ShrinkFont.Id),
-                RibbonItem.Glyph(ComposeCommands.Bold.Id),
-                RibbonItem.Glyph(ComposeCommands.Italic.Id),
-                RibbonItem.Glyph(ComposeCommands.Underline.Id),
-                RibbonItem.Glyph(ComposeCommands.Strikethrough.Id),
-                RibbonItem.Glyph(ComposeCommands.Subscript.Id),
-                RibbonItem.Glyph(ComposeCommands.Superscript.Id),
-                RibbonItem.Glyph(ComposeCommands.Highlight.Id, RibbonItemKind.SplitButton),
-                RibbonItem.Glyph(ComposeCommands.FontColor.Id, RibbonItemKind.SplitButton),
-                RibbonItem.Glyph(ComposeCommands.ClearFormatting.Id),
-                RibbonItem.Launcher(ComposeCommands.FontDialog.Id),
-                Sep,
-                RibbonItem.Glyph(ComposeCommands.Bullets.Id, RibbonItemKind.SplitButton),
-                RibbonItem.Glyph(ComposeCommands.Numbering.Id, RibbonItemKind.SplitButton),
-                RibbonItem.Glyph(ComposeCommands.MultilevelList.Id, RibbonItemKind.SplitButton),
-                RibbonItem.Glyph(ComposeCommands.DecreaseIndent.Id),
-                RibbonItem.Glyph(ComposeCommands.IncreaseIndent.Id),
-                RibbonItem.Glyph(ComposeCommands.Align.Id, RibbonItemKind.DropDown),
-                RibbonItem.Glyph(ComposeCommands.LineSpacing.Id, RibbonItemKind.DropDown),
-                RibbonItem.Launcher(ComposeCommands.ParagraphDialog.Id),
-                Sep,
-                RibbonItem.Small(ComposeCommands.Styles.Id, RibbonItemKind.DropDown),
-                RibbonItem.Small(ComposeCommands.ChangeStyles.Id, RibbonItemKind.DropDown),
-                RibbonItem.Launcher(ComposeCommands.StylesDialog.Id),
-                Sep,
-                RibbonItem.Small(ComposeCommands.Find.Id, RibbonItemKind.SplitButton),
-                Sep,
-                RibbonItem.Small(ComposeCommands.Zoom.Id),
-                Sep,
-            ],
+            ["formattext"] = FormatTextRow,
 
             // Separators measured at x = 512, 633, 767, 887 — each of Speech, Insights and
             // Language is its own cluster of one, which is why the row has so many rules in it.
-            ["review"] =
-            [
-                RibbonItem.Small(ComposeCommands.Spelling.Id, RibbonItemKind.SplitButton),
-                RibbonItem.Small(ComposeCommands.Editor.Id),
-                RibbonItem.Small(ComposeCommands.Thesaurus.Id),
-                RibbonItem.Small(ComposeCommands.WordCount.Id),
-                Sep,
-                RibbonItem.Small(ViewCommands.ReadAloud.Id),
-                Sep,
-                RibbonItem.Small(ComposeCommands.SmartLookup.Id),
-                Sep,
-                RibbonItem.Small(ComposeCommands.Language.Id, RibbonItemKind.DropDown),
-                Sep,
-                RibbonItem.Small(ComposeCommands.CheckAccessibility.Id),
-                Sep,
-            ],
+            ["review"] = ReviewRow,
         },
 
         Tabs =
@@ -473,173 +421,247 @@ internal static class ComposeRibbonLayout
                 ],
             },
 
-            new RibbonTab
-            {
-                Id = "formattext",
-                Label = "Format Text",
-                KeyTip = "X",
-                Groups =
-                [
-                    new RibbonGroup
-                    {
-                        Id = "clipboard",
-                        Label = "Clipboard",
-                        CollapsePriority = 6,
-                        DialogLauncher = ComposeCommands.Paste.Id,
-                        Items =
-                        [
-                            RibbonItem.Large(ComposeCommands.Paste.Id, RibbonItemKind.SplitButton),
-                            RibbonItem.Small(ComposeCommands.Cut.Id),
-                            RibbonItem.Small(ComposeCommands.Copy.Id),
-                            RibbonItem.Small(ComposeCommands.FormatPainter.Id),
-                        ],
-                    },
-
-                    new RibbonGroup
-                    {
-                        Id = "font",
-                        Label = "Font",
-                        CollapsePriority = 1,
-                        DialogLauncher = ComposeCommands.FontDialog.Id,
-                        Items =
-                        [
-                            RibbonItem.Small(ComposeCommands.Font.Id, RibbonItemKind.TextBox),
-                            RibbonItem.Small(ComposeCommands.FontSize.Id, RibbonItemKind.TextBox),
-                            RibbonItem.Glyph(ComposeCommands.GrowFont.Id),
-                            RibbonItem.Glyph(ComposeCommands.ShrinkFont.Id),
-                            RibbonItem.Glyph(ComposeCommands.Bold.Id),
-                            RibbonItem.Glyph(ComposeCommands.Italic.Id),
-                            RibbonItem.Glyph(ComposeCommands.Underline.Id),
-                            RibbonItem.Glyph(ComposeCommands.Strikethrough.Id),
-                            RibbonItem.Glyph(ComposeCommands.Subscript.Id),
-                            RibbonItem.Glyph(ComposeCommands.Superscript.Id),
-                            RibbonItem.Glyph(ComposeCommands.Highlight.Id, RibbonItemKind.SplitButton),
-                            RibbonItem.Glyph(ComposeCommands.FontColor.Id, RibbonItemKind.SplitButton),
-                            RibbonItem.Glyph(ComposeCommands.ClearFormatting.Id),
-                        ],
-                    },
-
-                    new RibbonGroup
-                    {
-                        Id = "paragraph",
-                        Label = "Paragraph",
-                        CollapsePriority = 2,
-                        DialogLauncher = ComposeCommands.ParagraphDialog.Id,
-                        Items =
-                        [
-                            RibbonItem.Glyph(ComposeCommands.Bullets.Id, RibbonItemKind.SplitButton),
-                            RibbonItem.Glyph(ComposeCommands.Numbering.Id, RibbonItemKind.SplitButton),
-                            RibbonItem.Glyph(ComposeCommands.MultilevelList.Id, RibbonItemKind.SplitButton),
-                            RibbonItem.Glyph(ComposeCommands.DecreaseIndent.Id),
-                            RibbonItem.Glyph(ComposeCommands.IncreaseIndent.Id),
-                            RibbonItem.Glyph(ComposeCommands.Sort.Id),
-                            RibbonItem.Glyph(ComposeCommands.ShowParagraphMarks.Id),
-                            RibbonItem.Glyph(ComposeCommands.Align.Id, RibbonItemKind.DropDown),
-                            RibbonItem.Glyph(ComposeCommands.LineSpacing.Id, RibbonItemKind.DropDown),
-                            RibbonItem.Glyph(ComposeCommands.Shading.Id, RibbonItemKind.DropDown),
-                            RibbonItem.Glyph(ComposeCommands.Borders.Id, RibbonItemKind.DropDown),
-                        ],
-                    },
-
-                    new RibbonGroup
-                    {
-                        Id = "styles",
-                        Label = "Styles",
-                        CollapsePriority = 4,
-                        DialogLauncher = ComposeCommands.StylesDialog.Id,
-                        IsGallery = true,
-                        Items =
-                        [
-                            RibbonItem.Small(ComposeCommands.Styles.Id, RibbonItemKind.DropDown),
-                            RibbonItem.Small(ComposeCommands.ChangeStyles.Id, RibbonItemKind.DropDown),
-                        ],
-                    },
-
-                    new RibbonGroup
-                    {
-                        Id = "format",
-                        Label = "Format",
-                        CollapsePriority = 3,
-                        Items =
-                        [
-                            RibbonItem.Small(ComposeCommands.FormatHtml.Id),
-                            RibbonItem.Small(ComposeCommands.FormatPlainText.Id),
-                            RibbonItem.Small(ComposeCommands.FormatRichText.Id),
-                        ],
-                    },
-
-                    new RibbonGroup
-                    {
-                        Id = "editing",
-                        Label = "Editing",
-                        CollapsePriority = 5,
-                        Items =
-                        [
-                            RibbonItem.Small(ComposeCommands.Find.Id, RibbonItemKind.SplitButton),
-                            RibbonItem.Small(ComposeCommands.Replace.Id),
-                            RibbonItem.Small(ComposeCommands.SelectAll.Id, RibbonItemKind.DropDown),
-                            RibbonItem.Small(ComposeCommands.Zoom.Id),
-                        ],
-                    },
-                ],
-            },
-
-            new RibbonTab
-            {
-                Id = "review",
-                Label = "Review",
-                KeyTip = "R",
-                Groups =
-                [
-                    new RibbonGroup
-                    {
-                        Id = "proofing",
-                        Label = "Proofing",
-                        CollapsePriority = 1,
-                        Items =
-                        [
-                            RibbonItem.Large(ComposeCommands.Spelling.Id, RibbonItemKind.SplitButton),
-                            RibbonItem.Large(ComposeCommands.Editor.Id),
-                            RibbonItem.Large(ComposeCommands.Thesaurus.Id),
-                            RibbonItem.Large(ComposeCommands.WordCount.Id),
-                        ],
-                    },
-
-                    new RibbonGroup
-                    {
-                        Id = "speech",
-                        Label = "Speech",
-                        CollapsePriority = 4,
-                        Items = [RibbonItem.Large(ViewCommands.ReadAloud.Id)],
-                    },
-
-                    new RibbonGroup
-                    {
-                        Id = "insights",
-                        Label = "Insights",
-                        CollapsePriority = 5,
-                        Items = [RibbonItem.Large(ComposeCommands.SmartLookup.Id)],
-                    },
-
-                    new RibbonGroup
-                    {
-                        Id = "language",
-                        Label = "Language",
-                        CollapsePriority = 3,
-                        Items = [RibbonItem.Large(ComposeCommands.Language.Id, RibbonItemKind.DropDown)],
-                    },
-
-                    new RibbonGroup
-                    {
-                        Id = "accessibility",
-                        Label = "Accessibility",
-                        CollapsePriority = 2,
-                        Items = [RibbonItem.Large(ComposeCommands.CheckAccessibility.Id, RibbonItemKind.SplitButton)],
-                    },
-                ],
-            },
+            FormatTextTab,
+            ReviewTab,
 
             new RibbonTab { Id = "help", Label = "Help", KeyTip = "Y", Groups = [] },
         ],
     };
+
+    /// <summary>
+    /// Format Text, shared with every window that writes rich text.
+    /// </summary>
+    /// <remarks>
+    /// The reference gives the compose window and the contact window the same Format Text and
+    /// Review tabs — both act on a document, and a document is a document. Named here rather
+    /// than copied there, so the transcription has one home.
+    /// </remarks>
+    internal static RibbonTab FormatTextTab =>
+        new RibbonTab
+        {
+            Id = "formattext",
+            Label = "Format Text",
+            KeyTip = "X",
+            Groups =
+            [
+                new RibbonGroup
+                {
+                    Id = "clipboard",
+                    Label = "Clipboard",
+                    CollapsePriority = 6,
+                    DialogLauncher = ComposeCommands.Paste.Id,
+                    Items =
+                    [
+                        RibbonItem.Large(ComposeCommands.Paste.Id, RibbonItemKind.SplitButton),
+                        RibbonItem.Small(ComposeCommands.Cut.Id),
+                        RibbonItem.Small(ComposeCommands.Copy.Id),
+                        RibbonItem.Small(ComposeCommands.FormatPainter.Id),
+                    ],
+                },
+
+                new RibbonGroup
+                {
+                    Id = "font",
+                    Label = "Font",
+                    CollapsePriority = 1,
+                    DialogLauncher = ComposeCommands.FontDialog.Id,
+                    Items =
+                    [
+                        RibbonItem.Small(ComposeCommands.Font.Id, RibbonItemKind.TextBox),
+                        RibbonItem.Small(ComposeCommands.FontSize.Id, RibbonItemKind.TextBox),
+                        RibbonItem.Glyph(ComposeCommands.GrowFont.Id),
+                        RibbonItem.Glyph(ComposeCommands.ShrinkFont.Id),
+                        RibbonItem.Glyph(ComposeCommands.Bold.Id),
+                        RibbonItem.Glyph(ComposeCommands.Italic.Id),
+                        RibbonItem.Glyph(ComposeCommands.Underline.Id),
+                        RibbonItem.Glyph(ComposeCommands.Strikethrough.Id),
+                        RibbonItem.Glyph(ComposeCommands.Subscript.Id),
+                        RibbonItem.Glyph(ComposeCommands.Superscript.Id),
+                        RibbonItem.Glyph(ComposeCommands.Highlight.Id, RibbonItemKind.SplitButton),
+                        RibbonItem.Glyph(ComposeCommands.FontColor.Id, RibbonItemKind.SplitButton),
+                        RibbonItem.Glyph(ComposeCommands.ClearFormatting.Id),
+                    ],
+                },
+
+                new RibbonGroup
+                {
+                    Id = "paragraph",
+                    Label = "Paragraph",
+                    CollapsePriority = 2,
+                    DialogLauncher = ComposeCommands.ParagraphDialog.Id,
+                    Items =
+                    [
+                        RibbonItem.Glyph(ComposeCommands.Bullets.Id, RibbonItemKind.SplitButton),
+                        RibbonItem.Glyph(ComposeCommands.Numbering.Id, RibbonItemKind.SplitButton),
+                        RibbonItem.Glyph(ComposeCommands.MultilevelList.Id, RibbonItemKind.SplitButton),
+                        RibbonItem.Glyph(ComposeCommands.DecreaseIndent.Id),
+                        RibbonItem.Glyph(ComposeCommands.IncreaseIndent.Id),
+                        RibbonItem.Glyph(ComposeCommands.Sort.Id),
+                        RibbonItem.Glyph(ComposeCommands.ShowParagraphMarks.Id),
+                        RibbonItem.Glyph(ComposeCommands.Align.Id, RibbonItemKind.DropDown),
+                        RibbonItem.Glyph(ComposeCommands.LineSpacing.Id, RibbonItemKind.DropDown),
+                        RibbonItem.Glyph(ComposeCommands.Shading.Id, RibbonItemKind.DropDown),
+                        RibbonItem.Glyph(ComposeCommands.Borders.Id, RibbonItemKind.DropDown),
+                    ],
+                },
+
+                new RibbonGroup
+                {
+                    Id = "styles",
+                    Label = "Styles",
+                    CollapsePriority = 4,
+                    DialogLauncher = ComposeCommands.StylesDialog.Id,
+                    IsGallery = true,
+                    Items =
+                    [
+                        RibbonItem.Small(ComposeCommands.Styles.Id, RibbonItemKind.DropDown),
+                        RibbonItem.Small(ComposeCommands.ChangeStyles.Id, RibbonItemKind.DropDown),
+                    ],
+                },
+
+                new RibbonGroup
+                {
+                    Id = "format",
+                    Label = "Format",
+                    CollapsePriority = 3,
+                    Items =
+                    [
+                        RibbonItem.Small(ComposeCommands.FormatHtml.Id),
+                        RibbonItem.Small(ComposeCommands.FormatPlainText.Id),
+                        RibbonItem.Small(ComposeCommands.FormatRichText.Id),
+                    ],
+                },
+
+                new RibbonGroup
+                {
+                    Id = "editing",
+                    Label = "Editing",
+                    CollapsePriority = 5,
+                    Items =
+                    [
+                        RibbonItem.Small(ComposeCommands.Find.Id, RibbonItemKind.SplitButton),
+                        RibbonItem.Small(ComposeCommands.Replace.Id),
+                        RibbonItem.Small(ComposeCommands.SelectAll.Id, RibbonItemKind.DropDown),
+                        RibbonItem.Small(ComposeCommands.Zoom.Id),
+                    ],
+                },
+            ],
+        };
+
+    /// <summary>Review, shared for the same reason.</summary>
+    internal static RibbonTab ReviewTab =>
+        new RibbonTab
+        {
+            Id = "review",
+            Label = "Review",
+            KeyTip = "R",
+            Groups =
+            [
+                new RibbonGroup
+                {
+                    Id = "proofing",
+                    Label = "Proofing",
+                    CollapsePriority = 1,
+                    Items =
+                    [
+                        RibbonItem.Large(ComposeCommands.Spelling.Id, RibbonItemKind.SplitButton),
+                        RibbonItem.Large(ComposeCommands.Editor.Id),
+                        RibbonItem.Large(ComposeCommands.Thesaurus.Id),
+                        RibbonItem.Large(ComposeCommands.WordCount.Id),
+                    ],
+                },
+
+                new RibbonGroup
+                {
+                    Id = "speech",
+                    Label = "Speech",
+                    CollapsePriority = 4,
+                    Items = [RibbonItem.Large(ViewCommands.ReadAloud.Id)],
+                },
+
+                new RibbonGroup
+                {
+                    Id = "insights",
+                    Label = "Insights",
+                    CollapsePriority = 5,
+                    Items = [RibbonItem.Large(ComposeCommands.SmartLookup.Id)],
+                },
+
+                new RibbonGroup
+                {
+                    Id = "language",
+                    Label = "Language",
+                    CollapsePriority = 3,
+                    Items = [RibbonItem.Large(ComposeCommands.Language.Id, RibbonItemKind.DropDown)],
+                },
+
+                new RibbonGroup
+                {
+                    Id = "accessibility",
+                    Label = "Accessibility",
+                    CollapsePriority = 2,
+                    Items = [RibbonItem.Large(ComposeCommands.CheckAccessibility.Id, RibbonItemKind.SplitButton)],
+                },
+            ],
+        };
+
+
+    /// <summary>The Format Text row, shared with the contact window's own bar.</summary>
+    internal static IReadOnlyList<RibbonItem> FormatTextRow =>
+[
+            RibbonItem.Glyph(ComposeCommands.Paste.Id, RibbonItemKind.SplitButton),
+            RibbonItem.Glyph(ComposeCommands.FormatPainter.Id),
+            Sep,
+            RibbonItem.Combo(ComposeCommands.Font.Id, FontFieldWidth, DefaultBodyFont),
+            RibbonItem.Combo(ComposeCommands.FontSize.Id, FontSizeFieldWidth, DefaultBodySize),
+            RibbonItem.Glyph(ComposeCommands.GrowFont.Id),
+            RibbonItem.Glyph(ComposeCommands.ShrinkFont.Id),
+            RibbonItem.Glyph(ComposeCommands.Bold.Id),
+            RibbonItem.Glyph(ComposeCommands.Italic.Id),
+            RibbonItem.Glyph(ComposeCommands.Underline.Id),
+            RibbonItem.Glyph(ComposeCommands.Strikethrough.Id),
+            RibbonItem.Glyph(ComposeCommands.Subscript.Id),
+            RibbonItem.Glyph(ComposeCommands.Superscript.Id),
+            RibbonItem.Glyph(ComposeCommands.Highlight.Id, RibbonItemKind.SplitButton),
+            RibbonItem.Glyph(ComposeCommands.FontColor.Id, RibbonItemKind.SplitButton),
+            RibbonItem.Glyph(ComposeCommands.ClearFormatting.Id),
+            RibbonItem.Launcher(ComposeCommands.FontDialog.Id),
+            Sep,
+            RibbonItem.Glyph(ComposeCommands.Bullets.Id, RibbonItemKind.SplitButton),
+            RibbonItem.Glyph(ComposeCommands.Numbering.Id, RibbonItemKind.SplitButton),
+            RibbonItem.Glyph(ComposeCommands.MultilevelList.Id, RibbonItemKind.SplitButton),
+            RibbonItem.Glyph(ComposeCommands.DecreaseIndent.Id),
+            RibbonItem.Glyph(ComposeCommands.IncreaseIndent.Id),
+            RibbonItem.Glyph(ComposeCommands.Align.Id, RibbonItemKind.DropDown),
+            RibbonItem.Glyph(ComposeCommands.LineSpacing.Id, RibbonItemKind.DropDown),
+            RibbonItem.Launcher(ComposeCommands.ParagraphDialog.Id),
+            Sep,
+            RibbonItem.Small(ComposeCommands.Styles.Id, RibbonItemKind.DropDown),
+            RibbonItem.Small(ComposeCommands.ChangeStyles.Id, RibbonItemKind.DropDown),
+            RibbonItem.Launcher(ComposeCommands.StylesDialog.Id),
+            Sep,
+            RibbonItem.Small(ComposeCommands.Find.Id, RibbonItemKind.SplitButton),
+            Sep,
+            RibbonItem.Small(ComposeCommands.Zoom.Id),
+            Sep,
+        ];
+
+    /// <summary>The Review row, shared for the same reason.</summary>
+    internal static IReadOnlyList<RibbonItem> ReviewRow =>
+[
+            RibbonItem.Small(ComposeCommands.Spelling.Id, RibbonItemKind.SplitButton),
+            RibbonItem.Small(ComposeCommands.Editor.Id),
+            RibbonItem.Small(ComposeCommands.Thesaurus.Id),
+            RibbonItem.Small(ComposeCommands.WordCount.Id),
+            Sep,
+            RibbonItem.Small(ViewCommands.ReadAloud.Id),
+            Sep,
+            RibbonItem.Small(ComposeCommands.SmartLookup.Id),
+            Sep,
+            RibbonItem.Small(ComposeCommands.Language.Id, RibbonItemKind.DropDown),
+            Sep,
+            RibbonItem.Small(ComposeCommands.CheckAccessibility.Id),
+            Sep,
+        ];
+
 }

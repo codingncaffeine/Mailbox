@@ -739,6 +739,124 @@ public static class ComposeCommands
         KeyTip = "O",
     };
 
+    /// <summary>
+    /// The four the contact window's Insert tab carries and the compose window's does not.
+    /// </summary>
+    /// <remarks>
+    /// The reference gives the two windows different Insert tabs: a message's has Stock Images,
+    /// Online Pictures, SmartArt, Chart, Equation and Symbol, and a contact's has these instead.
+    /// Both were transcribed from their own captures rather than assumed to be the same tab.
+    /// </remarks>
+    public static readonly MailboxCommand InsertBusinessCard = new()
+    {
+        Id = new("insert.businesscard"),
+        Label = "Business Card",
+        Description = "Insert somebody's card into what you are writing.",
+        Icon = "business-card",
+        Category = "Include",
+        Scope = ModuleScope.Mail,
+        KeyTip = "BC",
+    };
+
+    public static readonly MailboxCommand Bookmark = new()
+    {
+        Id = new("insert.bookmark"),
+        Label = "Bookmark",
+        Description = "Mark a place in this document so a link can point at it.",
+        Icon = "bookmark",
+        Category = "Links",
+        Scope = ModuleScope.Mail,
+        KeyTip = "BK",
+    };
+
+    public static readonly MailboxCommand TextBox = new()
+    {
+        Id = new("insert.textbox"),
+        Label = "Text Box",
+        Description = "Insert a box of text that can be moved about the page.",
+        Icon = "text-box",
+        Category = "Text",
+        Scope = ModuleScope.Mail,
+        KeyTip = "TB",
+    };
+
+    public static readonly MailboxCommand DropCap = new()
+    {
+        Id = new("insert.dropcap"),
+        Label = "Drop Cap",
+        Description = "Start the paragraph with one large letter.",
+        Icon = "drop-cap",
+        Category = "Text",
+        Scope = ModuleScope.Mail,
+        KeyTip = "DC",
+    };
+
+    public static readonly MailboxCommand DateAndTime = new()
+    {
+        Id = new("insert.datetime"),
+        Label = "Date & Time",
+        Description = "Insert today's date, or the time now.",
+        Icon = "date-time",
+        Category = "Text",
+        Scope = ModuleScope.Mail,
+        KeyTip = "DT",
+    };
+
+    public static readonly MailboxCommand HorizontalLine = new()
+    {
+        Id = new("insert.horizontalline"),
+        Label = "Horizontal Line",
+        Description = "Draw a line across the page.",
+        Icon = "horizontal-line",
+        Category = "Symbols",
+        Scope = ModuleScope.Mail,
+        KeyTip = "HL",
+    };
+
+    public static readonly MailboxCommand Screenshot = new()
+    {
+        Id = new("insert.screenshot"),
+        Label = "Screenshot",
+        Description = "Insert a picture of a window on this screen.",
+        Icon = "screenshot",
+        Category = "Illustrations",
+        Scope = ModuleScope.Mail,
+        KeyTip = "SC",
+    };
+
+    public static readonly MailboxCommand QuickParts = new()
+    {
+        Id = new("insert.quickparts"),
+        Label = "Quick Parts",
+        Description = "Insert a block of text you have saved to reuse.",
+        Icon = "quick-parts",
+        Category = "Text",
+        Scope = ModuleScope.Mail,
+        KeyTip = "QP",
+    };
+
+    public static readonly MailboxCommand WordArt = new()
+    {
+        Id = new("insert.wordart"),
+        Label = "WordArt",
+        Description = "Insert decorative text.",
+        Icon = "wordart",
+        Category = "Text",
+        Scope = ModuleScope.Mail,
+        KeyTip = "WA",
+    };
+
+    public static readonly MailboxCommand InsertObject = new()
+    {
+        Id = new("insert.object"),
+        Label = "Object",
+        Description = "Insert a document made by another program.",
+        Icon = "object",
+        Category = "Text",
+        Scope = ModuleScope.Mail,
+        KeyTip = "OJ",
+    };
+
     public static readonly MailboxCommand Shapes = new()
     {
         Id = new("insert.shapes"),
@@ -1079,6 +1197,8 @@ public static class ComposeCommands
         HighImportance, LowImportance, Properties,
         Dictate, Editor,
         Table, Pictures, StockImages, OnlinePictures, Shapes, Icons, Models3D, SmartArt, Chart,
+        Screenshot, QuickParts, WordArt, InsertObject,
+        InsertBusinessCard, Bookmark, TextBox, DropCap, DateAndTime, HorizontalLine,
         Equation, Symbol,
         Themes, ThemeColors, ThemeFonts, ThemeEffects, PageColor,
         ShowBcc, ShowFrom,

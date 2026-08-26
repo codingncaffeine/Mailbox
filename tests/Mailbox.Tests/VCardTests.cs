@@ -365,4 +365,53 @@ public class VCardTests
         Assert.DoesNotContain("PRIVATE", text, StringComparison.Ordinal);
         Assert.False(VCardCodec.Parse(text).Single().IsPrivate);
     }
+    /// <summary>
+    /// A note keeps its formatting for this application and stays readable to everybody else.
+    /// </summary>
+    /// <remarks>
+    /// NOTE is plain text in every version of vCard, so a formatted note is written twice: the
+    /// markup in an extension property, the text in NOTE. A client that has never heard of the
+    /// extension still shows the note; this one shows it as it was written.
+    /// </remarks>
+    [Fact]
+    public void ANoteKeepsItsFormattingAndItsText()
+    {
+        var contact = new Contact
+        {
+            Uid = "note-1@example.com",
+            FirstName = "A.",
+            LastName = "Person",
+            Notes = "Met at the conference.",
+            NotesHtml = "<p><b>Met</b> at the conference.</p>",
+        };
+
+        var card = VCardCodec.Serialize(contact);
+
+        // Both readings are in the card, and the standard one is the plain text.
+        Assert.Contains("NOTE:Met at the conference.", card, StringComparison.Ordinal);
+        Assert.Contains("X-MAILBOX-NOTES-HTML", card, StringComparison.Ordinal);
+
+        var back = VCardCodec.ParseOne(card);
+        Assert.Equal("Met at the conference.", back.Notes);
+        Assert.Equal("<p><b>Met</b> at the conference.</p>", back.NotesHtml);
+    }
+
+    [Fact]
+    public void ANoteFromAnotherClientHasNoFormattingAndIsStillANote()
+    {
+        var card = """
+            BEGIN:VCARD
+            VERSION:3.0
+            UID:plain-1@example.com
+            FN:B. Other
+            NOTE:Written somewhere else.
+            END:VCARD
+            """;
+
+        var contact = VCardCodec.ParseOne(card);
+
+        Assert.Equal("Written somewhere else.", contact.Notes);
+        Assert.Equal(string.Empty, contact.NotesHtml);
+    }
+
 }

@@ -75,6 +75,9 @@ public sealed class ComposeSurface : UserControl
     /// </summary>
     private MessageFont _font = MessageFont.Default;
 
+    /// <summary>The Format Text tab, shared with every other window that writes rich text.</summary>
+    private readonly EditorCommands _editorCommands;
+
     /// <summary>The document measures in device-independent pixels; mail talks in points.</summary>
     private const double PointsPerPixel = 0.75;
 
@@ -279,6 +282,11 @@ public sealed class ComposeSurface : UserControl
         // on top of it, which have to come from tokens like everything else.
         Bind(_body, RichEditor.SelectionBrushProperty, "state.selected.brush");
         Bind(_body, RichEditor.CaretBrushProperty, "compose.body.text.brush");
+
+        _editorCommands = new EditorCommands(_body, () => Host, Report, RaiseEnablementChanged)
+        {
+            BaseFont = () => _font,
+        };
 
         // A fresh editor has no document until something makes one, and until then InsertText,
         // InsertHtml and a keystroke are all silent no-ops. Clear() is what makes one — a single
@@ -1362,7 +1370,6 @@ public sealed class ComposeSurface : UserControl
         if (HandleInsert(id)) return true;
 
         if (id == ComposeCommands.Symbol.Id) { _ = InsertSymbolAsync(); return true; }
-        if (id == ComposeCommands.Link.Id) { _ = InsertLinkAsync(); return true; }
         if (id == ComposeCommands.DelayDelivery.Id) { _ = DelayAsync(); return true; }
         if (id == ComposeCommands.DirectRepliesTo.Id) { _ = DirectRepliesAsync(); return true; }
 
@@ -1387,47 +1394,9 @@ public sealed class ComposeSurface : UserControl
     /// </remarks>
     private bool HandleFormatting(CommandId id)
     {
-        if (id == MailCommands.Undo.Id) { _body.Undo(); _body.Focus(); return true; }
-        if (id == ViewCommands.Redo.Id) { _body.Redo(); _body.Focus(); return true; }
-
-        if (id == ComposeCommands.Bold.Id) return Format(_body.ToggleBold);
-        if (id == ComposeCommands.Italic.Id) return Format(_body.ToggleItalic);
-        if (id == ComposeCommands.Underline.Id) return Format(_body.ToggleUnderline);
-        if (id == ComposeCommands.Strikethrough.Id) return Format(_body.ToggleStrikethrough);
-
-        if (id == ComposeCommands.GrowFont.Id) return Format(_body.IncreaseFontSize);
-        if (id == ComposeCommands.ShrinkFont.Id) return Format(_body.DecreaseFontSize);
-
-        if (id == ComposeCommands.Bullets.Id) return Format(_body.ToggleBullet);
-        if (id == ComposeCommands.Numbering.Id) return Format(_body.ToggleNumbering);
-
-        if (id == ComposeCommands.IncreaseIndent.Id) return Format(() => _body.Indent(24));
-        if (id == ComposeCommands.DecreaseIndent.Id) return Format(() => _body.Indent(-24));
-
-        if (id == ComposeCommands.FormatPainter.Id)
-        {
-            if (_body.IsFormatPainterActive)
-            {
-                _body.CancelFormatPainter();
-                Report("Format painter off.");
-            }
-            else
-            {
-                _body.StartFormatPainter();
-                Report("Format painter on — select the text to paint.");
-            }
-
-            _body.Focus();
-            return true;
-        }
-
-        if (id == ComposeCommands.Font.Id) { _ = ChooseFontAsync(); return true; }
-        if (id == ComposeCommands.FontSize.Id) { _ = ChooseFontSizeAsync(); return true; }
-        if (id == ComposeCommands.FontColor.Id) { _ = ChooseColourAsync(highlight: false); return true; }
-        if (id == ComposeCommands.Highlight.Id) { _ = ChooseColourAsync(highlight: true); return true; }
-        if (id == ComposeCommands.Align.Id) { _ = ChooseAlignmentAsync(); return true; }
-        if (id == ComposeCommands.LineSpacing.Id) { _ = ChooseLineSpacingAsync(); return true; }
-        if (id == ComposeCommands.MultilevelList.Id) { _ = ChooseListStyleAsync(); return true; }
+        // Everything that is only about a document and a selection is EditorCommands' — the
+        // contact window's notes are rich text too, and bold is bold in both windows.
+        if (_editorCommands.Handle(id)) return true;
 
         if (id == ComposeCommands.FormatHtml.Id)
         {
@@ -1465,7 +1434,7 @@ public sealed class ComposeSurface : UserControl
             return true;
         }
 
-        if (id == ComposeCommands.Table.Id) { _ = InsertTableAsync(); return true; }
+        if (_editorCommands.HandleInsert(id)) return true;
         if (id == ComposeCommands.Pictures.Id) { _ = InsertPictureAsync(); return true; }
 
         return false;
@@ -1731,204 +1700,6 @@ public sealed class ComposeSurface : UserControl
     /// a reader choosing a face is entitled to know whether their recipient will see it and
     /// whether the layout will hold.
     /// </remarks>
-    private async Task ChooseFontAsync()
-    {
-        // FontResolver already builds this list, in the reference's own order and carrying
-        // each entry's resolution — it exists for this picker.
-        var choices = App.Fonts.PickerFamilies()
-            .Where(f => !string.Equals(f.Requested, "Segoe UI", StringComparison.Ordinal))
-            .Select(f => new Choice(f.Requested, f.Requested, Describe(f)))
-            .ToList();
-
-        if (await Chooser.AskAsync(Host, "Font", "Font:", choices, CaretFont()) is not { } family)
-        {
-            return;
-        }
-
-        _body.SetFontFamily(App.Fonts.Resolve(family).Rendered);
-        _body.Focus();
-        Report($"Font {family}.");
-    }
-
-    /// <summary>What choosing this face actually gets the reader, and their recipient.</summary>
-    private static string Describe(FontResolution font) => font switch
-    {
-        { IsSubstituted: false } => "installed here, and named in the message",
-
-        { Quality: SubstitutionQuality.MetricCompatible } =>
-            $"shown in {font.Rendered}, which lays out identically",
-
-        { MayReflow: true } =>
-            $"shown in {font.Rendered} — similar, but the message will reflow",
-
-        _ => "not installed here; a recipient who has it will see it correctly",
-    };
-
-    /// <summary>
-    /// The face at the caret as the writer knows it, so the picker opens on it.
-    /// </summary>
-    /// <remarks>
-    /// The run holds the family this machine draws — Liberation Serif, Gelasio — because that
-    /// is what the editor needs. The picker lists the Microsoft names, so the substitute is
-    /// mapped back to what it stands in for. Same split the serializer does on the wire.
-    /// </remarks>
-    private string? CaretFont()
-    {
-        var rendered = _body.GetCaretFormat().FontFamily;
-        if (string.IsNullOrEmpty(rendered)) return null;
-
-        return FontSubstitution.Table
-                   .FirstOrDefault(e => string.Equals(e.Substitute, rendered, StringComparison.OrdinalIgnoreCase))
-                   ?.Original
-               ?? rendered;
-    }
-
-    private async Task ChooseFontSizeAsync()
-    {
-        // The reference's own list.
-        var sizes = new[] { 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36, 48, 72 };
-
-        var choices = sizes
-            .Select(p => new Choice(p.ToString(CultureInfo.InvariantCulture),
-                                    p.ToString(CultureInfo.InvariantCulture)))
-            .ToList();
-
-        var caret = _body.GetCaretFormat().FontSize;
-        var current = ((caret > 0 ? caret * PointsPerPixel : _font.Points))
-            .ToString("0", CultureInfo.InvariantCulture);
-
-        if (await Chooser.AskAsync(Host, "Font Size", "Size, in points:", choices, current)
-            is not { } chosen)
-        {
-            return;
-        }
-
-        if (double.TryParse(chosen, CultureInfo.InvariantCulture, out var points))
-        {
-            _body.SetFontSize(points / PointsPerPixel);
-            _body.Focus();
-            Report($"Size {points:0}pt.");
-        }
-    }
-
-    /// <summary>
-    /// Colour, from the theme rather than from a wheel.
-    /// </summary>
-    /// <remarks>
-    /// These are the values that go into the message, so they are the one place in the
-    /// application where a literal colour is right: a recipient's client knows nothing about
-    /// this theme, and a colour resolved from one would change meaning between them. The
-    /// automatic entry writes nothing at all and lets the reader's own client decide.
-    /// </remarks>
-    private async Task ChooseColourAsync(bool highlight)
-    {
-        var colours = highlight
-            ? new[]
-            {
-                new Choice("None", "none"),
-                new Choice("Yellow", "#FFFF00"), new Choice("Bright green", "#00FF00"),
-                new Choice("Turquoise", "#00FFFF"), new Choice("Pink", "#FF00FF"),
-                new Choice("Blue", "#0000FF"), new Choice("Red", "#FF0000"),
-                new Choice("Grey", "#C0C0C0"),
-            }
-            : new[]
-            {
-                new Choice("Automatic", "none", "the reader's own text colour"),
-                new Choice("Black", "#000000"), new Choice("Dark red", "#C00000"),
-                new Choice("Red", "#FF0000"), new Choice("Orange", "#FFC000"),
-                new Choice("Green", "#008000"), new Choice("Blue", "#0070C0"),
-                new Choice("Dark blue", "#002060"), new Choice("Purple", "#7030A0"),
-                new Choice("Grey", "#808080"),
-            };
-
-        var title = highlight ? "Text Highlight Colour" : "Font Colour";
-
-        if (await Chooser.AskAsync(Host, title, "Colour:", colours) is not { } value) return;
-
-        var brush = string.Equals(value, "none", StringComparison.Ordinal)
-            ? null
-            : new SolidColorBrush(Color.Parse(value));
-
-        if (highlight) _body.SetHighlight(brush!);
-        else _body.SetForeground(brush!);
-
-        _body.Focus();
-        Report(title + " set.");
-    }
-
-    private async Task ChooseAlignmentAsync()
-    {
-        var choices = new[]
-        {
-            new Choice("Left", "left"), new Choice("Centre", "center"),
-            new Choice("Right", "right"), new Choice("Justified", "justify"),
-        };
-
-        if (await Chooser.AskAsync(Host, "Align", "Alignment:", choices) is not { } value) return;
-
-        _body.SetTextAlignment(value switch
-        {
-            "center" => TextAlignment.Center,
-            "right" => TextAlignment.Right,
-            "justify" => TextAlignment.Justify,
-            _ => TextAlignment.Left,
-        });
-
-        _body.Focus();
-    }
-
-    private async Task ChooseLineSpacingAsync()
-    {
-        var choices = new[]
-        {
-            new Choice("Single", "1.0"), new Choice("1.15", "1.15"),
-            new Choice("1.5 lines", "1.5"), new Choice("Double", "2.0"),
-        };
-
-        if (await Chooser.AskAsync(Host, "Line Spacing", "Spacing:", choices) is not { } value)
-        {
-            return;
-        }
-
-        if (double.TryParse(value, CultureInfo.InvariantCulture, out var multiplier))
-        {
-            _body.SetLineSpacing(multiplier);
-            _body.Focus();
-        }
-    }
-
-    private async Task ChooseListStyleAsync()
-    {
-        var choices = new[]
-        {
-            new Choice("Bullet — disc", "disc"), new Choice("Bullet — circle", "circle"),
-            new Choice("Bullet — square", "square"), new Choice("Bullet — dash", "dash"),
-            new Choice("Numbered — 1.", "decimal"), new Choice("Numbered — 1)", "decimalparen"),
-            new Choice("Lettered — a.", "loweralpha"), new Choice("Lettered — A.", "upperalpha"),
-            new Choice("Roman — i.", "lowerroman"),
-        };
-
-        if (await Chooser.AskAsync(Host, "List Style", "Marker:", choices) is not { } value)
-        {
-            return;
-        }
-
-        _body.SetListStyle(value switch
-        {
-            "circle" => ListMarkerStyle.Circle,
-            "square" => ListMarkerStyle.Square,
-            "dash" => ListMarkerStyle.Dash,
-            "decimal" => ListMarkerStyle.Decimal,
-            "decimalparen" => ListMarkerStyle.DecimalParen,
-            "loweralpha" => ListMarkerStyle.LowerAlpha,
-            "upperalpha" => ListMarkerStyle.UpperAlpha,
-            "lowerroman" => ListMarkerStyle.LowerRoman,
-            _ => ListMarkerStyle.Disc,
-        });
-
-        _body.Focus();
-    }
-
     /// <summary>
     /// The Signature dropdown: pick one to insert, or go and edit them.
     /// </summary>
@@ -2245,34 +2016,6 @@ public sealed class ComposeSurface : UserControl
         return Path.Combine(data, "mailbox", "personal.dic");
     }
 
-    private async Task InsertTableAsync()
-    {
-        var size = await Prompt("Table", "Rows and columns, as 3x4:");
-        if (string.IsNullOrWhiteSpace(size)) return;
-
-        var parts = size.Split(['x', 'X', '*', ',', ' '], StringSplitOptions.RemoveEmptyEntries);
-
-        if (parts.Length != 2
-            || !int.TryParse(parts[0], out var rows)
-            || !int.TryParse(parts[1], out var columns))
-        {
-            Report("A table size reads as rows by columns, like 3x4.");
-            return;
-        }
-
-        // A bound, because the number came from a text box and a table of ten thousand cells is
-        // a hang rather than a table.
-        if (rows is < 1 or > 50 || columns is < 1 or > 20)
-        {
-            Report("A table can be up to 50 rows by 20 columns.");
-            return;
-        }
-
-        _body.InsertTable(rows, columns);
-        _body.Focus();
-        Report($"Inserted a {rows}x{columns} table.");
-    }
-
     /// <summary>
     /// A picture from a file, which is the only source the sender's own machine offers.
     /// </summary>
@@ -2317,22 +2060,6 @@ public sealed class ComposeSurface : UserControl
         if (string.IsNullOrEmpty(symbol)) return;
 
         Insert(symbol);
-    }
-
-    private async Task InsertLinkAsync()
-    {
-        var address = await Prompt("Link", "Address:");
-        if (string.IsNullOrWhiteSpace(address)) return;
-
-        // A real one, now that there is a document to put it in.
-        var escaped = address.Trim()
-            .Replace("&", "&amp;", StringComparison.Ordinal)
-            .Replace("<", "&lt;", StringComparison.Ordinal)
-            .Replace(">", "&gt;", StringComparison.Ordinal)
-            .Replace("\"", "&quot;", StringComparison.Ordinal);
-
-        _body.InsertHtml($"<a href=\"{escaped}\">{escaped}</a>");
-        _body.Focus();
     }
 
     private void Insert(string text)

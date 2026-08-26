@@ -125,6 +125,34 @@ public static class ContactCommands
         KeyTip = "EM",
     };
 
+    /// <summary>
+    /// Meeting and More, which the classic Contact tab's Communicate group carries beside Email.
+    /// </summary>
+    public static readonly MailboxCommand Meeting = new()
+    {
+        Id = new("contact.meeting"),
+        Label = "Meeting",
+        Description = "Invite this person to a meeting.",
+        Icon = "meeting",
+        IconTint = "ribbon.icon.blue",
+        Category = "Communicate",
+        Scope = ModuleScope.People,
+        Surface = CommandSurface.Contact,
+        KeyTip = "MT",
+    };
+
+    public static readonly MailboxCommand More = new()
+    {
+        Id = new("contact.more"),
+        Label = "More",
+        Description = "The other ways of reaching this person.",
+        Icon = "more",
+        Category = "Communicate",
+        Scope = ModuleScope.People,
+        Surface = CommandSurface.Contact,
+        KeyTip = "MR",
+    };
+
     public static readonly MailboxCommand AddressBook = new()
     {
         Id = new("contact.addressbook"),
@@ -175,7 +203,7 @@ public static class ContactCommands
     [
         SaveAndClose, Delete, SaveAndNew, Forward,
         General, Details, Certificates, AllFields,
-        Email, AddressBook, CheckNames,
+        Email, Meeting, More, AddressBook, CheckNames,
         BusinessCard, Picture,
     ];
 }

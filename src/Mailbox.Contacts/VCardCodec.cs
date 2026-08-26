@@ -106,6 +106,7 @@ public static class VCardCodec
             InstantMessaging = card.Messengers?.Where(m => m is { IsEmpty: false }).Select(m => m!.Value!).ToList() ?? [],
             Categories = card.Categories?.Where(c => c is { IsEmpty: false }).SelectMany(c => c!.Value!).Where(v => v is { Length: > 0 }).ToList() ?? [],
             Notes = Text(card.Notes),
+            NotesHtml = Extension(card, NotesHtmlKey) ?? string.Empty,
             Birthday = ReadDate(card.BirthDayViews),
             Anniversary = ReadDate(card.AnniversaryViews),
             Photo = ReadPhoto(card),
@@ -422,6 +423,11 @@ public static class VCardCodec
         if (contact.Categories.Count > 0) builder.Categories.Add(contact.Categories);
         if (contact.Notes.Length > 0) builder.Notes.Add(contact.Notes);
 
+        // The formatted reading rides beside the plain one rather than replacing it: NOTE is
+        // text in every version of vCard, and a client that has never heard of this property
+        // still shows the note.
+        if (contact.NotesHtml.Length > 0) builder.NonStandards.Add(NotesHtmlKey, contact.NotesHtml);
+
         if (contact.Birthday is { } birthday) builder.BirthDayViews.Add(birthday.Year, birthday.Month, birthday.Day);
         if (contact.Anniversary is { } anniversary) builder.AnniversaryViews.Add(anniversary.Year, anniversary.Month, anniversary.Day);
 
@@ -499,6 +505,9 @@ public static class VCardCodec
     /// stated in a property that means only what it says, and nothing else is read as a link.
     /// </remarks>
     internal const string LinkKey = "X-MAILBOX-LINK";
+
+    /// <summary>Where a note's formatting is kept, beside the plain NOTE the standard defines.</summary>
+    internal const string NotesHtmlKey = "X-MAILBOX-NOTES-HTML";
 
     private static IReadOnlyList<string> ReadLinks(VCard card)
     {

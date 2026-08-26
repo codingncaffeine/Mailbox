@@ -6,8 +6,12 @@ using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.VisualTree;
+using AvaloniaRichEditor.Controls;
+using AvaloniaRichEditor.Documents;
 using Mailbox.Contacts;
 using Mailbox.Core.Commands;
+using Mailbox.Editor;
 using Mailbox.Store.Pim;
 
 namespace Mailbox.App.Views;
@@ -69,7 +73,22 @@ public sealed class ContactSurface : UserControl
     {
         Content = new TextBlock { Text = "This is the mailing address", TextWrapping = TextWrapping.Wrap, FontSize = 11 },
     };
-    private readonly TextBox _notes = new() { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap };
+    /// <summary>
+    /// The note, in the editor the compose window writes messages in.
+    /// </summary>
+    /// <remarks>
+    /// A rich note rather than a box of text, because the reference's is: its Insert and Format
+    /// Text tabs act on this field, and a tab of buttons that could not act would be worse than
+    /// no tab. What is written is kept twice — the formatting in the card's own extension, the
+    /// text in the standard NOTE — so another client still reads the note. See Contact.NotesHtml.
+    /// </remarks>
+    private readonly ComposeEditor _notes = new()
+    {
+        [Avalonia.Automation.AutomationProperties.NameProperty] = "Notes",
+        AllowRemoteImagesOnPaste = false,
+        AllowLocalFileImages = false,
+        AutoLinkOnType = true,
+    };
     private readonly ListBox _members = new();
     private readonly List<GroupMember> _memberList = [];
     private readonly Border _photo = new();
@@ -157,7 +176,11 @@ public sealed class ContactSurface : UserControl
             _address.Text = address.OneLine();
         }
 
-        _notes.Text = contact.Notes;
+        // The formatted reading when the card has one, the plain one when it does not — a
+        // contact written by another client, or by this one before notes could carry formatting.
+        _notes.Clear();
+        if (contact.NotesHtml.Length > 0) _notes.LoadHtml(contact.NotesHtml);
+        else if (contact.Notes.Length > 0) _notes.InsertText(contact.Notes);
         _memberList.AddRange(contact.Members);
         _members.ItemsSource = _memberList.Select(m => m.Name is { Length: > 0 } n ? $"{n} <{m.Address}>" : m.Address).ToList();
 
@@ -215,6 +238,22 @@ public sealed class ContactSurface : UserControl
     }
 
     /// <summary>The right-hand half: the card as it would be sent, and the notes under it.</summary>
+    /// <summary>
+    /// The note's formatting, or nothing at all when there is none worth keeping.
+    /// </summary>
+    /// <remarks>
+    /// An empty note writes an empty property rather than a document's worth of markup around
+    /// nothing: a card is a thing other clients read, and every byte in it is one they have to
+    /// skip. The same serializer the compose window uses, for the same reason — what comes out
+    /// is the narrow HTML §7.3 settled on rather than the editor's own.
+    /// </remarks>
+    private string NoteHtml()
+    {
+        if (_notes.GetPlainText().Trim().Length == 0) return string.Empty;
+
+        return EmailHtml.Serialize(_notes.Document ?? new FlowDocument());
+    }
+
     private Control NotesPane()
     {
         var preview = new Border
@@ -233,9 +272,12 @@ public sealed class ContactSurface : UserControl
         var label = new TextBlock { Text = "Notes", Margin = new Thickness(20, 10, 0, 4), FontSize = 12 };
         label[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("compose.header.text.brush");
 
-        _notes.BorderThickness = default;
-        _notes[!TemplatedControl.BackgroundProperty] = new DynamicResourceExtension("compose.body.background.brush");
-        _notes[!TemplatedControl.ForegroundProperty] = new DynamicResourceExtension("compose.body.text.brush");
+        _editorCommands = new EditorCommands(_notes, Host);
+
+        // The page and the marks on it, from tokens as the compose body's are.
+        _notes[!BackgroundProperty] = new DynamicResourceExtension("compose.body.background.brush");
+        _notes[!RichEditor.SelectionBrushProperty] = new DynamicResourceExtension("state.selected.brush");
+        _notes[!RichEditor.CaretBrushProperty] = new DynamicResourceExtension("compose.body.text.brush");
 
         var dock = new DockPanel();
         dock.Children.Add(new StackPanel { [DockPanel.DockProperty] = Dock.Top, Children = { preview, label } });
@@ -473,6 +515,9 @@ public sealed class ContactSurface : UserControl
 
     private static TextBox Field() => new() { VerticalContentAlignment = VerticalAlignment.Center };
 
+    /// <summary>Format Text and the document half of Insert, shared with the compose window.</summary>
+    private EditorCommands _editorCommands = null!;
+
     // ---- What the bar presses -------------------------------------------------------------------
 
     /// <summary>Runs one of the window's own commands. Returns a message when it cannot.</summary>
@@ -494,10 +539,165 @@ public sealed class ContactSurface : UserControl
             return null;
         }
 
+        // The note is a document, so the two document tabs act on it — the same code the compose
+        // window's own Format Text and Insert run.
+        if (_editorCommands.Handle(id)) return null;
+        if (_editorCommands.HandleInsert(id)) return null;
+
+        if (id == ComposeCommands.Signature.Id) { _ = InsertSignatureAsync(); return null; }
+
+        // Two of the Insert tab's own that a plain document can hold.
+        if (id == ComposeCommands.DateAndTime.Id) { _ = InsertDateAsync(); return null; }
+        if (id == ComposeCommands.HorizontalLine.Id)
+        {
+            _notes.InsertHtml("<hr>");
+            _notes.Focus();
+            return null;
+        }
+
+        // The rest of the Insert tab. The reference's contact notes are Rich Text and hold all
+        // of it; ours are the card's own, and a card is a thing other clients read: a picture,
+        // a shape or an embedded document would have to travel inside it as base64, which is how
+        // an address book stops syncing. Each says which, rather than doing nothing.
+        // Said rather than returned: this window has no status line, and the caller discards
+        // what Invoke hands back. Confirm.TellAsync is what the rest of the application uses to
+        // say "this one needs something that is not here".
+        if (Absent(id) is { } absent)
+        {
+            var label = App.Commands.TryGet(id, out var command) ? command.Label : "Insert";
+            _ = Confirm.TellAsync(Host(), label, absent);
+            return absent;
+        }
+
         // Everything else is the shell's: a message to this person, the address book, the vCard.
         ShellCommandRequested?.Invoke(this, id);
         return null;
     }
+
+    /// <summary>What the Insert tab's other entries would need, in the words the reader needs.</summary>
+    private static string? Absent(CommandId id)
+    {
+        if (id == ComposeCommands.Pictures.Id || id == ComposeCommands.Screenshot.Id)
+        {
+            return "A picture would have to travel inside the contact card itself, which is what "
+                   + "stops an address book syncing. Attach it to a message to this person instead.";
+        }
+
+        if (id == ComposeCommands.Shapes.Id || id == ComposeCommands.Icons.Id
+            || id == ComposeCommands.Models3D.Id || id == ComposeCommands.WordArt.Id
+            || id == ComposeCommands.SmartArt.Id || id == ComposeCommands.Chart.Id)
+        {
+            return "Drawing tools are not built here — the artwork behind them is somebody else's.";
+        }
+
+        if (id == ComposeCommands.TextBox.Id || id == ComposeCommands.DropCap.Id)
+        {
+            return "The editor lays a note out as text, and has no floating boxes or drop caps.";
+        }
+
+        if (id == ComposeCommands.Bookmark.Id)
+        {
+            return "A bookmark marks a place for a link to jump to, and a note has nothing to "
+                   + "link from.";
+        }
+
+        if (id == ComposeCommands.InsertBusinessCard.Id)
+        {
+            return "The card beside the form is this contact's own; inserting somebody else's "
+                   + "into the note would put a second card inside this one.";
+        }
+
+        if (id == ComposeCommands.AttachItem.Id)
+        {
+            return "A contact card carries no attachments; a message to this person does.";
+        }
+
+        if (id == ComposeCommands.Equation.Id || id == ComposeCommands.Symbol.Id)
+        {
+            return "Equations and the symbol picker are the compose window's; a note takes "
+                   + "whatever the keyboard types.";
+        }
+
+        if (id == ComposeCommands.InsertObject.Id)
+        {
+            return "Embedding a document from another program needs that program; nothing here can.";
+        }
+
+        if (id == ComposeCommands.QuickParts.Id)
+        {
+            return "There are no saved blocks of text yet — Quick Parts arrives with the ones the "
+                   + "compose window will keep.";
+        }
+
+        if (id == ComposeCommands.AttachFile.Id)
+        {
+            return "A contact card carries no attachments; a message to this person does.";
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Insert · Signature: the reader's own, dropped into the note as text.
+    /// </summary>
+    /// <remarks>
+    /// The reference offers this on a contact for the same reason it offers it on a message —
+    /// the field is a document — and there is nothing here it cannot do: a signature is HTML,
+    /// and so is the note.
+    /// </remarks>
+    private async Task InsertSignatureAsync()
+    {
+        var choices = App.Signatures.All.Select(sig => new Choice(sig.Name, sig.Name)).ToList();
+        if (choices.Count == 0)
+        {
+            await Confirm.TellAsync(Host(), "Signature",
+                "There are no signatures yet. Options · Mail · Signatures makes one.");
+            return;
+        }
+
+        if (await Chooser.AskAsync(Host(), "Signature", "Insert:", choices) is not { } chosen) return;
+        if (App.Signatures.Find(chosen) is not { } signature || signature.IsEmpty) return;
+
+        // The markup where there is any, so a formatted signature stays formatted; the plain
+        // reading of the note is produced from the document either way.
+        if (signature.Html is { Length: > 0 } html) _notes.InsertHtml(html);
+        else _notes.InsertText(signature.Text);
+
+        _notes.Focus();
+    }
+
+    /// <summary>Insert · Date &amp; Time: today, or the moment, as the reader chooses.</summary>
+    private async Task InsertDateAsync()
+    {
+        var now = DateTimeOffset.Now;
+        var choices = new[]
+        {
+            new Choice(now.ToString("d MMMM yyyy", CultureInfo.CurrentCulture), "date"),
+            new Choice(now.ToString("dddd, d MMMM yyyy", CultureInfo.CurrentCulture), "long"),
+            new Choice(now.ToString("g", CultureInfo.CurrentCulture), "datetime"),
+            new Choice(now.ToString("t", CultureInfo.CurrentCulture), "time"),
+        };
+
+        if (await Chooser.AskAsync(Host(), "Date and Time", "Insert:", choices) is not { } chosen) return;
+
+        _notes.InsertText(chosen switch
+        {
+            "long" => now.ToString("dddd, d MMMM yyyy", CultureInfo.CurrentCulture),
+            "datetime" => now.ToString("g", CultureInfo.CurrentCulture),
+            "time" => now.ToString("t", CultureInfo.CurrentCulture),
+            _ => now.ToString("d MMMM yyyy", CultureInfo.CurrentCulture),
+        });
+
+        _notes.Focus();
+    }
+
+    /// <summary>The note as text, for a harness run to read back what a command did to it.</summary>
+    internal string NoteText => _notes.GetPlainText().Replace("\n", "\u23ce").Trim();
+
+    /// <summary>The window this form is in, for the dialogs its commands open.</summary>
+    private Window Host()
+        => TopLevel.GetTopLevel(this) as Window
+           ?? throw new InvalidOperationException("The contact surface is not hosted in a window.");
 
     public void Cancel() => Cancelled?.Invoke(this, EventArgs.Empty);
 
@@ -544,7 +744,8 @@ public sealed class ContactSurface : UserControl
             Phones = phones,
             Urls = (_webPage.Text ?? string.Empty).Trim() is { Length: > 0 } url ? [url] : [],
             InstantMessaging = (_im.Text ?? string.Empty).Trim() is { Length: > 0 } im ? [im] : [],
-            Notes = _notes.Text ?? string.Empty,
+            Notes = _notes.GetPlainText().TrimEnd(),
+            NotesHtml = NoteHtml(),
             Photo = _picture,
             Members = _memberList,
             LastModified = DateTimeOffset.UtcNow,
