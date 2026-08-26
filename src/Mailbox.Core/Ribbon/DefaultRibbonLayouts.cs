@@ -160,32 +160,28 @@ public static class DefaultRibbonLayouts
                     RibbonItem.Small(ViewCommands.LayoutMenu.Id, RibbonItemKind.DropDown),
                     RibbonItem.Small(ViewCommands.ImmersiveReader.Id))),
 
-            // The Folder tab's Simplified row: the same commands in the same order, as one flat
-            // run. No capture of this one exists — the reference's Simplified rows are its
-            // classic groups condensed, and this follows that rule rather than inventing an
-            // order of its own.
-            ["folder"] = Bar(
-                Cluster("foldernew", "New",
-                    RibbonItem.Small(MailCommands.NewFolder.Id),
-                    RibbonItem.Small(MailCommands.NewSearchFolder.Id)),
+            // No Folder row: the Simplified capture's tab strip does not carry that tab at all
+            // (see RibbonTab.ClassicOnly), so there is nothing for a row to fill.
 
-                Cluster("folderactions", "Actions",
-                    RibbonItem.Small(MailCommands.RenameFolder.Id),
-                    RibbonItem.Small(MailCommands.CopyFolder.Id),
-                    RibbonItem.Small(MailCommands.MoveFolder.Id),
-                    RibbonItem.Small(MailCommands.DeleteFolder.Id)),
-
-                Cluster("foldercleanup", "Clean Up",
-                    RibbonItem.Small(MailCommands.MarkAllAsRead.Id),
-                    RibbonItem.Small(MailCommands.RunRulesNow.Id),
-                    RibbonItem.Small(MailCommands.CleanUpFolder.Id, RibbonItemKind.DropDown),
-                    RibbonItem.Small(MailCommands.DeleteAll.Id)),
-
-                Cluster("folderproperties", "Properties",
-                    RibbonItem.Small(MailCommands.AddToFavorites.Id),
-                    RibbonItem.Small(MailCommands.FolderProperties.Id))),
-
-            ["help"] = new SimplifiedBar { Groups = [] },
+            // Transcribed from the Simplified capture: seven entries, then the cluster's own
+            // "…", and Get Diagnostics is not on the row — the overflow is where it is.
+            ["help"] = new SimplifiedBar
+            {
+                // No rule closing the row: the bar draws its own "…" behind one after the last
+                // cluster, and that is the single "…" the capture shows after Support Tool.
+                TrailingRule = false,
+                Groups =
+                [
+                    Cluster("help", "Help",
+                        RibbonItem.Small(ViewCommands.Help.Id),
+                        RibbonItem.Small(ViewCommands.ContactSupport.Id),
+                        RibbonItem.Small(ViewCommands.Feedback.Id),
+                        RibbonItem.Small(ViewCommands.SuggestFeature.Id),
+                        RibbonItem.Small(ViewCommands.ShowTraining.Id),
+                        RibbonItem.Small(ViewCommands.WhatsNew.Id),
+                        RibbonItem.Small(ViewCommands.SupportTool.Id)),
+                ],
+            },
         },
         Tabs =
         [
@@ -424,6 +420,10 @@ public static class DefaultRibbonLayouts
                 Id = "folder",
                 Label = "Folder",
                 KeyTip = "O",
+
+                // The Simplified bar has no Folder tab: both captures were taken minutes apart
+                // and only the classic one shows it.
+                ClassicOnly = true,
                 Groups =
                 [
                     new RibbonGroup
@@ -604,12 +604,42 @@ public static class DefaultRibbonLayouts
                 ],
             },
 
+            // Help, transcribed from the capture: seven large buttons in one group and one in a
+            // group of its own. Four lead somewhere this project has; the other four name
+            // services the reference's publisher runs, and each says so when it is pressed.
             new RibbonTab
             {
                 Id = "help",
                 Label = "Help",
                 KeyTip = "Y",
-                Groups = [],
+                Groups =
+                [
+                    new RibbonGroup
+                    {
+                        Id = "help",
+                        Label = "Help",
+                        KeyTip = "ZH",
+                        CollapsePriority = 1,
+                        Items =
+                        [
+                            RibbonItem.Large(ViewCommands.Help.Id),
+                            RibbonItem.Large(ViewCommands.ContactSupport.Id),
+                            RibbonItem.Large(ViewCommands.Feedback.Id),
+                            RibbonItem.Large(ViewCommands.SuggestFeature.Id),
+                            RibbonItem.Large(ViewCommands.ShowTraining.Id),
+                            RibbonItem.Large(ViewCommands.WhatsNew.Id),
+                            RibbonItem.Large(ViewCommands.SupportTool.Id),
+                        ],
+                    },
+                    new RibbonGroup
+                    {
+                        Id = "helptools",
+                        Label = "Tools",
+                        KeyTip = "ZT",
+                        CollapsePriority = 2,
+                        Items = [RibbonItem.Large(ViewCommands.GetDiagnostics.Id)],
+                    },
+                ],
             },
         ],
     };

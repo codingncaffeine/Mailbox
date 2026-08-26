@@ -209,6 +209,16 @@ public sealed class RibbonView : ContentControl
 
             field = value;
             CloseFloatingBody();
+
+            // A tab the new mode does not carry cannot stay selected: switching to Simplified
+            // while the Folder tab is open would leave the strip pointing at a tab that is no
+            // longer in it, and the body under nothing at all.
+            if (VisibleTabs.FirstOrDefault() is { } first
+                && !VisibleTabs.Any(tab => string.Equals(tab.Id, _activeTabId, StringComparison.OrdinalIgnoreCase)))
+            {
+                _activeTabId = VisibleTabs.FirstOrDefault(tab => !tab.IsBackstage)?.Id ?? first.Id;
+            }
+
             Rebuild();
             DisplayModeChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -299,7 +309,8 @@ public sealed class RibbonView : ContentControl
 
     /// <summary>The tabs currently in the strip: every ordinary one, plus any active set.</summary>
     private IEnumerable<RibbonTab> VisibleTabs =>
-        ContextualTabs.Visible(_layout.Tabs, _contextualGroups);
+        ContextualTabs.Visible(_layout.Tabs, _contextualGroups)
+            .Where(tab => !tab.ClassicOnly || DisplayMode != RibbonDisplayMode.Simplified);
 
     public string ActiveTabId
     {

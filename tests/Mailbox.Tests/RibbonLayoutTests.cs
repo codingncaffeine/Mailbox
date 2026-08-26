@@ -76,11 +76,15 @@ public class RibbonLayoutTests
     [Fact]
     public void EveryTabWithCommandsHasASimplifiedRow()
     {
-        foreach (var tab in DefaultRibbonLayouts.Mail.Tabs.Where(t => t.Groups.Count > 0))
+        // A classic-only tab is not in the Simplified strip at all, so it has no row to fill:
+        // the Simplified capture's tab strip does not carry Folder.
+        foreach (var tab in DefaultRibbonLayouts.Mail.Tabs.Where(t => t.Groups.Count > 0 && !t.ClassicOnly))
         {
             Assert.True(DefaultRibbonLayouts.Mail.SimplifiedRows.ContainsKey(tab.Id),
                 $"Tab '{tab.Id}' has classic groups but no Simplified row.");
         }
+
+        Assert.DoesNotContain("folder", DefaultRibbonLayouts.Mail.SimplifiedRows.Keys);
     }
 
     [Fact]
@@ -91,7 +95,7 @@ public class RibbonLayoutTests
 
         foreach (var (tabId, items) in DefaultRibbonLayouts.Mail.SimplifiedRows)
         {
-            foreach (var item in items.Where(i => i.Kind != RibbonItemKind.Separator))
+            foreach (var item in items.Where(i => !i.IsSentinel))
             {
                 Assert.True(catalog.TryGet(item.Command, out _),
                     $"Simplified row '{tabId}' places unknown command '{item.Command}'.");

@@ -263,6 +263,16 @@ WANTED = {
     "mark-download": "arrow_download",
     "unmark-download": "document_prohibited",
     "process-headers": "checkmark",
+
+    # The Help tab.
+    "help": "question_circle",
+    "contact-support": "person_support",
+    "feedback": "person_feedback",
+    "suggest-feature": "note_edit",
+    "show-training": "hat_graduation",
+    "whats-new": "megaphone",
+    "support-tool": "wrench_settings",
+    "get-diagnostics": "briefcase",
 }
 
 SIZES = (16, 20, 24, 32)

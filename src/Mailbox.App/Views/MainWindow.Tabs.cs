@@ -478,6 +478,98 @@ public partial class MainWindow
         await ProcessMarkedHeadersAsync(shell);
     }
 
+    // ---- The Help tab -------------------------------------------------------------------
+
+    /// <summary>
+    /// The Help tab: four buttons that lead somewhere, and four that say what is not behind them.
+    /// </summary>
+    /// <remarks>
+    /// The reference's Help tab is mostly links into its publisher's services — a support desk,
+    /// training videos, a repair tool, a diagnostics collector. This project has none of those
+    /// and is not going to pretend otherwise, so those four are drawn (the tab is the
+    /// reference's tab) and each says plainly what it would need. The four that do lead
+    /// somewhere go to the places this project actually keeps: the manual, the issues page, and
+    /// the release notes.
+    /// </remarks>
+    private bool RunHelpCommand(ShellViewModel shell, CommandId id)
+    {
+        if (id == ViewCommands.Help.Id)
+        {
+            OpenProjectPage(shell, ViewCommands.Project.Manual, "the manual");
+            return true;
+        }
+
+        if (id == ViewCommands.Feedback.Id || id == ViewCommands.SuggestFeature.Id)
+        {
+            OpenProjectPage(shell, ViewCommands.Project.Issues, "the issues page");
+            return true;
+        }
+
+        if (id == ViewCommands.WhatsNew.Id)
+        {
+            OpenProjectPage(shell, ViewCommands.Project.Releases, "the releases page");
+            return true;
+        }
+
+        // Get Diagnostics is the one of the four with something real to point at: the logs are on
+        // disk whether or not anybody collects them, and where they are is the useful answer.
+        if (id == ViewCommands.GetDiagnostics.Id)
+        {
+            shell.StatusRight = $"{ViewCommands.GetDiagnostics.Description} They are in {Mailbox.Core.Diagnostics.Log.LogDirectory()}.";
+            return true;
+        }
+
+        if (id == ViewCommands.ContactSupport.Id || id == ViewCommands.ShowTraining.Id
+            || id == ViewCommands.SupportTool.Id)
+        {
+            shell.StatusRight = App.Commands.TryGet(id, out var command) ? command.Description : string.Empty;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Hands one of the project's own pages to the desktop.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not the reading pane's opener, which exists to follow a <em>stranger's</em>
+    /// link and is written to be suspicious of one. These are three addresses compiled into the
+    /// application, and what matters here instead is that a capture run never launches a
+    /// browser: a harness that opened seven tabs while it photographed the Help tab would be
+    /// unusable.
+    /// </remarks>
+    private static void OpenProjectPage(ShellViewModel shell, string url, string what)
+    {
+        if (Mailbox.App.Theming.WindowCapture.IsRequested)
+        {
+            shell.StatusRight = $"Would open {what}: {url}";
+            Log.Info($"Harness: would open {url}");
+            return;
+        }
+
+        try
+        {
+            using var process = new System.Diagnostics.Process
+            {
+                StartInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "xdg-open",
+                    ArgumentList = { url },
+                    UseShellExecute = false,
+                },
+            };
+
+            process.Start();
+            shell.StatusRight = $"Opened {what} in your browser.";
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Could not open {url}.", ex);
+            shell.StatusRight = $"Nothing on this desktop opened {url}.";
+        }
+    }
+
     // ---- What is on ---------------------------------------------------------------------
 
     /// <summary>

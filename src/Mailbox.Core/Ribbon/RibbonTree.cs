@@ -228,8 +228,15 @@ public sealed class RibbonTree
                 ? new RibbonTab { Id = entry.Id, Label = entry.Label, Groups = [] }
                 : original with { Label = entry.Label });
 
+            // The rule that closes a row is the layout's furniture rather than the reader's —
+            // not a command, and not something Customize Ribbon moves — so it is carried over
+            // rather than rebuilt from the tree, which had been giving every customized row the
+            // default one whether the shipped row had it or not.
+            var shippedBar = shipped.Simplified.GetValueOrDefault(entry.Id);
+
             bars[entry.Id] = new SimplifiedBar
             {
+                TrailingRule = shippedBar?.TrailingRule ?? true,
                 Groups =
                 [
                     .. entry.Groups.Select(group => new RibbonGroup

@@ -453,6 +453,17 @@ public sealed record RibbonTab
     /// the Backstage — a full-window takeover — instead of changing the ribbon beneath.
     /// </summary>
     public bool IsBackstage { get; init; }
+
+    /// <summary>
+    /// True for a tab the Simplified bar does not carry at all.
+    /// </summary>
+    /// <remarks>
+    /// Folder is the one: the classic capture's tab strip reads File, Home, Send / Receive,
+    /// Folder, View, Help, and the Simplified capture taken minutes later reads the same five
+    /// without it. So the tab is not merely empty in that mode — it is absent from the strip,
+    /// and a row invented for it would put a tab on screen the reference does not show.
+    /// </remarks>
+    public bool ClassicOnly { get; init; }
 }
 
 /// <summary>

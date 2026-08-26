@@ -4238,6 +4238,7 @@ public partial class MainWindow : Window
         if (RunViewTabCommand(shell, id)) return;
         if (RunFolderTabCommand(shell, id)) return;
         if (RunServerCommand(shell, id)) return;
+        if (RunHelpCommand(shell, id)) return;
 
         // A plugin's command, found the way a Quick Step is: the host owns the handler, and a
         // handler that throws disables its plugin rather than the window.

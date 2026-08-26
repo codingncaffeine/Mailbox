@@ -127,6 +127,77 @@ public class ClassicTabTests
                 .Select(i => i.Command.Value).ToArray());
     }
 
+    [Fact]
+    public void TheHelpTabIsTheCaptureS()
+    {
+        Assert.Equal(["Help", "Tools"], Groups("help"));
+
+        Assert.Equal(
+            ["help.manual", "help.support", "help.feedback", "help.suggest",
+             "help.training", "help.whatsnew", "help.supporttool"],
+            Commands("help", "Help"));
+        Assert.Equal(["help.diagnostics"], Commands("help", "Tools"));
+
+        // Seven large buttons in the first group, one in the second: the capture has no small
+        // stack anywhere on this tab.
+        Assert.All(
+            Tab("help").Groups.SelectMany(g => g.Items),
+            item => Assert.Equal(RibbonItemSize.Large, item.Size));
+
+        // F1 is the reference's own, and nothing here had it.
+        Assert.Equal("F1", ViewCommands.Help.DefaultGesture);
+    }
+
+    /// <summary>
+    /// The Simplified Help row: seven of the eight, and the row's own "…" holds the one it
+    /// leaves out. No rule closes the row — the bar draws one in front of its overflow.
+    /// </summary>
+    [Fact]
+    public void TheSimplifiedHelpRowLeavesGetDiagnosticsToTheOverflow()
+    {
+        var bar = DefaultRibbonLayouts.Mail.Simplified["help"];
+        var row = bar.Flatten().Select(i => i.Command.Value).ToArray();
+
+        Assert.False(bar.TrailingRule);
+        Assert.Equal(
+            ["help.manual", "help.support", "help.feedback", "help.suggest",
+             "help.training", "help.whatsnew", "help.supporttool"],
+            row);
+        Assert.DoesNotContain("help.diagnostics", row);
+    }
+
+    /// <summary>
+    /// The Folder tab is classic-only: both captures were taken minutes apart, and the
+    /// Simplified one's tab strip does not carry it.
+    /// </summary>
+    [Fact]
+    public void TheFolderTabIsNotInTheSimplifiedStrip()
+    {
+        Assert.True(Tab("folder").ClassicOnly);
+        Assert.All(
+            DefaultRibbonLayouts.Mail.Tabs.Where(t => t.Id != "folder"),
+            tab => Assert.False(tab.ClassicOnly));
+    }
+
+    /// <summary>
+    /// The four Help buttons with nothing behind them say so in the application's own voice.
+    /// </summary>
+    /// <remarks>
+    /// A screentip is interface, and §5's rule that the reference is named nowhere in what a
+    /// user sees applies to it as much as to a label.
+    /// </remarks>
+    [Fact]
+    public void TheHelpScreentipsNameNobody()
+    {
+        foreach (var command in (MailboxCommand[])
+                 [ViewCommands.ContactSupport, ViewCommands.ShowTraining,
+                  ViewCommands.SupportTool, ViewCommands.GetDiagnostics])
+        {
+            Assert.DoesNotContain("reference", command.Description, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("publisher", command.Description, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
     /// <summary>
     /// Categories and the three flag entries are drawings rather than glyphs: their meaning is
     /// their colours, and a monochrome font cannot carry four swatches or a red flag.

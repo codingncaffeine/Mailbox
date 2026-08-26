@@ -669,6 +669,114 @@ public static class ViewCommands
         KeyTip = "PH",
     };
 
+    // ---- The Help tab ------------------------------------------------------------------------
+    //
+    // Eight buttons, transcribed from the capture. Four of them lead somewhere this project has:
+    // the manual, the issues page twice, and the release notes. The other four name services the
+    // reference's publisher runs — a support desk, training videos, a repair tool and a
+    // diagnostics collector — and they are drawn rather than dropped, because the tab is what
+    // the reference's tab is. What each of those four says when it is pressed is written in the
+    // application's own voice: a screentip is interface, and no interface string here names the
+    // reference or anybody's publisher.
+
+    /// <summary>Where the project lives, and the pages the Help tab sends a reader to.</summary>
+    public static class Project
+    {
+        public const string Repository = "https://github.com/codingncaffeine/Mailbox";
+
+        /// <summary>The manual. The README until there is a longer one, which is where it will go.</summary>
+        public const string Manual = Repository + "#readme";
+
+        /// <summary>Where a fault or an idea goes. Both Feedback and Suggest a Feature open it.</summary>
+        public const string Issues = Repository + "/issues/new";
+
+        /// <summary>Every release carries what is new and what is fixed; the newest is at the top.</summary>
+        public const string Releases = Repository + "/releases";
+    }
+
+    public static readonly MailboxCommand Help = new()
+    {
+        Id = new("help.manual"),
+        Label = "Help",
+        Description = "Open the manual.",
+        Icon = "help",
+        IconTint = "ribbon.icon.blue",
+        Category = "Help",
+        KeyTip = "H",
+        DefaultGesture = "F1",
+    };
+
+    public static readonly MailboxCommand ContactSupport = new()
+    {
+        Id = new("help.support"),
+        Label = "Contact Support",
+        Description = "There is no support desk behind this application; the issues page is where a problem gets looked at.",
+        Icon = "contact-support",
+        Category = "Help",
+        KeyTip = "CS",
+    };
+
+    public static readonly MailboxCommand Feedback = new()
+    {
+        Id = new("help.feedback"),
+        Label = "Feedback",
+        Description = "Say what is wrong, or what worked — the issues page.",
+        Icon = "feedback",
+        Category = "Help",
+        KeyTip = "FB",
+    };
+
+    public static readonly MailboxCommand SuggestFeature = new()
+    {
+        Id = new("help.suggest"),
+        Label = "Suggest a Feature",
+        Description = "Ask for something the application does not do yet — the issues page.",
+        Icon = "suggest-feature",
+        Category = "Help",
+        KeyTip = "SF",
+    };
+
+    public static readonly MailboxCommand ShowTraining = new()
+    {
+        Id = new("help.training"),
+        Label = "Show Training",
+        Description = "There are no training videos for this application. The manual is what there is, and Help opens it.",
+        Icon = "show-training",
+        Category = "Help",
+        KeyTip = "ST",
+    };
+
+    public static readonly MailboxCommand WhatsNew = new()
+    {
+        Id = new("help.whatsnew"),
+        Label = "What's New",
+        Description = "What the newest release added and fixed.",
+        Icon = "whats-new",
+        IconTint = "ribbon.icon.blue",
+        Category = "Help",
+        KeyTip = "WN",
+    };
+
+    public static readonly MailboxCommand SupportTool = new()
+    {
+        Id = new("help.supporttool"),
+        Label = "Support Tool",
+        Description = "Nothing here diagnoses or repairs an installation; a fault worth looking at goes to the issues page.",
+        Icon = "support-tool",
+        Category = "Help",
+        KeyTip = "SU",
+    };
+
+    public static readonly MailboxCommand GetDiagnostics = new()
+    {
+        Id = new("help.diagnostics"),
+        Label = "Get Diagnostics",
+        Description = "Collecting a report to send to a support desk needs a support desk. The logs are written to disk either way.",
+        Icon = "get-diagnostics",
+        Category = "Tools",
+        KeyTip = "GD",
+    };
+
     public static IEnumerable<MailboxCommand> All =>
     [
         GoToMail, GoToCalendar, GoToPeople, GoToTasks, GoToNotes, GoToJournal,
@@ -686,5 +794,6 @@ public static class ViewCommands
         FolderPane, ReadingPane, ToDoBar,
         RemindersWindow, OpenInNewWindow, CloseAllItems,
         DownloadHeaders, MarkToDownload, UnmarkToDownload, ProcessMarkedHeaders,
+        Help, ContactSupport, Feedback, SuggestFeature, ShowTraining, WhatsNew, SupportTool, GetDiagnostics,
     ];
 }
