@@ -219,7 +219,14 @@ public partial class MainWindow : Window
                     }
 
                     RunCommand(new CommandId(id));
-                    if (DataContext is ShellViewModel s) Log.Info($"Harness: status \u201c{s.StatusRight}\u201d");
+
+                    // The status line and the windows: a press that opens a dialog writes no
+                    // status, and "nothing happened" and "a dialog opened" read identically
+                    // without this. Learnt from the row menu, which asks the same question.
+                    if (DataContext is ShellViewModel s)
+                    {
+                        Log.Info($"Harness: status \u201c{s.StatusRight}\u201d, windows: {OtherWindows()}");
+                    }
                 }
             }, DispatcherPriority.Background);
         }

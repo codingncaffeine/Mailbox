@@ -40,6 +40,17 @@ public partial class MainWindow
             return true;
         }
 
+        // The three the bar greys on a folder the account cannot do without. The bar is not the
+        // only way in — a keyboard shortcut reaches a greyed command — so the answer is here as
+        // well, and it says which folder and why rather than doing nothing.
+        if (folder.Role != FolderRole.None
+            && (id == MailCommands.RenameFolder.Id || id == MailCommands.MoveFolder.Id || id == MailCommands.DeleteFolder.Id))
+        {
+            shell.StatusRight = $"{folder.Name} is one of the folders the account is built on, and cannot be "
+                + (id == MailCommands.RenameFolder.Id ? "renamed." : id == MailCommands.MoveFolder.Id ? "moved." : "deleted.");
+            return true;
+        }
+
         if (id == MailCommands.NewFolder.Id) { _ = NewFolderAsync(shell, account, folder.Id); return true; }
         if (id == MailCommands.RenameFolder.Id) { _ = RenameFolderAsync(shell, account, folder); return true; }
         if (id == MailCommands.CopyFolder.Id) { _ = CopyFolderAsync(shell, account, folder); return true; }
