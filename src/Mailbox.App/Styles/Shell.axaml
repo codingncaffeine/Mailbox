@@ -238,6 +238,44 @@
     </Style>
 
     <!--
+        The entry under the pointer, and the one whose submenu is open. Both are ":selected" to
+        the control theme, which paints the row's own border directly and so beats the background
+        above. Left alone it reaches for an accent brush nothing here publishes, and the row comes
+        out filled with the stock blue — the one colour in an open menu that belonged to no theme.
+        A wash rather than a band with an edge: the reference draws no border round the entry the
+        pointer is on.
+    -->
+    <Style Selector="MenuItem:selected /template/ Border#root">
+        <Setter Property="Background" Value="{DynamicResource state.hover.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource state.hover.brush}" />
+    </Style>
+
+    <!--
+        A submenu is a popup of the entry's own rather than another flyout, so the presenter style
+        above never reaches it: the control theme paints it from the window's ground, and a
+        submenu came out a different colour from the menu it hangs off in the two themes where
+        ground and overlay differ. Same surface, same edge.
+    -->
+    <Style Selector="MenuItem /template/ Popup Border">
+        <Setter Property="Background" Value="{DynamicResource surface.overlay.brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource border.subtle.brush}" />
+    </Style>
+
+    <!--
+        The rules between the menu's groups take the stronger border rather than the subtle one
+        every other separator uses. Measured at #858585 against the menu's own #BDBDBD, which is
+        this theme's strong border almost exactly; the subtle one is #565656 there and draws a
+        rule far heavier than the reference's on a surface that dark.
+    -->
+    <Style Selector="MenuFlyoutPresenter Separator">
+        <Setter Property="Background" Value="{DynamicResource border.strong.brush}" />
+    </Style>
+
+    <Style Selector="MenuItem:separator /template/ Separator">
+        <Setter Property="Background" Value="{DynamicResource border.strong.brush}" />
+    </Style>
+
+    <!--
         A screentip is the desktop's, not the theme's. The reference draws it as a light box in
         every theme — measured #F0F0F0 on Dark Gray, where nothing else in the window is — for the
         same reason Account Settings is light everywhere: it is an OS tooltip, and the OS does not

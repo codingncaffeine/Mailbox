@@ -5614,6 +5614,36 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Harness: every window open besides this one, by title.
+    /// </summary>
+    /// <remarks>
+    /// Half the entries in a menu do their work by opening something — a dialog, or a compose
+    /// window — and leave the status line untouched, so a read-back that only reports the status
+    /// cannot tell "it opened what it should have" from "it did nothing at all".
+    /// <para>
+    /// Not the whole answer on its own: with the reading pane off, Reply and Forward embed their
+    /// draft in the window rather than opening one, which is the reference's behaviour and the
+    /// owner's setup. An empty list here is why the press read-back names the inline surface
+    /// beside it — read on its own it says "nothing happened" about a reply that opened
+    /// perfectly well.
+    /// </para>
+    /// </remarks>
+    private string OtherWindows()
+    {
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            return "not a desktop lifetime";
+        }
+
+        var others = desktop.Windows
+            .Where(w => !ReferenceEquals(w, this))
+            .Select(w => string.IsNullOrWhiteSpace(w.Title) ? w.GetType().Name : w.Title)
+            .ToList();
+
+        return others.Count == 0 ? "none" : string.Join(", ", others.Select(t => $"\u201c{t}\u201d"));
+    }
+
     /// <summary>What a harness press reports afterwards: the status line, once the press has run.</summary>
     private static Action? Pressed { get; set; }
 
@@ -5727,10 +5757,30 @@ public partial class MainWindow : Window
         {
             // The press is asynchronous where it opens a dialog, so the read-back is posted
             // below it rather than taken on the next line.
-            Pressed = () => Dispatcher.UIThread.Post(
-                () => Log.Info($"Harness: status \u201c{shell.StatusRight}\u201d, "
-                               + $"search \u201c{shell.SearchText}\u201d, {shell.Messages.Count} row(s)."),
-                DispatcherPriority.Background);
+            // Held, and asked a moment later. A press that opens a window does not always open
+            // it on the spot — a compose window builds its editor first — so a read-back taken
+            // at the next idle moment reports "windows: none" for an entry that was on its way
+            // to opening one, which reads exactly like an entry that did nothing. The hold stops
+            // the capture ending the run before the answer is in.
+            Pressed = () =>
+            {
+                var hold = WindowCapture.Hold();
+                _ = Dispatcher.UIThread.InvokeAsync(async () =>
+                {
+                    try
+                    {
+                        await Task.Delay(TimeSpan.FromMilliseconds(900));
+                        Log.Info($"Harness: status \u201c{shell.StatusRight}\u201d, "
+                                 + $"search \u201c{shell.SearchText}\u201d, {shell.Messages.Count} row(s), "
+                                 + $"windows: {OtherWindows()}, "
+                                 + $"inline: {(_inlineCompose is null ? "none" : "a reply is embedded")}.");
+                    }
+                    finally
+                    {
+                        hold.Dispose();
+                    }
+                });
+            };
 
             PressMenuEntry(flyout.Items.Cast<Control>(), press.Split('/', StringSplitOptions.TrimEntries), 0);
             return;

@@ -67,7 +67,7 @@
     "status.success": "#107C10",
     "status.warning": "#797673",
     "surface.ground": "{palette.content.row}",
-    "surface.overlay": "{palette.neutral.white}",
+    "surface.overlay": "{palette.chrome.ribbon}",
     "surface.raised": "{palette.content.row}",
     "surface.sunken": "{palette.content.pane}",
     "text.disabled": "{palette.neutral.tertiary}",

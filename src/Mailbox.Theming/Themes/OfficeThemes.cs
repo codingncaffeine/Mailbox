@@ -309,6 +309,14 @@ public static class OfficeThemes
         t.Set(TokenKeys.Surface.Raised, "{palette.content.row}");
         t.Set(TokenKeys.Surface.Sunken, "{palette.content.pane}");
 
+        // A popup is not white here, and the light semantics above would have made it one.
+        // Measured off two captures that agree — the menu over a message and the Categorize
+        // dropdown — #BDBDBD on a #D4D4D4 reading pane, inside a #666666 edge: a menu in this
+        // theme is *darker* than the content it covers, which is the opposite of every other
+        // theme and the reason a white one looked wrong. It is the ribbon's own grey, which is
+        // the same colour for the same reason.
+        t.Set(TokenKeys.Surface.Overlay, "{palette.chrome.ribbon}");
+
         // The month view, measured: days to come, days gone, today's whole cell, the lines
         // between, and the navigator's block over the days on show. The grid is light content
         // inside dark chrome, as the rows are — so the cells and their ink stay dark-on-light
