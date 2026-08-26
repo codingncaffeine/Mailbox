@@ -2307,16 +2307,20 @@ public sealed class RibbonView : ContentControl
         var button = new Button
         {
             Content = content,
-            // A 1px line that is transparent until the command is on, with the padding short
-            // by the same pixel: a button that grew when it was ticked would shove its
-            // neighbours along the bar, and the reference's boxed buttons sit exactly where
-            // their unboxed neighbours do.
-            Padding = new Thickness(
-                Math.Max(0, padding.Left - 1), Math.Max(0, padding.Top - 1),
-                Math.Max(0, padding.Right - 1), Math.Max(0, padding.Bottom - 1)),
+            // A toggle carries a 1px line from the start, transparent until it is on, with the
+            // padding short by the same pixel: a button that grew when it was switched on would
+            // shove its neighbours along the bar. Everything else keeps the padding it always
+            // had and no line at all — the pixel gate holds this bar against a reference, and a
+            // border on a button that never needs one moved every glyph in the row by a pixel
+            // where the padding it eats into was zero.
+            Padding = command.IsToggle
+                ? new Thickness(
+                    Math.Max(0, padding.Left - 1), Math.Max(0, padding.Top - 1),
+                    Math.Max(0, padding.Right - 1), Math.Max(0, padding.Bottom - 1))
+                : padding,
             MinWidth = minWidth,
             Height = height,
-            BorderThickness = new Thickness(1),
+            BorderThickness = command.IsToggle ? new Thickness(1) : default,
             CornerRadius = new CornerRadius(RibbonMetrics.ButtonCornerRadius),
             Classes = { RibbonButtonClass },
             HorizontalContentAlignment = HorizontalAlignment.Center,

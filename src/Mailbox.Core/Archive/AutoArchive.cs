@@ -65,9 +65,15 @@ public sealed record FolderArchivePolicy
 /// <remarks>
 /// The reference archives into a data file of its own; here old mail moves into the account's
 /// Archive folder, under a subfolder named for where it came from, so a message archived out of
-/// Sent Items is still recognisably sent mail. Every switch is as the reference names it, and
-/// on by default as the reference has it — the prompt is what keeps the first run from being a
-/// surprise.
+/// Sent Items is still recognisably sent mail. Every switch is as the reference names it.
+/// <para>
+/// <b>Off until it is asked for.</b> A stated divergence, and the owner's call: the reference
+/// ships this on and asks a fortnight in, and what the question means is "may I move some of
+/// your mail". A reader who has not gone looking for AutoArchive has no way to know what it
+/// would move or where it would put it, and a prompt at that moment is not consent — it is a
+/// dialog in the way of the mail. The switches below still default to what the reference asks
+/// for, so turning the one switch on gives the reference's own behaviour, prompt and all.
+/// </para>
 /// </remarks>
 public sealed class AutoArchiveOptions(SettingsStore settings)
 {
@@ -83,8 +89,8 @@ public sealed class AutoArchiveOptions(SettingsStore settings)
     public const string ActionKey = "autoarchive.action";
     public const string LastRunKey = "autoarchive.lastrun";
 
-    /// <summary>"Run AutoArchive every N days" — the switch.</summary>
-    public bool Enabled { get => _settings.GetBool(EnabledKey, true); set => _settings.Set(EnabledKey, value); }
+    /// <summary>"Run AutoArchive every N days" — the switch, off until somebody turns it on.</summary>
+    public bool Enabled { get => _settings.GetBool(EnabledKey, false); set => _settings.Set(EnabledKey, value); }
 
     public int EveryDays { get => Math.Clamp((int)_settings.GetNumber(EveryDaysKey, 14), 1, 60); set => _settings.Set(EveryDaysKey, Math.Clamp(value, 1, 60)); }
 

@@ -551,6 +551,7 @@ public static class MailCommands
         Icon = "work-offline",
         Category = "Preferences",
         KeyTip = "JW",
+        IsToggle = true,
     };
 
     /// <summary>On the Quick Access Toolbar by default, exactly as in the reference application.</summary>
@@ -857,6 +858,7 @@ public static class MailCommands
         Category = "Favorites",
         Scope = ModuleScope.Mail,
         KeyTip = "AF",
+        IsToggle = true,
     };
 
     public static readonly MailboxCommand AutoArchiveSettings = new()

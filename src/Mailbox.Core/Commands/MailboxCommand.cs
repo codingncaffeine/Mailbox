@@ -115,6 +115,20 @@ public sealed record MailboxCommand
     public required string Category { get; init; }
 
     /// <summary>
+    /// True for a command that is a state rather than an action — Work Offline, Use Tighter
+    /// Spacing, one arrangement of eleven — so the bar can draw the box the reference draws
+    /// round it while it is on.
+    /// </summary>
+    /// <remarks>
+    /// Declared here rather than inferred from whoever answers the host's checked hook, because
+    /// the bar has to know before the state does: a button that grew a line when it was switched
+    /// on would shove its neighbours along the bar, so a toggle carries its line from the start
+    /// and paints it transparent until it is wanted. A command that is not one is drawn exactly
+    /// as it was before any of this existed, down to the pixel.
+    /// </remarks>
+    public bool IsToggle { get; init; }
+
+    /// <summary>
     /// True when the command needs one or more selected items. Drives enablement without
     /// each call site reimplementing the check.
     /// </summary>

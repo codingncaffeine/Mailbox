@@ -205,6 +205,7 @@ public static class ViewCommands
         Icon = "spacing",
         Category = "Arrangement",
         KeyTip = "TS",
+        IsToggle = true,
     };
 
     public static readonly MailboxCommand LayoutMenu = new()
@@ -241,6 +242,7 @@ public static class ViewCommands
         Category = "Focused Inbox",
         Scope = ModuleScope.Mail,
         InDefaultLayout = false,
+        IsToggle = true,
     };
 
     // ---- Shell -------------------------------------------------------------------------
@@ -446,6 +448,7 @@ public static class ViewCommands
         Category = "Messages",
         Scope = ModuleScope.Mail,
         KeyTip = "SC",
+        IsToggle = true,
     };
 
     public static readonly MailboxCommand ConversationSettings = new()
@@ -490,6 +493,9 @@ public static class ViewCommands
         Category = "Arrangement",
         Scope = ModuleScope.Mail,
         KeyTip = keyTip,
+
+        // The gallery boxes whichever arrangement the list is under.
+        IsToggle = true,
     };
 
     public static readonly MailboxCommand ArrangeByDate = Arrange("date", "Date", "arrange-date", "AD");

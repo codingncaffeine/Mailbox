@@ -53,6 +53,10 @@ public class AutoArchiveTests : IDisposable
         Assert.Equal(FolderArchiveMode.Default, FolderArchivePolicy.FromJson("{nope").Mode);
     }
 
+    /// <summary>
+    /// Every switch reads as the reference has it — except the one that decides whether any of
+    /// it happens, which is off until a reader turns it on.
+    /// </summary>
     [Fact]
     public void TheOptionsReadTheReferencesDefaultsAndRememberChanges()
     {
@@ -60,7 +64,9 @@ public class AutoArchiveTests : IDisposable
         var settings = new SettingsStore(Path.Combine(_root, "settings.json"));
         var options = new AutoArchiveOptions(settings);
 
-        Assert.True(options.Enabled);
+        // Off: nothing archives, and nothing asks, until somebody has gone looking for it.
+        Assert.False(options.Enabled);
+
         Assert.Equal(14, options.EveryDays);
         Assert.True(options.Prompt);
         Assert.True(options.DeleteExpired);
