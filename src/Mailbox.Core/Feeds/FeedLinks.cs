@@ -49,9 +49,19 @@ public static class FeedLinks
     /// </summary>
     private static readonly string[] Guesses =
     [
-        "/feed", "/rss", "/feed.xml", "/rss.xml", "/atom.xml", "/index.xml",
-        "/feeds/posts/default", "/feed/", "/blog/feed", "/feed.json", "/rss/index.xml",
-        "/?feed=rss2",
+        // The four that cover most of the web, first.
+        "/feed", "/rss", "/feed.xml", "/rss.xml",
+
+        // The static-site generators.
+        "/index.xml", "/atom.xml", "/feed.atom", "/rss.json", "/feed.json",
+
+        // The blogging platforms and the engines behind most publications.
+        "/feeds/posts/default", "/?feed=rss2", "/rss/index.xml", "/feeds/all.atom.xml",
+        "/atom", "/rss/all.xml", "/feeds/rss",
+
+        // Where a publication that has more than one puts the main one.
+        "/blog/feed", "/blog/rss", "/news/feed", "/articles/feed", "/posts/feed",
+        "/en/feed", "/index.rss",
     ];
 
     /// <summary>Every feed the page advertises, in the order it advertises them.</summary>
@@ -119,6 +129,122 @@ public static class FeedLinks
         }
 
         return paths;
+    }
+
+    /// <summary>
+    /// The feeds a page links to in its body, for the sites that never learnt to write a link
+    /// element.
+    /// </summary>
+    /// <remarks>
+    /// A great many sites — especially older ones and hand-written ones — advertise nothing in
+    /// their head and simply put "RSS" in the footer. That link is the feed, and it is the one
+    /// thing a reader can see and the application could not, which is exactly the kind of gap
+    /// that makes software feel stupid.
+    /// <para>
+    /// Deliberately narrow about what counts: an address that ends in a feed-shaped path, or an
+    /// anchor whose own text says it is a feed. Following every link on a page would be a
+    /// crawler, which this is not.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<DiscoveredFeed> LinkedFrom(string html, string? baseUrl = null)
+    {
+        ArgumentNullException.ThrowIfNull(html);
+
+        var origin = Uri.TryCreate(baseUrl, UriKind.Absolute, out var parsed) ? parsed : null;
+        var found = new List<DiscoveredFeed>();
+
+        foreach (var (tag, text) in Anchors(html))
+        {
+            var attributes = Attributes(tag);
+            if (!attributes.TryGetValue("href", out var href) || href.Length == 0) continue;
+
+            if (!FeedShaped(href) && !SaysFeed(text) && !SaysFeed(attributes.GetValueOrDefault("title", string.Empty)))
+            {
+                continue;
+            }
+
+            var url = Absolute(href, origin);
+            if (url.Length == 0 || found.Any(f => f.Url.Equals(url, StringComparison.OrdinalIgnoreCase))) continue;
+
+            found.Add(new DiscoveredFeed(url, text.Trim()));
+            if (found.Count >= 12) break;
+        }
+
+        return found;
+    }
+
+    /// <summary>An address that is shaped like a feed's.</summary>
+    private static bool FeedShaped(string href)
+    {
+        var path = href.Split('?', '#')[0].TrimEnd('/');
+
+        foreach (var ending in (string[])["/feed", "/rss", ".rss", ".atom", "/atom", "feed.xml", "rss.xml", "atom.xml", "index.xml", "feed.json"])
+        {
+            if (path.EndsWith(ending, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+
+        return href.Contains("feed=rss", StringComparison.OrdinalIgnoreCase)
+               || href.Contains("/feeds/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Link text that says the link is a feed. "Subscribe" alone is not enough.</summary>
+    private static bool SaysFeed(string text)
+    {
+        var trimmed = text.Trim();
+        if (trimmed.Length is 0 or > 40) return false;
+
+        foreach (var word in (string[])["rss", "atom", "rss feed", "subscribe via rss", "feed"])
+        {
+            if (trimmed.Equals(word, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+
+        return trimmed.Contains("rss", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Every anchor in the markup, as its tag and the text between it and its close.</summary>
+    private static IEnumerable<(string Tag, string Text)> Anchors(string html)
+    {
+        var at = 0;
+
+        while (at < html.Length)
+        {
+            var open = html.IndexOf("<a", at, StringComparison.OrdinalIgnoreCase);
+            if (open < 0 || open + 2 >= html.Length) yield break;
+
+            // "<a" is also the start of "<address" and "<article".
+            if (char.IsAsciiLetterOrDigit(html[open + 2]))
+            {
+                at = open + 2;
+                continue;
+            }
+
+            var close = html.IndexOf('>', open);
+            if (close < 0) yield break;
+
+            var end = html.IndexOf("</a", close, StringComparison.OrdinalIgnoreCase);
+            var text = end > close && end - close < 400 ? Strip(html[(close + 1)..end]) : string.Empty;
+
+            yield return (html[(open + 1)..close], text);
+            at = close + 1;
+        }
+    }
+
+    /// <summary>Anchor text with any markup inside it taken off.</summary>
+    private static string Strip(string html)
+    {
+        if (!html.Contains('<')) return System.Net.WebUtility.HtmlDecode(html).Trim();
+
+        var text = new System.Text.StringBuilder(html.Length);
+        var inside = false;
+
+        foreach (var c in html)
+        {
+            if (c == '<') inside = true;
+            else if (c == '>') inside = false;
+            else if (!inside) text.Append(c);
+        }
+
+        return System.Net.WebUtility.HtmlDecode(text.ToString()).Trim();
     }
 
     /// <summary>True when the text looks like a feed rather than a page, without parsing it.</summary>

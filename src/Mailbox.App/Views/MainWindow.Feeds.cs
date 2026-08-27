@@ -160,17 +160,20 @@ public partial class MainWindow
         var dialog = new SubscribeDialog(App.FeedReader.Finder, App.Feeds);
         await dialog.ShowDialog(this);
 
-        if (dialog.Subscribed is not { } feed) return;
+        if (dialog.Subscribed is not { Count: > 0 } added) return;
 
-        shell.StatusRight = $"Subscribed to “{feed.Name}”.";
-        Log.Info($"Feeds: subscribed to “{feed.Name}” at {feed.Url}.");
+        shell.StatusRight = added.Count == 1
+            ? $"Subscribed to “{added[0].Name}”."
+            : $"Subscribed to {added.Count} feeds.";
+
+        foreach (var feed in added) Log.Info($"Feeds: subscribed to “{feed.Name}” at {feed.Url}.");
 
         _feedModule?.Reload();
         shell.Refresh();
 
-        // Read it at once: a subscription that shows nothing until the next scheduled pass looks
+        // Read at once: a subscription that shows nothing until the next scheduled pass looks
         // like it did not work.
-        await UpdateFeedsAsync(shell, force: true, only: feed);
+        foreach (var feed in added) await UpdateFeedsAsync(shell, force: true, only: feed);
     }
 
     /// <summary>Reads the subscriptions and files what arrived.</summary>

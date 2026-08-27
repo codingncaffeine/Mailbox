@@ -1271,6 +1271,23 @@ public partial class MainWindow : Window
             // reach and so have never been photographed.
             // MAILBOX_ACCOUNTS_TAB poses one of its tabs, by index or name;
             // MAILBOX_ACCOUNTS_ACTION presses its buttons and logs what the store says after.
+            // The subscribe box, posed with an address so the results are on screen.
+            // MAILBOX_SUBSCRIBE=<what to type>.
+            case "subscribe":
+                Opened += async (_, _) =>
+                {
+                    CaptureNextWindow();
+                    var subscribe = new SubscribeDialog(App.FeedReader.Finder, App.Feeds);
+
+                    if (Environment.GetEnvironmentVariable("MAILBOX_SUBSCRIBE") is { Length: > 0 } typed)
+                    {
+                        subscribe.Opened += (_, _) => subscribe.Pose(typed);
+                    }
+
+                    await subscribe.ShowDialog(this);
+                };
+                break;
+
             // The filters dashboard, which has no other way of being reached by a capture.
             case "mutefilters":
                 Opened += async (_, _) =>

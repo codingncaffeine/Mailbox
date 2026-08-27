@@ -45,10 +45,17 @@ public sealed class SubscribeDialog : Window
     private readonly TextBlock _message = new();
 
     private CancellationTokenSource? _searching;
-    private DiscoveredFeed? _chosen;
+    private readonly List<(DiscoveredFeed Feed, CheckBox Tick)> _offered = [];
 
-    /// <summary>What was subscribed to, or null when the dialog was cancelled.</summary>
-    public FeedSubscription? Subscribed { get; private set; }
+    /// <summary>
+    /// What was subscribed to. Empty when the dialog was cancelled.
+    /// </summary>
+    /// <remarks>
+    /// A list rather than one, because a site usually publishes several — the articles, one per
+    /// section, the comments — and the reader is the only one who knows which of them they want.
+    /// Offering the first and hiding the rest is a guess made on their behalf.
+    /// </remarks>
+    public IReadOnlyList<FeedSubscription> Subscribed { get; private set; } = [];
 
     public SubscribeDialog(FeedFinder finder, FeedSubscriptions feeds)
     {
@@ -56,9 +63,10 @@ public sealed class SubscribeDialog : Window
         _feeds = feeds ?? throw new ArgumentNullException(nameof(feeds));
 
         Title = "Add a Feed";
-        Width = 560;
-        Height = 460;
-        CanResize = false;
+        Width = 660;
+        Height = 660;
+        MinWidth = 520;
+        MinHeight = 420;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
         _find = Push("Find", async () => await SearchAsync());
@@ -76,7 +84,7 @@ public sealed class SubscribeDialog : Window
 
     private Control Layout(Button cancel)
     {
-        _address.PlaceholderText = "A website address, or the address of a feed";
+        _address.PlaceholderText = "A website address, a feed address, or a subject";
         _address.Margin = new Thickness(0, 0, 8, 0);
         _address.KeyDown += async (_, e) =>
         {
@@ -88,14 +96,14 @@ public sealed class SubscribeDialog : Window
         {
             _find.IsEnabled = !string.IsNullOrWhiteSpace(_address.Text);
             _subscribe.IsEnabled = false;
-            _chosen = null;
         };
         _find.IsEnabled = false;
 
         var prompt = Label("Follow a website", bold: true, size: 15);
         var explain = Label(
-            "Type the address of a site — theverge.com — and the feed behind it is found for you. "
-            + "The address of a feed works too.");
+            "Type the address of a site — theverge.com — and every feed it publishes is found for "
+            + "you. A feed's own address works, so do YouTube channels, subreddits and GitHub "
+            + "repositories, and a subject with no address becomes a news search.");
         explain.TextWrapping = TextWrapping.Wrap;
         explain.Margin = new Thickness(0, 4, 0, 12);
 
@@ -151,6 +159,22 @@ public sealed class SubscribeDialog : Window
         };
     }
 
+    /// <summary>Types an address and searches, for a capture run. Holds the shot until it is done.</summary>
+    public void Pose(string address)
+    {
+        _address.Text = address;
+        _ = PoseAsync();
+    }
+
+    private async Task PoseAsync()
+    {
+        using var hold = Mailbox.App.Theming.WindowCapture.IsRequested
+            ? Mailbox.App.Theming.WindowCapture.Hold()
+            : null;
+
+        await SearchAsync();
+    }
+
     // ---- Finding ---------------------------------------------------------------------------------
 
     private async Task SearchAsync()
@@ -164,7 +188,7 @@ public sealed class SubscribeDialog : Window
         var token = _searching.Token;
 
         _results.Children.Clear();
-        _chosen = null;
+        _offered.Clear();
         _subscribe.IsEnabled = false;
         _find.IsEnabled = false;
         _message.Text = "Looking…";
@@ -182,9 +206,10 @@ public sealed class SubscribeDialog : Window
 
             _message.Text = search.Feeds.Count == 1
                 ? "One feed found."
-                : $"{search.Feeds.Count} feeds found — choose one.";
+                : $"{search.Feeds.Count} feeds found — tick the ones you want.";
 
             foreach (var found in search.Feeds) _results.Children.Add(await CardAsync(found, token));
+            Recount();
         }
         catch (OperationCanceledException)
         {
@@ -202,87 +227,71 @@ public sealed class SubscribeDialog : Window
     }
 
     /// <summary>
-    /// One found feed, as a card: what it is called, where it is, what it says it is, and the
-    /// headlines it is carrying right now.
+    /// One found feed, as a tickable card: what it is called, where it is, what it says it is,
+    /// and the headlines it is carrying right now.
     /// </summary>
     private async Task<Control> CardAsync(DiscoveredFeed found, CancellationToken cancellation)
     {
         var channel = await PreviewAsync(found, cancellation);
+        var already = _feeds.Contains(found.Url);
 
-        var title = Label(channel?.Title is { Length: > 0 } named ? named : found.Label, bold: true, size: 14);
+        var named = channel?.Title is { Length: > 0 } title ? title : found.Label;
 
-        var host = Label(Uri.TryCreate(found.Url, UriKind.Absolute, out var url) ? url.Host : found.Url);
+        var tick = new CheckBox
+        {
+            Content = named,
+            FontWeight = FontWeight.SemiBold,
+            IsEnabled = !already,
+
+            // One result is what the reader meant; several is a choice, and ticking nothing by
+            // default would make them do the work twice.
+            IsChecked = !already && _offered.Count == 0,
+        };
+        Bind(tick, CheckBox.ForegroundProperty, "dialog.foreground.brush");
+        tick.IsCheckedChanged += (_, _) => Recount();
+
+        var host = Label(Uri.TryCreate(found.Url, UriKind.Absolute, out var url) ? url.Host + url.AbsolutePath : found.Url);
+        host.Margin = new Thickness(24, 2, 0, 0);
+        host.TextTrimming = TextTrimming.CharacterEllipsis;
         Bind(host, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
-        host.Margin = new Thickness(0, 2, 0, 0);
 
-        var stack = new StackPanel { Children = { title, host } };
+        var stack = new StackPanel { Children = { tick, host } };
 
         if (channel?.Description is { Length: > 0 } description)
         {
-            var summary = Label(description.Length > 220 ? description[..220] + "…" : description);
+            var summary = Label(description.Length > 200 ? description[..200] + "…" : description);
             summary.TextWrapping = TextWrapping.Wrap;
-            summary.Margin = new Thickness(0, 8, 0, 0);
+            summary.Margin = new Thickness(24, 6, 0, 0);
             stack.Children.Add(summary);
         }
 
-        // The three most recent headlines: the quickest way for a reader to tell whether this is
-        // the feed they meant.
-        foreach (var item in channel?.Items.Take(3) ?? [])
+        // The most recent headlines: the quickest way to tell whether this is the feed meant.
+        foreach (var item in channel?.Items.Take(2) ?? [])
         {
             var headline = Label($"·  {item.Title}");
             headline.TextTrimming = TextTrimming.CharacterEllipsis;
-            headline.Margin = new Thickness(0, 4, 0, 0);
+            headline.Margin = new Thickness(24, 3, 0, 0);
             Bind(headline, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
             stack.Children.Add(headline);
         }
 
-        if (Cadence(channel) is { Length: > 0 } cadence)
-        {
-            var rate = Label(cadence);
-            rate.Margin = new Thickness(0, 8, 0, 0);
-            Bind(rate, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
-            stack.Children.Add(rate);
-        }
+        var footnote = already
+            ? "Already subscribed."
+            : Cadence(channel);
 
-        var already = _feeds.Contains(found.Url);
-        if (already)
+        if (footnote.Length > 0)
         {
-            var note = Label("Already subscribed.");
-            note.Margin = new Thickness(0, 8, 0, 0);
+            var note = Label(footnote);
+            note.Margin = new Thickness(24, 6, 0, 0);
+            note.FontSize = 11;
             Bind(note, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
             stack.Children.Add(note);
         }
 
-        var card = new Button
-        {
-            Classes = { "flat" },
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            HorizontalContentAlignment = HorizontalAlignment.Left,
-            Padding = new Thickness(14),
-            IsEnabled = !already,
-            Content = stack,
-            Tag = found,
-        };
+        _offered.Add((found with { Title = named }, tick));
 
-        card.Click += (_, _) =>
-        {
-            _chosen = found with { Title = channel?.Title is { Length: > 0 } t ? t : found.Label };
-            _subscribe.IsEnabled = true;
-            _message.Text = $"“{_chosen.Label}” will be added.";
-
-            foreach (var other in _results.Children.OfType<Button>()) other.Classes.Remove("active");
-            card.Classes.Add("active");
-        };
-
-        // With one result there is nothing to choose between, so it is chosen already and the
-        // reader only has to press Subscribe.
-        if (!already && _results.Children.Count == 0)
-        {
-            _chosen = found with { Title = channel?.Title is { Length: > 0 } only ? only : found.Label };
-            _subscribe.IsEnabled = true;
-            card.Classes.Add("active");
-        }
-
+        var card = new Border { Padding = new Thickness(12), Child = stack };
+        card[!BackgroundProperty] = new DynamicResourceExtension("list.row.hover.brush");
         return card;
     }
 
@@ -336,13 +345,31 @@ public sealed class SubscribeDialog : Window
 
     // ---- Subscribing -----------------------------------------------------------------------------
 
+    /// <summary>Keeps the Subscribe button honest about how many it is about to add.</summary>
+    private void Recount()
+    {
+        var ticked = _offered.Count(o => o.Tick.IsChecked == true);
+
+        _subscribe.IsEnabled = ticked > 0;
+        _subscribe.Content = ticked > 1 ? $"Subscribe to {ticked}" : "Subscribe";
+    }
+
     private void Commit()
     {
-        if (_chosen is not { } found) return;
-
         var category = _category.SelectedIndex > 0 ? _category.SelectedItem as string ?? string.Empty : string.Empty;
+        var added = new List<FeedSubscription>();
 
-        Subscribed = _feeds.Add(found.Url, found.Label, category);
+        // One write of the subscription file for the whole set rather than one per feed.
+        using (_feeds.Batch())
+        {
+            foreach (var (feed, tick) in _offered)
+            {
+                if (tick.IsChecked != true) continue;
+                added.Add(_feeds.Add(feed.Url, feed.Label, category));
+            }
+        }
+
+        Subscribed = added;
         Close();
     }
 
