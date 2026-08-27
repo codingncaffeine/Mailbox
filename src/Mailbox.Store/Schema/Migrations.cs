@@ -643,6 +643,19 @@ public static class Migrations
 
         CREATE INDEX board_items_by_message ON board_items (message_id);
         """,
+
+        // ---- 29: how long an article takes to read ------------------------------------------------
+        //
+        // A column, for the reason the feed's link and picture are columns: the article list draws
+        // it on every visible row, and working it out would mean loading and parsing the whole
+        // message for each one. Words rather than minutes, because what counts as a minute is a
+        // rendering decision and the words are the fact.
+        //
+        // Null for everything that is not a feed article, and for feed articles filed before this
+        // existed — the list says nothing for those rather than guessing.
+        """
+        ALTER TABLE messages ADD COLUMN feed_words INTEGER;
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>

@@ -182,6 +182,16 @@ public sealed record MessageSummary(
 
     public string FeedImage { get; init; } = string.Empty;
 
+    /// <summary>
+    /// How many words the article holds, or 0 when it is not a feed article or was filed before
+    /// this was recorded.
+    /// </summary>
+    /// <remarks>
+    /// Words rather than minutes: what counts as a minute is a rendering decision and belongs
+    /// where the row is drawn, and the number of words is the fact underneath it.
+    /// </remarks>
+    public int FeedWords { get; init; }
+
     /// <summary>True for a message a feed delivered.</summary>
     public bool IsFeedItem => FeedLink.Length > 0 || FeedImage.Length > 0;
 

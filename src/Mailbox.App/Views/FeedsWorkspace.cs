@@ -1907,14 +1907,7 @@ internal sealed class FeedsWorkspace : Border
         title[!TextBlock.ForegroundProperty] = new DynamicResourceExtension(
             message.IsRead ? "text.secondary.brush" : "text.primary.brush");
 
-        var source = new TextBlock
-        {
-            Text = $"{message.DisplayFrom} · {Ago(message.Received)}",
-            FontSize = 12,
-            Margin = new Thickness(0, 5, 0, 0),
-            TextTrimming = TextTrimming.CharacterEllipsis,
-        };
-        source[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("text.secondary.brush");
+        var source = Byline(message, 12, new Thickness(0, 5, 0, 0));
 
         var snippet = new TextBlock
         {
@@ -1925,7 +1918,7 @@ internal sealed class FeedsWorkspace : Border
             TextWrapping = TextWrapping.Wrap,
             MaxLines = 2,
             TextTrimming = TextTrimming.CharacterEllipsis,
-            Opacity = 0.85,
+            Opacity = SnippetInk,
         };
         snippet[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("text.secondary.brush");
 
@@ -2385,6 +2378,123 @@ internal sealed class FeedsWorkspace : Border
         => _line.Id == message.Id && _line.Above > 0
             ? new StackPanel { Children = { UnreadLine(_line.Above), row } }
             : row;
+
+    /// <summary>
+    /// The line under the headline: who published it, who wrote it, how old it is, and how long
+    /// it takes to read.
+    /// </summary>
+    /// <remarks>
+    /// <b>The publication first, and that is the correction.</b> This line used to be the
+    /// author's name — so in Today, which is every feed at once, nothing on a row said where it
+    /// came from. The reference picture puts the publication here for exactly that reason; the
+    /// author is worth having as well and goes after it, when it is somebody other than the
+    /// publication itself.
+    /// <para>
+    /// The reference's own third item is an engagement count — how many of its users have saved
+    /// the article. That is other people's data and a local reader has no equivalent and never
+    /// will. What it can say instead, and what is arguably more use before deciding to open
+    /// something, is how long the thing is: real, ours, and exact now that the article itself is
+    /// fetched.
+    /// </para>
+    /// <para>
+    /// Drawn lighter than the snippet under it, measured off the reference rather than chosen —
+    /// its byline is #A7A6A7 under a black headline. Ours was at full strength, which made it
+    /// darker than its own snippet and the second loudest thing on the row.
+    /// </para>
+    /// </remarks>
+    private TextBlock Byline(MessageSummary message, double size, Thickness margin)
+    {
+        var parts = new List<string>(4);
+
+        var publication = PublicationOf(message);
+        if (publication.Length > 0) parts.Add(publication);
+
+        // The author, when the feed named one and it is not simply the publication again.
+        if (message.DisplayFrom is { Length: > 0 } author
+            && !string.Equals(author, publication, StringComparison.OrdinalIgnoreCase))
+        {
+            parts.Add(author);
+        }
+
+        parts.Add(Ago(message.Received));
+        if (ReadingTime(message) is { Length: > 0 } howLong) parts.Add(howLong);
+
+        var line = new TextBlock
+        {
+            Text = string.Join(" · ", parts),
+            FontSize = size,
+            Margin = margin,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Opacity = BylineInk,
+        };
+        line[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("text.secondary.brush");
+        return line;
+    }
+
+    /// <summary>
+    /// How light the byline and the snippet are drawn against the reading surface's own ink.
+    /// </summary>
+    /// <remarks>
+    /// Measured off the reference: its headline is #000000, its byline #A7A6A7 and its snippet
+    /// #A3A3A3, so both quiet lines sit about two-thirds of the way to the page. Informative
+    /// without competing, which is the whole point of them.
+    /// </remarks>
+    private const double BylineInk = 0.62;
+
+    /// <summary>
+    /// Below this many words, what is stored is a teaser and its length says nothing useful.
+    /// </summary>
+    /// <remarks>
+    /// A thousand characters of prose, which is the length the poll calls a teaser, is about a
+    /// hundred and seventy words.
+    /// </remarks>
+    private const int WholeArticle = 170;
+
+    private const double SnippetInk = 0.8;
+
+    /// <summary>
+    /// Who published it: the subscription the article was filed under.
+    /// </summary>
+    /// <remarks>
+    /// Off the folder rather than out of the message, because the message's From is the author —
+    /// which is what this line used to show, and what left a reader looking at Today unable to
+    /// tell one publication from another. A saved link has no subscription and falls back to the
+    /// site it came from.
+    /// </remarks>
+    private string PublicationOf(MessageSummary message)
+    {
+        if (_feedByFolder.TryGetValue(message.FolderId, out var feed)) return feed.Name;
+        if (message.FeedLink.Length == 0) return string.Empty;
+        if (!Uri.TryCreate(message.FeedLink, UriKind.Absolute, out var address)) return string.Empty;
+
+        return address.Host.StartsWith("www.", StringComparison.OrdinalIgnoreCase)
+            ? address.Host[4..]
+            : address.Host;
+    }
+
+    /// <summary>
+    /// How long the article takes to read, or nothing when that is not known.
+    /// </summary>
+    /// <remarks>
+    /// Two hundred and twenty words a minute, the middle of the published estimates for adult
+    /// reading of ordinary prose. Nothing at all when the length is not known — an article filed
+    /// before this was recorded, or a teaser whose page has not been read — because a guess is
+    /// worse than a silence here: the whole use of the number is deciding whether to start
+    /// something now.
+    /// </remarks>
+    private static string ReadingTime(MessageSummary message)
+    {
+        // Only when what is stored is the article rather than a teaser of it. A feed that sends
+        // two sentences and a link would otherwise be reported as a one-minute read, which is
+        // true of the two sentences and a lie about the thing the reader would be opening — and
+        // a wrong number here is worse than none, because the only use of it is deciding whether
+        // to start something now. The floor is the same length the poll uses to decide an entry
+        // is a teaser, in words rather than characters.
+        if (message.FeedWords < WholeArticle) return string.Empty;
+
+        var minutes = Math.Max(1, (int)Math.Round(message.FeedWords / 220.0, MidpointRounding.AwayFromZero));
+        return $"{minutes} min read";
+    }
 
     /// <summary>"2h", "3d" — what a feed reader shows instead of a date.</summary>
     private static string Ago(DateTimeOffset when)
@@ -3169,14 +3279,17 @@ internal sealed class FeedsWorkspace : Border
         Grid.SetColumn(title, 0);
         grid.Children.Add(title);
 
+        // The publication, not the author: one line an article means the reader is skimming a
+        // hundred of them, and which paper it came from is the thing that sorts them.
         var source = new TextBlock
         {
-            Text = message.DisplayFrom,
+            Text = PublicationOf(message) is { Length: > 0 } paper ? paper : message.DisplayFrom,
             FontSize = 11,
             Margin = new Thickness(12, 0, 0, 0),
             MaxWidth = 160,
             TextTrimming = TextTrimming.CharacterEllipsis,
             VerticalAlignment = VerticalAlignment.Center,
+            Opacity = BylineInk,
         };
         source[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("text.secondary.brush");
         Grid.SetColumn(source, 1);
@@ -3189,6 +3302,7 @@ internal sealed class FeedsWorkspace : Border
             Width = 46,
             TextAlignment = TextAlignment.Right,
             VerticalAlignment = VerticalAlignment.Center,
+            Opacity = BylineInk,
         };
         age[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("text.secondary.brush");
         Grid.SetColumn(age, 2);
@@ -3225,14 +3339,7 @@ internal sealed class FeedsWorkspace : Border
         title[!TextBlock.ForegroundProperty] = new DynamicResourceExtension(
             message.IsRead ? "text.secondary.brush" : "text.primary.brush");
 
-        var source = new TextBlock
-        {
-            Text = $"{message.DisplayFrom} · {Ago(message.Received)}",
-            FontSize = 11,
-            Margin = new Thickness(0, 4, 0, 0),
-            TextTrimming = TextTrimming.CharacterEllipsis,
-        };
-        source[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("text.secondary.brush");
+        var source = Byline(message, 11, new Thickness(0, 4, 0, 0));
 
         var tile = new Border
         {

@@ -59,8 +59,27 @@ public static class MessageMapper
             // this is what unfolds it.
             FeedLink = message.Headers["X-Mailbox-Feed-Link"] ?? string.Empty,
             FeedImage = message.Headers["X-Mailbox-Feed-Image"] ?? string.Empty,
+
+            // How long it takes to read, counted once here rather than on every draw of every
+            // visible row. Only for a feed article: an ordinary message's length is not something
+            // anybody wants told, and a mail list that announced "4 min" per letter would be
+            // reporting on somebody's correspondence.
+            FeedWords = message.Headers["X-Mailbox-Feed-Link"] is { Length: > 0 }
+                ? Words(FullText(message))
+                : 0,
         };
     }
+
+    /// <summary>
+    /// How many words a piece of text holds.
+    /// </summary>
+    /// <remarks>
+    /// Runs of whitespace, which is close enough: the number is turned into a reading time and
+    /// rounded to a minute, so the difference between one definition of a word and another
+    /// disappears long before it reaches the reader.
+    /// </remarks>
+    private static int Words(string text)
+        => text.Length == 0 ? 0 : text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
 
     /// <summary>The message's own expiry — an Expires or Expiry-Date header that parses — or null.</summary>
     private static DateTimeOffset? Expiry(MimeMessage message)
