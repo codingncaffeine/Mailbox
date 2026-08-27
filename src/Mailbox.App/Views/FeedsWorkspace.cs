@@ -701,6 +701,15 @@ internal sealed class FeedsWorkspace : Border
         return $"“{moving.Name}” dropped on {onto.Kind} “{onto.Label}”";
     }
 
+    /// <summary>
+    /// Presses the pane's "New heading…" row, for a harness run.
+    /// </summary>
+    /// <remarks>
+    /// The same expression the row's own Click handler runs, so what a run proves is the chain
+    /// from that row to the dialog — which is the thing that was missing, not the dialog.
+    /// </remarks>
+    public void PoseNewHeading() => NewHeadingRequested?.Invoke(this, null);
+
     /// <summary>Flips one of the row's two switches, for a harness run.</summary>
     public void PoseToggle(bool unreadOnly) => Toggle(unreadOnly ? UnreadOnlyKey : OrderKey);
 
@@ -1073,6 +1082,14 @@ internal sealed class FeedsWorkspace : Border
             _nav.Children.Add(NavButton(row, indent: 0));
         }
 
+        // The row the reference keeps at the foot of its feed list, and the only place anybody
+        // looks for it. This lived in a right-click menu, which meant a reader had to already
+        // know it existed to find out that it existed — and the pane's own BOARDS section had
+        // its "New board…" row sitting three inches below, making the absence louder.
+        _nav.Children.Add(MakeRow("New heading…",
+            "Group your subscriptions. A heading totals the unread counts of everything under it.",
+            () => NewHeadingRequested?.Invoke(this, null)));
+
         if (all.Count == 0) _nav.Children.Add(NoFeedsYet());
     }
 
@@ -1107,20 +1124,36 @@ internal sealed class FeedsWorkspace : Border
             _nav.Children.Add(NavButton(row, indent: 0));
         }
 
-        var make = new Button
+        _nav.Children.Add(MakeRow("New board…",
+            boards.Count == 0
+                ? "A board is a collection you save articles into — and any web address can go on one"
+                : "Make another collection to save articles into",
+            () => NewBoardRequested?.Invoke(this, EventArgs.Empty)));
+    }
+
+    /// <summary>
+    /// A "make another one" row at the foot of a section, as the reference draws them.
+    /// </summary>
+    /// <remarks>
+    /// One shape for both, because they are the same thing twice and a reader who has found one
+    /// has found the other. Drawn as a row rather than hidden behind a menu: an affordance you
+    /// have to already know about is one nobody discovers.
+    /// </remarks>
+    private Control MakeRow(string label, string tip, Action onClick)
+    {
+        var button = new Button
         {
             Classes = { "flat" },
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Left,
             Padding = new Thickness(4, 0, 0, 0),
             Height = 26,
-            Content = Row(IconGlyphs.GetOrEmpty("add", 16), "New board…"),
+            Content = Row(IconGlyphs.GetOrEmpty("add", 16), label),
         };
-        ToolTip.SetTip(make, boards.Count == 0
-            ? "A board is a collection you save articles into — and any web address can go on one"
-            : "Make another collection to save articles into");
-        make.Click += (_, _) => NewBoardRequested?.Invoke(this, EventArgs.Empty);
-        _nav.Children.Add(make);
+
+        ToolTip.SetTip(button, tip);
+        button.Click += (_, _) => onClick();
+        return button;
     }
 
     /// <summary>
@@ -1148,7 +1181,8 @@ internal sealed class FeedsWorkspace : Border
     {
         var text = new TextBlock
         {
-            Text = "No subscriptions yet. Add one with a website address — the feed behind it is found for you.",
+            Text = "No subscriptions yet. Add one with a website address — the feed behind it is "
+                   + "found for you — then group them under headings of your own.",
             TextWrapping = TextWrapping.Wrap,
             FontSize = 12,
             Opacity = 0.8,
@@ -1310,6 +1344,10 @@ internal sealed class FeedsWorkspace : Border
     {
         if (what.Feed is { } dragged)
         {
+            // Begun from the press, which is what the platform's drag needs. Avalonia holds it
+            // until the pointer actually moves, so a plain click still selects the feed — the
+            // same arrangement the message list uses, and the reason it is safe to hang this off
+            // a button whose whole job is to be clicked.
             row.AddHandler(PointerPressedEvent, async (object? _, PointerPressedEventArgs e) =>
             {
                 if (!e.GetCurrentPoint(row).Properties.IsLeftButtonPressed || _dragging) return;

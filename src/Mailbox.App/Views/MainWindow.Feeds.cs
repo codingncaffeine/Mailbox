@@ -550,6 +550,20 @@ public partial class MainWindow
                 Log.Info($"Harness: last looked at this row {minutes} minute(s) ago — {feeds.PoseLastSeen(minutes)}.");
                 return;
 
+            case "pressnewheading":
+                feeds.PoseNewHeading();
+
+                // What the press opened, read back after the dialog has had a turn to appear: the
+                // claim is that the row reaches it, and a run cannot photograph a modal it is
+                // blocked behind.
+                Avalonia.Threading.Dispatcher.UIThread.Post(
+                    () => Log.Info("Harness: pressing “New heading…” opened: "
+                        + (OwnedWindows.Count == 0
+                            ? "nothing"
+                            : string.Join(", ", OwnedWindows.Select(w => $"“{w.Title}”")))),
+                    Avalonia.Threading.DispatcherPriority.Background);
+                return;
+
             case "drop":
                 Log.Info($"Harness: {feeds.PoseDrop(Arg(1), Arg(2))}.");
                 break;
