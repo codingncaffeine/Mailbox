@@ -597,6 +597,20 @@ public static class Migrations
         ALTER TABLE messages ADD COLUMN header_only INTEGER NOT NULL DEFAULT 0;
         ALTER TABLE messages ADD COLUMN marked_download INTEGER NOT NULL DEFAULT 0;
         """,
+
+        // ---- 27: what an article list has to draw -----------------------------------------------
+        //
+        // A feed item's own address and its picture. Both are already in the message — as
+        // X-Mailbox-Feed-Link and X-Mailbox-Feed-Image — and both are needed once per visible
+        // row: the article list draws a thumbnail beside every entry, and opening the original
+        // is one press. Reading them from the message would mean loading and parsing the whole
+        // of it for every row on screen, so they are columns.
+        //
+        // Null for everything that is not a feed item, which is nearly every row in the store.
+        """
+        ALTER TABLE messages ADD COLUMN feed_link  TEXT;
+        ALTER TABLE messages ADD COLUMN feed_image TEXT;
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>

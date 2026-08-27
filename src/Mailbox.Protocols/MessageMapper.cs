@@ -52,6 +52,13 @@ public static class MessageMapper
             To = [.. message.To.Mailboxes.Select(m => m.Address.Trim().ToLowerInvariant()).Where(a => a.Length > 0)],
             Cc = [.. message.Cc.Mailboxes.Select(m => m.Address.Trim().ToLowerInvariant()).Where(a => a.Length > 0)],
             Expires = Expiry(message),
+
+            // A feed item's own address and picture, lifted into columns because the article
+            // list wants both on every visible row. Read through the header list rather than
+            // off the wire: a long address is folded into an encoded word on the way out, and
+            // this is what unfolds it.
+            FeedLink = message.Headers["X-Mailbox-Feed-Link"] ?? string.Empty,
+            FeedImage = message.Headers["X-Mailbox-Feed-Image"] ?? string.Empty,
         };
     }
 

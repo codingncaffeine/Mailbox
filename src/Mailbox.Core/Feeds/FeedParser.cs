@@ -32,7 +32,7 @@ namespace Mailbox.Core.Feeds;
 /// article a link that goes nowhere.
 /// </para>
 /// </remarks>
-public static class FeedParser
+public static partial class FeedParser
 {
     /// <summary>Media RSS, matched on the one word its four published namespaces share.</summary>
     private const string MediaModule = "mrss";
@@ -76,7 +76,7 @@ public static class FeedParser
         }
 
         return new FeedChannel(
-            Text(Child(channel, "title")) is { Length: > 0 } title ? title : "Feed",
+            Text(Child(channel, "title")) is { Length: > 0 } title ? Plain(title) : "Feed",
             LinkOf(channel, origin),
             [.. entries.Select(e => Item(e, origin))])
         {
@@ -117,7 +117,7 @@ public static class FeedParser
         var html = MarkupOf(entry);
         var published = FirstDate(entry, "pubDate", "published", "date", "created");
         var updated = FirstDate(entry, "updated", "modified");
-        var title = Text(Child(entry, "title"));
+        var title = Plain(Text(Child(entry, "title")));
 
         var enclosures = EnclosuresOf(entry, origin);
 
@@ -224,17 +224,38 @@ public static class FeedParser
     /// <summary>Who wrote it: RSS says so plainly, Atom wraps a name in an author element.</summary>
     private static string AuthorOf(XElement entry)
     {
-        if (Text(Child(entry, "creator")) is { Length: > 0 } creator) return creator;
+        if (Text(Child(entry, "creator")) is { Length: > 0 } creator) return Plain(creator);
 
         foreach (var name in (string[])["author", "contributor"])
         {
             if (Child(entry, name) is not { } author) continue;
-            if (Text(Child(author, "name")) is { Length: > 0 } named) return named;
-            if (Text(author) is { Length: > 0 } plain) return plain;
+            if (Text(Child(author, "name")) is { Length: > 0 } named) return Plain(named);
+            if (Text(author) is { Length: > 0 } plain) return Plain(plain);
         }
 
         return string.Empty;
     }
+
+    /// <summary>
+    /// A title or a name as a reader should see it, undoing one layer of encoding the publisher
+    /// applied on top of the one XML already undid.
+    /// </summary>
+    /// <remarks>
+    /// A title is plain text by specification and HTML-escaped by practice: publishers write
+    /// <c>&amp;amp;#8217;</c> where they mean an apostrophe, so what survives the XML parse is the
+    /// literal text "&amp;#8217;" and the article arrives with that in its subject line. Seen on
+    /// The Verge, and it is not unusual.
+    /// <para>
+    /// Only applied when something entity-shaped is still there after the XML parse, so a title
+    /// that genuinely contains an ampersand keeps it: at that point the ampersand has already
+    /// been decoded once and there is nothing left that looks like a reference.
+    /// </para>
+    /// </remarks>
+    private static string Plain(string text)
+        => text.Contains('&') && EntityShaped().IsMatch(text) ? WebUtility.HtmlDecode(text) : text;
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"&(#\d{1,7}|#[xX][0-9a-fA-F]{1,6}|[A-Za-z][A-Za-z0-9]{1,31});")]
+    private static partial System.Text.RegularExpressions.Regex EntityShaped();
 
     /// <summary>
     /// The tags the publisher filed the entry under. RSS writes them as text, Atom as a term
@@ -563,7 +584,7 @@ public static class FeedParser
         var html = Str(entry, "content_html") is { Length: > 0 } markup
             ? markup
             : WebUtility.HtmlEncode(Str(entry, "content_text"));
-        var title = Str(entry, "title");
+        var title = Plain(Str(entry, "title"));
         var published = FeedDates.Parse(Str(entry, "date_published"));
         var updated = FeedDates.Parse(Str(entry, "date_modified"));
 

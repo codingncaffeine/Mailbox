@@ -169,6 +169,22 @@ public sealed record MessageSummary(
     /// <summary>0 low, 1 normal, 2 high — the message's own Importance/X-Priority, for the list's column and the searches.</summary>
     public int Importance { get; init; } = 1;
 
+    /// <summary>
+    /// A feed item's own address, and the picture to show beside it. Both empty for a message
+    /// that did not come from a feed, which is nearly all of them.
+    /// </summary>
+    /// <remarks>
+    /// Columns rather than headers because the article list draws a thumbnail on every visible
+    /// row: reading these out of the MIME would mean loading and parsing every message on screen
+    /// to lay out a list.
+    /// </remarks>
+    public string FeedLink { get; init; } = string.Empty;
+
+    public string FeedImage { get; init; } = string.Empty;
+
+    /// <summary>True for a message a feed delivered.</summary>
+    public bool IsFeedItem => FeedLink.Length > 0 || FeedImage.Length > 0;
+
     /// <summary>Focused Inbox (§12): true for Focused, false for Other. Meaningful in the Inbox only.</summary>
     public bool IsFocused { get; init; } = true;
 

@@ -310,12 +310,12 @@ public sealed class MailRepository(MailStore store)
                     (folder_id, blob_id, server_uid, message_id, in_reply_to, thread_key,
                      from_name, from_address, subject, preview, body_text, sent_utc, received_utc,
                      size_bytes, is_read, is_flagged, has_attachment, importance, to_addresses, cc_addresses, expires_utc,
-                     header_only)
+                     header_only, feed_link, feed_image)
                 VALUES
                     ($folder, $blob, $uid, $messageId, NULL, $thread,
                      $fromName, $fromAddress, $subject, $preview, $bodyText, $sent, $received,
                      $size, $read, $flagged, $attachment, $importance, $to, $cc, $expires,
-                     $headerOnly)
+                     $headerOnly, $feedLink, $feedImage)
                 """,
                 ("$folder", folderId),
                 ("$blob", blobId),
@@ -337,7 +337,9 @@ public sealed class MailRepository(MailStore store)
                 ("$to", string.Join(',', message.To)),
                 ("$cc", string.Join(',', message.Cc)),
                 ("$expires", message.Expires?.ToUnixTimeSeconds()),
-                ("$headerOnly", message.HeaderOnly ? 1 : 0));
+                ("$headerOnly", message.HeaderOnly ? 1 : 0),
+                ("$feedLink", message.FeedLink.Length > 0 ? message.FeedLink : null),
+                ("$feedImage", message.FeedImage.Length > 0 ? message.FeedImage : null));
 
             if (inserted != 0)
             {
@@ -400,6 +402,92 @@ public sealed class MailRepository(MailStore store)
         "SELECT server_uid, id FROM messages WHERE folder_id = $folder AND server_uid IS NOT NULL",
         r => (Uid: r.GetString(0), Id: r.GetInt64(1)), ("$folder", folderId))
         .ToDictionary(x => x.Uid, x => x.Id, StringComparer.Ordinal);
+
+    /// <summary>
+    /// The rows in a folder keyed by server id, with the Message-ID each one carries.
+    /// </summary>
+    /// <remarks>
+    /// For a source that can revise something it has already sent, which is a feed: the server id
+    /// says <em>which</em> article a row is, and the Message-ID — written from a fingerprint of
+    /// what the article said — says <em>which version</em> of it. One query rather than a load of
+    /// every message in the folder, because this runs over every entry of every feed on every
+    /// poll.
+    /// </remarks>
+    public Dictionary<string, (long Id, string MessageId)> ServerUidIndex(long folderId) => _store.Query(
+        """
+        SELECT server_uid, id, coalesce(message_id, '')
+          FROM messages
+         WHERE folder_id = $folder AND server_uid IS NOT NULL
+        """,
+        r => (Uid: r.GetString(0), Id: r.GetInt64(1), MessageId: r.GetString(2)), ("$folder", folderId))
+        .ToDictionary(x => x.Uid, x => (x.Id, x.MessageId), StringComparer.Ordinal);
+
+    /// <summary>
+    /// Puts a new version of a message over the old one, keeping the row.
+    /// </summary>
+    /// <remarks>
+    /// The row keeps its id, so everything hung off it survives the revision: whether it was
+    /// read, a flag, a category, a follow-up, its place in a conversation. That is the whole
+    /// point — a publisher correcting a typo should not cost a reader the note they made on the
+    /// article, and should not deliver the article to them a second time either.
+    /// <para>
+    /// The read state is deliberately not reset. A feed that rewrites its markup on every publish
+    /// would otherwise mark everything unread again on every poll, which reads as a fault; a
+    /// reader who wants to know an article changed has the date, which does move.
+    /// </para>
+    /// </remarks>
+    public bool ReplaceMessage(long messageId, MessageSummary revised, byte[] raw)
+    {
+        ArgumentNullException.ThrowIfNull(revised);
+        ArgumentNullException.ThrowIfNull(raw);
+
+        return _store.InTransaction(() =>
+        {
+            var previous = _store.Query(
+                "SELECT blob_id FROM messages WHERE id = $id",
+                r => r.IsDBNull(0) ? (long?)null : r.GetInt64(0), ("$id", messageId)).FirstOrDefault();
+
+            var blobId = StoreBlob(raw);
+            var changed = _store.Execute(
+                """
+                UPDATE messages
+                   SET blob_id = $blob, message_id = $messageId, subject = $subject, preview = $preview,
+                       body_text = $bodyText, from_name = $fromName, from_address = $fromAddress,
+                       sent_utc = $sent, size_bytes = $size, has_attachment = $attachment,
+                       thread_key = $thread, feed_link = $feedLink, feed_image = $feedImage
+                 WHERE id = $id
+                """,
+                ("$blob", blobId),
+                ("$messageId", revised.MessageId),
+                ("$subject", revised.Subject),
+                ("$preview", revised.Preview),
+                ("$bodyText", revised.BodyText),
+                ("$fromName", revised.FromName),
+                ("$fromAddress", revised.FromAddress),
+                ("$sent", revised.Sent?.ToUnixTimeSeconds()),
+                ("$size", raw.LongLength),
+                ("$attachment", revised.HasAttachment ? 1 : 0),
+                ("$thread", ThreadKey(revised.Subject)),
+                ("$feedLink", revised.FeedLink.Length > 0 ? revised.FeedLink : null),
+                ("$feedImage", revised.FeedImage.Length > 0 ? revised.FeedImage : null),
+                ("$id", messageId));
+
+            if (changed == 0)
+            {
+                // The row went while this was being written. The blob has nothing pointing at it.
+                _store.Execute("DELETE FROM blobs WHERE id = $id", ("$id", blobId));
+                return false;
+            }
+
+            // The old body, if nothing else still refers to it. A revision that left it behind
+            // would grow the store by the size of the article on every correction — and one that
+            // deleted it unconditionally would empty a copy of the article filed in another
+            // folder, because a copy is a second row over the same blob.
+            if (previous is { } orphan && orphan != blobId) DeleteOrphanBlobs([orphan]);
+
+            return true;
+        });
+    }
 
     /// <summary>
     /// Takes the server's word for a message's flags. Used by the sync for changes made
@@ -1029,7 +1117,8 @@ public sealed class MailRepository(MailStore store)
                 var row = _store.Query(
                     """
                     SELECT blob_id, message_id, from_name, from_address, subject, preview, body_text, sent_utc,
-                           received_utc, size_bytes, is_read, is_flagged, has_attachment, importance, to_addresses, cc_addresses
+                           received_utc, size_bytes, is_read, is_flagged, has_attachment, importance, to_addresses, cc_addresses,
+                           feed_link, feed_image
                     FROM messages WHERE id = $id
                     """,
                     r => new object?[]
@@ -1038,6 +1127,7 @@ public sealed class MailRepository(MailStore store)
                         r.GetString(4), r.GetString(5), r.GetString(6), r.IsDBNull(7) ? null : r.GetInt64(7),
                         r.GetInt64(8), r.GetInt64(9), r.GetInt32(10), r.GetInt32(11), r.GetInt32(12), r.GetInt32(13),
                         r.GetString(14), r.GetString(15),
+                        r.IsDBNull(16) ? null : r.GetString(16), r.IsDBNull(17) ? null : r.GetString(17),
                     },
                     ("$id", id)).FirstOrDefault();
                 if (row is null) continue;
@@ -1050,14 +1140,17 @@ public sealed class MailRepository(MailStore store)
                     INSERT INTO messages
                         (folder_id, blob_id, server_uid, message_id, thread_key, from_name, from_address, subject, preview,
                          body_text, sent_utc, received_utc, size_bytes, is_read, is_flagged, has_attachment, importance,
-                         to_addresses, cc_addresses)
+                         to_addresses, cc_addresses,
+                         feed_link, feed_image)
                     VALUES ($folder, $blob, NULL, $mid, $thread, $fromName, $fromAddress, $subject, $preview,
-                            $body, $sent, $received, $size, $read, $flagged, $attachment, $importance, $to, $cc)
+                            $body, $sent, $received, $size, $read, $flagged, $attachment, $importance, $to, $cc,
+                            $feedLink, $feedImage)
                     """,
                     ("$folder", toFolderId), ("$blob", row[0]), ("$mid", row[1]), ("$thread", ThreadKey((string)row[4]!)),
                     ("$fromName", row[2]), ("$fromAddress", row[3]), ("$subject", row[4]), ("$preview", row[5]),
                     ("$body", row[6]), ("$sent", row[7]), ("$received", row[8]), ("$size", row[9]), ("$read", row[10]),
-                    ("$flagged", row[11]), ("$attachment", row[12]), ("$importance", row[13]), ("$to", row[14]), ("$cc", row[15]));
+                    ("$flagged", row[11]), ("$attachment", row[12]), ("$importance", row[13]), ("$to", row[14]), ("$cc", row[15]),
+                    ("$feedLink", row[16]), ("$feedImage", row[17]));
 
                 var newId = _store.LastInsertId;
                 if (row[0] is not null && IsSyncedFolder(toFolderId)) JournalAppend(toFolderId, newId);
@@ -2756,6 +2849,8 @@ public sealed class MailRepository(MailStore store)
         Expires = NullableLong(r, "expires_utc") is { } expires ? DateTimeOffset.FromUnixTimeSeconds(expires) : null,
         HeaderOnly = r.GetInt32(r.GetOrdinal("header_only")) != 0,
         MarkedForDownload = r.GetInt32(r.GetOrdinal("marked_download")) != 0,
+        FeedLink = Nullable(r, "feed_link") ?? string.Empty,
+        FeedImage = Nullable(r, "feed_image") ?? string.Empty,
     };
 
     private static IReadOnlyList<string> Split(string joined)
