@@ -1677,16 +1677,38 @@ public sealed class MailRepository(MailStore store)
     /// columns, newest first.
     /// </summary>
     public IReadOnlyList<MessageSummary> Search(Mailbox.Core.Search.SearchQuery query, long? folderId = null, int limit = 200)
+        => Search(query, folderId is { } one ? [one] : null, limit);
+
+    /// <summary>
+    /// The same search, over a set of folders rather than one.
+    /// </summary>
+    /// <remarks>
+    /// For a scope that spans several — every feed, everything under one heading. One query
+    /// rather than one per folder: a reader with fifty subscriptions typing into a search box
+    /// would otherwise fire fifty queries per keystroke.
+    /// <para>
+    /// An empty set is a scope with nothing in it, which is not the same as no scope at all and
+    /// must not quietly become a search of the whole store.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<MessageSummary> Search(
+        Mailbox.Core.Search.SearchQuery query, IReadOnlyCollection<long>? folderIds, int limit = 200)
     {
         ArgumentNullException.ThrowIfNull(query);
         if (query.IsEmpty) return [];
+        if (folderIds is { Count: 0 }) return [];
 
         var where = new List<string>();
         var parameters = new List<(string, object?)> { ("$limit", limit) };
-        if (folderId is { } folder)
+
+        if (folderIds is { Count: 1 })
         {
             where.Add("m.folder_id = $folder");
-            parameters.Add(("$folder", folder));
+            parameters.Add(("$folder", folderIds.First()));
+        }
+        else if (folderIds is { Count: > 1 })
+        {
+            where.Add($"m.folder_id IN ({Ids(folderIds)})");
         }
 
         // The full-text half. FTS5's column filter — subject:word — is what from:, subject: and

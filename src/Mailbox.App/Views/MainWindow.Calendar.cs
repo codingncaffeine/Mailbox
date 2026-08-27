@@ -1818,6 +1818,22 @@ public partial class MainWindow
                 {
                     var feeds = EnsureFeeds(shell);
                     feeds.Reload();
+
+                    // MAILBOX_FEED_SEARCH=<words>[|everywhere][|headline]
+                    if (Environment.GetEnvironmentVariable("MAILBOX_FEED_SEARCH") is { Length: > 0 } searching)
+                    {
+                        var parts = searching.Split('|', StringSplitOptions.TrimEntries);
+                        feeds.Pose(parts[0], parts.Contains("everywhere"), parts.Contains("headline"));
+
+                        // After the pose, not before: what a search found is the claim, and the
+                        // line logged on the way in is about the list it replaced.
+                        Log.Info($"Harness: feed search “{parts[0]}” — {feeds.Status}");
+                        foreach (var headline in feeds.Showing.Take(5))
+                        {
+                            Log.Info($"Harness:   · {headline}");
+                        }
+                    }
+
                     shell.ModuleStatusLeft = feeds.Status;
                     Log.Info($"Harness: Feeds showing {feeds.Status}; "
                         + $"{App.Feeds.All.Count} subscription(s), {App.Feeds.Categories.Count} heading(s).");

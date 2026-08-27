@@ -118,6 +118,12 @@ internal sealed class FeedsWorkspace : Border
 
     private FeedNavRow? _selected;
     private long _selectedMessage;
+
+    // What is being searched for, and over what. Empty means the pane's own row decides the list.
+    private string _query = string.Empty;
+    private bool _everywhere;
+    private bool _headlineOnly;
+    private TimeSpan? _within;
     private FeedSubscription? _articleFeed;
 
     public FeedsWorkspace(FeedSubscriptions feeds, Func<OpenAccount?> account, FeedThumbnails pictures)
@@ -314,6 +320,9 @@ internal sealed class FeedsWorkspace : Border
         var header = new StackPanel { Children = { _heading, _subheading } };
         DockPanel.SetDock(header, Dock.Top);
 
+        var search = SearchRow();
+        DockPanel.SetDock(search, Dock.Top);
+
         var actions = HeaderActions();
         DockPanel.SetDock(actions, Dock.Top);
 
@@ -324,7 +333,7 @@ internal sealed class FeedsWorkspace : Border
         {
             MaxWidth = ListIdeal,
             HorizontalAlignment = HorizontalAlignment.Center,
-            Children = { header, actions, _articles },
+            Children = { header, search, actions, _articles },
         };
 
         var host = new Border { MinWidth = ListMinimum, Child = panel };
@@ -337,6 +346,130 @@ internal sealed class FeedsWorkspace : Border
     /// article. The count on Mark All Read is the reference picture's own — it is what tells
     /// you what the button is about to do.
     /// </summary>
+    /// <summary>
+    /// The search box and what narrows it: where to look, how far back, and whether the
+    /// headline is enough.
+    /// </summary>
+    /// <remarks>
+    /// The engine underneath is the store's own — FTS5 with the reference's keyword grammar —
+    /// so <c>from:</c>, <c>subject:</c> and the rest work here as they do in mail, and the
+    /// controls are shorthands onto the same query rather than a second search.
+    /// <para>
+    /// Worth having at all because the readers this is measured against charge for it: the free
+    /// tier of Feedly has no search whatsoever, and the paid one searches only as far back as it
+    /// has kept, where a local store has kept everything.
+    /// </para>
+    /// </remarks>
+    private Control SearchRow()
+    {
+        _search.PlaceholderText = "Search these articles";
+        _search.MinWidth = 240;
+        _search.TextChanged += (_, _) =>
+        {
+            _query = _search.Text?.Trim() ?? string.Empty;
+            _filters.IsVisible = _query.Length > 0;
+            Rerun();
+        };
+
+        _search.KeyDown += (_, e) =>
+        {
+            if (e.Key is not Key.Escape) return;
+
+            e.Handled = true;
+            _search.Text = string.Empty;
+            Focus();
+        };
+
+        _scope.MinWidth = 150;
+        _scope.ItemsSource = new[] { "Here", "Every feed" };
+        _scope.SelectedIndex = 0;
+        ToolTip.SetTip(_scope, "Where to search");
+        _scope.SelectionChanged += (_, _) =>
+        {
+            _everywhere = _scope.SelectedIndex == 1;
+            Rerun();
+        };
+
+        var when = new ComboBox { MinWidth = 130 };
+        when.ItemsSource = new[] { "Any time", "Today", "Last 7 days", "Last 30 days", "Last year" };
+        when.SelectedIndex = 0;
+        ToolTip.SetTip(when, "How far back");
+        when.SelectionChanged += (_, _) =>
+        {
+            _within = when.SelectedIndex switch
+            {
+                1 => TimeSpan.FromDays(1),
+                2 => TimeSpan.FromDays(7),
+                3 => TimeSpan.FromDays(30),
+                4 => TimeSpan.FromDays(365),
+                _ => null,
+            };
+
+            Rerun();
+        };
+
+        var headline = new CheckBox { Content = "Headline only", VerticalAlignment = VerticalAlignment.Center };
+        headline[!TemplatedControl.ForegroundProperty] = new DynamicResourceExtension("text.secondary.brush");
+        headline.IsCheckedChanged += (_, _) =>
+        {
+            _headlineOnly = headline.IsChecked == true;
+            Rerun();
+        };
+
+        _filters = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            IsVisible = false,
+            VerticalAlignment = VerticalAlignment.Center,
+            Children = { _scope, when, headline },
+        };
+
+        return new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 10,
+            Margin = new Thickness(18, 0, 12, 10),
+            Children = { _search, _filters },
+        };
+    }
+
+    private readonly TextBox _search = new();
+    private readonly ComboBox _scope = new();
+    private StackPanel _filters = new();
+
+    /// <summary>The headlines the list is showing, for a harness run to read back.</summary>
+    public IEnumerable<string> Showing => _showing.Select(m => $"{m.Subject}  ({m.DisplayFrom})");
+
+    /// <summary>
+    /// Types into the search box and runs the search, for a harness run.
+    /// </summary>
+    /// <remarks>
+    /// The state is set and the search run here rather than left to the box's own TextChanged,
+    /// which Avalonia raises on a later pass — so a run that set the text and then read the
+    /// result back got the list as it was before the search, which is exactly the sort of
+    /// "verified" that verifies nothing.
+    /// </remarks>
+    public void Pose(string query, bool everywhere = false, bool headlineOnly = false)
+    {
+        _everywhere = everywhere;
+        _headlineOnly = headlineOnly;
+        _query = query.Trim();
+
+        // The controls move with the state, so a photograph of a posed run cannot show "Here"
+        // over a list that was searched everywhere.
+        _scope.SelectedIndex = everywhere ? 1 : 0;
+        _search.Text = query;
+        _filters.IsVisible = _query.Length > 0;
+        Rerun();
+    }
+
+    /// <summary>Redraws the list for whatever the search now says.</summary>
+    private void Rerun()
+    {
+        if (_selected is { } row) Select(row, keepReading: true);
+    }
+
     private Control HeaderActions()
     {
         _markAllRead = new Button
@@ -710,8 +843,13 @@ internal sealed class FeedsWorkspace : Border
         _layout = LayoutFor(row);
         ApplyLayout();
 
-        _heading.Text = row.Label;
-        _subheading.Text = Describe(row, articles.Count);
+        _heading.Text = _query.Length > 0 ? $"“{_query}”" : row.Label;
+        _subheading.Text = _query.Length > 0
+            ? articles.Count == 0
+                ? $"Nothing found {(_everywhere ? "in any feed" : $"in {row.Label}")}."
+                : $"{articles.Count} article{(articles.Count == 1 ? string.Empty : "s")} "
+                  + $"{(_everywhere ? "across every feed" : $"in {row.Label}")}."
+            : Describe(row, articles.Count);
         _showing = articles;
         _articles.ItemsSource = Shaped(articles);
         if (_articles.Scroll is { } top) top.Offset = new Vector(0, 0);
@@ -740,13 +878,27 @@ internal sealed class FeedsWorkspace : Border
             : row.Feed?.SiteUrl ?? string.Empty,
     };
 
-    /// <summary>The articles a pane row stands for, newest first.</summary>
+    /// <summary>The articles a pane row stands for, newest first — or what a search found.</summary>
     private List<MessageSummary> Articles(FeedNavRow row)
     {
-        if (_account() is not { } account || row.Folders.Count == 0) return [];
+        if (_account() is not { } account) return [];
 
-        var found = new List<MessageSummary>();
-        foreach (var folder in row.Folders) found.AddRange(account.Mail.Messages(folder));
+        // "Every feed" widens the search past the row the pane has selected; without a search
+        // there is nothing to widen, and the row is the whole question.
+        var folders = _query.Length > 0 && _everywhere
+            ? _rows.FirstOrDefault(r => r.Kind == FeedNavKind.Today)?.Folders ?? row.Folders
+            : row.Folders;
+
+        if (folders.Count == 0) return [];
+
+        var found = _query.Length > 0
+            ? account.Mail.Search(Query(), folders, limit: 500)
+            : Everything(account, folders);
+
+        if (_query.Length > 0)
+        {
+            Log.Debug($"Feeds: search “{_query}” over {folders.Count} folder(s) matched {found.Count}.");
+        }
 
         IEnumerable<MessageSummary> filtered = row.Kind switch
         {
@@ -756,6 +908,44 @@ internal sealed class FeedsWorkspace : Border
         };
 
         return [.. filtered.OrderByDescending(m => m.Received).Take(500)];
+    }
+
+    private static List<MessageSummary> Everything(OpenAccount account, IReadOnlyList<long> folders)
+    {
+        var found = new List<MessageSummary>();
+        foreach (var folder in folders) found.AddRange(account.Mail.Messages(folder));
+        return found;
+    }
+
+    /// <summary>
+    /// What was typed, as a query the store understands.
+    /// </summary>
+    /// <remarks>
+    /// The controls are shorthands onto the same grammar rather than a second search: "headline
+    /// only" moves the bare words into the subject column, and the date range becomes the
+    /// received bound the parser would have built from <c>received:</c>. So a reader who knows
+    /// the keywords can type them and a reader who does not can press the buttons, and both end
+    /// up in the same place.
+    /// </remarks>
+    private Mailbox.Core.Search.SearchQuery Query()
+    {
+        var query = Mailbox.Core.Search.SearchQuery.Parse(_query);
+
+        if (_headlineOnly && query.Words.Count > 0)
+        {
+            query = query with
+            {
+                Subject = [.. query.Subject.Concat(query.Words)],
+                Words = [],
+            };
+        }
+
+        if (_within is { } within)
+        {
+            query = query with { Received = (DateTimeOffset.UtcNow - within, null) };
+        }
+
+        return query;
     }
 
     /// <summary>
