@@ -431,6 +431,20 @@ internal sealed class FeedsWorkspace : Border
             Child = new ScrollViewer { Content = stack, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled },
         };
         pane[!BackgroundProperty] = new DynamicResourceExtension("nav.background.brush");
+
+        // A right-click anywhere in this column produces something. The rows have their own
+        // menus; this catches the gaps between and below them, where a reader who has decided to
+        // right-click the pane is just as likely to land — and where finding nothing reads as
+        // there being no menu at all.
+        pane.AddHandler(ContextRequestedEvent, (object? _, ContextRequestedEventArgs e) =>
+        {
+            if (e.Handled) return;
+
+            e.Handled = true;
+            _navMenu = PaneMenu();
+            _navMenu.ShowAt(pane, showAtPointer: true);
+        }, RoutingStrategies.Bubble);
+
         return pane;
     }
 
@@ -699,6 +713,49 @@ internal sealed class FeedsWorkspace : Border
 
         Dropped(moving, onto);
         return $"“{moving.Name}” dropped on {onto.Kind} “{onto.Label}”";
+    }
+
+    /// <summary>The pane menu last opened, for a run to read back.</summary>
+    private MenuFlyout? _navMenu;
+
+    /// <summary>
+    /// Right-clicks a feed row exactly as a mouse does, and says what came of it.
+    /// </summary>
+    /// <remarks>
+    /// A press and a release rather than raising ContextRequested directly, because the question
+    /// is not whether a flyout can open — it is whether the control a reader actually clicks gets
+    /// that far. Avalonia raises ContextRequested only from the source of an <em>unhandled</em>
+    /// release whose press was the right button, so a row that handles either one has no menu and
+    /// nothing anywhere says so.
+    /// </remarks>
+    public string PoseRightClick()
+    {
+        // The nav is a stack of buttons in the order the rows were added, so the button for the
+        // first feed row sits at that row's own offset.
+        var buttons = _nav.Children.OfType<Button>().ToList();
+        var feedAt = _rows.FindIndex(r => r.Kind == FeedNavKind.Feed);
+
+        if (feedAt < 0 || feedAt >= buttons.Count) return "there is no feed row to click";
+
+        var target = buttons[feedAt];
+        var pointer = new Pointer(0, PointerType.Mouse, isPrimary: true);
+        var at = new Point(20, 12);
+
+        target.RaiseEvent(new PointerPressedEventArgs(
+            target, pointer, _nav, at, 0,
+            new PointerPointProperties(RawInputModifiers.RightMouseButton, PointerUpdateKind.RightButtonPressed),
+            KeyModifiers.None));
+
+        target.RaiseEvent(new PointerReleasedEventArgs(
+            target, pointer, _nav, at, 0,
+            new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.RightButtonReleased),
+            KeyModifiers.None, MouseButton.Right));
+
+        var opened = _navMenu?.IsOpen == true;
+        var entries = _navMenu?.Items.Count ?? 0;
+        _navMenu?.Hide();
+
+        return $"right-clicked {_rows[feedAt].Label}: menu open = {opened}, {entries} entries";
     }
 
     /// <summary>
@@ -1304,12 +1361,18 @@ internal sealed class FeedsWorkspace : Border
 
         // Every reader has one of these on its sidebar, and this had none at all — which meant
         // renaming a feed, moving it, or copying its address had no gesture anywhere.
-        button.ContextRequested += (_, e) =>
+        button.AddHandler(ContextRequestedEvent, (object? _, ContextRequestedEventArgs e) =>
         {
+            if (e.Handled) return;
+
             e.Handled = true;
             Select(row, keepReading: false);
-            NavMenu(row).ShowAt(button, showAtPointer: true);
-        };
+
+            // Kept so a run can ask what actually opened. A menu whose entries are right but
+            // which never opens is the failure that reads as "there is no menu at all".
+            _navMenu = NavMenu(row);
+            _navMenu.ShowAt(button, showAtPointer: true);
+        }, RoutingStrategies.Bubble);
 
         return button;
     }
@@ -1486,6 +1549,34 @@ internal sealed class FeedsWorkspace : Border
         menu.Items.Add(new Separator());
         menu.Items.Add(Entry("Add a Feed…", "add", () => AddRequested?.Invoke(this, EventArgs.Empty)));
         menu.Items.Add(Entry("New Heading…", "new-folder", () => NewHeadingRequested?.Invoke(this, row.Feed)));
+
+        return menu;
+    }
+
+    /// <summary>
+    /// What right-clicking the pane itself offers, away from any row.
+    /// </summary>
+    /// <remarks>
+    /// The two things somebody arriving at an empty-ish pane wants to make, and nothing that
+    /// needs a row to act on. Deliberately short: a long menu here would be a menu about
+    /// whatever the reader happened to miss.
+    /// </remarks>
+    private MenuFlyout PaneMenu()
+    {
+        var menu = new MenuFlyout();
+
+        MenuItem Entry(string label, string icon, Action act)
+        {
+            var item = new MenuItem { Header = label, Icon = new Mailbox.Controls.Ribbon.RibbonArtwork(icon, 16) };
+            item.Click += (_, _) => act();
+            return item;
+        }
+
+        menu.Items.Add(Entry("Add a Feed…", "rss", () => AddRequested?.Invoke(this, EventArgs.Empty)));
+        menu.Items.Add(Entry("New Heading…", "new-folder", () => NewHeadingRequested?.Invoke(this, null)));
+        menu.Items.Add(Entry("New Board…", "bookmark", () => NewBoardRequested?.Invoke(this, EventArgs.Empty)));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(Entry("Update Feeds", "send-receive", () => RefreshRequested?.Invoke(this, EventArgs.Empty)));
 
         return menu;
     }

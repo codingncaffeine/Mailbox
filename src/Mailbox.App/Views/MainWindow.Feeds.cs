@@ -550,6 +550,10 @@ public partial class MainWindow
                 Log.Info($"Harness: last looked at this row {minutes} minute(s) ago — {feeds.PoseLastSeen(minutes)}.");
                 return;
 
+            case "rightclick":
+                Log.Info($"Harness: {feeds.PoseRightClick()}.");
+                return;
+
             case "pressnewheading":
                 feeds.PoseNewHeading();
 
