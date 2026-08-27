@@ -51,6 +51,7 @@ public partial class MainWindow
         workspace.AddRequested += (_, _) => _ = SubscribeToFeedAsync(shell);
         workspace.RefreshRequested += (_, _) => _ = UpdateFeedsAsync(shell, force: true);
         workspace.OpenRequested += (_, id) => OpenFeedArticle(shell, id);
+        workspace.ShortcutsRequested += (_, list) => _ = Confirm.ShowAsync(this, "Keyboard shortcuts", list);
         workspace.Changed += (_, _) =>
         {
             shell.ModuleStatusLeft = workspace.Status;

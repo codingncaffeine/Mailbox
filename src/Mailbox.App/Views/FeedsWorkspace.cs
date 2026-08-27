@@ -139,9 +139,18 @@ internal sealed class FeedsWorkspace : Border
         ScrollViewer.SetHorizontalScrollBarVisibility(_articles, ScrollBarVisibility.Disabled);
         _articles.SelectionChanged += (_, _) =>
         {
-            if (_articles.SelectedItem is MessageSummary chosen) Open(chosen);
+            if (_articles.SelectedItem is not MessageSummary chosen) return;
+
+            // Which subscription it came from, so Update This Feed and Feed Settings act on the
+            // right one when the reader is looking at Today rather than at one feed.
+            _articleFeed = _feedByFolder.GetValueOrDefault(chosen.FolderId);
+
+            if (_openOnSelect) Open(chosen);
         };
 
+        // Focusable so the single-key bindings reach it, and focused on the way in so a reader
+        // can start pressing j without clicking first.
+        Focusable = true;
         Child = Layout();
         Reload();
     }
@@ -164,9 +173,19 @@ internal sealed class FeedsWorkspace : Border
     /// <summary>The subscription the pane has selected, or the one the selected article came from.</summary>
     public FeedSubscription? SelectedFeed => _selected?.Feed ?? _articleFeed;
 
-    /// <summary>The article the list has selected, or null.</summary>
+    /// <summary>
+    /// The article the list has selected, read fresh from the store.
+    /// </summary>
+    /// <remarks>
+    /// Off the list's own selection rather than off whatever was last <em>opened</em>: n and p
+    /// move without opening, so the two part company the moment a reader skims. Read back by id
+    /// rather than returned as the row holds it, because the row is a snapshot and the thing a
+    /// command wants to know — is it read, is it flagged — is exactly what changes under it.
+    /// </remarks>
     public MessageSummary? SelectedArticle
-        => _selectedMessage != 0 && _account() is { } account ? account.Mail.GetMessage(_selectedMessage) : null;
+        => _articles.SelectedItem is MessageSummary chosen && _account() is { } account
+            ? account.Mail.GetMessage(chosen.Id) ?? chosen
+            : null;
 
     /// <summary>Whether the subscriptions pane is showing.</summary>
     public bool IsNavVisible
@@ -780,7 +799,7 @@ internal sealed class FeedsWorkspace : Border
             {
                 if (_account() is not { } account) return;
                 account.Mail.SetFlagged(message.Id, !message.IsFlagged);
-                Reload();
+                KeepingPlace(() => { BuildNav(); RefreshCards(); });
                 Changed?.Invoke(this, EventArgs.Empty);
             }));
 
@@ -915,10 +934,6 @@ internal sealed class FeedsWorkspace : Border
 
         _selectedMessage = message.Id;
 
-        // Which subscription this came from, so Update This Feed and Feed Settings act on the
-        // right one when the reader is looking at Today rather than at one feed.
-        _articleFeed = _feedByFolder.GetValueOrDefault(message.FolderId);
-
         var raw = account.Mail.LoadRaw(message.Id);
         if (raw is null)
         {
@@ -941,15 +956,40 @@ internal sealed class FeedsWorkspace : Border
 
         // Reading it marks it read, as it does in the mail list — and the counts in the pane move
         // with it, which is the thing a feed reader is judged on.
+        //
+        // Keeping the place while that happens is not a nicety: rebuilding the list drops the
+        // selection, and with it every key that means "the next one". Pressing j three times
+        // used to open the first article three times.
         if (!message.IsRead)
         {
             account.Mail.SetRead(message.Id, true);
-            Reload();
+            KeepingPlace(() => { BuildNav(); RefreshCards(); });
         }
-        else
+    }
+
+    /// <summary>
+    /// Runs a rebuild without losing where the reader was.
+    /// </summary>
+    /// <remarks>
+    /// The list is rebuilt from immutable snapshots, so a row that changes — read, flagged —
+    /// means a new list. Without this, every such change throws the selection away, and the
+    /// keyboard, which is entirely about "the next one", stops working after the first press.
+    /// </remarks>
+    private void KeepingPlace(Action rebuild)
+    {
+        var at = _articles.SelectedIndex;
+        var offset = _articles.Scroll?.Offset;
+
+        rebuild();
+
+        if (at >= 0 && at < _showing.Count)
         {
-            RefreshCards();
+            _openOnSelect = false;
+            _articles.SelectedIndex = at;
+            _openOnSelect = true;
         }
+
+        if (offset is { } where && _articles.Scroll is { } scroll) scroll.Offset = where;
     }
 
     /// <summary>Redraws the list without moving the scroll, so a changed row redraws in place.</summary>
@@ -1010,7 +1050,7 @@ internal sealed class FeedsWorkspace : Border
             ? $"“{article.Subject}” taken off Read Later."
             : $"“{article.Subject}” kept for later.";
 
-        Reload();
+        KeepingPlace(() => { BuildNav(); RefreshCards(); });
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
@@ -1079,8 +1119,179 @@ internal sealed class FeedsWorkspace : Border
         if (_account() is not { } account) return;
 
         account.Mail.SetRead(article.Id, read);
-        Reload();
+        KeepingPlace(() => { BuildNav(); RefreshCards(); });
         Changed?.Invoke(this, EventArgs.Empty);
     }
+
+    // ---- The keyboard -------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The single-key bindings every feed reader has had since Google Reader.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately the same letters Feedly and Inoreader use, so somebody arriving from either
+    /// keeps their hands. They are module-local rather than entries in the key map: a bare "j"
+    /// registered globally would be a letter the rest of the application could never use, and
+    /// these only mean anything while a list of articles has the focus. The commands themselves
+    /// are in the catalogue and rebindable in the ordinary way.
+    /// <para>
+    /// Bubbled, not tunnelled, so the list keeps the arrow keys and anything with a text box in
+    /// it keeps its letters.
+    /// </para>
+    /// </remarks>
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.Handled || e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Alt)) return;
+
+        var shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+
+        switch (e.Key)
+        {
+            // Move and open, which is what a reader does nine times out of ten.
+            case Key.J when !shift:
+                Step(1, open: true);
+                break;
+
+            case Key.K when !shift:
+                Step(-1, open: true);
+                break;
+
+            // Move without opening, for skimming headlines.
+            case Key.N:
+                Step(1, open: false);
+                break;
+
+            case Key.P:
+                Step(-1, open: false);
+                break;
+
+            // Between feeds rather than between articles.
+            case Key.J when shift:
+                StepFeed(1);
+                break;
+
+            case Key.K when shift:
+                StepFeed(-1);
+                break;
+
+            case Key.O or Key.Enter when SelectedArticle is { } opening:
+                OpenRequested?.Invoke(this, opening.Id);
+                break;
+
+            case Key.V:
+                OpenOriginal();
+                break;
+
+            case Key.M when SelectedArticle is { } toggled:
+                SetRead(toggled, !toggled.IsRead);
+                break;
+
+            // Mark read and move on: the one that empties a folder.
+            case Key.X when SelectedArticle is { } moving:
+                SetRead(moving, true);
+                Step(1, open: false);
+                break;
+
+            case Key.S:
+                ToggleReadLater();
+                break;
+
+            case Key.R:
+                RefreshRequested?.Invoke(this, EventArgs.Empty);
+                break;
+
+            case Key.A when shift:
+                MarkAllRead();
+                Changed?.Invoke(this, EventArgs.Empty);
+                break;
+
+            case Key.Delete when SelectedArticle is not null:
+                DeleteSelected();
+                break;
+
+            case Key.OemQuestion when shift:
+                ShowShortcuts();
+                break;
+
+            default:
+                return;
+        }
+
+        e.Handled = true;
+    }
+
+    /// <summary>Moves the selection through the list, opening as it goes or not.</summary>
+    private void Step(int by, bool open)
+    {
+        if (_showing.Count == 0) return;
+
+        var at = _articles.SelectedIndex + by;
+        if (at < 0 || at >= _showing.Count) return;
+
+        // Setting the index raises SelectionChanged, which opens the article. When the reader
+        // asked only to move, the opening is suppressed for that one change.
+        _openOnSelect = open;
+        _articles.SelectedIndex = at;
+        _openOnSelect = true;
+
+        _articles.ScrollIntoView(at);
+    }
+
+    private bool _openOnSelect = true;
+
+    /// <summary>Moves to the next or previous feed in the pane.</summary>
+    private void StepFeed(int by)
+    {
+        var feeds = _rows.Where(r => r.Kind is FeedNavKind.Feed or FeedNavKind.Category
+                                     or FeedNavKind.Today or FeedNavKind.Unread or FeedNavKind.ReadLater).ToList();
+        if (feeds.Count == 0) return;
+
+        var at = _selected is null ? 0 : feeds.FindIndex(r => r.Kind == _selected.Kind && r.Label == _selected.Label);
+        at = Math.Clamp(at + by, 0, feeds.Count - 1);
+
+        Select(feeds[at], keepReading: false);
+    }
+
+    /// <summary>The bindings, as a list the reader can read. What "?" opens.</summary>
+    private void ShowShortcuts()
+    {
+        (string Key, string Does)[] bindings =
+        [
+            ("J / K", "Next and previous article, opening it"),
+            ("N / P", "Next and previous without opening"),
+            ("Shift+J / Shift+K", "Next and previous feed"),
+            ("O or Enter", "Open the article in a window"),
+            ("V", "Open the original on the publisher's site"),
+            ("M", "Mark as read or unread"),
+            ("X", "Mark read and move on"),
+            ("S", "Keep for Read Later"),
+            ("R", "Update the feeds"),
+            ("Shift+A", "Mark everything showing as read"),
+            ("Delete", "Delete the article"),
+            ("?", "This list"),
+        ];
+
+        var rows = new StackPanel { Spacing = 6 };
+        foreach (var (key, does) in bindings)
+        {
+            var name = new TextBlock { Text = key, FontWeight = FontWeight.SemiBold, Width = 150 };
+            name[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("text.primary.brush");
+
+            var text = new TextBlock { Text = does };
+            text[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("text.secondary.brush");
+
+            rows.Children.Add(new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Children = { name, text },
+            });
+        }
+
+        ShortcutsRequested?.Invoke(this, rows);
+    }
+
+    /// <summary>Raised when the reader presses "?", with the list to show them.</summary>
+    public event EventHandler<Control>? ShortcutsRequested;
 
 }

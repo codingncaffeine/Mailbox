@@ -130,6 +130,10 @@ public partial class MainWindow
                 // the reader was in Mail is what they came here to see.
                 workspace.Reload();
                 host.Content = workspace;
+
+                // Focused so the single-key bindings work without a click first, which is the
+                // whole point of having them.
+                Dispatcher.UIThread.Post(() => workspace.Focus());
                 _ribbon.Layout = FeedsRibbon();
                 shell.ModuleStatusLeft = workspace.Status;
                 break;

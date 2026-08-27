@@ -5,6 +5,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Mailbox.Core.Calendars;
+using Mailbox.Core.Feeds;
 using Mailbox.Protocols;
 using Mailbox.Store;
 using Mailbox.Store.Pim;
@@ -660,65 +661,122 @@ public sealed class AccountSettingsDialog : Window
 
     // ---- RSS Feeds ------------------------------------------------------------------------
 
+    /// <summary>
+    /// The RSS Feeds tab: the subscription list, and the reference's own three buttons over it.
+    /// </summary>
+    /// <remarks>
+    /// Measured off <c>account settings/tabs/rss feeds.png</c> — two columns, the toolbar's
+    /// New…/Change…/Remove, and under the list the sentence naming where the selected feed
+    /// delivers with a Change Folder button beside it.
+    /// <para>
+    /// Two things the capture does not have, because the reference does not have them to show:
+    /// a third column saying whether the feed is actually working — a subscription that has been
+    /// failing for a week should say so where a reader is looking at the list of them, not only
+    /// in the log — and New… that takes a website address, since that is the address people have.
+    /// </para>
+    /// </remarks>
     private Control RssTab()
     {
         var list = new ClassicListView
         {
-            Columns = [new ClassicColumn("Feed Name", 338), new ClassicColumn("Last Updated On", 245)],
+            Columns =
+            [
+                new ClassicColumn("Feed Name", 236),
+                new ClassicColumn("Last Updated On", 174),
+                new ClassicColumn("Status", 173),
+            ],
         };
+
+        var location = Label(string.Empty, bold: true);
+        var changeFolder = PushButton("Change Folder", ChangeFeedFolderAsync, width: 92);
 
         void Fill()
         {
+            var chosen = list.SelectedRow?.Tag as string;
+
             list.SetRows(
             [
                 .. App.Feeds.All.Select(f => new ClassicRow(
-                    [f.Name, f.LastChecked is { } when ? when.LocalDateTime.ToString("g", CultureInfo.CurrentCulture) : "(never)"],
+                    [
+                        f.Name,
+                        f.LastChecked is { } when ? when.LocalDateTime.ToString("g", CultureInfo.CurrentCulture) : "(never)",
+                        f.IsFailing ? f.LastError : "OK",
+                    ],
                     Tag: f.Url)),
             ]);
+
+            // The selection survives a rebuild, so renaming a feed does not throw the reader
+            // back to the top of their list.
+            if (chosen is { Length: > 0 })
+            {
+                var at = list.Rows.ToList().FindIndex(r => (r.Tag as string) == chosen);
+                if (at >= 0) list.SelectedIndex = at;
+            }
+            ShowLocation();
         }
 
-        Fill();
+        void ShowLocation()
+        {
+            location.Text = Selected() is { } feed
+                ? $"RSS Feeds\\{feed.FolderPath.Replace('/', '\\')}"
+                : string.Empty;
+        }
+
+        FeedSubscription? Selected()
+            => list.SelectedRow?.Tag is string url ? App.Feeds.Find(url) : null;
 
         var change = ToolButton("change", "Change...", async () =>
         {
-            if (list.SelectedRow?.Tag is not string url) return;
-            var named = await Prompt.AskAsync(this, "RSS Feed Options", "Feed Name:", list.SelectedRow.Cells[0]);
-            if (named is null) return;
+            if (Selected() is not { } feed) return;
 
-            App.Feeds.Rename(url, named);
+            var dialog = new RssFeedOptionsDialog(feed, App.Feeds);
+            await dialog.ShowDialog(this);
+
+            if (!dialog.Changed) return;
+            Changed = true;
             Fill();
         });
 
-        var remove = ToolButton("remove", "Remove", () =>
+        var remove = ToolButton("remove", "Remove", async () =>
         {
-            if (list.SelectedRow?.Tag is not string url) return;
-            App.Feeds.Remove(url);
+            if (Selected() is not { } feed) return;
+
+            // The articles are messages and stay where they are: deleting somebody's mail
+            // because they stopped following a site would be a surprise.
+            if (!await Confirm.AskAsync(this, "Remove Feed",
+                    $"Stop reading \u201c{feed.Name}\u201d?\n\nThe articles already filed stay where they are.",
+                    "Remove")) return;
+
+            App.Feeds.Remove(feed.Url);
+            Changed = true;
             Fill();
         });
 
         void Enable()
         {
-            change.IsEnabled = list.SelectedRow is not null;
-            remove.IsEnabled = list.SelectedRow is not null;
+            var any = list.SelectedRow is not null;
+            change.IsEnabled = any;
+            remove.IsEnabled = any;
+            changeFolder.IsEnabled = any;
         }
 
-        list.SelectionChanged += (_, _) => Enable();
+        list.SelectionChanged += (_, _) =>
+        {
+            Enable();
+            ShowLocation();
+        };
+
+        Fill();
         Enable();
 
         var toolbar = Toolbar(
             ToolButton("new", "New...", async () =>
             {
-                var dialog = new SubscriptionDialog(
-                    "New RSS Feed",
-                    "Enter the location of the RSS Feed you want to add to Mailbox:",
-                    "Example: http://www.example.com/feed/main.xml");
+                var dialog = new SubscribeDialog(App.FeedReader.Finder, App.Feeds);
                 await dialog.ShowDialog(this);
-                if (dialog.Location is not { Length: > 0 } location) return;
 
-                // Named after its address until the first download, which is when the feed says
-                // what it is called — a subscription that could not be read still shows here.
-                var name = Uri.TryCreate(location, UriKind.Absolute, out var uri) ? uri.Host : location;
-                App.Feeds.Add(location, name);
+                if (dialog.Subscribed is null) return;
+                Changed = true;
                 Fill();
             }),
             change, remove);
@@ -732,12 +790,43 @@ public sealed class AccountSettingsDialog : Window
         {
             Children =
             {
-                At(Label("New items are delivered to a folder of their own under RSS Feeds."), 7, 9),
+                At(Label("Selected RSS Feed delivers new items to the following location:"), 7, 9),
+                At(changeFolder, 8, 30),
+                At(location, 108, 34),
                 At(paragraph, 8, 73),
             },
         };
 
+        _feedList = list;
+        _feedRefresh = Fill;
+
         return Page(toolbar, list, below);
+    }
+
+    private ClassicListView? _feedList;
+    private Action _feedRefresh = () => { };
+
+    /// <summary>
+    /// Files the selected feed under a different heading, which is what decides where it
+    /// delivers.
+    /// </summary>
+    /// <remarks>
+    /// A heading rather than a folder picker: a feed here delivers into a folder named after it,
+    /// and the heading above that is the thing worth choosing — it is what the Feeds module
+    /// groups by and what its unread counts total. The full folder picker would offer to put one
+    /// feed's articles in Sent Items, which is not a thing anybody wants.
+    /// </remarks>
+    private async Task ChangeFeedFolderAsync()
+    {
+        if (_feedList?.SelectedRow?.Tag is not string url || App.Feeds.Find(url) is not { } feed) return;
+
+        var typed = await Prompt.AskAsync(this, "Delivery Location",
+            "Heading to file this feed under (leave empty for none):", feed.Category);
+        if (typed is null) return;
+
+        App.Feeds.Recategorize(url, typed.Trim());
+        Changed = true;
+        _feedRefresh();
     }
 
     // ---- Internet Calendars ---------------------------------------------------------------

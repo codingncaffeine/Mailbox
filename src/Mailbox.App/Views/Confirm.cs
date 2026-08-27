@@ -29,6 +29,39 @@ public static class Confirm
         => (await AskAsync(owner, title, message, confirmLabel, destructive, dontShowAgain: null)).Confirmed;
 
     /// <summary>
+    /// A statement made of controls rather than of a sentence: one OK button, and whatever the
+    /// caller wants shown above it. For the keyboard-shortcut list, which is a table.
+    /// </summary>
+    public static async Task ShowAsync(Window owner, string title, Control content)
+    {
+        ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(content);
+
+        var window = new Window
+        {
+            Title = title,
+            SizeToContent = SizeToContent.WidthAndHeight,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ShowInTaskbar = false,
+        };
+
+        var ok = new Button { Content = "OK", MinWidth = 88, HorizontalAlignment = HorizontalAlignment.Right };
+        ok.Click += (_, _) => window.Close();
+        ok.IsDefault = true;
+        ok.IsCancel = true;
+
+        DialogChrome.Apply(window, new StackPanel
+        {
+            Margin = new Thickness(20),
+            Spacing = 16,
+            Children = { content, ok },
+        });
+
+        await window.ShowDialog(owner);
+    }
+
+    /// <summary>
     /// A statement rather than a question: one OK button, which is also the cancel. For
     /// telling the user something happened, or why it did not.
     /// </summary>
