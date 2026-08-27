@@ -233,6 +233,22 @@ internal sealed class FeedsWorkspace : Border
             if (_openOnSelect) Open(chosen);
         };
 
+        // The article menu, on the list rather than on each row — the same reasoning the pane's
+        // own menu is built on. A right-click lands on the innermost thing under it, never on the
+        // container that was built to hold it, so the article is worked back from what was hit.
+        _articles.AddHandler(ContextRequestedEvent, (object? _, ContextRequestedEventArgs e) =>
+        {
+            if (e.Handled) return;
+            if (ArticleUnder(e.Source) is not { } article) return;
+
+            e.Handled = true;
+            Choose(article);
+
+            _articleMenu?.Hide();
+            _articleMenu = ArticleMenu(article);
+            _articleMenu.ShowAt(_articles, showAtPointer: true);
+        }, RoutingStrategies.Bubble);
+
         // Marking read by scrolling past, which is how a river is actually cleared. Watched on the
         // scroll rather than on a timer, so nothing is marked read on a list nobody is moving.
         _articles.Loaded += (_, _) =>
@@ -1465,27 +1481,22 @@ internal sealed class FeedsWorkspace : Border
                       + $"“{RowUnder(e.Source)?.Label ?? "no row"}”, handled: {e.Handled}.");
         }, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
 
-        // The menu, opened from the release itself rather than from ContextRequested.
+        // The menu. One path, and this is the one: ContextRequested, raised from the element the
+        // release landed on and caught here as it bubbles.
         //
-        // ContextRequested is the tidy way and it is not the reliable one here: whether it is
-        // raised at all depends on which element the release landed on and whether anything on
-        // the way handled it, and a pane made of buttons is exactly the case where that goes
-        // wrong — which is what it did, silently, with the handler sitting on the button and
-        // never running. A right-button release is a fact about the pointer, and this reads it.
-        pane.AddHandler(PointerReleasedEvent, (object? _, PointerReleasedEventArgs e) =>
-        {
-            if (e.InitialPressMouseButton != MouseButton.Right) return;
-
-            e.Handled = true;
-            ShowPaneMenu(pane, RowUnder(e.Source));
-        }, RoutingStrategies.Bubble, handledEventsToo: true);
-
-        // And the keyboard's menu key, which produces this and no pointer event at all.
+        // There were briefly two — this and a reader of the right-button release — on the theory
+        // that ContextRequested might not arrive. It arrives. What that produced was two menus on
+        // one right-click, one exactly on top of the other, so choosing an entry dismissed the
+        // top one and left the other standing until it was clicked away as well. A second opener
+        // as insurance against the first is not insurance; it is a second bug.
         pane.AddHandler(ContextRequestedEvent, (object? _, ContextRequestedEventArgs e) =>
         {
             if (e.Handled) return;
 
             e.Handled = true;
+
+            // The row under the pointer, or — for the keyboard's menu key, which produces this
+            // and no pointer event at all — whatever the pane has selected.
             ShowPaneMenu(pane, RowUnder(e.Source) ?? _selected);
         }, RoutingStrategies.Bubble);
 
@@ -1543,8 +1554,15 @@ internal sealed class FeedsWorkspace : Border
     }
 
     /// <summary>The menu for a row, or the pane's own when the click landed between rows.</summary>
+    /// <remarks>
+    /// Whatever was open goes first. One opener cannot stack menus on its own, but the cost of
+    /// being sure is one line and the failure it prevents — a menu left standing behind the one
+    /// the reader just used — is one nobody would think to look for.
+    /// </remarks>
     private void ShowPaneMenu(Control pane, FeedNavRow? row)
     {
+        _navMenu?.Hide();
+
         if (row is not null)
         {
             Select(row, keepReading: false);
@@ -1953,13 +1971,6 @@ internal sealed class FeedsWorkspace : Border
             OpenRequested?.Invoke(this, message.Id);
         };
 
-        row.ContextRequested += (_, e) =>
-        {
-            e.Handled = true;
-            Choose(message);
-            ArticleMenu(message).ShowAt(row, showAtPointer: true);
-        };
-
         return row;
     }
 
@@ -2018,6 +2029,32 @@ internal sealed class FeedsWorkspace : Border
         menu.Items.Add(Entry("Delete", "delete", DeleteSelected));
 
         return menu;
+    }
+
+    /// <summary>The article menu last opened, so a second right-click replaces it.</summary>
+    private MenuFlyout? _articleMenu;
+
+    /// <summary>
+    /// The article the pointer is over, worked back from the element it actually hit.
+    /// </summary>
+    /// <remarks>
+    /// The data context flows down from the row's own container, so any element inside a row
+    /// carries the article it draws — but a click can also land on the list's own background
+    /// below the last row, and that is not an article and must not act on the last one.
+    /// </remarks>
+    private static MessageSummary? ArticleUnder(object? source)
+    {
+        var at = source as Visual;
+
+        while (at is not null)
+        {
+            if (at is ListBox) return null;
+            if (at is StyledElement { DataContext: MessageSummary article }) return article;
+
+            at = at.GetVisualParent();
+        }
+
+        return null;
     }
 
     /// <summary>
