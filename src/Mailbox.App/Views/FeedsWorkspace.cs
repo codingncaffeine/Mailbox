@@ -29,6 +29,22 @@ internal sealed record FeedNavRow(string Label, int Unread, FeedNavKind Kind)
     public bool IsExpanded { get; set; } = true;
 }
 
+/// <summary>
+/// How the articles are laid out. The three the readers this is measured against offer, under
+/// the names they use.
+/// </summary>
+internal enum FeedLayout
+{
+    /// <summary>Thumbnail, headline, source, snippet. The default, and what most people keep.</summary>
+    Magazine,
+
+    /// <summary>One line an article: headline, source, age. What heavy readers live in.</summary>
+    TextOnly,
+
+    /// <summary>A grid of pictures with the headline under each. For feeds that are photographs.</summary>
+    Cards,
+}
+
 internal enum FeedNavKind
 {
     Today,
@@ -336,19 +352,50 @@ internal sealed class FeedsWorkspace : Border
             Changed?.Invoke(this, EventArgs.Empty);
         };
 
+        // Top right of the article area, which is where both readers this is measured against
+        // put it, and per feed, which is how they remember it.
+        var views = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
+
+        foreach (var (layout, icon, tip) in (( FeedLayout, string, string )[])
+                 [
+                     (FeedLayout.Magazine, "reading-pane", "Magazine"),
+                     (FeedLayout.TextOnly, "bullets", "Text only"),
+                     (FeedLayout.Cards, "apps", "Cards"),
+                 ])
+        {
+            var chosen = layout;
+            var button = new Button
+            {
+                Classes = { "flat" },
+                Width = 28,
+                Height = 26,
+                Padding = new Thickness(0),
+                FontFamily = IconFont.Family,
+                FontSize = 14,
+                Content = IconGlyphs.GetOrEmpty(icon, 16),
+            };
+            button[!TemplatedControl.ForegroundProperty] = new DynamicResourceExtension("text.secondary.brush");
+            ToolTip.SetTip(button, tip);
+            button.Click += (_, _) => SetLayout(chosen);
+
+            _viewButtons[layout] = button;
+            views.Children.Add(button);
+        }
+
         var strip = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Right,
             Margin = new Thickness(12, 0, 12, 8),
-            Spacing = 4,
-            Children = { _markAllRead },
+            Spacing = 10,
+            Children = { _markAllRead, views },
         };
 
         return strip;
     }
 
     private Button? _markAllRead;
+    private readonly Dictionary<FeedLayout, Button> _viewButtons = [];
 
     private static StackPanel ActionContent(string icon, string text)
     {
@@ -660,10 +707,13 @@ internal sealed class FeedsWorkspace : Border
 
         var articles = Articles(row);
 
+        _layout = LayoutFor(row);
+        ApplyLayout();
+
         _heading.Text = row.Label;
         _subheading.Text = Describe(row, articles.Count);
         _showing = articles;
-        _articles.ItemsSource = articles;
+        _articles.ItemsSource = Shaped(articles);
         if (_articles.Scroll is { } top) top.Offset = new Vector(0, 0);
 
         if (!keepReading)
@@ -862,12 +912,12 @@ internal sealed class FeedsWorkspace : Border
     /// The tile rather than a gap: a list where some rows have a picture and some have a hole in
     /// them reads as broken, and a great many feeds publish no picture at all.
     /// </remarks>
-    private Control Thumbnail(MessageSummary message)
+    private Control Thumbnail(MessageSummary message, double width = ThumbnailWidth, double height = ThumbnailHeight)
     {
         var image = new Image
         {
-            Width = ThumbnailWidth,
-            Height = ThumbnailHeight,
+            Width = width,
+            Height = height,
             Stretch = Stretch.UniformToFill,
             IsVisible = false,
         };
@@ -883,8 +933,8 @@ internal sealed class FeedsWorkspace : Border
 
         var tile = new Border
         {
-            Width = ThumbnailWidth,
-            Height = ThumbnailHeight,
+            Width = width,
+            Height = height,
             CornerRadius = new CornerRadius(4),
             ClipToBounds = true,
             VerticalAlignment = VerticalAlignment.Top,
@@ -999,7 +1049,7 @@ internal sealed class FeedsWorkspace : Border
 
         var offset = _articles.Scroll?.Offset;
         _showing = Articles(row);
-        _articles.ItemsSource = _showing;
+        _articles.ItemsSource = Shaped(_showing);
         if (offset is { } where && _articles.Scroll is { } scroll) scroll.Offset = where;
     }
 
@@ -1293,5 +1343,202 @@ internal sealed class FeedsWorkspace : Border
 
     /// <summary>Raised when the reader presses "?", with the list to show them.</summary>
     public event EventHandler<Control>? ShortcutsRequested;
+
+    // ---- Layout -------------------------------------------------------------------------------------
+
+    /// <summary>How the articles are laid out right now.</summary>
+    private FeedLayout _layout = FeedLayout.Magazine;
+
+    /// <summary>Where a feed's chosen layout is kept, keyed by the row it belongs to.</summary>
+    private static string LayoutKey(FeedNavRow row)
+        => $"rss.view.{row.Kind}.{row.Label}".ToLowerInvariant();
+
+    /// <summary>
+    /// The layout this row was last read in.
+    /// </summary>
+    /// <remarks>
+    /// Per feed rather than one setting for all of them, which is how both readers this is
+    /// measured against remember it — and it is the right way round: a photography feed wants
+    /// Cards and a headline feed wants one line each, and a reader should not have to keep
+    /// switching.
+    /// </remarks>
+    private FeedLayout LayoutFor(FeedNavRow row)
+        => Enum.TryParse<FeedLayout>(App.Settings.GetString(LayoutKey(row)), out var kept)
+            ? kept
+            : FeedLayout.Magazine;
+
+    private void SetLayout(FeedLayout layout)
+    {
+        if (_selected is { } row) App.Settings.Set(LayoutKey(row), layout.ToString());
+
+        _layout = layout;
+        ApplyLayout();
+        RefreshCards();
+    }
+
+    /// <summary>Points the list at the template for the layout, and marks the button that is on.</summary>
+    private void ApplyLayout()
+    {
+        foreach (var (which, button) in _viewButtons)
+        {
+            button.Classes.Remove("active");
+            if (which == _layout) button.Classes.Add("active");
+        }
+
+        // Cards go across, the other two go down — and all three still virtualise, because a
+        // wrap panel does not: the grid is a stack of rows, each row a few tiles.
+        _articles.ItemTemplate = _layout switch
+        {
+            FeedLayout.TextOnly => new FuncDataTemplate<MessageSummary>((m, _) => Line(m), supportsRecycling: true),
+            FeedLayout.Cards => new FuncDataTemplate<MessageSummary[]>((row, _) => TileRow(row), supportsRecycling: true),
+            _ => new FuncDataTemplate<MessageSummary>((m, _) => Card(m), supportsRecycling: true),
+        };
+
+        _articles.ItemsPanel = new FuncTemplate<Panel?>(() => new VirtualizingStackPanel());
+
+        // A grid row selects as one thing, which is not what a reader means by choosing an
+        // article; in Cards the tile itself carries the press.
+        _articles.SelectionMode = _layout == FeedLayout.Cards ? SelectionMode.Single : SelectionMode.Single;
+    }
+
+    /// <summary>
+    /// One article as a single line: headline, source, age. What a reader skimming two hundred
+    /// headlines actually wants, and the densest of the three.
+    /// </summary>
+    private Control Line(MessageSummary message)
+    {
+        var grid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"),
+            Margin = new Thickness(16, 6, 10, 6),
+        };
+
+        var title = new TextBlock
+        {
+            Text = message.Subject,
+            FontSize = 13,
+            FontWeight = message.IsRead ? FontWeight.Normal : FontWeight.SemiBold,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        title[!TextBlock.ForegroundProperty] = new DynamicResourceExtension(
+            message.IsRead ? "list.row.read.text.brush" : "list.row.unread.text.brush");
+        Grid.SetColumn(title, 0);
+        grid.Children.Add(title);
+
+        var source = new TextBlock
+        {
+            Text = message.DisplayFrom,
+            FontSize = 11,
+            Margin = new Thickness(12, 0, 0, 0),
+            MaxWidth = 160,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        source[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("text.secondary.brush");
+        Grid.SetColumn(source, 1);
+        grid.Children.Add(source);
+
+        var age = new TextBlock
+        {
+            Text = Ago(message.Received),
+            FontSize = 11,
+            Width = 46,
+            TextAlignment = TextAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        age[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("text.secondary.brush");
+        Grid.SetColumn(age, 2);
+        grid.Children.Add(age);
+
+        var row = new Border { Background = Brushes.Transparent, Child = grid };
+        row.DoubleTapped += (_, e) =>
+        {
+            e.Handled = true;
+            OpenRequested?.Invoke(this, message.Id);
+        };
+
+        return row;
+    }
+
+    /// <summary>
+    /// One article as a tile: the picture large, the headline under it. For the feeds that are
+    /// mostly photographs, where a thumbnail the size of a stamp is no use.
+    /// </summary>
+    private Control CardTile(MessageSummary message)
+    {
+        var picture = Thumbnail(message, TileWidth, TileHeight);
+
+        var title = new TextBlock
+        {
+            Text = message.Subject,
+            FontSize = 13,
+            FontWeight = message.IsRead ? FontWeight.Normal : FontWeight.SemiBold,
+            TextWrapping = TextWrapping.Wrap,
+            MaxLines = 3,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Margin = new Thickness(0, 8, 0, 0),
+        };
+        title[!TextBlock.ForegroundProperty] = new DynamicResourceExtension(
+            message.IsRead ? "list.row.read.text.brush" : "list.row.unread.text.brush");
+
+        var source = new TextBlock
+        {
+            Text = $"{message.DisplayFrom} · {Ago(message.Received)}",
+            FontSize = 11,
+            Margin = new Thickness(0, 4, 0, 0),
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        source[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("text.secondary.brush");
+
+        var tile = new Border
+        {
+            Width = TileWidth,
+            Background = Brushes.Transparent,
+            Margin = new Thickness(16, 10, 0, 10),
+            Child = new StackPanel { Children = { picture, title, source } },
+        };
+
+        tile.PointerPressed += (_, e) =>
+        {
+            if (!e.GetCurrentPoint(tile).Properties.IsLeftButtonPressed) return;
+            e.Handled = true;
+
+            // The list selects a row of three, so the tile says which of the three was meant.
+            _openOnSelect = false;
+            _articles.SelectedIndex = _showing.FindIndex(m => m.Id == message.Id) / TilesAcross;
+            _openOnSelect = true;
+            Open(message);
+        };
+
+        tile.DoubleTapped += (_, e) =>
+        {
+            e.Handled = true;
+            OpenRequested?.Invoke(this, message.Id);
+        };
+
+        return tile;
+    }
+
+    private const double TileWidth = 216;
+    private const double TileHeight = 128;
+
+    /// <summary>How many tiles fit across the capped column.</summary>
+    private const int TilesAcross = 3;
+
+    /// <summary>
+    /// The list as the current layout wants it: articles one after another, or grouped into rows
+    /// of tiles for the grid.
+    /// </summary>
+    private System.Collections.IEnumerable Shaped(List<MessageSummary> articles)
+        => _layout == FeedLayout.Cards ? articles.Chunk(TilesAcross).ToList() : articles;
+
+    /// <summary>One row of the grid.</summary>
+    private Control TileRow(MessageSummary[] articles)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        foreach (var article in articles) row.Children.Add(CardTile(article));
+        return row;
+    }
 
 }
