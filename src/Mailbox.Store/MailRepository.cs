@@ -2326,6 +2326,19 @@ public sealed class MailRepository(MailStore store)
         """,
         ReadMessage, ("$board", boardId), ("$limit", limit));
 
+    /// <summary>
+    /// What is on a board and when each was saved, for moving a board between stores.
+    /// </summary>
+    /// <remarks>
+    /// The times matter: a board is read newest-saved-first, so a move that re-saved everything
+    /// at the moment of the move would hand the reader their keep pile in an order they never
+    /// put it in.
+    /// </remarks>
+    public IReadOnlyList<(long MessageId, DateTimeOffset SavedUtc)> BoardItems(long boardId) => _store.Query(
+        "SELECT message_id, saved_utc FROM board_items WHERE board_id = $board ORDER BY saved_utc, rowid",
+        r => (r.GetInt64(0), DateTimeOffset.FromUnixTimeSeconds(r.GetInt64(1))),
+        ("$board", boardId));
+
     /// <summary>Whether a message is on any board at all, which is what Delete asks before it acts.</summary>
     public bool IsOnAnyBoard(long messageId) => _store.ScalarLong(
         "SELECT count(*) FROM board_items WHERE message_id = $id", ("$id", messageId)) > 0;

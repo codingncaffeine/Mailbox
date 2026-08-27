@@ -310,6 +310,9 @@ public sealed class MailOptions(SettingsStore settings)
     /// <summary>Where the Feeds module's "show pictures" preference is kept.</summary>
     public const string FeedPicturesKey = "rss.pictures";
 
+    /// <summary>Whether the feeds store shows as a root of its own in the mail folder pane.</summary>
+    public const string FeedsInMailPaneKey = "rss.inmailpane";
+
     /// <summary>
     /// Whether the article list fetches the pictures the entries point at.
     /// </summary>
@@ -328,6 +331,21 @@ public sealed class MailOptions(SettingsStore settings)
     {
         get => _settings.GetBool(FeedPicturesKey, true);
         set => _settings.Set(FeedPicturesKey, value);
+    }
+
+    /// <summary>
+    /// Whether "RSS Feeds" appears in the mail folder pane, as a root beside the accounts.
+    /// </summary>
+    /// <remarks>
+    /// Off by default, the owner's call: there is a whole module for feeds, and a reader who
+    /// wants them does not go looking in Mail. It is a switch rather than a decision because the
+    /// articles genuinely are messages — searching finds them either way — and somebody who
+    /// wants to reach one from the folder pane should be able to.
+    /// </remarks>
+    public bool FeedsInMailPane
+    {
+        get => _settings.GetBool(FeedsInMailPaneKey, false);
+        set => _settings.Set(FeedsInMailPaneKey, value);
     }
 
     /// <summary>

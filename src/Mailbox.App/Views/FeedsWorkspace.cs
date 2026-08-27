@@ -159,6 +159,18 @@ internal sealed class FeedsWorkspace : Border
     private readonly Panel _readingHost = new();
 
     private readonly List<FeedNavRow> _rows = [];
+
+    /// <summary>
+    /// The button drawn for each pane row.
+    /// </summary>
+    /// <remarks>
+    /// Kept because a harness run has to be able to click a particular row, and counting buttons
+    /// to find it is wrong: the pane holds section labels and two "make another one" rows that
+    /// are not rows of the list, so the nth button is not the nth row. Getting that wrong made a
+    /// pose report a heading's menu as a feed's, and then a board row's absence of one as the
+    /// feed row having none.
+    /// </remarks>
+    private readonly Dictionary<FeedNavRow, Button> _rowButtons = [];
     private readonly HashSet<string> _collapsed = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Which subscription each folder belongs to, so an article knows where it came from.</summary>
@@ -728,16 +740,10 @@ internal sealed class FeedsWorkspace : Border
     /// release whose press was the right button, so a row that handles either one has no menu and
     /// nothing anywhere says so.
     /// </remarks>
-    public string PoseRightClick()
+    public string PoseRightClick(FeedNavKind kind = FeedNavKind.Feed)
     {
-        // The nav is a stack of buttons in the order the rows were added, so the button for the
-        // first feed row sits at that row's own offset.
-        var buttons = _nav.Children.OfType<Button>().ToList();
-        var feedAt = _rows.FindIndex(r => r.Kind == FeedNavKind.Feed);
-
-        if (feedAt < 0 || feedAt >= buttons.Count) return "there is no feed row to click";
-
-        var target = buttons[feedAt];
+        if (_rows.FirstOrDefault(r => r.Kind == kind) is not { } row) return $"there is no {kind} row to click";
+        if (!_rowButtons.TryGetValue(row, out var target)) return $"“{row.Label}” has no button";
         var pointer = new Pointer(0, PointerType.Mouse, isPrimary: true);
         var at = new Point(20, 12);
 
@@ -755,7 +761,7 @@ internal sealed class FeedsWorkspace : Border
         var entries = _navMenu?.Items.Count ?? 0;
         _navMenu?.Hide();
 
-        return $"right-clicked {_rows[feedAt].Label}: menu open = {opened}, {entries} entries";
+        return $"right-clicked the {kind} “{row.Label}”: menu open = {opened}, {entries} entries";
     }
 
     /// <summary>
@@ -1046,6 +1052,7 @@ internal sealed class FeedsWorkspace : Border
     private void BuildNav()
     {
         _rows.Clear();
+        _rowButtons.Clear();
         _nav.Children.Clear();
         _feedByFolder.Clear();
 
@@ -1356,6 +1363,8 @@ internal sealed class FeedsWorkspace : Border
 
         button.Click += (_, _) => Select(row, keepReading: false);
         if (ReferenceEquals(row, _selected)) button.Classes.Add("active");
+
+        _rowButtons[row] = button;
 
         WireDrag(button, row);
 

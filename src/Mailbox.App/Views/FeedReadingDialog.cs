@@ -31,6 +31,7 @@ public sealed class FeedReadingDialog : Window
     private readonly TextBox _seconds = new();
     private readonly TextBox _every = new();
     private readonly CheckBox _pictures;
+    private readonly CheckBox _inMailPane;
 
     /// <summary>True when something was changed and saved.</summary>
     public bool Changed { get; private set; }
@@ -54,11 +55,13 @@ public sealed class FeedReadingDialog : Window
 
         Title = "Reading";
         Width = 520;
-        Height = 400;
+        Height = 430;
         CanResize = false;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
         _pictures = Tick("Show pictures in the article list", _options.FeedPictures);
+        _inMailPane = Tick("Also show RSS Feeds in the Mail folder pane", _options.FeedsInMailPane);
+        _inMailPane.Margin = new Thickness(0, 6, 0, 0);
 
         var ok = Push("OK", Save);
         ok.IsDefault = true;
@@ -149,6 +152,7 @@ public sealed class FeedReadingDialog : Window
                 interval,
                 Gap(),
                 _pictures,
+                _inMailPane,
                 buttons,
             },
         };
@@ -196,6 +200,7 @@ public sealed class FeedReadingDialog : Window
 
         _settings.Set(IntervalKey, minutes);
         _options.FeedPictures = _pictures.IsChecked == true;
+        _options.FeedsInMailPane = _inMailPane.IsChecked == true;
 
         Changed = true;
         Close();

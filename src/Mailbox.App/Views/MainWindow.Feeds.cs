@@ -39,14 +39,17 @@ public partial class MainWindow
     private static RibbonLayout FeedsRibbon() => App.RibbonEdits.Apply(App.Plugins.InjectRibbon(FeedsRibbonLayout.Build()));
 
     /// <summary>
-    /// Where feed articles are filed: the default account's store.
+    /// Where feed articles are filed: the feed reader's own store.
     /// </summary>
     /// <remarks>
-    /// One account rather than all of them, and the first rather than a chosen one, because a
-    /// feed belongs to the reader and not to a mail account — it is filed somewhere because the
-    /// store is where messages live, not because a server has an opinion about it.
+    /// Its own file, not one of the reader's mail accounts. It used to be whichever account
+    /// sorted first, which was wrong in principle — a subscription belongs to the reader, and
+    /// nothing about a feed has anything to do with the server that carries their post — and
+    /// unstable in practice: adding an account that sorted ahead of the old one pointed the whole
+    /// module at a store with no feed folders, so the subscriptions appeared to empty themselves
+    /// while the articles sat in a file nothing was looking at any more.
     /// </remarks>
-    private static OpenAccount? FeedAccount() => App.Accounts.All.FirstOrDefault();
+    private static OpenAccount? FeedAccount() => App.FeedStore?.Account;
 
     private FeedsWorkspace EnsureFeeds(ShellViewModel shell)
     {
@@ -551,7 +554,11 @@ public partial class MainWindow
                 return;
 
             case "rightclick":
-                Log.Info($"Harness: {feeds.PoseRightClick()}.");
+                foreach (var kind in (FeedNavKind[])[FeedNavKind.Feed, FeedNavKind.Category, FeedNavKind.Today])
+                {
+                    Log.Info($"Harness: {feeds.PoseRightClick(kind)}.");
+                }
+
                 return;
 
             case "pressnewheading":
@@ -635,6 +642,10 @@ public partial class MainWindow
 
         ApplyFeedReadingOptions();
         _feedModule?.Reload();
+
+        // The folder pane is the mail module's, so it has to be told: the switch that puts the
+        // feeds store in it lives here.
+        shell.Refresh();
         shell.StatusRight = "Reading settings saved.";
     }
 

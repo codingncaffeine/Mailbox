@@ -959,6 +959,41 @@ public sealed partial class ShellViewModel : ObservableObject
             }
         }
 
+        // The feeds store, as a root of its own beside the accounts rather than inside one of
+        // them — which is what it used to be, filed into whichever account happened to sort
+        // first. Off unless asked for: there is a whole module for feeds, and a reader who wants
+        // them does not go looking in Mail. Searching reaches the articles either way.
+        if (App.MailOptions.FeedsInMailPane && App.FeedStore?.Account is { } feedStore)
+        {
+            var tree = feedStore.Mail.Folders(feedStore.Account.Id);
+            if (tree.Count > 0)
+            {
+                var heading = new FolderNode(FeedStores.DisplayName, 0, 0, bold: true);
+                Folders.Add(heading);
+
+                var feedDepths = new Dictionary<long, int>();
+                foreach (var folder in OrderedForTree(tree))
+                {
+                    var depth = folder.ParentId is { } parent && feedDepths.TryGetValue(parent, out var up)
+                        ? up + 1
+                        : 1;
+                    feedDepths[folder.Id] = depth;
+
+                    // The root is the store, so its own "RSS Feeds" folder would read as
+                    // "RSS Feeds / RSS Feeds". Its children hang off the heading instead.
+                    if (folder.ParentId is null && folder.Name == FeedStores.DisplayName)
+                    {
+                        feedDepths[folder.Id] = 0;
+                        continue;
+                    }
+
+                    var node = new FolderNode(folder.Name, depth, folder.Unread);
+                    _folderIds[node] = (feedStore, folder.Id, folder.Role);
+                    Folders.Add(node);
+                }
+            }
+        }
+
         if (selectFirst) SelectedFolder = Folders.FirstOrDefault(f => _folderIds.ContainsKey(f));
         Raise(nameof(TotalUnread));
         return true;

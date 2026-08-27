@@ -40,6 +40,16 @@ public partial class App : Application
     public static AccountStores Accounts { get; private set; } = null!;
 
     /// <summary>
+    /// Where feeds are filed: a store of their own, not one of the reader's mail accounts.
+    /// </summary>
+    /// <remarks>
+    /// Not in <see cref="Accounts"/>, deliberately, so nothing that walks the reader's accounts
+    /// finds it — not Send/Receive, not the unified inbox, not Account Settings, not the compose
+    /// From line. The folder pane can show it as a root of its own, and does not unless asked.
+    /// </remarks>
+    public static FeedStores FeedStore { get; private set; } = null!;
+
+    /// <summary>
     /// The Quick Access Toolbar's commands, placement and visibility.
     /// </summary>
     /// <remarks>
@@ -562,6 +572,22 @@ public partial class App : Application
         AccountOrder = new SettingsAccountOrder(Settings);
         var accountsDirectory = Environment.GetEnvironmentVariable("MAILBOX_STORE") ?? AccountStores.DefaultDirectory();
         Accounts = new AccountStores(accountsDirectory, AccountOrder);
+
+        // feeds.db sits beside the accounts directory, for the same reason pim.db does — and
+        // outside it, so nothing that opens every file in there as a mail account opens this one.
+        FeedStore = new FeedStores(FeedStores.PathBeside(accountsDirectory));
+
+        // The one-off that puts existing subscriptions where they now belong. Feeds used to be
+        // filed into whichever mail account sorted first, which was both wrong in principle and
+        // unstable in practice. Copies everything, counts it, and only then takes the old away.
+        var moved = FeedStoreMove.MoveAll(
+            FeedStore.Account, Accounts.All, Mailbox.Protocols.FeedReceiver.RootFolder);
+
+        if (moved.DidAnything)
+        {
+            Log.Info($"Feeds: moved into a store of their own — {moved.Articles} article(s), "
+                     + $"{moved.Folders} folder(s), {moved.Boards} board(s).");
+        }
 
         // pim.db sits beside the accounts directory, so a posed store brings its own calendar.
         var pimPath = PimPathBeside(accountsDirectory);
