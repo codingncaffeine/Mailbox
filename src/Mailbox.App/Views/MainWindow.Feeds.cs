@@ -553,14 +553,6 @@ public partial class MainWindow
                 Log.Info($"Harness: last looked at this row {minutes} minute(s) ago — {feeds.PoseLastSeen(minutes)}.");
                 return;
 
-            case "rightclick":
-                foreach (var kind in (FeedNavKind[])[FeedNavKind.Feed, FeedNavKind.Category, FeedNavKind.Today])
-                {
-                    Log.Info($"Harness: {feeds.PoseRightClick(kind)}.");
-                }
-
-                return;
-
             case "pressnewheading":
                 feeds.PoseNewHeading();
 

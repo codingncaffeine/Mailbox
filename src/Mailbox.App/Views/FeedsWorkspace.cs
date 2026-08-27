@@ -8,6 +8,7 @@ using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.VisualTree;
 using Mailbox.Core.Diagnostics;
 using Mailbox.Core.Feeds;
 using Mailbox.Protocols;
@@ -38,7 +39,6 @@ internal sealed record FeedNavRow(string Label, int Unread, FeedNavKind Kind)
     /// A board is a keep pile, and most of what a reader saves onto one they have already read.
     /// Counting the unread there would draw a nought against a board holding forty articles,
     /// which reads as an empty board rather than as a read one.
-    /// </remarks>
     public bool CountIsTotal { get; init; }
 
     public bool IsExpanded { get; set; } = true;
@@ -132,7 +132,6 @@ internal sealed class FeedsWorkspace : Border
     /// sits — and half a window of empty grey beside a list is the single thing that would make
     /// this look unfinished. So the pane is not there until there is something in it, and the
     /// list has the room in the meantime.
-    /// </remarks>
     private const double ReadingWidth = 620;
     /// <summary>
     /// The thumbnail, at the proportions the readers this is measured against use.
@@ -141,7 +140,6 @@ internal sealed class FeedsWorkspace : Border
     /// 150×86 is close to 16:9 and is what both reference pictures draw: large enough that a
     /// photograph is worth having, small enough that four rows still fit on a screen. It was
     /// smaller, and a picture at that size is decoration rather than information.
-    /// </remarks>
     private const double ThumbnailWidth = 150;
     private const double ThumbnailHeight = 86;
 
@@ -169,7 +167,6 @@ internal sealed class FeedsWorkspace : Border
     /// are not rows of the list, so the nth button is not the nth row. Getting that wrong made a
     /// pose report a heading's menu as a feed's, and then a board row's absence of one as the
     /// feed row having none.
-    /// </remarks>
     private readonly Dictionary<FeedNavRow, Button> _rowButtons = [];
     private readonly HashSet<string> _collapsed = new(StringComparer.OrdinalIgnoreCase);
 
@@ -338,7 +335,6 @@ internal sealed class FeedsWorkspace : Border
     /// move without opening, so the two part company the moment a reader skims. Read back by id
     /// rather than returned as the row holds it, because the row is a snapshot and the thing a
     /// command wants to know — is it read, is it flagged — is exactly what changes under it.
-    /// </remarks>
     public MessageSummary? SelectedArticle
     {
         get
@@ -360,7 +356,6 @@ internal sealed class FeedsWorkspace : Border
     /// The shell's zoom reached the mail reading pane and stopped there, so an article here was
     /// whatever size it was — which for the module a reader spends the most time reading in is
     /// the wrong one to have missed.
-    /// </remarks>
     public double MessageFontSize
     {
         get => _reading.MessageFontSize;
@@ -444,19 +439,7 @@ internal sealed class FeedsWorkspace : Border
         };
         pane[!BackgroundProperty] = new DynamicResourceExtension("nav.background.brush");
 
-        // A right-click anywhere in this column produces something. The rows have their own
-        // menus; this catches the gaps between and below them, where a reader who has decided to
-        // right-click the pane is just as likely to land — and where finding nothing reads as
-        // there being no menu at all.
-        pane.AddHandler(ContextRequestedEvent, (object? _, ContextRequestedEventArgs e) =>
-        {
-            if (e.Handled) return;
-
-            e.Handled = true;
-            _navMenu = PaneMenu();
-            _navMenu.ShowAt(pane, showAtPointer: true);
-        }, RoutingStrategies.Bubble);
-
+        WirePane(pane);
         return pane;
     }
 
@@ -529,12 +512,9 @@ internal sealed class FeedsWorkspace : Border
     /// The engine underneath is the store's own — FTS5 with the reference's keyword grammar —
     /// so <c>from:</c>, <c>subject:</c> and the rest work here as they do in mail, and the
     /// controls are shorthands onto the same query rather than a second search.
-    /// <para>
     /// Worth having at all because the readers this is measured against charge for it: the free
     /// tier of Feedly has no search whatsoever, and the paid one searches only as far back as it
     /// has kept, where a local store has kept everything.
-    /// </para>
-    /// </remarks>
     private Control SearchRow()
     {
         _search.PlaceholderText = "Search these articles";
@@ -625,7 +605,6 @@ internal sealed class FeedsWorkspace : Border
     /// which Avalonia raises on a later pass — so a run that set the text and then read the
     /// result back got the list as it was before the search, which is exactly the sort of
     /// "verified" that verifies nothing.
-    /// </remarks>
     public void Pose(string query, bool everywhere = false, bool headlineOnly = false)
     {
         _everywhere = everywhere;
@@ -646,7 +625,6 @@ internal sealed class FeedsWorkspace : Border
     /// <remarks>
     /// A run has to be able to say "this article" before it presses a command that acts on one,
     /// and clicking a row is the one thing a capture cannot do.
-    /// </remarks>
     public string PoseSelect(int at, bool open = false)
     {
         if (_showing.Count == 0) return "nothing is showing";
@@ -669,7 +647,6 @@ internal sealed class FeedsWorkspace : Border
     /// The claim "you can read the article here" is a claim about a number of characters, and it
     /// is the one a screenshot of a reading pane cannot make: a pane showing one paragraph and a
     /// pane showing the whole piece are the same picture above the fold.
-    /// </remarks>
     private string Length(MessageSummary article)
     {
         if (_account() is not { } account || account.Mail.LoadRaw(article.Id) is not { } raw) return "no";
@@ -693,7 +670,6 @@ internal sealed class FeedsWorkspace : Border
     /// <remarks>
     /// A capture run works on a throwaway copy of the settings, so the mark a real visit leaves
     /// cannot survive into a second run — which is the only way the line would otherwise appear.
-    /// </remarks>
     public string PoseLastSeen(int minutesAgo)
     {
         if (_selected is not { } row) return "nothing is selected";
@@ -714,7 +690,6 @@ internal sealed class FeedsWorkspace : Border
     /// <remarks>
     /// Through the same method the drop handler calls, because what has to be provable is what
     /// dropping does — a run cannot hold a pointer down and move it.
-    /// </remarks>
     public string PoseDrop(string movingName, string ontoName)
     {
         if (_feeds.All.FirstOrDefault(f => f.Name.Contains(movingName, StringComparison.OrdinalIgnoreCase))
@@ -730,39 +705,18 @@ internal sealed class FeedsWorkspace : Border
     /// <summary>The pane menu last opened, for a run to read back.</summary>
     private MenuFlyout? _navMenu;
 
-    /// <summary>
-    /// Right-clicks a feed row exactly as a mouse does, and says what came of it.
-    /// </summary>
-    /// <remarks>
-    /// A press and a release rather than raising ContextRequested directly, because the question
-    /// is not whether a flyout can open — it is whether the control a reader actually clicks gets
-    /// that far. Avalonia raises ContextRequested only from the source of an <em>unhandled</em>
-    /// release whose press was the right button, so a row that handles either one has no menu and
-    /// nothing anywhere says so.
-    /// </remarks>
-    public string PoseRightClick(FeedNavKind kind = FeedNavKind.Feed)
-    {
-        if (_rows.FirstOrDefault(r => r.Kind == kind) is not { } row) return $"there is no {kind} row to click";
-        if (!_rowButtons.TryGetValue(row, out var target)) return $"“{row.Label}” has no button";
-        var pointer = new Pointer(0, PointerType.Mouse, isPrimary: true);
-        var at = new Point(20, 12);
-
-        target.RaiseEvent(new PointerPressedEventArgs(
-            target, pointer, _nav, at, 0,
-            new PointerPointProperties(RawInputModifiers.RightMouseButton, PointerUpdateKind.RightButtonPressed),
-            KeyModifiers.None));
-
-        target.RaiseEvent(new PointerReleasedEventArgs(
-            target, pointer, _nav, at, 0,
-            new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.RightButtonReleased),
-            KeyModifiers.None, MouseButton.Right));
-
-        var opened = _navMenu?.IsOpen == true;
-        var entries = _navMenu?.Items.Count ?? 0;
-        _navMenu?.Hide();
-
-        return $"right-clicked the {kind} “{row.Label}”: menu open = {opened}, {entries} entries";
-    }
+    // ---- Why there is no pose for right-clicking a row ------------------------------------------
+    //
+    // One was written and it lied twice in one afternoon — first reporting a menu where a real
+    // click produced none, then reporting none where the wiring was fine. Events raised by hand
+    // reach a handler on the element they are raised at and do not travel to its ancestors, so
+    // what such a pose proves is that a handler would run if the pointer had landed exactly
+    // there, which is not the question. Real pointer input cannot be driven on this machine
+    // (XTEST is inert under a nested compositor, and Avalonia seals the in-process route).
+    // So this is settled by the log instead: WirePane keeps permanent debug lines
+    // on the press, the release and the context request, and one right-click through the
+    // diagnostics launcher says which element was hit, whether anything had already handled it,
+    // and which button began the press. That is the whole answer, and it costs one click.
 
     /// <summary>
     /// Presses the pane's "New heading…" row, for a harness run.
@@ -807,7 +761,6 @@ internal sealed class FeedsWorkspace : Border
     /// new articles into the list under whatever the reader was reading — so the thing they were
     /// looking at moved down the screen while they looked at it. This says what arrived and
     /// leaves the list alone until it is pressed, which is what every reader on the web does.
-    /// </remarks>
     private Control Arrived()
     {
         _arrived = new Button
@@ -846,7 +799,6 @@ internal sealed class FeedsWorkspace : Border
     /// Nothing at all when the list is empty or the reader has not started reading: there is no
     /// harm in simply showing them, and a bar offering to show articles on a screen that has none
     /// is a worse first impression than the articles.
-    /// </remarks>
     public void Announce(int delivered)
     {
         if (delivered <= 0) return;
@@ -1164,12 +1116,9 @@ internal sealed class FeedsWorkspace : Border
     /// Above the feeds and below the standing views, which is where every reader that has boards
     /// puts them: they are places a reader goes deliberately, and the subscription list under
     /// them is long enough to push anything below it off the pane.
-    /// <para>
     /// Drawn even when there are none, as one line offering to make the first — a feature nothing
     /// on screen mentions is a feature nobody finds, and this one is the difference between a
     /// reader who keeps things here and one who keeps them in their browser.
-    /// </para>
-    /// </remarks>
     private void BuildBoards(OpenAccount? account)
     {
         _nav.Children.Add(SectionLabel("BOARDS"));
@@ -1202,7 +1151,6 @@ internal sealed class FeedsWorkspace : Border
     /// One shape for both, because they are the same thing twice and a reader who has found one
     /// has found the other. Drawn as a row rather than hidden behind a menu: an affordance you
     /// have to already know about is one nobody discovers.
-    /// </remarks>
     private Control MakeRow(string label, string tip, Action onClick)
     {
         var button = new Button
@@ -1227,7 +1175,6 @@ internal sealed class FeedsWorkspace : Border
     /// The same trap the article list fell into, one pane over: <c>text.secondary</c> is dark by
     /// design because content surfaces are light, and on the pane's dark ground it disappears.
     /// Anything drawn on the pane takes <c>nav.item.text</c>.
-    /// </remarks>
     private static Control SectionLabel(string text)
     {
         var label = new TextBlock
@@ -1366,22 +1313,10 @@ internal sealed class FeedsWorkspace : Border
 
         _rowButtons[row] = button;
 
-        WireDrag(button, row);
-
-        // Every reader has one of these on its sidebar, and this had none at all — which meant
-        // renaming a feed, moving it, or copying its address had no gesture anywhere.
-        button.AddHandler(ContextRequestedEvent, (object? _, ContextRequestedEventArgs e) =>
-        {
-            if (e.Handled) return;
-
-            e.Handled = true;
-            Select(row, keepReading: false);
-
-            // Kept so a run can ask what actually opened. A menu whose entries are right but
-            // which never opens is the failure that reads as "there is no menu at all".
-            _navMenu = NavMenu(row);
-            _navMenu.ShowAt(button, showAtPointer: true);
-        }, RoutingStrategies.Bubble);
+        // The row this button stands for. Kept on the control rather than closed over, because
+        // the pane's own handlers are on the container and have only the element the pointer
+        // landed on to work back from.
+        button.Tag = row;
 
         return button;
     }
@@ -1392,76 +1327,10 @@ internal sealed class FeedsWorkspace : Border
     /// <remarks>
     /// A feed's address as text would be offered to every other window on the desktop, which is
     /// a paste of a URL somebody did not ask for. This one goes nowhere but here.
-    /// </remarks>
     private static readonly DataFormat<byte[]> FeedDragFormat =
         DataFormat.CreateBytesApplicationFormat("mailbox-feed-url");
 
     private bool _dragging;
-
-    /// <summary>
-    /// Makes a pane row something that can be picked up, and something that can be dropped on.
-    /// </summary>
-    /// <remarks>
-    /// The gesture everybody reaches for and this had none of: a feed is filed under a heading by
-    /// dragging it there, and put in the reader's own order by dragging it above or below another
-    /// one. The menu can do both, and nobody looks in a menu for it.
-    /// <para>
-    /// Dropping on a heading files it under that heading; dropping on a feed puts it after that
-    /// feed, in that feed's heading. Dropping on one of the standing views at the top means the
-    /// top level, which is the only sense that can be made of it and is also what a reader
-    /// dragging something out of a heading is reaching for.
-    /// </para>
-    /// </remarks>
-    private void WireDrag(Control row, FeedNavRow what)
-    {
-        if (what.Feed is { } dragged)
-        {
-            // Begun from the press, which is what the platform's drag needs. Avalonia holds it
-            // until the pointer actually moves, so a plain click still selects the feed — the
-            // same arrangement the message list uses, and the reason it is safe to hang this off
-            // a button whose whole job is to be clicked.
-            row.AddHandler(PointerPressedEvent, async (object? _, PointerPressedEventArgs e) =>
-            {
-                if (!e.GetCurrentPoint(row).Properties.IsLeftButtonPressed || _dragging) return;
-
-                _dragging = true;
-                try
-                {
-                    using var transfer = new DataTransfer();
-                    transfer.Add(DataTransferItem.Create(
-                        FeedDragFormat, System.Text.Encoding.UTF8.GetBytes(dragged.Url)));
-
-                    await DragDrop.DoDragDropAsync(e, transfer, DragDropEffects.Move);
-                }
-                finally
-                {
-                    _dragging = false;
-                }
-            }, RoutingStrategies.Bubble);
-        }
-
-        DragDrop.SetAllowDrop(row, true);
-
-        row.AddHandler(DragDrop.DragOverEvent, (object? _, DragEventArgs e) =>
-        {
-            e.DragEffects = Carried(e) is { } url && !Same(url, what) ? DragDropEffects.Move : DragDropEffects.None;
-            row.Classes.Set("droptarget", e.DragEffects != DragDropEffects.None);
-            e.Handled = true;
-        });
-
-        row.AddHandler(DragDrop.DragLeaveEvent, (object? _, DragEventArgs _) => row.Classes.Remove("droptarget"));
-
-        row.AddHandler(DragDrop.DropEvent, (object? _, DragEventArgs e) =>
-        {
-            e.Handled = true;
-            row.Classes.Remove("droptarget");
-
-            if (Carried(e) is not { } url || Same(url, what)) return;
-            if (_feeds.Find(url) is not { } moving) return;
-
-            Dropped(moving, what);
-        });
-    }
 
     private static string? Carried(DragEventArgs e)
         => e.DataTransfer.TryGetValue(FeedDragFormat) is { Length: > 0 } bytes
@@ -1506,7 +1375,6 @@ internal sealed class FeedsWorkspace : Border
     /// The entries are the ones a reader reaches for on a sidebar and cannot otherwise reach at
     /// all — the ribbon has the commands, but nobody looks on a ribbon to rename the thing they
     /// are pointing at.
-    /// </remarks>
     private MenuFlyout NavMenu(FeedNavRow row)
     {
         var menu = new MenuFlyout();
@@ -1563,13 +1431,171 @@ internal sealed class FeedsWorkspace : Border
     }
 
     /// <summary>
+    /// Everything the pointer does in this column, wired once on the column.
+    /// </summary>
+    /// <remarks>
+    /// On the container rather than on each row's button, which is the shape the message list
+    /// uses and the reason this works. Three things decide whether a right-click becomes a menu
+    /// and none of them can be seen from outside the event — which element the release landed on,
+    /// whether something had already handled it, and which button began the press — so a handler
+    /// hung on a control that is not the one the pointer actually hit is a handler that may never
+    /// run. The row is worked back from the element under the pointer instead.
+    /// The three log lines are permanent and at debug level, so the diagnostics launcher has them
+    /// and an ordinary run does not. They are what settles "the menu does not open" in one
+    /// right-click rather than in an afternoon.
+    private void WirePane(Control pane)
+    {
+        pane.AddHandler(PointerPressedEvent, (object? _, PointerPressedEventArgs e) =>
+        {
+            var point = e.GetCurrentPoint(pane).Properties;
+            Log.Debug($"Feeds pane press: {e.Source?.GetType().Name ?? "nothing"} on "
+                      + $"“{RowUnder(e.Source)?.Label ?? "no row"}”, right: {point.IsRightButtonPressed}, "
+                      + $"handled: {e.Handled}.");
+        }, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+
+        pane.AddHandler(PointerReleasedEvent, (object? _, PointerReleasedEventArgs e) =>
+        {
+            Log.Debug($"Feeds pane release: {e.Source?.GetType().Name ?? "nothing"}, "
+                      + $"began with {e.InitialPressMouseButton}, handled: {e.Handled}.");
+        }, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+
+        pane.AddHandler(ContextRequestedEvent, (object? _, ContextRequestedEventArgs e) =>
+        {
+            Log.Debug($"Feeds pane context requested from {e.Source?.GetType().Name ?? "nothing"} on "
+                      + $"“{RowUnder(e.Source)?.Label ?? "no row"}”, handled: {e.Handled}.");
+        }, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+
+        // The menu, opened from the release itself rather than from ContextRequested.
+        //
+        // ContextRequested is the tidy way and it is not the reliable one here: whether it is
+        // raised at all depends on which element the release landed on and whether anything on
+        // the way handled it, and a pane made of buttons is exactly the case where that goes
+        // wrong — which is what it did, silently, with the handler sitting on the button and
+        // never running. A right-button release is a fact about the pointer, and this reads it.
+        pane.AddHandler(PointerReleasedEvent, (object? _, PointerReleasedEventArgs e) =>
+        {
+            if (e.InitialPressMouseButton != MouseButton.Right) return;
+
+            e.Handled = true;
+            ShowPaneMenu(pane, RowUnder(e.Source));
+        }, RoutingStrategies.Bubble, handledEventsToo: true);
+
+        // And the keyboard's menu key, which produces this and no pointer event at all.
+        pane.AddHandler(ContextRequestedEvent, (object? _, ContextRequestedEventArgs e) =>
+        {
+            if (e.Handled) return;
+
+            e.Handled = true;
+            ShowPaneMenu(pane, RowUnder(e.Source) ?? _selected);
+        }, RoutingStrategies.Bubble);
+
+        // Picking a feed up. Begun from the press, which is what the platform's drag needs;
+        // Avalonia holds it until the pointer actually moves, so a plain click still selects.
+        pane.AddHandler(PointerPressedEvent, async (object? _, PointerPressedEventArgs e) =>
+        {
+            if (!e.GetCurrentPoint(pane).Properties.IsLeftButtonPressed || _dragging) return;
+            if (RowUnder(e.Source)?.Feed is not { } dragged) return;
+
+            _dragging = true;
+            try
+            {
+                using var transfer = new DataTransfer();
+                transfer.Add(DataTransferItem.Create(
+                    FeedDragFormat, System.Text.Encoding.UTF8.GetBytes(dragged.Url)));
+
+                await DragDrop.DoDragDropAsync(e, transfer, DragDropEffects.Move);
+            }
+            finally
+            {
+                _dragging = false;
+            }
+        }, RoutingStrategies.Bubble);
+
+        // And putting it down. The row under the pointer is worked out at drop time from what is
+        // actually there, as the folder pane's own drop target does.
+        DragDrop.SetAllowDrop(pane, true);
+
+        pane.AddHandler(DragDrop.DragOverEvent, (object? _, DragEventArgs e) =>
+        {
+            var onto = RowUnder(e.Source);
+            e.DragEffects = Carried(e) is { } url && onto is not null && !Same(url, onto)
+                ? DragDropEffects.Move
+                : DragDropEffects.None;
+
+            Mark(onto);
+            e.Handled = true;
+        });
+
+        pane.AddHandler(DragDrop.DragLeaveEvent, (object? _, DragEventArgs _) => Mark(null));
+
+        pane.AddHandler(DragDrop.DropEvent, (object? _, DragEventArgs e) =>
+        {
+            e.Handled = true;
+            Mark(null);
+
+            if (Carried(e) is not { } url) return;
+            if (RowUnder(e.Source) is not { } onto || Same(url, onto)) return;
+            if (_feeds.Find(url) is not { } moving) return;
+
+            Log.Info($"Feeds: “{moving.Name}” dropped on {onto.Kind} “{onto.Label}”.");
+            Dropped(moving, onto);
+        });
+    }
+
+    /// <summary>The menu for a row, or the pane's own when the click landed between rows.</summary>
+    private void ShowPaneMenu(Control pane, FeedNavRow? row)
+    {
+        if (row is not null)
+        {
+            Select(row, keepReading: false);
+            _navMenu = NavMenu(row);
+        }
+        else
+        {
+            _navMenu = PaneMenu();
+        }
+
+        _navMenu.ShowAt(pane, showAtPointer: true);
+    }
+
+    /// <summary>Shows which row a drop would land on, and takes the mark off the last one.</summary>
+    private void Mark(FeedNavRow? row)
+    {
+        if (ReferenceEquals(_marked, row)) return;
+
+        if (_marked is { } was && _rowButtons.TryGetValue(was, out var old)) old.Classes.Remove("droptarget");
+        _marked = row;
+        if (row is { } now && _rowButtons.TryGetValue(now, out var button)) button.Classes.Add("droptarget");
+    }
+
+    private FeedNavRow? _marked;
+
+    /// <summary>
+    /// The pane row the pointer is over, worked back from the element it actually hit.
+    /// </summary>
+    /// <remarks>
+    /// A click lands on the innermost thing under it — a TextBlock inside a Grid inside the row's
+    /// button — so the row is found by walking up from there to the button that carries it.
+    private static FeedNavRow? RowUnder(object? source)
+    {
+        var at = source as Visual;
+
+        while (at is not null)
+        {
+            if (at is Button { Tag: FeedNavRow row }) return row;
+            at = at.GetVisualParent();
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// What right-clicking the pane itself offers, away from any row.
     /// </summary>
     /// <remarks>
     /// The two things somebody arriving at an empty-ish pane wants to make, and nothing that
     /// needs a row to act on. Deliberately short: a long menu here would be a menu about
     /// whatever the reader happened to miss.
-    /// </remarks>
     private MenuFlyout PaneMenu()
     {
         var menu = new MenuFlyout();
@@ -1781,13 +1807,10 @@ internal sealed class FeedsWorkspace : Border
     /// every other row does: a board is read newest-<em>saved</em> first, so a piece from last
     /// year that the reader put on it this morning is at the top where they left it, rather than
     /// buried under the week's headlines.
-    /// <para>
     /// Searching a board is a filter over its membership rather than a query with the board in
     /// it: the store's search thinks in folders, and a board's articles are still filed in the
     /// feeds they arrived from. Running the same query over the whole scope and keeping what is
     /// on the board gives the same answer and needs nothing new in the store.
-    /// </para>
-    /// </remarks>
     private List<MessageSummary> OnBoard(OpenAccount account, Board board)
     {
         var saved = account.Mail.BoardMessages(board.Id);
@@ -1810,7 +1833,6 @@ internal sealed class FeedsWorkspace : Border
     /// received bound the parser would have built from <c>received:</c>. So a reader who knows
     /// the keywords can type them and a reader who does not can press the buttons, and both end
     /// up in the same place.
-    /// </remarks>
     private Mailbox.Core.Search.SearchQuery Query()
     {
         var query = Mailbox.Core.Search.SearchQuery.Parse(_query);
@@ -1949,7 +1971,6 @@ internal sealed class FeedsWorkspace : Border
     /// reader looks for them. Everything on it acts on the row that was pointed at rather than on
     /// whatever the list happened to have selected, which is what <see cref="Choose"/> settles
     /// before the menu is built.
-    /// </remarks>
     private MenuFlyout ArticleMenu(MessageSummary message)
     {
         var menu = new MenuFlyout();
@@ -2007,12 +2028,9 @@ internal sealed class FeedsWorkspace : Border
     /// what the attachment strip refuses to do, for good reasons that apply here too, and is
     /// also simply worse: a player given the address streams it, where a download waits for a
     /// hundred megabytes before anything is heard.
-    /// <para>
     /// Read out of the message rather than off the row, because there is no column for it and a
     /// podcast is a small share of what a reader has. One blob read when a menu is opened is
     /// nothing; a column on every message in the store for the few that are episodes is not.
-    /// </para>
-    /// </remarks>
     private string Playable(MessageSummary message)
     {
         if (!message.HasAttachment && message.SizeBytes < 512) return string.Empty;
@@ -2123,7 +2141,6 @@ internal sealed class FeedsWorkspace : Border
     /// The buttons appear under the pointer, which is not where the selection is: a reader can
     /// hover the fourth row while the first is selected, and a menu opened from the fourth row's
     /// button that saved the first one would be saving something they cannot see.
-    /// </remarks>
     private void Choose(MessageSummary message)
     {
         _chosen = message;
@@ -2146,7 +2163,6 @@ internal sealed class FeedsWorkspace : Border
     /// <remarks>
     /// Kept beside the list's own selection rather than read out of it, because in the Cards
     /// layout the list selects a row of three tiles and cannot say which of the three was meant.
-    /// </remarks>
     private MessageSummary? _chosen;
 
     private static Button RowButton(string icon, string tip, Action<Button> onClick)
@@ -2187,7 +2203,6 @@ internal sealed class FeedsWorkspace : Border
     /// <remarks>
     /// The tile rather than a gap: a list where some rows have a picture and some have a hole in
     /// them reads as broken, and a great many feeds publish no picture at all.
-    /// </remarks>
     private Control Thumbnail(MessageSummary message, double width = ThumbnailWidth, double height = ThumbnailHeight)
     {
         var image = new Image
@@ -2258,7 +2273,6 @@ internal sealed class FeedsWorkspace : Border
     /// list of rows trailing "https://…" is a list nobody can skim. The poll no longer writes one
     /// into the column — but every article filed before it stopped still carries one, and those
     /// are exactly the rows a reader is looking at today.
-    /// </remarks>
     private static string Snippet(MessageSummary message)
     {
         var text = message.Preview;
@@ -2283,7 +2297,6 @@ internal sealed class FeedsWorkspace : Border
     /// The reader's own switch for the feed it came from — the same one that governs reading the
     /// article itself, because it is the same request to the same page. An article whose feed is
     /// not among the subscriptions, a saved link, keeps whatever it arrived with.
-    /// </remarks>
     private bool AllowsLookup(MessageSummary message)
         => _feedByFolder.TryGetValue(message.FolderId, out var feed) && feed.ReadFullArticle;
 
@@ -2294,7 +2307,6 @@ internal sealed class FeedsWorkspace : Border
     /// A row rather than an adornment, so it scrolls with what it marks. Not selectable and not
     /// clickable: it is a mark on the list, and a reader arrowing down it should pass straight
     /// over rather than landing on nothing.
-    /// </remarks>
     private static Control UnreadLine(int above)
     {
         var label = new TextBlock
@@ -2424,7 +2436,6 @@ internal sealed class FeedsWorkspace : Border
     /// The point of the delay is that arrowing past something is not reading it. So the timer is
     /// cancelled whenever the reader moves on, and the check on the way out is what stops an
     /// article the reader left three seconds ago being marked read behind them.
-    /// </remarks>
     private void WaitThenMarkRead(long messageId)
     {
         _reading_timer?.Cancel();
@@ -2455,7 +2466,6 @@ internal sealed class FeedsWorkspace : Border
     /// The list is rebuilt from immutable snapshots, so a row that changes — read, flagged —
     /// means a new list. Without this, every such change throws the selection away, and the
     /// keyboard, which is entirely about "the next one", stops working after the first press.
-    /// </remarks>
     private void KeepingPlace(Action rebuild)
     {
         var at = _articles.SelectedIndex;
@@ -2480,12 +2490,9 @@ internal sealed class FeedsWorkspace : Border
     /// Only what has gone past the <em>top</em>, and only entirely: a row half on screen is one
     /// the reader may still be reading. What is below the fold has not been seen at all, so
     /// scrolling back up must not mark anything.
-    /// <para>
     /// The store is written in one call for the whole batch rather than per row, because a fast
     /// scroll produces dozens of them at once — and the list is rebuilt once at the end rather
     /// than once per row, which is what would make a flick through a folder redraw fifty times.
-    /// </para>
-    /// </remarks>
     private void ScrolledPast()
     {
         if (ReadMode != FeedReadMode.OnScroll) return;
@@ -2554,7 +2561,6 @@ internal sealed class FeedsWorkspace : Border
     /// selection with it, so saving an article to a board would leave nothing selected — and the
     /// next command a reader pressed, or the next <c>j</c>, would act on nothing. Saving is not a
     /// gesture that should cost you your place.
-    /// </remarks>
     public void RefreshBoards() => KeepingPlace(() => { BuildNav(); RefreshCards(); });
 
     /// <summary>
@@ -2579,7 +2585,6 @@ internal sealed class FeedsWorkspace : Border
     /// <remarks>
     /// The ribbon has no row to hang a flyout from, so it hands over its own button; a row's own
     /// button hands over itself. Either way the menu opens where the press was.
-    /// </remarks>
     public MessageSummary? ArticleForBoard => SelectedArticle;
 
     /// <summary>Takes the selected article off the board the pane has open.</summary>
@@ -2641,7 +2646,6 @@ internal sealed class FeedsWorkspace : Border
     /// <remarks>
     /// Through xdg-open rather than a browser named here: which browser is the desktop's
     /// business, and naming one is how a Linux application ends up opening the wrong thing.
-    /// </remarks>
     private void OpenExternally(string url)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var address) || address.Scheme is not ("http" or "https"))
@@ -2734,11 +2738,8 @@ internal sealed class FeedsWorkspace : Border
     /// registered globally would be a letter the rest of the application could never use, and
     /// these only mean anything while a list of articles has the focus. The commands themselves
     /// are in the catalogue and rebindable in the ordinary way.
-    /// <para>
     /// Bubbled, not tunnelled, so the list keeps the arrow keys and anything with a text box in
     /// it keeps its letters.
-    /// </para>
-    /// </remarks>
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
@@ -2867,11 +2868,8 @@ internal sealed class FeedsWorkspace : Border
     /// <c>j</c> and <c>k</c> walk every article, read or not, which is not what somebody clearing
     /// a morning's feeds is doing. Space is the binding every mail and news reader has used for
     /// this since before the web.
-    /// <para>
     /// Space also scrolls first, when there is more of the article to see. Jumping off an article
     /// somebody is halfway through is the one thing that would make the key unusable.
-    /// </para>
-    /// </remarks>
     public async Task<bool> NextUnreadAsync(bool scrollFirst = false)
     {
         if (scrollFirst && _reading.IsVisible && await _reading.ScrollDownAsync()) return true;
@@ -2979,7 +2977,6 @@ internal sealed class FeedsWorkspace : Border
     /// <remarks>
     /// The workspace does not do it itself: reading a publisher's page is a network request and
     /// this is a view. What comes back reaches it again through <see cref="Reopen"/>.
-    /// </remarks>
     public event EventHandler<MessageSummary>? FullTextWanted;
 
     /// <summary>
@@ -2988,7 +2985,6 @@ internal sealed class FeedsWorkspace : Border
     /// <remarks>
     /// A page that yields nothing usable would otherwise be re-fetched every time its row is
     /// opened, which for a reader flicking through a folder is a request per keystroke.
-    /// </remarks>
     private readonly HashSet<long> _tried = [];
 
     /// <summary>
@@ -2998,7 +2994,6 @@ internal sealed class FeedsWorkspace : Border
     /// Only when it is still the one on screen: reading a page takes a moment, and a reader who
     /// has moved on in the meantime must not have the article they were reading replaced by the
     /// one they left.
-    /// </remarks>
     public void Reopen(long messageId)
     {
         if (_selectedMessage != messageId) return;
@@ -3028,7 +3023,6 @@ internal sealed class FeedsWorkspace : Border
     /// What the line across the list is drawn from — the marker every reader puts at the point
     /// where "new since you last looked" begins, and the single thing that tells a reader
     /// returning to a busy feed how much of it is actually new.
-    /// </remarks>
     private static DateTimeOffset? LastSeen(FeedNavRow row)
         => App.Settings.GetNumber(LastSeenKey(row), 0) is > 0 and var seconds
             ? DateTimeOffset.FromUnixTimeSeconds((long)seconds)
@@ -3058,14 +3052,12 @@ internal sealed class FeedsWorkspace : Border
     /// Per row, because it is per row that it matters: a news feed is read newest first and a
     /// serialised blog or a podcast is read in the order it was written, and a reader should not
     /// have to keep switching. Every reader worth the name offers this and this one did not.
-    /// </remarks>
     private bool OldestFirstFor(FeedNavRow row) => App.Settings.GetBool(OrderKey(row), false);
 
     /// <summary>Whether this row shows only what has not been read.</summary>
     /// <remarks>
     /// The standing Unread view answers this across everything; a reader clearing out one busy
     /// feed wants it for that feed, which is what every reader's "hide read articles" is.
-    /// </remarks>
     private bool UnreadOnlyFor(FeedNavRow row) => App.Settings.GetBool(UnreadOnlyKey(row), false);
 
     /// <summary>
@@ -3076,7 +3068,6 @@ internal sealed class FeedsWorkspace : Border
     /// measured against remember it — and it is the right way round: a photography feed wants
     /// Cards and a headline feed wants one line each, and a reader should not have to keep
     /// switching.
-    /// </remarks>
     private FeedLayout LayoutFor(FeedNavRow row)
         => Enum.TryParse<FeedLayout>(App.Settings.GetString(LayoutKey(row)), out var kept)
             ? kept
@@ -3253,7 +3244,6 @@ internal sealed class FeedsWorkspace : Border
     /// Taken when the row is opened and held for as long as it stays open, so the line does not
     /// creep down the list as the reader reads. It moves on the next visit, which is the whole
     /// point of it.
-    /// </remarks>
     private DateTimeOffset? _since;
 
     /// <summary>
@@ -3264,7 +3254,6 @@ internal sealed class FeedsWorkspace : Border
     /// the whole reason: the list's indices are article indices — the keyboard, the selection,
     /// and keeping a reader's place all count in them — and a row that is not an article would
     /// put every one of them out by one from the line downwards.
-    /// </remarks>
     private (long Id, int Above) _line;
 
     /// <summary>Works out where the line goes for the list as it now stands.</summary>
