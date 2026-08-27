@@ -44,6 +44,15 @@ public sealed class FeedPictureLookup(Func<OpenAccount?> account, Func<FeedFetch
     /// </remarks>
     private readonly ConcurrentDictionary<long, byte> _asked = new();
 
+    /// <summary>
+    /// Which rows are still waiting on each article's lookup.
+    /// </summary>
+    /// <remarks>
+    /// The same trap the thumbnail fetch has: the list is rebuilt whenever anything changes, and
+    /// the row that asked is gone by the time the answer arrives. Everyone who asked gets told.
+    /// </remarks>
+    private readonly Dictionary<long, List<Action<string>>> _waiting = [];
+
     /// <summary>Whether pictures are looked up at all. Follows the reader's own setting.</summary>
     public bool Enabled { get; set; } = true;
 
@@ -64,17 +73,27 @@ public sealed class FeedPictureLookup(Func<OpenAccount?> account, Func<FeedFetch
         if (fetch() is not { } client) return;
 
         // Claimed before the work starts, so a row realised twice while the first request is in
-        // flight asks once.
-        if (!_asked.TryAdd(article.Id, 0)) return;
+        // flight asks once — but the second row still gets the answer.
+        lock (_waiting)
+        {
+            if (_waiting.TryGetValue(article.Id, out var queue))
+            {
+                queue.Add(found);
+                return;
+            }
+
+            if (!_asked.TryAdd(article.Id, 0)) return;
+            _waiting[article.Id] = [found];
+        }
 
         // A capture waits for the pictures rather than photographing the placeholders, for the
         // same reason the thumbnail fetch holds it: whether they arrive is the claim being made.
         var hold = WindowCapture.IsRequested ? WindowCapture.Hold() : null;
 
-        _ = LookUpAsync(article, client, found, hold);
+        _ = LookUpAsync(article, client, hold);
     }
 
-    private async Task LookUpAsync(MessageSummary article, FeedFetch client, Action<string> found, IDisposable? hold)
+    private async Task LookUpAsync(MessageSummary article, FeedFetch client, IDisposable? hold)
     {
         using var held = hold;
 
@@ -87,13 +106,20 @@ public sealed class FeedPictureLookup(Func<OpenAccount?> account, Func<FeedFetch
             var url = PageCards.Read(answer.Text, article.FeedLink).ImageUrl;
             if (url.Length == 0) return;
 
+            List<Action<string>> waiting;
+            lock (_waiting)
+            {
+                waiting = _waiting.TryGetValue(article.Id, out var queue) ? queue : [];
+                _waiting.Remove(article.Id);
+            }
+
             Dispatcher.UIThread.Post(() =>
             {
                 // Written to the row so it is there the next time the list is drawn, and after a
                 // restart: a lookup that had to happen again on every launch would be a request
                 // per article per session.
                 account()?.Mail.SetFeedImage(article.Id, url);
-                found(url);
+                foreach (var waiter in waiting) waiter(url);
             });
 
             Log.Debug($"Feeds: found a picture for “{article.Subject}” on its own page.");
@@ -105,9 +131,14 @@ public sealed class FeedPictureLookup(Func<OpenAccount?> account, Func<FeedFetch
         finally
         {
             _gate.Release();
+            lock (_waiting) _waiting.Remove(article.Id);
         }
     }
 
     /// <summary>Lets everything be asked again, for a reader who has just turned pictures on.</summary>
-    public void Forget() => _asked.Clear();
+    public void Forget()
+    {
+        _asked.Clear();
+        lock (_waiting) _waiting.Clear();
+    }
 }

@@ -124,6 +124,12 @@ public sealed class FeedSubscriptions
         ArgumentNullException.ThrowIfNull(settings);
         _settings = settings;
         if (settings.Has(Key)) _feeds.AddRange(Parse(settings.GetString(Key)));
+
+        if (settings.Has(HeadingsKey))
+        {
+            _headings.AddRange(settings.GetString(HeadingsKey)
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        }
     }
 
     /// <summary>Raised after the list changes, so a pane or a dialog can rebuild.</summary>
@@ -131,10 +137,49 @@ public sealed class FeedSubscriptions
 
     public IReadOnlyList<FeedSubscription> All => _feeds;
 
-    /// <summary>The headings feeds are filed under, in the order a reader would expect them.</summary>
+    /// <summary>
+    /// The headings, in the order a reader would expect them.
+    /// </summary>
+    /// <remarks>
+    /// The ones feeds are filed under, and the ones the reader has made and not filled yet. An
+    /// empty heading has to be able to exist: making the folder and then dragging things into it
+    /// is the order people work in, and a heading that only came into being once something was
+    /// already in it would mean there was no way to make the first one.
+    /// </remarks>
     public IReadOnlyList<string> Categories =>
-        [.. _feeds.Select(f => f.Category).Where(c => c.Length > 0)
+        [.. _feeds.Select(f => f.Category).Where(c => c.Length > 0).Concat(_headings)
             .Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.CurrentCultureIgnoreCase)];
+
+    /// <summary>Headings the reader has made, whether or not anything is filed under them yet.</summary>
+    private readonly List<string> _headings = [];
+
+    /// <summary>The key the made-but-empty headings are kept under.</summary>
+    public const string HeadingsKey = "rss.headings";
+
+    /// <summary>Makes a heading. False when there is already one of that name.</summary>
+    public bool AddCategory(string name)
+    {
+        var wanted = name.Trim();
+        if (wanted.Length == 0) return false;
+        if (Categories.Any(c => string.Equals(c, wanted, StringComparison.OrdinalIgnoreCase))) return false;
+
+        _headings.Add(wanted);
+        SaveHeadings();
+        return true;
+    }
+
+    private void SaveHeadings()
+    {
+        // Only the ones nothing is filed under: a heading that has feeds in it is already
+        // described by them, and writing it twice is a second place for the two to disagree.
+        var loose = _headings
+            .Where(h => !_feeds.Any(f => string.Equals(f.Category, h, StringComparison.OrdinalIgnoreCase)))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        _settings.Set(HeadingsKey, string.Join('\n', loose));
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
 
     public bool Contains(string url)
         => _feeds.Any(f => string.Equals(f.Url, url, StringComparison.OrdinalIgnoreCase));
@@ -231,6 +276,75 @@ public sealed class FeedSubscriptions
     /// <summary>Files a feed under a heading, or under none when it is empty.</summary>
     public bool Recategorize(string url, string category)
         => Update(url, feed => feed with { Category = category.Trim() });
+
+    /// <summary>Every feed filed under a heading.</summary>
+    public IReadOnlyList<FeedSubscription> Under(string category)
+        => [.. _feeds.Where(f => string.Equals(f.Category, category.Trim(), StringComparison.OrdinalIgnoreCase))];
+
+    /// <summary>
+    /// Renames a heading, taking every feed under it with it.
+    /// </summary>
+    /// <remarks>
+    /// The heading is not a record of its own — it is a field on each subscription, which is what
+    /// makes it free to have and free to leave empty. So renaming one is a pass over the feeds
+    /// that carry it, in a single write of the file.
+    /// </remarks>
+    /// <returns>How many feeds moved, or 0 when the name is taken or nothing is under it.</returns>
+    public int RenameCategory(string from, string to)
+    {
+        var wanted = to.Trim();
+        var current = from.Trim();
+
+        if (wanted.Length == 0 || current.Length == 0) return 0;
+        if (string.Equals(wanted, current, StringComparison.Ordinal)) return 0;
+
+        // A heading that already exists is a merge, not a rename, and the reader did not ask for
+        // one: two feeds of the same name under one heading would deliver into one folder.
+        if (!string.Equals(wanted, current, StringComparison.OrdinalIgnoreCase)
+            && Categories.Any(c => string.Equals(c, wanted, StringComparison.OrdinalIgnoreCase)))
+        {
+            return 0;
+        }
+
+        var moved = 0;
+        using (Batch())
+        {
+            foreach (var feed in Under(current))
+            {
+                if (Update(feed.Url, f => f with { Category = wanted })) moved++;
+            }
+        }
+
+        // The declaration moves too, so renaming one nothing is filed under yet works as well as
+        // renaming one that is full.
+        for (var at = 0; at < _headings.Count; at++)
+        {
+            if (string.Equals(_headings[at], current, StringComparison.OrdinalIgnoreCase)) _headings[at] = wanted;
+        }
+
+        SaveHeadings();
+        return moved;
+    }
+
+    /// <summary>
+    /// Removes a heading. Its feeds go to the top level rather than away with it.
+    /// </summary>
+    /// <returns>How many feeds came out of it.</returns>
+    public int RemoveCategory(string category)
+    {
+        var moved = 0;
+        using (Batch())
+        {
+            foreach (var feed in Under(category))
+            {
+                if (Update(feed.Url, f => f with { Category = string.Empty })) moved++;
+            }
+        }
+
+        _headings.RemoveAll(h => string.Equals(h, category.Trim(), StringComparison.OrdinalIgnoreCase));
+        SaveHeadings();
+        return moved;
+    }
 
     /// <summary>Replaces a subscription wholesale, matched on its address.</summary>
     public bool Replace(FeedSubscription feed)

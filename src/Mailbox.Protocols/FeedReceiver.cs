@@ -635,6 +635,18 @@ public sealed class FeedReceiver : IDisposable
     /// work: the folder pane already totals a subtree, so filing a feed one level deeper gives a
     /// reader the count they actually want for free.
     /// </remarks>
+    /// <summary>Where a feed delivers, or null when it has never delivered anything.</summary>
+    /// <remarks>
+    /// Public because renaming a feed has to move its folder with it, and the rule for where a
+    /// feed's folder is belongs here rather than being written a second time in the shell.
+    /// </remarks>
+    public static Folder? Folder(OpenAccount account, FeedSubscription feed)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+        ArgumentNullException.ThrowIfNull(feed);
+        return Folder(account, feed, create: false);
+    }
+
     private static Folder? Folder(OpenAccount account, FeedSubscription feed, bool create)
     {
         var folders = account.Mail.Folders(account.Account.Id);
@@ -668,6 +680,99 @@ public sealed class FeedReceiver : IDisposable
         if (own is not null) return own;
 
         return create ? account.Mail.AddFolder(account.Account.Id, name, parentId: parent.Id) : null;
+    }
+
+    // ---- Moving the tree about ---------------------------------------------------------------
+
+    /// <summary>
+    /// Renames a heading's folder, so the articles under it follow the heading.
+    /// </summary>
+    /// <remarks>
+    /// A heading is a folder here — that is what makes the unread count against it work — so a
+    /// rename that touched only the subscriptions would leave every article behind in a folder
+    /// nothing points at any more, and the feed would look as though it had lost its history.
+    /// Called before the subscriptions are updated, because it finds the folder by the old path.
+    /// </remarks>
+    public static bool RenameHeading(OpenAccount account, string from, string to)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+
+        var folders = account.Mail.Folders(account.Account.Id);
+        var root = folders.FirstOrDefault(f => f.ParentId is null && f.Name == RootFolder);
+        if (root is null) return false;
+
+        if (folders.FirstOrDefault(f => f.ParentId == root.Id && f.Name == from) is not { } heading) return false;
+
+        // Something already there is a merge, which nothing here is asking for.
+        if (folders.Any(f => f.ParentId == root.Id && f.Name == to)) return false;
+
+        account.Mail.RenameFolder(heading.Id, to, null);
+        Log.Info($"Feeds: the heading “{from}” is now “{to}”.");
+        return true;
+    }
+
+    /// <summary>
+    /// Moves a feed's folder under a different heading, making it if it is not there.
+    /// </summary>
+    /// <remarks>
+    /// Same reasoning as the rename, and the same ordering: called with the subscription as it
+    /// still is, because that is what says where its folder is now. An empty heading means the
+    /// top of the feeds tree.
+    /// </remarks>
+    public static bool MoveToHeading(OpenAccount account, FeedSubscription feed, string category)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+        ArgumentNullException.ThrowIfNull(feed);
+
+        if (Folder(account, feed, create: false) is not { } own) return true;
+
+        var folders = account.Mail.Folders(account.Account.Id);
+        var root = folders.FirstOrDefault(f => f.ParentId is null && f.Name == RootFolder);
+        if (root is null) return false;
+
+        var parent = root;
+        if (category.Trim() is { Length: > 0 } wanted)
+        {
+            parent = folders.FirstOrDefault(f => f.ParentId == root.Id && f.Name == wanted)
+                     ?? account.Mail.AddFolder(account.Account.Id, wanted, parentId: root.Id);
+        }
+
+        if (own.ParentId == parent.Id) return true;
+
+        // A feed of the same name already filed there. Moving on top of it would give one folder
+        // two feeds' articles, which reads as a single feed publishing twice as much.
+        if (account.Mail.Folders(account.Account.Id).Any(f => f.ParentId == parent.Id && f.Name == own.Name))
+        {
+            Log.Warn($"Feeds: “{feed.Name}” cannot move to “{category}” — something of that name is already there.");
+            return false;
+        }
+
+        var moved = account.Mail.MoveFolder(own.Id, parent.Id, null);
+        if (moved) Log.Info($"Feeds: “{feed.Name}” moved to {(category.Length > 0 ? category : "the top level")}.");
+        return moved;
+    }
+
+    /// <summary>
+    /// Removes a heading's folder once its feeds have gone, so an empty one does not linger.
+    /// </summary>
+    /// <remarks>
+    /// Only when it is empty of both. A heading folder still holding messages is one somebody's
+    /// articles are in, and tidying the tree is not a reason to delete them.
+    /// </remarks>
+    public static bool RemoveEmptyHeading(OpenAccount account, string category)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+
+        var folders = account.Mail.Folders(account.Account.Id);
+        var root = folders.FirstOrDefault(f => f.ParentId is null && f.Name == RootFolder);
+        if (root is null) return false;
+
+        if (folders.FirstOrDefault(f => f.ParentId == root.Id && f.Name == category) is not { } heading) return false;
+        if (folders.Any(f => f.ParentId == heading.Id)) return false;
+        if (account.Mail.Messages(heading.Id, limit: 1).Count > 0) return false;
+
+        account.Mail.RemoveFolder(heading.Id);
+        return true;
     }
 
     /// <summary>

@@ -225,6 +225,36 @@ internal sealed class FeedsWorkspace : Border
     /// <summary>Raised with the control to hang the Save to Board menu off.</summary>
     public event EventHandler<Control>? SaveToBoardRequested;
 
+    /// <summary>Raised to read one subscription now.</summary>
+    public event EventHandler<FeedSubscription>? UpdateFeedRequested;
+
+    /// <summary>Raised to give a feed a different name.</summary>
+    public event EventHandler<FeedSubscription>? RenameFeedRequested;
+
+    /// <summary>Raised to open one feed's settings.</summary>
+    public event EventHandler<FeedSubscription>? FeedSettingsRequested;
+
+    /// <summary>Raised to stop reading a feed.</summary>
+    public event EventHandler<FeedSubscription>? UnsubscribeRequested;
+
+    /// <summary>Raised to file a feed under a heading — empty for the top level.</summary>
+    public event EventHandler<(FeedSubscription Feed, string Category)>? MoveFeedRequested;
+
+    /// <summary>Raised to make a heading, optionally putting a feed straight into it.</summary>
+    public event EventHandler<FeedSubscription?>? NewHeadingRequested;
+
+    /// <summary>Raised to rename a heading, with the name it has now.</summary>
+    public event EventHandler<string>? RenameHeadingRequested;
+
+    /// <summary>Raised to remove a heading. Its feeds go to the top level.</summary>
+    public event EventHandler<string>? RemoveHeadingRequested;
+
+    /// <summary>Raised to open the Boards dialog.</summary>
+    public event EventHandler<Board>? ManageBoardsRequested;
+
+    /// <summary>Raised with text to put on the clipboard.</summary>
+    public event EventHandler<string>? CopyRequested;
+
     /// <summary>Raised when the reader opens an article in a window of its own.</summary>
     public event EventHandler<long>? OpenRequested;
 
@@ -563,6 +593,9 @@ internal sealed class FeedsWorkspace : Border
         }
     }
 
+    /// <summary>Flips one of the row's two switches, for a harness run.</summary>
+    public void PoseToggle(bool unreadOnly) => Toggle(unreadOnly ? UnreadOnlyKey : OrderKey);
+
     /// <summary>What is on the boards, as lines a harness run can read back.</summary>
     public IEnumerable<string> BoardReport()
     {
@@ -643,19 +676,65 @@ internal sealed class FeedsWorkspace : Border
         ToolTip.SetTip(_saveLink, "Put any web address on this board");
         _saveLink.Click += (_, _) => SaveLinkRequested?.Invoke(this, EventArgs.Empty);
 
+        _unreadOnly = new Button
+        {
+            Classes = { "flat" },
+            Padding = new Thickness(8, 2, 8, 2),
+            Content = ActionContent("filter", "Unread only"),
+        };
+        ToolTip.SetTip(_unreadOnly, "Show only what you have not read here");
+        _unreadOnly.Click += (_, _) => Toggle(UnreadOnlyKey);
+
+        _oldestFirst = new Button
+        {
+            Classes = { "flat" },
+            Width = 28,
+            Height = 26,
+            Padding = new Thickness(0),
+            FontFamily = IconFont.Family,
+            FontSize = 14,
+            Content = IconGlyphs.GetOrEmpty("reverse-sort", 16),
+        };
+        _oldestFirst[!TemplatedControl.ForegroundProperty] = new DynamicResourceExtension("text.secondary.brush");
+        ToolTip.SetTip(_oldestFirst, "Read oldest first");
+        _oldestFirst.Click += (_, _) => Toggle(OrderKey);
+
         var strip = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Right,
             Margin = new Thickness(12, 0, 12, 8),
             Spacing = 10,
-            Children = { _saveLink, _markAllRead, views },
+            Children = { _saveLink, _unreadOnly, _markAllRead, _oldestFirst, views },
         };
 
         return strip;
     }
 
+    private Button? _unreadOnly;
+    private Button? _oldestFirst;
+
+    /// <summary>Flips one of the row's own switches and redraws for it.</summary>
+    private void Toggle(Func<FeedNavRow, string> key)
+    {
+        if (_selected is not { } row) return;
+
+        var name = key(row);
+        App.Settings.Set(name, !App.Settings.GetBool(name, false));
+
+        Select(row, keepReading: true);
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
     private Button? _saveLink;
+
+    private static void Mark(Button? button, bool on)
+    {
+        if (button is null) return;
+
+        button.Classes.Remove("active");
+        if (on) button.Classes.Add("active");
+    }
 
     private Button? _markAllRead;
     private readonly Dictionary<FeedLayout, Button> _viewButtons = [];
@@ -1004,7 +1083,112 @@ internal sealed class FeedsWorkspace : Border
         button.Click += (_, _) => Select(row, keepReading: false);
         if (ReferenceEquals(row, _selected)) button.Classes.Add("active");
 
+        // Every reader has one of these on its sidebar, and this had none at all — which meant
+        // renaming a feed, moving it, or copying its address had no gesture anywhere.
+        button.ContextRequested += (_, e) =>
+        {
+            e.Handled = true;
+            Select(row, keepReading: false);
+            NavMenu(row).ShowAt(button, showAtPointer: true);
+        };
+
         return button;
+    }
+
+    /// <summary>
+    /// What right-clicking a row of the pane offers: a feed, a heading, or one of the views.
+    /// </summary>
+    /// <remarks>
+    /// The entries are the ones a reader reaches for on a sidebar and cannot otherwise reach at
+    /// all — the ribbon has the commands, but nobody looks on a ribbon to rename the thing they
+    /// are pointing at.
+    /// </remarks>
+    private MenuFlyout NavMenu(FeedNavRow row)
+    {
+        var menu = new MenuFlyout();
+
+        MenuItem Entry(string label, string icon, Action act, bool enabled = true)
+        {
+            var item = new MenuItem { Header = label, IsEnabled = enabled };
+            if (icon.Length > 0) item.Icon = new Mailbox.Controls.Ribbon.RibbonArtwork(icon, 16);
+            item.Click += (_, _) => act();
+            return item;
+        }
+
+        menu.Items.Add(Entry("Mark All as Read", "mark-all-read", () =>
+        {
+            MarkAllRead();
+            Changed?.Invoke(this, EventArgs.Empty);
+        }));
+
+        if (row.Kind == FeedNavKind.Feed && row.Feed is { } feed)
+        {
+            menu.Items.Add(new Separator());
+            menu.Items.Add(Entry("Update This Feed", "refresh", () => UpdateFeedRequested?.Invoke(this, feed)));
+            menu.Items.Add(new Separator());
+            menu.Items.Add(MoveMenu(feed));
+            menu.Items.Add(Entry("Rename…", "folder-rename", () => RenameFeedRequested?.Invoke(this, feed)));
+            menu.Items.Add(Entry("Feed Settings…", "settings", () => FeedSettingsRequested?.Invoke(this, feed)));
+            menu.Items.Add(new Separator());
+            menu.Items.Add(Entry("Copy Feed Address", "copy", () => CopyRequested?.Invoke(this, feed.Url)));
+            menu.Items.Add(Entry("Open the Site", "link", () => OpenExternally(
+                feed.SiteUrl is { Length: > 0 } site ? site : feed.Url)));
+            menu.Items.Add(new Separator());
+            menu.Items.Add(Entry("Unsubscribe", "remove-feed", () => UnsubscribeRequested?.Invoke(this, feed)));
+        }
+        else if (row.Kind == FeedNavKind.Category)
+        {
+            menu.Items.Add(new Separator());
+            menu.Items.Add(Entry("Rename Heading…", "folder-rename", () => RenameHeadingRequested?.Invoke(this, row.Category)));
+            menu.Items.Add(Entry("Remove Heading", "delete-folder", () => RemoveHeadingRequested?.Invoke(this, row.Category)));
+        }
+        else if (row.Kind == FeedNavKind.Board && row.Board is { } board)
+        {
+            menu.Items.Add(new Separator());
+            menu.Items.Add(Entry("Manage Boards…", "settings", () => ManageBoardsRequested?.Invoke(this, board)));
+        }
+
+        menu.Items.Add(new Separator());
+        menu.Items.Add(Entry("Add a Feed…", "add", () => AddRequested?.Invoke(this, EventArgs.Empty)));
+        menu.Items.Add(Entry("New Heading…", "new-folder", () => NewHeadingRequested?.Invoke(this, row.Feed)));
+
+        return menu;
+    }
+
+    /// <summary>The headings this feed could be filed under, with a tick against the one it is.</summary>
+    private MenuItem MoveMenu(FeedSubscription feed)
+    {
+        var move = new MenuItem
+        {
+            Header = "Move to Heading",
+            Icon = new Mailbox.Controls.Ribbon.RibbonArtwork("folder-move", 16),
+        };
+
+        void Add(string label, string category)
+        {
+            var here = string.Equals(feed.Category, category, StringComparison.OrdinalIgnoreCase);
+            var item = new MenuItem { Header = label, IsEnabled = !here };
+            if (here) item.Icon = new TextBlock
+            {
+                Text = IconGlyphs.GetOrEmpty("mark-complete", 16),
+                FontFamily = IconFont.Family,
+                FontSize = 12,
+            };
+
+            item.Click += (_, _) => MoveFeedRequested?.Invoke(this, (feed, category));
+            move.Items.Add(item);
+        }
+
+        Add("(no heading)", string.Empty);
+        foreach (var heading in _feeds.Categories) Add(heading, heading);
+
+        move.Items.Add(new Separator());
+
+        var made = new MenuItem { Header = "New Heading…" };
+        made.Click += (_, _) => NewHeadingRequested?.Invoke(this, feed);
+        move.Items.Add(made);
+
+        return move;
     }
 
     private static string Glyph(FeedNavKind kind) => kind switch
@@ -1050,6 +1234,15 @@ internal sealed class FeedsWorkspace : Border
         if (_articles.Scroll is { } top) top.Offset = new Vector(0, 0);
 
         if (_saveLink is { } saving) saving.IsVisible = row.Kind == FeedNavKind.Board;
+
+        // The two switches show their state rather than only acting: a filter nothing marks is a
+        // filter a reader forgets is on and then reports as missing articles.
+        Mark(_unreadOnly, UnreadOnlyFor(row));
+        Mark(_oldestFirst, OldestFirstFor(row));
+
+        // Neither means anything on a board, which is a keep pile in the order it was kept.
+        if (_unreadOnly is { } filter) filter.IsVisible = row.Kind != FeedNavKind.Board;
+        if (_oldestFirst is { } order) order.IsVisible = row.Kind != FeedNavKind.Board;
 
         // A board's search is a filter over what is on it, so "Here" and "Every feed" would be
         // two names for the same answer. A control that cannot change anything is worse than no
@@ -1117,7 +1310,14 @@ internal sealed class FeedsWorkspace : Border
             _ => found,
         };
 
-        return [.. filtered.OrderByDescending(m => m.Received).Take(500)];
+        // The reader's own two choices for this row: what to show, and which end to start at.
+        if (UnreadOnlyFor(row)) filtered = filtered.Where(m => !m.IsRead);
+
+        var ordered = OldestFirstFor(row)
+            ? filtered.OrderBy(m => m.Received)
+            : filtered.OrderByDescending(m => m.Received);
+
+        return [.. ordered.Take(500)];
     }
 
     private static List<MessageSummary> Everything(OpenAccount account, IReadOnlyList<long> folders)
@@ -1285,7 +1485,66 @@ internal sealed class FeedsWorkspace : Border
             OpenRequested?.Invoke(this, message.Id);
         };
 
+        row.ContextRequested += (_, e) =>
+        {
+            e.Handled = true;
+            Choose(message);
+            ArticleMenu(message).ShowAt(row, showAtPointer: true);
+        };
+
         return row;
+    }
+
+    /// <summary>
+    /// What right-clicking an article offers.
+    /// </summary>
+    /// <remarks>
+    /// The hover buttons are the four most common things; this is the rest, and it is where a
+    /// reader looks for them. Everything on it acts on the row that was pointed at rather than on
+    /// whatever the list happened to have selected, which is what <see cref="Choose"/> settles
+    /// before the menu is built.
+    /// </remarks>
+    private MenuFlyout ArticleMenu(MessageSummary message)
+    {
+        var menu = new MenuFlyout();
+
+        MenuItem Entry(string label, string icon, Action act, bool enabled = true)
+        {
+            var item = new MenuItem { Header = label, IsEnabled = enabled };
+            if (icon.Length > 0) item.Icon = new Mailbox.Controls.Ribbon.RibbonArtwork(icon, 16);
+            item.Click += (_, _) => act();
+            return item;
+        }
+
+        menu.Items.Add(Entry("Open in a Window", "new-window", () => OpenRequested?.Invoke(this, message.Id)));
+        menu.Items.Add(Entry("Open the Original", "link",
+            () => OpenExternally(message.FeedLink), message.FeedLink.Length > 0));
+
+        menu.Items.Add(new Separator());
+        menu.Items.Add(Entry(message.IsRead ? "Mark as Unread" : "Mark as Read", "unread",
+            () => SetRead(message, !message.IsRead)));
+        menu.Items.Add(Entry(message.IsFlagged ? "Take off Read Later" : "Read Later", "flag", ToggleReadLater));
+
+        if (_selected is { Kind: FeedNavKind.Board, Board: { } open })
+        {
+            menu.Items.Add(Entry($"Take Off {open.Name}", "remove-feed", () => RemoveFromOpenBoard()));
+        }
+        else
+        {
+            var save = Entry("Save to a Board…", "bookmark", () => { });
+            save.Click += (_, _) => SaveToBoardRequested?.Invoke(this, this);
+            menu.Items.Add(save);
+        }
+
+        menu.Items.Add(new Separator());
+        menu.Items.Add(Entry("Copy Link", "copy",
+            () => CopyRequested?.Invoke(this, message.FeedLink), message.FeedLink.Length > 0));
+        menu.Items.Add(Entry("Copy Headline", "copy", () => CopyRequested?.Invoke(this, message.Subject)));
+
+        menu.Items.Add(new Separator());
+        menu.Items.Add(Entry("Delete", "delete", DeleteSelected));
+
+        return menu;
     }
 
     /// <summary>
@@ -2058,6 +2317,31 @@ internal sealed class FeedsWorkspace : Border
     /// <summary>Where a feed's chosen layout is kept, keyed by the row it belongs to.</summary>
     private static string LayoutKey(FeedNavRow row)
         => $"rss.view.{row.Kind}.{row.Label}".ToLowerInvariant();
+
+    /// <summary>Where a row's reading order is kept.</summary>
+    private static string OrderKey(FeedNavRow row)
+        => $"rss.order.{row.Kind}.{row.Label}".ToLowerInvariant();
+
+    /// <summary>Where a row's "hide what I have read" is kept.</summary>
+    private static string UnreadOnlyKey(FeedNavRow row)
+        => $"rss.unreadonly.{row.Kind}.{row.Label}".ToLowerInvariant();
+
+    /// <summary>
+    /// Whether this row is read oldest first.
+    /// </summary>
+    /// <remarks>
+    /// Per row, because it is per row that it matters: a news feed is read newest first and a
+    /// serialised blog or a podcast is read in the order it was written, and a reader should not
+    /// have to keep switching. Every reader worth the name offers this and this one did not.
+    /// </remarks>
+    private bool OldestFirstFor(FeedNavRow row) => App.Settings.GetBool(OrderKey(row), false);
+
+    /// <summary>Whether this row shows only what has not been read.</summary>
+    /// <remarks>
+    /// The standing Unread view answers this across everything; a reader clearing out one busy
+    /// feed wants it for that feed, which is what every reader's "hide read articles" is.
+    /// </remarks>
+    private bool UnreadOnlyFor(FeedNavRow row) => App.Settings.GetBool(UnreadOnlyKey(row), false);
 
     /// <summary>
     /// The layout this row was last read in.

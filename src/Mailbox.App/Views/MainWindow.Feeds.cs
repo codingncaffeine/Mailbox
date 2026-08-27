@@ -72,6 +72,19 @@ public partial class MainWindow
         workspace.OpenRequested += (_, id) => OpenFeedArticle(shell, id);
         workspace.ShortcutsRequested += (_, list) => _ = Confirm.ShowAsync(this, "Keyboard shortcuts", list);
         workspace.FullTextWanted += (_, article) => _ = FillInArticleAsync(shell, workspace, article);
+
+        // The pane's own menu. Everything here was previously reachable only from the ribbon, or
+        // — for renaming, moving and copying an address — not at all.
+        workspace.UpdateFeedRequested += (_, feed) => _ = UpdateFeedsAsync(shell, force: true, only: feed);
+        workspace.FeedSettingsRequested += (_, feed) => _ = FeedSettingsAsync(shell, feed);
+        workspace.UnsubscribeRequested += (_, feed) => _ = UnsubscribeAsync(shell, feed);
+        workspace.RenameFeedRequested += (_, feed) => _ = RenameFeedAsync(shell, feed);
+        workspace.MoveFeedRequested += (_, move) => MoveFeed(shell, move.Feed, move.Category);
+        workspace.NewHeadingRequested += (_, feed) => _ = NewHeadingAsync(shell, feed);
+        workspace.RenameHeadingRequested += (_, heading) => _ = RenameHeadingAsync(shell, heading);
+        workspace.RemoveHeadingRequested += (_, heading) => _ = RemoveHeadingAsync(shell, heading);
+        workspace.ManageBoardsRequested += (_, _) => _ = BoardsAsync(shell, string.Empty);
+        workspace.CopyRequested += (_, text) => _ = CopyToClipboardAsync(shell, text);
         workspace.Changed += (_, _) =>
         {
             shell.ModuleStatusLeft = workspace.Status;
@@ -463,6 +476,231 @@ public partial class MainWindow
         catch (Exception ex) when (ex is HttpRequestException or IOException)
         {
             Log.Debug($"Feeds: “{article.Subject}” could not be filled in — {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// The harness's way at the pane's own menu, which a capture cannot open.
+    /// </summary>
+    /// <remarks>
+    /// Calls the same handlers the menu entries call, so what is proved is what a press does
+    /// rather than that a menu can be built. The prompts are the one thing skipped: a modal
+    /// blocks a run, and the name it would have asked for is given on the command line.
+    /// </remarks>
+    private void PoseFeedOrganise(ShellViewModel shell, FeedsWorkspace feeds, string spec)
+    {
+        var parts = spec.Split('|', StringSplitOptions.TrimEntries);
+        var verb = parts[0].ToLowerInvariant();
+        string Arg(int at) => parts.Length > at ? parts[at] : string.Empty;
+
+        Mailbox.Core.Feeds.FeedSubscription? Named(string name)
+            => App.Feeds.All.FirstOrDefault(f => f.Name.Contains(name, StringComparison.OrdinalIgnoreCase));
+
+        switch (verb)
+        {
+            case "newheading":
+                Log.Info($"Harness: heading “{Arg(1)}” made: {App.Feeds.AddCategory(Arg(1))}.");
+                break;
+
+            case "move" when Named(Arg(1)) is { } moving:
+                MoveFeed(shell, moving, Arg(2));
+                break;
+
+            case "renameheading":
+                _ = RenameHeadingPosed(shell, Arg(1), Arg(2));
+                break;
+
+            case "removeheading":
+                if (FeedAccount() is { } store)
+                {
+                    foreach (var under in App.Feeds.Under(Arg(1)))
+                    {
+                        Mailbox.Protocols.FeedReceiver.MoveToHeading(store, under, string.Empty);
+                    }
+
+                    App.Feeds.RemoveCategory(Arg(1));
+                    Mailbox.Protocols.FeedReceiver.RemoveEmptyHeading(store, Arg(1));
+                }
+
+                break;
+
+            case "unreadonly":
+                feeds.PoseToggle(unreadOnly: true);
+                break;
+
+            case "oldestfirst":
+                feeds.PoseToggle(unreadOnly: false);
+                break;
+
+            default:
+                Log.Info($"Harness: “{verb}” is not something the pane's menu does.");
+                return;
+        }
+
+        _feedModule?.Reload();
+        shell.Refresh();
+
+        Log.Info($"Harness: headings now [{string.Join(", ", App.Feeds.Categories)}]; "
+            + string.Join("; ", App.Feeds.All.Select(f => $"{f.Name} under “{f.Category}”")));
+        foreach (var line in feeds.Showing.Take(3)) Log.Info($"Harness:   · {line}");
+    }
+
+    /// <summary>The rename without its prompt, for a run.</summary>
+    private async Task RenameHeadingPosed(ShellViewModel shell, string from, string to)
+    {
+        await Task.Yield();
+
+        if (FeedAccount() is { } account) Mailbox.Protocols.FeedReceiver.RenameHeading(account, from, to);
+
+        var moved = App.Feeds.RenameCategory(from, to);
+        Log.Info($"Harness: heading “{from}” renamed to “{to}”, {moved} feed(s) moved.");
+
+        _feedModule?.Reload();
+        shell.Refresh();
+    }
+
+    // ---- Organising the tree --------------------------------------------------------------------------
+
+    /// <summary>
+    /// Gives a feed a different name.
+    /// </summary>
+    /// <remarks>
+    /// The name is also the folder its articles are filed in, so the folder moves with it — a
+    /// rename that touched only the subscription would leave the whole feed's history behind in
+    /// a folder nothing points at any more.
+    /// </remarks>
+    private async Task RenameFeedAsync(ShellViewModel shell, FeedSubscription feed)
+    {
+        var typed = await NameDialog.AskAsync(this, "Rename Feed", "What should this feed be called?", feed.Name);
+        if (typed is not { Length: > 0 } name || name == feed.Name) return;
+
+        if (FeedAccount() is { } account
+            && Mailbox.Protocols.FeedReceiver.Folder(account, feed) is { } folder)
+        {
+            account.Mail.RenameFolder(folder.Id, name, null);
+        }
+
+        App.Feeds.Rename(feed.Url, name);
+        _feedModule?.Reload();
+        shell.Refresh();
+        shell.StatusRight = $"“{feed.Name}” is now “{name}”.";
+    }
+
+    /// <summary>Files a feed under a heading, moving its folder with it.</summary>
+    private void MoveFeed(ShellViewModel shell, FeedSubscription feed, string category)
+    {
+        if (FeedAccount() is not { } account) return;
+
+        // The folder first, because it is found by where the subscription still says it is.
+        if (!Mailbox.Protocols.FeedReceiver.MoveToHeading(account, feed, category))
+        {
+            shell.StatusRight = $"“{feed.Name}” could not be moved — something of that name is already there.";
+            return;
+        }
+
+        var was = feed.Category;
+        App.Feeds.Recategorize(feed.Url, category);
+
+        // An emptied heading does not linger in the folder pane as a folder with nothing in it.
+        if (was.Length > 0 && App.Feeds.Under(was).Count == 0)
+        {
+            Mailbox.Protocols.FeedReceiver.RemoveEmptyHeading(account, was);
+        }
+
+        _feedModule?.Reload();
+        shell.Refresh();
+        shell.StatusRight = category.Length > 0
+            ? $"“{feed.Name}” moved to {category}."
+            : $"“{feed.Name}” is no longer under a heading.";
+    }
+
+    /// <summary>Makes a heading, and puts a feed straight into it when one was pointed at.</summary>
+    private async Task NewHeadingAsync(ShellViewModel shell, FeedSubscription? feed)
+    {
+        var typed = await NameDialog.AskAsync(this, "New Heading",
+            "Headings group your subscriptions, and their unread counts add up. What is this one called?");
+
+        if (typed is not { Length: > 0 } name) return;
+
+        if (App.Feeds.Categories.Any(c => string.Equals(c, name, StringComparison.OrdinalIgnoreCase)))
+        {
+            shell.StatusRight = $"There is already a heading called “{name}”.";
+            return;
+        }
+
+        App.Feeds.AddCategory(name);
+
+        // Straight in, when the reader made it from a feed's own menu — which is the gesture that
+        // means "and put this one in it".
+        if (feed is not null)
+        {
+            MoveFeed(shell, feed, name);
+            return;
+        }
+
+        _feedModule?.Reload();
+        shell.StatusRight = $"“{name}” made. Move a feed into it from the feed's own menu.";
+    }
+
+    private async Task RenameHeadingAsync(ShellViewModel shell, string heading)
+    {
+        var typed = await NameDialog.AskAsync(this, "Rename Heading", "What should this heading be called?", heading);
+        if (typed is not { Length: > 0 } name || name == heading) return;
+
+        if (FeedAccount() is { } account) Mailbox.Protocols.FeedReceiver.RenameHeading(account, heading, name);
+
+        var moved = App.Feeds.RenameCategory(heading, name);
+        if (moved == 0)
+        {
+            shell.StatusRight = $"“{heading}” could not be renamed — there is already a heading called “{name}”.";
+            return;
+        }
+
+        _feedModule?.Reload();
+        shell.Refresh();
+        shell.StatusRight = $"“{heading}” is now “{name}”, with {moved} feed{(moved == 1 ? string.Empty : "s")} under it.";
+    }
+
+    private async Task RemoveHeadingAsync(ShellViewModel shell, string heading)
+    {
+        var under = App.Feeds.Under(heading).Count;
+
+        if (!await Confirm.AskAsync(this, "Remove Heading",
+                under == 0
+                    ? $"Remove the heading “{heading}”?"
+                    : $"Remove the heading “{heading}”?\n\nIts {under} "
+                      + $"feed{(under == 1 ? string.Empty : "s")} and everything they have delivered "
+                      + "stay where they are, at the top level.",
+                "Remove")) return;
+
+        if (FeedAccount() is { } account)
+        {
+            foreach (var feed in App.Feeds.Under(heading))
+            {
+                Mailbox.Protocols.FeedReceiver.MoveToHeading(account, feed, string.Empty);
+            }
+        }
+
+        App.Feeds.RemoveCategory(heading);
+        if (FeedAccount() is { } store) Mailbox.Protocols.FeedReceiver.RemoveEmptyHeading(store, heading);
+
+        _feedModule?.Reload();
+        shell.Refresh();
+        shell.StatusRight = $"“{heading}” removed; its feeds are at the top level.";
+    }
+
+    private async Task CopyToClipboardAsync(ShellViewModel shell, string text)
+    {
+        if (TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard) return;
+
+        try
+        {
+            await clipboard.SetTextAsync(text);
+            shell.StatusRight = "Copied.";
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or TimeoutException)
+        {
+            Log.Debug($"Feeds: the clipboard would not take it — {ex.Message}");
         }
     }
 

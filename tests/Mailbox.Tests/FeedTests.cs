@@ -174,4 +174,86 @@ public class FeedTests
         Assert.Contains("https://example.org/a", raw, StringComparison.Ordinal);
         Assert.Contains("A. Person", raw, StringComparison.Ordinal);
     }
+
+    // ---- Headings ---------------------------------------------------------------------------
+
+    [Fact]
+    public void AHeadingCanExistBeforeAnythingIsFiledUnderIt()
+    {
+        // The order people actually work in: make the folder, then drag things into it. A heading
+        // that came into being only once something was already in it would mean there was no way
+        // to make the first one — which is what there was.
+        var feeds = new FeedSubscriptions(SettingsStore.Transient());
+
+        Assert.True(feeds.AddCategory("Reading"));
+        Assert.Contains("Reading", feeds.Categories);
+
+        // And not twice, whatever the capitals.
+        Assert.False(feeds.AddCategory("reading"));
+        Assert.Single(feeds.Categories);
+    }
+
+    [Fact]
+    public void AHeadingSurvivesBeingReopened()
+    {
+        var settings = SettingsStore.Transient();
+        new FeedSubscriptions(settings).AddCategory("Reading");
+
+        Assert.Contains("Reading", new FeedSubscriptions(settings).Categories);
+    }
+
+    [Fact]
+    public void RenamingAHeadingTakesItsFeedsWithIt()
+    {
+        var feeds = new FeedSubscriptions(SettingsStore.Transient());
+        feeds.Add("https://a.example/feed", "A", "News");
+        feeds.Add("https://b.example/feed", "B", "News");
+        feeds.Add("https://c.example/feed", "C", "Tech");
+
+        Assert.Equal(2, feeds.RenameCategory("News", "Current Affairs"));
+
+        Assert.Equal(["Current Affairs", "Tech"], feeds.Categories);
+        Assert.Equal(2, feeds.Under("Current Affairs").Count);
+        Assert.Empty(feeds.Under("News"));
+    }
+
+    [Fact]
+    public void AHeadingIsNotRenamedOnTopOfAnotherOne()
+    {
+        // That is a merge, and nobody asked for one: two feeds of the same name under one heading
+        // would deliver into a single folder and read as one feed publishing twice as much.
+        var feeds = new FeedSubscriptions(SettingsStore.Transient());
+        feeds.Add("https://a.example/feed", "A", "News");
+        feeds.Add("https://c.example/feed", "C", "Tech");
+
+        Assert.Equal(0, feeds.RenameCategory("News", "Tech"));
+        Assert.Equal(["News", "Tech"], feeds.Categories);
+    }
+
+    [Fact]
+    public void RemovingAHeadingKeepsItsFeeds()
+    {
+        var feeds = new FeedSubscriptions(SettingsStore.Transient());
+        feeds.Add("https://a.example/feed", "A", "News");
+        feeds.Add("https://b.example/feed", "B", "News");
+
+        Assert.Equal(2, feeds.RemoveCategory("News"));
+
+        Assert.Empty(feeds.Categories);
+        Assert.Equal(2, feeds.All.Count);
+        Assert.All(feeds.All, f => Assert.Equal(string.Empty, f.Category));
+    }
+
+    [Fact]
+    public void AnEmptyHeadingCanBeRenamedAndRemovedToo()
+    {
+        var feeds = new FeedSubscriptions(SettingsStore.Transient());
+        feeds.AddCategory("Reading");
+
+        feeds.RenameCategory("Reading", "To Read");
+        Assert.Equal(["To Read"], feeds.Categories);
+
+        feeds.RemoveCategory("To Read");
+        Assert.Empty(feeds.Categories);
+    }
 }

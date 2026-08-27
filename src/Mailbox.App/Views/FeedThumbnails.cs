@@ -45,6 +45,19 @@ public sealed class FeedThumbnails
     private readonly ConcurrentQueue<string> _order = new();
     private readonly SemaphoreSlim _gate = new(4);
 
+    /// <summary>
+    /// Who is still waiting for each picture being fetched.
+    /// </summary>
+    /// <remarks>
+    /// A list rather than a single caller, and this is load-bearing. The list is virtualised and
+    /// rebuilt whenever anything changes — a poll finishing, a row being marked read, a view being
+    /// switched — and each rebuild makes new Image controls for the same articles. With one caller
+    /// remembered, the second row to ask for a picture already in flight was dropped and the
+    /// callback went to a control no longer on screen, so the row stayed blank until it was
+    /// scrolled out of view and back.
+    /// </remarks>
+    private readonly Dictionary<string, List<Action<Bitmap>>> _waiting = new(StringComparer.Ordinal);
+
     /// <summary>Whether pictures are fetched at all. Read from the reader's setting.</summary>
     public bool Enabled { get; set; } = true;
 
@@ -87,16 +100,25 @@ public sealed class FeedThumbnails
         if (!Enabled || url.Length == 0) return;
         if (!Uri.TryCreate(url, UriKind.Absolute, out var address) || address.Scheme is not ("http" or "https")) return;
 
-        // A null value is a picture that has already been tried and failed: remembered so a
-        // broken address is not re-requested every time its row scrolls back into view.
+        // Already here, or already known not to be a picture — a broken address is not
+        // re-requested every time its row scrolls back into view.
         if (_kept.TryGetValue(url, out var already))
         {
             if (already is not null) Dispatcher.UIThread.Post(() => onLoaded(already));
             return;
         }
 
-        // Claim it before starting, so a row that scrolls past twice asks once.
-        if (!_kept.TryAdd(url, null)) return;
+        lock (_waiting)
+        {
+            // Being fetched already. Join the queue rather than being dropped.
+            if (_waiting.TryGetValue(url, out var queue))
+            {
+                queue.Add(onLoaded);
+                return;
+            }
+
+            _waiting[url] = [onLoaded];
+        }
 
         // A capture waits for the pictures rather than photographing the placeholders: whether
         // the thumbnails arrive is exactly the claim a screenshot of this list is making.
@@ -106,30 +128,28 @@ public sealed class FeedThumbnails
         // gap and photographs the placeholder it was meant to wait for.
         var hold = WindowCapture.IsRequested ? WindowCapture.Hold() : null;
 
-        _ = FetchAsync(url, address, onLoaded, hold);
+        _ = FetchAsync(url, address, hold);
     }
 
-    private async Task FetchAsync(string url, Uri address, Action<Bitmap> onLoaded, IDisposable? hold)
+    private async Task FetchAsync(string url, Uri address, IDisposable? hold)
     {
         using var held = hold;
+
+        Bitmap? bitmap = null;
 
         await _gate.WaitAsync().ConfigureAwait(false);
         try
         {
             using var response = await Client.GetAsync(address, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode) return;
-            if (response.Content.Headers.ContentLength > MaxBytes) return;
-
-            var bytes = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
-            if (bytes.Length is 0 or > MaxBytes) return;
-
-            using var stream = new MemoryStream(bytes);
-            var bitmap = Bitmap.DecodeToWidth(stream, DecodeWidth);
-
-            _kept[url] = bitmap;
-            Remember(url);
-
-            Dispatcher.UIThread.Post(() => onLoaded(bitmap));
+            if (response.IsSuccessStatusCode && response.Content.Headers.ContentLength <= MaxBytes)
+            {
+                var bytes = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+                if (bytes.Length is > 0 and <= MaxBytes)
+                {
+                    using var stream = new MemoryStream(bytes);
+                    bitmap = Bitmap.DecodeToWidth(stream, DecodeWidth);
+                }
+            }
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or ArgumentException or NotSupportedException)
         {
@@ -141,6 +161,24 @@ public sealed class FeedThumbnails
         {
             _gate.Release();
         }
+
+        // Everyone who asked while it was in flight — and a null, which is what says not to ask
+        // for this one again.
+        List<Action<Bitmap>> waiting;
+        lock (_waiting)
+        {
+            waiting = _waiting.TryGetValue(url, out var queue) ? queue : [];
+            _waiting.Remove(url);
+        }
+
+        _kept[url] = bitmap;
+        if (bitmap is not { } ready) return;
+
+        Remember(url);
+        Dispatcher.UIThread.Post(() =>
+        {
+            foreach (var waiter in waiting) waiter(ready);
+        });
     }
 
     /// <summary>Lets the oldest pictures go once there are too many to be holding.</summary>
@@ -164,5 +202,7 @@ public sealed class FeedThumbnails
         }
 
         while (_order.TryDequeue(out _)) { }
+
+        lock (_waiting) _waiting.Clear();
     }
 }

@@ -1846,6 +1846,14 @@ public partial class MainWindow
                         }
                     }
 
+                    // MAILBOX_FEED_ORGANISE=<verb>[|arg][|arg] presses the pane's own menu, which
+                    // a capture cannot open: newheading|X, move|<feed>|<heading>,
+                    // renameheading|<from>|<to>, removeheading|<X>, unreadonly, oldestfirst.
+                    if (Environment.GetEnvironmentVariable("MAILBOX_FEED_ORGANISE") is { Length: > 0 } organise)
+                    {
+                        PoseFeedOrganise(shell, feeds, organise);
+                    }
+
                     shell.ModuleStatusLeft = feeds.Status;
                     Log.Info($"Harness: Feeds showing {feeds.Status}; "
                         + $"{App.Feeds.All.Count} subscription(s), {App.Feeds.Categories.Count} heading(s).");
