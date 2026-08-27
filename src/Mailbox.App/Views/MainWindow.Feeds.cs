@@ -83,6 +83,10 @@ public partial class MainWindow
                 _ = SubscribeToFeedAsync(shell);
                 return true;
 
+            case "feeds.newsletters":
+                _ = NewslettersAsync(shell);
+                return true;
+
             case "feeds.import.opml":
                 _ = ImportFeedsAsync(shell);
                 return true;
@@ -347,6 +351,38 @@ public partial class MainWindow
         shell.StatusRight = live == 0
             ? "Nothing is muted."
             : $"{live} mute filter{(live == 1 ? string.Empty : "s")} in force.";
+    }
+
+    /// <summary>
+    /// The newsletters already arriving in the mailbox, offered as feeds.
+    /// </summary>
+    /// <remarks>
+    /// No forwarding address and no third party: the mail is already here, and this only decides
+    /// where it is filed. Which is the whole of why a mail client can do this better than a
+    /// website can.
+    /// </remarks>
+    private async Task NewslettersAsync(ShellViewModel shell)
+    {
+        if (FeedAccount() is null)
+        {
+            shell.StatusRight = "There is no mail account to read newsletters from.";
+            return;
+        }
+
+        var dialog = new NewslettersDialog(App.Feeds, FeedAccount);
+        await dialog.ShowDialog(this);
+
+        if (dialog.Added == 0) return;
+
+        shell.StatusRight = dialog.Gathered > 0
+            ? $"{dialog.Added} newsletter{(dialog.Added == 1 ? string.Empty : "s")} moved here, "
+              + $"with {dialog.Gathered} issue{(dialog.Gathered == 1 ? string.Empty : "s")}."
+            : $"{dialog.Added} newsletter{(dialog.Added == 1 ? string.Empty : "s")} will be read here from now on.";
+
+        Log.Info($"Newsletters: {dialog.Added} taken up, {dialog.Gathered} back number(s) moved.");
+
+        _feedModule?.Reload();
+        shell.Refresh();
     }
 
     // ---- OPML ---------------------------------------------------------------------------------------

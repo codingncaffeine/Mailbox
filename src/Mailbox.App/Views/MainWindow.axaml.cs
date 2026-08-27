@@ -1288,6 +1288,15 @@ public partial class MainWindow : Window
                 };
                 break;
 
+            // The newsletters already in the mailbox, offered as feeds.
+            case "newsletters":
+                Opened += async (_, _) =>
+                {
+                    CaptureNextWindow();
+                    await new NewslettersDialog(App.Feeds, FeedAccount).ShowDialog(this);
+                };
+                break;
+
             // The filters dashboard, which has no other way of being reached by a capture.
             case "mutefilters":
                 Opened += async (_, _) =>

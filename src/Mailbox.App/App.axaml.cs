@@ -69,6 +69,9 @@ public partial class App : Application
     /// <summary>The words whose articles are never delivered.</summary>
     public static Mailbox.Core.Feeds.MuteFilters Mutes { get; private set; } = null!;
 
+    /// <summary>Files the newsletters the reader reads as articles into the feeds tree.</summary>
+    public static Mailbox.Protocols.NewsletterRouter Newsletters { get; private set; } = null!;
+
     /// <summary>The calendars this reader publishes, and where each one goes.</summary>
     public static Mailbox.Core.Calendars.PublishedCollections Published { get; private set; } = null!;
 
@@ -641,11 +644,15 @@ public partial class App : Application
         });
 
         // What acts on a message as it arrives, in order: the junk filter, then the rules, then
-        // the plugins — last, so a hook sees where the application's own handlers left it. Both
-        // protocols run the same pipeline, so all of it means the same thing on POP3 and IMAP.
+        // the newsletters the reader reads as articles, then the plugins — last, so a hook sees
+        // where the application's own handlers left it. Both protocols run the same pipeline, so
+        // all of it means the same thing on POP3 and IMAP.
+        //
+        // Newsletters go after the rules on purpose: a reader who has written a rule about a
+        // publication meant that rule, and it should win over the general arrangement.
         Rules = new RulesHandler();
         Arrival = new ArrivalPipeline(
-            Junk, new IgnoreHandler(), new FocusedInboxHandler(), Rules, Plugins.Arrivals);
+            Junk, new IgnoreHandler(), new FocusedInboxHandler(), Rules, Newsletters, Plugins.Arrivals);
         var arrival = Arrival;
 
         // Read at the moment a collector is made, which is per run — so the Options page's
@@ -689,6 +696,7 @@ public partial class App : Application
         Security = new SecurityOptions(Settings);
         Feeds = new Mailbox.Core.Feeds.FeedSubscriptions(Settings);
         Mutes = new Mailbox.Core.Feeds.MuteFilters(Settings);
+        Newsletters = new Mailbox.Protocols.NewsletterRouter(Feeds);
 
         // Built here with the other settings-backed lists, and handed to the sync service, which
         // was made further up before this existed.

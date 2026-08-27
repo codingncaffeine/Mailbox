@@ -131,7 +131,10 @@ public sealed class FeedReceiver : IDisposable
         ArgumentNullException.ThrowIfNull(account);
         if (_feeds.All.Count == 0) return FeedReport.Nothing;
 
-        var due = _feeds.All.Where(f => force || IsDue(f, now)).ToList();
+        // A newsletter's issues arrive as mail, so there is nothing here to ask for. Skipped by
+        // its address rather than by a flag: the fetch would refuse a "newsletter:" scheme
+        // anyway, and this keeps the report honest about how many feeds were polled.
+        var due = _feeds.All.Where(f => !f.IsNewsletter() && (force || IsDue(f, now))).ToList();
         if (due.Count == 0) return FeedReport.Nothing;
 
         // What each feed has already delivered, read before anything goes parallel: the store is

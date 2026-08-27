@@ -47,7 +47,11 @@ public static class FeedsRibbonLayout
                         Label = "New",
                         KeyTip = "ZN",
                         CollapsePriority = 7,
-                        Items = [RibbonItem.Large(FeedCommands.Subscribe.Id)],
+                        Items =
+                        [
+                            RibbonItem.Large(FeedCommands.Subscribe.Id),
+                            RibbonItem.Large(FeedCommands.Newsletters.Id),
+                        ],
                     },
 
                     new RibbonGroup
@@ -205,7 +209,8 @@ public static class FeedsRibbonLayout
         {
             ["home"] = Bar(
                 Cluster("new", "New",
-                    RibbonItem.Small(FeedCommands.Subscribe.Id)),
+                    RibbonItem.Small(FeedCommands.Subscribe.Id),
+                    RibbonItem.Small(FeedCommands.Newsletters.Id)),
 
                 Cluster("update", "Update",
                     RibbonItem.Small(FeedCommands.Update.Id),

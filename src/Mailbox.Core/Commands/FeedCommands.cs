@@ -135,6 +135,20 @@ public static class FeedCommands
         KeyTip = "UN",
     };
 
+    public static readonly MailboxCommand Newsletters = new()
+    {
+        Id = new("feeds.newsletters"),
+        Label = "Newsletters",
+        Description = "Read the newsletters already arriving in your mail as articles.",
+        Icon = "mail",
+        Category = "New",
+
+        // Every module: this is about mail, and a reader thinking about it is as likely to be
+        // looking at their inbox as at their feeds.
+        Scope = ModuleScope.Any,
+        KeyTip = "NL",
+    };
+
     public static readonly MailboxCommand Mute = new()
     {
         Id = new("feeds.mute"),
@@ -183,7 +197,7 @@ public static class FeedCommands
     /// <summary>Every command this module owns, which is what the catalogue registers.</summary>
     public static IReadOnlyList<MailboxCommand> All { get; } =
     [
-        Subscribe, Update, UpdateThis, MarkAllRead,
+        Subscribe, Newsletters, Update, UpdateThis, MarkAllRead,
         ReadLater, OpenOriginal, Delete, Categorize,
         FeedSettings, Unsubscribe, Mute, MuteThis, Import, Export,
     ];
