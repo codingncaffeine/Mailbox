@@ -124,6 +124,7 @@ internal sealed class FeedsWorkspace : Border
     private readonly FeedSubscriptions _feeds;
     private readonly Func<OpenAccount?> _account;
     private readonly FeedThumbnails _pictures;
+    private readonly FeedPictureLookup? _lookup;
 
     private readonly StackPanel _nav = new();
     private readonly ListBox _articles = new();
@@ -149,11 +150,16 @@ internal sealed class FeedsWorkspace : Border
     private TimeSpan? _within;
     private FeedSubscription? _articleFeed;
 
-    public FeedsWorkspace(FeedSubscriptions feeds, Func<OpenAccount?> account, FeedThumbnails pictures)
+    public FeedsWorkspace(
+        FeedSubscriptions feeds,
+        Func<OpenAccount?> account,
+        FeedThumbnails pictures,
+        FeedPictureLookup? lookup = null)
     {
         _feeds = feeds ?? throw new ArgumentNullException(nameof(feeds));
         _account = account ?? throw new ArgumentNullException(nameof(account));
         _pictures = pictures ?? throw new ArgumentNullException(nameof(pictures));
+        _lookup = lookup;
 
         // The reading surface, not the list surface. Chrome is themed and content is light —
         // which is the owner's call and is also what both references do: the reference's own Dark
@@ -745,6 +751,15 @@ internal sealed class FeedsWorkspace : Border
         long UnreadIn(FeedSubscription feed)
             => byPath.TryGetValue(feed.FolderPath, out var folder) ? folder.Unread : 0;
 
+        // Which subscription owns which folder, for every feed rather than for the rows that
+        // happen to be drawn: a heading the reader has collapsed still has its articles in Today,
+        // and they still need to know where they came from — which is what decides whether Update
+        // This Feed acts on the right one, and whether a missing picture may be looked up.
+        foreach (var feed in _feeds.All)
+        {
+            if (byPath.TryGetValue(feed.FolderPath, out var owned)) _feedByFolder[owned.Id] = feed;
+        }
+
         IReadOnlyList<long> FoldersFor(IEnumerable<FeedSubscription> subscriptions)
             => [.. subscriptions.Select(f => byPath.TryGetValue(f.FolderPath, out var folder) ? folder.Id : 0).Where(id => id != 0)];
 
@@ -788,8 +803,6 @@ internal sealed class FeedsWorkspace : Border
                     Folders = FoldersFor([feed]),
                 };
 
-                foreach (var id in row.Folders) _feedByFolder[id] = feed;
-
                 _rows.Add(row);
                 _nav.Children.Add(NavButton(row, indent: 1));
             }
@@ -802,8 +815,6 @@ internal sealed class FeedsWorkspace : Border
                 Feed = feed,
                 Folders = FoldersFor([feed]),
             };
-
-            foreach (var id in row.Folders) _feedByFolder[id] = feed;
 
             _rows.Add(row);
             _nav.Children.Add(NavButton(row, indent: 0));
@@ -1221,7 +1232,7 @@ internal sealed class FeedsWorkspace : Border
 
         var snippet = new TextBlock
         {
-            Text = message.Preview,
+            Text = Snippet(message),
             FontSize = 13,
             LineHeight = 19,
             Margin = new Thickness(0, 7, 0, 0),
@@ -1456,25 +1467,74 @@ internal sealed class FeedsWorkspace : Border
         };
         tile[!BackgroundProperty] = new DynamicResourceExtension("list.row.hover.brush");
 
-        if (message.FeedImage is { Length: > 0 } url)
+        void Draw(string url)
         {
             if (_pictures.Ready(url) is { } already)
             {
                 image.Source = already;
                 image.IsVisible = true;
+                return;
             }
-            else
+
+            _pictures.Want(url, bitmap =>
             {
-                _pictures.Want(url, bitmap =>
-                {
-                    image.Source = bitmap;
-                    image.IsVisible = true;
-                });
-            }
+                image.Source = bitmap;
+                image.IsVisible = true;
+            });
+        }
+
+        if (message.FeedImage is { Length: > 0 } url)
+        {
+            Draw(url);
+        }
+        else if (AllowsLookup(message))
+        {
+            // The feed sent no picture. Nearly every article published has one, so rather than a
+            // lettered tile the publisher's own page is asked — the same og:image every social
+            // network reads — and what comes back is kept on the row.
+            _lookup?.Want(message, Draw);
         }
 
         return tile;
     }
+
+    /// <summary>
+    /// The line under the headline, with any address trailing it taken off.
+    /// </summary>
+    /// <remarks>
+    /// A feed item's body ends with the article's own address, so a plain-text reader can reach
+    /// it; for an entry whose summary is one sentence that address is most of the preview, and a
+    /// list of rows trailing "https://…" is a list nobody can skim. The poll no longer writes one
+    /// into the column — but every article filed before it stopped still carries one, and those
+    /// are exactly the rows a reader is looking at today.
+    /// </remarks>
+    private static string Snippet(MessageSummary message)
+    {
+        var text = message.Preview;
+
+        while (text.LastIndexOfAny([' ', '\n', '\t']) is var space and > 0
+               && IsAddress(text.AsSpan(space + 1)))
+        {
+            text = text[..space].TrimEnd();
+        }
+
+        return text.Length > 0 ? text : message.Preview;
+    }
+
+    private static bool IsAddress(ReadOnlySpan<char> word)
+        => word.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+           || word.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether the publisher's page may be read for this article's picture.
+    /// </summary>
+    /// <remarks>
+    /// The reader's own switch for the feed it came from — the same one that governs reading the
+    /// article itself, because it is the same request to the same page. An article whose feed is
+    /// not among the subscriptions, a saved link, keeps whatever it arrived with.
+    /// </remarks>
+    private bool AllowsLookup(MessageSummary message)
+        => _feedByFolder.TryGetValue(message.FolderId, out var feed) && feed.ReadFullArticle;
 
     /// <summary>"2h", "3d" — what a feed reader shows instead of a date.</summary>
     private static string Ago(DateTimeOffset when)

@@ -321,14 +321,18 @@ public static partial class FeedParser
     {
         var relativeTo = BaseOf(entry, origin);
 
-        foreach (var thumbnail in Media(entry, "thumbnail"))
+        // Media RSS, both elements together and largest first. A publisher that offers the same
+        // picture at three widths — which the Guardian does, at 140, 460 and 700 — is offering a
+        // choice, and the smallest of them is a postage stamp in a row built for a photograph.
+        if (Media(entry, "thumbnail").Concat(Media(entry, "content"))
+                .Where(IsPicture)
+                .Select(m => (Url: Resolve(Attribute(m, "url"), relativeTo), Width: WidthOf(m)))
+                .Where(m => m.Url.Length > 0)
+                .OrderByDescending(m => Preference(m.Width))
+                .Select(m => m.Url)
+                .FirstOrDefault() is { Length: > 0 } best)
         {
-            if (Resolve(Attribute(thumbnail, "url"), relativeTo) is { Length: > 0 } url) return url;
-        }
-
-        foreach (var media in Media(entry, "content").Where(m => MediaType(m).StartsWith("image/", StringComparison.OrdinalIgnoreCase)))
-        {
-            if (Resolve(Attribute(media, "url"), relativeTo) is { Length: > 0 } url) return url;
+            return best;
         }
 
         foreach (var itunes in Children(entry, "image"))
@@ -341,6 +345,74 @@ public static partial class FeedParser
 
         return Resolve(FirstImageIn(MarkupOf(entry)), relativeTo);
     }
+
+    /// <summary>
+    /// Whether a Media RSS element is offering a picture.
+    /// </summary>
+    /// <remarks>
+    /// The specification says to write <c>type</c> or <c>medium</c>, and a great many publishers
+    /// write neither: the Guardian's <c>media:content</c> carries a <c>url</c> and a
+    /// <c>width</c> and nothing else. Requiring the declaration threw away every picture in that
+    /// feed and in a good many others, which is a worse answer than reading what is there — so
+    /// what is declared decides when there is a declaration, and the address and the dimensions
+    /// decide when there is not.
+    /// </remarks>
+    private static bool IsPicture(XElement media)
+    {
+        var declared = MediaType(media);
+
+        if (declared.StartsWith("image/", StringComparison.OrdinalIgnoreCase)) return true;
+
+        // Said to be something else — audio, video, a document. Believe it.
+        if (declared.Length > 0) return false;
+
+        if (LooksLikeImageUrl(Attribute(media, "url"))) return true;
+
+        // Undeclared, but given a width or a height, which nothing but a visual carries. A
+        // media:thumbnail is a picture by definition whatever else it says.
+        return WidthOf(media) > 0
+               || Attribute(media, "height").Length > 0
+               || Is(media, "thumbnail");
+    }
+
+    /// <summary>An address whose last path segment ends in a picture's extension.</summary>
+    private static bool LooksLikeImageUrl(string url)
+    {
+        if (url.Length == 0) return false;
+
+        // The query is where a CDN puts its resizing, and it is not part of the file name.
+        var path = url.Split('?', 2)[0].Split('#', 2)[0];
+        var dot = path.LastIndexOf('.');
+        if (dot < 0 || dot == path.Length - 1) return false;
+
+        return path[(dot + 1)..].ToLowerInvariant()
+            is "jpg" or "jpeg" or "png" or "gif" or "webp" or "avif" or "bmp" or "tif" or "tiff";
+    }
+
+    private static int WidthOf(XElement media)
+        => int.TryParse(Attribute(media, "width"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var width)
+            ? width
+            : 0;
+
+    /// <summary>
+    /// How much a candidate's width is worth, largest-usable-first.
+    /// </summary>
+    /// <remarks>
+    /// The biggest is not automatically the best: a publisher offering a 4,000-pixel original
+    /// alongside a 700 is offering a megabyte to draw at 150. So the largest at or under a
+    /// sensible ceiling wins, and anything above it is ranked below every candidate under it —
+    /// still taken when it is the only one there is.
+    /// </remarks>
+    private static int Preference(int width) => width switch
+    {
+        // Nothing said. Ranked above an oversized candidate, below any stated usable width: a
+        // publisher who gives one size and does not measure it usually gives a sensible one.
+        0 => 1,
+        <= LargestUsefulPicture => width + 1,
+        _ => 0,
+    };
+
+    private const int LargestUsefulPicture = 1600;
 
     /// <summary>The src of the first img tag in some markup, or empty.</summary>
     /// <remarks>

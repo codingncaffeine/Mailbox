@@ -25,6 +25,16 @@ public partial class MainWindow
     /// <summary>The pictures the article list draws, shared across a session.</summary>
     private readonly FeedThumbnails _feedPictures = new();
 
+    /// <summary>
+    /// Where a picture comes from when the feed sent none, shared across a session.
+    /// </summary>
+    /// <remarks>
+    /// Session-lived rather than per-workspace so that what it has already asked about survives
+    /// the reader switching modules and coming back, which would otherwise be a fresh round of
+    /// requests to a publisher for pictures already looked up.
+    /// </remarks>
+    private FeedPictureLookup? _feedLookup;
+
     /// <summary>The Feeds ribbon: the shipped layout with the reader's edits over it.</summary>
     private static RibbonLayout FeedsRibbon() => App.RibbonEdits.Apply(App.Plugins.InjectRibbon(FeedsRibbonLayout.Build()));
 
@@ -44,7 +54,12 @@ public partial class MainWindow
 
         _feedPictures.Enabled = App.MailOptions.FeedPictures;
 
-        var workspace = new FeedsWorkspace(App.Feeds, FeedAccount, _feedPictures)
+        _feedLookup ??= new FeedPictureLookup(FeedAccount, () => App.FeedReader?.Fetch)
+        {
+            Enabled = App.MailOptions.FeedPictures,
+        };
+
+        var workspace = new FeedsWorkspace(App.Feeds, FeedAccount, _feedPictures, _feedLookup)
         {
             IsNavVisible = shell.NavVisible,
         };

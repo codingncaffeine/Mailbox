@@ -15,14 +15,17 @@ public class FeedPollTests
     private const string Url = "https://example.com/feed.xml";
 
     private static string Feed(params string[] items) => $"""
-        <rss version="2.0"><channel><title>Example Weekly</title><link>https://example.com/</link>
+        <rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+        <channel><title>Example Weekly</title><link>https://example.com/</link>
         {string.Join('\n', items)}
         </channel></rss>
         """;
 
-    private static string Item(string id, string title, string body = "Something happened.") => $"""
+    private static string Item(string id, string title, string body = "Something happened.",
+        string picture = "") => $"""
         <item><guid isPermaLink="false">{id}</guid><title>{title}</title>
           <link>https://example.com/{id}</link>
+          {(picture.Length > 0 ? $"<media:thumbnail url=\"{picture}\"/>" : string.Empty)}
           <description>{body}</description></item>
         """;
 
@@ -90,15 +93,17 @@ public class FeedPollTests
     }
 
     [Fact]
-    public async Task AFeedThatSendsTheWholeArticleIsNotFetchedTwice()
+    public async Task AFeedThatSendsTheWholeArticleAndAPictureIsNotFetchedTwice()
     {
-        // The politeness half. A feed that publishes in full has nothing to add, and asking its
-        // publisher for every article anyway is how a reader gets themselves blocked.
+        // The politeness half. A feed that publishes in full and sends its picture has nothing
+        // left to add, and asking its publisher for every article anyway is how a reader gets
+        // themselves blocked.
         var whole = string.Concat(Enumerable.Repeat(
             "<p>A paragraph of an article that the feed itself carried in full. </p>", 30));
 
         var server = new FakeFeedServer()
-            .Serve(Url, Feed(Item("1", "First", System.Net.WebUtility.HtmlEncode(whole))))
+            .Serve(Url, Feed(Item("1", "First", System.Net.WebUtility.HtmlEncode(whole),
+                picture: "https://example.com/its-own.jpg")))
             .Serve("https://example.com/1", ArticlePage("First"));
 
         var feeds = new FeedSubscriptions(SettingsStore.Transient());
@@ -112,6 +117,41 @@ public class FeedPollTests
 
         Assert.Equal(1, server.RequestsFor(Url));
         Assert.Equal(0, server.RequestsFor("https://example.com/1"));
+    }
+
+    [Fact]
+    public async Task AFeedThatSendsTheWholeArticleAndNoPictureIsAskedForThePictureOnly()
+    {
+        // Nearly every article published has a picture, and a feed that sends the words without
+        // one still has it on the page. LWN is exactly this shape, and so is a great deal of the
+        // web: a list of lettered tiles beside perfectly good writing.
+        var whole = string.Concat(Enumerable.Repeat(
+            "<p>A paragraph of an article that the feed itself carried in full. </p>", 30));
+
+        var server = new FakeFeedServer()
+            .Serve(Url, Feed(Item("1", "First", System.Net.WebUtility.HtmlEncode(whole))))
+            .Serve("https://example.com/1", ArticlePage("First"));
+
+        var feeds = new FeedSubscriptions(SettingsStore.Transient());
+        feeds.Add(Url, "Example");
+
+        var (account, store, mail) = Account();
+        using var _s = store;
+        using var receiver = new FeedReceiver(feeds, server);
+
+        await receiver.PollAsync(account, DateTimeOffset.UtcNow, TestContext.Current.CancellationToken);
+
+        var folder = mail.Folders(account.Account.Id).Single(f => f.Name == "Example");
+        var article = Assert.Single(mail.Messages(folder.Id));
+
+        Assert.Equal(1, server.RequestsFor("https://example.com/1"));
+        Assert.StartsWith("https://example.com/img/", article.FeedImage, StringComparison.Ordinal);
+
+        // And the words stay the publisher's own: the page was read for the picture, not to
+        // replace an article that was already here in full.
+        using var buffer = new MemoryStream(mail.LoadRaw(article.Id)!);
+        var message = MimeKit.MimeMessage.Load(buffer, TestContext.Current.CancellationToken);
+        Assert.Contains("carried in full", message.HtmlBody, StringComparison.Ordinal);
     }
 
     [Fact]

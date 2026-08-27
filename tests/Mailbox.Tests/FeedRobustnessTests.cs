@@ -214,6 +214,87 @@ public class FeedRobustnessTests
     }
 
     [Fact]
+    public void AMediaContentWithNoTypeIsStillAPicture()
+    {
+        // The Guardian's feed, which is a very ordinary shape: media:content with a url and a
+        // width and no type or medium at all. Requiring the declaration threw away the picture on
+        // every one of its forty-five articles, and on a good many other feeds besides.
+        var text = """
+            <rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+            <channel><title>T</title><item><guid>1</guid><title>A</title>
+              <media:content width="140" url="https://example.com/w140.jpg"/>
+              <media:content width="460" url="https://example.com/w460.jpg"/>
+              <media:content width="700" url="https://example.com/w700.jpg"/>
+            </item></channel></rss>
+            """;
+
+        // And the largest of the sizes offered: the smallest is a postage stamp in a row built
+        // for a photograph, and a publisher listing three is offering a choice.
+        Assert.Equal("https://example.com/w700.jpg", Assert.Single(FeedParser.Parse(text).Items).ImageUrl);
+    }
+
+    [Fact]
+    public void AMediaContentThatSaysItIsNotAPictureIsBelieved()
+    {
+        // The other half. An undeclared element is read for what it looks like; a declared one is
+        // taken at its word, or an article list draws a podcast episode as its thumbnail.
+        var text = """
+            <rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+            <channel><title>T</title><item><guid>1</guid><title>A</title>
+              <media:content type="audio/mpeg" url="https://example.com/episode.mp3" width="0"/>
+              <media:content medium="video" url="https://example.com/clip.mp4"/>
+            </item></channel></rss>
+            """;
+
+        Assert.Equal(string.Empty, Assert.Single(FeedParser.Parse(text).Items).ImageUrl);
+    }
+
+    [Fact]
+    public void AnUndeclaredMediaContentIsReadFromItsAddress()
+    {
+        var text = """
+            <rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+            <channel><title>T</title><item><guid>1</guid><title>A</title>
+              <media:content url="https://example.com/photo.webp?width=800&amp;quality=85"/>
+            </item></channel></rss>
+            """;
+
+        Assert.Equal("https://example.com/photo.webp?width=800&quality=85",
+            Assert.Single(FeedParser.Parse(text).Items).ImageUrl);
+    }
+
+    [Fact]
+    public void AnEnormousOriginalLosesToASensibleSize()
+    {
+        // A publisher offering the four-thousand-pixel original beside a usable one is offering a
+        // megabyte to draw at a hundred and fifty.
+        var text = """
+            <rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+            <channel><title>T</title><item><guid>1</guid><title>A</title>
+              <media:content width="4000" url="https://example.com/original.jpg"/>
+              <media:content width="800" url="https://example.com/large.jpg"/>
+            </item></channel></rss>
+            """;
+
+        Assert.Equal("https://example.com/large.jpg", Assert.Single(FeedParser.Parse(text).Items).ImageUrl);
+    }
+
+    [Fact]
+    public void APictureInsideAMediaGroupIsFoundToo()
+    {
+        var text = """
+            <rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+            <channel><title>T</title><item><guid>1</guid><title>A</title>
+              <media:group>
+                <media:content medium="image" url="https://example.com/grouped.jpg"/>
+              </media:group>
+            </item></channel></rss>
+            """;
+
+        Assert.Equal("https://example.com/grouped.jpg", Assert.Single(FeedParser.Parse(text).Items).ImageUrl);
+    }
+
+    [Fact]
     public void TheSyndicationModulesUpdatePeriodIsAnUpdateLimitToo()
     {
         var text = """

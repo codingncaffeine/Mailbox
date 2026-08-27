@@ -476,10 +476,12 @@ public sealed class FeedReceiver : IDisposable
 
             if (item.Link.Length == 0) continue;
 
-            // The page is worth reading when the reader asked for it as an attachment, or when
-            // this entry is a teaser and would otherwise arrive unreadable. One request answers
-            // both, and it is the same request that carries the picture such a feed never sends.
-            var wantsPage = feed.DownloadFullArticle || (feed.ReadFullArticle && IsTeaser(item));
+            // The page is worth reading when the reader asked for it as an attachment; when this
+            // entry is a teaser and would otherwise arrive unreadable; and when it brought no
+            // picture, because nearly every article published has one and a feed that does not
+            // send it still has it on the page. One request answers all three.
+            var wantsPage = feed.DownloadFullArticle
+                            || (feed.ReadFullArticle && (IsTeaser(item) || item.ImageUrl.Length == 0));
             if (!wantsPage) continue;
 
             if (pages >= MostPagesPerPoll)

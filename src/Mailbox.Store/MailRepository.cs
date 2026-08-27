@@ -2154,6 +2154,19 @@ public sealed class MailRepository(MailStore store)
             ("$category", categoryId));
     }
 
+    /// <summary>
+    /// Records the picture found for a feed article that arrived without one.
+    /// </summary>
+    /// <remarks>
+    /// The column rather than the message, deliberately: the article list draws a thumbnail for
+    /// every visible row and reads it from here, so a picture looked up once is on the row from
+    /// then on without the message being reparsed — or rewritten, which for a revision-tracked
+    /// feed item would be a change of a different kind.
+    /// </remarks>
+    public void SetFeedImage(long messageId, string url) => _store.Execute(
+        "UPDATE messages SET feed_image = $url WHERE id = $id",
+        ("$url", url.Length == 0 ? null : url), ("$id", messageId));
+
     // ---- Boards -----------------------------------------------------------------------------
     //
     // Named collections an article is saved into. The membership is a join rather than a column
