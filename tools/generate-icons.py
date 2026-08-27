@@ -52,6 +52,7 @@ WANTED = {
     "tasks": "task_list_square_ltr",
     "notes": "note",
     "journal": "book",
+    "rss": "rss",
     "attach": "attach",
     "print": "print",
     "settings": "settings",
