@@ -133,6 +133,14 @@ public partial class MainWindow
                 _ = UnsubscribeAsync(shell, feeds.SelectedFeed);
                 return true;
 
+            case "feeds.mute":
+                _ = MuteFiltersAsync(shell, string.Empty);
+                return true;
+
+            case "feeds.mute.this":
+                _ = MuteFiltersAsync(shell, feeds.SelectedArticle?.Subject ?? string.Empty);
+                return true;
+
             default:
                 return false;
         }
@@ -316,6 +324,26 @@ public partial class MainWindow
         shell.Refresh();
         shell.StatusRight = $"Unsubscribed from “{feed.Name}”.";
         Log.Info($"Feeds: unsubscribed from {feed.Url}.");
+    }
+
+    /// <summary>
+    /// The filters dashboard.
+    /// </summary>
+    /// <param name="seed">
+    /// A phrase to start the box with — what "Mute This" hands over, taken from the selected
+    /// article so the reader edits a suggestion rather than typing from nothing.
+    /// </param>
+    private async Task MuteFiltersAsync(ShellViewModel shell, string seed)
+    {
+        var dialog = new MuteFiltersDialog(App.Mutes, App.Feeds, DateTimeOffset.UtcNow) { Suggested = seed };
+        await dialog.ShowDialog(this);
+
+        if (!dialog.Changed) return;
+
+        var live = App.Mutes.Live(DateTimeOffset.UtcNow).Count;
+        shell.StatusRight = live == 0
+            ? "Nothing is muted."
+            : $"{live} mute filter{(live == 1 ? string.Empty : "s")} in force.";
     }
 
     // ---- OPML ---------------------------------------------------------------------------------------

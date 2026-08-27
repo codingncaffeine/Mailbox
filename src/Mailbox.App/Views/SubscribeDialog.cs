@@ -107,7 +107,7 @@ public sealed class SubscribeDialog : Window
 
         _message.TextWrapping = TextWrapping.Wrap;
         _message.Margin = new Thickness(0, 12, 0, 0);
-        Bind(_message, TextBlock.ForegroundProperty, "text.secondary.brush");
+        Bind(_message, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
 
         // The heading a feed is filed under. Editable, so a reader can type a new one rather than
         // having to make it somewhere else first.
@@ -212,7 +212,7 @@ public sealed class SubscribeDialog : Window
         var title = Label(channel?.Title is { Length: > 0 } named ? named : found.Label, bold: true, size: 14);
 
         var host = Label(Uri.TryCreate(found.Url, UriKind.Absolute, out var url) ? url.Host : found.Url);
-        Bind(host, TextBlock.ForegroundProperty, "text.secondary.brush");
+        Bind(host, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
         host.Margin = new Thickness(0, 2, 0, 0);
 
         var stack = new StackPanel { Children = { title, host } };
@@ -232,7 +232,7 @@ public sealed class SubscribeDialog : Window
             var headline = Label($"·  {item.Title}");
             headline.TextTrimming = TextTrimming.CharacterEllipsis;
             headline.Margin = new Thickness(0, 4, 0, 0);
-            Bind(headline, TextBlock.ForegroundProperty, "text.secondary.brush");
+            Bind(headline, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
             stack.Children.Add(headline);
         }
 
@@ -240,7 +240,7 @@ public sealed class SubscribeDialog : Window
         {
             var rate = Label(cadence);
             rate.Margin = new Thickness(0, 8, 0, 0);
-            Bind(rate, TextBlock.ForegroundProperty, "text.secondary.brush");
+            Bind(rate, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
             stack.Children.Add(rate);
         }
 
@@ -249,7 +249,7 @@ public sealed class SubscribeDialog : Window
         {
             var note = Label("Already subscribed.");
             note.Margin = new Thickness(0, 8, 0, 0);
-            Bind(note, TextBlock.ForegroundProperty, "text.secondary.brush");
+            Bind(note, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
             stack.Children.Add(note);
         }
 
@@ -367,7 +367,7 @@ public sealed class SubscribeDialog : Window
             FontSize = size,
             FontWeight = bold ? FontWeight.SemiBold : FontWeight.Normal,
         };
-        Bind(block, TextBlock.ForegroundProperty, "text.primary.brush");
+        Bind(block, TextBlock.ForegroundProperty, "dialog.foreground.brush");
         return block;
     }
 

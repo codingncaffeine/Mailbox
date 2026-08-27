@@ -135,6 +135,29 @@ public static class FeedCommands
         KeyTip = "UN",
     };
 
+    public static readonly MailboxCommand Mute = new()
+    {
+        Id = new("feeds.mute"),
+        Label = "Mute Filters",
+        Description = "Words and phrases whose articles are not delivered.",
+        Icon = "ignore",
+        Category = "Manage",
+        Scope = ModuleScope.Feeds,
+        KeyTip = "MF",
+    };
+
+    public static readonly MailboxCommand MuteThis = new()
+    {
+        Id = new("feeds.mute.this"),
+        Label = "Mute This",
+        Description = "Stop delivering articles whose headline carries the selected article's subject.",
+        Icon = "ignore",
+        Category = "Manage",
+        Scope = ModuleScope.Feeds,
+        KeyTip = "MT",
+        RequiresSelection = true,
+    };
+
     public static readonly MailboxCommand Import = new()
     {
         Id = new("feeds.import.opml"),
@@ -162,6 +185,6 @@ public static class FeedCommands
     [
         Subscribe, Update, UpdateThis, MarkAllRead,
         ReadLater, OpenOriginal, Delete, Categorize,
-        FeedSettings, Unsubscribe, Import, Export,
+        FeedSettings, Unsubscribe, Mute, MuteThis, Import, Export,
     ];
 }

@@ -66,6 +66,9 @@ public partial class App : Application
     /// <summary>The RSS subscriptions, and the reader that delivers them into mail folders.</summary>
     public static Mailbox.Core.Feeds.FeedSubscriptions Feeds { get; private set; } = null!;
 
+    /// <summary>The words whose articles are never delivered.</summary>
+    public static Mailbox.Core.Feeds.MuteFilters Mutes { get; private set; } = null!;
+
     /// <summary>The calendars this reader publishes, and where each one goes.</summary>
     public static Mailbox.Core.Calendars.PublishedCollections Published { get; private set; } = null!;
 
@@ -685,12 +688,13 @@ public partial class App : Application
         ContactFavourites = new Mailbox.Core.People.ContactFavourites(Settings);
         Security = new SecurityOptions(Settings);
         Feeds = new Mailbox.Core.Feeds.FeedSubscriptions(Settings);
+        Mutes = new Mailbox.Core.Feeds.MuteFilters(Settings);
 
         // Built here with the other settings-backed lists, and handed to the sync service, which
         // was made further up before this existed.
         Published = new Mailbox.Core.Calendars.PublishedCollections(Settings);
         PimSync.Published = Published;
-        FeedReader = new Mailbox.Protocols.FeedReceiver(Feeds);
+        FeedReader = new Mailbox.Protocols.FeedReceiver(Feeds) { Mutes = Mutes };
         Stationery = new StationeryFonts(Settings);
         Groups = new SendReceiveGroups(Settings);
         Signatures = new Signatures(Settings);

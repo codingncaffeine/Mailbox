@@ -105,6 +105,7 @@ public static class FeedsRibbonLayout
                         [
                             RibbonItem.Large(FeedCommands.FeedSettings.Id),
                             RibbonItem.Large(FeedCommands.Unsubscribe.Id),
+                            RibbonItem.Large(FeedCommands.Mute.Id),
                             RibbonItem.Large(FeedCommands.Import.Id),
                             RibbonItem.Large(FeedCommands.Export.Id),
                         ],
@@ -224,6 +225,7 @@ public static class FeedsRibbonLayout
                 Cluster("manage", "Manage",
                     RibbonItem.Sheddable(FeedCommands.FeedSettings.Id),
                     RibbonItem.Sheddable(FeedCommands.Unsubscribe.Id),
+                    RibbonItem.Sheddable(FeedCommands.Mute.Id),
                     RibbonItem.Sheddable(FeedCommands.Import.Id),
                     RibbonItem.Sheddable(FeedCommands.Export.Id)),
 

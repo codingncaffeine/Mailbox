@@ -1271,6 +1271,15 @@ public partial class MainWindow : Window
             // reach and so have never been photographed.
             // MAILBOX_ACCOUNTS_TAB poses one of its tabs, by index or name;
             // MAILBOX_ACCOUNTS_ACTION presses its buttons and logs what the store says after.
+            // The filters dashboard, which has no other way of being reached by a capture.
+            case "mutefilters":
+                Opened += async (_, _) =>
+                {
+                    CaptureNextWindow();
+                    await new MuteFiltersDialog(App.Mutes, App.Feeds, DateTimeOffset.UtcNow).ShowDialog(this);
+                };
+                break;
+
             case "accounts":
                 Opened += async (_, _) =>
                 {

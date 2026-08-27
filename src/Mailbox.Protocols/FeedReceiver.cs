@@ -21,13 +21,16 @@ public sealed record FeedReport(int Delivered, IReadOnlyList<(string Url, string
     /// <summary>Feeds that answered "nothing has changed", which is the cheap and common case.</summary>
     public int Unchanged { get; init; }
 
+    /// <summary>Articles a mute filter kept out, which were never filed.</summary>
+    public int Muted { get; init; }
+
     public bool DidAnything => Delivered + Revised > 0;
 
     public string Summary
     {
         get
         {
-            if (Delivered == 0 && Revised == 0 && Failed.Count == 0)
+            if (Delivered == 0 && Revised == 0 && Muted == 0 && Failed.Count == 0)
             {
                 return Polled == 0 ? "nothing due" : "nothing new";
             }
@@ -35,6 +38,7 @@ public sealed record FeedReport(int Delivered, IReadOnlyList<(string Url, string
             var parts = new List<string>();
             if (Delivered > 0) parts.Add($"{Delivered} new item{(Delivered == 1 ? string.Empty : "s")}");
             if (Revised > 0) parts.Add($"{Revised} updated");
+            if (Muted > 0) parts.Add($"{Muted} muted");
             if (Failed.Count > 0) parts.Add($"{Failed.Count} feed{(Failed.Count == 1 ? string.Empty : "s")} failed");
 
             return string.Join(", ", parts);
@@ -161,6 +165,7 @@ public sealed class FeedReceiver : IDisposable
         var delivered = 0;
         var revised = 0;
         var unchanged = 0;
+        var silenced = 0;
         var failed = new List<(string Url, string Error)>();
 
         foreach (var result in prepared)
@@ -191,9 +196,10 @@ public sealed class FeedReceiver : IDisposable
 
             if (result.Channel is not { } channel) continue;
 
-            var (added, changed) = Deliver(account, result.Feed, channel, now, result.Arrival, result.Downloads);
+            var (added, changed, muted) = Deliver(account, result.Feed, channel, now, result.Arrival, result.Downloads, Mutes);
             delivered += added;
             revised += changed;
+            silenced += muted;
 
             _feeds.Update(url, f => Succeeded(f with
             {
@@ -209,6 +215,7 @@ public sealed class FeedReceiver : IDisposable
         {
             Revised = revised,
             Unchanged = unchanged,
+            Muted = silenced,
             Polled = prepared.Count,
         };
     }
@@ -244,6 +251,17 @@ public sealed class FeedReceiver : IDisposable
 
     /// <summary>What the reader asked to have done to each arriving item, or null for nothing.</summary>
     public IArrivalHandler? Arrival { get; set; }
+
+    /// <summary>
+    /// The articles the reader has asked not to see, or null for none.
+    /// </summary>
+    /// <remarks>
+    /// Consulted at delivery, so a muted article is never filed: it costs no space and turns up
+    /// in no count and no search. The consequence is that a filter added today does not clear
+    /// out yesterday's articles, which the dialog says plainly rather than leaving a reader to
+    /// discover.
+    /// </remarks>
+    public MuteFilters? Mutes { get; set; }
 
     // ---- Scheduling ------------------------------------------------------------------------------
 
@@ -431,16 +449,17 @@ public sealed class FeedReceiver : IDisposable
     /// Feeds" is off out of the box, and a folder-per-feed is already a kind of filing.
     /// </param>
     public static int Deliver(OpenAccount account, FeedSubscription feed, FeedChannel channel, DateTimeOffset now,
-        IArrivalHandler? arrival = null)
-        => Deliver(account, feed, channel, now, arrival, null).Delivered;
+        IArrivalHandler? arrival = null, MuteFilters? mutes = null)
+        => Deliver(account, feed, channel, now, arrival, null, mutes).Delivered;
 
-    private static (int Delivered, int Revised) Deliver(
+    private static (int Delivered, int Revised, int Muted) Deliver(
         OpenAccount account,
         FeedSubscription feed,
         FeedChannel channel,
         DateTimeOffset now,
         IArrivalHandler? arrival,
-        IReadOnlyDictionary<string, byte[]>? downloads)
+        IReadOnlyDictionary<string, byte[]>? downloads,
+        MuteFilters? mutes)
     {
         ArgumentNullException.ThrowIfNull(account);
         ArgumentNullException.ThrowIfNull(feed);
@@ -451,6 +470,7 @@ public sealed class FeedReceiver : IDisposable
 
         var delivered = 0;
         var revised = 0;
+        var muted = 0;
 
         foreach (var item in channel.Items)
         {
@@ -461,6 +481,15 @@ public sealed class FeedReceiver : IDisposable
 
             // Delivered already, and saying the same thing it said then.
             if (stored is { } previous && previous.MessageId == identity) continue;
+
+            // Muted, and not already here. An article the reader has since decided to mute stays
+            // where it is — a filter is not a licence to delete what has already arrived.
+            if (stored is null && mutes?.Matching(item.Title, Text(item), feed.Category, feed.Url, now) is { } silencing)
+            {
+                mutes.Counted(silencing);
+                muted++;
+                continue;
+            }
 
             var message = Compose(channel, item, feed, identity, downloads);
             using var buffer = new MemoryStream();
@@ -487,7 +516,7 @@ public sealed class FeedReceiver : IDisposable
             if (arrival is not null && id is { } newlyStored) arrival.Handle(account.Mail, folder, newlyStored, message);
         }
 
-        return (delivered, revised);
+        return (delivered, revised, muted);
     }
 
     /// <summary>
