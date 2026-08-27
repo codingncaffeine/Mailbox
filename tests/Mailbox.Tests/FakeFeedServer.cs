@@ -22,6 +22,17 @@ public sealed class FakeFeedServer : HttpMessageHandler
     public int RequestsFor(string url)
         => Requests.Count(r => string.Equals(r.RequestUri?.AbsoluteUri, url, StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>
+    /// The requests made for one address, in order.
+    /// </summary>
+    /// <remarks>
+    /// Asked for by address rather than by position in the whole list, because a poll asks for
+    /// more than the feed: reading a teaser's own page is another request, and a test that indexed
+    /// the flat list was really asserting that nothing else was ever fetched.
+    /// </remarks>
+    public List<HttpRequestMessage> RequestLog(string url)
+        => [.. Requests.Where(r => string.Equals(r.RequestUri?.AbsoluteUri, url, StringComparison.OrdinalIgnoreCase))];
+
     /// <summary>Serves a body at an address.</summary>
     public FakeFeedServer Serve(
         string url,

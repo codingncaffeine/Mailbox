@@ -27,7 +27,16 @@ namespace Mailbox.App.Views;
 public sealed class RssFeedOptionsDialog : Window
 {
     private const double DialogWidth = 456;
-    private const double DialogHeight = 476;
+
+    /// <summary>
+    /// Tall enough for all four boxes and the buttons under them.
+    /// </summary>
+    /// <remarks>
+    /// Measured against the content rather than guessed: at the height this was, the Update Limit
+    /// box ran off the bottom and OK and Cancel were drawn over its last line. A fixed-size system
+    /// dialog has to be sized to what is in it, because nothing else will do it at run time.
+    /// </remarks>
+    private const double DialogHeight = 604;
 
     private readonly FeedSubscription _feed;
     private readonly FeedSubscriptions _feeds;
@@ -36,6 +45,7 @@ public sealed class RssFeedOptionsDialog : Window
     private readonly ComboBox _category = new();
     private readonly CheckBox _enclosures;
     private readonly CheckBox _article;
+    private readonly CheckBox _fullText;
     private readonly CheckBox _useLimit;
 
     /// <summary>True when something was changed and saved.</summary>
@@ -54,6 +64,10 @@ public sealed class RssFeedOptionsDialog : Window
 
         _enclosures = Tick("Automatically download Enclosures for this RSS Feed", feed.DownloadEnclosures);
         _article = Tick("Download the full article as an .html attachment", feed.DownloadFullArticle);
+        // Kept to what fits on one line at this dialog's width: a tick box does not wrap, and a
+        // label longer than the box is a label with its end cut off. The note under the three
+        // says the rest.
+        _fullText = Tick("Read the full article from the publisher's page", feed.ReadFullArticle);
         _useLimit = Tick("Update this RSS Feed with the publisher's recommendation.", feed.UseProviderLimit);
 
         SystemDialogChrome.Apply(this, Layout());
@@ -101,7 +115,8 @@ public sealed class RssFeedOptionsDialog : Window
         var grid = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("104,*"),
-            RowDefinitions = new RowDefinitions("26,20,20"),
+            RowDefinitions = new RowDefinitions("Auto,Auto,Auto"),
+            RowSpacing = 5,
         };
 
         Row(grid, 0, "Feed Name:", _name);
@@ -125,7 +140,6 @@ public sealed class RssFeedOptionsDialog : Window
 
         var text = Paragraph("Items from this RSS Feed are delivered to a folder named after it, "
             + "under the heading you choose here.");
-        text.Width = 400;
         text.Margin = new Thickness(0, 0, 0, 8);
 
         var path = Label($"RSS Feeds\\{_feed.FolderPath.Replace('/', '\\')}", bold: true);
@@ -140,21 +154,24 @@ public sealed class RssFeedOptionsDialog : Window
     private Control Downloads()
     {
         _article.Margin = new Thickness(0, 6, 0, 0);
+        _fullText.Margin = new Thickness(0, 6, 0, 0);
 
+        // Indented to where the tick boxes' words start, so the note reads as a note about them
+        // rather than as a third row of the list. The same 17px the Update Limit box uses.
         var note = Paragraph("An enclosure is a file an article carries — a podcast episode, a "
-            + "video. The full article is fetched from the publisher's own page, for a feed that "
-            + "publishes only the first paragraph.");
-        note.Width = 400;
-        note.Margin = new Thickness(0, 8, 0, 0);
+            + "video. Reading the article fetches the publisher's page and puts what it says in "
+            + "the message, so a feed that publishes one paragraph can still be read here; the "
+            + "picture such a feed does not send comes from the same page. Downloading it keeps "
+            + "the whole page as an attachment instead.");
+        note.Margin = new Thickness(17, 8, 0, 0);
 
-        return new StackPanel { Children = { _enclosures, _article, note } };
+        return new StackPanel { Children = { _enclosures, _fullText, _article, note } };
     }
 
     private Control UpdateLimit()
     {
         var explain = Paragraph("Send/Receive groups do not update this feed more often than the "
             + "publisher asks, which is what stops a feed being suspended by its publisher.");
-        explain.Width = 400;
         explain.Margin = new Thickness(17, 2, 0, 0);
 
         var current = Label(_feed.ProviderLimitMinutes is { } minutes
@@ -215,6 +232,7 @@ public sealed class RssFeedOptionsDialog : Window
             || !string.Equals(category, _feed.Category, StringComparison.Ordinal)
             || _enclosures.IsChecked == true != _feed.DownloadEnclosures
             || _article.IsChecked == true != _feed.DownloadFullArticle
+            || _fullText.IsChecked == true != _feed.ReadFullArticle
             || _useLimit.IsChecked == true != _feed.UseProviderLimit;
 
         if (Changed)
@@ -225,6 +243,7 @@ public sealed class RssFeedOptionsDialog : Window
                 Category = category,
                 DownloadEnclosures = _enclosures.IsChecked == true,
                 DownloadFullArticle = _article.IsChecked == true,
+                ReadFullArticle = _fullText.IsChecked == true,
                 UseProviderLimit = _useLimit.IsChecked == true,
 
                 // Turning the limit off should take effect now rather than after the limit the

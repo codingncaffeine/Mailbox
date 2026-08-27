@@ -243,6 +243,22 @@ public sealed record SearchFolder(long Id, string Name, int Ordinal, Mailbox.Cor
 public sealed record Category(long Id, string Name, string ColourToken, string? Shortcut, int Ordinal);
 
 /// <summary>
+/// A board: a named collection an article is saved into.
+/// </summary>
+/// <remarks>
+/// Not a folder and not a category. Not a folder, because a message lives in exactly one and an
+/// article saved to a board has to stay in its feed as well as on two other boards; not a
+/// category, because a category is a colour the mail module offers on every message it draws,
+/// and a reader's "Rust" board has no business turning up in the Categorize menu over an
+/// invoice.
+/// <para>
+/// <paramref name="Count"/> is how many articles are on it, filled by <c>Boards()</c> so the
+/// pane can draw the number without a query per row.
+/// </para>
+/// </remarks>
+public sealed record Board(long Id, string Name, string Description, int Ordinal, int Count = 0);
+
+/// <summary>
 /// One entry in the Auto-Complete List: an address mail has gone to, the name it went under,
 /// and how much it has been used.
 /// </summary>

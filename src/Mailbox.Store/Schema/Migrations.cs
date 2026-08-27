@@ -611,6 +611,38 @@ public static class Migrations
         ALTER TABLE messages ADD COLUMN feed_link  TEXT;
         ALTER TABLE messages ADD COLUMN feed_image TEXT;
         """,
+
+        // ---- 28: boards --------------------------------------------------------------------------
+        //
+        // Named collections an article is saved into. Its own pair of tables rather than a reuse
+        // of the colour categories, which are the same shape and the wrong meaning: a board would
+        // then appear in the mail module's Categorize menu and every colour category would appear
+        // in the boards pane, and both are wrong in a way no amount of naming fixes.
+        //
+        // The join carries when it was saved, because that is what a board is ordered by — a keep
+        // pile is read newest-kept-first, not newest-published-first, and a category assignment
+        // has nowhere to put that.
+        //
+        // Both sides cascade: deleting a board leaves its articles alone, and deleting an article
+        // takes its membership with it.
+        """
+        CREATE TABLE boards (
+            id            INTEGER PRIMARY KEY,
+            name          TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+            description   TEXT    NOT NULL DEFAULT '',
+            ordinal       INTEGER NOT NULL DEFAULT 0,
+            created_utc   INTEGER NOT NULL
+        );
+
+        CREATE TABLE board_items (
+            board_id      INTEGER NOT NULL REFERENCES boards(id)   ON DELETE CASCADE,
+            message_id    INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+            saved_utc     INTEGER NOT NULL,
+            PRIMARY KEY (board_id, message_id)
+        );
+
+        CREATE INDEX board_items_by_message ON board_items (message_id);
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>

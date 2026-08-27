@@ -73,6 +73,23 @@ public sealed record FeedSubscription(string Url, string Name, DateTimeOffset? L
     /// </summary>
     public bool DownloadFullArticle { get; init; }
 
+    /// <summary>
+    /// Read the publisher's page for the article itself, when the feed sends only a teaser.
+    /// </summary>
+    /// <remarks>
+    /// On by default, and it is the difference between a usable reader and a list of headlines.
+    /// A great many feeds — TechCrunch's carries a hundred and thirty characters an entry — send
+    /// a sentence and a link, and without this a reader who subscribes gets a list of things
+    /// they cannot read. The page also carries the picture such a feed never sends, so the same
+    /// one request fills in both.
+    /// <para>
+    /// Distinct from <see cref="DownloadFullArticle"/>, which keeps the whole page as an
+    /// attachment: this puts the article in the message where the reading pane will show it and
+    /// the index will find it.
+    /// </para>
+    /// </remarks>
+    public bool ReadFullArticle { get; init; } = true;
+
     /// <summary>When the reader last read anything from this feed, for sorting by liveliness.</summary>
     public DateTimeOffset? LastItemUtc { get; init; }
 
@@ -328,6 +345,7 @@ public sealed class FeedSubscriptions
         if (!feed.UseProviderLimit) entry["uselimit"] = false;
         if (feed.DownloadEnclosures) entry["enclosures"] = true;
         if (feed.DownloadFullArticle) entry["article"] = true;
+        if (!feed.ReadFullArticle) entry["fulltext"] = false;
 
         return entry;
     }
@@ -370,6 +388,7 @@ public sealed class FeedSubscriptions
                 UseProviderLimit = Flag(entry, "uselimit") ?? true,
                 DownloadEnclosures = Flag(entry, "enclosures") ?? false,
                 DownloadFullArticle = Flag(entry, "article") ?? false,
+                ReadFullArticle = Flag(entry, "fulltext") ?? true,
             };
         }
     }

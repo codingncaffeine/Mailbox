@@ -76,6 +76,56 @@ public static class FeedCommands
         RequiresSelection = true,
     };
 
+    public static readonly MailboxCommand SaveToBoard = new()
+    {
+        Id = new("feeds.board.save"),
+        Label = "Save to Board",
+        Description = "Keep this article in a named collection. It stays in its feed as well.",
+        Icon = "bookmark",
+        Category = "Boards",
+        Scope = ModuleScope.Feeds,
+        KeyTip = "SB",
+        RequiresSelection = true,
+    };
+
+    public static readonly MailboxCommand RemoveFromBoard = new()
+    {
+        Id = new("feeds.board.remove"),
+        Label = "Take Off Board",
+        Description = "Take this article off the board you are reading. The article itself stays.",
+        Icon = "remove-feed",
+        Category = "Boards",
+        Scope = ModuleScope.Feeds,
+        KeyTip = "TB",
+        RequiresSelection = true,
+    };
+
+    public static readonly MailboxCommand SaveLink = new()
+    {
+        Id = new("feeds.board.link"),
+        Label = "Save a Link",
+        Description = "Put any web address on a board, whether or not you subscribe to the site.",
+        Icon = "link",
+        Category = "Boards",
+
+        // Every module: a reader comes across an address while they are reading their mail at
+        // least as often as while they are reading their feeds, and this is the one command in
+        // the module that needs nothing selected.
+        Scope = ModuleScope.Any,
+        KeyTip = "SL",
+    };
+
+    public static readonly MailboxCommand Boards = new()
+    {
+        Id = new("feeds.boards"),
+        Label = "Boards",
+        Description = "Make, rename and remove the collections articles are saved into.",
+        Icon = "bookmark",
+        Category = "Boards",
+        Scope = ModuleScope.Feeds,
+        KeyTip = "BD",
+    };
+
     public static readonly MailboxCommand OpenOriginal = new()
     {
         Id = new("feeds.open.original"),
@@ -198,7 +248,8 @@ public static class FeedCommands
     public static IReadOnlyList<MailboxCommand> All { get; } =
     [
         Subscribe, Newsletters, Update, UpdateThis, MarkAllRead,
-        ReadLater, OpenOriginal, Delete, Categorize,
+        ReadLater, SaveToBoard, RemoveFromBoard, SaveLink, Boards,
+        OpenOriginal, Delete, Categorize,
         FeedSettings, Unsubscribe, Mute, MuteThis, Import, Export,
     ];
 }

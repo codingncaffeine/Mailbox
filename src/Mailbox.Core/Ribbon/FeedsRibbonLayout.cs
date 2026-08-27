@@ -46,7 +46,7 @@ public static class FeedsRibbonLayout
                         Id = "new",
                         Label = "New",
                         KeyTip = "ZN",
-                        CollapsePriority = 7,
+                        CollapsePriority = 8,
                         Items =
                         [
                             RibbonItem.Large(FeedCommands.Subscribe.Id),
@@ -59,7 +59,7 @@ public static class FeedsRibbonLayout
                         Id = "update",
                         Label = "Update",
                         KeyTip = "ZU",
-                        CollapsePriority = 6,
+                        CollapsePriority = 7,
                         Items =
                         [
                             RibbonItem.Large(FeedCommands.Update.Id),
@@ -72,7 +72,7 @@ public static class FeedsRibbonLayout
                         Id = "delete",
                         Label = "Delete",
                         KeyTip = "ZD",
-                        CollapsePriority = 5,
+                        CollapsePriority = 6,
                         Items = [RibbonItem.Large(FeedCommands.Delete.Id)],
                     },
 
@@ -81,12 +81,27 @@ public static class FeedsRibbonLayout
                         Id = "tags",
                         Label = "Tags",
                         KeyTip = "ZT",
-                        CollapsePriority = 4,
+                        CollapsePriority = 5,
                         Items =
                         [
                             RibbonItem.Large(FeedCommands.ReadLater.Id),
                             RibbonItem.Large(FeedCommands.MarkAllRead.Id),
                             RibbonItem.Large(FeedCommands.Categorize.Id, RibbonItemKind.DropDown),
+                        ],
+                    },
+
+                    new RibbonGroup
+                    {
+                        Id = "boards",
+                        Label = "Boards",
+                        KeyTip = "ZB",
+                        CollapsePriority = 4,
+                        Items =
+                        [
+                            RibbonItem.Large(FeedCommands.SaveToBoard.Id, RibbonItemKind.DropDown),
+                            RibbonItem.Large(FeedCommands.RemoveFromBoard.Id),
+                            RibbonItem.Large(FeedCommands.SaveLink.Id),
+                            RibbonItem.Large(FeedCommands.Boards.Id),
                         ],
                     },
 
@@ -223,6 +238,12 @@ public static class FeedsRibbonLayout
                     RibbonItem.Sheddable(FeedCommands.ReadLater.Id),
                     RibbonItem.Sheddable(FeedCommands.MarkAllRead.Id),
                     RibbonItem.Sheddable(FeedCommands.Categorize.Id, RibbonItemKind.DropDown)),
+
+                Cluster("boards", "Boards",
+                    RibbonItem.Small(FeedCommands.SaveToBoard.Id, RibbonItemKind.DropDown),
+                    RibbonItem.Sheddable(FeedCommands.RemoveFromBoard.Id),
+                    RibbonItem.Sheddable(FeedCommands.SaveLink.Id),
+                    RibbonItem.Sheddable(FeedCommands.Boards.Id)),
 
                 Cluster("actions", "Actions",
                     RibbonItem.Sheddable(FeedCommands.OpenOriginal.Id)),

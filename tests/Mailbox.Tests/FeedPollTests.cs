@@ -35,6 +35,146 @@ public class FeedPollTests
         return (new OpenAccount(account, store, mail), store, mail);
     }
 
+    /// <summary>A publisher's page shaped like the ones a teaser links to.</summary>
+    private static string ArticlePage(string headline) => $"""
+        <!doctype html><html><head><title>{headline}</title>
+          <meta property="og:image" content="https://example.com/img/{headline.GetHashCode(StringComparison.Ordinal)}.jpg">
+        </head><body>
+          <nav><a href="/">Home</a><a href="/news">News</a></nav>
+          <div class="content">
+            <p>The article opens with a paragraph long enough that nobody could mistake it for a
+            caption, and goes on to say something worth having come here for.</p>
+            <p>It continues, because an article is more than one paragraph, and this one has
+            several so that the densest run on the page is unmistakably this one.</p>
+            <p>And it finishes, having said its piece at a length that makes it plainly the
+            thing a reader came to the page in order to read.</p>
+          </div>
+          <footer><p>Copyright somebody.</p></footer>
+        </body></html>
+        """;
+
+    [Fact]
+    public async Task AFeedThatSendsATeaserGetsTheArticleReadFromItsOwnPage()
+    {
+        // The single commonest complaint about reading by RSS, and the reason a reader with one
+        // such subscription sees a list of headlines they cannot read.
+        var server = new FakeFeedServer()
+            .Serve(Url, Feed(Item("1", "First", "A sentence and a link.")))
+            .Serve("https://example.com/1", ArticlePage("First"));
+
+        var feeds = new FeedSubscriptions(SettingsStore.Transient());
+        feeds.Add(Url, "Example");
+
+        var (account, store, mail) = Account();
+        using var _ = store;
+        using var receiver = new FeedReceiver(feeds, server);
+
+        Assert.Equal(1, (await receiver.PollAsync(account, DateTimeOffset.UtcNow, TestContext.Current.CancellationToken)).Delivered);
+
+        var folder = mail.Folders(account.Account.Id).Single(f => f.Name == "Example");
+        var article = Assert.Single(mail.Messages(folder.Id));
+
+        // The body is the article rather than the sentence, and the picture the feed never sent
+        // came off the same page — one request, both answers.
+        var raw = mail.LoadRaw(article.Id)!;
+        using var buffer = new MemoryStream(raw);
+        var message = MimeKit.MimeMessage.Load(buffer, TestContext.Current.CancellationToken);
+
+        Assert.Contains("nobody could mistake it for a caption", message.TextBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("Copyright somebody", message.TextBody, StringComparison.Ordinal);
+        Assert.StartsWith("https://example.com/img/", article.FeedImage, StringComparison.Ordinal);
+
+        // The snippet stays the publisher's own sentence, and carries no address: it is what the
+        // article list draws under the headline.
+        Assert.Equal("A sentence and a link.", article.Preview);
+    }
+
+    [Fact]
+    public async Task AFeedThatSendsTheWholeArticleIsNotFetchedTwice()
+    {
+        // The politeness half. A feed that publishes in full has nothing to add, and asking its
+        // publisher for every article anyway is how a reader gets themselves blocked.
+        var whole = string.Concat(Enumerable.Repeat(
+            "<p>A paragraph of an article that the feed itself carried in full. </p>", 30));
+
+        var server = new FakeFeedServer()
+            .Serve(Url, Feed(Item("1", "First", System.Net.WebUtility.HtmlEncode(whole))))
+            .Serve("https://example.com/1", ArticlePage("First"));
+
+        var feeds = new FeedSubscriptions(SettingsStore.Transient());
+        feeds.Add(Url, "Example");
+
+        var (account, store, _) = Account();
+        using var _s = store;
+        using var receiver = new FeedReceiver(feeds, server);
+
+        await receiver.PollAsync(account, DateTimeOffset.UtcNow, TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, server.RequestsFor(Url));
+        Assert.Equal(0, server.RequestsFor("https://example.com/1"));
+    }
+
+    [Fact]
+    public async Task AReaderWhoTurnsItOffIsNotAskingThePublisherForAnything()
+    {
+        var server = new FakeFeedServer()
+            .Serve(Url, Feed(Item("1", "First", "A sentence and a link.")))
+            .Serve("https://example.com/1", ArticlePage("First"));
+
+        var feeds = new FeedSubscriptions(SettingsStore.Transient());
+        feeds.Add(Url, "Example");
+        feeds.Update(Url, f => f with { ReadFullArticle = false });
+
+        var (account, store, _) = Account();
+        using var _s = store;
+        using var receiver = new FeedReceiver(feeds, server);
+
+        await receiver.PollAsync(account, DateTimeOffset.UtcNow, TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, server.RequestsFor("https://example.com/1"));
+    }
+
+    [Fact]
+    public async Task AnArticleAlreadyFiledAsATeaserIsFilledInWhenItIsOpened()
+    {
+        // The retroactive half: everything filed before this existed, or before the reader turned
+        // it on, is still a teaser, and a reader opening one means "show me more of this".
+        var server = new FakeFeedServer()
+            .Serve(Url, Feed(Item("1", "First", "A sentence and a link.")))
+            .Serve("https://example.com/1", ArticlePage("First"));
+
+        var feeds = new FeedSubscriptions(SettingsStore.Transient());
+        feeds.Add(Url, "Example");
+        feeds.Update(Url, f => f with { ReadFullArticle = false });
+
+        var (account, store, mail) = Account();
+        using var _s = store;
+
+        using (var receiver = new FeedReceiver(feeds, server))
+        {
+            await receiver.PollAsync(account, DateTimeOffset.UtcNow, TestContext.Current.CancellationToken);
+        }
+
+        var folder = mail.Folders(account.Account.Id).Single(f => f.Name == "Example");
+        var teaser = Assert.Single(mail.Messages(folder.Id));
+        Assert.True(ArticleFill.LooksLikeTeaser(teaser));
+
+        using var fetch = new FeedFetch(server);
+        var written = await ArticleFill.FillAsync(account, teaser.Id, fetch, TestContext.Current.CancellationToken);
+        Assert.True(written > 0, "the page behind the teaser was not read");
+
+        // Rewritten in place: the same row, so a flag, a category or a board put on it survives.
+        var filled = Assert.Single(mail.Messages(folder.Id));
+        Assert.Equal(teaser.Id, filled.Id);
+        Assert.True(filled.SizeBytes > teaser.SizeBytes);
+        Assert.StartsWith("https://example.com/img/", filled.FeedImage, StringComparison.Ordinal);
+
+        // And only once: a second opening is not a second request.
+        var asked = server.RequestsFor("https://example.com/1");
+        Assert.Equal(0, await ArticleFill.FillAsync(account, teaser.Id, fetch, TestContext.Current.CancellationToken));
+        Assert.Equal(asked, server.RequestsFor("https://example.com/1"));
+    }
+
     [Fact]
     public async Task AnUnchangedFeedCostsOneConditionalRequestAndNoBody()
     {
@@ -57,7 +197,7 @@ public class FeedPollTests
 
         // The second request carried the tag the first was given, which is what earned the 304.
         Assert.Equal(2, server.RequestsFor(Url));
-        Assert.NotEmpty(server.Requests[1].Headers.IfNoneMatch);
+        Assert.NotEmpty(server.RequestLog(Url)[1].Headers.IfNoneMatch);
     }
 
     [Fact]

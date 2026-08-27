@@ -9,6 +9,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Mailbox.Core.Diagnostics;
 using Mailbox.Core.Feeds;
+using Mailbox.Protocols;
 using Mailbox.Store;
 using Mailbox.Theming.Icons;
 
@@ -25,6 +26,19 @@ internal sealed record FeedNavRow(string Label, int Unread, FeedNavKind Kind)
 
     /// <summary>The store folders whose articles this row shows.</summary>
     public IReadOnlyList<long> Folders { get; init; } = [];
+
+    /// <summary>The board a board row stands for, or null for everything else.</summary>
+    public Board? Board { get; init; }
+
+    /// <summary>
+    /// Whether the number beside the row is everything on it rather than what is unread.
+    /// </summary>
+    /// <remarks>
+    /// A board is a keep pile, and most of what a reader saves onto one they have already read.
+    /// Counting the unread there would draw a nought against a board holding forty articles,
+    /// which reads as an empty board rather than as a read one.
+    /// </remarks>
+    public bool CountIsTotal { get; init; }
 
     public bool IsExpanded { get; set; } = true;
 }
@@ -50,6 +64,7 @@ internal enum FeedNavKind
     Today,
     Unread,
     ReadLater,
+    Board,
     Category,
     Feed,
 }
@@ -95,8 +110,16 @@ internal sealed class FeedsWorkspace : Border
     /// list has the room in the meantime.
     /// </remarks>
     private const double ReadingWidth = 620;
-    private const double ThumbnailWidth = 132;
-    private const double ThumbnailHeight = 76;
+    /// <summary>
+    /// The thumbnail, at the proportions the readers this is measured against use.
+    /// </summary>
+    /// <remarks>
+    /// 150×86 is close to 16:9 and is what both reference pictures draw: large enough that a
+    /// photograph is worth having, small enough that four rows still fit on a screen. It was
+    /// smaller, and a picture at that size is decoration rather than information.
+    /// </remarks>
+    private const double ThumbnailWidth = 150;
+    private const double ThumbnailHeight = 86;
 
     private readonly FeedSubscriptions _feeds;
     private readonly Func<OpenAccount?> _account;
@@ -166,6 +189,7 @@ internal sealed class FeedsWorkspace : Border
             // Which subscription it came from, so Update This Feed and Feed Settings act on the
             // right one when the reader is looking at Today rather than at one feed.
             _articleFeed = _feedByFolder.GetValueOrDefault(chosen.FolderId);
+            _chosen = chosen;
 
             if (_openOnSelect) Open(chosen);
         };
@@ -186,6 +210,15 @@ internal sealed class FeedsWorkspace : Border
     /// <summary>Raised when the reader asks to add a feed.</summary>
     public event EventHandler? AddRequested;
 
+    /// <summary>Raised when the reader asks for a new board, with the article to put on it if any.</summary>
+    public event EventHandler? NewBoardRequested;
+
+    /// <summary>Raised when the reader asks to save an address that arrived from nowhere.</summary>
+    public event EventHandler? SaveLinkRequested;
+
+    /// <summary>Raised with the control to hang the Save to Board menu off.</summary>
+    public event EventHandler<Control>? SaveToBoardRequested;
+
     /// <summary>Raised when the reader opens an article in a window of its own.</summary>
     public event EventHandler<long>? OpenRequested;
 
@@ -194,6 +227,9 @@ internal sealed class FeedsWorkspace : Border
 
     /// <summary>The subscription the pane has selected, or the one the selected article came from.</summary>
     public FeedSubscription? SelectedFeed => _selected?.Feed ?? _articleFeed;
+
+    /// <summary>The board the pane has open, or null when the pane is on a feed or a view.</summary>
+    public Board? SelectedBoard => _selected?.Board;
 
     /// <summary>
     /// The article the list has selected, read fresh from the store.
@@ -205,9 +241,18 @@ internal sealed class FeedsWorkspace : Border
     /// command wants to know — is it read, is it flagged — is exactly what changes under it.
     /// </remarks>
     public MessageSummary? SelectedArticle
-        => _articles.SelectedItem is MessageSummary chosen && _account() is { } account
-            ? account.Mail.GetMessage(chosen.Id) ?? chosen
-            : null;
+    {
+        get
+        {
+            if (_account() is not { } account) return null;
+
+            // In the Cards layout the list selects a row of three tiles, so its own selection
+            // cannot say which article was meant and the tile that was pressed is the only thing
+            // that can. Everywhere else the two agree.
+            var article = _articles.SelectedItem as MessageSummary ?? _chosen;
+            return article is null ? null : account.Mail.GetMessage(article.Id) ?? article;
+        }
+    }
 
     /// <summary>Whether the subscriptions pane is showing.</summary>
     public bool IsNavVisible
@@ -363,6 +408,7 @@ internal sealed class FeedsWorkspace : Border
     private Control SearchRow()
     {
         _search.PlaceholderText = "Search these articles";
+        _search.MaxLength = 200;
         _search.MinWidth = 240;
         _search.TextChanged += (_, _) =>
         {
@@ -464,6 +510,70 @@ internal sealed class FeedsWorkspace : Border
         Rerun();
     }
 
+    /// <summary>
+    /// Selects the nth article showing, without opening it, for a harness run.
+    /// </summary>
+    /// <remarks>
+    /// A run has to be able to say "this article" before it presses a command that acts on one,
+    /// and clicking a row is the one thing a capture cannot do.
+    /// </remarks>
+    public string PoseSelect(int at, bool open = false)
+    {
+        if (_showing.Count == 0) return "nothing is showing";
+        if (at < 0 || at >= _showing.Count) return $"only {_showing.Count} article(s) are showing";
+
+        Choose(_showing[at]);
+
+        // What a click does is select and open, so a run that poses a click has to do both —
+        // otherwise the reading pane in the photograph is the one the previous row left behind.
+        if (open) Open(_showing[at]);
+
+        return $"“{_showing[at].Subject}” ({_showing[at].DisplayFrom})"
+            + (open ? $", opened; {Length(_showing[at])} characters of article" : string.Empty);
+    }
+
+    /// <summary>
+    /// How much article a row actually carries, for a harness run.
+    /// </summary>
+    /// <remarks>
+    /// The claim "you can read the article here" is a claim about a number of characters, and it
+    /// is the one a screenshot of a reading pane cannot make: a pane showing one paragraph and a
+    /// pane showing the whole piece are the same picture above the fold.
+    /// </remarks>
+    private string Length(MessageSummary article)
+    {
+        if (_account() is not { } account || account.Mail.LoadRaw(article.Id) is not { } raw) return "no";
+
+        try
+        {
+            using var stream = new MemoryStream(raw);
+            var message = MimeKit.MimeMessage.Load(stream);
+            var text = message.TextBody ?? FeedParser.PlainText(message.HtmlBody ?? string.Empty);
+            return text.Trim().Length.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+        catch (Exception ex) when (ex is FormatException or IOException)
+        {
+            return "unreadable";
+        }
+    }
+
+    /// <summary>What is on the boards, as lines a harness run can read back.</summary>
+    public IEnumerable<string> BoardReport()
+    {
+        if (_account() is not { } account) yield break;
+
+        foreach (var board in account.Mail.Boards())
+        {
+            yield return $"{board.Name}: {board.Count} article(s)"
+                + (board.Description.Length > 0 ? $" — {board.Description}" : string.Empty);
+
+            foreach (var article in account.Mail.BoardMessages(board.Id).Take(5))
+            {
+                yield return $"    · {article.Subject}  ({article.DisplayFrom})";
+            }
+        }
+    }
+
     /// <summary>Redraws the list for whatever the search now says.</summary>
     private void Rerun()
     {
@@ -515,17 +625,31 @@ internal sealed class FeedsWorkspace : Border
             views.Children.Add(button);
         }
 
+        // Only over a board, where it is the thing a reader is there to do. Over a feed it would
+        // be a button about somewhere else.
+        _saveLink = new Button
+        {
+            Classes = { "flat" },
+            Padding = new Thickness(8, 2, 8, 2),
+            IsVisible = false,
+            Content = ActionContent("add", "Save a link"),
+        };
+        ToolTip.SetTip(_saveLink, "Put any web address on this board");
+        _saveLink.Click += (_, _) => SaveLinkRequested?.Invoke(this, EventArgs.Empty);
+
         var strip = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Right,
             Margin = new Thickness(12, 0, 12, 8),
             Spacing = 10,
-            Children = { _markAllRead, views },
+            Children = { _saveLink, _markAllRead, views },
         };
 
         return strip;
     }
+
+    private Button? _saveLink;
 
     private Button? _markAllRead;
     private readonly Dictionary<FeedLayout, Button> _viewButtons = [];
@@ -634,6 +758,8 @@ internal sealed class FeedsWorkspace : Border
 
         foreach (var row in _rows.ToList()) _nav.Children.Add(NavButton(row, indent: 0));
 
+        BuildBoards(account);
+
         _nav.Children.Add(SectionLabel("FEEDS"));
 
         // Headings first, in the order a reader would expect them, then the loose feeds.
@@ -684,6 +810,53 @@ internal sealed class FeedsWorkspace : Border
         }
 
         if (all.Count == 0) _nav.Children.Add(NoFeedsYet());
+    }
+
+    /// <summary>
+    /// The boards section of the pane, with New Board… at the end of it.
+    /// </summary>
+    /// <remarks>
+    /// Above the feeds and below the standing views, which is where every reader that has boards
+    /// puts them: they are places a reader goes deliberately, and the subscription list under
+    /// them is long enough to push anything below it off the pane.
+    /// <para>
+    /// Drawn even when there are none, as one line offering to make the first — a feature nothing
+    /// on screen mentions is a feature nobody finds, and this one is the difference between a
+    /// reader who keeps things here and one who keeps them in their browser.
+    /// </para>
+    /// </remarks>
+    private void BuildBoards(OpenAccount? account)
+    {
+        _nav.Children.Add(SectionLabel("BOARDS"));
+
+        var boards = account?.Mail.Boards() ?? [];
+
+        foreach (var board in boards)
+        {
+            var row = new FeedNavRow(board.Name, board.Count, FeedNavKind.Board)
+            {
+                Board = board,
+                CountIsTotal = true,
+            };
+
+            _rows.Add(row);
+            _nav.Children.Add(NavButton(row, indent: 0));
+        }
+
+        var make = new Button
+        {
+            Classes = { "flat" },
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Left,
+            Padding = new Thickness(4, 0, 0, 0),
+            Height = 26,
+            Content = Row(IconGlyphs.GetOrEmpty("add", 16), "New board…"),
+        };
+        ToolTip.SetTip(make, boards.Count == 0
+            ? "A board is a collection you save articles into — and any web address can go on one"
+            : "Make another collection to save articles into");
+        make.Click += (_, _) => NewBoardRequested?.Invoke(this, EventArgs.Empty);
+        _nav.Children.Add(make);
     }
 
     /// <summary>
@@ -766,7 +939,10 @@ internal sealed class FeedsWorkspace : Border
             Text = row.Label,
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
-            FontWeight = row.Unread > 0 ? FontWeight.SemiBold : FontWeight.Normal,
+
+            // Bold means "there is something here you have not read". A board's number is how
+            // much is on it, which is not that, so a board is never bolded by its count.
+            FontWeight = row.Unread > 0 && !row.CountIsTotal ? FontWeight.SemiBold : FontWeight.Normal,
         };
         label[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("nav.item.text.brush");
         Grid.SetColumn(label, 2);
@@ -781,7 +957,9 @@ internal sealed class FeedsWorkspace : Border
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(6, 0, 10, 0),
             };
-            count[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("nav.unreadcount.brush");
+            count[!TextBlock.ForegroundProperty] = new DynamicResourceExtension(
+                row.CountIsTotal ? "nav.item.text.brush" : "nav.unreadcount.brush");
+            if (row.CountIsTotal) count.Opacity = 0.7;
             Grid.SetColumn(count, 3);
             grid.Children.Add(count);
         }
@@ -797,6 +975,10 @@ internal sealed class FeedsWorkspace : Border
         else if (row.Feed is { } feed)
         {
             ToolTip.SetTip(grid, feed.Description.Length > 0 ? $"{feed.Name}\n{feed.Description}" : feed.Name);
+        }
+        else if (row.Board is { } board)
+        {
+            ToolTip.SetTip(grid, board.Description.Length > 0 ? $"{board.Name}\n{board.Description}" : board.Name);
         }
 
         var button = new Button
@@ -819,6 +1001,7 @@ internal sealed class FeedsWorkspace : Border
         FeedNavKind.Today => "calendar",
         FeedNavKind.Unread => "unread",
         FeedNavKind.ReadLater => "flag",
+        FeedNavKind.Board => "bookmark",
         FeedNavKind.Category => "folder",
         _ => "rss",
     };
@@ -828,6 +1011,7 @@ internal sealed class FeedsWorkspace : Border
     private void Select(FeedNavRow? row, bool keepReading)
     {
         _selected = row;
+        _chosen = null;
         if (row is null)
         {
             _heading.Text = "Feeds";
@@ -854,6 +1038,13 @@ internal sealed class FeedsWorkspace : Border
         _articles.ItemsSource = Shaped(articles);
         if (_articles.Scroll is { } top) top.Offset = new Vector(0, 0);
 
+        if (_saveLink is { } saving) saving.IsVisible = row.Kind == FeedNavKind.Board;
+
+        // A board's search is a filter over what is on it, so "Here" and "Every feed" would be
+        // two names for the same answer. A control that cannot change anything is worse than no
+        // control, so it goes rather than sitting there being pressed to no effect.
+        _scope.IsVisible = row.Kind != FeedNavKind.Board;
+
         if (!keepReading)
         {
             _selectedMessage = 0;
@@ -871,6 +1062,9 @@ internal sealed class FeedsWorkspace : Border
         FeedNavKind.Today => "Everything your subscriptions have published, newest first.",
         FeedNavKind.Unread => "What you have not read yet.",
         FeedNavKind.ReadLater => "Articles you flagged to come back to.",
+        FeedNavKind.Board => row.Board?.Description is { Length: > 0 } why
+            ? why
+            : $"{count} article{(count == 1 ? string.Empty : "s")} saved here, newest first.",
         FeedNavKind.Category => $"{count} article{(count == 1 ? string.Empty : "s")} across "
             + $"{_feeds.All.Count(f => string.Equals(f.Category, row.Category, StringComparison.OrdinalIgnoreCase))} feeds.",
         _ => row.Feed?.Description is { Length: > 0 } described
@@ -882,6 +1076,11 @@ internal sealed class FeedsWorkspace : Border
     private List<MessageSummary> Articles(FeedNavRow row)
     {
         if (_account() is not { } account) return [];
+
+        // A board is not a folder — it is a set of articles that are still filed wherever they
+        // came from — so it is read through its own membership and then narrowed by the search
+        // rather than being handed to a query that thinks in folders.
+        if (row.Kind == FeedNavKind.Board && row.Board is { } board) return OnBoard(account, board);
 
         // "Every feed" widens the search past the row the pane has selected; without a search
         // there is nothing to widen, and the row is the whole question.
@@ -915,6 +1114,34 @@ internal sealed class FeedsWorkspace : Border
         var found = new List<MessageSummary>();
         foreach (var folder in folders) found.AddRange(account.Mail.Messages(folder));
         return found;
+    }
+
+    /// <summary>
+    /// What is on a board, in the order it was saved, narrowed by whatever is in the search box.
+    /// </summary>
+    /// <remarks>
+    /// The order is the point and is why this does not end with the same <c>OrderByDescending</c>
+    /// every other row does: a board is read newest-<em>saved</em> first, so a piece from last
+    /// year that the reader put on it this morning is at the top where they left it, rather than
+    /// buried under the week's headlines.
+    /// <para>
+    /// Searching a board is a filter over its membership rather than a query with the board in
+    /// it: the store's search thinks in folders, and a board's articles are still filed in the
+    /// feeds they arrived from. Running the same query over the whole scope and keeping what is
+    /// on the board gives the same answer and needs nothing new in the store.
+    /// </para>
+    /// </remarks>
+    private List<MessageSummary> OnBoard(OpenAccount account, Board board)
+    {
+        var saved = account.Mail.BoardMessages(board.Id);
+        if (_query.Length == 0) return [.. saved];
+
+        var matched = account.Mail
+            .Search(Query(), folderIds: null, limit: 2000)
+            .Select(m => m.Id)
+            .ToHashSet();
+
+        return [.. saved.Where(m => matched.Contains(m.Id))];
     }
 
     /// <summary>
@@ -957,30 +1184,37 @@ internal sealed class FeedsWorkspace : Border
         var grid = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions($"{ThumbnailWidth},*,Auto"),
-            Margin = new Thickness(16, 10, 10, 10),
+            Margin = new Thickness(18, 14, 12, 14),
         };
 
         var picture = Thumbnail(message);
         Grid.SetColumn(picture, 0);
         grid.Children.Add(picture);
 
+        // The headline carries the row. In the reference pictures it is half again the size of
+        // everything around it and set in the page's own ink, not a link colour — an article
+        // list is nearly all unread, and a list of blue headlines reads as a page of links.
         var title = new TextBlock
         {
             Text = message.Subject,
-            FontSize = 14,
+            FontSize = 15.5,
+            LineHeight = 21,
             FontWeight = message.IsRead ? FontWeight.Normal : FontWeight.SemiBold,
             TextWrapping = TextWrapping.Wrap,
             MaxLines = 2,
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
+
+        // Read is the same headline in the quieter ink, which is how the reference marks one:
+        // a read article is still worth being able to read the title of.
         title[!TextBlock.ForegroundProperty] = new DynamicResourceExtension(
-            message.IsRead ? "list.row.read.text.brush" : "list.row.unread.text.brush");
+            message.IsRead ? "text.secondary.brush" : "text.primary.brush");
 
         var source = new TextBlock
         {
             Text = $"{message.DisplayFrom} · {Ago(message.Received)}",
-            FontSize = 11,
-            Margin = new Thickness(0, 3, 0, 0),
+            FontSize = 12,
+            Margin = new Thickness(0, 5, 0, 0),
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
         source[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("text.secondary.brush");
@@ -988,15 +1222,22 @@ internal sealed class FeedsWorkspace : Border
         var snippet = new TextBlock
         {
             Text = message.Preview,
-            FontSize = 12,
-            Margin = new Thickness(0, 5, 0, 0),
+            FontSize = 13,
+            LineHeight = 19,
+            Margin = new Thickness(0, 7, 0, 0),
             TextWrapping = TextWrapping.Wrap,
-            MaxLines = 3,
+            MaxLines = 2,
             TextTrimming = TextTrimming.CharacterEllipsis,
+            Opacity = 0.85,
         };
-        snippet[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("list.row.preview.text.brush");
+        snippet[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("text.secondary.brush");
 
-        var text = new StackPanel { Margin = new Thickness(14, 0, 8, 0), Children = { title, source, snippet } };
+        var text = new StackPanel
+        {
+            Margin = new Thickness(20, 0, 8, 0),
+            VerticalAlignment = VerticalAlignment.Top,
+            Children = { title, source, snippet },
+        };
         Grid.SetColumn(text, 1);
         grid.Children.Add(text);
 
@@ -1005,10 +1246,28 @@ internal sealed class FeedsWorkspace : Border
         grid.Children.Add(actions);
 
         // The buttons appear under the pointer, as the reference's do: a row carrying four
-        // buttons at all times is a row nobody can read.
-        var row = new Border { Background = Brushes.Transparent, Child = grid };
-        row.PointerEntered += (_, _) => actions.IsVisible = true;
-        row.PointerExited += (_, _) => actions.IsVisible = false;
+        // buttons at all times is a row nobody can read. The row tints with them, so it is
+        // obvious which one they belong to.
+        var row = new Border
+        {
+            Background = Brushes.Transparent,
+            CornerRadius = new CornerRadius(6),
+            Margin = new Thickness(6, 0, 6, 0),
+            Child = grid,
+        };
+
+        row.PointerEntered += (_, _) =>
+        {
+            actions.IsVisible = true;
+            row[!BackgroundProperty] = new DynamicResourceExtension("list.row.hover.brush");
+        };
+
+        row.PointerExited += (_, _) =>
+        {
+            actions.IsVisible = false;
+            row.Background = Brushes.Transparent;
+        };
+
         row.DoubleTapped += (_, e) =>
         {
             e.Handled = true;
@@ -1043,6 +1302,30 @@ internal sealed class FeedsWorkspace : Border
                 Changed?.Invoke(this, EventArgs.Empty);
             }));
 
+        // On a board, the second button takes the article off the board it is showing — which is
+        // the one thing a reader looking at a board wants that nothing else offers. Everywhere
+        // else it is the way onto one.
+        if (_selected is { Kind: FeedNavKind.Board, Board: { } open })
+        {
+            strip.Children.Add(RowButton("remove-feed", $"Take off {open.Name}", () =>
+            {
+                if (_account() is not { } account) return;
+
+                account.Mail.RemoveFromBoard([message.Id], open.Id);
+                Status = $"“{message.Subject}” taken off {open.Name}.";
+                RefreshBoards();
+                Changed?.Invoke(this, EventArgs.Empty);
+            }));
+        }
+        else
+        {
+            strip.Children.Add(RowButton("bookmark", "Save to a board", button =>
+            {
+                Choose(message);
+                SaveToBoardRequested?.Invoke(this, button);
+            }));
+        }
+
         if (message.FeedLink.Length > 0)
         {
             strip.Children.Add(RowButton("link", "Open the original", () => OpenExternally(message.FeedLink)));
@@ -1068,6 +1351,47 @@ internal sealed class FeedsWorkspace : Border
         }));
 
         return strip;
+    }
+
+    /// <summary>A row button whose press wants the button itself — a menu has to hang off one.</summary>
+    /// <summary>
+    /// Points the selection at a row without opening it, so a button on that row acts on it.
+    /// </summary>
+    /// <remarks>
+    /// The buttons appear under the pointer, which is not where the selection is: a reader can
+    /// hover the fourth row while the first is selected, and a menu opened from the fourth row's
+    /// button that saved the first one would be saving something they cannot see.
+    /// </remarks>
+    private void Choose(MessageSummary message)
+    {
+        _chosen = message;
+        _articleFeed = _feedByFolder.GetValueOrDefault(message.FolderId);
+
+        var at = _showing.FindIndex(m => m.Id == message.Id);
+        if (at < 0) return;
+
+        var index = _layout == FeedLayout.Cards ? at / TilesAcross : at;
+        if (index == _articles.SelectedIndex) return;
+
+        _openOnSelect = false;
+        _articles.SelectedIndex = index;
+        _openOnSelect = true;
+    }
+
+    /// <summary>
+    /// The row a button was pressed on, which is what a menu opened from one acts on.
+    /// </summary>
+    /// <remarks>
+    /// Kept beside the list's own selection rather than read out of it, because in the Cards
+    /// layout the list selects a row of three tiles and cannot say which of the three was meant.
+    /// </remarks>
+    private MessageSummary? _chosen;
+
+    private static Button RowButton(string icon, string tip, Action<Button> onClick)
+    {
+        Button? made = null;
+        made = RowButton(icon, tip, () => onClick(made!));
+        return made;
     }
 
     private static Button RowButton(string icon, string tip, Action onClick)
@@ -1194,6 +1518,14 @@ internal sealed class FeedsWorkspace : Border
             return;
         }
 
+        // A feed that sends a sentence and a link is the ordinary case, not the exotic one, and
+        // "click it to read it" has to mean something. The teaser is shown first and the article
+        // replaces it when the page has been read — rather than an empty pane and a wait.
+        if (ArticleFill.LooksLikeTeaser(message) && _tried.Add(message.Id))
+        {
+            FullTextWanted?.Invoke(this, message);
+        }
+
         // Reading it marks it read, as it does in the mail list — and the counts in the pane move
         // with it, which is the thing a feed reader is judged on.
         //
@@ -1265,6 +1597,17 @@ internal sealed class FeedsWorkspace : Border
     public void Refresh() => RefreshCards();
 
     /// <summary>
+    /// Redraws after a board has changed: the pane's counts, and the list if a board is open.
+    /// </summary>
+    /// <remarks>
+    /// Not <see cref="Reload"/>. A full reload rebuilds the list from scratch and drops the
+    /// selection with it, so saving an article to a board would leave nothing selected — and the
+    /// next command a reader pressed, or the next <c>j</c>, would act on nothing. Saving is not a
+    /// gesture that should cost you your place.
+    /// </remarks>
+    public void RefreshBoards() => KeepingPlace(() => { BuildNav(); RefreshCards(); });
+
+    /// <summary>
     /// Marks everything showing as read, which is the button a reader presses most.
     /// </summary>
     /// <returns>How many were not already read.</returns>
@@ -1278,6 +1621,41 @@ internal sealed class FeedsWorkspace : Border
         account.Mail.SetRead(unread, read: true);
         Reload();
         return unread.Count;
+    }
+
+    /// <summary>
+    /// The article a board command acts on, and the control to hang its menu off.
+    /// </summary>
+    /// <remarks>
+    /// The ribbon has no row to hang a flyout from, so it hands over its own button; a row's own
+    /// button hands over itself. Either way the menu opens where the press was.
+    /// </remarks>
+    public MessageSummary? ArticleForBoard => SelectedArticle;
+
+    /// <summary>Takes the selected article off the board the pane has open.</summary>
+    /// <returns>False when the pane is not on a board, which is what the bar greys.</returns>
+    public bool RemoveFromOpenBoard()
+    {
+        if (_selected is not { Kind: FeedNavKind.Board, Board: { } board }) return false;
+        if (SelectedArticle is not { } article || _account() is not { } account) return false;
+
+        account.Mail.RemoveFromBoard([article.Id], board.Id);
+        Status = $"“{article.Subject}” taken off {board.Name}.";
+
+        RefreshBoards();
+        Changed?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
+    /// <summary>Opens the board the pane's row stands for, by name. What a save jumps to.</summary>
+    public bool ShowBoard(string name)
+    {
+        if (_rows.FirstOrDefault(r => r.Kind == FeedNavKind.Board
+                                      && string.Equals(r.Label, name, StringComparison.OrdinalIgnoreCase))
+            is not { } row) return false;
+
+        Select(row, keepReading: false);
+        return true;
     }
 
     /// <summary>Keeps the selected article to come back to, or stops keeping it.</summary>
@@ -1344,13 +1722,45 @@ internal sealed class FeedsWorkspace : Border
     {
         if (SelectedArticle is not { } article || _account() is not { } account) return;
 
-        account.Mail.DeleteMessage(article.Id);
+        // An article somebody put on a board is not deleted by clearing out the feed it arrived
+        // in. Deleting it would take it off every board it is on — the join cascades — and a keep
+        // pile that quietly loses things is not one anybody keeps using. So it is moved to where
+        // saved things live and the reader is told, and the way to actually let it go is to take
+        // it off the board first, which is what the button on a board row does.
+        if (account.Mail.IsOnAnyBoard(article.Id) && _selected is not { Kind: FeedNavKind.Board })
+        {
+            if (SavedFolder(account) is { } keep && article.FolderId != keep.Id)
+            {
+                account.Mail.MoveMessage(article.Id, keep.Id);
+                Status = $"“{article.Subject}” is on a board, so it was kept rather than deleted.";
+            }
+            else
+            {
+                Status = $"“{article.Subject}” is on a board and was kept.";
+            }
+        }
+        else
+        {
+            account.Mail.DeleteMessage(article.Id);
+            Status = $"“{article.Subject}” deleted.";
+        }
+
         _selectedMessage = 0;
         ShowReading(false);
         Reload();
 
-        Status = $"“{article.Subject}” deleted.";
         Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Where a saved thing lives, or null when nothing has been saved yet.</summary>
+    private static Folder? SavedFolder(OpenAccount account)
+    {
+        var folders = account.Mail.Folders(account.Account.Id);
+        var root = folders.FirstOrDefault(f => f.ParentId is null && f.Name == Mailbox.Protocols.FeedReceiver.RootFolder);
+
+        return root is null
+            ? null
+            : folders.FirstOrDefault(f => f.ParentId == root.Id && f.Name == Mailbox.Protocols.SavedLinks.SavedFolder);
     }
 
     /// <summary>Marks one article read or unread, from a row's own button.</summary>
@@ -1437,6 +1847,15 @@ internal sealed class FeedsWorkspace : Border
                 ToggleReadLater();
                 break;
 
+            // The letter both readers this is measured against use for it.
+            case Key.B when !shift && SelectedArticle is not null:
+                SaveToBoardRequested?.Invoke(this, this);
+                break;
+
+            case Key.B when shift:
+                if (!RemoveFromOpenBoard()) Status = "Open a board first to take an article off it.";
+                break;
+
             case Key.R:
                 RefreshRequested?.Invoke(this, EventArgs.Empty);
                 break;
@@ -1506,6 +1925,8 @@ internal sealed class FeedsWorkspace : Border
             ("M", "Mark as read or unread"),
             ("X", "Mark read and move on"),
             ("S", "Keep for Read Later"),
+            ("B", "Save to a board"),
+            ("Shift+B", "Take off the board you are reading"),
             ("R", "Update the feeds"),
             ("Shift+A", "Mark everything showing as read"),
             ("Delete", "Delete the article"),
@@ -1533,6 +1954,41 @@ internal sealed class FeedsWorkspace : Border
 
     /// <summary>Raised when the reader presses "?", with the list to show them.</summary>
     public event EventHandler<Control>? ShortcutsRequested;
+
+    /// <summary>
+    /// Raised when an article was opened that is only a teaser, so its page can be read.
+    /// </summary>
+    /// <remarks>
+    /// The workspace does not do it itself: reading a publisher's page is a network request and
+    /// this is a view. What comes back reaches it again through <see cref="Reopen"/>.
+    /// </remarks>
+    public event EventHandler<MessageSummary>? FullTextWanted;
+
+    /// <summary>
+    /// Articles whose page has already been asked for this session.
+    /// </summary>
+    /// <remarks>
+    /// A page that yields nothing usable would otherwise be re-fetched every time its row is
+    /// opened, which for a reader flicking through a folder is a request per keystroke.
+    /// </remarks>
+    private readonly HashSet<long> _tried = [];
+
+    /// <summary>
+    /// Shows an article again from the store, after something has changed underneath it.
+    /// </summary>
+    /// <remarks>
+    /// Only when it is still the one on screen: reading a page takes a moment, and a reader who
+    /// has moved on in the meantime must not have the article they were reading replaced by the
+    /// one they left.
+    /// </remarks>
+    public void Reopen(long messageId)
+    {
+        if (_selectedMessage != messageId) return;
+        if (_account() is not { } account || account.Mail.GetMessage(messageId) is not { } article) return;
+
+        Open(article);
+        KeepingPlace(() => RefreshCards());
+    }
 
     // ---- Layout -------------------------------------------------------------------------------------
 
@@ -1606,13 +2062,13 @@ internal sealed class FeedsWorkspace : Border
         var title = new TextBlock
         {
             Text = message.Subject,
-            FontSize = 13,
+            FontSize = 13.5,
             FontWeight = message.IsRead ? FontWeight.Normal : FontWeight.SemiBold,
             TextTrimming = TextTrimming.CharacterEllipsis,
             VerticalAlignment = VerticalAlignment.Center,
         };
         title[!TextBlock.ForegroundProperty] = new DynamicResourceExtension(
-            message.IsRead ? "list.row.read.text.brush" : "list.row.unread.text.brush");
+            message.IsRead ? "text.secondary.brush" : "text.primary.brush");
         Grid.SetColumn(title, 0);
         grid.Children.Add(title);
 
@@ -1662,7 +2118,7 @@ internal sealed class FeedsWorkspace : Border
         var title = new TextBlock
         {
             Text = message.Subject,
-            FontSize = 13,
+            FontSize = 13.5,
             FontWeight = message.IsRead ? FontWeight.Normal : FontWeight.SemiBold,
             TextWrapping = TextWrapping.Wrap,
             MaxLines = 3,
@@ -1670,7 +2126,7 @@ internal sealed class FeedsWorkspace : Border
             Margin = new Thickness(0, 8, 0, 0),
         };
         title[!TextBlock.ForegroundProperty] = new DynamicResourceExtension(
-            message.IsRead ? "list.row.read.text.brush" : "list.row.unread.text.brush");
+            message.IsRead ? "text.secondary.brush" : "text.primary.brush");
 
         var source = new TextBlock
         {
@@ -1695,9 +2151,7 @@ internal sealed class FeedsWorkspace : Border
             e.Handled = true;
 
             // The list selects a row of three, so the tile says which of the three was meant.
-            _openOnSelect = false;
-            _articles.SelectedIndex = _showing.FindIndex(m => m.Id == message.Id) / TilesAcross;
-            _openOnSelect = true;
+            Choose(message);
             Open(message);
         };
 

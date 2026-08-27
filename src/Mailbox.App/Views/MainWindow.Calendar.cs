@@ -1834,9 +1834,43 @@ public partial class MainWindow
                         }
                     }
 
+                    // MAILBOX_FEED_PICK=<n> chooses the nth article showing, so a command that
+                    // acts on one has something to act on. A run cannot click a row.
+                    if (Environment.GetEnvironmentVariable("MAILBOX_FEED_PICK") is { Length: > 0 } picking)
+                    {
+                        var choice = picking.Split('|', StringSplitOptions.TrimEntries);
+                        if (int.TryParse(choice[0], CultureInfo.InvariantCulture, out var nth))
+                        {
+                            Log.Info($"Harness: feed article {nth} chosen — "
+                                + $"{feeds.PoseSelect(nth, choice.Contains("open"))}.");
+                        }
+                    }
+
                     shell.ModuleStatusLeft = feeds.Status;
                     Log.Info($"Harness: Feeds showing {feeds.Status}; "
                         + $"{App.Feeds.All.Count} subscription(s), {App.Feeds.Categories.Count} heading(s).");
+
+                    // MAILBOX_BOARD_VIEW=<name> opens a board and reads back what is on it —
+                    // posted at Background so it lands after MAILBOX_RUN has pressed whatever
+                    // put something there. Opening the board before the save would photograph
+                    // the board as it was, which is exactly the sort of proof that proves nothing.
+                    if (Environment.GetEnvironmentVariable("MAILBOX_BOARD_VIEW") is { Length: > 0 } boardView)
+                    {
+                        Dispatcher.UIThread.Post(
+                            () =>
+                            {
+                                var name = boardView.Trim();
+                                Log.Info(feeds.ShowBoard(name)
+                                    ? $"Harness: board “{name}” opened — {feeds.Status}."
+                                    : $"Harness: there is no board called “{name}”.");
+
+                                foreach (var line in feeds.BoardReport()) Log.Info($"Harness: board {line}");
+                                foreach (var headline in feeds.Showing.Take(5)) Log.Info($"Harness:   · {headline}");
+
+                                shell.ModuleStatusLeft = feeds.Status;
+                            },
+                            DispatcherPriority.Background);
+                    }
                 }
 
                 if (shell.Module == MailboxModule.People)

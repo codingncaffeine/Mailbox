@@ -269,7 +269,7 @@ public static class FeedLinks
     // ---- A very small scanner ------------------------------------------------------------------
 
     /// <summary>Every tag of the given name in the markup, as the text between angle brackets.</summary>
-    private static IEnumerable<string> Tags(string html, string name)
+    internal static IEnumerable<string> Tags(string html, string name)
     {
         var at = 0;
 
@@ -296,7 +296,7 @@ public static class FeedLinks
            && (at + name.Length == html.Length || !char.IsAsciiLetterOrDigit(html[at + name.Length]));
 
     /// <summary>The attributes of one tag, lower-cased by name, with entities decoded.</summary>
-    private static Dictionary<string, string> Attributes(string tag)
+    internal static Dictionary<string, string> Attributes(string tag)
     {
         var found = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var at = 0;

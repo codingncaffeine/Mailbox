@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Input.Platform;
 using Avalonia.Platform.Storage;
 using Mailbox.App.ViewModels;
 using Mailbox.Core.Commands;
@@ -49,9 +50,13 @@ public partial class MainWindow
         };
 
         workspace.AddRequested += (_, _) => _ = SubscribeToFeedAsync(shell);
+        workspace.NewBoardRequested += (_, _) => _ = BoardsAsync(shell, string.Empty);
+        workspace.SaveLinkRequested += (_, _) => _ = SaveLinkAsync(shell);
+        workspace.SaveToBoardRequested += (_, anchor) => SaveToBoard(shell, workspace, anchor);
         workspace.RefreshRequested += (_, _) => _ = UpdateFeedsAsync(shell, force: true);
         workspace.OpenRequested += (_, id) => OpenFeedArticle(shell, id);
         workspace.ShortcutsRequested += (_, list) => _ = Confirm.ShowAsync(this, "Keyboard shortcuts", list);
+        workspace.FullTextWanted += (_, article) => _ = FillInArticleAsync(shell, workspace, article);
         workspace.Changed += (_, _) =>
         {
             shell.ModuleStatusLeft = workspace.Status;
@@ -94,6 +99,12 @@ public partial class MainWindow
             case "feeds.export.opml":
                 _ = ExportFeedsAsync(shell);
                 return true;
+
+            // Saving an address needs nothing selected and no module: a reader comes across one
+            // while they are reading their mail as often as while they are reading their feeds.
+            case "feeds.board.link":
+                _ = SaveLinkAsync(shell);
+                return true;
         }
 
         if (shell.Module != MailboxModule.Feeds) return false;
@@ -115,6 +126,19 @@ public partial class MainWindow
 
             case "feeds.readlater":
                 feeds.ToggleReadLater();
+                return true;
+
+            case "feeds.board.save":
+                SaveToBoard(shell, feeds, _ribbon ?? (Avalonia.Controls.Control)this);
+                return true;
+
+            case "feeds.board.remove":
+                if (!feeds.RemoveFromOpenBoard()) shell.StatusRight = "Open a board first to take an article off it.";
+                else shell.StatusRight = feeds.Status;
+                return true;
+
+            case "feeds.boards":
+                _ = BoardsAsync(shell, string.Empty);
                 return true;
 
             case "feeds.open.original":
@@ -383,6 +407,260 @@ public partial class MainWindow
 
         _feedModule?.Reload();
         shell.Refresh();
+    }
+
+    /// <summary>
+    /// Reads the publisher's page for an article the feed sent only a teaser of.
+    /// </summary>
+    /// <remarks>
+    /// What makes clicking an article mean something for the many feeds that publish a sentence
+    /// and a link. The teaser is already on screen when this starts, so the reader is reading
+    /// while it runs and the article replaces it in place when it arrives.
+    /// <para>
+    /// Off the reader's own switch for the feed, so "do not fetch my articles' pages" is honoured
+    /// here as it is in the poll — and skipped entirely for anything that is not from a feed.
+    /// </para>
+    /// </remarks>
+    private async Task FillInArticleAsync(ShellViewModel shell, FeedsWorkspace feeds, MessageSummary article)
+    {
+        if (FeedAccount() is not { } account) return;
+
+        // Which subscription filed it, so its own switch decides. A saved link has no
+        // subscription and is left alone: its page was read when it was saved.
+        var feed = App.Feeds.All.FirstOrDefault(f =>
+            account.Mail.Folders(account.Account.Id)
+                .Any(folder => folder.Id == article.FolderId && folder.Name == f.Name));
+
+        if (feed is { ReadFullArticle: false }) return;
+
+        try
+        {
+            var written = await Mailbox.Protocols.ArticleFill.FillAsync(account, article.Id, App.FeedReader.Fetch);
+            if (written == 0) return;
+
+            feeds.Reopen(article.Id);
+            shell.StatusRight = $"Read {written:N0} characters of “{article.Subject}” from the publisher's page.";
+        }
+        catch (OperationCanceledException)
+        {
+            // The window is closing, or the reader moved on. Neither is worth saying.
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException)
+        {
+            Log.Debug($"Feeds: “{article.Subject}” could not be filled in — {ex.Message}");
+        }
+    }
+
+    // ---- Boards -------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The Save to Board menu, over whatever the reader pressed it from.
+    /// </summary>
+    /// <remarks>
+    /// The menu writes straight to the store — a board is a row in a table and there is nothing
+    /// to compose — so what comes back is only the redraw: the pane's counts move, and the bar
+    /// re-decides whether Take Off Board can act.
+    /// </remarks>
+    private void SaveToBoard(ShellViewModel shell, FeedsWorkspace feeds, Control anchor)
+    {
+        if (feeds.ArticleForBoard is not { } article)
+        {
+            shell.StatusRight = "Choose an article first.";
+            return;
+        }
+
+        if (FeedAccount() is not { } account)
+        {
+            shell.StatusRight = "Boards are kept with your mail, and there is no account yet.";
+            return;
+        }
+
+        BoardMenu.Show(
+            account.Mail,
+            anchor,
+            article.Subject,
+            [article.Id],
+            DateTimeOffset.UtcNow,
+            changed: () =>
+            {
+                // The pane's counts and the open board, without the reader losing the row they
+                // were on — a save is not a reason to put them back at the top of the list.
+                _feedModule?.RefreshBoards();
+                shell.StatusRight = Standing(account, article);
+                RefreshCommandEnablement();
+            },
+            newBoard: () => _ = BoardsAsync(shell, string.Empty, article),
+            manage: () => _ = BoardsAsync(shell, string.Empty, article));
+    }
+
+    /// <summary>What the bar says after a save: where the article now is, rather than "done".</summary>
+    private static string Standing(OpenAccount account, MessageSummary article)
+    {
+        var on = account.Mail.BoardsFor([article.Id]).GetValueOrDefault(article.Id) ?? [];
+
+        return on.Count switch
+        {
+            0 => $"“{article.Subject}” is on no board.",
+            1 => $"“{article.Subject}” is on {on[0].Name}.",
+            _ => $"“{article.Subject}” is on {string.Join(", ", on.Select(b => b.Name))}.",
+        };
+    }
+
+    /// <summary>
+    /// The Boards dialog, optionally saving an article onto whatever is made in it.
+    /// </summary>
+    /// <param name="saving">
+    /// The article the reader was on when they asked for a new board, so making one from Save to
+    /// Board saves onto it — which is what a reader who reached the dialog that way meant.
+    /// </param>
+    private async Task BoardsAsync(ShellViewModel shell, string suggested, MessageSummary? saving = null)
+    {
+        if (FeedAccount() is not { } account)
+        {
+            shell.StatusRight = "Boards are kept with your mail, and there is no account yet.";
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        Board? made = null;
+
+        var dialog = new BoardsDialog(account.Mail, now)
+        {
+            Suggested = suggested,
+            Made = board =>
+            {
+                made = board;
+                if (saving is { } article) account.Mail.SaveToBoard([article.Id], board.Id, now);
+            },
+        };
+
+        await dialog.ShowDialog(this);
+
+        if (!dialog.Changed) return;
+
+        _feedModule?.Reload();
+        RefreshCommandEnablement();
+
+        shell.StatusRight = made is { } fresh && saving is { } saved
+            ? $"“{saved.Subject}” saved to {fresh.Name}."
+            : $"{account.Mail.Boards().Count} board(s).";
+    }
+
+    /// <summary>
+    /// Save a Link: an address becomes an article on a board.
+    /// </summary>
+    /// <remarks>
+    /// The whole of what makes a board different from a heading. The fetch happens here rather
+    /// than in the dialog, so the dialog stays a dialog and the reading of a page goes through
+    /// the same controlled client every other page fetch in the module goes through — no
+    /// cookies, no referer, a size cap.
+    /// <para>
+    /// The clipboard is read for a starting value, because a reader reaching for this has almost
+    /// always just copied an address. Only when it is one: pasting the last thing somebody copied
+    /// into a box they did not ask for it in is a surprise, and a paragraph of text in an address
+    /// box is worse than an empty one.
+    /// </para>
+    /// </remarks>
+    private async Task SaveLinkAsync(ShellViewModel shell)
+    {
+        if (FeedAccount() is not { } account)
+        {
+            shell.StatusRight = "A saved link is filed with your mail, and there is no account yet.";
+            return;
+        }
+
+        // A dialog blocks a capture run, so the harness takes the same path without one:
+        // MAILBOX_SAVE_LINK=<address>[|board]. What has to be provable is that an address becomes
+        // an article on a board — not that a text box accepts typing.
+        if (Environment.GetEnvironmentVariable("MAILBOX_SAVE_LINK") is { Length: > 0 } posedLink)
+        {
+            await PoseSaveLinkAsync(shell, account, posedLink);
+            return;
+        }
+
+        var suggested = string.Empty;
+        try
+        {
+            if (TopLevel.GetTopLevel(this)?.Clipboard is { } board
+                && await board.TryGetTextAsync() is { Length: > 0 } copied
+                && Mailbox.Protocols.SavedLinks.Normalize(copied) is { } address)
+            {
+                suggested = address;
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or TimeoutException)
+        {
+            // A desktop with no clipboard to read is not a reason to refuse to save a link.
+            Log.Debug($"Save a Link: the clipboard could not be read — {ex.Message}");
+        }
+
+        Mailbox.Protocols.SavedLink? saved = null;
+        var dialog = new SaveLinkDialog(
+            account.Mail,
+            async (address, board) =>
+            {
+                saved = await Mailbox.Protocols.SavedLinks.SaveAsync(
+                    account, address, App.FeedReader.Fetch, DateTimeOffset.UtcNow);
+
+                if (!saved.Ok) return (false, string.Empty, saved.Unreachable);
+                if (board is { } chosen) account.Mail.SaveToBoard([saved.MessageId], chosen.Id, DateTimeOffset.UtcNow);
+
+                return (true, saved.Card.Headline, saved.Unreachable);
+            },
+            preferred: _feedModule?.SelectedBoard,
+            suggested: suggested);
+
+        await dialog.ShowDialog(this);
+
+        if (!dialog.Saved || saved is not { Ok: true } link) return;
+
+        _feedModule?.Reload();
+        shell.Refresh();
+
+        var where = dialog.Chosen is { } chosen ? $" on {chosen.Name}" : string.Empty;
+        shell.StatusRight = link.AlreadyHere
+            ? $"“{link.Card.Headline}” was already saved{(where.Length > 0 ? $"; it is now{where}" : string.Empty)}."
+            : $"“{link.Card.Headline}” saved{where}.";
+
+        // Straight to the board it went on, because a save that shows nothing looks like nothing
+        // happened — the same reason a new subscription is read at once.
+        if (dialog.Chosen is { } opened) _feedModule?.ShowBoard(opened.Name);
+    }
+
+    /// <summary>The harness's Save a Link: the same two calls the dialog makes, and the readback.</summary>
+    private async Task PoseSaveLinkAsync(ShellViewModel shell, OpenAccount account, string spec)
+    {
+        var parts = spec.Split('|', 2, StringSplitOptions.TrimEntries);
+        var now = DateTimeOffset.UtcNow;
+
+        var saved = await Mailbox.Protocols.SavedLinks.SaveAsync(account, parts[0], App.FeedReader.Fetch, now);
+
+        if (!saved.Ok)
+        {
+            Log.Info($"Harness: “{parts[0]}” was not saved — {saved.Unreachable}");
+            return;
+        }
+
+        Board? board = null;
+        if (parts.Length > 1 && parts[1].Length > 0)
+        {
+            board = account.Mail.BoardNamed(parts[1]) ?? account.Mail.AddBoard(parts[1], now);
+            account.Mail.SaveToBoard([saved.MessageId], board.Id, now);
+        }
+
+        Log.Info($"Harness: saved link “{saved.Card.Headline}” from {saved.Card.Url}"
+            + $"{(board is null ? string.Empty : $" onto “{board.Name}”")}"
+            + $"{(saved.AlreadyHere ? " (it was already here)" : string.Empty)}"
+            + $"{(saved.Unreachable.Length > 0 ? $"; the page could not be read — {saved.Unreachable}" : string.Empty)}.");
+
+        _feedModule?.Reload();
+        shell.Refresh();
+
+        if (board is { } opened && _feedModule is { } module)
+        {
+            module.ShowBoard(opened.Name);
+            foreach (var headline in module.Showing.Take(5)) Log.Info($"Harness:   · {headline}");
+        }
     }
 
     // ---- OPML ---------------------------------------------------------------------------------------

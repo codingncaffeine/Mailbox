@@ -88,6 +88,27 @@ public sealed class FeedReceiver : IDisposable
     private const int MostEnclosures = 10;
 
     /// <summary>
+    /// Below this many characters, what a feed sent is a teaser rather than the article.
+    /// </summary>
+    /// <remarks>
+    /// Measured against real feeds rather than chosen: TechCrunch sends about 130 characters an
+    /// entry, the BBC about 200, and a feed that publishes its articles in full sends thousands.
+    /// There is a wide gap between the two and this sits in it, so a short post from a full-text
+    /// feed costs one unnecessary request and nothing else.
+    /// </remarks>
+    private const int TeaserLength = 1000;
+
+    /// <summary>
+    /// How many publisher pages one poll of one feed may read.
+    /// </summary>
+    /// <remarks>
+    /// A first poll of a busy feed would otherwise be fifty requests to one site in a row, which
+    /// is how a reader gets themselves blocked. What is skipped is said in the log rather than
+    /// passed over: a cap nobody is told about reads as "this feed has no article text".
+    /// </remarks>
+    private const int MostPagesPerPoll = 25;
+
+    /// <summary>
     /// How long to wait after a failure, doubling each time, and how long is too long.
     /// </summary>
     /// <remarks>
@@ -116,6 +137,16 @@ public sealed class FeedReceiver : IDisposable
 
     /// <summary>Finds the feed behind an address, for the subscribe box.</summary>
     public FeedFinder Finder => new(_fetch);
+
+    /// <summary>
+    /// The client every page in this module is read through, for saving a link.
+    /// </summary>
+    /// <remarks>
+    /// The same one rather than a second: it is the one with the size cap, the timeout, the
+    /// redirect limit and no cookies on it, and a page saved to a board is fetched on exactly
+    /// the terms a feed is.
+    /// </remarks>
+    public FeedFetch Fetch => _fetch;
 
     /// <summary>Reads every subscription that is due and files what is new into <paramref name="account"/>.</summary>
     /// <param name="force">
@@ -199,7 +230,19 @@ public sealed class FeedReceiver : IDisposable
 
             if (result.Channel is not { } channel) continue;
 
-            var (added, changed, muted) = Deliver(account, result.Feed, channel, now, result.Arrival, result.Downloads, Mutes);
+            // A feed subscribed to by address and never named — an OPML file with no title, a
+            // pasted URL — takes the publisher's own title the first time it answers. Only
+            // before it has delivered anything: the name is also the folder name, and renaming
+            // one that already holds articles would leave them behind in the old folder and
+            // split the feed in two.
+            var named = Named(account, result.Feed, channel);
+            if (!ReferenceEquals(named, result.Feed))
+            {
+                _feeds.Update(url, _ => named);
+                Log.Info($"Feeds: {result.Feed.Url} is called “{named.Name}”, which is what it says it is.");
+            }
+
+            var (added, changed, muted) = Deliver(account, named, channel, now, result.Arrival, result.Downloads, Mutes);
             delivered += added;
             revised += changed;
             silenced += muted;
@@ -221,6 +264,21 @@ public sealed class FeedReceiver : IDisposable
             Muted = silenced,
             Polled = prepared.Count,
         };
+    }
+
+    /// <summary>
+    /// The subscription under the publisher's own title, when it has never had one of its own.
+    /// </summary>
+    /// <remarks>
+    /// Hands back the same object when there is nothing to change, so the caller can tell.
+    /// </remarks>
+    private static FeedSubscription Named(OpenAccount account, FeedSubscription feed, FeedChannel channel)
+    {
+        if (channel.Title is not { Length: > 0 } title) return feed;
+        if (!string.Equals(feed.Name, feed.Url, StringComparison.OrdinalIgnoreCase)) return feed;
+        if (Folder(account, feed, create: false) is not null) return feed;
+
+        return feed with { Name = title.Trim() };
     }
 
     /// <summary>
@@ -374,7 +432,7 @@ public sealed class FeedReceiver : IDisposable
             return new Prepared(feed, answer) { Error = ex.Message };
         }
 
-        var downloads = feed.DownloadEnclosures || feed.DownloadFullArticle
+        var downloads = feed.DownloadEnclosures || feed.DownloadFullArticle || feed.ReadFullArticle
             ? await ExtrasAsync(feed, channel, known, cancellation).ConfigureAwait(false)
             : new Dictionary<string, byte[]>(StringComparer.Ordinal);
 
@@ -401,6 +459,8 @@ public sealed class FeedReceiver : IDisposable
         CancellationToken cancellation)
     {
         var wanted = new List<string>();
+        var pages = 0;
+        var skipped = 0;
 
         foreach (var item in channel.Items)
         {
@@ -414,7 +474,28 @@ public sealed class FeedReceiver : IDisposable
                     .Select(e => e.Url));
             }
 
-            if (feed.DownloadFullArticle && item.Link.Length > 0) wanted.Add(item.Link);
+            if (item.Link.Length == 0) continue;
+
+            // The page is worth reading when the reader asked for it as an attachment, or when
+            // this entry is a teaser and would otherwise arrive unreadable. One request answers
+            // both, and it is the same request that carries the picture such a feed never sends.
+            var wantsPage = feed.DownloadFullArticle || (feed.ReadFullArticle && IsTeaser(item));
+            if (!wantsPage) continue;
+
+            if (pages >= MostPagesPerPoll)
+            {
+                skipped++;
+                continue;
+            }
+
+            pages++;
+            wanted.Add(item.Link);
+        }
+
+        if (skipped > 0)
+        {
+            Log.Info($"Feeds: “{feed.Name}” had {skipped} more article(s) to read than one pass will "
+                + $"fetch; they keep what the feed itself sent and are read on the next pass.");
         }
 
         var found = new Dictionary<string, byte[]>(StringComparer.Ordinal);
@@ -499,7 +580,11 @@ public sealed class FeedReceiver : IDisposable
             message.WriteTo(buffer);
             var raw = buffer.ToArray();
 
-            var summary = MessageMapper.ToSummary(message, item.Id, raw.Length, item.Published ?? now);
+            // The snippet is the entry's own words, said here rather than left to be sliced off
+            // the body: the body ends with the article's address so a plain-text reader can reach
+            // it, and a list whose every row trails "https://…" is a list nobody can skim.
+            var summary = MessageMapper.ToSummary(message, item.Id, raw.Length, item.Published ?? now)
+                with { Preview = Snippet(item, channel) };
 
             if (stored is { } outdated)
             {
@@ -613,11 +698,20 @@ public sealed class FeedReceiver : IDisposable
             MessageId = identity,
         };
 
+        // What the publisher's own page had to say, when it was read: the article for a feed
+        // that sent a teaser, and the picture for a feed that sent none. Both come out of the
+        // one page, which is why they are read together rather than in two places.
+        var page = Page(item, feed, downloads);
+
         // Which feed this came from. Nothing else in the message says: every feed on a host
         // sends as rss@<host>, so a rule matching the sender would catch a site's whole set.
         message.Headers.Add("X-Mailbox-Feed", feed.Url);
         if (item.Link is { Length: > 0 } link) message.Headers.Add("X-Mailbox-Feed-Link", link);
-        if (item.ImageUrl is { Length: > 0 } picture) message.Headers.Add("X-Mailbox-Feed-Image", picture);
+
+        var picture = item.ImageUrl is { Length: > 0 } own ? own : page.Picture;
+        if (picture.Length > 0) message.Headers.Add("X-Mailbox-Feed-Image", picture);
+
+        if (page.Article.Found) message.Headers.Add("X-Mailbox-Feed-Fulltext", item.Link);
         if (feed.Category is { Length: > 0 } category) message.Headers.Add("X-Mailbox-Feed-Category", category);
 
         // The publisher's own tags, where a mail client keeps its own: a rule can act on them and
@@ -629,10 +723,15 @@ public sealed class FeedReceiver : IDisposable
 
         var body = new BodyBuilder
         {
-            HtmlBody = item.Html.Length > 0
-                ? item.Html + Footer(item)
-                : $"<p>{System.Net.WebUtility.HtmlEncode(item.Title)}</p>{Footer(item)}",
-            TextBody = Text(item),
+            HtmlBody = page.Article.Found
+                ? page.Article.Html + Footer(item)
+                : item.Html.Length > 0
+                    ? item.Html + Footer(item)
+                    : $"<p>{System.Net.WebUtility.HtmlEncode(item.Title)}</p>{Footer(item)}",
+
+            TextBody = page.Article.Found
+                ? item.Link.Length > 0 ? $"{page.Article.Text}\n\n{item.Link}" : page.Article.Text
+                : Text(item),
         };
 
         if (downloads is { Count: > 0 })
@@ -643,6 +742,58 @@ public sealed class FeedReceiver : IDisposable
         message.Body = body.ToMessageBody();
         return message;
     }
+
+    /// <summary>What reading the publisher's page got, or nothing when it was not read.</summary>
+    private readonly record struct FromPage(ArticleBody Article, string Picture)
+    {
+        public static readonly FromPage Nothing = new(ArticleBody.Nothing, string.Empty);
+    }
+
+    /// <summary>
+    /// Reads the page fetched for this entry, if one was.
+    /// </summary>
+    /// <remarks>
+    /// The extracted article is used only when it is meaningfully more than the feed already
+    /// sent. A page whose text cannot be found gives back a handful of characters of navigation,
+    /// and replacing a publisher's own summary with that would make the reader worse rather than
+    /// better — so the bar is a real multiple, and failing it means keeping what the feed said.
+    /// </remarks>
+    private static FromPage Page(FeedItem item, FeedSubscription feed, IReadOnlyDictionary<string, byte[]>? downloads)
+    {
+        if (item.Link.Length == 0) return FromPage.Nothing;
+        if (downloads is null || !downloads.TryGetValue(item.Link, out var bytes)) return FromPage.Nothing;
+
+        string html;
+        try
+        {
+            html = System.Text.Encoding.UTF8.GetString(bytes);
+        }
+        catch (ArgumentException)
+        {
+            return FromPage.Nothing;
+        }
+
+        // The picture is worth taking whether or not the article was: a feed that sends full text
+        // and no picture is common, and this is where the picture is.
+        var picture = item.ImageUrl.Length > 0 ? string.Empty : PageCards.Read(html, item.Link).ImageUrl;
+
+        if (!feed.ReadFullArticle || !IsTeaser(item)) return new FromPage(ArticleBody.Nothing, picture);
+
+        var written = (item.Html.Length > 0 ? FeedParser.PlainText(item.Html) : item.Summary).Trim().Length;
+        var article = ArticleText.Extract(html, item.Link);
+
+        var worthIt = article.Found && article.Length > Math.Max(WorthReplacing, written * 2);
+        if (!worthIt && article.Found)
+        {
+            Log.Debug($"Feeds: the page behind “{item.Title}” gave {article.Length} characters, "
+                + $"which is not enough more than the {written} the feed sent; keeping the feed's own.");
+        }
+
+        return new FromPage(worthIt ? article : ArticleBody.Nothing, picture);
+    }
+
+    /// <summary>The least an extracted article can be and still be worth showing instead.</summary>
+    private const int WorthReplacing = 400;
 
     /// <summary>The files this entry brought with it, as parts of the message.</summary>
     private static void Attach(
@@ -674,6 +825,19 @@ public sealed class FeedReceiver : IDisposable
         }
     }
 
+    /// <summary>
+    /// Whether what the feed sent for this entry is a teaser rather than the article.
+    /// </summary>
+    /// <remarks>
+    /// Judged on the words rather than on the markup: a hundred characters of text wrapped in two
+    /// kilobytes of tracking pixels and a "read more" button is still a teaser.
+    /// </remarks>
+    private static bool IsTeaser(FeedItem item)
+    {
+        var written = item.Html.Length > 0 ? FeedParser.PlainText(item.Html) : item.Summary;
+        return written.Trim().Length < TeaserLength;
+    }
+
     /// <summary>A file name for an enclosure, from its address, always with an extension.</summary>
     private static string FileName(FeedEnclosure enclosure)
     {
@@ -691,7 +855,27 @@ public sealed class FeedReceiver : IDisposable
     }
 
     /// <summary>
-    /// The entry as plain text, which is what the list's snippet line is built from.
+    /// The line under the headline in the article list: what the entry says, and nothing else.
+    /// </summary>
+    /// <remarks>
+    /// The publisher's own summary first, because that is what they wrote for exactly this; the
+    /// article's own opening when they wrote none. Never the address, never the boilerplate the
+    /// footer adds.
+    /// </remarks>
+    private static string Snippet(FeedItem item, FeedChannel channel)
+    {
+        var written = item.Summary is { Length: > 0 } given ? given : FeedParser.PlainText(item.Html);
+
+        if (written.Trim() is not { Length: > 0 } text) return channel.Title;
+
+        // Whitespace collapsed: a summary written across six indented lines of XML draws as six
+        // lines of gaps in a row that has room for two.
+        var flat = string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        return flat.Length <= 400 ? flat : flat[..400];
+    }
+
+    /// <summary>
+    /// The entry as plain text, which is what the message body's text half is.
     /// </summary>
     private static string Text(FeedItem item)
     {

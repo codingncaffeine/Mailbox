@@ -236,7 +236,16 @@ internal static class SystemDialogKit
         name.HorizontalAlignment = HorizontalAlignment.Left;
         name.VerticalAlignment = VerticalAlignment.Top;
 
-        var backdrop = new Border { Child = name, HorizontalAlignment = HorizontalAlignment.Left };
+        // Top, and only as tall as the word. Left to stretch, this opaque rectangle runs the
+        // whole height of the box and paints out the first inch of every row inside it — which
+        // is what it did: "Feed Name:" read "me:", and a paragraph began mid-word. It is there to
+        // break one line, not to be a column.
+        var backdrop = new Border
+        {
+            Child = name,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top,
+        };
         Bind(backdrop, Border.BackgroundProperty, "systemdialog.background.brush");
 
         return new Panel

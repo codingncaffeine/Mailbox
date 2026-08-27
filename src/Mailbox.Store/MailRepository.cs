@@ -2154,6 +2154,169 @@ public sealed class MailRepository(MailStore store)
             ("$category", categoryId));
     }
 
+    // ---- Boards -----------------------------------------------------------------------------
+    //
+    // Named collections an article is saved into. The membership is a join rather than a column
+    // because an article belongs to as many boards as the reader puts it on, and it carries when
+    // it was saved because that is the order a keep pile is read in.
+
+    /// <summary>Every board, in the reader's order, each with how many articles are on it.</summary>
+    public IReadOnlyList<Board> Boards() => _store.Query(
+        """
+        SELECT b.id, b.name, b.description, b.ordinal, count(i.message_id) AS items
+        FROM boards b LEFT JOIN board_items i ON i.board_id = b.id
+        GROUP BY b.id ORDER BY b.ordinal, b.id
+        """,
+        r => new Board(r.GetInt64(0), r.GetString(1), r.GetString(2), r.GetInt32(3), r.GetInt32(4)));
+
+    public Board? BoardNamed(string name) => _store.Query(
+        """
+        SELECT b.id, b.name, b.description, b.ordinal, count(i.message_id) AS items
+        FROM boards b LEFT JOIN board_items i ON i.board_id = b.id
+        WHERE b.name = $name COLLATE NOCASE GROUP BY b.id
+        """,
+        r => new Board(r.GetInt64(0), r.GetString(1), r.GetString(2), r.GetInt32(3), r.GetInt32(4)),
+        ("$name", name.Trim())).FirstOrDefault();
+
+    /// <summary>
+    /// Makes a board, or hands back the one already under that name.
+    /// </summary>
+    /// <remarks>
+    /// Idempotent rather than throwing on the unique index, because every caller wants the same
+    /// thing — the board called this — and the menu that offers "New board…" is one keystroke
+    /// away from a name that already exists.
+    /// </remarks>
+    public Board AddBoard(string name, DateTimeOffset now, string description = "")
+    {
+        var trimmed = name.Trim();
+        ArgumentException.ThrowIfNullOrWhiteSpace(trimmed);
+
+        if (BoardNamed(trimmed) is { } already) return already;
+
+        _store.Execute(
+            """
+            INSERT INTO boards (name, description, ordinal, created_utc)
+            VALUES ($name, $description, (SELECT count(*) FROM boards), $now)
+            """,
+            ("$name", trimmed), ("$description", description.Trim()), ("$now", now.ToUnixTimeSeconds()));
+
+        return BoardNamed(trimmed)!;
+    }
+
+    /// <summary>Renames a board. False when the new name is already another board's.</summary>
+    public bool RenameBoard(long id, string name)
+    {
+        var trimmed = name.Trim();
+        if (trimmed.Length == 0) return false;
+        if (BoardNamed(trimmed) is { } clash && clash.Id != id) return false;
+
+        return _store.Execute(
+            "UPDATE boards SET name = $name WHERE id = $id", ("$name", trimmed), ("$id", id)) > 0;
+    }
+
+    /// <summary>Sets what a board is for, which the article column shows under its name.</summary>
+    public void DescribeBoard(long id, string description) => _store.Execute(
+        "UPDATE boards SET description = $description WHERE id = $id",
+        ("$description", description.Trim()), ("$id", id));
+
+    /// <summary>
+    /// Removes a board. The articles on it are untouched — the join rows cascade, the messages
+    /// do not, and a reader tidying their boards is not asking to lose anything they read.
+    /// </summary>
+    public void DeleteBoard(long id) => _store.Execute("DELETE FROM boards WHERE id = $id", ("$id", id));
+
+    /// <summary>Moves a board up or down the reader's order.</summary>
+    public void ReorderBoards(IReadOnlyList<long> idsInOrder)
+    {
+        ArgumentNullException.ThrowIfNull(idsInOrder);
+
+        _store.InTransaction(() =>
+        {
+            for (var at = 0; at < idsInOrder.Count; at++)
+            {
+                _store.Execute("UPDATE boards SET ordinal = $ordinal WHERE id = $id",
+                    ("$ordinal", at), ("$id", idsInOrder[at]));
+            }
+
+            return 0;
+        });
+    }
+
+    /// <summary>Saves messages onto a board. Saving one twice keeps the first time it was saved.</summary>
+    /// <returns>How many were not already on it.</returns>
+    public int SaveToBoard(IReadOnlyCollection<long> messageIds, long boardId, DateTimeOffset now)
+    {
+        if (messageIds.Count == 0) return 0;
+
+        return _store.InTransaction(() =>
+        {
+            var added = 0;
+            foreach (var id in messageIds)
+            {
+                added += _store.Execute(
+                    """
+                    INSERT INTO board_items (board_id, message_id, saved_utc) VALUES ($board, $message, $now)
+                    ON CONFLICT(board_id, message_id) DO NOTHING
+                    """,
+                    ("$board", boardId), ("$message", id), ("$now", now.ToUnixTimeSeconds()));
+            }
+
+            return added;
+        });
+    }
+
+    /// <summary>Takes messages off a board. The messages themselves stay where they are.</summary>
+    public int RemoveFromBoard(IReadOnlyCollection<long> messageIds, long boardId)
+        => messageIds.Count == 0
+            ? 0
+            : _store.Execute(
+                $"DELETE FROM board_items WHERE board_id = $board AND message_id IN ({Ids(messageIds)})",
+                ("$board", boardId));
+
+    /// <summary>
+    /// Which boards a set of messages is on, keyed by message. One query rather than one per
+    /// row, for the reason <see cref="CategoriesFor"/> is one query.
+    /// </summary>
+    public Dictionary<long, List<Board>> BoardsFor(IReadOnlyCollection<long> messageIds)
+    {
+        var found = new Dictionary<long, List<Board>>();
+        if (messageIds.Count == 0) return found;
+
+        foreach (var (messageId, board) in _store.Query(
+            $"""
+             SELECT i.message_id, b.id, b.name, b.description, b.ordinal FROM board_items i
+             JOIN boards b ON b.id = i.board_id
+             WHERE i.message_id IN ({Ids(messageIds)})
+             ORDER BY b.ordinal, b.id
+             """,
+            r => (r.GetInt64(0), new Board(r.GetInt64(1), r.GetString(2), r.GetString(3), r.GetInt32(4)))))
+        {
+            if (!found.TryGetValue(messageId, out var list)) found[messageId] = list = [];
+            list.Add(board);
+        }
+
+        return found;
+    }
+
+    /// <summary>
+    /// What is on a board, most recently saved first.
+    /// </summary>
+    /// <remarks>
+    /// By when it was saved rather than when it was published: a reader who saves a piece from
+    /// last year expects to find it at the top of the board they just put it on, not buried
+    /// under this morning's headlines.
+    /// </remarks>
+    public IReadOnlyList<MessageSummary> BoardMessages(long boardId, int limit = 500) => _store.Query(
+        """
+        SELECT m.* FROM messages m JOIN board_items i ON i.message_id = m.id
+        WHERE i.board_id = $board ORDER BY i.saved_utc DESC, i.rowid DESC LIMIT $limit
+        """,
+        ReadMessage, ("$board", boardId), ("$limit", limit));
+
+    /// <summary>Whether a message is on any board at all, which is what Delete asks before it acts.</summary>
+    public bool IsOnAnyBoard(long messageId) => _store.ScalarLong(
+        "SELECT count(*) FROM board_items WHERE message_id = $id", ("$id", messageId)) > 0;
+
     // ---- Rules --------------------------------------------------------------------------------
     //
     // The Rules and Alerts wizard's rules, in the order they run. The definition is Core's JSON
