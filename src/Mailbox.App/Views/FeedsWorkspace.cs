@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Templates;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
@@ -57,6 +58,29 @@ internal enum FeedLayout
 
     /// <summary>A grid of pictures with the headline under each. For feeds that are photographs.</summary>
     Cards,
+}
+
+/// <summary>
+/// When an article counts as read.
+/// </summary>
+/// <remarks>
+/// The most-used setting in every reader there is, and the one this had no answer to at all: it
+/// marked read on opening and nothing else, so a reader skimming a hundred headlines had to press
+/// something on each one.
+/// </remarks>
+internal enum FeedReadMode
+{
+    /// <summary>Only when the reader opens it. What this did, and still the safe default.</summary>
+    OnOpen,
+
+    /// <summary>Opened, and still the one being looked at a few seconds later.</summary>
+    AfterAMoment,
+
+    /// <summary>Scrolled up past the top of the list, which is how a reader clears a river.</summary>
+    OnScroll,
+
+    /// <summary>Never, for a reader who marks things read themselves.</summary>
+    Never,
 }
 
 internal enum FeedNavKind
@@ -200,6 +224,14 @@ internal sealed class FeedsWorkspace : Border
             if (_openOnSelect) Open(chosen);
         };
 
+        // Marking read by scrolling past, which is how a river is actually cleared. Watched on the
+        // scroll rather than on a timer, so nothing is marked read on a list nobody is moving.
+        _articles.Loaded += (_, _) =>
+        {
+            if (_articles.Scroll is not ScrollViewer viewer) return;
+            viewer.ScrollChanged += (_, _) => ScrolledPast();
+        };
+
         // Focusable so the single-key bindings reach it, and focused on the way in so a reader
         // can start pressing j without clicking first.
         Focusable = true;
@@ -209,6 +241,22 @@ internal sealed class FeedsWorkspace : Border
 
     /// <summary>What the status bar says while this module is showing.</summary>
     public string Status { get; private set; } = string.Empty;
+
+    /// <summary>Where the reader's choice about marking read is kept.</summary>
+    /// <remarks>Written by <see cref="FeedReadingDialog"/>; the two enums share their names.</remarks>
+    public const string ReadModeKey = "rss.markread";
+
+    /// <summary>How long "after a moment" is, in seconds.</summary>
+    public const string ReadDelayKey = "rss.markread.seconds";
+
+    private static FeedReadMode ReadMode =>
+        Enum.TryParse<FeedReadMode>(App.Settings.GetString(ReadModeKey), out var mode) ? mode : FeedReadMode.OnOpen;
+
+    private static TimeSpan ReadDelay
+        => TimeSpan.FromSeconds(Math.Clamp(App.Settings.GetNumber(ReadDelayKey, 3), 0.5, 60));
+
+    /// <summary>Waiting to mark the article the reader is looking at as read.</summary>
+    private CancellationTokenSource? _reading_timer;
 
     /// <summary>Raised when the reader asks for the subscriptions to be brought up to date.</summary>
     public event EventHandler? RefreshRequested;
@@ -236,6 +284,9 @@ internal sealed class FeedsWorkspace : Border
 
     /// <summary>Raised to stop reading a feed.</summary>
     public event EventHandler<FeedSubscription>? UnsubscribeRequested;
+
+    /// <summary>Raised to pause a feed, or to start it again.</summary>
+    public event EventHandler<FeedSubscription>? PauseFeedRequested;
 
     /// <summary>Raised to file a feed under a heading — empty for the top level.</summary>
     public event EventHandler<(FeedSubscription Feed, string Category)>? MoveFeedRequested;
@@ -288,6 +339,20 @@ internal sealed class FeedsWorkspace : Border
             var article = _articles.SelectedItem as MessageSummary ?? _chosen;
             return article is null ? null : account.Mail.GetMessage(article.Id) ?? article;
         }
+    }
+
+    /// <summary>
+    /// The size the article is set at, following the status bar's zoom.
+    /// </summary>
+    /// <remarks>
+    /// The shell's zoom reached the mail reading pane and stopped there, so an article here was
+    /// whatever size it was — which for the module a reader spends the most time reading in is
+    /// the wrong one to have missed.
+    /// </remarks>
+    public double MessageFontSize
+    {
+        get => _reading.MessageFontSize;
+        set => _reading.MessageFontSize = value;
     }
 
     /// <summary>Whether the subscriptions pane is showing.</summary>
@@ -401,6 +466,9 @@ internal sealed class FeedsWorkspace : Border
         var header = new StackPanel { Children = { _heading, _subheading } };
         DockPanel.SetDock(header, Dock.Top);
 
+        var arrived = Arrived();
+        DockPanel.SetDock(arrived, Dock.Top);
+
         var search = SearchRow();
         DockPanel.SetDock(search, Dock.Top);
 
@@ -414,7 +482,7 @@ internal sealed class FeedsWorkspace : Border
         {
             MaxWidth = ListIdeal,
             HorizontalAlignment = HorizontalAlignment.Center,
-            Children = { header, search, actions, _articles },
+            Children = { header, arrived, search, actions, _articles },
         };
 
         var host = new Border { MinWidth = ListMinimum, Child = panel };
@@ -593,6 +661,46 @@ internal sealed class FeedsWorkspace : Border
         }
     }
 
+    /// <summary>
+    /// Poses "I last looked at this row N minutes ago", so the line can be photographed.
+    /// </summary>
+    /// <remarks>
+    /// A capture run works on a throwaway copy of the settings, so the mark a real visit leaves
+    /// cannot survive into a second run — which is the only way the line would otherwise appear.
+    /// </remarks>
+    public string PoseLastSeen(int minutesAgo)
+    {
+        if (_selected is not { } row) return "nothing is selected";
+
+        _since = DateTimeOffset.UtcNow.AddMinutes(-minutesAgo);
+        PlaceLine(_showing);
+        _articles.ItemsSource = null;
+        _articles.ItemsSource = Shaped(_showing);
+
+        return _line.Above > 0
+            ? $"the line sits above “{_showing[_line.Above].Subject}”, with {_line.Above} above it"
+            : "nothing is new since then";
+    }
+
+    /// <summary>
+    /// Poses dropping one feed onto a pane row, for a harness run.
+    /// </summary>
+    /// <remarks>
+    /// Through the same method the drop handler calls, because what has to be provable is what
+    /// dropping does — a run cannot hold a pointer down and move it.
+    /// </remarks>
+    public string PoseDrop(string movingName, string ontoName)
+    {
+        if (_feeds.All.FirstOrDefault(f => f.Name.Contains(movingName, StringComparison.OrdinalIgnoreCase))
+            is not { } moving) return $"there is no feed matching “{movingName}”";
+
+        var onto = _rows.FirstOrDefault(r => r.Label.Contains(ontoName, StringComparison.OrdinalIgnoreCase));
+        if (onto is null) return $"there is no row matching “{ontoName}”";
+
+        Dropped(moving, onto);
+        return $"“{moving.Name}” dropped on {onto.Kind} “{onto.Label}”";
+    }
+
     /// <summary>Flips one of the row's two switches, for a harness run.</summary>
     public void PoseToggle(bool unreadOnly) => Toggle(unreadOnly ? UnreadOnlyKey : OrderKey);
 
@@ -617,6 +725,72 @@ internal sealed class FeedsWorkspace : Border
     private void Rerun()
     {
         if (_selected is { } row) Select(row, keepReading: true);
+    }
+
+    /// <summary>
+    /// The bar that says what a poll brought in.
+    /// </summary>
+    /// <remarks>
+    /// A poll finishing used to write a line in the status bar that scrolled away, and put the
+    /// new articles into the list under whatever the reader was reading — so the thing they were
+    /// looking at moved down the screen while they looked at it. This says what arrived and
+    /// leaves the list alone until it is pressed, which is what every reader on the web does.
+    /// </remarks>
+    private Control Arrived()
+    {
+        _arrived = new Button
+        {
+            Classes = { "flat" },
+            IsVisible = false,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Padding = new Thickness(14, 5, 14, 5),
+            Margin = new Thickness(0, 0, 0, 8),
+        };
+
+        _arrivedText = new TextBlock { FontSize = 12, FontWeight = FontWeight.SemiBold };
+        _arrivedText[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("accent.rest.brush");
+        _arrived.Content = _arrivedText;
+
+        _arrived.Click += (_, _) =>
+        {
+            _waiting = 0;
+            _arrived.IsVisible = false;
+            Reload();
+        };
+
+        return _arrived;
+    }
+
+    private Button? _arrived;
+    private TextBlock? _arrivedText;
+
+    /// <summary>How many have come in since the reader last had the list refreshed under them.</summary>
+    private int _waiting;
+
+    /// <summary>
+    /// Says that a poll brought articles in, without moving what is on screen.
+    /// </summary>
+    /// <remarks>
+    /// Nothing at all when the list is empty or the reader has not started reading: there is no
+    /// harm in simply showing them, and a bar offering to show articles on a screen that has none
+    /// is a worse first impression than the articles.
+    /// </remarks>
+    public void Announce(int delivered)
+    {
+        if (delivered <= 0) return;
+
+        if (_showing.Count == 0 || _selectedMessage == 0)
+        {
+            Reload();
+            return;
+        }
+
+        _waiting += delivered;
+
+        if (_arrived is null || _arrivedText is null) return;
+
+        _arrivedText.Text = _waiting == 1 ? "1 new article — show it" : $"{_waiting} new articles — show them";
+        _arrived.IsVisible = true;
     }
 
     private Control HeaderActions()
@@ -1062,6 +1236,15 @@ internal sealed class FeedsWorkspace : Border
             glyph.Text = IconGlyphs.GetOrEmpty("warning", 16);
             glyph[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("status.warning.brush");
         }
+        else if (row.Feed is { Paused: true } stopped)
+        {
+            // Paused reads as "broken" unless it says otherwise, and a reader who paused a feed
+            // three weeks ago will not remember doing it.
+            ToolTip.SetTip(grid, $"{stopped.Name} — paused, and not being asked for");
+            glyph.Text = IconGlyphs.GetOrEmpty("cancel", 16);
+            label.Opacity = 0.55;
+            glyph.Opacity = 0.55;
+        }
         else if (row.Feed is { } feed)
         {
             ToolTip.SetTip(grid, feed.Description.Length > 0 ? $"{feed.Name}\n{feed.Description}" : feed.Name);
@@ -1083,6 +1266,8 @@ internal sealed class FeedsWorkspace : Border
         button.Click += (_, _) => Select(row, keepReading: false);
         if (ReferenceEquals(row, _selected)) button.Classes.Add("active");
 
+        WireDrag(button, row);
+
         // Every reader has one of these on its sidebar, and this had none at all — which meant
         // renaming a feed, moving it, or copying its address had no gesture anywhere.
         button.ContextRequested += (_, e) =>
@@ -1093,6 +1278,115 @@ internal sealed class FeedsWorkspace : Border
         };
 
         return button;
+    }
+
+    /// <summary>
+    /// Our own drag format for a subscription, in-process only.
+    /// </summary>
+    /// <remarks>
+    /// A feed's address as text would be offered to every other window on the desktop, which is
+    /// a paste of a URL somebody did not ask for. This one goes nowhere but here.
+    /// </remarks>
+    private static readonly DataFormat<byte[]> FeedDragFormat =
+        DataFormat.CreateBytesApplicationFormat("mailbox-feed-url");
+
+    private bool _dragging;
+
+    /// <summary>
+    /// Makes a pane row something that can be picked up, and something that can be dropped on.
+    /// </summary>
+    /// <remarks>
+    /// The gesture everybody reaches for and this had none of: a feed is filed under a heading by
+    /// dragging it there, and put in the reader's own order by dragging it above or below another
+    /// one. The menu can do both, and nobody looks in a menu for it.
+    /// <para>
+    /// Dropping on a heading files it under that heading; dropping on a feed puts it after that
+    /// feed, in that feed's heading. Dropping on one of the standing views at the top means the
+    /// top level, which is the only sense that can be made of it and is also what a reader
+    /// dragging something out of a heading is reaching for.
+    /// </para>
+    /// </remarks>
+    private void WireDrag(Control row, FeedNavRow what)
+    {
+        if (what.Feed is { } dragged)
+        {
+            row.AddHandler(PointerPressedEvent, async (object? _, PointerPressedEventArgs e) =>
+            {
+                if (!e.GetCurrentPoint(row).Properties.IsLeftButtonPressed || _dragging) return;
+
+                _dragging = true;
+                try
+                {
+                    using var transfer = new DataTransfer();
+                    transfer.Add(DataTransferItem.Create(
+                        FeedDragFormat, System.Text.Encoding.UTF8.GetBytes(dragged.Url)));
+
+                    await DragDrop.DoDragDropAsync(e, transfer, DragDropEffects.Move);
+                }
+                finally
+                {
+                    _dragging = false;
+                }
+            }, RoutingStrategies.Bubble);
+        }
+
+        DragDrop.SetAllowDrop(row, true);
+
+        row.AddHandler(DragDrop.DragOverEvent, (object? _, DragEventArgs e) =>
+        {
+            e.DragEffects = Carried(e) is { } url && !Same(url, what) ? DragDropEffects.Move : DragDropEffects.None;
+            row.Classes.Set("droptarget", e.DragEffects != DragDropEffects.None);
+            e.Handled = true;
+        });
+
+        row.AddHandler(DragDrop.DragLeaveEvent, (object? _, DragEventArgs _) => row.Classes.Remove("droptarget"));
+
+        row.AddHandler(DragDrop.DropEvent, (object? _, DragEventArgs e) =>
+        {
+            e.Handled = true;
+            row.Classes.Remove("droptarget");
+
+            if (Carried(e) is not { } url || Same(url, what)) return;
+            if (_feeds.Find(url) is not { } moving) return;
+
+            Dropped(moving, what);
+        });
+    }
+
+    private static string? Carried(DragEventArgs e)
+        => e.DataTransfer.TryGetValue(FeedDragFormat) is { Length: > 0 } bytes
+            ? System.Text.Encoding.UTF8.GetString(bytes)
+            : null;
+
+    private static bool Same(string url, FeedNavRow row)
+        => row.Feed is { } feed && string.Equals(feed.Url, url, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>What dropping a feed on a given row means.</summary>
+    private void Dropped(FeedSubscription moving, FeedNavRow onto)
+    {
+        switch (onto.Kind)
+        {
+            // Onto a heading: file it there, at the end of what is already under it.
+            case FeedNavKind.Category:
+                MoveFeedRequested?.Invoke(this, (moving, onto.Category));
+                break;
+
+            // Onto another feed: after it, and under whatever heading that one is under — which
+            // is what somebody dragging a feed into the middle of a group means by it.
+            case FeedNavKind.Feed when onto.Feed is { } neighbour:
+                if (!string.Equals(moving.Category, neighbour.Category, StringComparison.OrdinalIgnoreCase))
+                {
+                    MoveFeedRequested?.Invoke(this, (moving, neighbour.Category));
+                }
+
+                if (_feeds.Move(moving.Url, neighbour.Url)) Reload();
+                break;
+
+            // Onto one of the standing views: out of its heading, to the top level.
+            default:
+                MoveFeedRequested?.Invoke(this, (moving, string.Empty));
+                break;
+        }
     }
 
     /// <summary>
@@ -1124,7 +1418,10 @@ internal sealed class FeedsWorkspace : Border
         if (row.Kind == FeedNavKind.Feed && row.Feed is { } feed)
         {
             menu.Items.Add(new Separator());
-            menu.Items.Add(Entry("Update This Feed", "refresh", () => UpdateFeedRequested?.Invoke(this, feed)));
+            menu.Items.Add(Entry("Update This Feed", "refresh",
+                () => UpdateFeedRequested?.Invoke(this, feed), !feed.Paused));
+            menu.Items.Add(Entry(feed.Paused ? "Start Reading Again" : "Pause This Feed",
+                feed.Paused ? "refresh" : "cancel", () => PauseFeedRequested?.Invoke(this, feed)));
             menu.Items.Add(new Separator());
             menu.Items.Add(MoveMenu(feed));
             menu.Items.Add(Entry("Rename…", "folder-rename", () => RenameFeedRequested?.Invoke(this, feed)));
@@ -1217,6 +1514,10 @@ internal sealed class FeedsWorkspace : Border
             return;
         }
 
+        // Where the reader had got to last time, taken before this visit's own mark is written —
+        // otherwise the line is always at the top and always says nothing is new.
+        if (!keepReading) _since = LastSeen(row);
+
         var articles = Articles(row);
 
         _layout = LayoutFor(row);
@@ -1229,7 +1530,11 @@ internal sealed class FeedsWorkspace : Border
                 : $"{articles.Count} article{(articles.Count == 1 ? string.Empty : "s")} "
                   + $"{(_everywhere ? "across every feed" : $"in {row.Label}")}."
             : Describe(row, articles.Count);
+        _waiting = 0;
+        if (_arrived is { } bar) bar.IsVisible = false;
+
         _showing = articles;
+        PlaceLine(articles);
         _articles.ItemsSource = Shaped(articles);
         if (_articles.Scroll is { } top) top.Offset = new Vector(0, 0);
 
@@ -1256,6 +1561,9 @@ internal sealed class FeedsWorkspace : Border
         }
 
         Status = $"{row.Label}: {articles.Count} article{(articles.Count == 1 ? string.Empty : "s")}";
+
+        // This visit is now the one the next line is drawn from.
+        if (!keepReading) Seen(row, articles);
 
         // Rebuilt so the pressed row takes the mark. Cheap: the pane is tens of rows.
         BuildNav();
@@ -1536,6 +1844,12 @@ internal sealed class FeedsWorkspace : Border
             menu.Items.Add(save);
         }
 
+        if (Playable(message) is { Length: > 0 } episode)
+        {
+            menu.Items.Add(new Separator());
+            menu.Items.Add(Entry("Play the Episode", "reader", () => OpenExternally(episode)));
+        }
+
         menu.Items.Add(new Separator());
         menu.Items.Add(Entry("Copy Link", "copy",
             () => CopyRequested?.Invoke(this, message.FeedLink), message.FeedLink.Length > 0));
@@ -1545,6 +1859,46 @@ internal sealed class FeedsWorkspace : Border
         menu.Items.Add(Entry("Delete", "delete", DeleteSelected));
 
         return menu;
+    }
+
+    /// <summary>
+    /// The address of the file this article carries, when it carries one a player would open.
+    /// </summary>
+    /// <remarks>
+    /// Handed to the desktop rather than downloaded and opened from a temporary path — which is
+    /// what the attachment strip refuses to do, for good reasons that apply here too, and is
+    /// also simply worse: a player given the address streams it, where a download waits for a
+    /// hundred megabytes before anything is heard.
+    /// <para>
+    /// Read out of the message rather than off the row, because there is no column for it and a
+    /// podcast is a small share of what a reader has. One blob read when a menu is opened is
+    /// nothing; a column on every message in the store for the few that are episodes is not.
+    /// </para>
+    /// </remarks>
+    private string Playable(MessageSummary message)
+    {
+        if (!message.HasAttachment && message.SizeBytes < 512) return string.Empty;
+        if (_account() is not { } account || account.Mail.LoadRaw(message.Id) is not { } raw) return string.Empty;
+
+        try
+        {
+            using var stream = new MemoryStream(raw);
+            var mime = MimeKit.MimeMessage.Load(stream);
+
+            if (mime.Headers["X-Mailbox-Feed-Media"] is not { Length: > 0 } named) return string.Empty;
+
+            // "<type> <address>", written by the receiver. The address is the half that matters.
+            var space = named.LastIndexOf(' ');
+            var url = space > 0 ? named[(space + 1)..] : named;
+
+            return Uri.TryCreate(url, UriKind.Absolute, out var address) && address.Scheme is "http" or "https"
+                ? address.AbsoluteUri
+                : string.Empty;
+        }
+        catch (Exception ex) when (ex is FormatException or IOException)
+        {
+            return string.Empty;
+        }
     }
 
     /// <summary>
@@ -1795,6 +2149,56 @@ internal sealed class FeedsWorkspace : Border
     private bool AllowsLookup(MessageSummary message)
         => _feedByFolder.TryGetValue(message.FolderId, out var feed) && feed.ReadFullArticle;
 
+    /// <summary>
+    /// The rule across the list, with the count of what is above it.
+    /// </summary>
+    /// <remarks>
+    /// A row rather than an adornment, so it scrolls with what it marks. Not selectable and not
+    /// clickable: it is a mark on the list, and a reader arrowing down it should pass straight
+    /// over rather than landing on nothing.
+    /// </remarks>
+    private static Control UnreadLine(int above)
+    {
+        var label = new TextBlock
+        {
+            Text = above == 1 ? "1 new article" : $"{above} new articles",
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            Margin = new Thickness(10, 0, 10, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        label[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("accent.rest.brush");
+
+        Border Rule()
+        {
+            var rule = new Border { Height = 1, VerticalAlignment = VerticalAlignment.Center };
+            rule[!BackgroundProperty] = new DynamicResourceExtension("accent.rest.brush");
+            rule.Opacity = 0.5;
+            return rule;
+        }
+
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,*") };
+
+        var left = Rule();
+        Grid.SetColumn(left, 0);
+        grid.Children.Add(left);
+
+        Grid.SetColumn(label, 1);
+        grid.Children.Add(label);
+
+        var right = Rule();
+        Grid.SetColumn(right, 2);
+        grid.Children.Add(right);
+
+        return new Border { Margin = new Thickness(24, 10, 24, 12), Child = grid, IsHitTestVisible = false };
+    }
+
+    /// <summary>An article's row, with the line above it when this is the article it belongs over.</summary>
+    private Control WithLine(MessageSummary message, Control row)
+        => _line.Id == message.Id && _line.Above > 0
+            ? new StackPanel { Children = { UnreadLine(_line.Above), row } }
+            : row;
+
     /// <summary>"2h", "3d" — what a feed reader shows instead of a date.</summary>
     private static string Ago(DateTimeOffset when)
     {
@@ -1846,16 +2250,64 @@ internal sealed class FeedsWorkspace : Border
         }
 
         // Reading it marks it read, as it does in the mail list — and the counts in the pane move
-        // with it, which is the thing a feed reader is judged on.
+        // with it, which is the thing a feed reader is judged on. When, exactly, is the reader's
+        // choice; opening it is only the commonest answer.
         //
         // Keeping the place while that happens is not a nicety: rebuilding the list drops the
         // selection, and with it every key that means "the next one". Pressing j three times
         // used to open the first article three times.
-        if (!message.IsRead)
+        if (message.IsRead) return;
+
+        switch (ReadMode)
         {
-            account.Mail.SetRead(message.Id, true);
-            KeepingPlace(() => { BuildNav(); RefreshCards(); });
+            case FeedReadMode.OnOpen:
+                MarkRead(message.Id);
+                break;
+
+            case FeedReadMode.AfterAMoment:
+                WaitThenMarkRead(message.Id);
+                break;
         }
+    }
+
+    private void MarkRead(long messageId)
+    {
+        if (_account() is not { } account) return;
+
+        account.Mail.SetRead(messageId, true);
+        KeepingPlace(() => { BuildNav(); RefreshCards(); });
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Marks it read once it has been on screen a moment, and only if it still is.
+    /// </summary>
+    /// <remarks>
+    /// The point of the delay is that arrowing past something is not reading it. So the timer is
+    /// cancelled whenever the reader moves on, and the check on the way out is what stops an
+    /// article the reader left three seconds ago being marked read behind them.
+    /// </remarks>
+    private void WaitThenMarkRead(long messageId)
+    {
+        _reading_timer?.Cancel();
+        _reading_timer?.Dispose();
+
+        var waiting = new CancellationTokenSource();
+        _reading_timer = waiting;
+
+        _ = Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(async () =>
+        {
+            try
+            {
+                await Task.Delay(ReadDelay, waiting.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+
+            if (_selectedMessage == messageId) MarkRead(messageId);
+        });
     }
 
     /// <summary>
@@ -1883,6 +2335,46 @@ internal sealed class FeedsWorkspace : Border
         if (offset is { } where && _articles.Scroll is { } scroll) scroll.Offset = where;
     }
 
+    /// <summary>
+    /// Marks read whatever has scrolled up out of sight.
+    /// </summary>
+    /// <remarks>
+    /// Only what has gone past the <em>top</em>, and only entirely: a row half on screen is one
+    /// the reader may still be reading. What is below the fold has not been seen at all, so
+    /// scrolling back up must not mark anything.
+    /// <para>
+    /// The store is written in one call for the whole batch rather than per row, because a fast
+    /// scroll produces dozens of them at once — and the list is rebuilt once at the end rather
+    /// than once per row, which is what would make a flick through a folder redraw fifty times.
+    /// </para>
+    /// </remarks>
+    private void ScrolledPast()
+    {
+        if (ReadMode != FeedReadMode.OnScroll) return;
+        if (_account() is not { } account) return;
+        if (_articles.ItemsPanelRoot is not { } panel) return;
+
+        var passed = new List<long>();
+
+        foreach (var container in panel.Children.OfType<Control>())
+        {
+            if (container.DataContext is not MessageSummary article || article.IsRead) continue;
+
+            // Where this row sits in the scroller's own coordinates. A row whose bottom edge is
+            // above the top of the viewport has been scrolled completely past.
+            if (container.TranslatePoint(new Point(0, container.Bounds.Height), _articles) is not { } bottom) continue;
+            if (bottom.Y > 0) continue;
+
+            passed.Add(article.Id);
+        }
+
+        if (passed.Count == 0) return;
+
+        account.Mail.SetRead(passed, read: true);
+        KeepingPlace(() => { BuildNav(); RefreshCards(); });
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
     /// <summary>Redraws the list without moving the scroll, so a changed row redraws in place.</summary>
     private void RefreshCards()
     {
@@ -1890,6 +2382,7 @@ internal sealed class FeedsWorkspace : Border
 
         var offset = _articles.Scroll?.Offset;
         _showing = Articles(row);
+        PlaceLine(_showing);
         _articles.ItemsSource = Shaped(_showing);
         if (offset is { } where && _articles.Scroll is { } scroll) scroll.Offset = where;
     }
@@ -2166,6 +2659,15 @@ internal sealed class FeedsWorkspace : Border
                 ToggleReadLater();
                 break;
 
+            // Read on: more of this article, or the next thing not yet read — across feeds.
+            case Key.Space when !shift:
+                _ = NextUnreadAsync(scrollFirst: true);
+                break;
+
+            case Key.Space when shift:
+                _ = _reading.ScrollUpAsync();
+                break;
+
             // The letter both readers this is measured against use for it.
             case Key.B when !shift && SelectedArticle is not null:
                 SaveToBoardRequested?.Invoke(this, this);
@@ -2218,6 +2720,63 @@ internal sealed class FeedsWorkspace : Border
 
     private bool _openOnSelect = true;
 
+    /// <summary>
+    /// The next thing the reader has not read, carrying on into the next feed when this one is
+    /// done.
+    /// </summary>
+    /// <remarks>
+    /// The gesture the whole keyboard of a reader is built around, and the one this did not have:
+    /// <c>j</c> and <c>k</c> walk every article, read or not, which is not what somebody clearing
+    /// a morning's feeds is doing. Space is the binding every mail and news reader has used for
+    /// this since before the web.
+    /// <para>
+    /// Space also scrolls first, when there is more of the article to see. Jumping off an article
+    /// somebody is halfway through is the one thing that would make the key unusable.
+    /// </para>
+    /// </remarks>
+    public async Task<bool> NextUnreadAsync(bool scrollFirst = false)
+    {
+        if (scrollFirst && _reading.IsVisible && await _reading.ScrollDownAsync()) return true;
+
+        // The rest of this list first.
+        var from = _articles.SelectedIndex;
+        for (var at = from + 1; at < _showing.Count; at++)
+        {
+            if (_showing[at].IsRead) continue;
+
+            _articles.SelectedIndex = at;
+            _articles.ScrollIntoView(at);
+            return true;
+        }
+
+        // Then the next row of the pane with anything unread in it. A reader who has finished
+        // one feed means to carry on, not to stop.
+        var rows = _rows.Where(r => r.Kind is FeedNavKind.Feed or FeedNavKind.Category).ToList();
+        var here = _selected is null ? -1 : rows.FindIndex(r => r.Kind == _selected.Kind && r.Label == _selected.Label);
+
+        for (var at = here + 1; at < rows.Count; at++)
+        {
+            if (rows[at].Unread == 0) continue;
+
+            Select(rows[at], keepReading: false);
+
+            var first = _showing.FindIndex(m => !m.IsRead);
+            if (first < 0) continue;
+
+            _articles.SelectedIndex = first;
+            _articles.ScrollIntoView(first);
+
+            // Said, because the reader was in one feed and is now in another — a list that
+            // changes under a keystroke without saying why is a list that has lost them.
+            Status = $"Moved on to {rows[at].Label}.";
+            Changed?.Invoke(this, EventArgs.Empty);
+            return true;
+        }
+
+        Status = "Nothing left unread.";
+        return false;
+    }
+
     /// <summary>Moves to the next or previous feed in the pane.</summary>
     private void StepFeed(int by)
     {
@@ -2244,6 +2803,8 @@ internal sealed class FeedsWorkspace : Border
             ("M", "Mark as read or unread"),
             ("X", "Mark read and move on"),
             ("S", "Keep for Read Later"),
+            ("Space", "Read on: down the article, then the next unread"),
+            ("Shift+Space", "Back up the article"),
             ("B", "Save to a board"),
             ("Shift+B", "Take off the board you are reading"),
             ("R", "Update the feeds"),
@@ -2318,6 +2879,32 @@ internal sealed class FeedsWorkspace : Border
     private static string LayoutKey(FeedNavRow row)
         => $"rss.view.{row.Kind}.{row.Label}".ToLowerInvariant();
 
+    /// <summary>Where the moment a row was last looked at is kept.</summary>
+    private static string LastSeenKey(FeedNavRow row)
+        => $"rss.seen.{row.Kind}.{row.Label}".ToLowerInvariant();
+
+    /// <summary>
+    /// When this row was last looked at, or null for one never opened.
+    /// </summary>
+    /// <remarks>
+    /// What the line across the list is drawn from — the marker every reader puts at the point
+    /// where "new since you last looked" begins, and the single thing that tells a reader
+    /// returning to a busy feed how much of it is actually new.
+    /// </remarks>
+    private static DateTimeOffset? LastSeen(FeedNavRow row)
+        => App.Settings.GetNumber(LastSeenKey(row), 0) is > 0 and var seconds
+            ? DateTimeOffset.FromUnixTimeSeconds((long)seconds)
+            : null;
+
+    /// <summary>Remembers that this row has now been looked at, up to its newest article.</summary>
+    private static void Seen(FeedNavRow row, IReadOnlyList<MessageSummary> showing)
+    {
+        if (showing.Count == 0) return;
+
+        var newest = showing.Max(m => m.Received);
+        App.Settings.Set(LastSeenKey(row), newest.ToUnixTimeSeconds());
+    }
+
     /// <summary>Where a row's reading order is kept.</summary>
     private static string OrderKey(FeedNavRow row)
         => $"rss.order.{row.Kind}.{row.Label}".ToLowerInvariant();
@@ -2379,9 +2966,9 @@ internal sealed class FeedsWorkspace : Border
         // wrap panel does not: the grid is a stack of rows, each row a few tiles.
         _articles.ItemTemplate = _layout switch
         {
-            FeedLayout.TextOnly => new FuncDataTemplate<MessageSummary>((m, _) => Line(m), supportsRecycling: true),
+            FeedLayout.TextOnly => new FuncDataTemplate<MessageSummary>((m, _) => WithLine(m, Line(m)), supportsRecycling: true),
             FeedLayout.Cards => new FuncDataTemplate<MessageSummary[]>((row, _) => TileRow(row), supportsRecycling: true),
-            _ => new FuncDataTemplate<MessageSummary>((m, _) => Card(m), supportsRecycling: true),
+            _ => new FuncDataTemplate<MessageSummary>((m, _) => WithLine(m, Card(m)), supportsRecycling: true),
         };
 
         _articles.ItemsPanel = new FuncTemplate<Panel?>(() => new VirtualizingStackPanel());
@@ -2520,6 +3107,39 @@ internal sealed class FeedsWorkspace : Border
     /// </summary>
     private System.Collections.IEnumerable Shaped(List<MessageSummary> articles)
         => _layout == FeedLayout.Cards ? articles.Chunk(TilesAcross).ToList() : articles;
+
+    /// <summary>
+    /// Where the line sits: everything above it arrived since the reader last looked here.
+    /// </summary>
+    /// <remarks>
+    /// Taken when the row is opened and held for as long as it stays open, so the line does not
+    /// creep down the list as the reader reads. It moves on the next visit, which is the whole
+    /// point of it.
+    /// </remarks>
+    private DateTimeOffset? _since;
+
+    /// <summary>
+    /// The article the line is drawn above, and how many are above it.
+    /// </summary>
+    /// <remarks>
+    /// Drawn inside that article's own row rather than inserted as a row of its own, and this is
+    /// the whole reason: the list's indices are article indices — the keyboard, the selection,
+    /// and keeping a reader's place all count in them — and a row that is not an article would
+    /// put every one of them out by one from the line downwards.
+    /// </remarks>
+    private (long Id, int Above) _line;
+
+    /// <summary>Works out where the line goes for the list as it now stands.</summary>
+    private void PlaceLine(List<MessageSummary> articles)
+    {
+        _line = default;
+        if (_since is not { } since || _layout == FeedLayout.Cards) return;
+
+        var at = articles.FindIndex(m => m.Received <= since);
+        if (at <= 0 || at >= articles.Count) return;
+
+        _line = (articles[at].Id, at);
+    }
 
     /// <summary>One row of the grid.</summary>
     private Control TileRow(MessageSummary[] articles)

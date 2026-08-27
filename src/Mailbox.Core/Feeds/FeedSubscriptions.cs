@@ -93,6 +93,43 @@ public sealed record FeedSubscription(string Url, string Name, DateTimeOffset? L
     /// <summary>When the reader last read anything from this feed, for sorting by liveliness.</summary>
     public DateTimeOffset? LastItemUtc { get; init; }
 
+    /// <summary>
+    /// Stopped, without being unsubscribed from.
+    /// </summary>
+    /// <remarks>
+    /// The difference between "I am not reading this at the moment" and "I no longer want this",
+    /// and the reason people put up with a feed they have stopped caring about: unsubscribing
+    /// throws away the subscription, and a reader who might come back in a month would rather
+    /// not have to find the address again.
+    /// </remarks>
+    public bool Paused { get; init; }
+
+    /// <summary>
+    /// How often to ask this publisher, in minutes, or 0 to follow the schedule everything else
+    /// follows.
+    /// </summary>
+    /// <remarks>
+    /// Per feed because feeds differ by orders of magnitude: a wire service publishes fifty times
+    /// an hour and a personal blog four times a year, and one interval for both is either
+    /// wasteful or late. The publisher's own limit still wins over a shorter one — asking more
+    /// often than they asked for is how a reader gets themselves blocked.
+    /// </remarks>
+    public int RefreshMinutes { get; init; }
+
+    /// <summary>
+    /// How many articles to keep from this feed, or 0 for all of them.
+    /// </summary>
+    /// <remarks>
+    /// Nothing is trimmed by default, and that is deliberate: keeping everything is the thing a
+    /// local reader can do that a hosted one cannot, and it is why a search here reaches back
+    /// further than Feedly's does. But a feed publishing fifty a day is a reasonable thing to
+    /// want a lid on, and the reader is the one who knows which theirs is.
+    /// </remarks>
+    public int KeepMost { get; init; }
+
+    /// <summary>Where the reader has put this feed in the pane. Ties break on the name.</summary>
+    public int Ordinal { get; init; }
+
     /// <summary>True when the last poll failed, which is what the list marks.</summary>
     public bool IsFailing => LastError.Length > 0;
 
@@ -138,6 +175,55 @@ public sealed class FeedSubscriptions
     public IReadOnlyList<FeedSubscription> All => _feeds;
 
     /// <summary>
+    /// The feeds in the order the reader has put them, alphabetically where they have not.
+    /// </summary>
+    /// <remarks>
+    /// Ordinal first so a reader who has arranged their pane keeps that arrangement, and the name
+    /// as the tie-break so one who has never dragged anything gets a sorted list rather than the
+    /// order they happened to subscribe in.
+    /// </remarks>
+    public IReadOnlyList<FeedSubscription> InOrder =>
+        [.. _feeds.OrderBy(f => f.Ordinal).ThenBy(f => f.Name, StringComparer.CurrentCultureIgnoreCase)];
+
+    /// <summary>
+    /// Puts one feed immediately after another in the pane, or at the front when after is null.
+    /// </summary>
+    /// <remarks>
+    /// The whole list is renumbered rather than the moved one being given a fractional place:
+    /// there are tens of these, renumbering is nothing, and integers that stay integers are what
+    /// makes the file readable to somebody opening it.
+    /// </remarks>
+    public bool Move(string url, string? afterUrl)
+    {
+        if (Find(url) is not { } moving) return false;
+        if (string.Equals(url, afterUrl, StringComparison.OrdinalIgnoreCase)) return false;
+
+        var order = InOrder.Where(f => !string.Equals(f.Url, url, StringComparison.OrdinalIgnoreCase)).ToList();
+
+        var at = afterUrl is null
+            ? 0
+            : order.FindIndex(f => string.Equals(f.Url, afterUrl, StringComparison.OrdinalIgnoreCase)) + 1;
+
+        if (at < 0) at = order.Count;
+        order.Insert(Math.Clamp(at, 0, order.Count), moving);
+
+        using (Batch())
+        {
+            for (var n = 0; n < order.Count; n++)
+            {
+                var place = n + 1;
+                Update(order[n].Url, f => f with { Ordinal = place });
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>Stops or restarts a feed without unsubscribing from it.</summary>
+    public bool Pause(string url, bool paused)
+        => Update(url, feed => feed with { Paused = paused, NextDueUtc = paused ? feed.NextDueUtc : null });
+
+    /// <summary>
     /// The headings, in the order a reader would expect them.
     /// </summary>
     /// <remarks>
@@ -147,8 +233,8 @@ public sealed class FeedSubscriptions
     /// already in it would mean there was no way to make the first one.
     /// </remarks>
     public IReadOnlyList<string> Categories =>
-        [.. _feeds.Select(f => f.Category).Where(c => c.Length > 0).Concat(_headings)
-            .Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.CurrentCultureIgnoreCase)];
+        [.. _feeds.OrderBy(f => f.Ordinal).Select(f => f.Category).Where(c => c.Length > 0).Concat(_headings)
+            .Distinct(StringComparer.OrdinalIgnoreCase)];
 
     /// <summary>Headings the reader has made, whether or not anything is filed under them yet.</summary>
     private readonly List<string> _headings = [];
@@ -460,6 +546,10 @@ public sealed class FeedSubscriptions
         if (feed.DownloadEnclosures) entry["enclosures"] = true;
         if (feed.DownloadFullArticle) entry["article"] = true;
         if (!feed.ReadFullArticle) entry["fulltext"] = false;
+        if (feed.Paused) entry["paused"] = true;
+        if (feed.RefreshMinutes > 0) entry["every"] = feed.RefreshMinutes;
+        if (feed.KeepMost > 0) entry["keep"] = feed.KeepMost;
+        if (feed.Ordinal != 0) entry["ordinal"] = feed.Ordinal;
 
         return entry;
     }
@@ -503,6 +593,10 @@ public sealed class FeedSubscriptions
                 DownloadEnclosures = Flag(entry, "enclosures") ?? false,
                 DownloadFullArticle = Flag(entry, "article") ?? false,
                 ReadFullArticle = Flag(entry, "fulltext") ?? true,
+                Paused = Flag(entry, "paused") ?? false,
+                RefreshMinutes = Number(entry, "every") is { } every ? (int)every : 0,
+                KeepMost = Number(entry, "keep") is { } keep ? (int)keep : 0,
+                Ordinal = Number(entry, "ordinal") is { } ordinal ? (int)ordinal : 0,
             };
         }
     }

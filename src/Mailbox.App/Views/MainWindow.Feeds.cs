@@ -52,16 +52,21 @@ public partial class MainWindow
     {
         if (_feedModule is not null) return _feedModule;
 
-        _feedPictures.Enabled = App.MailOptions.FeedPictures;
-
-        _feedLookup ??= new FeedPictureLookup(FeedAccount, () => App.FeedReader?.Fetch)
-        {
-            Enabled = App.MailOptions.FeedPictures,
-        };
+        _feedLookup ??= new FeedPictureLookup(FeedAccount, () => App.FeedReader?.Fetch);
+        ApplyFeedReadingOptions();
 
         var workspace = new FeedsWorkspace(App.Feeds, FeedAccount, _feedPictures, _feedLookup)
         {
             IsNavVisible = shell.NavVisible,
+            MessageFontSize = shell.ReadingFontSize,
+        };
+
+        // The status bar's zoom, followed here as it is in mail. It reached one pane and not the
+        // other, which for the module a reader reads most in was the wrong one to miss.
+        shell.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName != nameof(ShellViewModel.ReadingFontSize)) return;
+            if (_feedModule is { } live) live.MessageFontSize = shell.ReadingFontSize;
         };
 
         workspace.AddRequested += (_, _) => _ = SubscribeToFeedAsync(shell);
@@ -85,6 +90,7 @@ public partial class MainWindow
         workspace.RemoveHeadingRequested += (_, heading) => _ = RemoveHeadingAsync(shell, heading);
         workspace.ManageBoardsRequested += (_, _) => _ = BoardsAsync(shell, string.Empty);
         workspace.CopyRequested += (_, text) => _ = CopyToClipboardAsync(shell, text);
+        workspace.PauseFeedRequested += (_, feed) => PauseFeed(shell, feed);
         workspace.Changed += (_, _) =>
         {
             shell.ModuleStatusLeft = workspace.Status;
@@ -167,6 +173,18 @@ public partial class MainWindow
 
             case "feeds.boards":
                 _ = BoardsAsync(shell, string.Empty);
+                return true;
+
+            case "feeds.next.unread":
+                _ = feeds.NextUnreadAsync(scrollFirst: true);
+                return true;
+
+            case "feeds.pause":
+                PauseFeed(shell, feeds.SelectedFeed);
+                return true;
+
+            case "feeds.reading":
+                _ = ReadingOptionsAsync(shell);
                 return true;
 
             case "feeds.open.original":
@@ -264,7 +282,11 @@ public partial class MainWindow
             foreach (var (url, error) in report.Failed) Log.Warn($"Feeds: {url} — {error}");
 
             shell.Refresh();
-            _feedModule?.Reload();
+
+            // What arrived is announced rather than inserted: putting new articles into the list
+            // under a reader moves the one they are reading down the screen while they read it.
+            if (report.Delivered > 0) _feedModule?.Announce(report.Delivered);
+            else _feedModule?.Reload();
         }
         catch (OperationCanceledException)
         {
@@ -524,6 +546,14 @@ public partial class MainWindow
 
                 break;
 
+            case "seen" when int.TryParse(Arg(1), out var minutes):
+                Log.Info($"Harness: last looked at this row {minutes} minute(s) ago — {feeds.PoseLastSeen(minutes)}.");
+                return;
+
+            case "drop":
+                Log.Info($"Harness: {feeds.PoseDrop(Arg(1), Arg(2))}.");
+                break;
+
             case "unreadonly":
                 feeds.PoseToggle(unreadOnly: true);
                 break;
@@ -541,7 +571,8 @@ public partial class MainWindow
         shell.Refresh();
 
         Log.Info($"Harness: headings now [{string.Join(", ", App.Feeds.Categories)}]; "
-            + string.Join("; ", App.Feeds.All.Select(f => $"{f.Name} under “{f.Category}”")));
+            + string.Join("; ", App.Feeds.InOrder.Select(f =>
+                $"{f.Name} under “{f.Category}” at {f.Ordinal}{(f.Paused ? " (paused)" : string.Empty)}")));
         foreach (var line in feeds.Showing.Take(3)) Log.Info($"Harness:   · {line}");
     }
 
@@ -557,6 +588,59 @@ public partial class MainWindow
 
         _feedModule?.Reload();
         shell.Refresh();
+    }
+
+    /// <summary>Stops or restarts a feed without unsubscribing from it.</summary>
+    private void PauseFeed(ShellViewModel shell, FeedSubscription? feed)
+    {
+        if (feed is null)
+        {
+            shell.StatusRight = "Choose a feed in the list first.";
+            return;
+        }
+
+        App.Feeds.Pause(feed.Url, !feed.Paused);
+        _feedModule?.Reload();
+
+        shell.StatusRight = feed.Paused
+            ? $"“{feed.Name}” will be read again."
+            : $"“{feed.Name}” paused. It stays in your list and is not asked for.";
+    }
+
+    /// <summary>The module's own reading settings, which had nowhere to live.</summary>
+    private async Task ReadingOptionsAsync(ShellViewModel shell)
+    {
+        var dialog = new FeedReadingDialog(App.Settings, App.MailOptions);
+        await dialog.ShowDialog(this);
+
+        if (!dialog.Changed) return;
+
+        ApplyFeedReadingOptions();
+        _feedModule?.Reload();
+        shell.StatusRight = "Reading settings saved.";
+    }
+
+    /// <summary>
+    /// Puts the module's settings where the things that act on them can see them.
+    /// </summary>
+    /// <remarks>
+    /// Called at startup and after the dialog, so turning pictures off takes effect at once
+    /// rather than on the next launch — which is what "the setting is honoured" has to mean.
+    /// </remarks>
+    private void ApplyFeedReadingOptions()
+    {
+        _feedPictures.Enabled = App.MailOptions.FeedPictures;
+        if (!App.MailOptions.FeedPictures) _feedPictures.Forget();
+
+        if (_feedLookup is { } lookup)
+        {
+            lookup.Enabled = App.MailOptions.FeedPictures;
+            if (App.MailOptions.FeedPictures) lookup.Forget();
+        }
+
+        App.FeedReader.DefaultRefresh = App.Settings.GetNumber(FeedReadingDialog.IntervalKey, 0) is > 0 and var minutes
+            ? TimeSpan.FromMinutes(minutes)
+            : null;
     }
 
     // ---- Organising the tree --------------------------------------------------------------------------

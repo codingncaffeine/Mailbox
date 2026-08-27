@@ -446,6 +446,14 @@
         <Setter Property="Background" Value="{DynamicResource state.pressed.brush}" />
     </Style>
 
+    <!--
+        A pane row a feed is being dragged onto. Marked while the pointer is over it, because a
+        drag with nothing showing where it would land is a drag nobody can aim.
+    -->
+    <Style Selector="Button.flat.droptarget">
+        <Setter Property="Background" Value="{DynamicResource accent.subtle.brush}" />
+    </Style>
+
     <!-- ============================= Row actions =============================== -->
     <!--
         The buttons that appear on a message row under the pointer. Hidden rather than

@@ -657,6 +657,59 @@ public sealed class ReadingPaneBody : UserControl, IDisposable
         }
     }
 
+    /// <summary>
+    /// Scrolls the message down a screen, and says whether there was anywhere to go.
+    /// </summary>
+    /// <remarks>
+    /// What makes Space one key rather than two in the feed reader: it means "carry on", and
+    /// carrying on is more of this article until there is no more of it, then the next one. So
+    /// the answer matters — a key that silently does nothing at the foot of an article is worse
+    /// than no key at all.
+    /// <para>
+    /// Two surfaces to handle, because the pane is either a web engine or a block of text
+    /// depending on what this machine has. The engine is asked in its own language and its
+    /// answer awaited; the text is a ScrollViewer and is asked directly.
+    /// </para>
+    /// </remarks>
+    public Task<bool> ScrollDownAsync() => ScrollAsync(down: true);
+
+    /// <summary>Scrolls the message back up a screen.</summary>
+    public Task<bool> ScrollUpAsync() => ScrollAsync(down: false);
+
+    private async Task<bool> ScrollAsync(bool down)
+    {
+        if (ReferenceEquals(_surface.Content, _fallbackHost))
+        {
+            var before = _fallbackHost.Offset.Y;
+
+            if (down) _fallbackHost.PageDown();
+            else _fallbackHost.PageUp();
+
+            return Math.Abs(_fallbackHost.Offset.Y - before) > 0.5;
+        }
+
+        if (_web is null) return false;
+
+        try
+        {
+            // Scrolls, and reports whether it actually moved. Written to work on a document whose
+            // scrolling element is the body and on one where it is the html element, which differ
+            // by quirks mode and are both common.
+            var by = down ? "d" : "-d";
+            var answer = await _web.InvokeScript(
+                "(function(){var e=document.scrollingElement||document.documentElement||document.body;"
+                + "var b=e.scrollTop;var d=window.innerHeight*0.9;"
+                + $"e.scrollTop=b+({by});return String(Math.abs(e.scrollTop-b)>1);}})()");
+
+            return answer?.ToString()?.Contains("true", StringComparison.OrdinalIgnoreCase) ?? false;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException or TaskCanceledException)
+        {
+            Log.Debug($"The reading pane would not scroll: {ex.Message}");
+            return false;
+        }
+    }
+
     private void ShowText(string text)
     {
         _fallback.Text = text;

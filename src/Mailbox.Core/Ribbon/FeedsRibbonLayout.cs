@@ -84,6 +84,7 @@ public static class FeedsRibbonLayout
                         CollapsePriority = 5,
                         Items =
                         [
+                            RibbonItem.Large(FeedCommands.NextUnread.Id),
                             RibbonItem.Large(FeedCommands.ReadLater.Id),
                             RibbonItem.Large(FeedCommands.MarkAllRead.Id),
                             RibbonItem.Large(FeedCommands.Categorize.Id, RibbonItemKind.DropDown),
@@ -123,6 +124,8 @@ public static class FeedsRibbonLayout
                         Items =
                         [
                             RibbonItem.Large(FeedCommands.FeedSettings.Id),
+                            RibbonItem.Large(FeedCommands.Reading.Id),
+                            RibbonItem.Large(FeedCommands.Pause.Id),
                             RibbonItem.Large(FeedCommands.Unsubscribe.Id),
                             RibbonItem.Large(FeedCommands.Mute.Id),
                             RibbonItem.Large(FeedCommands.Import.Id),
@@ -235,6 +238,7 @@ public static class FeedsRibbonLayout
                     RibbonItem.Sheddable(FeedCommands.Delete.Id)),
 
                 Cluster("tags", "Tags",
+                    RibbonItem.Small(FeedCommands.NextUnread.Id),
                     RibbonItem.Sheddable(FeedCommands.ReadLater.Id),
                     RibbonItem.Sheddable(FeedCommands.MarkAllRead.Id),
                     RibbonItem.Sheddable(FeedCommands.Categorize.Id, RibbonItemKind.DropDown)),
@@ -250,6 +254,8 @@ public static class FeedsRibbonLayout
 
                 Cluster("manage", "Manage",
                     RibbonItem.Sheddable(FeedCommands.FeedSettings.Id),
+                    RibbonItem.Sheddable(FeedCommands.Reading.Id),
+                    RibbonItem.Sheddable(FeedCommands.Pause.Id),
                     RibbonItem.Sheddable(FeedCommands.Unsubscribe.Id),
                     RibbonItem.Sheddable(FeedCommands.Mute.Id),
                     RibbonItem.Sheddable(FeedCommands.Import.Id),

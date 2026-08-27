@@ -13,6 +13,30 @@ public sealed record FeedEnclosure(string Url, string MediaType = "", long Lengt
 {
     /// <summary>True for a type this would show rather than file: the thumbnail candidates.</summary>
     public bool IsImage => MediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// A file a player would open: an episode, a video.
+    /// </summary>
+    /// <remarks>
+    /// What makes a podcast subscription a podcast subscription. Judged on the address as well as
+    /// on the declared type, because a great many feeds serve their episodes with no type at all
+    /// or with a generic one.
+    /// </remarks>
+    public bool IsPlayable
+        => MediaType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase)
+           || MediaType.StartsWith("video/", StringComparison.OrdinalIgnoreCase)
+           || (MediaType.Length == 0 && LooksPlayable(Url));
+
+    private static bool LooksPlayable(string url)
+    {
+        var path = url.Split('?', 2)[0].Split('#', 2)[0];
+        var dot = path.LastIndexOf('.');
+        if (dot < 0 || dot == path.Length - 1) return false;
+
+        return path[(dot + 1)..].ToLowerInvariant()
+            is "mp3" or "m4a" or "aac" or "ogg" or "oga" or "opus" or "flac" or "wav"
+            or "mp4" or "m4v" or "webm" or "mov" or "mkv";
+    }
 }
 
 /// <summary>One entry of a feed, in the terms a message is written in.</summary>

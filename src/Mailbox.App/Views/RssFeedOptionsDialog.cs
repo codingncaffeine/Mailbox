@@ -36,7 +36,7 @@ public sealed class RssFeedOptionsDialog : Window
     /// box ran off the bottom and OK and Cancel were drawn over its last line. A fixed-size system
     /// dialog has to be sized to what is in it, because nothing else will do it at run time.
     /// </remarks>
-    private const double DialogHeight = 604;
+    private const double DialogHeight = 760;
 
     private readonly FeedSubscription _feed;
     private readonly FeedSubscriptions _feeds;
@@ -47,6 +47,9 @@ public sealed class RssFeedOptionsDialog : Window
     private readonly CheckBox _article;
     private readonly CheckBox _fullText;
     private readonly CheckBox _useLimit;
+    private readonly CheckBox _paused;
+    private readonly TextBox _every = Field();
+    private readonly TextBox _keep = Field();
 
     /// <summary>True when something was changed and saved.</summary>
     public bool Changed { get; private set; }
@@ -69,6 +72,7 @@ public sealed class RssFeedOptionsDialog : Window
         // says the rest.
         _fullText = Tick("Read the full article from the publisher's page", feed.ReadFullArticle);
         _useLimit = Tick("Update this RSS Feed with the publisher's recommendation.", feed.UseProviderLimit);
+        _paused = Tick("Stop reading this feed for now", feed.Paused);
 
         SystemDialogChrome.Apply(this, Layout());
     }
@@ -100,6 +104,7 @@ public sealed class RssFeedOptionsDialog : Window
                 GroupBox("Delivery Location", Delivery(), top: 8),
                 GroupBox("Downloads", Downloads(), top: 8),
                 GroupBox("Update Limit", UpdateLimit(), top: 8),
+                GroupBox("This Feed", Housekeeping(), top: 8),
             },
         };
 
@@ -182,6 +187,68 @@ public sealed class RssFeedOptionsDialog : Window
         return new StackPanel { Children = { _useLimit, explain, current } };
     }
 
+    /// <summary>
+    /// How often to ask, how much to keep, and whether to ask at all.
+    /// </summary>
+    /// <remarks>
+    /// Three things a reader wants per feed and could not say anywhere. Pausing rather than
+    /// unsubscribing, because "not at the moment" and "never again" are different; an interval,
+    /// because a wire service and a personal blog are orders of magnitude apart; and a number to
+    /// keep, because keeping everything is right by default and wrong for a feed publishing
+    /// fifty a day.
+    /// </remarks>
+    private Control Housekeeping()
+    {
+        _every.Text = _feed.RefreshMinutes > 0
+            ? _feed.RefreshMinutes.ToString(CultureInfo.CurrentCulture)
+            : string.Empty;
+        _every.Width = 56;
+        _every.HorizontalAlignment = HorizontalAlignment.Left;
+
+        _keep.Text = _feed.KeepMost > 0 ? _feed.KeepMost.ToString(CultureInfo.CurrentCulture) : string.Empty;
+        _keep.Width = 56;
+        _keep.HorizontalAlignment = HorizontalAlignment.Left;
+
+        var interval = Beside("Check for new articles every", _every, "minutes — blank to follow Send/Receive");
+        var keeping = Beside("Keep the newest", _keep, "articles — blank to keep them all");
+        keeping.Margin = new Thickness(0, 6, 0, 0);
+
+        _paused.Margin = new Thickness(0, 8, 0, 0);
+
+        var note = Paragraph("A paused feed is not asked for at all, and stays in your list. "
+            + "Trimming never removes an article you have flagged, saved to a board, or not read "
+            + "yet — the number is a lid on how much a feed can pile up, not a clear-out.");
+        note.Margin = new Thickness(17, 8, 0, 0);
+
+        return new StackPanel { Children = { interval, keeping, _paused, note } };
+    }
+
+    /// <summary>A sentence with a small box in the middle of it, which is how these read.</summary>
+    private static Control Beside(string before, Control field, string after)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+
+        var lead = Label(before);
+        lead.VerticalAlignment = VerticalAlignment.Center;
+        row.Children.Add(lead);
+
+        field.VerticalAlignment = VerticalAlignment.Center;
+        row.Children.Add(field);
+
+        var tail = Label(after);
+        tail.VerticalAlignment = VerticalAlignment.Center;
+        row.Children.Add(tail);
+
+        return row;
+    }
+
+    /// <summary>A box that should hold a number, as a number — 0 for blank or nonsense.</summary>
+    private static int Number(TextBox box)
+        => int.TryParse((box.Text ?? string.Empty).Trim(), NumberStyles.Integer, CultureInfo.CurrentCulture, out var n)
+           && n > 0
+            ? n
+            : 0;
+
     /// <summary>A limit in minutes, said the way a person would say it.</summary>
     private static string Describe(int minutes) => minutes switch
     {
@@ -233,7 +300,10 @@ public sealed class RssFeedOptionsDialog : Window
             || _enclosures.IsChecked == true != _feed.DownloadEnclosures
             || _article.IsChecked == true != _feed.DownloadFullArticle
             || _fullText.IsChecked == true != _feed.ReadFullArticle
-            || _useLimit.IsChecked == true != _feed.UseProviderLimit;
+            || _useLimit.IsChecked == true != _feed.UseProviderLimit
+            || _paused.IsChecked == true != _feed.Paused
+            || Number(_every) != _feed.RefreshMinutes
+            || Number(_keep) != _feed.KeepMost;
 
         if (Changed)
         {
@@ -245,6 +315,9 @@ public sealed class RssFeedOptionsDialog : Window
                 DownloadFullArticle = _article.IsChecked == true,
                 ReadFullArticle = _fullText.IsChecked == true,
                 UseProviderLimit = _useLimit.IsChecked == true,
+                Paused = _paused.IsChecked == true,
+                RefreshMinutes = Number(_every),
+                KeepMost = Number(_keep),
 
                 // Turning the limit off should take effect now rather than after the limit the
                 // reader has just declined to honour has expired.

@@ -702,7 +702,17 @@ public partial class App : Application
         // was made further up before this existed.
         Published = new Mailbox.Core.Calendars.PublishedCollections(Settings);
         PimSync.Published = Published;
-        FeedReader = new Mailbox.Protocols.FeedReceiver(Feeds) { Mutes = Mutes };
+        FeedReader = new Mailbox.Protocols.FeedReceiver(Feeds)
+        {
+            Mutes = Mutes,
+
+            // Set here rather than only when the Feeds module is first opened: the scheduled poll
+            // runs whether or not the reader has been in there this session, and an interval that
+            // only took effect after a visit would be one that did nothing on most launches.
+            DefaultRefresh = Settings.GetNumber(Views.FeedReadingDialog.IntervalKey, 0) is > 0 and var everyMinutes
+                ? TimeSpan.FromMinutes(everyMinutes)
+                : null,
+        };
         Stationery = new StationeryFonts(Settings);
         Groups = new SendReceiveGroups(Settings);
         Signatures = new Signatures(Settings);

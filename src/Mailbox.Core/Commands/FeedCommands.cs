@@ -76,6 +76,39 @@ public static class FeedCommands
         RequiresSelection = true,
     };
 
+    public static readonly MailboxCommand NextUnread = new()
+    {
+        Id = new("feeds.next.unread"),
+        Label = "Next Unread",
+        Description = "Read on: down the article, then the next thing you have not read.",
+        Icon = "chevron-down",
+        Category = "Read",
+        Scope = ModuleScope.Feeds,
+        KeyTip = "NU",
+    };
+
+    public static readonly MailboxCommand Pause = new()
+    {
+        Id = new("feeds.pause"),
+        Label = "Pause Feed",
+        Description = "Stop asking this publisher for now. The subscription stays in your list.",
+        Icon = "cancel",
+        Category = "Manage",
+        Scope = ModuleScope.Feeds,
+        KeyTip = "PF",
+    };
+
+    public static readonly MailboxCommand Reading = new()
+    {
+        Id = new("feeds.reading"),
+        Label = "Reading",
+        Description = "When an article counts as read, how often feeds are checked, and pictures.",
+        Icon = "reader",
+        Category = "Manage",
+        Scope = ModuleScope.Feeds,
+        KeyTip = "RD",
+    };
+
     public static readonly MailboxCommand SaveToBoard = new()
     {
         Id = new("feeds.board.save"),
@@ -247,9 +280,9 @@ public static class FeedCommands
     /// <summary>Every command this module owns, which is what the catalogue registers.</summary>
     public static IReadOnlyList<MailboxCommand> All { get; } =
     [
-        Subscribe, Newsletters, Update, UpdateThis, MarkAllRead,
+        Subscribe, Newsletters, Update, UpdateThis, MarkAllRead, NextUnread,
         ReadLater, SaveToBoard, RemoveFromBoard, SaveLink, Boards,
         OpenOriginal, Delete, Categorize,
-        FeedSettings, Unsubscribe, Mute, MuteThis, Import, Export,
+        FeedSettings, Pause, Reading, Unsubscribe, Mute, MuteThis, Import, Export,
     ];
 }

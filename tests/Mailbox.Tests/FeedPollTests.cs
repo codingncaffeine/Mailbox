@@ -216,6 +216,97 @@ public class FeedPollTests
     }
 
     [Fact]
+    public async Task APausedFeedIsNotAskedForAtAll()
+    {
+        var server = new FakeFeedServer().Serve(Url, Feed(Item("1", "First", "x", "https://example.com/p.jpg")));
+        var feeds = new FeedSubscriptions(SettingsStore.Transient());
+        feeds.Add(Url, "Example");
+        feeds.Pause(Url, true);
+
+        var (account, store, _) = Account();
+        using var _s = store;
+        using var receiver = new FeedReceiver(feeds, server);
+
+        // Not even when the reader presses Update Feeds: paused means paused. Update This Feed
+        // is the way to ask for one deliberately, and the pane greys it on a paused feed.
+        Assert.Equal(0, (await receiver.PollAsync(account, DateTimeOffset.UtcNow,
+            TestContext.Current.CancellationToken, force: true)).Delivered);
+
+        Assert.Equal(0, server.RequestsFor(Url));
+    }
+
+    [Fact]
+    public async Task AFeedIsNotAskedForAgainBeforeItsOwnIntervalIsUp()
+    {
+        var server = new FakeFeedServer().Serve(Url, Feed(Item("1", "First", "x", "https://example.com/p.jpg")));
+        var feeds = new FeedSubscriptions(SettingsStore.Transient());
+        feeds.Add(Url, "Example");
+        feeds.Update(Url, f => f with { RefreshMinutes = 60 });
+
+        var (account, store, _) = Account();
+        using var _s = store;
+        using var receiver = new FeedReceiver(feeds, server);
+
+        var start = DateTimeOffset.UtcNow;
+        await receiver.PollAsync(account, start, TestContext.Current.CancellationToken);
+        Assert.Equal(1, server.RequestsFor(Url));
+
+        // Ten minutes later: not due.
+        await receiver.PollAsync(account, start.AddMinutes(10), TestContext.Current.CancellationToken);
+        Assert.Equal(1, server.RequestsFor(Url));
+
+        // Two hours later: due.
+        await receiver.PollAsync(account, start.AddHours(2), TestContext.Current.CancellationToken);
+        Assert.Equal(2, server.RequestsFor(Url));
+    }
+
+    [Fact]
+    public void TrimmingKeepsWhatTheReaderAskedToKeep()
+    {
+        // The number is a lid on how much a feed piles up, not a clear-out: a flagged article, a
+        // boarded one and an unread one all survive it whatever their age.
+        var feeds = new FeedSubscriptions(SettingsStore.Transient());
+        var feed = feeds.Add(Url, "Example");
+        feeds.Update(Url, f => f with { KeepMost = 3 });
+
+        var (account, store, mail) = Account();
+        using var _s = store;
+
+        var folder = mail.AddFolder(account.Account.Id, FeedReceiver.RootFolder);
+        var own = mail.AddFolder(account.Account.Id, "Example", parentId: folder.Id);
+
+        var now = DateTimeOffset.UtcNow;
+        var ids = new List<long>();
+        for (var n = 0; n < 10; n++)
+        {
+            var when = now.AddMinutes(-n);
+            var summary = new MessageSummary(0, own.Id, $"u{n}", null, "A", "a@example.com",
+                $"Article {n}", "text", when, when, 100, true, false, false);
+            ids.Add(mail.AddMessage(own.Id, summary)!.Value);
+        }
+
+        // The oldest of the ten: one flagged, one on a board, one left unread.
+        mail.SetFlagged(ids[9], true);
+        var board = mail.AddBoard("Keep", now);
+        mail.SaveToBoard([ids[8]], board.Id, now);
+        mail.SetRead(ids[7], false);
+
+        var removed = FeedReceiver.Trim(account, feeds.Find(Url)!);
+
+        var left = mail.Messages(own.Id);
+        Assert.Equal(10 - removed, left.Count);
+
+        // The three newest, plus the three the reader said something about.
+        Assert.Contains(left, m => m.Id == ids[0]);
+        Assert.Contains(left, m => m.Id == ids[9]);
+        Assert.Contains(left, m => m.Id == ids[8]);
+        Assert.Contains(left, m => m.Id == ids[7]);
+        Assert.DoesNotContain(left, m => m.Id == ids[5]);
+
+        _ = feed;
+    }
+
+    [Fact]
     public async Task AnUnchangedFeedCostsOneConditionalRequestAndNoBody()
     {
         // The difference between a subscription costing a megabyte an hour and costing nothing.

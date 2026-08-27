@@ -165,7 +165,12 @@ public sealed class FeedReceiver : IDisposable
         // A newsletter's issues arrive as mail, so there is nothing here to ask for. Skipped by
         // its address rather than by a flag: the fetch would refuse a "newsletter:" scheme
         // anyway, and this keeps the report honest about how many feeds were polled.
-        var due = _feeds.All.Where(f => !f.IsNewsletter() && (force || IsDue(f, now))).ToList();
+        // Force means "never mind whose schedule says what", not "never mind that I paused this":
+        // a reader who paused a feed and then pressed Update Feeds did not ask for it back. The
+        // way to read a paused one deliberately is Update This Feed, which goes the other way in.
+        var due = _feeds.All
+            .Where(f => !f.IsNewsletter() && !f.Paused && (force || IsDue(f, now)))
+            .ToList();
         if (due.Count == 0) return FeedReport.Nothing;
 
         // What each feed has already delivered, read before anything goes parallel: the store is
@@ -247,6 +252,8 @@ public sealed class FeedReceiver : IDisposable
             revised += changed;
             silenced += muted;
 
+            if (added > 0) Trim(account, named);
+
             _feeds.Update(url, f => Succeeded(f with
             {
                 ChannelTitle = channel.Title,
@@ -310,6 +317,16 @@ public sealed class FeedReceiver : IDisposable
         }
     }
 
+    /// <summary>
+    /// How often to ask a feed that has no interval of its own, or null to follow Send/Receive.
+    /// </summary>
+    /// <remarks>
+    /// The reader's own answer to "how often is this checked", which was previously not a
+    /// question anything could be asked: feeds rode whatever schedule Send/Receive was on and
+    /// there was nothing anywhere that said so or let it be changed.
+    /// </remarks>
+    public TimeSpan? DefaultRefresh { get; set; }
+
     /// <summary>What the reader asked to have done to each arriving item, or null for nothing.</summary>
     public IArrivalHandler? Arrival { get; set; }
 
@@ -326,9 +343,30 @@ public sealed class FeedReceiver : IDisposable
 
     // ---- Scheduling ------------------------------------------------------------------------------
 
-    /// <summary>Whether this feed may be asked for yet.</summary>
-    private static bool IsDue(FeedSubscription feed, DateTimeOffset now)
-        => feed.NextDueUtc is not { } due || due <= now;
+    /// <summary>
+    /// Whether this feed may be asked for yet.
+    /// </summary>
+    /// <remarks>
+    /// Three things can hold it back, and they compose: the reader has paused it; the publisher
+    /// asked to be left alone until a time that has not arrived; and the reader's own interval
+    /// for this feed has not elapsed. The publisher's request wins over a shorter interval of the
+    /// reader's — asking more often than a publisher asked for is how a reader gets blocked, and
+    /// it is not a thing a settings box should be able to do.
+    /// </remarks>
+    private bool IsDue(FeedSubscription feed, DateTimeOffset now)
+    {
+        if (feed.Paused) return false;
+        if (feed.NextDueUtc is { } due && due > now) return false;
+
+        // The feed's own interval, or the reader's default for everything that has none.
+        var wanted = feed.RefreshMinutes > 0
+            ? TimeSpan.FromMinutes(feed.RefreshMinutes)
+            : DefaultRefresh;
+
+        return wanted is not { } every
+               || feed.LastChecked is not { } last
+               || last + every <= now;
+    }
 
     private static int? Minutes(TimeSpan? limit)
         => limit is { } span && span > TimeSpan.Zero ? (int)Math.Ceiling(span.TotalMinutes) : null;
@@ -682,6 +720,57 @@ public sealed class FeedReceiver : IDisposable
         return create ? account.Mail.AddFolder(account.Account.Id, name, parentId: parent.Id) : null;
     }
 
+    /// <summary>
+    /// Keeps a feed's folder to the number of articles the reader asked for.
+    /// </summary>
+    /// <remarks>
+    /// Nothing is trimmed unless the reader asked, and what is kept forever is the thing a local
+    /// reader has over a hosted one. When they do ask, three kinds of article survive the cut
+    /// whatever their age, because each of them is something the reader said they wanted: one
+    /// kept for later, one saved onto a board, and one that has not been read yet. A retention
+    /// setting is a way to stop a folder growing, not a licence to throw away the piece somebody
+    /// put aside to come back to.
+    /// </remarks>
+    public static int Trim(OpenAccount account, FeedSubscription feed)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+        ArgumentNullException.ThrowIfNull(feed);
+
+        if (feed.KeepMost <= 0) return 0;
+        if (Folder(account, feed, create: false) is not { } folder) return 0;
+
+        var all = account.Mail.Messages(folder.Id, limit: 5000);
+        if (all.Count <= feed.KeepMost) return 0;
+
+        // One query for the whole folder rather than one per article: this runs after every poll
+        // of a busy feed, and a question asked per row turns a trim into a thousand queries.
+        var boarded = account.Mail.BoardsFor([.. all.Select(m => m.Id)]);
+
+        var kept = 0;
+        var doomed = new List<long>();
+
+        // Newest first, which is the order the folder comes back in. The first KeepMost survive
+        // because they are the newest; the ones after that survive only if the reader said so.
+        foreach (var article in all)
+        {
+            var asked = article.IsFlagged || !article.IsRead || boarded.ContainsKey(article.Id);
+
+            if (kept < feed.KeepMost || asked)
+            {
+                kept++;
+                continue;
+            }
+
+            doomed.Add(article.Id);
+        }
+
+        if (doomed.Count == 0) return 0;
+
+        account.Mail.DeleteMessages(doomed);
+        Log.Info($"Feeds: “{feed.Name}” trimmed to {feed.KeepMost}; {doomed.Count} older article(s) removed.");
+        return doomed.Count;
+    }
+
     // ---- Moving the tree about ---------------------------------------------------------------
 
     /// <summary>
@@ -819,6 +908,15 @@ public sealed class FeedReceiver : IDisposable
         if (picture.Length > 0) message.Headers.Add("X-Mailbox-Feed-Image", picture);
 
         if (page.Article.Found) message.Headers.Add("X-Mailbox-Feed-Fulltext", item.Link);
+
+        // The file an entry carries, named on the message so it can be played without the
+        // message being opened and without it having been downloaded. A podcast episode is the
+        // case, and streaming it is both quicker and kinder than fetching a hundred megabytes to
+        // a temporary file first.
+        if (item.Enclosures.FirstOrDefault(e => e.IsPlayable) is { } media)
+        {
+            message.Headers.Add("X-Mailbox-Feed-Media", $"{media.MediaType} {media.Url}");
+        }
         if (feed.Category is { Length: > 0 } category) message.Headers.Add("X-Mailbox-Feed-Category", category);
 
         // The publisher's own tags, where a mail client keeps its own: a rule can act on them and

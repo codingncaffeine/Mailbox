@@ -256,4 +256,63 @@ public class FeedTests
         feeds.RemoveCategory("To Read");
         Assert.Empty(feeds.Categories);
     }
+
+    // ---- Order, pausing, retention ---------------------------------------------------------------
+
+    [Fact]
+    public void FeedsKeepTheOrderTheReaderPutsThemIn()
+    {
+        var feeds = new FeedSubscriptions(SettingsStore.Transient());
+        feeds.Add("https://c.example/feed", "Charlie");
+        feeds.Add("https://a.example/feed", "Alpha");
+        feeds.Add("https://b.example/feed", "Bravo");
+
+        // Alphabetical until the reader says otherwise, so somebody who has never dragged
+        // anything gets a sorted list rather than the order they happened to subscribe in.
+        Assert.Equal(["Alpha", "Bravo", "Charlie"], feeds.InOrder.Select(f => f.Name));
+
+        // Charlie after Alpha.
+        Assert.True(feeds.Move("https://c.example/feed", "https://a.example/feed"));
+        Assert.Equal(["Alpha", "Charlie", "Bravo"], feeds.InOrder.Select(f => f.Name));
+
+        // And to the front.
+        Assert.True(feeds.Move("https://b.example/feed", null));
+        Assert.Equal(["Bravo", "Alpha", "Charlie"], feeds.InOrder.Select(f => f.Name));
+    }
+
+    [Fact]
+    public void TheOrderSurvivesBeingReopened()
+    {
+        var settings = SettingsStore.Transient();
+        var feeds = new FeedSubscriptions(settings);
+        feeds.Add("https://a.example/feed", "Alpha");
+        feeds.Add("https://b.example/feed", "Bravo");
+        feeds.Move("https://b.example/feed", null);
+
+        Assert.Equal(["Bravo", "Alpha"], new FeedSubscriptions(settings).InOrder.Select(f => f.Name));
+    }
+
+    [Fact]
+    public void AFeedCannotBeMovedAfterItself()
+    {
+        var feeds = new FeedSubscriptions(SettingsStore.Transient());
+        feeds.Add("https://a.example/feed", "Alpha");
+
+        Assert.False(feeds.Move("https://a.example/feed", "https://a.example/feed"));
+    }
+
+    [Fact]
+    public void PausingKeepsTheSubscriptionAndStopsTheAsking()
+    {
+        var settings = SettingsStore.Transient();
+        var feeds = new FeedSubscriptions(settings);
+        feeds.Add("https://a.example/feed", "Alpha");
+
+        Assert.True(feeds.Pause("https://a.example/feed", true));
+        Assert.True(feeds.Find("https://a.example/feed")!.Paused);
+        Assert.Single(feeds.All);
+
+        // And it survives a restart, which is the whole difference from unsubscribing.
+        Assert.True(new FeedSubscriptions(settings).Find("https://a.example/feed")!.Paused);
+    }
 }
