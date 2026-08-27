@@ -1,9 +1,15 @@
 namespace Mailbox.Core.Commands;
 
 /// <summary>
-/// The six modules in the navigation pane, in the reference's own order. The numeric values
-/// match the Ctrl+1..Ctrl+8 accelerators.
+/// The modules in the navigation pane, in the reference's own order. The numeric values match
+/// the Ctrl+1..Ctrl+9 accelerators.
 /// </summary>
+/// <remarks>
+/// Feeds is the one the reference does not have: it keeps subscriptions as folders under Mail
+/// and nothing else. A reader with fifty of them wants what a feed reader gives them — their
+/// own headings, their own counts, and a list built for articles rather than for correspondence
+/// — so it is a module here, and the ninth accelerator.
+/// </remarks>
 public enum MailboxModule
 {
     Mail = 1,
@@ -14,6 +20,7 @@ public enum MailboxModule
     Folders = 6,
     Shortcuts = 7,
     Journal = 8,
+    Feeds = 9,
 }
 
 /// <summary>
@@ -30,7 +37,8 @@ public enum ModuleScope
     Tasks = 1 << 3,
     Notes = 1 << 4,
     Journal = 1 << 5,
-    Any = Mail | Calendar | People | Tasks | Notes | Journal,
+    Feeds = 1 << 6,
+    Any = Mail | Calendar | People | Tasks | Notes | Journal | Feeds,
 }
 
 public static class ModuleScopeExtensions
@@ -43,6 +51,7 @@ public static class ModuleScopeExtensions
         MailboxModule.Tasks => ModuleScope.Tasks,
         MailboxModule.Notes => ModuleScope.Notes,
         MailboxModule.Journal => ModuleScope.Journal,
+        MailboxModule.Feeds => ModuleScope.Feeds,
         _ => ModuleScope.None,
     };
 }

@@ -61,7 +61,7 @@ public partial class MainWindow
     private void SwitchModule(ShellViewModel shell, MailboxModule module)
     {
         if (module is not (MailboxModule.Mail or MailboxModule.Calendar or MailboxModule.People
-            or MailboxModule.Tasks or MailboxModule.Notes or MailboxModule.Journal))
+            or MailboxModule.Tasks or MailboxModule.Notes or MailboxModule.Journal or MailboxModule.Feeds))
         {
             // Folders and Shortcuts are the rest of the navigation pane rather than modules of
             // their own, and a button that says which phase brings it is better than one that
@@ -118,6 +118,19 @@ public partial class MainWindow
                 var workspace = EnsureJournal(shell);
                 host.Content = workspace;
                 _ribbon.Layout = JournalRibbon();
+                shell.ModuleStatusLeft = workspace.Status;
+                break;
+            }
+
+            case MailboxModule.Feeds:
+            {
+                var workspace = EnsureFeeds(shell);
+
+                // Rebuilt on the way in rather than only when a poll finishes: what arrived while
+                // the reader was in Mail is what they came here to see.
+                workspace.Reload();
+                host.Content = workspace;
+                _ribbon.Layout = FeedsRibbon();
                 shell.ModuleStatusLeft = workspace.Status;
                 break;
             }
@@ -1789,12 +1802,22 @@ public partial class MainWindow
                     "tasks" => MailboxModule.Tasks,
                     "notes" => MailboxModule.Notes,
                     "journal" => MailboxModule.Journal,
+                    "feeds" or "rss" => MailboxModule.Feeds,
                     _ => MailboxModule.Mail,
                 });
 
                 if (shell.Module == MailboxModule.Tasks) PoseTasks(shell);
                 if (shell.Module == MailboxModule.Notes) PoseNotes(shell);
                 if (shell.Module == MailboxModule.Journal) PoseJournal(shell);
+
+                if (shell.Module == MailboxModule.Feeds)
+                {
+                    var feeds = EnsureFeeds(shell);
+                    feeds.Reload();
+                    shell.ModuleStatusLeft = feeds.Status;
+                    Log.Info($"Harness: Feeds showing {feeds.Status}; "
+                        + $"{App.Feeds.All.Count} subscription(s), {App.Feeds.Categories.Count} heading(s).");
+                }
 
                 if (shell.Module == MailboxModule.People)
                 {

@@ -139,63 +139,107 @@ public sealed class FeedReceiver : IDisposable
 
         var prepared = await FetchAllAsync(due, known, now, cancellation).ConfigureAwait(false);
 
+        // One write of the subscription file for the whole pass rather than one per feed.
+        using (_feeds.Batch())
+        {
+            return File(account, prepared, now, cancellation) with { Polled = due.Count };
+        }
+    }
+
+    /// <summary>
+    /// Files what came back: the articles into the store, and what was learnt into the
+    /// subscriptions.
+    /// </summary>
+    /// <remarks>
+    /// The one place both passes meet — the scheduled one over everything due, and the reader
+    /// pressing Update This Feed — so the caching headers, the backoff, the move-following and
+    /// the revision handling cannot drift apart between them.
+    /// </remarks>
+    private FeedReport File(
+        OpenAccount account, IReadOnlyList<Prepared> prepared, DateTimeOffset now, CancellationToken cancellation)
+    {
         var delivered = 0;
         var revised = 0;
         var unchanged = 0;
         var failed = new List<(string Url, string Error)>();
 
-        // One write of the subscription file for the whole pass rather than one per feed.
-        using (_feeds.Batch())
+        foreach (var result in prepared)
         {
-            foreach (var result in prepared)
+            cancellation.ThrowIfCancellationRequested();
+
+            if (result.Answer.MovedTo is { Length: > 0 } moved && _feeds.Moved(result.Feed.Url, moved))
             {
-                cancellation.ThrowIfCancellationRequested();
-
-                if (result.Answer.MovedTo is { Length: > 0 } moved && _feeds.Moved(result.Feed.Url, moved))
-                {
-                    Log.Info($"Feeds: “{result.Feed.Name}” has moved to {moved}.");
-                }
-
-                var url = result.Answer.MovedTo is { Length: > 0 } to ? to : result.Feed.Url;
-
-                if (result.Answer.NotModified)
-                {
-                    unchanged++;
-                    _feeds.Update(url, f => Succeeded(f, result.Answer, f.ProviderLimitMinutes, now));
-                    continue;
-                }
-
-                if (result.Error is { Length: > 0 } error)
-                {
-                    failed.Add((result.Feed.Url, error));
-                    _feeds.Update(url, f => Failed(f, error, result.Answer.RetryAfter, now));
-                    Log.Warn($"The feed at {result.Feed.Url} could not be read: {error}");
-                    continue;
-                }
-
-                if (result.Channel is not { } channel) continue;
-
-                var (added, changed) = Deliver(account, result.Feed, channel, now, result.Arrival, result.Downloads);
-                delivered += added;
-                revised += changed;
-
-                _feeds.Update(url, f => Succeeded(f with
-                {
-                    ChannelTitle = channel.Title,
-                    SiteUrl = channel.Link.Length > 0 ? channel.Link : f.SiteUrl,
-                    IconUrl = channel.IconUrl.Length > 0 ? channel.IconUrl : f.IconUrl,
-                    Description = channel.Description.Length > 0 ? channel.Description : f.Description,
-                    LastItemUtc = channel.Items.Select(i => i.Published).Where(p => p is not null).Max() ?? f.LastItemUtc,
-                }, result.Answer, Minutes(channel.UpdateLimit), now));
+                Log.Info($"Feeds: “{result.Feed.Name}” has moved to {moved}.");
             }
+
+            var url = result.Answer.MovedTo is { Length: > 0 } to ? to : result.Feed.Url;
+
+            if (result.Answer.NotModified)
+            {
+                unchanged++;
+                _feeds.Update(url, f => Succeeded(f, result.Answer, f.ProviderLimitMinutes, now));
+                continue;
+            }
+
+            if (result.Error is { Length: > 0 } error)
+            {
+                failed.Add((result.Feed.Url, error));
+                _feeds.Update(url, f => Failed(f, error, result.Answer.RetryAfter, now));
+                Log.Warn($"The feed at {result.Feed.Url} could not be read: {error}");
+                continue;
+            }
+
+            if (result.Channel is not { } channel) continue;
+
+            var (added, changed) = Deliver(account, result.Feed, channel, now, result.Arrival, result.Downloads);
+            delivered += added;
+            revised += changed;
+
+            _feeds.Update(url, f => Succeeded(f with
+            {
+                ChannelTitle = channel.Title,
+                SiteUrl = channel.Link.Length > 0 ? channel.Link : f.SiteUrl,
+                IconUrl = channel.IconUrl.Length > 0 ? channel.IconUrl : f.IconUrl,
+                Description = channel.Description.Length > 0 ? channel.Description : f.Description,
+                LastItemUtc = channel.Items.Select(i => i.Published).Where(p => p is not null).Max() ?? f.LastItemUtc,
+            }, result.Answer, Minutes(channel.UpdateLimit), now));
         }
 
         return new FeedReport(delivered, failed)
         {
             Revised = revised,
-            Polled = due.Count,
             Unchanged = unchanged,
+            Polled = prepared.Count,
         };
+    }
+
+    /// <summary>
+    /// Reads one subscription now, whether or not it is due.
+    /// </summary>
+    /// <remarks>
+    /// What "Update This Feed" means, and what a reader presses the moment after they subscribe:
+    /// a new subscription that shows nothing until the next scheduled pass looks like it did not
+    /// work. Goes through the same path a full pass does, so the caching headers, the backoff and
+    /// the revision handling are the same ones — this is a narrower pass, not a second
+    /// implementation.
+    /// </remarks>
+    public async Task<FeedReport> PollOneAsync(OpenAccount account, FeedSubscription feed, DateTimeOffset now,
+        CancellationToken cancellation = default)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+        ArgumentNullException.ThrowIfNull(feed);
+
+        if (_feeds.Find(feed.Url) is not { } current) return FeedReport.Nothing;
+
+        var known = Folder(account, current, create: false) is { } folder
+            ? account.Mail.ServerUidIndex(folder.Id)
+            : [];
+
+        var prepared = await PrepareAsync(current, known, cancellation).ConfigureAwait(false);
+        using (_feeds.Batch())
+        {
+            return File(account, [prepared], now, cancellation) with { Polled = 1 };
+        }
     }
 
     /// <summary>What the reader asked to have done to each arriving item, or null for nothing.</summary>

@@ -86,6 +86,7 @@ public partial class MainWindow : Window
                 MailboxModule.Tasks => TasksRibbon(),
                 MailboxModule.Notes => NotesRibbon(),
                 MailboxModule.Journal => JournalRibbon(),
+                MailboxModule.Feeds => FeedsRibbon(),
                 _ => App.MailRibbon(),
             };
         });
@@ -4243,6 +4244,7 @@ public partial class MainWindow : Window
         if (RunTaskCommand(shell, id)) return;
         if (RunNoteCommand(shell, id)) return;
         if (RunJournalCommand(shell, id)) return;
+        if (RunFeedCommand(shell, id)) return;
         if (RunOverSelection(shell, id)) return;
         if (RunViewCommand(shell, id)) return;
         if (RunViewTabCommand(shell, id)) return;
@@ -6383,6 +6385,7 @@ public partial class MainWindow : Window
         MailboxModule.Tasks => _taskModule?.Selected is null ? 0 : 1,
         MailboxModule.Notes => _noteModule?.Selected is null ? 0 : 1,
         MailboxModule.Journal => _journalModule?.Selected is null ? 0 : 1,
+        MailboxModule.Feeds => _feedModule?.SelectedArticle is null ? 0 : 1,
         _ => 0,
     };
 

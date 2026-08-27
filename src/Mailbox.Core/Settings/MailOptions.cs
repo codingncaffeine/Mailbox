@@ -307,6 +307,29 @@ public sealed class MailOptions(SettingsStore settings)
         set => _settings.Set(RulesOnFeedsKey, value);
     }
 
+    /// <summary>Where the Feeds module's "show pictures" preference is kept.</summary>
+    public const string FeedPicturesKey = "rss.pictures";
+
+    /// <summary>
+    /// Whether the article list fetches the pictures the entries point at.
+    /// </summary>
+    /// <remarks>
+    /// <b>On by default, which is the opposite of what a message's remote images do</b>, and the
+    /// difference is deliberate. A stranger's mail has its pictures blocked because the request
+    /// itself tells the sender their mail was opened. A feed is not a stranger: the reader went
+    /// and subscribed to it, the publisher already knows the feed was fetched, and an article
+    /// list with no pictures in it is not what anybody means by a feed reader.
+    /// <para>
+    /// The fetching is still on Mailbox's own terms — no cookies, no referer, a timeout and a
+    /// size cap — and a reader who would rather not can turn it off here.
+    /// </para>
+    /// </remarks>
+    public bool FeedPictures
+    {
+        get => _settings.GetBool(FeedPicturesKey, true);
+        set => _settings.Set(FeedPicturesKey, value);
+    }
+
     /// <summary>
     /// A sound file to play instead of the desktop's own new-mail sound, or empty for the
     /// desktop's.

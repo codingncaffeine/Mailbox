@@ -26,6 +26,7 @@ docs/HANDOFF*.md
 # is ours to publish.
 docs/MISSING-BROKEN*.md
 docs/USER-REQUESTS*.md
+docs/FEEDS-PLAN*.md
 
 # Downloaded format specifications — reference material, not ours to redistribute.
 specs/

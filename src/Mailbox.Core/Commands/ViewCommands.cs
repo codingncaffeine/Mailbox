@@ -394,7 +394,8 @@ public static class ViewCommands
     /// The rail's modules as commands, one per accelerator.
     /// </summary>
     /// <remarks>
-    /// Ctrl+1 to Ctrl+8 are the reference's own module switches (§6), and the enum's values are
+    /// Ctrl+1 to Ctrl+8 are the reference's own module switches (§6), Ctrl+9 is Feeds, and the
+    /// enum's values are
     /// those numbers. They are commands rather than a special case in the key handler so they can
     /// be rebound, searched for and placed like everything else — and unplaced on the default
     /// ribbon, because the reference switches modules from the rail and not from a tab.
@@ -416,6 +417,7 @@ public static class ViewCommands
     public static readonly MailboxCommand GoToTasks = Module(MailboxModule.Tasks, "tasks");
     public static readonly MailboxCommand GoToNotes = Module(MailboxModule.Notes, "notes");
     public static readonly MailboxCommand GoToJournal = Module(MailboxModule.Journal, "journal");
+    public static readonly MailboxCommand GoToFeeds = Module(MailboxModule.Feeds, "rss");
 
     /// <summary>The module a switch command names, or null when it is not one.</summary>
     public static MailboxModule? ModuleOf(CommandId id)
@@ -425,6 +427,7 @@ public static class ViewCommands
                      (GoToMail, MailboxModule.Mail), (GoToCalendar, MailboxModule.Calendar),
                      (GoToPeople, MailboxModule.People), (GoToTasks, MailboxModule.Tasks),
                      (GoToNotes, MailboxModule.Notes), (GoToJournal, MailboxModule.Journal),
+                     (GoToFeeds, MailboxModule.Feeds),
                  ])
         {
             if (command.Id == id) return module;
@@ -785,7 +788,7 @@ public static class ViewCommands
 
     public static IEnumerable<MailboxCommand> All =>
     [
-        GoToMail, GoToCalendar, GoToPeople, GoToTasks, GoToNotes, GoToJournal,
+        GoToMail, GoToCalendar, GoToPeople, GoToTasks, GoToNotes, GoToJournal, GoToFeeds,
         SendAll, UpdateFolder, SendReceiveGroups, ShowProgress, CancelAll,
         ChangeView, ViewSettings, ArrangeBy, ReverseSort, TighterSpacing, LayoutMenu,
         ChangeViewCompact, ChangeViewSingle, ChangeViewPreview, ManageViews, SaveViewAs, ApplyViewToFolders,

@@ -207,4 +207,50 @@ internal static class SystemDialogKit
     /// <summary>The desktop's edit box: white in a hairline, 20px tall.</summary>
     internal static TextBox Field(string watermark = "")
         => new() { Classes = { "sysfield" }, PlaceholderText = watermark };
+
+    /// <summary>
+    /// The desktop's group box: a hairline rectangle with its name sitting on the top edge.
+    /// </summary>
+    /// <remarks>
+    /// Drawn rather than borrowed, as the tabs and the report list are: Avalonia has no group
+    /// box, and the reference's dialogs are built out of them — the RSS Feed Options dialog is
+    /// four of them stacked.
+    /// </remarks>
+    internal static Control GroupBox(string label, Control content, double top = 0)
+    {
+        var frame = new Border
+        {
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(0),
+            Margin = new Thickness(0, 7, 0, 0),
+            Padding = new Thickness(9, 12, 9, 9),
+            Child = content,
+        };
+        Bind(frame, Border.BorderBrushProperty, "systemdialog.border.brush");
+
+        // The name sits on the line, with the dialog's own ground behind it so the line does not
+        // run through the text — which is how Win32 has drawn a group box since 1995.
+        var name = Label(label);
+        name.Margin = new Thickness(8, 0, 0, 0);
+        name.Padding = new Thickness(3, 0, 3, 0);
+        name.HorizontalAlignment = HorizontalAlignment.Left;
+        name.VerticalAlignment = VerticalAlignment.Top;
+
+        var backdrop = new Border { Child = name, HorizontalAlignment = HorizontalAlignment.Left };
+        Bind(backdrop, Border.BackgroundProperty, "systemdialog.background.brush");
+
+        return new Panel
+        {
+            Margin = new Thickness(0, top, 0, 0),
+            Children = { frame, backdrop },
+        };
+    }
+
+    /// <summary>The desktop's tick box, on a system dialog's page.</summary>
+    internal static CheckBox Tick(string label, bool isChecked = false)
+    {
+        var box = new CheckBox { Content = label, IsChecked = isChecked };
+        Bind(box, CheckBox.ForegroundProperty, "systemdialog.foreground.brush");
+        return box;
+    }
 }

@@ -1819,6 +1819,7 @@ public sealed partial class ShellViewModel : ObservableObject
         new(MailboxModule.Tasks, "tasks", isActive: false),
         new(MailboxModule.Notes, "notes", isActive: false),
         new(MailboxModule.Journal, "journal", isActive: false),
+        new(MailboxModule.Feeds, "rss", isActive: false),
     ];
 
     public string WindowTitle => $"{SelectedFolderName} - you@example.com - Mailbox";
@@ -3909,6 +3910,7 @@ public sealed partial class ShellViewModel : ObservableObject
             foreach (var tab in Modules) tab.IsActive = tab.Module == value;
             Raise(nameof(IsMailModule));
             Raise(nameof(IsCalendarModule));
+            Raise(nameof(IsFeedsModule));
             Raise(nameof(ShowsWorkspace));
             Raise(nameof(StatusLeft));
             Raise(nameof(ShowReadingPaneToggles));
@@ -3918,6 +3920,8 @@ public sealed partial class ShellViewModel : ObservableObject
     public bool IsMailModule => Module == MailboxModule.Mail;
 
     public bool IsCalendarModule => Module == MailboxModule.Calendar;
+
+    public bool IsFeedsModule => Module == MailboxModule.Feeds;
 
     /// <summary>
     /// The status bar's two layout buttons belong to the message list, so they go with it: the

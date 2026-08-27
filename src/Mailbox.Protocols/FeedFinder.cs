@@ -71,6 +71,19 @@ public sealed class FeedFinder(FeedFetch fetch)
             : new FeedSearch([], "No feed was found at that address.");
     }
 
+    /// <summary>
+    /// Reads a feed at a known address, for showing what is in it before anything subscribes.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="FindAsync"/> because the question is different: this one already
+    /// knows where the feed is and wants its contents, where finding is about not knowing.
+    /// </remarks>
+    public async Task<FeedChannel?> PeekAsync(string url, CancellationToken cancellation = default)
+    {
+        var answer = await _fetch.GetAsync(url, cancellation: cancellation).ConfigureAwait(false);
+        return answer.Ok ? TryParse(answer.Text, answer.FinalUrl is { Length: > 0 } final ? final : url) : null;
+    }
+
     /// <summary>The usual places, tried in order, stopping at the first that answers.</summary>
     private async Task<FeedSearch> GuessAsync(string url, CancellationToken cancellation)
     {
