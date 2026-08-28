@@ -56,8 +56,8 @@ internal sealed class EditorCommands(
         if (id == ComposeCommands.Underline.Id) return Format(_editor.ToggleUnderline);
         if (id == ComposeCommands.Strikethrough.Id) return Format(_editor.ToggleStrikethrough);
 
-        if (id == ComposeCommands.GrowFont.Id) return Format(_editor.IncreaseFontSize);
-        if (id == ComposeCommands.ShrinkFont.Id) return Format(_editor.DecreaseFontSize);
+        if (id == ComposeCommands.GrowFont.Id) return Format(() => Step(larger: true));
+        if (id == ComposeCommands.ShrinkFont.Id) return Format(() => Step(larger: false));
 
         if (id == ComposeCommands.Bullets.Id) return Format(_editor.ToggleBullet);
         if (id == ComposeCommands.Numbering.Id) return Format(_editor.ToggleNumbering);
@@ -152,6 +152,31 @@ internal sealed class EditorCommands(
         _editor.InsertHtml($"<a href=\"{escaped}\">{escaped}</a>");
         _editor.Focus();
         changed?.Invoke();
+    }
+
+    /// <summary>The size a run nobody has sized carries — the document model's own.</summary>
+    private static readonly double UntouchedFontSize = new Run().FontSize;
+
+    /// <summary>One step up or down the size ladder, from the size the text is actually written at.</summary>
+    /// <remarks>
+    /// Anchored deliberately. A run nobody has given a size to carries the document model's
+    /// untouched value rather than the stationery size the editor draws it at, and the ladder
+    /// steps from what the run carries — so on a message written at the default 11pt the first
+    /// press of Grow Font put <b>7.88pt</b> on the wire and Shrink Font 6.75pt: both buttons made
+    /// the text smaller, and it took four presses of Grow to climb back over where it started.
+    /// Pinning the effective size first makes the first step a step. The test is the one
+    /// <c>EmailHtml</c> already uses to decide whether a run's size is worth writing down, so the
+    /// two cannot disagree about which runs have a size of their own.
+    /// </remarks>
+    private void Step(bool larger)
+    {
+        if (Math.Abs(_editor.GetCaretFormat().FontSize - UntouchedFontSize) < 0.01)
+        {
+            _editor.SetFontSize(_editor.DefaultFontSize);
+        }
+
+        if (larger) _editor.IncreaseFontSize();
+        else _editor.DecreaseFontSize();
     }
 
     /// <summary>Applies something to the selection, then puts the caret back where it was.</summary>

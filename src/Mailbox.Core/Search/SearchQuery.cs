@@ -78,9 +78,15 @@ public sealed record SearchQuery
     public bool HasText => Words.Count > 0 || From.Count > 0 || Subject.Count > 0 || Body.Count > 0;
 
     /// <summary>Takes a search box's text apart. <paramref name="now"/> anchors the date words.</summary>
+    /// <remarks>
+    /// With no anchor the application's own clock answers, not the machine's: <c>received:today</c>
+    /// has to mean the same day the list is calling Today, and a second copy of a clock is how two
+    /// halves of one application come to disagree about what day it is. Live and identical to the
+    /// machine's unless <c>MAILBOX_TODAY</c> pins it — see <see cref="PosedClock"/>.
+    /// </remarks>
     public static SearchQuery Parse(string text, DateTimeOffset? now = null)
     {
-        var today = (now ?? DateTimeOffset.Now).ToLocalTime();
+        var today = (now ?? PosedClock.Now).ToLocalTime();
         var query = new SearchQuery();
         var words = new List<string>();
         var from = new List<string>();

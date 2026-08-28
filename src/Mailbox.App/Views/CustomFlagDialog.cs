@@ -50,16 +50,21 @@ public sealed class CustomFlagDialog : Window
         var type = new ComboBox { ItemsSource = FlagTypes.ToList(), MinWidth = 220 };
         type.SelectedIndex = Math.Max(0, Array.IndexOf(FlagTypes, current?.FollowUpType ?? "Follow up"));
 
+        // Today as the application believes it — the real day unless MAILBOX_TODAY pins one.
+        // The dialog's date defaults are otherwise a different picture every day it is
+        // photographed, and a flag set from here writes a date the run cannot be repeated to.
+        var today = Mailbox.Core.PosedClock.Now.LocalDateTime.Date;
+
         var start = new CalendarDatePicker { SelectedDate = current?.FollowUpStart?.LocalDateTime.Date, MinWidth = 160 };
-        var due = new CalendarDatePicker { SelectedDate = current?.FollowUpDue?.LocalDateTime.Date ?? DateTime.Today, MinWidth = 160 };
+        var due = new CalendarDatePicker { SelectedDate = current?.FollowUpDue?.LocalDateTime.Date ?? today, MinWidth = 160 };
 
         var reminderDate = new CalendarDatePicker { MinWidth = 160 };
         var reminderTime = new ComboBox { MinWidth = 110 };
-        reminderTime.ItemsSource = Enumerable.Range(0, 48).Select(h => DateTime.Today.AddMinutes(30 * h).ToString("h:mm tt", CultureInfo.CurrentCulture)).ToList();
+        reminderTime.ItemsSource = Enumerable.Range(0, 48).Select(h => today.AddMinutes(30 * h).ToString("h:mm tt", CultureInfo.CurrentCulture)).ToList();
 
         var existing = current?.Reminder?.LocalDateTime;
         var reminderOnNow = reminderOn || existing is not null;
-        var reminderAt = existing ?? (due.SelectedDate ?? DateTime.Today).Date.AddHours(16);
+        var reminderAt = existing ?? (due.SelectedDate ?? today).Date.AddHours(16);
         reminderDate.SelectedDate = reminderAt.Date;
         reminderTime.SelectedIndex = Math.Clamp((int)(reminderAt.TimeOfDay.TotalMinutes / 30), 0, 47);
 

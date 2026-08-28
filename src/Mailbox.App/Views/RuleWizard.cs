@@ -138,6 +138,14 @@ public sealed class RuleWizard : Window
     private void Go(int step)
     {
         _step = Math.Clamp(step, 0, 4);
+
+        // The page that is leaving lets go of its children first. Every page is built by
+        // <see cref="Page"/> out of the same four instance controls — the intro, the heading, the
+        // description and the example — and Avalonia refuses a control two visual parents, so
+        // building the next grid while the last one still holds them throws and the wizard never
+        // moves off the page it opened on.
+        if (_page.Content is Panel leaving) leaving.Children.Clear();
+
         _page.Content = _step switch
         {
             0 => TemplatePage(),
@@ -149,7 +157,12 @@ public sealed class RuleWizard : Window
 
         _back.IsEnabled = _step > 0;
         _next.IsEnabled = _step < 4;
-        _finish.IsEnabled = _step >= 2;
+
+        // Finish is live from the first page, as the reference's is — a template is a whole rule
+        // and somebody who wants the default of it should not have to walk three pages to say so.
+        // What stops an unfinishable rule is Finish itself, which names the clause with no value
+        // and the rule with no action rather than being greyed with nothing said.
+        _finish.IsEnabled = true;
         _description.Show(_rule);
     }
 

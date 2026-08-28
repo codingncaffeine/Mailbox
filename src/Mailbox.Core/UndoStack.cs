@@ -57,6 +57,23 @@ public sealed class UndoStack
 
     public bool CanRedo => _undone.Count > 0;
 
+    /// <summary>How many presses Ctrl+Z would take back, and how many Ctrl+Y would do again.</summary>
+    /// <remarks>
+    /// For the harness rather than for the chrome, which shows one step at a time. The contract
+    /// above says which commands record a step and which four record none, and nothing outside
+    /// this class could tell a command that pushed nothing from one that pushed two — the second
+    /// being the fault worth catching, since a reader who presses Ctrl+Z once and gets half their
+    /// action back has been told something untrue.
+    /// </remarks>
+    public int Count => _done.Count;
+
+    public int RedoCount => _undone.Count;
+
+    /// <summary>What each held step says it was, oldest first.</summary>
+    public IReadOnlyList<string> Descriptions => [.. _done.Select(step => step.Description)];
+
+    public IReadOnlyList<string> RedoDescriptions => [.. _undone.Select(step => step.Description)];
+
     /// <summary>What the next Ctrl+Z would take back, for the status line and the tooltip.</summary>
     public string? NextUndo => _done.Count > 0 ? _done[^1].Description : null;
 
@@ -129,6 +146,12 @@ public sealed class UndoStack
     /// command that batches for its own reasons is still one step inside a Quick Step. Nothing is
     /// pushed for a batch that collected nothing.
     /// </para>
+    /// <para>
+    /// An <b>empty description</b> means "keep the first step's own". That is for a caller that
+    /// knows a command is about to record itself several times but has no business naming it — a
+    /// selection spanning two accounts, which runs the same command once per account. Inventing a
+    /// word there would put a description on the stack that no command ever used.
+    /// </para>
     /// </remarks>
     public IDisposable Batch(string description)
     {
@@ -157,7 +180,7 @@ public sealed class UndoStack
         // Taken back newest first, as the stack itself takes steps back; done again oldest first,
         // in the order they happened.
         Push(
-            _batchDescription,
+            _batchDescription.Length > 0 ? _batchDescription : collected[0].Description,
             () => { for (var i = collected.Count - 1; i >= 0; i--) collected[i].Undo(); },
             () => { foreach (var step in collected) step.Redo(); });
     }

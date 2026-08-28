@@ -676,7 +676,11 @@ public partial class App : Application
         //
         // Newsletters go after the rules on purpose: a reader who has written a rule about a
         // publication meant that rule, and it should win over the general arrangement.
-        Rules = new RulesHandler();
+        // The application's clock rather than the machine's: a rule whose action is "flag for
+        // follow-up today" writes a date, and a date written from a second clock disagrees with
+        // the one the list is grouping by the moment MAILBOX_TODAY pins anything. Live and
+        // identical to the machine's in an ordinary run — see PosedClock.
+        Rules = new RulesHandler(() => Mailbox.Core.PosedClock.Now);
         Arrival = new ArrivalPipeline(
             Junk, new IgnoreHandler(), new FocusedInboxHandler(), Rules, Newsletters, Plugins.Arrivals);
         var arrival = Arrival;

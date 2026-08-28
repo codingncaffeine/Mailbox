@@ -16,6 +16,14 @@ namespace Mailbox.Core.Ribbon;
 /// and has no capture behind it — treat the group boundaries and item sizes as provisional and
 /// measure them when a classic capture exists.
 /// </para>
+/// <para>
+/// <b>Group KeyTips</b> are Z plus the first letter of the group's own label that no other group
+/// on the same tab has already claimed, scanning the label left to right — and skipping a leading
+/// Z, which the prefix has already spent. Z is the convention
+/// <see cref="RibbonGroup.KeyTip"/> records, and it keeps these clear of the single and double
+/// letters the commands take. <c>AuditRibbonTests</c> holds both halves: every group with items
+/// carries one, and none of them collides with a command's on the same tab.
+/// </para>
 /// </remarks>
 internal static class ComposeRibbonLayout
 {
@@ -172,6 +180,7 @@ internal static class ComposeRibbonLayout
                         Id = "clipboard",
                         Label = "Clipboard",
                         CollapsePriority = 8,
+                        KeyTip = "ZC",
                         DialogLauncher = ComposeCommands.Paste.Id,
                         Items =
                         [
@@ -187,6 +196,7 @@ internal static class ComposeRibbonLayout
                         Id = "basictext",
                         Label = "Basic Text",
                         CollapsePriority = 2,
+                        KeyTip = "ZB",
                         DialogLauncher = ComposeCommands.FontDialog.Id,
                         Items =
                         [
@@ -212,6 +222,7 @@ internal static class ComposeRibbonLayout
                         Id = "names",
                         Label = "Names",
                         CollapsePriority = 6,
+                        KeyTip = "ZN",
                         Items =
                         [
                             RibbonItem.Large(MailCommands.AddressBook.Id),
@@ -224,6 +235,7 @@ internal static class ComposeRibbonLayout
                         Id = "include",
                         Label = "Include",
                         CollapsePriority = 1,
+                        KeyTip = "ZI",
                         Items =
                         [
                             RibbonItem.Large(ComposeCommands.AttachFile.Id, RibbonItemKind.SplitButton),
@@ -238,6 +250,7 @@ internal static class ComposeRibbonLayout
                         Id = "tags",
                         Label = "Tags",
                         CollapsePriority = 3,
+                        KeyTip = "ZT",
                         DialogLauncher = ComposeCommands.Properties.Id,
                         Items =
                         [
@@ -252,6 +265,7 @@ internal static class ComposeRibbonLayout
                         Id = "voice",
                         Label = "Voice",
                         CollapsePriority = 9,
+                        KeyTip = "ZV",
                         Items = [RibbonItem.Large(ComposeCommands.Dictate.Id)],
                     },
 
@@ -260,6 +274,7 @@ internal static class ComposeRibbonLayout
                         Id = "apps",
                         Label = "Apps",
                         CollapsePriority = 10,
+                        KeyTip = "ZA",
                         Items = [RibbonItem.Large(ViewCommands.Apps.Id)],
                     },
 
@@ -268,6 +283,7 @@ internal static class ComposeRibbonLayout
                         Id = "editor",
                         Label = "Editor",
                         CollapsePriority = 7,
+                        KeyTip = "ZE",
                         Items = [RibbonItem.Large(ComposeCommands.Editor.Id)],
                     },
 
@@ -276,6 +292,7 @@ internal static class ComposeRibbonLayout
                         Id = "immersive",
                         Label = "Immersive",
                         CollapsePriority = 11,
+                        KeyTip = "ZM",
                         Items = [RibbonItem.Large(ViewCommands.ImmersiveReader.Id)],
                     },
                 ],
@@ -293,6 +310,7 @@ internal static class ComposeRibbonLayout
                         Id = "include",
                         Label = "Include",
                         CollapsePriority = 1,
+                        KeyTip = "ZI",
                         Items =
                         [
                             RibbonItem.Large(ComposeCommands.AttachFile.Id, RibbonItemKind.SplitButton),
@@ -306,6 +324,7 @@ internal static class ComposeRibbonLayout
                         Id = "tables",
                         Label = "Tables",
                         CollapsePriority = 4,
+                        KeyTip = "ZT",
                         Items = [RibbonItem.Large(ComposeCommands.Table.Id, RibbonItemKind.DropDown)],
                     },
 
@@ -314,6 +333,7 @@ internal static class ComposeRibbonLayout
                         Id = "illustrations",
                         Label = "Illustrations",
                         CollapsePriority = 5,
+                        KeyTip = "ZL",
                         Items =
                         [
                             RibbonItem.Large(ComposeCommands.Pictures.Id),
@@ -332,6 +352,7 @@ internal static class ComposeRibbonLayout
                         Id = "links",
                         Label = "Links",
                         CollapsePriority = 2,
+                        KeyTip = "ZN",
                         Items = [RibbonItem.Large(ComposeCommands.Link.Id, RibbonItemKind.SplitButton)],
                     },
 
@@ -340,6 +361,7 @@ internal static class ComposeRibbonLayout
                         Id = "symbols",
                         Label = "Symbols",
                         CollapsePriority = 3,
+                        KeyTip = "ZS",
                         Items =
                         [
                             RibbonItem.Large(ComposeCommands.Equation.Id, RibbonItemKind.SplitButton),
@@ -361,6 +383,7 @@ internal static class ComposeRibbonLayout
                         Id = "themes",
                         Label = "Themes",
                         CollapsePriority = 4,
+                        KeyTip = "ZT",
                         Items =
                         [
                             RibbonItem.Large(ComposeCommands.Themes.Id, RibbonItemKind.DropDown),
@@ -376,6 +399,7 @@ internal static class ComposeRibbonLayout
                         Id = "showfields",
                         Label = "Show Fields",
                         CollapsePriority = 2,
+                        KeyTip = "ZS",
                         Items =
                         [
                             RibbonItem.Small(ComposeCommands.ShowBcc.Id),
@@ -388,6 +412,7 @@ internal static class ComposeRibbonLayout
                         Id = "permission",
                         Label = "Permission",
                         CollapsePriority = 5,
+                        KeyTip = "ZP",
                         Items =
                         [
                             RibbonItem.Large(ComposeCommands.Permission.Id, RibbonItemKind.DropDown),
@@ -401,6 +426,7 @@ internal static class ComposeRibbonLayout
                         Id = "tracking",
                         Label = "Tracking",
                         CollapsePriority = 1,
+                        KeyTip = "ZR",
                         DialogLauncher = ComposeCommands.Properties.Id,
                         Items =
                         [
@@ -415,6 +441,7 @@ internal static class ComposeRibbonLayout
                         Id = "moreoptions",
                         Label = "More Options",
                         CollapsePriority = 3,
+                        KeyTip = "ZM",
                         Items =
                         [
                             RibbonItem.Small(ComposeCommands.SaveSentItemTo.Id, RibbonItemKind.DropDown),
@@ -455,6 +482,7 @@ internal static class ComposeRibbonLayout
                     Id = "clipboard",
                     Label = "Clipboard",
                     CollapsePriority = 6,
+                    KeyTip = "ZC",
                     DialogLauncher = ComposeCommands.Paste.Id,
                     Items =
                     [
@@ -470,6 +498,7 @@ internal static class ComposeRibbonLayout
                     Id = "font",
                     Label = "Font",
                     CollapsePriority = 1,
+                    KeyTip = "ZF",
                     DialogLauncher = ComposeCommands.FontDialog.Id,
                     Items =
                     [
@@ -494,6 +523,7 @@ internal static class ComposeRibbonLayout
                     Id = "paragraph",
                     Label = "Paragraph",
                     CollapsePriority = 2,
+                    KeyTip = "ZP",
                     DialogLauncher = ComposeCommands.ParagraphDialog.Id,
                     Items =
                     [
@@ -516,6 +546,7 @@ internal static class ComposeRibbonLayout
                     Id = "styles",
                     Label = "Styles",
                     CollapsePriority = 4,
+                    KeyTip = "ZS",
                     DialogLauncher = ComposeCommands.StylesDialog.Id,
                     IsGallery = true,
                     Items =
@@ -530,6 +561,7 @@ internal static class ComposeRibbonLayout
                     Id = "format",
                     Label = "Format",
                     CollapsePriority = 3,
+                    KeyTip = "ZO",
                     Items =
                     [
                         RibbonItem.Small(ComposeCommands.FormatHtml.Id),
@@ -543,6 +575,7 @@ internal static class ComposeRibbonLayout
                     Id = "editing",
                     Label = "Editing",
                     CollapsePriority = 5,
+                    KeyTip = "ZE",
                     Items =
                     [
                         RibbonItem.Small(ComposeCommands.Find.Id, RibbonItemKind.SplitButton),
@@ -568,6 +601,7 @@ internal static class ComposeRibbonLayout
                     Id = "proofing",
                     Label = "Proofing",
                     CollapsePriority = 1,
+                    KeyTip = "ZP",
                     Items =
                     [
                         RibbonItem.Large(ComposeCommands.Spelling.Id, RibbonItemKind.SplitButton),
@@ -582,6 +616,7 @@ internal static class ComposeRibbonLayout
                     Id = "speech",
                     Label = "Speech",
                     CollapsePriority = 4,
+                    KeyTip = "ZS",
                     Items = [RibbonItem.Large(ViewCommands.ReadAloud.Id)],
                 },
 
@@ -590,6 +625,7 @@ internal static class ComposeRibbonLayout
                     Id = "insights",
                     Label = "Insights",
                     CollapsePriority = 5,
+                    KeyTip = "ZI",
                     Items = [RibbonItem.Large(ComposeCommands.SmartLookup.Id)],
                 },
 
@@ -598,6 +634,7 @@ internal static class ComposeRibbonLayout
                     Id = "language",
                     Label = "Language",
                     CollapsePriority = 3,
+                    KeyTip = "ZL",
                     Items = [RibbonItem.Large(ComposeCommands.Language.Id, RibbonItemKind.DropDown)],
                 },
 
@@ -606,6 +643,7 @@ internal static class ComposeRibbonLayout
                     Id = "accessibility",
                     Label = "Accessibility",
                     CollapsePriority = 2,
+                    KeyTip = "ZA",
                     Items = [RibbonItem.Large(ComposeCommands.CheckAccessibility.Id, RibbonItemKind.SplitButton)],
                 },
             ],

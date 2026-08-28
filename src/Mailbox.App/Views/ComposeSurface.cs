@@ -55,7 +55,7 @@ namespace Mailbox.App.Views;
 /// says what, rather than "not wired yet".
 /// </para>
 /// </remarks>
-public sealed class ComposeSurface : UserControl
+public sealed partial class ComposeSurface : UserControl
 {
     /// <summary>
     /// The window this surface is hosted in, for the modal dialogs and the file picker that
@@ -92,11 +92,28 @@ public sealed class ComposeSurface : UserControl
         _font = font;
         _body.DefaultFontFamily = Mailbox.Theming.Fonts.BundledFonts.FamilyFor(App.Fonts.Resolve(font.Family).Rendered);
         _body.DefaultFontSize = font.Points / PointsPerPixel;
+        UseFontEmphasis();
+    }
 
+    /// <summary>
+    /// Puts the stationery font's weight, slant and colour on an empty document, so what is
+    /// typed comes out in them.
+    /// </summary>
+    /// <remarks>
+    /// Its own method because it has to be able to run <em>last</em>. Everything that starts the
+    /// document over takes the caret's formatting with it, and two things do that after
+    /// <see cref="UseFont"/> in the constructor: a signature is put in with <c>LoadHtml</c>, and
+    /// an account with no signature — the default — clears the document outright. So Personal
+    /// Stationery's Bold and Italic were set on a document that was then thrown away, and a
+    /// reader who chose a bold face got a message typed in regular. The colour survived only
+    /// because it also travels on the body element as <c>BaseColour</c>.
+    /// </remarks>
+    private void UseFontEmphasis()
+    {
         if (!string.IsNullOrWhiteSpace(_body.GetPlainText())) return;
-        if (font.Bold) _body.ToggleBold();
-        if (font.Italic) _body.ToggleItalic();
-        if (font.Colour is { } hex && Avalonia.Media.Color.TryParse(hex, out var colour))
+        if (_font.Bold) _body.ToggleBold();
+        if (_font.Italic) _body.ToggleItalic();
+        if (_font.Colour is { } hex && Avalonia.Media.Color.TryParse(hex, out var colour))
         {
             _body.SetForeground(new Avalonia.Media.SolidColorBrush(colour));
         }
@@ -354,6 +371,10 @@ public sealed class ComposeSurface : UserControl
         // is built, because it goes into the document and the document is part of that tree.
         InsertDefaultSignature();
 
+        // And the stationery font's weight and slant after that, because both branches of the
+        // line above start the document over and take the caret's formatting with them.
+        UseFontEmphasis();
+
         ApplyAutosaveInterval();
 
         // The timer runs while the surface is in the tree and stops when it leaves — so a closed
@@ -420,33 +441,48 @@ public sealed class ComposeSurface : UserControl
     }
 
     /// <summary>
-    /// Commands that need something in the body before they mean anything — either because they
-    /// format text that is not there, or because they insert into a document that is empty.
+    /// Commands with nothing to act on until the document has something in it.
     /// </summary>
-    private static readonly HashSet<CommandId> InsertsIntoBody =
+    /// <remarks>
+    /// Three, and each one takes an existing run of text as its input: two of them lift it out and
+    /// the third copies its formatting. Everything else on the bar <em>makes</em> something, and
+    /// making it into an empty document is the ordinary case — which is why this list is not the
+    /// formatting run.
+    /// </remarks>
+    private static readonly HashSet<CommandId> NeedsSomethingToActOn =
     [
-        ComposeCommands.Table.Id, ComposeCommands.Pictures.Id, ComposeCommands.StockImages.Id,
-        ComposeCommands.OnlinePictures.Id, ComposeCommands.Shapes.Id, ComposeCommands.Icons.Id,
-        ComposeCommands.Models3D.Id, ComposeCommands.SmartArt.Id, ComposeCommands.Chart.Id,
-        ComposeCommands.Equation.Id, ComposeCommands.Symbol.Id, ComposeCommands.Link.Id,
-        ComposeCommands.Styles.Id, ComposeCommands.ChangeStyles.Id, ComposeCommands.PageColor.Id,
+        ComposeCommands.Cut.Id, ComposeCommands.Copy.Id, ComposeCommands.FormatPainter.Id,
     ];
 
     /// <summary>
     /// Whether a command is usable right now.
     /// </summary>
     /// <remarks>
-    /// Paste is the exception among the formatting commands: there is always somewhere to paste
-    /// to, even in an empty message. Everything else in that run needs text to act on.
+    /// Almost everything, almost always. This used to grey every command drawn with a neutral icon
+    /// and every command that inserts, on the reasoning that the left of the bar is "pale on an
+    /// empty message and darkens as soon as there is something to format" — and the reference's own
+    /// captures of a brand-new message say otherwise on all three tabs that carry those commands.
+    /// <c>new email/new email.png</c>, <c>insert.png</c> and <c>format text.png</c> draw Bold,
+    /// Italic, Underline, the highlight and colour pair, both list buttons, the indents, alignment,
+    /// line spacing, Styles, Change Styles, Table, Pictures, Shapes, Chart, Equation and Symbol in
+    /// full ink with an empty To line and an empty body. Measured here: the rule greyed 44 of the
+    /// 101 commands the compose bar places, against three in the reference — and the greyed ones
+    /// work, which is the part that made it a fault rather than a shade. Pressing Bold and then
+    /// Bullets into an empty document and typing produced
+    /// <c>&lt;ul&gt;&lt;li&gt;&lt;b&gt;hello&lt;/b&gt;&lt;/li&gt;&lt;/ul&gt;</c>: both commands did
+    /// exactly what their labels say, on the message where the ribbon would not let them be
+    /// pressed. (An empty document is why they work — the constructor's <c>Clear()</c> makes one,
+    /// which is the same fix that let Insert Symbol and the automatic signature work before
+    /// anything is typed.)
+    /// <para>
+    /// Two divergences are left and are not this method's to close. Paste is enabled here and greyed
+    /// in the reference when the clipboard is empty — reading the clipboard is asynchronous and this
+    /// is called per repaint. Link is enabled here and greyed there when nothing is selected — the
+    /// editor exposes no selection to ask.
+    /// </para>
     /// </remarks>
     public bool IsCommandEnabled(CommandId id)
-    {
-        if (id == ComposeCommands.Paste.Id) return true;
-        if (!_catalog.TryGet(id, out var command)) return true;
-        if (!command.NeutralIcon && !InsertsIntoBody.Contains(id)) return true;
-
-        return !string.IsNullOrEmpty(_body.GetPlainText());
-    }
+        => !NeedsSomethingToActOn.Contains(id) || !string.IsNullOrEmpty(_body.GetPlainText());
 
     /// <summary>
     /// Fills the window from a message, for one that has been pulled back out of the outbox.
@@ -465,9 +501,30 @@ public sealed class ComposeSurface : UserControl
         _bcc.Text = string.Join("; ", message.Bcc.Mailboxes.Select(m => m.Address));
         _subject.Text = message.Subject ?? string.Empty;
 
+        // A message that has a Bcc shows the row that holds it. Filling the field and leaving the
+        // row hidden — which is what happened — is a recipient nobody can see on a message that
+        // will still be sent to them, which is the one thing a Bcc line must never be.
+        if (message.Bcc.Mailboxes.Any()) _bccRow.IsVisible = true;
+
         if (message.From.Mailboxes.FirstOrDefault()?.Address is { Length: > 0 } from)
         {
             SendFrom(from);
+        }
+
+        // The attachments come back with everything else. They did not, and both callers lose by
+        // it: reopening a draft with a file on it and saving again wrote a draft without the file
+        // — the old row is deleted and replaced, so the file was gone from the store — and Undo
+        // Send handed back a message whose attachments had been dropped, ready to send that way.
+        // Carried rather than re-read from disk: these are already MIME and go back out as they
+        // are, which is also the only thing available for a draft written on another machine.
+        _carried.Clear();
+        _carried.AddRange(Mailbox.Rendering.MessageAttachments.List(message)
+            .Select(a => new CarriedPart(a.Name, a.MimeType, a.Part)));
+
+        if (_carried.Count > 0)
+        {
+            _attachmentStrip.Text = "Attached: " + string.Join(", ", _carried.Select(c => c.Name));
+            _attachmentRow.IsVisible = true;
         }
 
         // The document as it was written. The HTML half where there is one, because that is
@@ -1536,7 +1593,7 @@ public sealed class ComposeSurface : UserControl
                 var rewritten = new List<string>(entries.Count);
                 foreach (var entry in entries)
                 {
-                    if (MailboxAddress.TryParse(entry, out _))
+                    if (IsAddress(entry))
                     {
                         rewritten.Add(entry);
                         continue;
@@ -1559,13 +1616,21 @@ public sealed class ComposeSurface : UserControl
             }
         }
 
-        var bad = BadAddresses();
+        // An ambiguous name is never an address either, so reporting the parse failure first hid
+        // the only line that says what to do about it — "More than one contact answers to: Person"
+        // tells the reader to choose; "Could not read: Person" tells them nothing they did not
+        // already know. Named here, dropped from there, and anything left genuinely unreadable is
+        // still said, after.
+        var bad = BadAddresses()
+            .Where(entry => !ambiguous.Any(name => entry.EndsWith($": {name}", StringComparison.Ordinal)))
+            .ToList();
 
-        Report(
-            bad.Count > 0 ? "Could not read: " + string.Join("; ", bad)
-            : ambiguous.Count > 0 ? "More than one contact answers to: " + string.Join("; ", ambiguous)
-            : resolved > 0 ? $"{resolved} name(s) resolved against the address book."
-            : "Every address parses.");
+        var says = new List<string>();
+        if (ambiguous.Count > 0) says.Add("More than one contact answers to: " + string.Join("; ", ambiguous));
+        if (bad.Count > 0) says.Add("Could not read: " + string.Join("; ", bad));
+        if (says.Count == 0 && resolved > 0) says.Add($"{resolved} name(s) resolved against the address book.");
+
+        Report(says.Count > 0 ? string.Join("  ", says) : "Every address parses.");
     }
 
     /// <summary>Every recipient entry that is not an address, named by its field.</summary>
@@ -1601,12 +1666,32 @@ public sealed class ComposeSurface : UserControl
         {
             foreach (var entry in Split(box.Text))
             {
-                if (!MailboxAddress.TryParse(entry, out _)) bad.Add($"{label}: {entry}");
+                if (!IsAddress(entry)) bad.Add($"{label}: {entry}");
             }
         }
 
         return bad;
     }
+
+    /// <summary>
+    /// Whether a recipient entry names a mailbox, as opposed to a person.
+    /// </summary>
+    /// <remarks>
+    /// The parse alone is not the question, and answering it that way is what stopped Check Names
+    /// ever resolving anything. <c>MailboxAddress.TryParse</c> is deliberately generous — it reads
+    /// <c>B. Other</c> as a local part of <c>B.Other</c> with no domain at all and returns true —
+    /// so every bare name a reader typed looked like an address that had already been checked. The
+    /// button then said "Every address parses", the address book was never consulted, and the
+    /// automatic name check on Send had nothing to object to: a message addressed
+    /// <c>To: B.Other</c> was queued for delivery.
+    /// <para>
+    /// A domain is the distinction. Nothing reachable over SMTP submission is addressed without
+    /// one, and no name a person types has one by accident.
+    /// </para>
+    /// </remarks>
+    private static bool IsAddress(string entry)
+        => MailboxAddress.TryParse(entry, out var parsed)
+           && parsed.Address.Contains('@', StringComparison.Ordinal);
 
     /// <summary>
     /// The addresses in a field. Semicolons always separate; commas only when the Options page
@@ -2315,11 +2400,28 @@ public sealed class ComposeSurface : UserControl
         // So the list of keys to ask about is this attempt's own rather than a previous send's.
         CryptoStores.Passphrases.Clear();
 
-        var report = await Task.Run(() => Protect(message, draft: false));
-
-        if (report.State == ProtectionState.Locked && await UnlockAsync())
+        ProtectionReport report;
+        try
         {
             report = await Task.Run(() => Protect(message, draft: false));
+
+            if (report.State == ProtectionState.Locked && await UnlockAsync())
+            {
+                report = await Task.Run(() => Protect(message, draft: false));
+            }
+        }
+        catch (Exception ex)
+        {
+            // A store that will not open at all, as opposed to one with no key in it. SendAsync is
+            // started and not awaited, so without this the exception went to the finalizer as an
+            // unobserved task fault: the writer pressed Send, nothing was queued, nothing was
+            // said, and the window sat there looking as though the button had not been pressed.
+            // Whatever the cause, the message stays in the window and unsent — never in the clear,
+            // which is what the buttons promised.
+            Log.Warn("The message could not be signed or encrypted.", ex);
+            Report($"This message could not be {(_protection.HasFlag(Protection.Encrypt) ? "encrypted" : "signed")}, "
+                   + $"so it has not been sent: {ex.Message}");
+            return false;
         }
 
         // What the message actually became, which is the only way to check the claim: a shape here
@@ -2603,6 +2705,15 @@ public sealed class ComposeSurface : UserControl
 
     private async Task<string?> Prompt(string title, string label, string value = "")
     {
+        // A posed answer, for a harness that cannot type into a modal — see HarnessAnswer. This
+        // window keeps its own prompt rather than using the shared one (it takes several lines,
+        // for a signature), so it needs the hook of its own; without it Find, Replace, Symbol,
+        // Delay Delivery and Direct Replies To could not be pressed by any pose at all.
+        if (HarnessAnswer.Next(title) is { } posed)
+        {
+            return HarnessAnswer.IsCancel(posed) ? null : posed;
+        }
+
         var input = new TextBox
         {
             MinWidth = 320,

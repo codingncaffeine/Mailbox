@@ -232,6 +232,16 @@ public static class EmailHtml
             style.Add($"margin-left:{Number(paragraph.Indent * PointsPerPixel)}pt");
         }
 
+        // Line and Paragraph Spacing. NaN is a paragraph nobody has set one on, and 1 is single,
+        // which is every client's default and not worth the bytes. Unitless, because a multiplier
+        // is what the writer chose and what every client understands — a length here would fix the
+        // leading against one font size and break it for a reader whose client picked another.
+        if (!double.IsNaN(paragraph.LineSpacing) && paragraph.LineSpacing > 0
+            && Math.Abs(paragraph.LineSpacing - 1) > 0.001)
+        {
+            style.Add($"line-height:{Number(paragraph.LineSpacing)}");
+        }
+
         if (paragraph.Background is ISolidColorBrush { Color.A: > 0 } background)
         {
             style.Add($"background-color:{Hex(background.Color)}");

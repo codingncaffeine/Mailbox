@@ -151,6 +151,13 @@ public sealed class SendReceiveProgressDialog : Window
             Content = "Don't show this dialog box during Send/Receive",
             IsChecked = _settings.GetBool(HideSetting),
         };
+
+        // The dialog's own ink, not the shell's. A CheckBox left unbound takes the shell's
+        // foreground, which over this dialog's ground draws a live control at about the weight of
+        // a disabled one — the only row in the window that reads as greyed while everything
+        // around it reads as live.
+        Bind(box, TemplatedControl.ForegroundProperty, "dialog.foreground.brush");
+
         box.IsCheckedChanged += (_, _) => _settings.Set(HideSetting, box.IsChecked == true);
         return box;
     }

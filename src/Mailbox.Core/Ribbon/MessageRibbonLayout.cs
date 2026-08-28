@@ -101,6 +101,7 @@ public static class MessageRibbonLayout
                         Id = "delete",
                         Label = "Delete",
                         CollapsePriority = 4,
+                        KeyTip = "ZD",
                         Items =
                         [
                             RibbonItem.Large(MailCommands.Delete.Id),
@@ -113,6 +114,7 @@ public static class MessageRibbonLayout
                         Id = "respond",
                         Label = "Respond",
                         CollapsePriority = 1,
+                        KeyTip = "ZR",
                         Items =
                         [
                             RibbonItem.Large(MailCommands.Reply.Id),
@@ -127,6 +129,7 @@ public static class MessageRibbonLayout
                         Label = "Quick Steps",
                         IsGallery = true,
                         CollapsePriority = 5,
+                        KeyTip = "ZQ",
                         Items =
                         [
                             RibbonItem.Small(ViewCommands.MoveToQuick.Id),
@@ -140,6 +143,7 @@ public static class MessageRibbonLayout
                         Id = "move",
                         Label = "Move",
                         CollapsePriority = 3,
+                        KeyTip = "ZM",
                         Items =
                         [
                             RibbonItem.Large(MailCommands.MoveTo.Id, RibbonItemKind.SplitButton),
@@ -151,6 +155,7 @@ public static class MessageRibbonLayout
                         Id = "tags",
                         Label = "Tags",
                         CollapsePriority = 2,
+                        KeyTip = "ZT",
                         Items =
                         [
                             RibbonItem.Small(MailCommands.MarkAsUnread.Id),
@@ -164,6 +169,7 @@ public static class MessageRibbonLayout
                         Id = "editing",
                         Label = "Editing",
                         CollapsePriority = 6,
+                        KeyTip = "ZE",
                         Items =
                         [
                             RibbonItem.Small(ViewCommands.FindInMessage.Id),
@@ -178,6 +184,7 @@ public static class MessageRibbonLayout
                         Id = "zoom",
                         Label = "Zoom",
                         CollapsePriority = 7,
+                        KeyTip = "ZO",
                         Items =
                         [
                             RibbonItem.Large(ViewCommands.Zoom.Id),

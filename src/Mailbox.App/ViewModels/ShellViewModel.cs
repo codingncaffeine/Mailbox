@@ -3298,10 +3298,36 @@ public sealed partial class ShellViewModel : ObservableObject
     }
 
     /// <summary>Re-reads what is on screen — the search results, or the folder — after a change to a row's state.</summary>
+    /// <remarks>
+    /// Keeps the reader on the message they were on. The reload builds fresh <see
+    /// cref="MessageRow"/> objects out of the store, so the row this class is holding afterwards
+    /// is not one the new list contains and an identity comparison re-selects nothing: every
+    /// command that reloads — the flag toggle, Mark Complete, Clear Flag — and every undo left
+    /// the selection empty. That is how pressing the flag key twice came to leave a message
+    /// flagged rather than complete, the second press acting on nothing and silently doing
+    /// nothing.
+    /// <para>
+    /// Matched on the store id <em>and</em> the address, because every account's store numbers its
+    /// own rows from one and a unified view holds several at once. A row that is no longer in the
+    /// list — moved, deleted, filtered out — leaves the reload's own choice standing rather than
+    /// hunting for a substitute; what should be selected after a delete is a separate question,
+    /// and one the reading-pane setting owns.
+    /// </para>
+    /// </remarks>
     private void ReloadCurrentView()
     {
+        var wanted = (SelectedRow as MessageRow) ?? SelectedMessage;
+        var id = wanted?.Id;
+        var address = wanted?.Address;
+
         if (IsSearching) RunSearch();
         else LoadMessages(_selectedFolder);
+
+        if (id is not { } was) return;
+        if (Messages.FirstOrDefault(m => m.Id == was && m.Address == address) is not { } again) return;
+
+        SelectedMessage = again;
+        SelectedRow = again;
     }
 
     /// <summary>Flags the selection for follow-up, with an optional due date. The reference's flag menu.</summary>
@@ -3458,8 +3484,11 @@ public sealed partial class ShellViewModel : ObservableObject
         RemoveRows(rows);
         RefreshCounts();
 
+        // "Today" against the posed day, not the machine's: the line reads "snoozed until 8:00 AM"
+        // only when the message comes back on the day the list is showing.
         var local = until.LocalDateTime;
-        var when = local.Date == DateTime.Today ? local.ToString("h:mm tt") : local.ToString("ddd d MMM, h:mm tt");
+        var today = Mailbox.Core.PosedClock.Now.LocalDateTime.Date;
+        var when = local.Date == today ? local.ToString("h:mm tt") : local.ToString("ddd d MMM, h:mm tt");
         StatusRight = $"{Describe(rows.Count)} snoozed until {when}.";
 
         Undo.Push("Snooze", () => RestoreSnooze(before), () => Snooze(rows, until));
@@ -3543,6 +3572,10 @@ public sealed partial class ShellViewModel : ObservableObject
             .Distinct()!,
     ];
 
+    /// <summary>What a safe or blocked list literally holds, for comparing entries against.</summary>
+    private static HashSet<string> Held(IEnumerable<string> entries)
+        => new(entries, StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
     /// Block Sender: the senders join the Blocked Senders list, and the messages go to Junk with
     /// the filter trained on them — the reference's menu entry does all three.
@@ -3553,12 +3586,45 @@ public sealed partial class ShellViewModel : ObservableObject
 
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
+        // One step for the whole press: the list write and the junking underneath it are one
+        // thing the reader did, and MarkJunk's own batch joins this one rather than making a
+        // second. The description is this command's, not "Junk", because that is the button.
+        using var batch = Undo.Batch("Block Sender");
+
         var now = DateTimeOffset.UtcNow;
         var senders = Senders(rows);
+
+        // What each list literally held, so the step puts both back exactly. Read as rows rather
+        // than asked with IsBlockedSender, which answers for a wildcard entry too: a sender
+        // already covered by a blocked domain still gets a row of their own here, and an undo
+        // that skipped it would leave one behind.
+        var (blocked, safe) = (Held(mail.BlockedSenders()), Held(mail.SafeSenders()));
+        var newlyBlocked = senders.Where(s => !blocked.Contains(s)).ToList();
+        var noLongerSafe = senders.Where(safe.Contains).ToList();
+
         foreach (var sender in senders)
         {
             mail.AddBlockedSender(sender, now);
             mail.RemoveSafeSender(sender);
+        }
+
+        if (newlyBlocked.Count > 0 || noLongerSafe.Count > 0)
+        {
+            Undo.Push(
+                "Block Sender",
+                () =>
+                {
+                    foreach (var sender in newlyBlocked) mail.RemoveBlockedSender(sender);
+                    foreach (var sender in noLongerSafe) mail.AddSafeSender(sender, now);
+                },
+                () =>
+                {
+                    foreach (var sender in senders)
+                    {
+                        mail.AddBlockedSender(sender, now);
+                        mail.RemoveSafeSender(sender);
+                    }
+                });
         }
 
         if (CurrentFolderRole != FolderRole.Junk) MarkJunk(rows);
@@ -3578,15 +3644,40 @@ public sealed partial class ShellViewModel : ObservableObject
 
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
+        using var batch = Undo.Batch(domain ? "Never Block Sender's Domain" : "Never Block Sender");
+
         var now = DateTimeOffset.UtcNow;
         var entries = domain
             ? SenderDomains(rows).Select(d => "@" + d).ToList()
             : Senders(rows);
 
+        var (safe, blocked) = (Held(mail.SafeSenders()), Held(mail.BlockedSenders()));
+        var newlySafe = entries.Where(e => !safe.Contains(e)).ToList();
+        var noLongerBlocked = entries.Where(blocked.Contains).ToList();
+
         foreach (var entry in entries)
         {
             mail.AddSafeSender(entry, now);
             mail.RemoveBlockedSender(entry);
+        }
+
+        if (newlySafe.Count > 0 || noLongerBlocked.Count > 0)
+        {
+            Undo.Push(
+                domain ? "Never Block Sender's Domain" : "Never Block Sender",
+                () =>
+                {
+                    foreach (var entry in newlySafe) mail.RemoveSafeSender(entry);
+                    foreach (var entry in noLongerBlocked) mail.AddBlockedSender(entry, now);
+                },
+                () =>
+                {
+                    foreach (var entry in entries)
+                    {
+                        mail.AddSafeSender(entry, now);
+                        mail.RemoveBlockedSender(entry);
+                    }
+                });
         }
 
         if (CurrentFolderRole == FolderRole.Junk) MarkJunk(rows);
@@ -3606,11 +3697,15 @@ public sealed partial class ShellViewModel : ObservableObject
 
         if (rows.Count == 0 || Mail(rows) is not { } mail) return;
 
+        using var batch = Undo.Batch("Never Block this Group");
+
         var now = DateTimeOffset.UtcNow;
         var own = new HashSet<string>(
             _accounts?.All.Select(a => a.Account.Address.ToLowerInvariant()) ?? [],
             StringComparer.OrdinalIgnoreCase);
+        var already = Held(mail.SafeRecipients());
         var added = new List<string>();
+        var newlySafe = new List<string>();
 
         foreach (var row in rows)
         {
@@ -3628,7 +3723,16 @@ public sealed partial class ShellViewModel : ObservableObject
             {
                 mail.AddSafeRecipient(address, now);
                 if (!added.Contains(address)) added.Add(address);
+                if (!already.Contains(address) && !newlySafe.Contains(address)) newlySafe.Add(address);
             }
+        }
+
+        if (newlySafe.Count > 0)
+        {
+            Undo.Push(
+                "Never Block this Group",
+                () => { foreach (var address in newlySafe) mail.RemoveSafeRecipient(address); },
+                () => { foreach (var address in newlySafe) mail.AddSafeRecipient(address, now); });
         }
 
         if (CurrentFolderRole == FolderRole.Junk) MarkJunk(rows);
@@ -3691,7 +3795,26 @@ public sealed partial class ShellViewModel : ObservableObject
 
         if (groups.Count < 2) return false;
 
+        // One press, one step. Each group runs the command again and each records itself, so
+        // without this a selection spanning three accounts left three steps on the stack: Ctrl+Z
+        // took back one account's share and the rest stayed done, which is exactly the hole the
+        // undo contract above says is worse than no undo at all. The batch is unnamed, so the
+        // step keeps the command's own description rather than a word invented here.
+        using var batch = Undo.Batch(string.Empty);
+
         foreach (var group in groups) command([.. group]);
+
+        // And the line at the bottom. Every one of these commands opens its status with
+        // Describe(count) — "1 message …", "8 messages …" — and the last group's is the one left
+        // on the bar, so deleting fourteen messages across three accounts reported four. Rewritten
+        // only where the line really does start with the last group's own count, so a command that
+        // words its status some other way is left alone.
+        var last = Describe(groups[^1].Count());
+        if (StatusRight.StartsWith(last, StringComparison.Ordinal))
+        {
+            StatusRight = Describe(rows.Count) + StatusRight[last.Length..];
+        }
+
         return true;
     }
 
