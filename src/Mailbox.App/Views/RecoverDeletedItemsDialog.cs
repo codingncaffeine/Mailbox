@@ -50,7 +50,7 @@ public sealed class RecoverDeletedItemsDialog : Window
             }
         };
 
-        _list.ItemTemplate = new FuncDataTemplate<RecoverableMessage>((item, _) => Row(item));
+        _list.ItemTemplate = new FuncDataTemplate<RecoverableMessage>((item, _) => item is null ? new Control() : Row(item));
         Bind(_list, TemplatedControl.BackgroundProperty, "dialog.surface.brush");
         Bind(_list, TemplatedControl.BorderBrushProperty, "dialog.border.brush");
         Bind(_status, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");

@@ -37,7 +37,7 @@ public sealed class SendReceiveGroupsDialog : Window
         CanResize = false;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
-        _list.ItemTemplate = new FuncDataTemplate<SendReceiveGroup>((group, _) => Row(group));
+        _list.ItemTemplate = new FuncDataTemplate<SendReceiveGroup>((group, _) => group is null ? new Control() : Row(group));
         _list.SelectionChanged += (_, _) => ShowSettings();
 
         DialogChrome.Apply(this, Body());

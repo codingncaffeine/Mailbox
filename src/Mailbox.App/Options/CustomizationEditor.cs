@@ -195,7 +195,7 @@ public abstract class CustomizationEditor : UserControl
 
     private Control BuildGallery()
     {
-        _gallery.ItemTemplate = new FuncDataTemplate<GalleryEntry>((entry, _) => GalleryRow(entry));
+        _gallery.ItemTemplate = new FuncDataTemplate<GalleryEntry>((entry, _) => entry is null ? new Control() : GalleryRow(entry));
         _gallery.SelectionChanged += (_, _) => RefreshButtons();
         _gallery.DoubleTapped += (_, _) =>
         {

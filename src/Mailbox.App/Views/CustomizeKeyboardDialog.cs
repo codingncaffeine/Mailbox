@@ -54,6 +54,8 @@ public sealed class CustomizeKeyboardDialog : Window
 
         _commandList.ItemTemplate = new FuncDataTemplate<MailboxCommand>((c, _) =>
         {
+            if (c is null) return new Control();
+
             var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
             var name = ViewDialogKit.SurfaceText(c.Label);
             var key = ViewDialogKit.SurfaceText(_keys.GestureFor(c.Id)?.Display ?? string.Empty);

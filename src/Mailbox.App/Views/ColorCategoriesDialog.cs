@@ -73,7 +73,7 @@ public sealed class ColorCategoriesDialog : Window
 
     private Control Layout()
     {
-        _list.ItemTemplate = new FuncDataTemplate<Category>((category, _) => Row(category));
+        _list.ItemTemplate = new FuncDataTemplate<Category>((category, _) => category is null ? new Control() : Row(category));
 
         var newButton = Action("New…", NewCategory);
         var rename = Action("Rename…", RenameSelected);

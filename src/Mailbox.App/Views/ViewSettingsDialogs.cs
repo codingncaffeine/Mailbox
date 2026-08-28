@@ -775,6 +775,8 @@ public sealed class ConditionalFormattingDialog : Window
 
         _list.ItemTemplate = new FuncDataTemplate<ConditionalFormat>((rule, _) =>
         {
+            if (rule is null) return new Control();
+
             var box = new CheckBox { IsChecked = rule.Enabled, VerticalAlignment = VerticalAlignment.Center };
             ViewDialogKit.Bind(box, TemplatedControl.ForegroundProperty, "dialog.surface.text.brush");
             box.IsCheckedChanged += (_, _) =>
@@ -960,7 +962,7 @@ public sealed class FormatColumnsDialog : Window
         CanResize = false;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
-        _list.ItemTemplate = new FuncDataTemplate<ViewColumn>((c, _) => ViewDialogKit.SurfaceText(ViewFields.Label(c.Id)));
+        _list.ItemTemplate = new FuncDataTemplate<ViewColumn>((c, _) => c is null ? new Control() : ViewDialogKit.SurfaceText(ViewFields.Label(c.Id)));
         _list.ItemsSource = _columns.ToList();
         _list.SelectionChanged += (_, _) => ShowSelected();
         _label.TextChanged += (_, _) => Save();
@@ -1072,6 +1074,8 @@ public sealed class ManageViewsDialog : Window
 
         _list.ItemTemplate = new FuncDataTemplate<Entry>((entry, _) =>
         {
+            if (entry is null) return new Control();
+
             var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("200,140,*"), Margin = new Thickness(4, 2) };
             var name = ViewDialogKit.SurfaceText(entry.Name);
             var scope = ViewDialogKit.SurfaceText(entry.IsCurrent ? $"\"{folderName}\"" : "All Mail folders");

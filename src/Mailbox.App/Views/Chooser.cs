@@ -53,6 +53,15 @@ public static class Chooser
             {
                 var stack = new StackPanel { Margin = new Thickness(2) };
 
+                // Recycling clears a row's content before it fills it with the next item, so the
+                // template is built once with nothing to show. Only a list long enough to
+                // virtualise ever gets that far, which is why the font list was the one that
+                // stopped scrolling: the throw came back up through the scroll, not the paint.
+                if (choice is null)
+                {
+                    return stack;
+                }
+
                 var name = new TextBlock { Text = choice.Label };
                 Bind(name, TextBlock.ForegroundProperty, "dialog.surface.text.brush");
                 stack.Children.Add(name);

@@ -59,7 +59,7 @@ internal sealed class RecipientAutocomplete
         {
             Focusable = false,
             MaxHeight = 8 * 40,
-            ItemTemplate = new FuncDataTemplate<RecipientSuggestion>((entry, _) => Row(entry)),
+            ItemTemplate = new FuncDataTemplate<RecipientSuggestion>((entry, _) => entry is null ? new Control() : Row(entry)),
         };
         Bind(_list, TemplatedControl.BackgroundProperty, "surface.overlay.brush");
 

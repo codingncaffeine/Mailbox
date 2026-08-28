@@ -443,7 +443,7 @@ public sealed class ManageQuickStepsDialog : Window
         Height = 520;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
-        _list.ItemTemplate = new FuncDataTemplate<QuickStep>((step, _) => Row(step));
+        _list.ItemTemplate = new FuncDataTemplate<QuickStep>((step, _) => step is null ? new Control() : Row(step));
         _list.SelectionChanged += (_, _) => Describe();
         QuickStepUi.Bind(_list, TemplatedControl.BackgroundProperty, "dialog.surface.brush");
         QuickStepUi.Bind(_list, TemplatedControl.BorderBrushProperty, "dialog.border.brush");

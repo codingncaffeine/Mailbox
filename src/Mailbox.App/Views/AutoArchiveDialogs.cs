@@ -207,6 +207,8 @@ public sealed class ArchiveDialog : Window
         Add(null);
         tree.ItemTemplate = new FuncDataTemplate<Folder>((f, _) =>
         {
+            if (f is null) return new Control();
+
             var text = ViewDialogKit.SurfaceText(f.Name);
             text.Margin = new Thickness(Depth(f, folders) * 16, 0, 0, 0);
             return text;

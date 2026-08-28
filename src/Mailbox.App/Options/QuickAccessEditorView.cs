@@ -47,7 +47,7 @@ public sealed class QuickAccessEditorView : CustomizationEditor
 
     protected override Control BuildTarget()
     {
-        _placed.ItemTemplate = new FuncDataTemplate<GalleryEntry>((entry, _) => PlacedRow(entry));
+        _placed.ItemTemplate = new FuncDataTemplate<GalleryEntry>((entry, _) => entry is null ? new Control() : PlacedRow(entry));
         _placed.SelectionChanged += (_, _) =>
         {
             RefreshButtons();

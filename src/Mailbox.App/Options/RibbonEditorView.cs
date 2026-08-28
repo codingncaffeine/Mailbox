@@ -113,7 +113,7 @@ public sealed class RibbonEditorView : CustomizationEditor
 
     protected override Control BuildTarget()
     {
-        _tree.ItemTemplate = new FuncDataTemplate<RibbonTreeRow>((row, _) => TreeRow(row));
+        _tree.ItemTemplate = new FuncDataTemplate<RibbonTreeRow>((row, _) => row is null ? new Control() : TreeRow(row));
         _tree.SelectionChanged += (_, _) => RefreshButtons();
         Plain(_tree);
 

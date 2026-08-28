@@ -216,7 +216,7 @@ internal sealed class FeedsWorkspace : Border
         // selection, so the bar knows what it is acting on; and it moves with the arrow keys
         // without any of that being written here.
         _articles.ItemsPanel = new FuncTemplate<Panel?>(() => new VirtualizingStackPanel());
-        _articles.ItemTemplate = new FuncDataTemplate<MessageSummary>((message, _) => Card(message), supportsRecycling: true);
+        _articles.ItemTemplate = new FuncDataTemplate<MessageSummary>((message, _) => message is null ? new Control() : Card(message), supportsRecycling: true);
         _articles.Background = Brushes.Transparent;
         _articles.BorderThickness = new Thickness(0);
         _articles.Padding = new Thickness(0);
@@ -3242,9 +3242,9 @@ internal sealed class FeedsWorkspace : Border
         // wrap panel does not: the grid is a stack of rows, each row a few tiles.
         _articles.ItemTemplate = _layout switch
         {
-            FeedLayout.TextOnly => new FuncDataTemplate<MessageSummary>((m, _) => WithLine(m, Line(m)), supportsRecycling: true),
-            FeedLayout.Cards => new FuncDataTemplate<MessageSummary[]>((row, _) => TileRow(row), supportsRecycling: true),
-            _ => new FuncDataTemplate<MessageSummary>((m, _) => WithLine(m, Card(m)), supportsRecycling: true),
+            FeedLayout.TextOnly => new FuncDataTemplate<MessageSummary>((m, _) => m is null ? new Control() : WithLine(m, Line(m)), supportsRecycling: true),
+            FeedLayout.Cards => new FuncDataTemplate<MessageSummary[]>((row, _) => row is null ? new Control() : TileRow(row), supportsRecycling: true),
+            _ => new FuncDataTemplate<MessageSummary>((m, _) => m is null ? new Control() : WithLine(m, Card(m)), supportsRecycling: true),
         };
 
         _articles.ItemsPanel = new FuncTemplate<Panel?>(() => new VirtualizingStackPanel());
