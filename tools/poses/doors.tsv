@@ -1,4 +1,4 @@
-# Every MAILBOX_PEEK key, generated from MainWindow's own switch — never transcribed.
+# Every MAILBOX_PEEK key, generated from HarnessDoors.All — never transcribed.
 # Regenerate: tools/poses/generate-doors.py
 # 88 keys.
 peek-calendar	MAILBOX_PEEK=calendar
