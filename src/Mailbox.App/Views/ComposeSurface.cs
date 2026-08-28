@@ -944,11 +944,26 @@ public sealed class ComposeSurface : UserControl
                 HorizontalContentAlignment = HorizontalAlignment.Center,
                 VerticalContentAlignment = VerticalAlignment.Center,
                 BorderThickness = new Thickness(1),
-                Flyout = AccountMenu(),
             };
             Bind(button, TemplatedControl.BackgroundProperty, "surface.raised.brush");
             Bind(button, TemplatedControl.BorderBrushProperty, "border.strong.brush");
             ToolTip.SetTip(button, "Send this message from a different account");
+
+            // Built full and then shown, never filled from its own Opening: the presenter is
+            // created and measured before that event is raised, so a menu populated there is
+            // measured with nothing in it and opens as a window the size of its own border.
+            // Which is what this was doing — the click worked, the menu was empty.
+            button.Click += (_, _) =>
+            {
+                var flyout = new MenuFlyout();
+                foreach (var item in AccountMenuItems())
+                {
+                    flyout.Items.Add(item);
+                }
+
+                flyout.ShowAt(button, showAtPointer: false);
+            };
+
             caption = button;
         }
         else if (opensAddressBook)
@@ -1196,13 +1211,6 @@ public sealed class ComposeSurface : UserControl
     /// beside the button to be telling the truth.
     /// </para>
     /// </remarks>
-    private MenuFlyout AccountMenu()
-    {
-        var flyout = new MenuFlyout();
-        flyout.Opening += (_, _) => flyout.ItemsSource = AccountMenuItems();
-        return flyout;
-    }
-
     private List<MenuItem> AccountMenuItems()
     {
         var accounts = _accounts?.All ?? [];
