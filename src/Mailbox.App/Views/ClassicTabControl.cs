@@ -136,7 +136,7 @@ public sealed class ClassicTabControl : Grid
 
         private Typeface Typeface => new(Font ?? FontFamily.Default);
 
-        private FormattedText Text(string header, IBrush ink) => new(
+        private FormattedText Text(string header, IBrush? ink) => new(
             header, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, Typeface, 12, ink);
 
         /// <summary>Each tab's natural span, border to shared border, from the origin.</summary>
@@ -146,7 +146,9 @@ public sealed class ClassicTabControl : Grid
             var x = Origin;
             foreach (var (header, _) in _owner._tabs)
             {
-                var width = Math.Max(Math.Ceiling(Text(header, Brushes.Black).Width) + 2 * TextInset + 1, MinTabWidth);
+                // Measured, never drawn, so it is asked for with no brush at all rather than
+                // with a colour this file has no business naming.
+                var width = Math.Max(Math.Ceiling(Text(header, null).Width) + 2 * TextInset + 1, MinTabWidth);
                 spans.Add((x, x + width));
                 x += width;
             }
@@ -163,10 +165,12 @@ public sealed class ClassicTabControl : Grid
         public override void Render(DrawingContext context)
         {
             var spans = Spans();
-            var line = Line ?? Brushes.Gray;
-            var tabFill = TabFill ?? Brushes.WhiteSmoke;
-            var pageFill = PageFill ?? Brushes.White;
-            var ink = Ink ?? Brushes.Black;
+            // All four are bound to systemdialog.* tokens; a theme that has not defined one
+            // draws magenta rather than something plausible, so the gap is visible.
+            var line = Line ?? Brushes.Magenta;
+            var tabFill = TabFill ?? Brushes.Magenta;
+            var pageFill = PageFill ?? Brushes.Magenta;
+            var ink = Ink ?? Brushes.Magenta;
             var pageTop = Bounds.Height - 1;
             var selected = _owner._selected;
 

@@ -49,7 +49,8 @@ public sealed class NewsletterRouter(FeedSubscriptions feeds) : IArrivalHandler
         mail.MoveMessage(messageId, destination.Id);
         Filed++;
 
-        Log.Info($"Newsletters: “{message.Subject}” filed under {Mailbox.Protocols.FeedReceiver.RootFolder}/{subscription.FolderPath}.");
+        Log.Info($"Newsletters: message {messageId} filed under {Mailbox.Protocols.FeedReceiver.RootFolder}/{subscription.FolderPath}.");
+        Log.Debug($"Newsletters: message {messageId} is “{message.Subject}”.");
         return destination.Id;
     }
 

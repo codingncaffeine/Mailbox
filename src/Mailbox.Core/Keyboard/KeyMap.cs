@@ -173,14 +173,36 @@ public sealed class KeyMap
         // Asking with a module is the shell asking, and the shell cannot run the compose or
         // appointment window's commands: Ctrl+U marks a message unread here whatever it does in
         // an editor.
-        bool Here(MailboxCommand c) => scope == ModuleScope.None || c.Surface == CommandSurface.Shell;
+        //
+        // Asked on whether a module was named, not on whether that module has a scope. Folders
+        // and Shortcuts have none — AsScope answers None for both — and reading that as "nobody
+        // named a module" let every command in, whichever window it belongs to: in those two
+        // modules Ctrl+C reached the compose window's Copy, was treated as handled, and so never
+        // reached the control the reader was actually in. Twelve chords did that, the clipboard's
+        // four among them.
+        bool Here(MailboxCommand c) => module is null || c.Surface == CommandSurface.Shell;
 
         // Two passes — own shortcuts, then the shipped "also" chords — each asked twice: the
         // module's own commands, then the ones every module shares.
         foreach (var also in (bool[])[false, true])
         {
             if (Match(chord, also, c => Here(c) && scope != ModuleScope.None && c.Scope != ModuleScope.Any && c.Scope.HasFlag(scope)) is { } own) return own;
-            if (Match(chord, also, c => Here(c) && (scope == ModuleScope.None || c.Scope == ModuleScope.Any)) is { } shared) return shared;
+
+            // A command that names this module as its chord's home, ahead of the ones every
+            // module shares. Six commands put a New Items entry in every module and are scoped
+            // Any for it, and all six also carry Ctrl+N; scope alone therefore could not say
+            // which of them Ctrl+N means in the calendar, and the shared pass below answered
+            // with whichever the frozen catalogue happened to enumerate first — a different one
+            // between runs. GestureHome is the module where the answer is not a guess.
+            if (Match(chord, also, c => Here(c) && scope != ModuleScope.None && c.GestureHome == scope) is { } home) return home;
+
+            // Asked on `module is null` for the same reason Here is: a module with no scope of
+            // its own — Folders and Shortcuts — is still a module, and "no scope" must mean
+            // "only what every module shares", not "anything at all". Reading it the other way
+            // let Delete reach the journal's delete and Enter the calendar's open, each the
+            // first of several module-scoped owners in catalogue order. Null really is nobody
+            // asking from a module: that is the shortcut editor, which wants the whole map.
+            if (Match(chord, also, c => Here(c) && (module is null || c.Scope == ModuleScope.Any)) is { } shared) return shared;
         }
 
         return null;

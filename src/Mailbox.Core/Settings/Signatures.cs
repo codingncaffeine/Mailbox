@@ -137,8 +137,13 @@ public sealed class Signatures
                 ? existing
                 : [];
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            // Starting over is the only way forward, but it discards every other account's
+            // choice along with the unreadable one — and the line below writes the empty map
+            // back, so it is not recoverable on the next run. Said out loud for that reason;
+            // its sibling above already says the same about reading.
+            Log.Warn($"The signature choices in '{key}' could not be read and were reset.", ex);
             map = [];
         }
 

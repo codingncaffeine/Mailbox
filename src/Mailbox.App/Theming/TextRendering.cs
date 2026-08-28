@@ -4,7 +4,8 @@ using Avalonia.Media;
 namespace Mailbox.App.Theming;
 
 /// <summary>
-/// Controls glyph rasterization, and the harness for the Phase 0 text-rendering investigation.
+/// Controls glyph rasterization, and the harness for the text-rendering investigation written
+/// up in docs/text-rendering.md.
 /// </summary>
 /// <remarks>
 /// This is the highest fidelity risk in the whole project. Windows draws the reference's UI with

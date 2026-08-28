@@ -105,6 +105,25 @@ public sealed record MailboxCommand
     public IReadOnlyList<string> AlsoGestures { get; init; } = [];
 
     /// <summary>
+    /// The one module in which this command's shortcuts are the right answer, for a command that
+    /// is offered in every module and so cannot say it through <see cref="Scope"/>.
+    /// </summary>
+    /// <remarks>
+    /// The six New Items commands are the case this exists for. Each puts an entry on the New
+    /// Items menu of every module, which makes each of them <see cref="ModuleScope.Any"/>, and
+    /// each also carries Ctrl+N. Scope therefore could not tell the key map that Ctrl+N means an
+    /// appointment in the calendar and a contact in People — it could only say "all six are
+    /// available everywhere" — so the map fell through to its shared pass and returned whichever
+    /// the catalogue enumerated first, which is dictionary order and differs between runs.
+    /// <para>
+    /// Left null by everything else. Scope is the right way to say where a command belongs; this
+    /// says only where its <em>chord</em> resolves, for the commands that are genuinely
+    /// everywhere and whose chord is genuinely one module's.
+    /// </para>
+    /// </remarks>
+    public ModuleScope? GestureHome { get; init; }
+
+    /// <summary>
     /// False for commands that exist but are not in the reference application — Snooze, Undo Send, Message
     /// Source. They are fully present in the catalogue and customization gallery, they are
     /// simply absent from the default ribbon layout so first run is an exact clone.

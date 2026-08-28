@@ -384,7 +384,8 @@ public sealed class AddressBookDialog : Window
 
         var written = _book.Save(result.Contact, result.CollectionId);
         App.PimSync.QueuePut(written);
-        Log.Info($"Address Book: contact {written.Id} added — {result.Contact.Named()}.");
+        Log.Info($"Address Book: contact {written.Id} added.");
+        Log.Debug($"Address Book: contact {written.Id} is {result.Contact.Named()}.");
 
         FillBooks();
         Refresh();

@@ -86,7 +86,7 @@ public class CommandCatalogTests
     /// by the default ribbon layout. Unplaced must never mean unreachable.
     /// </summary>
     [Fact]
-    public void CommandsBeyondOutlookAreCataloguedButNotInDefaultLayout()
+    public void CommandsBeyondTheReferenceAreCataloguedButNotInDefaultLayout()
     {
         var catalog = Loaded();
         var beyond = catalog.BeyondDefaultLayout.Select(c => c.Id.Value).ToHashSet();
@@ -103,7 +103,7 @@ public class CommandCatalogTests
     }
 
     [Fact]
-    public void OutlookParityCommandsAreInTheDefaultLayout()
+    public void ReferenceParityCommandsAreInTheDefaultLayout()
     {
         var catalog = Loaded();
         foreach (var id in (string[])["mail.reply", "mail.reply.all", "mail.forward", "mail.delete"])

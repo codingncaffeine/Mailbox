@@ -28,7 +28,7 @@ public class RtfBodyTests
     [Fact]
     public void EncapsulatedHtmlComesBackOutAsHtml()
     {
-        // The shape Outlook writes for HTML mail: markup in \*\htmltag groups, the RTF's own
+        // The shape those writers use for HTML mail: markup in \*\htmltag groups, the RTF's own
         // rendering fenced behind \htmlrtf toggles, the visible text shared between both.
         var rtf = @"{\rtf1\ansi\fromhtml1{\fonttbl{\f0 Arial;}}" +
                   @"{\*\htmltag2 <html>}{\*\htmltag50 <body>}" +

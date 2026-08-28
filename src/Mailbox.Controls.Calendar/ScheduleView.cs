@@ -22,8 +22,8 @@ public sealed record ScheduleRow(
 /// read against each other at a glance.
 /// </summary>
 /// <remarks>
-/// The reference's answer to "when is everyone free", minus the tenant free/busy the plan puts
-/// out of scope — the rows here are the calendars this machine has, local and subscribed alike.
+/// The reference's answer to "when is everyone free", minus the tenant free/busy that is out of
+/// scope here — the rows are the calendars this machine has, local and subscribed alike.
 /// <b>No capture exists for this view</b>; the geometry is authored from the reference's shape
 /// and shares the time grid's own numbers so the two read as one family.
 /// </remarks>

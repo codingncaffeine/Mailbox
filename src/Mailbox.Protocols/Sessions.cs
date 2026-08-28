@@ -58,7 +58,7 @@ public interface ISmtpSession : IDisposable
     /// </summary>
     /// <remarks>
     /// Empty means the server offers none — which is a real configuration, not a fault, and is
-    /// the one an Outlook.com account with SMTP AUTH switched off is in.
+    /// the one a Microsoft consumer mailbox with SMTP AUTH switched off is in.
     /// </remarks>
     IReadOnlySet<string> AuthenticationMechanisms { get; }
 

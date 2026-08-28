@@ -19,8 +19,8 @@ public sealed record ComposeCommandStatus(
 /// <remarks>
 /// One table, read by three things: the window, so a blocked button says what it is waiting for
 /// rather than "not wired yet"; a test, so a command cannot be added to the ribbon without
-/// someone deciding which of these it is; and the plan, so the progress record is derived from
-/// the code rather than maintained beside it and left to drift.
+/// someone deciding which of these it is; and the progress record, so it is derived from the
+/// code rather than maintained beside it and left to drift.
 /// <para>
 /// A blocked button is still a real button — it is placed, it has its screentip and its KeyTip,
 /// and it is reachable from the catalogue. What it does not do is pretend.
@@ -29,8 +29,8 @@ public sealed record ComposeCommandStatus(
 public static class ComposeAvailability
 {
     private const string EditorGap =
-        "The editor does not offer it. The editor here is a library rather than ours (§7.3), so " +
-        "what is missing is what its document model does not carry — see the survey there.";
+        "The editor does not offer it. The editor here is a library rather than ours, so what " +
+        "is missing is what its document model does not carry.";
 
     private const string Drawing =
         "Not planned for the editor. A drawing surface is a different program inside this one, " +
@@ -79,7 +79,7 @@ public static class ComposeAvailability
         // ---- Font ---------------------------------------------------------------------
         new(ComposeCommands.Font.Id, ComposeCommandState.Working,
             "Picks a family, listing the Microsoft names and saying what each will actually " +
-            "look like here and to a recipient (§6)."),
+            "look like here and to a recipient."),
         new(ComposeCommands.FontSize.Id, ComposeCommandState.Working, "Sets the size in points."),
         new(ComposeCommands.GrowFont.Id, ComposeCommandState.Working, "One step larger."),
         new(ComposeCommands.ShrinkFont.Id, ComposeCommandState.Working, "One step smaller."),

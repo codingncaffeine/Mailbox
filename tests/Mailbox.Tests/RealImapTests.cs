@@ -266,7 +266,7 @@ public class RealImapTests
     /// A move, and whether the server named the new UID.
     /// </summary>
     /// <remarks>
-    /// This is the one the handoff's trap is about: a move clears a row's <c>server_uid</c> until
+    /// This is the trap: a move clears a row's <c>server_uid</c> until
     /// UIDPLUS, a Message-ID search or <c>AdoptServerUid</c> names it again. Which of the three
     /// happens depends entirely on what the server does, and only a real one can say.
     /// </remarks>

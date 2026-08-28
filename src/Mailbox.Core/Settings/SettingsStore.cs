@@ -126,6 +126,60 @@ public sealed class SettingsStore
         Changed?.Invoke(this, key);
     }
 
+    /// <summary>
+    /// What every key holds at this moment, to be handed back to <see cref="Revert"/>.
+    /// </summary>
+    /// <remarks>
+    /// For a dialog that writes as the reader changes each control — which the Options dialog
+    /// does on purpose, so a page revisited shows what was chosen — and must still be able to
+    /// answer Cancel. Take one before the dialog opens; hand it back if Cancel is pressed; drop
+    /// it on OK.
+    /// <para>
+    /// Values are kept as their JSON text rather than as live nodes: a <see cref="JsonNode"/>
+    /// belongs to one parent, so a snapshot holding the real nodes would be a second reference
+    /// to the objects the store goes on mutating.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyDictionary<string, string?> Snapshot()
+        => _values.ToDictionary(pair => pair.Key, pair => pair.Value?.ToJsonString(), StringComparer.Ordinal);
+
+    /// <summary>
+    /// Puts the store back the way <paramref name="snapshot"/> found it.
+    /// </summary>
+    /// <remarks>
+    /// Saves once and then raises <see cref="Changed"/> for every key that actually moved, so
+    /// anything that applied a setting live — the theme, the ribbon layout — is told to read it
+    /// again. Keys written since the snapshot and absent from it are removed, which is what
+    /// makes a Cancel after a first-ever write leave no trace.
+    /// </remarks>
+    public void Revert(IReadOnlyDictionary<string, string?> snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+
+        var moved = new List<string>();
+
+        foreach (var key in _values.Select(pair => pair.Key).ToArray())
+        {
+            if (snapshot.ContainsKey(key)) continue;
+            _values.Remove(key);
+            moved.Add(key);
+        }
+
+        foreach (var (key, json) in snapshot)
+        {
+            var current = _values.TryGetPropertyValue(key, out var found) ? found?.ToJsonString() : null;
+            if (current == json) continue;
+
+            _values[key] = json is null ? null : JsonNode.Parse(json);
+            moved.Add(key);
+        }
+
+        if (moved.Count == 0) return;
+
+        Save();
+        foreach (var key in moved) Changed?.Invoke(this, key);
+    }
+
     private bool TryGet(string key, [NotNullWhen(true)] out JsonNode? node)
     {
         node = _values.TryGetPropertyValue(key, out var found) ? found : null;

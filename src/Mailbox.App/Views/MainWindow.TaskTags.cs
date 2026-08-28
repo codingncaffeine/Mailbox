@@ -99,8 +99,9 @@ public partial class MainWindow
         clear.Click += (_, _) => FlagToDo(shell, row, null);
         flyout.Items.Add(clear);
 
-        Log.Info($"Flag Task: “{row.Summary}” is due {(row.Task.Due is { } due ? due.Wall.ToString("yyyy-MM-dd") : "—")}"
+        Log.Info($"Flag Task: the row is due {(row.Task.Due is { } due ? due.Wall.ToString("yyyy-MM-dd") : "—")}"
             + (row.IsMessage ? ", a flagged message." : "."));
+        Log.Debug($"Flag Task: the row is “{row.Summary}”.");
         flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
     }
 
@@ -164,7 +165,8 @@ public partial class MainWindow
         clear.Click += (_, _) => apply(null);
         flyout.Items.Add(clear);
 
-        Log.Info($"Flag: “{subject}” is due {current?.LocalDateTime.ToString("yyyy-MM-dd") ?? "—"}.");
+        Log.Info($"Flag: the item is due {current?.LocalDateTime.ToString("yyyy-MM-dd") ?? "—"}.");
+        Log.Debug($"Flag: the item is “{subject}”.");
         flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
     }
 
@@ -354,7 +356,7 @@ public partial class MainWindow
         {
             var kind = row.IsContact ? "a flagged contact" : "a flagged message";
             shell.StatusRight = $"Private marks a task; this row is {kind}.";
-            Log.Info($"Private: “{row.Summary}” is {kind} — nothing set.");
+            Log.Info($"Private: the row is {kind} — nothing set.");
             return;
         }
 
@@ -408,7 +410,7 @@ public partial class MainWindow
         if (row.IsContact)
         {
             shell.StatusRight = "Importance marks a task or a message; this row is a flagged contact.";
-            Log.Info($"Importance: “{row.Summary}” is a flagged contact — nothing set.");
+            Log.Info("Importance: the row is a flagged contact — nothing set.");
             return;
         }
 

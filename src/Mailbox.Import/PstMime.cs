@@ -139,6 +139,8 @@ internal static class PstMime
             }
             catch (DecoderFallbackException)
             {
+                // The stated code page does not fit the bytes. Nothing to say about it: the two
+                // readings below are the rest of the ladder, and the last one cannot fail.
             }
         }
 

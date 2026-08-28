@@ -522,9 +522,9 @@ public sealed class GroupHeaderRow(string header, int count, bool collapsed)
 }
 
 /// <summary>
-/// Phase 0 shell state. Backed by sample data — the point of this phase is that the chrome
-/// passes a squint test against real the reference application, not that it moves mail. Phases 2 onward replace
-/// each collection with the real store.
+/// The shell's own state. Most collections are filled from the store; the few that are still
+/// sample data are there because the chrome has to pass a squint test against the reference
+/// whether or not a store is open, and a posed run may have none.
 /// </summary>
 public sealed partial class ShellViewModel : ObservableObject
 {
@@ -563,7 +563,7 @@ public sealed partial class ShellViewModel : ObservableObject
                 .Where(id => catalog.TryGet(id, out _))
                 .Select(id => new QuickAccessButton(catalog.Get(id))));
 
-        // New the reference's command bar: New mail, then the actions that used to be the Delete,
+        // The modern command bar: New mail, then the actions that used to be the Delete,
         // Respond and Tags groups, flattened into one row.
         foreach (var id in new[]
                  {
@@ -745,11 +745,11 @@ public sealed partial class ShellViewModel : ObservableObject
     /// </summary>
     public bool ShowAppRail => true;
 
-    /// <summary>Superseded by the app rail; kept for the pre-move the reference application look.</summary>
+    /// <summary>Superseded by the app rail; kept for the pre-move classic look.</summary>
     public bool ShowBottomModuleStrip => false;
 
-    // No "Try the new the reference application" toggle. That pill exists to move people onto the vendor's web
-    // app; Mailbox is the thing it is nagging them away from. The space stays empty.
+    // No "try the new one" toggle. That pill exists in the reference to move people onto the
+    // vendor's web app; Mailbox is the thing it is nagging them away from. The space stays empty.
 
     /// <summary>Modern replaces the ribbon with a single-row command bar.</summary>
     public bool ShowRibbon => IsClassic;
@@ -3880,8 +3880,9 @@ public sealed partial class ShellViewModel : ObservableObject
     public string ZoomLabel => $"{ZoomPercent:0}%";
 
     /// <summary>
-    /// The signed-in address. Phase 2 replaces this with the real account; until then the
-    /// avatar and its flyout read from here so there is one source for both.
+    /// The signed-in address. <b>Still a placeholder</b>: the avatar, its tooltip, its initials
+    /// and the account flyout all read from here, so they all show this rather than the account
+    /// that is actually open. One source for the four, which is what makes replacing it one edit.
     /// </summary>
     public string AccountAddress { get; } = "you@example.com";
 
@@ -3968,7 +3969,7 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>
     /// Empty at rest — the reference's status bar carries the counts on the left and the view
     /// and zoom controls on the right, with nothing between them. Transient messages land here
-    /// and the connection state will once accounts exist in Phase 2.
+    /// and the connection state will once something reports it.
     /// </summary>
     public string StatusRight
     {

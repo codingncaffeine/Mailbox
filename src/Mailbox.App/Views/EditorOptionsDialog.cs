@@ -106,7 +106,8 @@ public sealed class EditorOptionsDialog : Window
         {
             "accessibility" => Note("Accessibility",
                 "Make e-mail messages more accessible.",
-                "The editor's accessibility options wait on the accessibility pass (Phase 16): automation peers, screen reader traversal, focus order."),
+                "The editor's accessibility options wait on the accessibility work the whole "
+                + "application waits on: automation peers, screen reader traversal, focus order."),
             "advanced" => Note("Advanced",
                 "Advanced options for working with the editor.",
                 "Editing options — typing replaces selected text, smart cut and paste, overtype — wait on the editor exposing them."),

@@ -135,7 +135,8 @@ public static class SavedLinks
 
         if (id is not { } filed) return new SavedLink(0, card);
 
-        Log.Info($"Saved links: “{card.Headline}” filed from {card.Url}.");
+        Log.Info($"Saved links: link {filed} filed from {card.Url}.");
+        Log.Debug($"Saved links: link {filed} is “{card.Headline}”.");
         return new SavedLink(filed, card);
     }
 

@@ -80,6 +80,12 @@ public static class OfficeThemes
         t.Set("motion.fast", "100");
         t.Set("motion.normal", "150");
 
+        // The chrome's two drop shadows, measured off the captures like the geometry above and,
+        // like it, the same in all four themes. Here rather than in a stylesheet so that no
+        // surface outside this file names a colour — a shadow is a colour, alpha and all.
+        t.Set(TokenKeys.Elevation.Ribbon, "0 1 3 0 #94000000");
+        t.Set(TokenKeys.Elevation.CommandBar, "0 4 9 -1 #73000000");
+
         // Chrome geometry, measured from reference captures.
         // The layout reads RibbonMetrics for these; the tokens carry the same measured numbers
         // so a theme file cannot contradict the control.
@@ -143,6 +149,8 @@ public static class OfficeThemes
         LightSemantics(t);
         LightChrome(t);
         SystemDialogPalette(t);
+        // The title bar carries the brand blue; a dialog stands on white.
+        CaptionPalette(t, lightTitleBar: false, lightDialog: true);
         PeekPopupPalette(t);
 
         // The title bar alone carries the hue. The tab strip below it is light, which is what
@@ -211,6 +219,8 @@ public static class OfficeThemes
         LightSemantics(t);
         LightChrome(t);
         SystemDialogPalette(t);
+        // Both this theme's title bar and its dialogs are pale.
+        CaptionPalette(t, lightTitleBar: true, lightDialog: true);
         PeekPopupPalette(t);
 
         // Not actually white: the title bar is the same pale blue-grey as the tab strip, and
@@ -302,6 +312,8 @@ public static class OfficeThemes
         LightSemantics(t);
         LightChrome(t);
         SystemDialogPalette(t);
+        // Dark chrome throughout: the caption band and the dialog ground are both dark here.
+        CaptionPalette(t, lightTitleBar: false, lightDialog: false);
         PeekPopupPalette(t);
 
         // Content sits light inside dark chrome.
@@ -554,6 +566,8 @@ public static class OfficeThemes
         t.Set("palette.sunken", "#171717");
 
         SystemDialogPalette(t);
+        // Dark chrome throughout.
+        CaptionPalette(t, lightTitleBar: false, lightDialog: false);
         PeekPopupPalette(t);
 
         // Semantics — dark. Deliberately authored rather than inverted from the light set:
@@ -802,6 +816,41 @@ public static class OfficeThemes
     }
 
     // ------------------------------------------------------------------------------------
+    // The caption buttons. Windows washes the button under the pointer rather than colouring
+    // it: white over a dark caption, black over a light one, at about an eighth and a fifth.
+    // Which way round is the only thing that varies, and it varies by what is behind the
+    // button rather than by theme — the title bar, a dialog's own ground and the system
+    // dialogs' desktop-light band are three different answers inside one theme.
+    // ------------------------------------------------------------------------------------
+    private const string CaptionWashOverDark = "#22FFFFFF";
+    private const string CaptionWashOverDarkPressed = "#33FFFFFF";
+    private const string CaptionWashOverLight = "#14000000";
+    private const string CaptionWashOverLightPressed = "#26000000";
+
+    /// <param name="lightTitleBar">True when this theme's title bar is pale, as White's is.</param>
+    /// <param name="lightDialog">True when this theme's dialogs stand on a pale ground.</param>
+    private static void CaptionPalette(TokenSet t, bool lightTitleBar, bool lightDialog)
+    {
+        t.Set(TokenKeys.TitleBar.CaptionHover,
+            lightTitleBar ? CaptionWashOverLight : CaptionWashOverDark);
+        t.Set(TokenKeys.TitleBar.CaptionPressed,
+            lightTitleBar ? CaptionWashOverLightPressed : CaptionWashOverDarkPressed);
+
+        t.Set(TokenKeys.Dialog.CaptionHover,
+            lightDialog ? CaptionWashOverLight : CaptionWashOverDark);
+        t.Set(TokenKeys.Dialog.CaptionPressed,
+            lightDialog ? CaptionWashOverLightPressed : CaptionWashOverDarkPressed);
+
+        // The close button is the one caption colour that does not follow the theme at all:
+        // the same red with a white cross on it everywhere, which is why all three of these
+        // are identical in the four built-ins and every caption in the application — title
+        // bar, dialog and system dialog — takes them rather than carrying its own.
+        t.Set(TokenKeys.TitleBar.CaptionClose, "#E81123");
+        t.Set(TokenKeys.TitleBar.CaptionClosePressed, "#F1707A");
+        t.Set(TokenKeys.TitleBar.CaptionCloseText, "#FFFFFF");
+    }
+
+    // ------------------------------------------------------------------------------------
     // The system dialogs — Account Settings and the small dialogs it opens. The reference
     // draws these with the desktop's own controls, and the desktop's light dialog palette
     // does not follow the Office theme: they are the same light grey in Colorful, White,
@@ -814,11 +863,21 @@ public static class OfficeThemes
     private static void SystemDialogPalette(TokenSet t)
     {
         t.Set(TokenKeys.SystemDialog.TitleBar, "#F3F3F3");
+
+        // That band is light in every theme, so its caption buttons darken under the pointer
+        // rather than lightening — the same pair the light themes use on their own captions.
+        t.Set(TokenKeys.SystemDialog.CaptionHover, CaptionWashOverLight);
+        t.Set(TokenKeys.SystemDialog.CaptionPressed, CaptionWashOverLightPressed);
+
         t.Set(TokenKeys.SystemDialog.Background, "#F0F0F0");
         t.Set(TokenKeys.SystemDialog.Banner, "#FFFFFF");
         t.Set(TokenKeys.SystemDialog.BannerRule, "#AAAAAA");
         t.Set(TokenKeys.SystemDialog.Foreground, "#000000");
         t.Set(TokenKeys.SystemDialog.ForegroundDisabled, "#A0A0A0");
+        // Secondary text, not unavailable text: the desktop's own dialogs set guidance and
+        // status lines in a mid grey that still reads as something to be read, well clear of
+        // the #A0A0A0 a greyed control wears.
+        t.Set(TokenKeys.SystemDialog.ForegroundSubtle, "#666666");
         t.Set(TokenKeys.SystemDialog.Surface, "#F9F9F9");
         t.Set(TokenKeys.SystemDialog.Tab, "#F3F3F3");
         t.Set(TokenKeys.SystemDialog.Border, "#E5E5E5");

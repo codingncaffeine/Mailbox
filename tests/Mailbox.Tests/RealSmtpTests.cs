@@ -74,7 +74,7 @@ public class RealSmtpTests
     /// </summary>
     /// <remarks>
     /// The same greeting <see cref="ServerProbe"/> reads to tell an account whose SMTP AUTH is
-    /// switched off from one whose password is wrong — the Outlook.com gotcha §5 names. Reading it
+    /// switched off from one whose password is wrong — the consumer-mailbox gotcha §5 names. Reading
     /// sends no mail, so it is not behind the second gate.
     /// </remarks>
     [Fact]

@@ -78,7 +78,7 @@ public sealed record NoteRow(string Text) : OptionRow;
 public sealed record SubHeadingRow(string Text) : OptionRow;
 
 /// <summary>
-/// the reference's signature Options row: an icon on the left, a sentence of description, and a
+/// The reference's signature Options row: an icon on the left, a sentence of description, and a
 /// button pushed to the right edge that opens a sub-dialog.
 /// </summary>
 public sealed record ActionRow(

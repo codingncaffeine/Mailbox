@@ -3084,9 +3084,10 @@ public sealed class MailRepository(MailStore store)
     };
 
     /// <summary>
-    /// Groups replies with what they reply to. Subject-based for now; Phase 8's conversation
-    /// view replaces it with References-header threading, which this deliberately does not
-    /// pretend to be.
+    /// Groups replies with what they reply to, by normalised subject. <b>Subject-based, and
+    /// this is what the conversation view threads on</b> — <c>message_id</c> and
+    /// <c>in_reply_to</c> are stored beside it but nothing reads them yet, so a reply whose
+    /// subject was edited threads as its own conversation.
     /// </summary>
     internal static string ThreadKey(string subject)
     {

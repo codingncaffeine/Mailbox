@@ -10,11 +10,17 @@
 #
 # Usage: tools/generate-panel-icons.sh [source-directory]
 # The source directory holds "mailbox full.png" and "mailbox empty regular.png" at full size.
+# It is not in the repository — pass it, or set MAILBOX_ICON_SOURCES to where it lives.
 
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-src="${1:-$HOME/Desktop/outlook examples/taskbar icons}"
+src="${1:-${MAILBOX_ICON_SOURCES:-}}"
+[ -n "$src" ] || {
+    echo "generate-panel-icons: pass the directory holding the two drawings," >&2
+    echo "                      or set MAILBOX_ICON_SOURCES to it" >&2
+    exit 2
+}
 out="$root/assets/icons"
 
 command -v magick >/dev/null 2>&1 || { echo "generate-panel-icons: ImageMagick is not installed" >&2; exit 1; }

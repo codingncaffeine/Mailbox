@@ -6,7 +6,7 @@ using Mailbox.Store;
 namespace Mailbox.Tests;
 
 /// <summary>
-/// The 4K OST layout, best-effort by stated scope, against a real Outlook 2013 file: 4096-byte
+/// The 4K OST layout, best-effort by stated scope, against a real 2013-era file: 4096-byte
 /// pages, blocks in 512-byte steps with the longer footer, zlib-compressed block data, and the
 /// OST's own way of naming its mail subtree. The deep NDB and LTP sweeps in the corpus suites
 /// already walk this file; what is here is the OST-specific behaviour.

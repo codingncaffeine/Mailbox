@@ -165,7 +165,7 @@ public sealed class SecretServiceStore : ICredentialStore
                 // The keyring did not answer. Killed rather than left behind, and reported as a
                 // failure rather than as an empty password, which would look like a password that
                 // was simply not set.
-                try { process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+                try { process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { /* it exited on its own between the timeout and here */ }
 
                 return (false, string.Empty,
                     $"the desktop keyring did not answer within {Patience.TotalSeconds:0} seconds");

@@ -142,7 +142,7 @@ public static class GnuPgImport
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
-                try { process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+                try { process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { /* it exited on its own between the timeout and here */ }
                 return ([], "GnuPG did not answer. If it asked for a passphrase, it may be waiting out of sight.");
             }
 

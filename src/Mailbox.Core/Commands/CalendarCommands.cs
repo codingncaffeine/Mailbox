@@ -33,9 +33,12 @@ public static class CalendarCommands
         DefaultGesture = "Ctrl+Shift+A",
 
         // Ctrl+N makes the new item of whichever module is open, and in this one that is an
-        // appointment. The lookup prefers a command scoped to the open module, so this and
-        // Mail's own Ctrl+N coexist rather than one taking the key from the other.
+        // appointment. Scope cannot say so — all six New Items commands are Any, because each is
+        // offered in every module — so GestureHome says it instead, and the key map prefers it
+        // over the shared pass. Without it the six shared Ctrl+N and the map returned whichever
+        // came first out of a frozen dictionary, which is to say a different one between runs.
         AlsoGestures = ["Ctrl+N"],
+        GestureHome = ModuleScope.Calendar,
     };
 
     public static readonly MailboxCommand NewMeeting = new()

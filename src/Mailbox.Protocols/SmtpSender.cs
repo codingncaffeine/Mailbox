@@ -43,11 +43,11 @@ public sealed class SmtpSender(MailRepository repository)
     /// Whether a message that went is filed in Sent Items.
     /// </summary>
     /// <remarks>
-    /// On, as it is everywhere. It was not done at all until session 4: the sender marked the
-    /// outbox row sent and stopped, and Sent Items stayed empty for as long as anyone used the
-    /// application — the Options row that governs it was a checkbox over a feature that did not
-    /// exist. Off is for the person who genuinely does not want a copy, which is a real
-    /// preference and the reason the reference offers it.
+    /// On, as it is everywhere. It was once not done at all: the sender marked the outbox row
+    /// sent and stopped, and Sent Items stayed empty for as long as anyone used the application
+    /// — the Options row that governs it was a checkbox over a feature that did not exist. Off
+    /// is for the person who genuinely does not want a copy, which is a real preference and the
+    /// reason the reference offers it.
     /// </remarks>
     public bool FileSentCopies { get; set; } = true;
 
@@ -120,8 +120,11 @@ public sealed class SmtpSender(MailRepository repository)
             // identifier is what a postmaster needs when a message was accepted here and arrived
             // nowhere — a question this end otherwise cannot answer at all.
             Log.Info(
-                $"Sent “{message.Subject}” to {string.Join(", ", message.To.Mailboxes.Select(m => m.Address))} "
+                $"Sent a message to {message.To.Mailboxes.Count()} recipient(s) "
                 + $"via {account.Outgoing.Host}:{account.Outgoing.Port}; the server said: {Tidy(accepted)}");
+            Log.Debug(
+                $"Sent “{message.Subject}” to "
+                + string.Join(", ", message.To.Mailboxes.Select(m => m.Address)) + ".");
 
             return SendResult.Ok();
         }

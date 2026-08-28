@@ -311,7 +311,7 @@
 
         <Border Grid.Row="1" Grid.Column="1"
                 ZIndex="2"
-                BoxShadow="0 4 9 -1 #73000000"
+                BoxShadow="{DynamicResource elevation.commandbar.boxshadow}"
                 IsVisible="{Binding ShowCommandBar}"
                 Background="{DynamicResource ribbon.background.brush}"
                 BorderThickness="0,0,0,1"
@@ -477,6 +477,28 @@
                                 <Setter Property="Padding" Value="8,3" />
                                 <Setter Property="MinHeight" Value="22" />
                             </Style>
+
+                            <!--
+                                The pane's own hover and selection, not the shell's. Every theme
+                                defines nav.item.hover and nav.item.selected for exactly this
+                                surface and nothing read them: the generic ListBoxItem rules in
+                                Shell.axaml applied instead, and their state.* values are tuned
+                                for light content rows. On Dark Gray that put a near-white bar
+                                and a pale blue selection on a dark pane. The collection nav
+                                panes already ask for the nav.* family; this is the folder pane
+                                joining them.
+                            -->
+                            <Style Selector="ListBoxItem:pointerover">
+                                <Setter Property="Background" Value="{DynamicResource nav.item.hover.brush}" />
+                            </Style>
+
+                            <Style Selector="ListBoxItem:selected">
+                                <Setter Property="Background" Value="{DynamicResource nav.item.selected.brush}" />
+                            </Style>
+
+                            <Style Selector="ListBoxItem:selected:pointerover">
+                                <Setter Property="Background" Value="{DynamicResource nav.item.selected.brush}" />
+                            </Style>
                         </ListBox.Styles>
                         <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="vm:FolderNode">
@@ -630,7 +652,7 @@
                                  selection tint never showed and a selected message looked like
                                  every other one. The ground comes from a style rather than a
                                  local value, so the selected state can change it: a local value
-                                 beats every style setter, which is the trap the handoff names.
+                                 beats every style setter, which is the trap here.
                                  The tint is measured off the reference (#B3D3EC in Dark Gray),
                                  whole row, left edge included. -->
                             <Style Selector="Grid.row">

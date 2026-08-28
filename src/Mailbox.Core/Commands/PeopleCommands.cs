@@ -32,8 +32,10 @@ public static class PeopleCommands
         KeyTip = "NC",
         DefaultGesture = "Ctrl+Shift+C",
 
-        // Ctrl+N makes the open module's new thing, which here is a contact.
+        // Ctrl+N makes the open module's new thing, which here is a contact. GestureHome is what
+        // says so — see CalendarCommands.NewAppointment for why Scope cannot.
         AlsoGestures = ["Ctrl+N"],
+        GestureHome = ModuleScope.People,
     };
 
     public static readonly MailboxCommand NewContactGroup = new()
@@ -73,8 +75,12 @@ public static class PeopleCommands
         KeyTip = "D",
         RequiresSelection = true,
 
-        // Delete means the open module's thing, as it does in the calendar.
-        AlsoGestures = ["Delete"],
+        // Delete means the open module's thing, as it does in the calendar — and as its own
+        // shortcut, which is how the calendar, tasks, notes, journal and feeds all declare theirs.
+        // Declared as a second chord it lost: mail.delete reaches every module and holds Delete
+        // outright, and a command's own shortcut is answered before anybody's second chord, so
+        // Delete in People threw a message away rather than the contact in front of the reader.
+        DefaultGesture = "Delete",
     };
 
     public static readonly MailboxCommand OpenContact = new()
@@ -87,7 +93,10 @@ public static class PeopleCommands
         Scope = ModuleScope.People,
         RequiresSingleSelection = true,
         InDefaultLayout = false,
-        AlsoGestures = ["Ctrl+O"],
+
+        // Its own, as Journal, Notes and Tasks declare theirs. Nothing else claims Ctrl+O today,
+        // so a second chord reached it — until something did, and then it would not have.
+        DefaultGesture = "Ctrl+O",
     };
 
     // ---- Communicate ---------------------------------------------------------------------------

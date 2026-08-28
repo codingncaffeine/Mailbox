@@ -8,7 +8,7 @@ namespace Mailbox.Core.Commands;
 /// Commands with <see cref="MailboxCommand.InDefaultLayout"/> set to false are the additions
 /// beyond the reference application parity. They are ordinary catalogue entries — searchable, bindable,
 /// placeable — and are simply not positioned by the default ribbon layout, so first run is
-/// an exact clone. See the plan, rule 5.
+/// an exact clone.
 /// </remarks>
 public static class MailCommands
 {

@@ -25,13 +25,13 @@ public sealed class ServerSettingsDialog : Window
 {
     private readonly Account _account;
 
-    private readonly TextBox _displayName = new() { Width = 260 };
-    private readonly TextBox _incomingHost = new() { Width = 260 };
-    private readonly TextBox _incomingPort = new() { Width = 80 };
-    private readonly TextBox _incomingUser = new() { Width = 260 };
-    private readonly TextBox _outgoingHost = new() { Width = 260 };
-    private readonly TextBox _outgoingPort = new() { Width = 80 };
-    private readonly TextBox _outgoingUser = new() { Width = 260 };
+    private readonly TextBox _displayName = new() { Classes = { "sysfield" }, Width = 260 };
+    private readonly TextBox _incomingHost = new() { Classes = { "sysfield" }, Width = 260 };
+    private readonly TextBox _incomingPort = new() { Classes = { "sysfield" }, Width = 80 };
+    private readonly TextBox _incomingUser = new() { Classes = { "sysfield" }, Width = 260 };
+    private readonly TextBox _outgoingHost = new() { Classes = { "sysfield" }, Width = 260 };
+    private readonly TextBox _outgoingPort = new() { Classes = { "sysfield" }, Width = 80 };
+    private readonly TextBox _outgoingUser = new() { Classes = { "sysfield" }, Width = 260 };
     private readonly ComboBox _incomingSecurity = SecurityCombo();
     private readonly ComboBox _outgoingSecurity = SecurityCombo();
     private readonly CheckBox _leaveOnServer = new() { Content = "Leave a copy of messages on the server" };
@@ -51,8 +51,8 @@ public sealed class ServerSettingsDialog : Window
 
     // Server-side rules reach the server by ManageSieve: the incoming host unless the account
     // says otherwise, and port 4190 by convention.
-    private readonly TextBox _sieveHost = new() { Width = 260, PlaceholderText = "same as the incoming server" };
-    private readonly TextBox _sievePort = new() { Width = 80 };
+    private readonly TextBox _sieveHost = new() { Classes = { "sysfield" }, Width = 260, PlaceholderText = "same as the incoming server" };
+    private readonly TextBox _sievePort = new() { Classes = { "sysfield" }, Width = 80 };
 
     private bool IsImap => _account.Protocol == MailProtocol.Imap;
 
@@ -70,8 +70,11 @@ public sealed class ServerSettingsDialog : Window
         CanResize = false;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
-        DialogChrome.Apply(this, Layout());
-        Bind(this, BackgroundProperty, "surface.ground.brush");
+        // A member of the Account Settings family — drawn the way the desktop draws its own
+        // dialogs and light in every theme, never DialogChrome's theme-following palette. And no
+        // Background bind after it: WindowFrame sets the window transparent so its rounded,
+        // clipping border is the only thing that paints.
+        SystemDialogChrome.Apply(this, Layout());
         Load();
     }
 
@@ -138,10 +141,10 @@ public sealed class ServerSettingsDialog : Window
 
     private Control Layout()
     {
-        var save = new Button { Content = "Save", IsDefault = true };
+        var save = new Button { Content = "Save", IsDefault = true, Classes = { "sysbutton" } };
         save.Click += (_, _) => Save();
 
-        var cancel = new Button { Content = "Cancel", IsCancel = true };
+        var cancel = new Button { Content = "Cancel", IsCancel = true, Classes = { "sysbutton" } };
         cancel.Click += (_, _) => Close();
 
         Bind(_status, TextBlock.ForegroundProperty, "status.danger.brush");
@@ -243,7 +246,7 @@ public sealed class ServerSettingsDialog : Window
             FontWeight = FontWeight.SemiBold,
             Margin = new Thickness(0, 10, 0, 2),
         };
-        Bind(block, TextBlock.ForegroundProperty, "dialog.foreground.brush");
+        Bind(block, TextBlock.ForegroundProperty, "systemdialog.foreground.brush");
         return block;
     }
 
@@ -269,7 +272,7 @@ public sealed class ServerSettingsDialog : Window
     private TextBlock Note(string text)
     {
         var block = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, MaxWidth = 500, HorizontalAlignment = HorizontalAlignment.Left };
-        Bind(block, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
+        Bind(block, TextBlock.ForegroundProperty, "systemdialog.foreground.subtle.brush");
         return block;
     }
 
@@ -281,7 +284,7 @@ public sealed class ServerSettingsDialog : Window
             Width = width,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        Bind(block, TextBlock.ForegroundProperty, "dialog.foreground.brush");
+        Bind(block, TextBlock.ForegroundProperty, "systemdialog.foreground.brush");
         return block;
     }
 

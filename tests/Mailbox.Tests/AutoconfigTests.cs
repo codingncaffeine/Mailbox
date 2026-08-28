@@ -101,7 +101,7 @@ public class AutoconfigTests
     /// protocol would otherwise be pointed at a server that does not exist.
     /// </summary>
     [Fact]
-    public void OutlookOverPopIsTheSameHostAsOverImap()
+    public void ConsumerMailOverPopIsTheSameHostAsOverImap()
     {
         var found = Autoconfig.ForAddress("someone@outlook.com", MailProtocolKind.Pop3);
 

@@ -12,7 +12,8 @@ namespace Mailbox.Core.Commands;
 /// a task, and a shared id would reach the mail module's handler.
 /// <para>
 /// Reply, Reply All and Forward are on the reference's Tasks bar because the To-Do List holds
-/// flagged mail as well as tasks — which is a Phase 14 join here, so they are declared and say so.
+/// flagged mail as well as tasks. The list holds it here too; these three are declared and
+/// placed but not yet joined to the mail module's respond path, so they say so when pressed.
 /// </para>
 /// </remarks>
 public static class TaskCommands
@@ -33,8 +34,10 @@ public static class TaskCommands
         KeyTip = "NT",
         DefaultGesture = "Ctrl+Shift+K",
 
-        // Ctrl+N makes the open module's new thing, which here is a task.
+        // Ctrl+N makes the open module's new thing, which here is a task. GestureHome is what
+        // says so — see CalendarCommands.NewAppointment for why Scope cannot.
         AlsoGestures = ["Ctrl+N"],
+        GestureHome = ModuleScope.Tasks,
     };
 
     public static readonly MailboxCommand NewEmail = new()

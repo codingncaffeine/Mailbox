@@ -7,8 +7,8 @@ namespace Mailbox.Store.Pim;
 /// <remarks>
 /// One file rather than one per account, on purpose: the To-Do Bar, the reminders window and
 /// the day's appointments on the front page read across every collection at once, and a local
-/// calendar belongs to no mail account at all. Recorded as a departure from the schema sketch's
-/// <c>collections.account_id</c> in the plan.
+/// calendar belongs to no mail account at all. A deliberate departure from the schema sketch,
+/// which hung a collection off <c>collections.account_id</c>.
 /// </remarks>
 public sealed class PimStore : SqliteStore
 {

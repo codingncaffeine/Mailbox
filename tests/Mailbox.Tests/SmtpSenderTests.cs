@@ -104,8 +104,8 @@ public class SmtpSenderTests
 
     /// <summary>
     /// A message that went is filed in Sent Items, as the person who wrote it, already read.
-    /// This did not happen at all until session 4: the sender marked the row sent and stopped,
-    /// and Sent Items stayed empty for as long as anyone used the application.
+    /// This once did not happen at all: the sender marked the row sent and stopped, and Sent
+    /// Items stayed empty for as long as anyone used the application.
     /// </summary>
     [Fact]
     public async Task ASentMessageIsFiledInSentItems()

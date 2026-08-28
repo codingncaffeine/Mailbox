@@ -245,8 +245,23 @@ public sealed class ComposeSurface : UserControl
     /// <summary>Raised when a command's enabled state may have changed, so a host ribbon can refresh.</summary>
     public event EventHandler? EnablementChanged;
 
-    /// <summary>True once the message has been sent or saved, so a host need not prompt to keep it.</summary>
+    /// <summary>True once the message has gone out, so there is nothing left for a host to keep.</summary>
+    /// <remarks>
+    /// Sent, not saved. Saving a draft used to set this too, on the reasoning that a written
+    /// draft needs no keeping — but the flag never went back down, so the first save silenced
+    /// the close prompt and stopped the autosave timer for the life of the window, and
+    /// everything typed afterwards was dropped on close without a word. Whether there is
+    /// anything worth keeping is <see cref="IsDirty"/>'s question, and it answers it per
+    /// keystroke.
+    /// </remarks>
     public bool IsSent => _sent;
+
+    /// <summary>True while there are changes this window has not written to Drafts.</summary>
+    /// <remarks>
+    /// False on a message that was only ever populated — a reply's quoted body, a signature —
+    /// so closing one nobody typed in asks nothing, and false again after every save.
+    /// </remarks>
+    public bool IsDirty => _dirty;
 
     private void RequestClose() => CloseRequested?.Invoke(this, EventArgs.Empty);
 
@@ -1271,6 +1286,7 @@ public sealed class ComposeSurface : UserControl
     {
         _sendingAddress = address;
         _fromAddress.Text = address;
+        _dirty = true;
 
         Report($"This message will be sent from {address}.");
     }
@@ -1308,7 +1324,7 @@ public sealed class ComposeSurface : UserControl
     private bool Handle(CommandId id)
     {
         if (id == ComposeCommands.Send.Id) { _ = SendAsync(); return true; }
-        if (id == ComposeCommands.SaveDraft.Id) { SaveDraft(); return true; }
+        if (id == ComposeCommands.SaveDraft.Id) { _ = SaveDraftAsync(); return true; }
         if (id == ComposeCommands.Discard.Id) { RequestClose(); return true; }
 
         // Paste goes through the editor, which reads the clipboard's HTML flavour and keeps
@@ -1397,7 +1413,8 @@ public sealed class ComposeSurface : UserControl
     /// The choosers are the compromise. A ribbon control reports which command was pressed and
     /// never a value with it, so a font, a size, a colour or an alignment has to be asked for
     /// before the command can act. The reference uses live-previewing galleries; replacing these
-    /// with those is ribbon work, and it is written down in the plan rather than pretended away.
+    /// with those is ribbon work, and it is recorded as work still to do rather than pretended
+    /// away.
     /// </para>
     /// </remarks>
     private bool HandleFormatting(CommandId id)
@@ -1482,6 +1499,10 @@ public sealed class ComposeSurface : UserControl
     private void SetImportance(MessageImportance wanted)
     {
         _importance = _importance == wanted ? MessageImportance.Normal : wanted;
+
+        // Dirty like a keystroke: this goes out on the message, so a window that has been given
+        // it has something a saved draft does not yet have.
+        _dirty = true;
         UpdateStatus();
     }
 
@@ -1654,6 +1675,11 @@ public sealed class ComposeSurface : UserControl
         _attachmentStrip.Text = "Attached: " +
             string.Join(", ", _attachments.Select(f => f.Name));
         _attachmentRow.IsVisible = true;
+
+        // Attaching is a change like typing is. Only the text fields marked the surface dirty,
+        // so a message whose only content was a file it had just been given looked to the close
+        // prompt exactly like one nobody had touched.
+        _dirty = true;
         UpdateStatus();
     }
 
@@ -1987,7 +2013,7 @@ public sealed class ComposeSurface : UserControl
         if (minutes <= 0) return;
 
         _autosave = new DispatcherTimer { Interval = TimeSpan.FromMinutes(minutes) };
-        _autosave.Tick += (_, _) => { if (_dirty && !_sent && HasContent()) SaveDraft(); };
+        _autosave.Tick += (_, _) => { if (_dirty && !_sent && HasContent()) _ = SaveDraftAsync(); };
 
         // Started here when the surface is already on screen: the attach handler that usually
         // starts it has long since run.
@@ -2086,6 +2112,7 @@ public sealed class ComposeSurface : UserControl
         if (string.IsNullOrWhiteSpace(entered))
         {
             _notBefore = null;
+            _dirty = true;
             UpdateStatus();
             return;
         }
@@ -2098,6 +2125,7 @@ public sealed class ComposeSurface : UserControl
         }
 
         _notBefore = new DateTimeOffset(when);
+        _dirty = true;
         UpdateStatus();
     }
 
@@ -2109,6 +2137,7 @@ public sealed class ComposeSurface : UserControl
         if (string.IsNullOrWhiteSpace(entered))
         {
             _replyTo = null;
+            _dirty = true;
             Report("Replies go to the sending account.");
             return;
         }
@@ -2120,6 +2149,7 @@ public sealed class ComposeSurface : UserControl
         }
 
         _replyTo = entered;
+        _dirty = true;
         Report($"Replies will go to {entered}.");
     }
 
@@ -2478,7 +2508,14 @@ public sealed class ComposeSurface : UserControl
     }
 
     /// <summary>Saves the message to Drafts, replacing the row it is editing. Public so a host can save on close.</summary>
-    public void SaveDraft()
+    /// <remarks>
+    /// Awaited rather than blocked on. <see cref="BuildMessageAsync"/> reads every attachment off
+    /// the disk, and its continuations come back to the dispatcher; pulling the result out with
+    /// <c>GetAwaiter().GetResult()</c> on the UI thread deadlocked the application outright the
+    /// moment a message carried an attachment large enough for the copy to go asynchronous —
+    /// including from the autosave timer, which needs nobody to press anything.
+    /// </remarks>
+    public async Task SaveDraftAsync()
     {
         if (SendingAccount() is not { } account)
         {
@@ -2497,7 +2534,7 @@ public sealed class ComposeSurface : UserControl
                 return;
             }
 
-            var message = BuildMessageAsync(account).GetAwaiter().GetResult();
+            var message = await BuildMessageAsync(account);
 
             // A draft is never signed and is encrypted to its author alone (§19) — the recipient
             // fields are the part a mailto: link gets to choose, and a signature is a statement made
@@ -2524,8 +2561,10 @@ public sealed class ComposeSurface : UserControl
             if (_draftId is { } previous) account.Mail.DeleteMessage(previous);
             _draftId = account.Mail.AddMessage(drafts.Id, summary, raw);
 
+            // Not _sent — the message has not gone anywhere. Clearing _dirty is the whole of
+            // what a save means: there is nothing unwritten now, and the next keystroke says
+            // there is again.
             _dirty = false;
-            _sent = true;
             Report("Saved to Drafts.");
         }
         catch (Exception ex)
@@ -2602,6 +2641,14 @@ public sealed class ComposeSurface : UserControl
         return answer;
     }
 
+    /// <remarks>
+    /// Chromed through <see cref="DialogChrome"/> like every other dialog. Setting the window's
+    /// <c>Content</c> here instead left these seven — Word Count, Find,
+    /// Replace, the two spelling reports, Symbol, Delay Delivery and Direct Replies To — wearing
+    /// the desktop's title bar and its close button in the middle of a themed compose window.
+    /// The caller keeps adding buttons to <paramref name="panel"/> afterwards, which still works:
+    /// the panel is the same instance, now inside the frame rather than directly in the window.
+    /// </remarks>
     private static Window SmallDialog(string title, Control content, out StackPanel panel)
     {
         panel = new StackPanel { Spacing = 12, Margin = new Thickness(16) };
@@ -2613,9 +2660,9 @@ public sealed class ComposeSurface : UserControl
             SizeToContent = SizeToContent.WidthAndHeight,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             CanResize = false,
-            Content = panel,
+            ShowInTaskbar = false,
         };
-        Bind(dialog, BackgroundProperty, "surface.ground.brush");
+        DialogChrome.Apply(dialog, panel);
         return dialog;
     }
 

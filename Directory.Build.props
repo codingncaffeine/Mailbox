@@ -27,13 +27,36 @@
     <VersionPrefix>0.1.0</VersionPrefix>
   </PropertyGroup>
 
-  <!-- Central package versions. Bump here, nowhere else. -->
+  <!--
+    Central package versions. Bump here, nowhere else — a version written on a
+    PackageReference is one this file cannot see, and two copies of a number drift the day
+    only one of them is bumped.
+  -->
   <PropertyGroup>
     <AvaloniaVersion>12.1.1</AvaloniaVersion>
+    <!-- Its own release train, not Avalonia's: the WebView package is versioned separately
+         and 12.0.1 is the newest that exists. -->
+    <AvaloniaWebViewVersion>12.0.1</AvaloniaWebViewVersion>
     <MailKitVersion>4.17.0</MailKitVersion>
     <SqliteVersion>10.0.11</SqliteVersion>
     <IcalNetVersion>5.2.3</IcalNetVersion>
     <VCardsVersion>8.1.2</VCardsVersion>
+    <RichEditorVersion>1.1.0</RichEditorVersion>
+    <HunspellVersion>7.0.1</HunspellVersion>
+    <!-- Mailbox.Security compiles against Org.BouncyCastle directly — S/MIME, OpenPGP, DKIM
+         and the passphrase vault all name its types. It used to arrive only as MimeKit's own
+         dependency, which meant its version was whatever MimeKit happened to resolve and a
+         MimeKit bump that dropped or majored it would have broken the build with nothing here
+         to say why. 2.6.2 is what MimeKit 4.17.0 resolves today, so pinning it changes no
+         binary; it only makes the dependency one we chose rather than one we inherited. -->
+    <BouncyCastleVersion>2.6.2</BouncyCastleVersion>
+  </PropertyGroup>
+
+  <!-- The test project's own, kept here for the same reason. -->
+  <PropertyGroup>
+    <TestSdkVersion>17.14.1</TestSdkVersion>
+    <XunitVersion>3.1.0</XunitVersion>
+    <XunitRunnerVersion>3.1.4</XunitRunnerVersion>
   </PropertyGroup>
 
 </Project>

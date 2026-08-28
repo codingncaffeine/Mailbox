@@ -94,7 +94,8 @@ internal static class BoardMenu
         else all.Click += (_, _) => manage();
         flyout.Items.Add(all);
 
-        Log.Info($"Boards: “{subject}” is on {(on.Count == 0 ? "no board" : $"{on.Count} board(s)")}.");
+        Log.Info($"Boards: the item is on {(on.Count == 0 ? "no board" : $"{on.Count} board(s)")}.");
+        Log.Debug($"Boards: the item is “{subject}”.");
         flyout.ShowAt(anchor, showAtPointer: true);
     }
 

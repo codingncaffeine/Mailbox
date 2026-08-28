@@ -4,12 +4,14 @@
 
 An email client for everyone.
 
-Mail, Calendar, People, Tasks, Notes and Journal in one desktop application for Linux. Open
-protocols only — IMAP, POP3, SMTP, CalDAV, CardDAV — with no cloud service behind it, no
+Mail, Calendar, People, Tasks, Notes, Journal and Feeds in one desktop application for Linux.
+Open protocols only — IMAP, POP3, SMTP, CalDAV, CardDAV — with no cloud service behind it, no
 account required, no AI features and no telemetry.
 
-**Status: early, but it moves mail.** Add an account, press F9, and POP3 and SMTP work
-against a local SQLite store. The other five modules are still to come.
+**Status: early, but it moves mail.** Add an account and mail works end to end over IMAP, POP3
+and SMTP against a local SQLite store. The calendar, contacts, tasks, notes, journal and feed
+modules are built and run against that same store; adding a CalDAV or CardDAV account to sync
+them is not in the interface yet, so those five are single-machine for now.
 
 ![The Mailbox shell: folder pane, message list and reading pane](docs/ribbon-simplified.png)
 
@@ -21,7 +23,8 @@ A dense, keyboard-driven, offline-first mail client for people who want a real d
 application rather than a web page in a window.
 
 - **Everything is local.** Your mail lives in a store on your machine and stays readable when
-  the network does not. Nothing is uploaded anywhere.
+  the network does not. Nothing is uploaded to us — there is no service behind this to upload
+  it to, and the one thing that would call home, the update check, is off unless you turn it on.
 - **Open protocols.** POP3 and IMAP for mail, SMTP for sending, CalDAV and CardDAV for
   calendars, contacts, tasks and notes. Works with self-hosted servers and any provider that
   speaks them.
@@ -60,8 +63,9 @@ the package did not bring, and the binary gets as far as looking for a display.
 
 Runtime dependencies on the target: WPE WebKit (`libwpewebkit-2.0-1` / `wpewebkit`), libwpe and
 WPEBackend-fdo, X11 or Wayland, fontconfig; and, recommended, `secret-tool` (libsecret) for the
-keyring, `notify-send` (libnotify) for notifications, Hunspell dictionaries for spelling, and
-the metric-compatible fonts below.
+keyring, `notify-send` (libnotify) for notifications, Hunspell dictionaries for spelling, a
+desktop portal (with GTK 3 as the fallback) for the file dialogs, and the metric-compatible
+fonts below.
 
 ### Fonts
 
@@ -117,15 +121,26 @@ mailbox --export-theme darkgray my-theme.mailbox-theme.json   # a complete theme
 ## Layout
 
 ```
-src/Mailbox.Core             domain model, command catalogue, toolbar layout, logging
+src/Mailbox.Core             domain model, command catalogue, toolbar layout, settings, logging
 src/Mailbox.Theming          token system, themes, font substitution, icons
-src/Mailbox.Controls.Ribbon  the toolbar control
-src/Mailbox.Store            SQLite store, migrations, backup and restore
-src/Mailbox.Protocols        POP3, SMTP, autoconfig, credentials
-src/Mailbox.App              Avalonia shell, Options, account view
-tests/Mailbox.Tests          247 tests, no UI thread required
+src/Mailbox.Controls.*       the toolbar, calendar, people, tasks, notes and journal controls
+src/Mailbox.Store            SQLite store, migrations, search index, backup and restore
+src/Mailbox.Protocols        IMAP, POP3, SMTP, autoconfig, OAuth, feeds, credentials
+src/Mailbox.Dav              CalDAV and CardDAV sync
+src/Mailbox.Scheduling       iCalendar, recurrence, time zones, invitations
+src/Mailbox.Contacts         vCard, the address book and name parsing
+src/Mailbox.Editor           the rich text editor and its HTML
+src/Mailbox.Rendering        the sanitizer and the offscreen engine the reading pane draws with
+src/Mailbox.Security         S/MIME and OpenPGP
+src/Mailbox.Import           Maildir, mbox, .eml, .msg and Thunderbird profiles
+src/Mailbox.Pst              the read-only archive-file reader
+src/Mailbox.Junk             the junk classifier
+src/Mailbox.Google           Google Tasks
+src/Mailbox.Plugins[.Api]    the plugin host and the API plugins compile against
+src/Mailbox.App              the Avalonia shell: every module, Options, the dialogs
+tests/Mailbox.Tests          the test suite, no UI thread required
 tools/generate-icons.py      regenerates the icon glyph map
-assets/                      bundled fonts and the application icon
+assets/                      bundled fonts, the icon ladder and the reminder sound
 packaging/                   desktop entry, MIME associations, icon install, the release build and its dependency test
 assets/themes/               the four built-in themes as theme files (generated: tools/export-themes.sh)
 ```
@@ -147,8 +162,8 @@ against 0.0% for grayscale — it is honoured. See
 **Themes cover every surface.** Four built-in themes, each authored as a complete explicit
 token set rather than derived from one another, with a coverage gate that refuses to load a
 theme missing any token. The usual failure of themeable applications is holes — a compose
-window or a settings page the theme cannot reach — so there is a test that fails on a
-hard-coded colour anywhere.
+window or a settings page the theme cannot reach — so every surface takes its colour from a
+named token rather than a literal, and the gate makes a missing one loud.
 
 **Fonts resolve honestly.** The substitution table separates metric-compatible pairs from
 lookalikes, and a fallback can never inherit a metric claim it has not earned. Outgoing mail

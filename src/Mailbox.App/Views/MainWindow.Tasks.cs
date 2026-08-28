@@ -445,7 +445,7 @@ public partial class MainWindow
         if (row.IsMessage)
         {
             shell.StatusRight = "Move acts on a task; this row is a flagged message.";
-            Log.Info($"Move: “{row.Summary}” is a flagged message — nothing moved.");
+            Log.Info("Move: the row is a flagged message — nothing moved.");
             return;
         }
 
@@ -554,7 +554,8 @@ public partial class MainWindow
         });
 
         shell.StatusRight = $"“{subject}” added.";
-        Log.Info($"Task {written.Id} added: {subject}.");
+        Log.Info($"Task {written.Id} added.");
+        Log.Debug($"Task {written.Id} is “{subject}”.");
     }
 
     /// <summary>

@@ -155,7 +155,8 @@ public sealed class InvitationBar : Border
         }
 
         var payload = Imip.Reply(_invitation, _address, response);
-        Log.Info($"Invitation: {response} for “{_invitation.Event.Summary}”, item {stored?.Id.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none"}.");
+        Log.Info($"Invitation: {response}, item {stored?.Id.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none"}.");
+        Log.Debug($"Invitation: the event is “{_invitation.Event.Summary}”.");
         Answered?.Invoke(this, new Answer(_invitation, response, _sendReply.IsChecked == true, payload, stored));
         IsVisible = false;
     }
@@ -174,7 +175,7 @@ public sealed class InvitationBar : Border
             App.PimSync.Remove(item);
         }
 
-        Log.Info($"Invitation: “{_invitation.Event.Summary}” removed after a cancellation.");
+        Log.Info("Invitation: the event was removed after a cancellation.");
         IsVisible = false;
     }
 }

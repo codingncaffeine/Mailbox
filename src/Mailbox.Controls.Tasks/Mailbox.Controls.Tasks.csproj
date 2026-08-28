@@ -5,8 +5,8 @@
     a to-do list is a long run of short rows under group headings, and a control per row is a
     control per row.
 
-    This is the second caller the plan's §7 note was waiting for before deciding whether the
-    message list's engine should move out of the application. It does not want that engine: the
+    This is the second caller that had to exist before deciding whether the message list's
+    engine should move out of the application. It does not want that engine: the
     reference draws this list with the same chrome — 26px group headings, 21px rows — but its
     columns, its grouping and its arrangement are the task's own, and what the two share is the
     metrics rather than the machinery. So the seam stays where it is, and this list is drawn like

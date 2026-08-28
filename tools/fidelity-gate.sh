@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The Phase 10 pixel gate (§8): the four built-in themes stay pixel-identical to their
+# The pixel gate: the four built-in themes stay pixel-identical to their
 # reference captures as the token system evolves.
 #
 # What one run does, per theme:

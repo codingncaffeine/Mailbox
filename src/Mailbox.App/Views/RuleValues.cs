@@ -155,8 +155,9 @@ internal static class RuleValues
 
     /// <summary>
     /// People or a public group: addresses, names or "@domain"s, one per line. The reference
-    /// opens the address book; there are no contacts yet (Phase 12), so this is the typed form
-    /// with the Auto-Complete List's shape of entry.
+    /// opens the address book from here; this is the typed form instead, with the Auto-Complete
+    /// List's shape of entry. Wiring it to the address book the People module already has is
+    /// the obvious next step.
     /// </summary>
     public static async Task<IReadOnlyList<string>?> PeopleAsync(Window owner, string title, IReadOnlyList<string> current)
     {

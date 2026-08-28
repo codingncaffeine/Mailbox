@@ -104,7 +104,7 @@ public static class RibbonMetrics
     /// <summary>
     /// Height of the expanded ribbon body, excluding the tab strip. Measured off the classic
     /// capture: the panel runs 100 rows, from the row under the tab strip to the row above its
-    /// shadow. It was 92 until session 7, and everything inside it sat 8px too high.
+    /// shadow. It was 92 for a long time, and everything inside it sat 8px too high.
     /// </summary>
     public const double BodyHeight = 100;
 

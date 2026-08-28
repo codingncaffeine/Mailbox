@@ -7,6 +7,8 @@
 
   <ItemGroup>
     <PackageReference Include="MimeKit" Version="$(MailKitVersion)" />
+    <!-- Named here because this project compiles against it, not because MimeKit brings it. -->
+    <PackageReference Include="BouncyCastle.Cryptography" Version="$(BouncyCastleVersion)" />
   </ItemGroup>
 
   <ItemGroup>

@@ -31,9 +31,9 @@ public static class BundledFonts
     /// <summary>
     /// The family as Avalonia has to be asked for it. A bundled family is found only through its
     /// collection — <c>fonts:Mailbox#Selawik</c> — while a bare name is looked up among the
-    /// system's fonts alone, and a bare "Selawik" drew Noto Sans (or whatever fontconfig had)
-    /// from the first session until session 7, some six to ten percent wider than the metrics
-    /// the whole chrome was measured against. Any other family is returned as it is.
+    /// system's fonts alone, and a bare "Selawik" once drew Noto Sans (or whatever fontconfig
+    /// had) instead, some six to ten percent wider than the metrics the whole chrome was
+    /// measured against. Any other family is returned as it is.
     /// </summary>
     public static FontFamily FamilyFor(string rendered)
     {

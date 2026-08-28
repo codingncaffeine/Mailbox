@@ -119,7 +119,7 @@ public sealed class BackstageView : Border
     }
 
     /// <summary>
-    /// the reference's page list, with the two rules that break it into groups and the account,
+    /// The reference's page list, with the two rules that break it into groups and the account,
     /// options and exit entries pinned to the bottom.
     /// </summary>
     private void BuildRail()

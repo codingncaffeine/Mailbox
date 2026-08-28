@@ -28,7 +28,11 @@ public static class FeedCommands
         Scope = ModuleScope.Any,
         KeyTip = "AF",
         DefaultGesture = "Ctrl+Shift+U",
+
+        // Ctrl+N makes the open module's new thing, which here is a subscription. GestureHome is
+        // what says so — see CalendarCommands.NewAppointment for why Scope cannot.
         AlsoGestures = ["Ctrl+N"],
+        GestureHome = ModuleScope.Feeds,
     };
 
     public static readonly MailboxCommand Update = new()

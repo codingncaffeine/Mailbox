@@ -13,7 +13,7 @@ public sealed record ProbeResult(bool Reached, bool CanAuthenticate, string Expl
 /// Asks a sending server whether it will accept a login at all, before the account is saved.
 /// </summary>
 /// <remarks>
-/// There is one failure this exists for. Outlook.com accounts created from 2025 onward
+/// There is one failure this exists for. Microsoft consumer mailboxes created from 2025 onward
 /// frequently have SMTP AUTH switched off at the tenant, and a client that finds out at the
 /// first send reports it as an authentication failure — which sends the user to check a
 /// password that was never the problem. The server says so on connecting, before any
@@ -96,8 +96,8 @@ public sealed class ServerProbe(Func<ISmtpSession>? session = null)
                 CanAuthenticate: false,
                 $"{server.Host} accepted the connection but offers no way to sign in. "
                 + "Sending is switched off for this mailbox rather than misconfigured here — "
-                + "on Outlook.com it is the SMTP AUTH setting, which an administrator turns on "
-                + "per mailbox. Receiving will work; sending will be refused until it is.");
+                + "on a Microsoft mailbox it is the SMTP AUTH setting, which an administrator "
+                + "turns on per mailbox. Receiving will work; sending will be refused until it is.");
         }
         catch (OperationCanceledException)
         {

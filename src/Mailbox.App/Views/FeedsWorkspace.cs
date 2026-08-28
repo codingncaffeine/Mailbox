@@ -2533,7 +2533,7 @@ internal sealed class FeedsWorkspace : Border
         }
         catch (Exception ex) when (ex is FormatException or IOException)
         {
-            Log.Warn($"Feeds: “{message.Subject}” could not be shown.", ex);
+            Log.Warn("Feeds: an article could not be shown.", ex);
             ShowReading(false);
             return;
         }

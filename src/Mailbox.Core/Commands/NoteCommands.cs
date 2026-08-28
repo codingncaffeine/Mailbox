@@ -33,8 +33,10 @@ public static class NoteCommands
         KeyTip = "NN",
         DefaultGesture = "Ctrl+Shift+N",
 
-        // Ctrl+N makes the open module's new thing, which here is a note.
+        // Ctrl+N makes the open module's new thing, which here is a note. GestureHome is what
+        // says so — see CalendarCommands.NewAppointment for why Scope cannot.
         AlsoGestures = ["Ctrl+N"],
+        GestureHome = ModuleScope.Notes,
     };
 
     public static readonly MailboxCommand NewItems = new()

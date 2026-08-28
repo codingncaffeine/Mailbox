@@ -17,7 +17,7 @@
       no P/Invoke, and the IL carries no licence-key or watermark path. Declares Avalonia
       12.0.1 and runs against 12.1.
     -->
-    <PackageReference Include="AvaloniaRichEditor" Version="1.1.0" />
+    <PackageReference Include="AvaloniaRichEditor" Version="$(RichEditorVersion)" />
 
     <!--
       Spelling, in managed code so nothing in-house has a native part (§16). MPL 1.1 / GPL 2.0 /
@@ -25,7 +25,7 @@
       no dependencies of its own. It reads the dictionaries the desktop already has, so the words
       the user taught LibreOffice are the words this knows.
     -->
-    <PackageReference Include="WeCantSpell.Hunspell" Version="7.0.1" />
+    <PackageReference Include="WeCantSpell.Hunspell" Version="$(HunspellVersion)" />
   </ItemGroup>
 
   <ItemGroup>

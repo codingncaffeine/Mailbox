@@ -87,7 +87,7 @@ public static class ArticleFill
         var answer = await fetch.GetAsync(link, cancellation: cancellation).ConfigureAwait(false);
         if (!answer.Ok || answer.Text.Length == 0)
         {
-            Log.Info($"Feeds: the page behind “{article.Subject}” could not be read — {answer.Error}");
+            Log.Info($"Feeds: the page behind article {messageId} could not be read — {answer.Error}");
             return 0;
         }
 
@@ -118,7 +118,8 @@ public static class ArticleFill
 
         if (!account.Mail.ReplaceMessage(messageId, summary, bytes)) return 0;
 
-        Log.Info($"Feeds: read {body.Length} characters of “{article.Subject}” from {link}.");
+        Log.Info($"Feeds: read {body.Length} characters for article {messageId}.");
+        Log.Debug($"Feeds: article {messageId} is “{article.Subject}”, read from {link}.");
         return body.Length;
     }
 

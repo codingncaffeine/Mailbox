@@ -10,7 +10,7 @@ namespace Mailbox.Core.Commands;
 /// Response Options and puts Send where Save &amp; Close is.
 /// <para>
 /// Send to OneNote sits between Forward and Invite Attendees in the reference and is absent
-/// here, with the rest of the vendor-cloud integrations the plan leaves out rather than stubs.
+/// here, with the rest of the vendor-cloud integrations, which are left out rather than stubbed.
 /// </para>
 /// </remarks>
 public static class AppointmentCommands

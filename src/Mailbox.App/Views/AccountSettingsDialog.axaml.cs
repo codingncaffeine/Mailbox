@@ -329,8 +329,10 @@ public sealed class AccountSettingsDialog : Window
     {
         var typeface = new Typeface(
             Application.Current?.FindResource("ui.fontfamily") as FontFamily ?? FontFamily.Default);
+        // Measured, never drawn, so it is asked for with no brush rather than with a colour
+        // this file has no business naming.
         double Width(string s) => new FormattedText(
-            s, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, typeface, 12, Brushes.Black).Width;
+            s, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, typeface, 12, null).Width;
 
         if (Width(path) <= maxWidth) return path;
 

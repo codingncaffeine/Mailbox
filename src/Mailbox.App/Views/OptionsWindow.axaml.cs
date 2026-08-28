@@ -39,6 +39,33 @@ public sealed class OptionsWindow : Window
     private readonly ContentControl _page = new();
     private string _selected = "general";
 
+    /// <summary>
+    /// What the settings held when this dialog opened, so Cancel can put them back.
+    /// </summary>
+    /// <remarks>
+    /// Every row here writes the moment it changes, deliberately: a page revisited within one
+    /// visit shows what was chosen, and a control that only committed on OK could not do that.
+    /// The cost was that Cancel did nothing at all — it called Close(false), nothing reverted,
+    /// and none of the callers read the result — so a reader who changed five things and
+    /// thought better of it kept all five. Holding the before-state here is what lets both be
+    /// true: the writes stay immediate, and Cancel is still an answer.
+    /// </remarks>
+    private readonly IReadOnlyDictionary<string, string?> _before = App.Settings.Snapshot();
+
+    /// <summary>True once OK has been pressed, which is the one way out that keeps the changes.</summary>
+    private bool _accepted;
+
+    /// <summary>
+    /// The appearance on screen when this dialog opened. The theme and the density are the two
+    /// choices here that change the running application as they are picked rather than when the
+    /// dialog is dismissed, so restoring the settings is not enough to undo them — a Cancel that
+    /// left a cancelled theme on the screen would not be a cancel. Held as what was actually
+    /// applied rather than re-derived from the reverted store, which keeps this out of the
+    /// business of knowing what the startup defaults are.
+    /// </summary>
+    private readonly string _themeBefore;
+    private readonly Density _densityBefore;
+
     /// <param name="initialPage">
     /// Which page to open on, by id. Lets a control that has its own Options page — the Quick
     /// Access Toolbar's "More Commands…" — land there instead of on General, which is the
@@ -47,6 +74,8 @@ public sealed class OptionsWindow : Window
     public OptionsWindow(ThemeService themes, string? initialPage = null)
     {
         _themes = themes;
+        _themeBefore = themes.ThemeId;
+        _densityBefore = themes.Density;
 
         if (!string.IsNullOrWhiteSpace(initialPage)
             && OptionsPages.All.Any(p => string.Equals(p.Id, initialPage, StringComparison.OrdinalIgnoreCase)))
@@ -106,6 +135,51 @@ public sealed class OptionsWindow : Window
         ShowPage(_selected);
     }
 
+    /// <summary>
+    /// Anything but OK puts the settings back. Cancel, the caption's close button and Escape all
+    /// mean the same thing about a dialog of preferences, so the revert lives on the way out
+    /// rather than on the Cancel button alone.
+    /// </summary>
+    protected override void OnClosing(WindowClosingEventArgs e)
+    {
+        if (!_accepted)
+        {
+            App.Settings.Revert(_before);
+            PutTheAppearanceBack();
+        }
+
+        base.OnClosing(e);
+    }
+
+    /// <summary>
+    /// Re-applies the theme and density this dialog opened on, for the Cancel path.
+    /// </summary>
+    /// <remarks>
+    /// Everything else on these pages is read when it is next needed, so putting the value back
+    /// is the whole of putting it back. These two are applied to the running application the
+    /// moment they are chosen — that is the point of the live preview — and the store alone
+    /// cannot undo what is already on the screen.
+    /// </remarks>
+    private void PutTheAppearanceBack()
+    {
+        try
+        {
+            if (!string.Equals(_themes.ThemeId, _themeBefore, StringComparison.OrdinalIgnoreCase))
+            {
+                _themes.Apply(_themeBefore);
+            }
+
+            if (_themes.Density != _densityBefore) _themes.SetDensity(_densityBefore);
+        }
+        catch (Mailbox.Theming.Tokens.ThemeResolutionException ex)
+        {
+            // The theme that was on screen a moment ago no longer resolves — its file changed
+            // while the dialog was open. Said rather than swallowed; the reader keeps whatever
+            // is applied now, which is at least a theme that works.
+            Mailbox.Core.Diagnostics.Log.Warn($"The appearance could not be put back after Cancel: {ex.Message}");
+        }
+    }
+
     private Control BuildButtonRow()
     {
         var row = new StackPanel
@@ -117,7 +191,7 @@ public sealed class OptionsWindow : Window
         };
 
         var ok = DialogButton("OK", isDefault: true);
-        ok.Click += (_, _) => Close(true);
+        ok.Click += (_, _) => { _accepted = true; Close(true); };
         row.Children.Add(ok);
 
         var cancel = DialogButton("Cancel", isDefault: false);
@@ -432,8 +506,9 @@ public sealed class OptionsWindow : Window
     // ------------------------------------------------------------------------------------
 
     /// <summary>
-    /// Fills the General page's named slots with controls wired to real state. Everything else
-    /// on the page is inert until the settings store lands in Phase 2.
+    /// Fills the General page's named slots with controls wired to real state — the rows whose
+    /// control has to be live rather than declared. Everything else on the page reads and writes
+    /// through the settings store by its key.
     /// </summary>
     private void FillLiveSlots(OptionsPageRenderer renderer)
     {
@@ -831,17 +906,29 @@ public sealed class OptionsWindow : Window
             Children = { make, import },
         };
 
-        if (!Mailbox.Security.OpenPgp.GnuPgImport.IsAvailable)
+        // Asked off the dispatcher. The probe starts gpg and waits up to two seconds on it, so
+        // reading it while the page is being laid out froze the dialog mid-build on any machine
+        // where gpg is slow to start — or simply absent, which is the case that has to wait
+        // longest to find out. The button opens on the pessimistic answer and turns on if the
+        // probe disagrees.
+        import.IsEnabled = false;
+        var absent = new TextBlock
         {
-            import.IsEnabled = false;
-            var absent = new TextBlock
-            {
-                Text = "GnuPG is not installed on this machine.",
-                VerticalAlignment = VerticalAlignment.Center,
-            };
-            Bind(absent, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
-            buttons.Children.Add(absent);
+            Text = "GnuPG is not installed on this machine.",
+            IsVisible = false,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Bind(absent, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
+        buttons.Children.Add(absent);
+
+        async Task LookForGnuPgAsync()
+        {
+            var available = await Task.Run(() => Mailbox.Security.OpenPgp.GnuPgImport.IsAvailable);
+            import.IsEnabled = available;
+            absent.IsVisible = !available;
         }
+
+        _ = LookForGnuPgAsync();
 
         panel.Children.Add(summary);
         panel.Children.Add(list);

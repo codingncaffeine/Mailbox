@@ -16,10 +16,22 @@ Libraries (bundled in the self-contained publish)
 --------------------------------------------------
 Avalonia, Avalonia.Desktop, Avalonia.Themes.Simple, Avalonia.Wayland, Avalonia.Fonts.Inter,
   Avalonia.Controls.WebView — MIT License. https://avaloniaui.net
+MicroCom.Runtime, NWayland and Tmds.DBus.Protocol (the COM interop, Wayland bindings and D-Bus
+  transport Avalonia brings with it) — MIT License.
 AvaloniaRichEditor — MIT License.
+HtmlAgilityPack (the HTML parser the editor reads documents with) — MIT License.
 MailKit and MimeKit — MIT License. Copyright (c) 2013-2026 .NET Foundation and Contributors.
+BouncyCastle.Cryptography (the cryptography behind S/MIME, OpenPGP and DKIM) — MIT License.
+  Copyright (c) 2000-2026 The Legion of the Bouncy Castle Inc.
 Microsoft.Data.Sqlite — MIT License. SQLite itself is in the public domain.
+SQLitePCLRaw (the SQLite bindings under Microsoft.Data.Sqlite, including the bundled
+  e_sqlite3 native library) — Apache License 2.0. Copyright (c) 2014-2026 SourceGear LLC.
 Ical.Net (iCalendar, RFC 5545) — MIT License. Copyright 2007-2026 ical-org. https://github.com/ical-org/ical.net
+NodaTime (the date and time library Ical.Net computes recurrences with) — Apache License 2.0.
+  Copyright 2009-2026 The Noda Time Authors.
+FolkerKinzel.VCards (vCard reading and writing), with FolkerKinzel.Strings,
+  FolkerKinzel.Helpers, FolkerKinzel.MimeTypes and FolkerKinzel.DataUrls — MIT License.
+  Copyright (c) Folker Kinzel.
 WeCantSpell.Hunspell — a port of Hunspell; licensed under the MPL 1.1 / GPL 2.0 / LGPL 2.1
   tri-licence inherited from Hunspell. Full text: the package's license.txt.
 SkiaSharp and HarfBuzzSharp (native rendering, via Avalonia) — MIT License; Skia is BSD-3-Clause,

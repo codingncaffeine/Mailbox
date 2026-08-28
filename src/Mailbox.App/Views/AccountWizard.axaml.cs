@@ -28,15 +28,15 @@ namespace Mailbox.App.Views;
 /// </remarks>
 public sealed class AccountWizard : Window
 {
-    private readonly TextBox _address = new() { PlaceholderText = "you@example.com", Width = 320 };
-    private readonly TextBox _password = new() { PasswordChar = '•', Width = 320 };
+    private readonly TextBox _address = new() { Classes = { "sysfield" }, PlaceholderText = "you@example.com", Width = 320 };
+    private readonly TextBox _password = new() { Classes = { "sysfield" }, PasswordChar = '•', Width = 320 };
     private readonly TextBlock _guidance = new() { TextWrapping = TextWrapping.Wrap, MaxWidth = 430 };
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap, MaxWidth = 430 };
     private readonly Expander _advanced;
-    private readonly TextBox _incomingHost = new() { Width = 220 };
-    private readonly TextBox _incomingPort = new() { Width = 70 };
-    private readonly TextBox _outgoingHost = new() { Width = 220 };
-    private readonly TextBox _outgoingPort = new() { Width = 70 };
+    private readonly TextBox _incomingHost = new() { Classes = { "sysfield" }, Width = 220 };
+    private readonly TextBox _incomingPort = new() { Classes = { "sysfield" }, Width = 70 };
+    private readonly TextBox _outgoingHost = new() { Classes = { "sysfield" }, Width = 220 };
+    private readonly TextBox _outgoingPort = new() { Classes = { "sysfield" }, Width = 70 };
     private readonly ComboBox _protocol = new()
     {
         ItemsSource = new[] { "POP3", "IMAP" },
@@ -46,7 +46,7 @@ public sealed class AccountWizard : Window
 
     private readonly Button _add;
     private readonly Button _signIn = new() { Content = "Sign in…" };
-    private readonly TextBox _clientId = new() { Width = 320 };
+    private readonly TextBox _clientId = new() { Classes = { "sysfield" }, Width = 320 };
     private readonly TextBlock _signedIn = new() { TextWrapping = TextWrapping.Wrap, MaxWidth = 430 };
     private Control _passwordRow = null!;
     private Control _signInRow = null!;
@@ -70,9 +70,8 @@ public sealed class AccountWizard : Window
         SizeToContent = SizeToContent.Height;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         CanResize = false;
-        ExtendClientAreaToDecorationsHint = false;
 
-        _add = new Button { Content = "Add Account", IsEnabled = false, IsDefault = true };
+        _add = new Button { Content = "Add Account", IsEnabled = false, IsDefault = true, Classes = { "sysbutton" } };
         _add.Click += async (_, _) =>
         {
             // Once the account exists the button's job changes: pressing it again would add a
@@ -81,7 +80,7 @@ public sealed class AccountWizard : Window
             await AddAsync();
         };
 
-        var cancel = new Button { Content = "Cancel", IsCancel = true };
+        var cancel = new Button { Content = "Cancel", IsCancel = true, Classes = { "sysbutton" } };
         cancel.Click += (_, _) => Close();
 
         _advanced = new Expander
@@ -97,12 +96,15 @@ public sealed class AccountWizard : Window
         _clientId.TextChanged += (_, _) => UpdateAddButton();
         _signIn.Click += async (_, _) => await SignInAsync();
 
-        Bind(_guidance, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
-        Bind(_status, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
-        Bind(_signedIn, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
+        Bind(_guidance, TextBlock.ForegroundProperty, "systemdialog.foreground.subtle.brush");
+        Bind(_status, TextBlock.ForegroundProperty, "systemdialog.foreground.subtle.brush");
+        Bind(_signedIn, TextBlock.ForegroundProperty, "systemdialog.foreground.subtle.brush");
 
-        DialogChrome.Apply(this, Layout(cancel));
-        Bind(this, BackgroundProperty, "surface.ground.brush");
+        // A member of the Account Settings family — drawn the way the desktop draws its own
+        // dialogs and light in every theme, never DialogChrome's theme-following palette. And no
+        // Background bind after it: WindowFrame sets the window transparent so its rounded,
+        // clipping border is the only thing that paints.
+        SystemDialogChrome.Apply(this, Layout(cancel));
     }
 
     private Control Layout(Button cancel)
@@ -113,7 +115,7 @@ public sealed class AccountWizard : Window
             FontSize = 20,
             Margin = new Thickness(0, 0, 0, 4),
         };
-        Bind(heading, TextBlock.ForegroundProperty, "dialog.foreground.brush");
+        Bind(heading, TextBlock.ForegroundProperty, "systemdialog.foreground.brush");
 
         var subheading = new TextBlock
         {
@@ -121,7 +123,7 @@ public sealed class AccountWizard : Window
             Margin = new Thickness(0, 0, 0, 18),
             TextWrapping = TextWrapping.Wrap,
         };
-        Bind(subheading, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
+        Bind(subheading, TextBlock.ForegroundProperty, "systemdialog.foreground.subtle.brush");
 
         var buttons = new StackPanel
         {
@@ -200,7 +202,7 @@ public sealed class AccountWizard : Window
             Width = width,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        Bind(block, TextBlock.ForegroundProperty, "dialog.foreground.brush");
+        Bind(block, TextBlock.ForegroundProperty, "systemdialog.foreground.brush");
         return block;
     }
 

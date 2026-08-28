@@ -13,9 +13,10 @@ namespace Mailbox.Core.Ribbon;
 /// transcribed from it, and the New and Current View clusters are authored from the reference's
 /// own Home tab in the order it lists them.
 /// <para>
-/// Reply, Reply All and Forward are on it because the reference's To-Do List holds flagged mail
-/// beside the tasks. That join arrives with Phase 14; until then the three say so when pressed,
-/// which is better than a bar that does not look like the reference's.
+/// Reply, Reply All and Forward are on it because the To-Do List holds flagged mail beside the
+/// tasks, exactly as the reference's does. The list carries that mail today; the three commands
+/// are declared, placed and not yet wired to the mail module's respond path, and they say so
+/// when pressed rather than a bar that does not look like the reference's.
 /// </para>
 /// </remarks>
 public static class TasksRibbonLayout

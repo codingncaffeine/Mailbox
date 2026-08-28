@@ -92,7 +92,8 @@ internal static class ItemCategoryMenu
         else all.Click += (_, _) => allCategories();
         flyout.Items.Add(all);
 
-        Log.Info($"Categorize: “{subject}” carries {(carried.Count == 0 ? "nothing" : string.Join(", ", carried))}.");
+        Log.Info($"Categorize: the item carries {(carried.Count == 0 ? "nothing" : string.Join(", ", carried))}.");
+        Log.Debug($"Categorize: the item is “{subject}”.");
         flyout.ShowAt(anchor, showAtPointer: true);
     }
 

@@ -712,7 +712,7 @@ public class OAuthTests
     }
 
     [Fact]
-    public void AnOutlookAddressSignsInToMicrosoft()
+    public void AConsumerAddressSignsInToMicrosoft()
     {
         Assert.Equal(OAuthProviders.Microsoft, OAuthProviders.ForMail("someone@outlook.com"));
         Assert.Equal(OAuthProviders.Microsoft, OAuthProviders.ForMail("someone@hotmail.com"));

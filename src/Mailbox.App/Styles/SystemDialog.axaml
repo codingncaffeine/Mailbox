@@ -19,6 +19,20 @@
         <Setter Property="Foreground" Value="{DynamicResource systemdialog.foreground.brush}" />
     </Style>
 
+    <!--
+        And the white cross on that red, restated here because this file is included after
+        Shell.axaml: the rule above matches while the pointer is over the button too, and the
+        later of two matching setters wins, so without these the cross would stay black on the
+        red rather than turning white as it does on every other caption.
+    -->
+    <Style Selector="Button.caption-close.on-system:pointerover">
+        <Setter Property="Foreground" Value="{DynamicResource titlebar.caption.close.text.brush}" />
+    </Style>
+
+    <Style Selector="Button.caption-close.on-system:pressed">
+        <Setter Property="Foreground" Value="{DynamicResource titlebar.caption.close.text.brush}" />
+    </Style>
+
     <!-- ============================ Drop-down list ============================ -->
     <!--
         A combo box on a system dialog's page. Without this it keeps the application's own

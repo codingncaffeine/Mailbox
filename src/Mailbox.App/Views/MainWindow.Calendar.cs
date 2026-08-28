@@ -64,9 +64,9 @@ public partial class MainWindow
             or MailboxModule.Tasks or MailboxModule.Notes or MailboxModule.Journal or MailboxModule.Feeds))
         {
             // Folders and Shortcuts are the rest of the navigation pane rather than modules of
-            // their own, and a button that says which phase brings it is better than one that
-            // does nothing.
-            shell.StatusRight = $"{module} is Phase 14, with the rest of the shell.";
+            // their own. Nothing on the rail or in the key map reaches them today; this guard is
+            // here so a command that named one would say so rather than switch to nothing.
+            shell.StatusRight = $"{module} is not a module of its own here.";
             return;
         }
 
@@ -1586,7 +1586,8 @@ public partial class MainWindow
             Instant(day.AddDays(1).ToDateTime(TimeOnly.MinValue)));
 
         view.Entries = entries;
-        Log.Info($"Peek: {day:yyyy-MM-dd} holds {view.Agenda.Count} — "
+        Log.Info($"Peek: {day:yyyy-MM-dd} holds {view.Agenda.Count}.");
+        Log.Debug($"Peek: {day:yyyy-MM-dd} — "
             + string.Join(" | ", view.Agenda.Select(r => $"{r.Time} {r.Subject}")));
     }
 

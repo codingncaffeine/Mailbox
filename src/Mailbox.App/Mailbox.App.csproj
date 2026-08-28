@@ -23,7 +23,7 @@
 
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />
-    <PackageReference Include="Avalonia.Controls.WebView" Version="12.0.1" />
+    <PackageReference Include="Avalonia.Controls.WebView" Version="$(AvaloniaWebViewVersion)" />
     <PackageReference Include="Avalonia.Desktop" Version="$(AvaloniaVersion)" />
     <!-- The native Wayland backend is not part of Avalonia.Desktop's platform detection; it is
          its own package (MIT, over the MIT NWayland bindings) and is opted into at startup by
@@ -32,8 +32,8 @@
     <PackageReference Include="Avalonia.Fonts.Inter" Version="$(AvaloniaVersion)" />
     <!-- Structural only. Simple provides bare control templates so ListBox, ComboBox and
          GridSplitter have something to render; it contributes no colour, because every
-         brush still comes from the token system. Phase 1 onward replaces these with
-         the reference application-specific control themes and this reference goes away. -->
+         brush still comes from the token system. Control themes of our own replace it
+         template by template, and this reference goes away when the last one lands. -->
     <PackageReference Include="Avalonia.Themes.Simple" Version="$(AvaloniaVersion)" />
     <!-- No Avalonia.Diagnostics: DevTools moved under the commercial licence at 12.x and is
          not published for this version. Not a runtime dependency either way. -->

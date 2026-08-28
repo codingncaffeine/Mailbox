@@ -2160,7 +2160,7 @@ public partial class MainWindow : Window
             // forward and says what it waits on — as the rail buttons for the same modules do.
             if (string.Equals(arg, "--new-appointment", StringComparison.Ordinal))
             {
-                if (DataContext is ShellViewModel s) s.StatusRight = "Appointments arrive with Phase 11.";
+                if (DataContext is ShellViewModel s) s.StatusRight = "The New Appointment launcher action is not wired up yet.";
                 return;
             }
 
@@ -4039,8 +4039,9 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Phase 0 has no behaviour behind the commands yet; this proves the catalogue round-trip
-    /// from ribbon click to a resolved command. Phases 2 onward attach real handlers.
+    /// Resolves what the ribbon raised to a catalogue command and hands it to
+    /// <see cref="RunCommand"/>, which is where the behaviour lives. The two are separate so the
+    /// round-trip from a click to a resolved command can be proven without a handler.
     /// </summary>
     private void OnRibbonCommand(object? sender, RibbonCommandEventArgs e)
     {
@@ -4199,9 +4200,9 @@ public partial class MainWindow : Window
     private RibbonDisplayMode? _ribbonBeforeFullScreen;
 
     /// <summary>
-    /// The single place a command arrives, whichever control raised it. Phases 2 onward replace
-    /// the placeholder with real handlers; until then every route reports the same thing, which
-    /// is at least honest about what is and is not built.
+    /// The single place a command arrives, whichever control raised it. Every route below is a
+    /// real handler; a command with none falls through to the status line, which says what it is
+    /// waiting for rather than pretending.
     /// </summary>
     private void RunCommand(CommandId id)
     {
@@ -4777,11 +4778,11 @@ public partial class MainWindow : Window
     /// The Home tab's commands over the selected messages.
     /// </summary>
     /// <remarks>
-    /// The shell has had every one of these operations since Phase 3 — the Delete key, the
-    /// hover actions and the shortcuts all call them — and the ribbon buttons for the same
-    /// things reported "not wired" until session 4's audit pressed them. They call the same
-    /// operations now, so a thing done from the ribbon, the keyboard, a hover or the row's
-    /// menu is one thing done four ways.
+    /// The shell has had every one of these operations for a long time — the Delete key, the
+    /// hover actions and the shortcuts all call them — while the ribbon buttons for the same
+    /// things reported "not wired" until an audit pressed them. They call the same operations
+    /// now, so a thing done from the ribbon, the keyboard, a hover or the row's menu is one
+    /// thing done four ways.
     /// </remarks>
     private bool RunOverSelection(ShellViewModel shell, CommandId id)
     {
@@ -5539,7 +5540,7 @@ public partial class MainWindow : Window
         more.Items.Add(entry);
 
         var form = new MenuItem { Header = "Choose Form…", IsEnabled = false };
-        ToolTip.SetTip(form, "Custom forms are a plugin's business (§13).");
+        ToolTip.SetTip(form, "Custom forms are a plugin's business.");
         more.Items.Add(form);
         flyout.Items.Add(more);
 
@@ -6218,8 +6219,17 @@ public partial class MainWindow : Window
 
         Closed += (_, _) =>
         {
-            foreach (var watcher in _watchers) watcher.Dispose();
+            // Cancelled here, unwound off the dispatcher. Disposing in place waited up to two
+            // seconds per watcher on the UI thread — a watcher mid-network-read cannot see the
+            // cancellation until its read returns — so three IMAP accounts held a dispatcher
+            // that could no longer run for six seconds after the window had gone, which reads
+            // as a process that will not die. Cancelling all of them first lets them unwind at
+            // the same time instead of one after another.
+            var closing = _watchers.ToArray();
             _watchers.Clear();
+
+            foreach (var watcher in closing) watcher.BeginStop();
+            Task.Run(() => { foreach (var watcher in closing) watcher.Dispose(); });
         };
     }
 

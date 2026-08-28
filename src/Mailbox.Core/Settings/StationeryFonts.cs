@@ -49,7 +49,7 @@ public enum StationeryUse
 /// (<c>{"family":"Calibri","points":11,"bold":false,"italic":false,"colour":null}</c>). A key
 /// that is missing or unreadable is the reference's default, never an error. The comment
 /// switches are kept but not yet acted on: marking a comment inside quoted text needs the
-/// editor to know where the quote begins, and it does not yet — the plan's §20 says so.
+/// editor to know where the quote begins, and it does not yet.
 /// </remarks>
 public sealed class StationeryFonts
 {

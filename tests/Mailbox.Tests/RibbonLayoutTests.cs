@@ -30,11 +30,11 @@ public class RibbonLayoutTests
     }
 
     /// <summary>
-    /// the reference's Home tab, left to right. Order is the whole point of a clone — getting the
+    /// The reference's Home tab, left to right. Order is the whole point of a clone — getting the
     /// commands right but the order wrong still reads as wrong.
     /// </summary>
     [Fact]
-    public void HomeTabGroupsAreInOutlookOrder()
+    public void HomeTabGroupsAreInReferenceOrder()
     {
         string[] expected =
         [
@@ -54,7 +54,7 @@ public class RibbonLayoutTests
     /// one. The tab strip in the Folder, View and Send/Receive captures shows all six.
     /// </remarks>
     [Fact]
-    public void TabsAreInOutlookOrder()
+    public void TabsAreInReferenceOrder()
     {
         string[] expected = ["file", "home", "sendreceive", "folder", "view", "help"];
         Assert.Equal(expected, DefaultRibbonLayouts.Mail.Tabs.Select(t => t.Id).ToArray());
@@ -105,7 +105,7 @@ public class RibbonLayoutTests
 
     /// <summary>The Home row opens with New Email and ends with Send/Receive All Folders.</summary>
     [Fact]
-    public void SimplifiedHomeRowMatchesOutlookOrder()
+    public void SimplifiedHomeRowMatchesReferenceOrder()
     {
         var row = DefaultRibbonLayouts.Mail.SimplifiedRows["home"]
             .Where(i => i.Kind != RibbonItemKind.Separator)
@@ -248,9 +248,9 @@ public class RibbonLayoutTests
         Assert.All(tags.Items.Skip(1), i => Assert.Equal(RibbonItemSize.Small, i.Size));
     }
 
-    /// <summary>the reference application ships Send/Receive All Folders and Undo on the QAT, in that order.</summary>
+    /// <summary>The reference ships Send/Receive All Folders and Undo on the QAT, in that order.</summary>
     [Fact]
-    public void QuickAccessToolbarMatchesOutlookDefault()
+    public void QuickAccessToolbarMatchesTheReferenceDefault()
         => Assert.Equal(
             ["app.sendreceive.all", "app.undo"],
             DefaultRibbonLayouts.Mail.QuickAccess.Select(c => c.Value).ToArray());
@@ -260,7 +260,7 @@ public class RibbonLayoutTests
     /// Additions live in the catalogue and reach the ribbon through Customize Ribbon.
     /// </summary>
     [Fact]
-    public void DefaultLayoutPlacesNothingBeyondOutlookParity()
+    public void DefaultLayoutPlacesNothingBeyondReferenceParity()
     {
         var catalog = Catalog();
         var placed = DefaultRibbonLayouts.Mail.PlacedCommands.ToHashSet();

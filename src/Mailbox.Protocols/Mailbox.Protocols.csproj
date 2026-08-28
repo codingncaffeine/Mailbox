@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Talking to mail servers: POP3 and SMTP now, IMAP in Phase 7. MailKit does the protocol;
+    Talking to mail servers: IMAP, POP3 and SMTP. MailKit does the protocol;
     what lives here is the policy around it — what to download, what to leave, when to retry.
   -->
 

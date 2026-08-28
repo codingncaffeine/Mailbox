@@ -18,7 +18,7 @@ public enum ComposeFormat
 /// sender and the shell ask here rather than each remembering a string.
 /// <para>
 /// The keys are named here and declared on the rows, so a page can be reworded without a
-/// choice silently resetting — the plan's own rule for a setting the code refers to. A setting
+/// choice silently resetting — the standing rule for any setting the code refers to. A setting
 /// with no accessor here is one nothing reads yet, and §20 says so per row.
 /// </para>
 /// </remarks>
@@ -83,7 +83,11 @@ public sealed class MailOptions(SettingsStore settings)
     public const string RequestReadReceiptKey = "mail.tracking.read";
     public const string EmptyDeletedOnExitKey = "mail.exit.emptydeleted";
     public const string SendImmediatelyKey = "mail.send.immediately";
-    public const string ScheduleMinutesKey = "mail.sendreceive.minutes";
+
+    // No key for the send/receive schedule. The Advanced page's row edits the All Accounts
+    // group's own ScheduleEnabled and ScheduleMinutes through SendReceiveGroups, so that the
+    // page and the Send/Receive Groups dialog cannot disagree; a second copy of the number here
+    // would be the disagreement.
     public const string ReplyStyleKey = "mail.reply.style";
     public const string ForwardStyleKey = "mail.forward.style";
     public const string ReplyPrefixKey = "mail.reply.prefix";

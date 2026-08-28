@@ -17,12 +17,12 @@ public enum RibbonItemSize
 }
 
 /// <summary>
-/// the reference's own ribbon display modes, toggled from the chevron at the right end of the bar.
+/// The reference's own ribbon display modes, toggled from the chevron at the right end of the bar.
 /// </summary>
 public enum RibbonDisplayMode
 {
     /// <summary>
-    /// The the reference application default: one row of icon-and-label commands with separators, an
+    /// The reference's default: one row of icon-and-label commands with separators, an
     /// overflow menu, and no group labels. Compact enough that the message list keeps the
     /// screen.
     /// </summary>

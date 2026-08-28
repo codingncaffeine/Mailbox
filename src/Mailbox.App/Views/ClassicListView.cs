@@ -170,8 +170,10 @@ public sealed class ClassicListView : Border
 
         public override void Render(DrawingContext context)
         {
-            var line = Line ?? Brushes.Gainsboro;
-            var ink = Ink ?? Brushes.Black;
+            // Both are bound to systemdialog.* tokens; magenta is what a theme that has not
+            // defined one gets, so the gap shows rather than being papered over.
+            var line = Line ?? Brushes.Magenta;
+            var ink = Ink ?? Brushes.Magenta;
             var face = new Typeface(Font ?? FontFamily.Default);
             var x = 0.0;
 
@@ -229,8 +231,8 @@ public sealed class ClassicListView : Border
 
         public override void Render(DrawingContext context)
         {
-            var ink = Ink ?? Brushes.Black;
-            var paper = _owner.Background ?? Brushes.White;
+            var ink = Ink ?? Brushes.Magenta;
+            var paper = _owner.Background ?? Brushes.Magenta;
             var face = new Typeface(Font ?? FontFamily.Default);
             var textStart = MarkerInset + MarkerWidth + 1;
             var last = _owner._columns.Sum(c => c.Width);
@@ -243,11 +245,11 @@ public sealed class ClassicListView : Border
                 if (i == _owner._selected)
                 {
                     var fill = IsFocused ? SelectionFocused : Selection;
-                    context.FillRectangle(fill ?? Brushes.LightGray, new Rect(textStart, top, last - textStart, RowHeight));
+                    context.FillRectangle(fill ?? Brushes.Magenta, new Rect(textStart, top, last - textStart, RowHeight));
                 }
                 else if (i == _hot)
                 {
-                    context.FillRectangle(Hover ?? Brushes.AliceBlue, new Rect(textStart, top, last - textStart, RowHeight));
+                    context.FillRectangle(Hover ?? Brushes.Magenta, new Rect(textStart, top, last - textStart, RowHeight));
                 }
 
                 // The marker: the same disc-and-tick as Set as Default, drawn straight into the

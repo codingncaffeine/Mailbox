@@ -1,5 +1,5 @@
-# The whole suite, and Phase 10's pixel gate (§8): the four built-in themes stay
-# pixel-identical to their reference captures. The runner image is pinned because the
+# The whole suite, and the pixel gate: the four built-in themes stay pixel-identical to their
+# reference captures. The runner image is pinned because the
 # references are rasterised by this environment's own font stack; a runner bump that shifts
 # antialiasing is a real change, and regenerating the references is the deliberate answer to
 # it: download the fidelity artifact and commit its four PNGs as tests/fidelity/*.png. The run

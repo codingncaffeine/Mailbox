@@ -120,19 +120,24 @@ public sealed class ClassicIcon : Control
         // Disabled: every colour becomes the disabled ink — the silhouette the reference draws
         // — while a hole cut through a shape stays a hole: the tick in the disc is the ground
         // showing through, and greying the disc leaves it showing through.
+        // Every one of these is bound to a systemdialog.icon.* token above, so the fallback is
+        // only ever reached when a theme has not defined one — and then it draws magenta on
+        // purpose, the way DrawnSurface does. Falling back to a plausible colour instead is how
+        // a missing token stays missing: the drawing still looks like a drawing.
         var grey = IsDisabled ? DisabledInk : null;
+        var missing = Brushes.Magenta;
         var p = new Palette(
-            grey ?? Ink ?? Brushes.Black,
-            grey ?? Paper ?? Brushes.White,
-            Paper ?? Brushes.White,
-            grey ?? Gold ?? Brushes.Gold,
-            grey ?? GoldDark ?? Brushes.DarkGoldenrod,
-            grey ?? Steel ?? Brushes.LightSteelBlue,
-            grey ?? SteelDark ?? Brushes.SlateGray,
-            grey ?? Wood ?? Brushes.Peru,
-            grey ?? Green ?? Brushes.Green,
-            grey ?? Blue ?? Brushes.RoyalBlue,
-            grey ?? BlueDark ?? Brushes.DarkBlue);
+            grey ?? Ink ?? missing,
+            grey ?? Paper ?? missing,
+            Paper ?? missing,
+            grey ?? Gold ?? missing,
+            grey ?? GoldDark ?? missing,
+            grey ?? Steel ?? missing,
+            grey ?? SteelDark ?? missing,
+            grey ?? Wood ?? missing,
+            grey ?? Green ?? missing,
+            grey ?? Blue ?? missing,
+            grey ?? BlueDark ?? missing);
 
         Draw(context, Glyph, p);
     }

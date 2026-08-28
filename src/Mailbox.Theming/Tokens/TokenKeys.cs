@@ -2,8 +2,10 @@ namespace Mailbox.Theming.Tokens;
 
 /// <summary>
 /// Well-known token names. Referencing these instead of string literals is what lets the
-/// coverage audit prove no surface is unreachable — a hard-coded colour anywhere in the UI
-/// is a build failure, not a style nit.
+/// coverage audit prove no surface is unreachable: every key here has to be defined before a
+/// theme loads, so a surface that takes its colour from a token can never be left unpainted.
+/// A hard-coded colour is the failure this exists to prevent — it is invisible to the audit,
+/// which is why it is a defect rather than a style nit.
 /// </summary>
 public static class TokenKeys
 {
@@ -110,6 +112,27 @@ public static class TokenKeys
         public static readonly IReadOnlyList<string> All = [Flag, FlagOutline, FlagPole];
     }
 
+    /// <summary>
+    /// The drop shadows the chrome casts, whole — offset, blur, spread and colour in one value,
+    /// because that is what a shadow is and splitting it would leave the colour tokenised and
+    /// the geometry a literal. Published as a <c>BoxShadows</c> under <c>.boxshadow</c>.
+    /// </summary>
+    /// <remarks>
+    /// Identical in the four built-ins, like the geometry: the reference casts the same shadow
+    /// whatever the theme. They are tokens all the same so that nothing outside the theme names
+    /// a colour, and so a theme file that wants a flatter chrome can say so.
+    /// </remarks>
+    public static class Elevation
+    {
+        /// <summary>Under the ribbon panel.</summary>
+        public const string Ribbon = "elevation.ribbon";
+
+        /// <summary>Under the Quick Access command bar, which floats over the workspace.</summary>
+        public const string CommandBar = "elevation.commandbar";
+
+        public static readonly IReadOnlyList<string> All = [Ribbon, CommandBar];
+    }
+
     public static class TitleBar
     {
         public const string Background = "titlebar.background";
@@ -121,6 +144,23 @@ public static class TokenKeys
         public const string SearchWidth = "titlebar.search.width";
         public const string SearchHeight = "titlebar.search.height";
         public const string SearchOffset = "titlebar.search.offset";
+
+        /// <summary>
+        /// The neutral wash a caption button wears under the pointer, and while held. Windows
+        /// lightens a dark caption and darkens a light one, so this cannot be one value: a
+        /// white wash is what White's own pale caption had, and it was invisible.
+        /// </summary>
+        public const string CaptionHover = "titlebar.caption.hover";
+        public const string CaptionPressed = "titlebar.caption.pressed";
+
+        /// <summary>
+        /// The close button's red, its held red, and the glyph drawn on them. The one caption
+        /// colour the reference does not vary by theme, so every caption in the application —
+        /// title bar, dialog and system dialog alike — takes these three.
+        /// </summary>
+        public const string CaptionClose = "titlebar.caption.close";
+        public const string CaptionClosePressed = "titlebar.caption.close.pressed";
+        public const string CaptionCloseText = "titlebar.caption.close.text";
     }
 
     /// <summary>The account button in the title bar, and the panel it opens.</summary>
@@ -445,6 +485,14 @@ public static class TokenKeys
 
         /// <summary>A selected row inside one.</summary>
         public const string Selection = "dialog.selection";
+
+        /// <summary>
+        /// The wash a caption button on a dialog wears under the pointer, and while held. A
+        /// dialog's caption stands on the dialog's ground, which is the opposite end of the
+        /// ramp from the title bar's in two of the four themes, so it needs its own pair.
+        /// </summary>
+        public const string CaptionHover = "dialog.caption.hover";
+        public const string CaptionPressed = "dialog.caption.pressed";
     }
 
     /// <summary>
@@ -463,6 +511,14 @@ public static class TokenKeys
     {
         /// <summary>The caption band.</summary>
         public const string TitleBar = "systemdialog.titlebar";
+
+        /// <summary>
+        /// The wash a caption button on one of these wears under the pointer, and while held.
+        /// The band behind it is the desktop's own light one in every theme, so unlike the
+        /// title bar's this pair is the same in all four.
+        /// </summary>
+        public const string CaptionHover = "systemdialog.caption.hover";
+        public const string CaptionPressed = "systemdialog.caption.pressed";
         /// <summary>The dialog's ground.</summary>
         public const string Background = "systemdialog.background";
         /// <summary>The white band under the caption that names the page, and the rule under it.</summary>
@@ -470,6 +526,12 @@ public static class TokenKeys
         public const string BannerRule = "systemdialog.banner.rule";
         public const string Foreground = "systemdialog.foreground";
         public const string ForegroundDisabled = "systemdialog.foreground.disabled";
+        /// <summary>
+        /// The family's quieter ink — guidance under a heading, a status line, the sentence
+        /// under a wizard's question. Distinct from <see cref="ForegroundDisabled"/>: text that
+        /// is secondary is not text that is unavailable, and a reader can tell the difference.
+        /// </summary>
+        public const string ForegroundSubtle = "systemdialog.foreground.subtle";
         /// <summary>A tab's page.</summary>
         public const string Surface = "systemdialog.surface";
         /// <summary>A tab that is not selected, and the page's faint shadow.</summary>
@@ -532,7 +594,8 @@ public static class TokenKeys
 
         public static readonly IReadOnlyList<string> All =
         [
-            TitleBar, Background, Banner, BannerRule, Foreground, ForegroundDisabled,
+            TitleBar, CaptionHover, CaptionPressed,
+            Background, Banner, BannerRule, Foreground, ForegroundDisabled, ForegroundSubtle,
             Surface, Tab, Border, ListBackground, ListBorder, Selection, SelectionFocused, SelectionText,
             Hover, HoverBorder, Pressed, Accent, FieldBorder,
             Button, ButtonBorder, ButtonBorderBottom, ButtonDisabled, ButtonDisabledBorder,
@@ -794,6 +857,7 @@ public static class TokenKeys
     public static IReadOnlyList<string> Required { get; } =
     [
         Surface.Ground, Surface.Raised, Surface.Sunken, Surface.Overlay,
+        .. Elevation.All,
         Text.Primary, Text.Secondary, Text.Disabled, Text.OnAccent, Text.Link,
         Accent.Rest, Accent.Hover, Accent.Pressed, Accent.Subtle, Accent.Disabled,
         Border.Subtle, Border.Strong, Border.Focus,
@@ -804,6 +868,8 @@ public static class TokenKeys
         TitleBar.Background, TitleBar.Foreground, TitleBar.Search,
         TitleBar.SearchBorder, TitleBar.SearchText, TitleBar.Height,
         TitleBar.SearchWidth, TitleBar.SearchHeight, TitleBar.SearchOffset,
+        TitleBar.CaptionHover, TitleBar.CaptionPressed,
+        TitleBar.CaptionClose, TitleBar.CaptionClosePressed, TitleBar.CaptionCloseText,
         Avatar.Background, Avatar.Foreground,
         Category.Red, Category.Orange, Category.Yellow,
         Category.Green, Category.Blue, Category.Purple,
@@ -833,6 +899,7 @@ public static class TokenKeys
         Dialog.Background, Dialog.Foreground, Dialog.ForegroundSubtle,
         Dialog.Surface, Dialog.SurfaceText,
         Dialog.Border, Dialog.Selection,
+        Dialog.CaptionHover, Dialog.CaptionPressed,
         .. SystemDialog.All,
         Calendar.Background, Calendar.PastFill, Calendar.TodayFill, Calendar.TodayText, Calendar.SelectedFill,
         Calendar.WorkingHoursFill, Calendar.NonWorkingFill,

@@ -1,8 +1,8 @@
 namespace Mailbox.Core;
 
 /// <summary>
-/// Which generation of the reference application the shell imitates. Orthogonal to the colour theme: any of the
-/// four Office palettes works with either layout.
+/// Which generation of the reference application the shell imitates. Orthogonal to the colour
+/// theme: any of the four palettes works with either layout.
 /// </summary>
 /// <remarks>
 /// The two are genuinely different products rather than a restyle, so this is a structural
@@ -18,10 +18,10 @@ public enum ShellLayoutMode
     Classic,
 
     /// <summary>
-    /// New the reference application for Windows. A thin unified header carrying search, a single-row command
-    /// bar in place of the ribbon, and a vertical app rail down the left edge holding Mail,
-    /// Calendar, People, Tasks and Apps — the arrangement shared with the reference application on the web,
-    /// Office.com and Teams.
+    /// The reference's newer Windows client. A thin unified header carrying search, a single-row
+    /// command bar in place of the ribbon, and a vertical app rail down the left edge holding
+    /// Mail, Calendar, People, Tasks and Apps — the arrangement it shares with the same vendor's
+    /// web client.
     /// </summary>
     Modern,
 }

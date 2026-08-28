@@ -50,7 +50,7 @@ public sealed record OAuthProvider(
 public static class OAuthProviders
 {
     /// <summary>
-    /// Microsoft's consumer and work accounts, over the endpoints Outlook.com uses.
+    /// Microsoft's consumer and work accounts, over the endpoints its hosted mail service uses.
     /// </summary>
     /// <remarks>
     /// <c>offline_access</c> is what makes a refresh token come back; the three service scopes are

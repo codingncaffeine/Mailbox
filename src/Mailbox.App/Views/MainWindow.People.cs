@@ -196,7 +196,7 @@ public partial class MainWindow
             if (id == ContactCommands.Forward.Id) { ForwardCard(shell, window.Surface.Current()); return; }
             if (id == ContactCommands.BusinessCard.Id)
             {
-                shell.StatusRight = "The card is drawn beside the form; designing one is Phase 16.";
+                shell.StatusRight = "The card is drawn beside the form; designing one is not built yet.";
                 return;
             }
 
@@ -651,7 +651,7 @@ public partial class MainWindow
     private static string? WaitingPeopleCommand(CommandId id)
     {
         if (id == PeopleCommands.MoreCommunicate.Id) return "The other ways to reach somebody arrive with the module's actions.";
-        if (id == PeopleCommands.MailMerge.Id) return "Mail merge arrives with Phase 16.";
+        if (id == PeopleCommands.MailMerge.Id) return "Mail merge needs a word processor to merge into, which is out of scope here.";
 
         if (id == PeopleCommands.OpenSharedContacts.Id) return "A shared address book is a CardDAV account — add one in Account Settings.";
         if (id == PeopleCommands.NewItems.Id) return "New Items arrives with the rest of the modules.";

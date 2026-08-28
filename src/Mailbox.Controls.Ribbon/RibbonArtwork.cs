@@ -472,8 +472,10 @@ public sealed class RibbonArtwork : Control
 
     private static void Swatch(DrawingContext context, double x, double y, IBrush? fill, IBrush? outline)
     {
-        context.FillRectangle(outline ?? Brushes.Gray, new Rect(x, y, 8, 8));
-        context.FillRectangle(fill ?? Brushes.White, new Rect(x + 1, y + 1, 6, 6));
+        // Bound to ribbon.icon.swatch.*; magenta is what a theme missing one gets, rather than
+        // a plausible grey that would leave the gap looking like a drawing.
+        context.FillRectangle(outline ?? Brushes.Magenta, new Rect(x, y, 8, 8));
+        context.FillRectangle(fill ?? Brushes.Magenta, new Rect(x + 1, y + 1, 6, 6));
     }
 
     /// <summary>
@@ -482,9 +484,9 @@ public sealed class RibbonArtwork : Control
     /// </summary>
     private void DrawFollowUp(DrawingContext context)
     {
-        var pole = FlagPole ?? Brushes.Gray;
-        var cloth = Flag ?? Brushes.IndianRed;
-        var edge = FlagOutline ?? Brushes.DarkRed;
+        var pole = FlagPole ?? Brushes.Magenta;
+        var cloth = Flag ?? Brushes.Magenta;
+        var edge = FlagOutline ?? Brushes.Magenta;
 
         // The pole starts under the near flag and runs to the bottom of the figure.
         context.FillRectangle(pole, new Rect(0, 9, 1, 9));

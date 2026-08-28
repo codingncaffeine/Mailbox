@@ -14,7 +14,7 @@
         Text rendering mode is NOT set here. Avalonia 12.1 exposes TextOptions through
         Get/Set methods rather than public attached-property fields, so XAML cannot reach it.
         TextRendering.Apply() sets it on the window in code, which also lets the mode be
-        switched at runtime for the Phase 0 investigation. See docs/text-rendering.md.
+        switched at runtime for the investigation in docs/text-rendering.md.
     -->
     <Style Selector="TextBlock">
         <Setter Property="FontFamily" Value="{DynamicResource ui.fontfamily}" />
@@ -93,6 +93,27 @@
 
     <Style Selector="Button.ribbonbutton:disabled">
         <Setter Property="Background" Value="Transparent" />
+    </Style>
+
+    <!--
+        The tab strip. Same story as the buttons above: these were bound in code, the local value
+        beat the style setters, and so ribbon.tab.hover was a token every theme defined and
+        nothing read.
+
+        The selected rule comes last on purpose. A tab that is already showing does not answer
+        the pointer — being selected is the stronger statement, and the reference leaves it
+        alone — so it wins over the hover rule rather than the other way round.
+    -->
+    <Style Selector="Button.ribbontab">
+        <Setter Property="Background" Value="{DynamicResource ribbon.tab.rest.brush}" />
+    </Style>
+
+    <Style Selector="Button.ribbontab:pointerover">
+        <Setter Property="Background" Value="{DynamicResource ribbon.tab.hover.brush}" />
+    </Style>
+
+    <Style Selector="Button.ribbontab.selected">
+        <Setter Property="Background" Value="{DynamicResource ribbon.tab.selected.brush}" />
     </Style>
 
     <!--
@@ -538,25 +559,47 @@
         <Setter Property="Foreground" Value="{DynamicResource dialog.foreground.brush}" />
     </Style>
 
+    <!--
+        The neutral wash, which is a wash rather than a colour: Windows lightens a dark caption
+        under the pointer and darkens a light one. Which way round depends on what the button
+        is standing on, and that is three different answers inside one theme — the title bar,
+        a dialog's own ground, and the system dialogs' desktop-light band — so each has its own
+        pair rather than the one literal that used to be here. A white wash over White's own
+        #E9EEF2 caption, and over any light theme's white dialog, was invisible.
+    -->
     <Style Selector="Button.caption:pointerover">
-        <Setter Property="Background" Value="#22FFFFFF" />
+        <Setter Property="Background" Value="{DynamicResource titlebar.caption.hover.brush}" />
+    </Style>
+
+    <Style Selector="Button.caption:pressed">
+        <Setter Property="Background" Value="{DynamicResource titlebar.caption.pressed.brush}" />
+    </Style>
+
+    <Style Selector="Button.caption.on-dialog:pointerover">
+        <Setter Property="Background" Value="{DynamicResource dialog.caption.hover.brush}" />
+    </Style>
+
+    <Style Selector="Button.caption.on-dialog:pressed">
+        <Setter Property="Background" Value="{DynamicResource dialog.caption.pressed.brush}" />
+    </Style>
+
+    <Style Selector="Button.caption.on-system:pointerover">
+        <Setter Property="Background" Value="{DynamicResource systemdialog.caption.hover.brush}" />
+    </Style>
+
+    <Style Selector="Button.caption.on-system:pressed">
+        <Setter Property="Background" Value="{DynamicResource systemdialog.caption.pressed.brush}" />
     </Style>
 
     <!-- White glyph on the red, whatever the theme's caption colour normally is. -->
     <Style Selector="Button.caption-close:pointerover">
-        <Setter Property="Foreground" Value="#FFFFFF" />
-    </Style>
-
-    <Style Selector="Button.caption:pressed">
-        <Setter Property="Background" Value="#33FFFFFF" />
-    </Style>
-
-    <Style Selector="Button.caption-close:pointerover">
-        <Setter Property="Background" Value="#E81123" />
+        <Setter Property="Background" Value="{DynamicResource titlebar.caption.close.brush}" />
+        <Setter Property="Foreground" Value="{DynamicResource titlebar.caption.close.text.brush}" />
     </Style>
 
     <Style Selector="Button.caption-close:pressed">
-        <Setter Property="Background" Value="#F1707A" />
+        <Setter Property="Background" Value="{DynamicResource titlebar.caption.close.pressed.brush}" />
+        <Setter Property="Foreground" Value="{DynamicResource titlebar.caption.close.text.brush}" />
     </Style>
 
     <!-- ============================= Dialog contents =========================== -->

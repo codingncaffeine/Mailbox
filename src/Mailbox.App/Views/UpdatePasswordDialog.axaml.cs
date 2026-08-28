@@ -17,11 +17,17 @@ namespace Mailbox.App.Views;
 /// Its own dialog rather than a field in Server Settings, because it is the thing people come
 /// back for: a provider expires an app password and every other setting is still correct. One
 /// field and a button beats hunting through a form of eight.
+/// <para>
+/// A member of the Account Settings family, so it is drawn the way the desktop draws its own
+/// dialogs and stays light in every theme — <see cref="SystemDialogChrome"/> and the
+/// <c>systemdialog.*</c> tokens, never <c>DialogChrome</c>. It used to use the latter, which
+/// meant a reader on Dark Gray watched a light Account Settings open a dark child.
+/// </para>
 /// </remarks>
 public sealed class UpdatePasswordDialog : Window
 {
     private readonly Account _account;
-    private readonly TextBox _password = new() { PasswordChar = '•', Width = 300 };
+    private readonly TextBox _password = new() { PasswordChar = '•', Width = 300, Classes = { "sysfield" } };
     private readonly CheckBox _sameForSending = new()
     {
         Content = "Use this for sending as well",
@@ -41,14 +47,14 @@ public sealed class UpdatePasswordDialog : Window
         CanResize = false;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
-        var save = new Button { Content = "Save", IsDefault = true };
+        var save = new Button { Content = "Save", IsDefault = true, Classes = { "sysbutton" } };
         save.Click += async (_, _) => await SaveAsync();
 
-        var cancel = new Button { Content = "Cancel", IsCancel = true };
+        var cancel = new Button { Content = "Cancel", IsCancel = true, Classes = { "sysbutton" } };
         cancel.Click += (_, _) => Close();
 
         var heading = new TextBlock { Text = _account.Address, FontWeight = FontWeight.SemiBold };
-        Bind(heading, TextBlock.ForegroundProperty, "dialog.foreground.brush");
+        Bind(heading, TextBlock.ForegroundProperty, "systemdialog.foreground.brush");
 
         var where = new TextBlock
         {
@@ -57,8 +63,8 @@ public sealed class UpdatePasswordDialog : Window
             Margin = new Thickness(0, 2, 0, 14),
             MaxWidth = 380,
         };
-        Bind(where, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
-        Bind(_status, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
+        Bind(where, TextBlock.ForegroundProperty, "systemdialog.foreground.subtle.brush");
+        Bind(_status, TextBlock.ForegroundProperty, "systemdialog.foreground.subtle.brush");
 
         var body = new StackPanel
         {
@@ -85,9 +91,10 @@ public sealed class UpdatePasswordDialog : Window
             },
         };
 
-        DialogChrome.Apply(this, body);
-
-        Bind(this, BackgroundProperty, "surface.ground.brush");
+        // No Background bind after it: WindowFrame sets the window transparent on purpose, so
+        // the rounded, clipping border is the only thing that paints. Re-binding a ground here
+        // put an opaque square back behind the corners.
+        SystemDialogChrome.Apply(this, body);
     }
 
     private TextBlock Caption(string text)
@@ -98,7 +105,7 @@ public sealed class UpdatePasswordDialog : Window
             Width = 80,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        Bind(block, TextBlock.ForegroundProperty, "dialog.foreground.brush");
+        Bind(block, TextBlock.ForegroundProperty, "systemdialog.foreground.brush");
         return block;
     }
 

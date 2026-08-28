@@ -30,7 +30,8 @@ public sealed record ContactResult(Contact Contact, long CollectionId, bool Dele
 /// The Show group's four buttons are pages rather than more buttons, which is what the reference
 /// means by them: General is the form, and Details, Certificates and All Fields replace it. Two of
 /// those three are built here — Details from the fields the card already carries, All Fields from
-/// every property in it — and Certificates says what it waits for, S/MIME being Phase 15.
+/// every property in it — and Certificates says what it waits for: S/MIME itself is built, but a
+/// contact carries no certificate column for the page to list.
 /// </para>
 /// </remarks>
 public sealed class ContactWindow : Window
@@ -172,7 +173,9 @@ public sealed class ContactWindow : Window
         {
             "contact.show.details" => DetailsPage(),
             "contact.show.allfields" => AllFieldsPage(),
-            "contact.show.certificates" => Waiting("Certificates arrive with S/MIME (Phase 15)."),
+            "contact.show.certificates" => Waiting(
+                "A contact's own S/MIME certificates are not kept on the card yet, so there is "
+                + "nothing to list here."),
             _ => _surface,
         };
 

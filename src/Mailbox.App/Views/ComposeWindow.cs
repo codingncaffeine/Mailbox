@@ -414,10 +414,14 @@ public sealed class ComposeWindow : Window
 
     protected override async void OnClosing(WindowClosingEventArgs e)
     {
-        // Nothing typed, or already dealt with: close without asking. Otherwise offer to keep
-        // it — which is the affordance for the X and for Discard alike, both of which arrive
-        // here through Close().
-        if (_closing || _surface.IsSent || !_surface.HasContent())
+        // Nothing typed, nothing unwritten, or already dealt with: close without asking.
+        // Otherwise offer to keep it — which is the affordance for the X and for Discard alike,
+        // both of which arrive here through Close().
+        //
+        // IsDirty rather than "a draft was saved once": a saved draft goes stale on the next
+        // keystroke, and asking the older question dropped everything typed after the first
+        // save — including the first autosave, which nobody presses.
+        if (_closing || _surface.IsSent || !_surface.HasContent() || !_surface.IsDirty)
         {
             base.OnClosing(e);
             return;
@@ -427,7 +431,9 @@ public sealed class ComposeWindow : Window
         var keep = await Confirm.AskAsync(this, "Save this message?",
             "This message has not been sent. Save it to Drafts?", "Save", destructive: false);
 
-        if (keep) _surface.SaveDraft();
+        // Awaited: the close below must not race the write, and the surface reads its
+        // attachments off the disk to build the draft.
+        if (keep) await _surface.SaveDraftAsync();
 
         // Answered either way: let the next close through, whether or not a draft was kept.
         _closing = true;

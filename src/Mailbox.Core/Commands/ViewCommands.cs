@@ -171,7 +171,7 @@ public static class ViewCommands
         Id = new("view.refresh"),
         Label = "Refresh",
         Description = "Reload the folder pane and the list from the store.",
-        Icon = "sync",
+        Icon = "refresh",
         Category = "Window",
         DefaultGesture = "F5",
         InDefaultLayout = false,
@@ -298,7 +298,10 @@ public static class ViewCommands
         Scope = ModuleScope.Mail,
     };
 
-    /// <summary>Waits for Phase 16's language work, and says so when pressed (§20).</summary>
+    /// <summary>
+    /// Placed, and it says why it does nothing: translating means sending the message to a
+    /// service, and no service has been chosen.
+    /// </summary>
     public static readonly MailboxCommand Translate = new()
     {
         Id = new("view.translate"),
@@ -309,7 +312,10 @@ public static class ViewCommands
         Scope = ModuleScope.Mail,
     };
 
-    /// <summary>Find inside the open message. Waits for Phase 16's polish, and says so (§20).</summary>
+    /// <summary>
+    /// Find inside the open message. Placed, and it says why it does nothing: the body is drawn
+    /// by a web engine this side cannot drive the find of.
+    /// </summary>
     public static readonly MailboxCommand FindInMessage = new()
     {
         Id = new("mail.find"),
@@ -321,7 +327,7 @@ public static class ViewCommands
     };
 
     /// <summary>
-    /// the reference's third Move entry is Send to OneNote. Deliberately absent: that is Microsoft
+    /// The reference's third Move entry is Send to OneNote. Deliberately absent: that is Microsoft
     /// integration, which the project excludes, so the group ships with two entries.
     /// </summary>
     public static readonly MailboxCommand MoveToQuick = new()
@@ -382,8 +388,11 @@ public static class ViewCommands
     {
         Id = new("app.keyboard"),
         Label = "Keyboard Shortcuts",
+        // The icon set has no keyboard, so this borrows Help's question mark — which is also the
+        // key that opens it. A keyboard glyph belongs in the generated map; asking for one that is
+        // not there draws nothing at all, which is what this was doing.
         Description = "Show every command and the key that runs it.",
-        Icon = "keyboard",
+        Icon = "help",
         Category = "Help",
         DefaultGesture = "Shift+OemQuestion",
         AlsoGestures = ["OemQuestion"],
@@ -394,9 +403,10 @@ public static class ViewCommands
     /// The rail's modules as commands, one per accelerator.
     /// </summary>
     /// <remarks>
-    /// Ctrl+1 to Ctrl+8 are the reference's own module switches (§6), Ctrl+9 is Feeds, and the
-    /// enum's values are
-    /// those numbers. They are commands rather than a special case in the key handler so they can
+    /// The reference's own module switches are Ctrl+1 to Ctrl+8 (§6) and Ctrl+9 is Feeds; the
+    /// enum's values are those numbers, so the gesture falls out of the module. Folders and
+    /// Shortcuts have no command here because neither is a module of its own. They are commands
+    /// rather than a special case in the key handler so they can
     /// be rebound, searched for and placed like everything else — and unplaced on the default
     /// ribbon, because the reference switches modules from the rail and not from a tab.
     /// </remarks>

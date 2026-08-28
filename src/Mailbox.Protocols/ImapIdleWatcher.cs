@@ -132,7 +132,19 @@ public sealed class ImapIdleWatcher(AccountConnection account, Func<IImapSession
         catch (OperationCanceledException) { /* Stopping. */ }
     }
 
+    /// <summary>
+    /// Tells the loop to stop without waiting for it. Separated from <see cref="Stop"/> so a
+    /// caller closing several watchers can cancel them all first and have them unwind at the
+    /// same time, rather than paying each one's wait end to end.
+    /// </summary>
+    public void BeginStop() => _stop?.Cancel();
+
     /// <summary>Stops watching and lets the connection go. Waits briefly for the loop to unwind.</summary>
+    /// <remarks>
+    /// The wait is up to two seconds — the case where the loop is mid-network-read and the
+    /// cancellation has nowhere to land until the read returns. That makes this the wrong thing
+    /// to call on the UI thread: see <see cref="BeginStop"/>.
+    /// </remarks>
     public void Stop()
     {
         _stop?.Cancel();

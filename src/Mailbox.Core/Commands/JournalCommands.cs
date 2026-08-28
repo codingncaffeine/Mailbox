@@ -26,8 +26,10 @@ public static class JournalCommands
         KeyTip = "NJ",
         DefaultGesture = "Ctrl+Shift+J",
 
-        // Ctrl+N makes the open module's new thing, which here is an entry.
+        // Ctrl+N makes the open module's new thing, which here is an entry. GestureHome is what
+        // says so — see CalendarCommands.NewAppointment for why Scope cannot.
         AlsoGestures = ["Ctrl+N"],
+        GestureHome = ModuleScope.Journal,
     };
 
     public static readonly MailboxCommand NewItems = new()

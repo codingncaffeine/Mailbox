@@ -9,7 +9,7 @@ namespace Mailbox.Import;
 /// </summary>
 /// <remarks>
 /// Decompression is MimeKit's, already trusted here for everything MIME. What is ours is what
-/// happens after: Outlook-written RTF is very often just HTML in a coat ([MS-OXRTFEX] — the
+/// happens after: RTF from those writers is very often just HTML in a coat ([MS-OXRTFEX] — the
 /// original markup carried in <c>\*\htmltag</c> groups, with the RTF's own rendering fenced
 /// behind <c>\htmlrtf</c> toggles), and that HTML is recovered rather than re-derived. RTF that
 /// was really written as RTF is stripped to its text: formatting is the part that cannot be

@@ -140,7 +140,7 @@ public sealed class GoogleTasksSync(GoogleTasksApi api, PimRepository repository
                 // rather than silently, because it is the one case where local work disappears.
                 if (queued.ContainsKey(row.Id))
                 {
-                    Log.Warn($"“{row.Summary}” was deleted in the Google list; the change made here could not be sent.");
+                    Log.Warn($"Task {row.Id} was deleted in the Google list; the change made here could not be sent.");
                 }
 
                 repository.DeleteItem(row.Id);

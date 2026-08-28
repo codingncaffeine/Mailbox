@@ -122,8 +122,12 @@ public sealed class NoteWindow : Window
         _made.Foreground = new SolidColorBrush(Colour(TokenKeys.Notes.TextDim));
     }
 
+    /// <summary>
+    /// A token's colour, or magenta when a theme has not defined it — the same loud fallback
+    /// the drawn surfaces use. A plausible note yellow here would hide the missing token.
+    /// </summary>
     private Color Colour(string key)
-        => this.TryFindResource(key + ".color", out var found) && found is Color colour ? colour : Colors.Khaki;
+        => this.TryFindResource(key + ".color", out var found) && found is Color colour ? colour : Colors.Magenta;
 
     private double Number(string key, double fallback)
         => this.TryFindResource(key + ".value", out var found) && found is double value ? value : fallback;

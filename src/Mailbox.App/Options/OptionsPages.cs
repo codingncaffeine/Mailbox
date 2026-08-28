@@ -24,8 +24,13 @@ public static class OptionsPages
     {
         public const string UserName = "general.username";
         public const string Initials = "general.initials";
-        public const string FirstDayOfWeek = "calendar.firstdayofweek";
-        public const string ShowWeekNumbers = "calendar.showweeknumbers";
+
+        // The two the calendar reads are named there, not again here: two constants holding the
+        // same string are one rename away from being two settings, and the reader whose week
+        // started on Monday would find it starting on Sunday with no way to see why.
+        public const string FirstDayOfWeek = CalendarOptions.FirstDayOfWeekKey;
+        public const string ShowWeekNumbers = CalendarOptions.ShowWeekNumbersKey;
+
         public const string ShowReadingPane = "panes.showreadingpane";
         public const string ReadingPaneAtBottom = "panes.readingpane.bottom";
     }
@@ -117,8 +122,8 @@ public static class OptionsPages
                 [
                     new ComboRow("Compose messages in this format:",
                         ["HTML", "Rich Text", "Plain Text"], 0, 130, 210) { Key = MailOptions.ComposeFormatKey },
-                    // Text prediction is an AI feature, which the plan rules out on its first
-                    // page. Greyed rather than removed: the row is where the reference puts it.
+                    // Text prediction is an AI feature, and this application ships none.
+                    // Greyed rather than removed: the row is where the reference puts it.
                     new CheckRow("Show text predictions while typing") { HasInfo = true, IsDisabled = true },
                 ]),
                 new ActionRow("reader", string.Empty, "Spelling and Autocorrect...",
@@ -581,7 +586,13 @@ public static class OptionsPages
             new OptionSection("Message authentication",
             [
                 new CheckRow("Show DKIM, SPF and DMARC results in the reading pane", true),
-                new CheckRow("Warn me about lookalike sender domains", true),
+                // The same switch Junk Email Options draws as "warn me about suspicious domain
+                // names", and so the same key: keyed by its own label it was a second, silent
+                // copy, and turning it off here left the warnings coming.
+                new CheckRow("Warn me about lookalike sender domains", true)
+                {
+                    Key = MailOptions.JunkWarnDomainsKey,
+                },
                 new CheckRow("Warn me when a display name disagrees with the sending address", true),
             ]),
         ]);

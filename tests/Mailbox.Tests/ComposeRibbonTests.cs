@@ -223,7 +223,7 @@ public class ComposeRibbonTests
     /// goes stale silently: the phase lands, the command stays blocked for a different reason,
     /// and the note now says something false while looking maintained. What is missing — the list
     /// a compose window was opened from, a message picker, the properties dialog — stays true
-    /// whatever the plan does, and is what somebody pressing the button actually wants to know.
+    /// whatever ships next, and is what somebody pressing the button actually wants to know.
     /// </remarks>
     [Fact]
     public void NoBlockedNoteNamesAPhase()

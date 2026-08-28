@@ -460,8 +460,15 @@ public sealed class RibbonView : ContentControl
             Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Arrow),
         };
 
-        Bind(button, BackgroundProperty,
-            selected ? "ribbon.tab.selected.brush" : "ribbon.tab.rest.brush");
+        // Classed rather than bound. Binding the Background here set a local value, and a local
+        // value beats every style setter — which is why the tab strip had no hover state at all
+        // while every theme defined ribbon.tab.hover for one. The ribbon's own buttons were
+        // moved off local Backgrounds for this exact reason; Shell.axaml records it.
+        //
+        // A static class is enough because the strip is rebuilt whenever the active tab changes:
+        // ActiveTabId's setter calls Rebuild.
+        button.Classes.Add("ribbontab");
+        if (selected) button.Classes.Add("selected");
 
         button.Click += (_, _) =>
         {
@@ -779,9 +786,9 @@ public sealed class RibbonView : ContentControl
         var shadow = new Border
         {
             CornerRadius = new CornerRadius(RibbonMetrics.BodyCornerRadius),
-            BoxShadow = BoxShadows.Parse("0 1 3 0 #94000000"),
             Background = Brushes.Transparent,
         };
+        Bind(shadow, Border.BoxShadowProperty, "elevation.ribbon.boxshadow");
 
         var host = new Border
         {
