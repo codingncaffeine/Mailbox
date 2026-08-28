@@ -233,43 +233,75 @@ public partial class MainWindow : Window
         // does what §20 says rather than what its handler's name suggests.
         // Once per run, not once per window: Open in New Window makes a second shell, and a
         // second shell that ran the same command list again would open a third.
+        // Selects every row in the list, so a command can be pressed over a selection rather than
+        // over one message: MAILBOX_SELECT_ALL=1. Posted at Loaded, which is before the Background
+        // pass MAILBOX_RUN acts on, so a run sees the whole selection. The per-account guard on
+        // the unified mailbox — one press, one undo step, each account's own store written — has
+        // no other way in, a selection being something only a pointer or Ctrl+A can make.
+        // Posted from inside a Loaded pass rather than at it: MAILBOX_FOLDER's own handler runs at
+        // Loaded and replaces the list, and a selection made in the same pass is thrown away with
+        // the rows it was made over. The nesting is what puts this after the folder has changed —
+        // the same trick MAILBOX_SELECT uses for the same reason.
+        if (Environment.GetEnvironmentVariable("MAILBOX_SELECT_ALL") is "1" or "true")
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(
+                () => Dispatcher.UIThread.Post(Phase4BSelectAll, DispatcherPriority.Loaded),
+                DispatcherPriority.Loaded);
+        }
+
         if (Environment.GetEnvironmentVariable("MAILBOX_RUN") is { Length: > 0 } run && !_harnessRan)
         {
             _harnessRan = true;
-            Opened += (_, _) => Dispatcher.UIThread.Post(() =>
+
+            // One post per command, as a person's presses arrive — not all of them in one pass of
+            // the loop. A command that reloads the list replaces every row with a fresh object,
+            // and the next command in the same pass then acts on a selection that no longer holds
+            // anything: pressing the flag command twice reported the second press as a no-op and
+            // left the message flagged rather than complete, which reads exactly like a command
+            // that does not work. MAILBOX_KEY has posted one per pass for this reason since it was
+            // written; this had not.
+            Opened += (_, _) =>
             {
                 foreach (var id in run.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                 {
-                    Log.Info($"Harness: running {id}.");
+                    var one = id;
+                    Dispatcher.UIThread.Post(
+                        () =>
+                        {
+                            Log.Info($"Harness: running {one}.");
 
-                    // Reply and forward open a window only when the Options page asks for one;
-                    // otherwise they grow inline in this window, which this window's own capture
-                    // shows. Photograph the next window only in the windowed case.
-                    if (id is "mail.reply" or "mail.reply.all" or "mail.forward"
-                        && App.MailOptions.OpenRepliesInNewWindow)
-                    {
-                        CaptureNextWindow();
-                    }
+                            // Reply and forward open a window only when the Options page asks for
+                            // one; otherwise they grow inline in this window, which this window's
+                            // own capture shows. Photograph the next window only in that case.
+                            if (one is "mail.reply" or "mail.reply.all" or "mail.forward"
+                                && App.MailOptions.OpenRepliesInNewWindow)
+                            {
+                                CaptureNextWindow();
+                            }
 
-                    // MAILBOX_CAPTURE_DIALOG=1 photographs whatever window the command opens
-                    // rather than the shell behind it, which is the only way to look at a dialog:
-                    // a modal is a window of its own and never appears in the shell's picture.
-                    if (Environment.GetEnvironmentVariable("MAILBOX_CAPTURE_DIALOG") == "1")
-                    {
-                        CaptureNextWindow();
-                    }
+                            // MAILBOX_CAPTURE_DIALOG=1 photographs whatever window the command
+                            // opens rather than the shell behind it, which is the only way to look
+                            // at a dialog: a modal is a window of its own and never appears in the
+                            // shell's picture.
+                            if (Environment.GetEnvironmentVariable("MAILBOX_CAPTURE_DIALOG") == "1")
+                            {
+                                CaptureNextWindow();
+                            }
 
-                    RunCommand(new CommandId(id));
+                            RunCommand(new CommandId(one));
 
-                    // The status line and the windows: a press that opens a dialog writes no
-                    // status, and "nothing happened" and "a dialog opened" read identically
-                    // without this. Learnt from the row menu, which asks the same question.
-                    if (DataContext is ShellViewModel s)
-                    {
-                        Log.Info($"Harness: status \u201c{s.StatusRight}\u201d, windows: {OtherWindows()}");
-                    }
+                            // The status line and the windows: a press that opens a dialog writes
+                            // no status, and "nothing happened" and "a dialog opened" read
+                            // identically without this. Learnt from the row menu, which asks the
+                            // same question.
+                            if (DataContext is ShellViewModel s)
+                            {
+                                Log.Info($"Harness: status \u201c{s.StatusRight}\u201d, windows: {OtherWindows()}");
+                            }
+                        },
+                        DispatcherPriority.Background);
                 }
-            }, DispatcherPriority.Background);
+            };
         }
 
         // Links the posed selection to whoever the value names, and reads both cards back —
@@ -632,17 +664,18 @@ public partial class MainWindow : Window
 
                 if (snooze == "wake")
                 {
-                    var woken = s.WakeSnoozed(DateTimeOffset.UtcNow);
-                    Log.Info($"Harness: woke {woken.Count} snoozed message(s).");
+                    var woken = s.WakeSnoozed(Mailbox.Core.PosedClock.Now);
+                    Log.Info($"Harness: woke {woken.Count} snoozed message(s) as of "
+                             + $"{Mailbox.Core.PosedClock.Now:yyyy-MM-dd HH:mm}.");
                     return;
                 }
 
                 if (int.TryParse(snooze, out var index))
                 {
-                    var presets = Mailbox.Core.SnoozePresets.For(DateTimeOffset.Now);
+                    var presets = Mailbox.Core.SnoozePresets.For(Mailbox.Core.PosedClock.Now);
                     var (header, until) = presets[Math.Clamp(index, 0, presets.Count - 1)];
                     s.Snooze(SelectedRows(), until);
-                    Log.Info($"Harness: {header} → status “{s.StatusRight}”");
+                    Log.Info($"Harness: {header} → until {until:yyyy-MM-dd HH:mm}, status “{s.StatusRight}”");
                 }
             }, DispatcherPriority.Background);
         }
@@ -677,14 +710,9 @@ public partial class MainWindow : Window
                 {
                     if (DataContext is not ShellViewModel s) return;
 
-                    // "unified:Inbox" names one of the All Accounts folders, which otherwise
-                    // cannot be told from the six others with the same names.
-                    var match = wanted.StartsWith("unified:", StringComparison.OrdinalIgnoreCase)
-                        ? s.Folders.FirstOrDefault(
-                            f => f.Kind == FolderNodeKind.Unified
-                                 && f.Name.Contains(wanted["unified:".Length..], StringComparison.OrdinalIgnoreCase))
-                        : s.Folders.FirstOrDefault(
-                            f => f.Name.Contains(wanted, StringComparison.OrdinalIgnoreCase));
+                    // Named plainly, as one of the All Accounts folders ("unified:Inbox"), or with
+                    // the account it belongs to ("you@example.com/Inbox") — see FolderNamed.
+                    var match = FolderNamed(s, wanted);
 
                     Log.Info(match is null
                         ? $"No folder matching '{wanted}' in: {string.Join(", ", s.Folders.Select(f => f.Name))}"
@@ -853,6 +881,11 @@ public partial class MainWindow : Window
         {
             Opened += (_, _) => _ribbon.RevealCollapsedRibbon();
         }
+
+        // Pressing a button inside a dialog, and reading the undo stack back. Wired last so both
+        // act after every pose above has had its say — the stack the run finished with is the
+        // claim, not the stack half-way through it.
+        WirePhase4APoses();
     }
 
     /// <summary>
@@ -1093,7 +1126,18 @@ public partial class MainWindow : Window
             // Undo Send's toast is there for a few seconds after a send, which a capture cannot
             // make happen. Posed against a fixed clock so the countdown reads the same every run
             // — a photograph of a number that changes is not a measurement.
+            //
+            // MAILBOX_UNDOSEND takes it further than a photograph: over a message really in the
+            // outbox, with the real withdrawal behind the button, so the button can be pressed
+            // and what it did read back out of the store. See Phase4BUndoSend.
             case "undosend":
+                if (Environment.GetEnvironmentVariable("MAILBOX_UNDOSEND") is { Length: > 0 } undoSpec)
+                {
+                    Opened += (_, _) => Dispatcher.UIThread.Post(
+                        () => Phase4BUndoSend(undoSpec), DispatcherPriority.Loaded);
+                    break;
+                }
+
                 Opened += (_, _) => _undoSend.Offer(
                     new QueuedMessageEventArgs(
                         "you@example.com", 0, DateTimeOffset.UtcNow.AddSeconds(5),
@@ -1546,8 +1590,15 @@ public partial class MainWindow : Window
                         names.AddDnsName("d8.my-control-panel.com");
                         request.CertificateExtensions.Add(names.Build());
 
+                        // Really out of date for the expired pose, rather than in date and merely
+                        // said to be: the dialog's wording chooses between "it expired on" and
+                        // "it is not valid until" by reading the certificate, so a certificate
+                        // that is fine photographed a sentence the real path can never produce
+                        // — "not valid until" a date a month in the past.
+                        var expiredPose = Environment.GetEnvironmentVariable("MAILBOX_CERT_FAULT") == "expired";
                         using var certificate = request.CreateSelfSigned(
-                            DateTimeOffset.UtcNow.AddDays(-30), DateTimeOffset.UtcNow.AddDays(60));
+                            DateTimeOffset.UtcNow.AddDays(expiredPose ? -400 : -30),
+                            DateTimeOffset.UtcNow.AddDays(expiredPose ? -35 : 60));
 
                         var facts = Mailbox.Security.Tls.CertificateFacts.Read(certificate);
                         var fault = Environment.GetEnvironmentVariable("MAILBOX_CERT_FAULT") switch
@@ -1633,8 +1684,43 @@ public partial class MainWindow : Window
             case "searchfolder":
                 Opened += async (_, _) =>
                 {
+                    if (DataContext is not ShellViewModel s) return;
                     CaptureNextWindow();
-                    await new NewSearchFolderDialog(DataContext is ShellViewModel s ? s.CurrentAccountForCategories() : null).ShowDialog(this);
+
+                    // MAILBOX_SEARCHFOLDER picks a criterion in the list and presses OK. Through
+                    // NewSearchFolderAsync — the shell's own consumer — rather than a dialog of
+                    // its own, so what is proven is that the criterion the reader chose becomes a
+                    // folder in the store and a row in the pane. See Phase4BSearchFolder.
+                    if (Environment.GetEnvironmentVariable("MAILBOX_SEARCHFOLDER") is { Length: > 0 } pick)
+                    {
+                        var (criterion, then) = pick.Split('|', 2) is [var head, var tail] ? (head, tail) : (pick, null);
+                        Dispatcher.UIThread.Post(() => Phase4BSearchFolder(criterion), DispatcherPriority.Background);
+                        await NewSearchFolderAsync(s, null);
+                        Phase4BReportSearchFolders(s);
+
+                        // "|<command-id>" acts on the folder that was just made and reports it
+                        // again: a saved query is only a search folder if its contents follow the
+                        // mail, and one report cannot show that.
+                        if (then is { Length: > 0 })
+                        {
+                            Log.Info($"Harness: search folder — running {then} on what it holds.");
+                            s.SelectedMessage = s.Messages.FirstOrDefault();
+                            s.SelectedRow = s.SelectedMessage;
+                            RunCommand(new CommandId(then));
+                            Phase4BReportSearchFolders(s);
+                            Log.Info($"Harness: search folder — the list now draws {s.Messages.Count} row(s).");
+
+                            // And again after a refresh, which is what a reader gets by leaving
+                            // the folder and coming back: the two answers apart are what says
+                            // whether the query re-runs on the change or on the visit.
+                            s.Refresh();
+                            Log.Info($"Harness: search folder — after a refresh the list draws {s.Messages.Count} row(s).");
+                        }
+
+                        return;
+                    }
+
+                    await new NewSearchFolderDialog(s.CurrentAccountForCategories()).ShowDialog(this);
                 };
                 break;
 
@@ -1842,7 +1928,18 @@ public partial class MainWindow : Window
                 Opened += async (_, _) =>
                 {
                     CaptureNextWindow();
-                    await new RulesAndAlertsDialog(DataContext is ShellViewModel s ? s.CurrentAddress : null).ShowDialog(this);
+                    var alerts = new RulesAndAlertsDialog(DataContext is ShellViewModel s ? s.CurrentAddress : null);
+
+                    // MAILBOX_RULES_PRESS reports every toolbar button's enabled state and presses
+                    // the ones it names — the reference greys six of them without a rule selected,
+                    // which is a claim only a read-back can hold. See Phase4BRulesDialog.
+                    if (Environment.GetEnvironmentVariable("MAILBOX_RULES_PRESS") is { Length: > 0 } press)
+                    {
+                        alerts.Opened += (_, _) => Dispatcher.UIThread.Post(
+                            () => Phase4BRulesDialog(alerts, press), DispatcherPriority.Loaded);
+                    }
+
+                    await alerts.ShowDialog(this);
                 };
                 break;
 
@@ -1854,6 +1951,17 @@ public partial class MainWindow : Window
                     if (DataContext is not ShellViewModel s || s.CurrentAccountForCategories() is not { } account) return;
                     CaptureNextWindow();
                     var wizard = new RuleWizard(account.Mail, account.Account.Id);
+
+                    // MAILBOX_WIZARD_PRESS walks the pages through their own buttons and reports
+                    // the rule that comes out — the wizard's five pages are otherwise five
+                    // photographs of a wizard that has never been asked to do anything.
+                    if (Environment.GetEnvironmentVariable("MAILBOX_WIZARD_PRESS") is { Length: > 0 } walk)
+                    {
+                        wizard.Opened += (_, _) => Dispatcher.UIThread.Post(
+                            () => Phase4BWizard(wizard, walk), DispatcherPriority.Loaded);
+                        wizard.Closed += (_, _) => Phase4BReportRule(wizard.Result, wizard.RunNow, "the wizard");
+                    }
+
                     await wizard.ShowDialog(this);
                 };
                 break;
@@ -1873,7 +1981,17 @@ public partial class MainWindow : Window
                 {
                     if (DataContext is not ShellViewModel s || s.CurrentAccountForCategories() is not { } account) return;
                     CaptureNextWindow();
-                    await new RunRulesNowDialog(account).ShowDialog(this);
+                    var runRules = new RunRulesNowDialog(account);
+
+                    // MAILBOX_RULES_RUN presses the dialog's own buttons, so what Run Now did can
+                    // be read back out of the store — see Phase4BRunRules.
+                    if (Environment.GetEnvironmentVariable("MAILBOX_RULES_RUN") is { Length: > 0 } press)
+                    {
+                        runRules.Opened += (_, _) => Dispatcher.UIThread.Post(
+                            () => Phase4BRunRules(runRules, press), DispatcherPriority.Loaded);
+                    }
+
+                    await runRules.ShowDialog(this);
                 };
                 break;
 
@@ -1934,7 +2052,13 @@ public partial class MainWindow : Window
                 Opened += async (_, _) =>
                 {
                     CaptureNextWindow();
+
+                    // What the dialog's ticks decide, before and after it is used: which accounts
+                    // each group covers and which a Send/Receive All reaches. A capture of the
+                    // ticks proves the ticks — see Phase4BGroups.
+                    Phase4BGroups(AccountAddresses());
                     await new SendReceiveGroupsDialog(App.Groups, AccountAddresses()).ShowDialog(this);
+                    Phase4BGroups(AccountAddresses());
                 };
                 break;
 
@@ -2028,16 +2152,32 @@ public partial class MainWindow : Window
                     var window = new SendReceiveProgressDialog(tasks, App.Settings, () => { });
                     window.Show(this);
 
+                    // The dialog opens on Tasks and there is no other way to the Errors tab, which
+                    // is where an account that could not be reached says why — see Phase4BProgressTab.
+                    if (Environment.GetEnvironmentVariable("MAILBOX_PROGRESS_TAB") is { Length: > 0 } tab)
+                    {
+                        Dispatcher.UIThread.Post(
+                            () => Phase4BProgressTab(window, tab), DispatcherPriority.Loaded);
+                    }
+
                     // Refreshed through a state change, which is the sequence a real run puts it
                     // through and the one the pose never did: a row that says Processing and then
                     // says Completed is where stale text on a reused row shows up. Building the
                     // states first and showing the window once cannot produce it.
-                    tasks.Report(new PollProgress(first, 0, 0, "Sending"));
-                    window.Refresh();
-                    tasks.Report(new PollProgress(first, 0, 0, "Connecting"));
-                    window.Refresh();
-                    tasks.Report(new PollProgress(first, 5, 9, "Downloading"));
-                    window.Refresh();
+                    //
+                    // Only for the mid-flight pose. A report after Finish puts a finished task
+                    // back into Processing, so running these under =finished or =failed
+                    // photographed a run still going and both end states were unreachable — the
+                    // opposite of what those two values say they show.
+                    if (Environment.GetEnvironmentVariable("MAILBOX_PROGRESS_STATE") is not ("finished" or "failed"))
+                    {
+                        tasks.Report(new PollProgress(first, 0, 0, "Sending"));
+                        window.Refresh();
+                        tasks.Report(new PollProgress(first, 0, 0, "Connecting"));
+                        window.Refresh();
+                        tasks.Report(new PollProgress(first, 5, 9, "Downloading"));
+                        window.Refresh();
+                    }
                 };
                 break;
         }
@@ -2065,6 +2205,13 @@ public partial class MainWindow : Window
                 // Posed before the window opens: a capture never gets a second layout pass,
                 // so anything toggled afterwards photographs at its old size.
                 compose.ShowOptionalFields();
+
+                // The audit's compose lane — the whole address block, pressing an arbitrary
+                // compose command, attaching a real file, and the states a capture cannot show.
+                // Wired here rather than lower down so its Opened handler is registered before
+                // MAILBOX_COMPOSE_QUEUE's: a pose that sets a header and a pose that sends have
+                // to happen in that order.
+                WirePhase5ADoors(compose);
 
                 // The address rows are measured against the reference, and an empty field
                 // cannot be measured — the thing being checked is where the text sits.
@@ -2105,6 +2252,10 @@ public partial class MainWindow : Window
                     }, DispatcherPriority.Background);
                 }
 
+                // Presses formatting commands on the editor — MAILBOX_COMPOSE_RUN. Registered
+                // here so its post runs after anything typed above and before the send below.
+                PoseComposeEditor(compose);
+
                 // What the compose bar's "…" lists at this width, which a capture cannot show.
                 if (Environment.GetEnvironmentVariable("MAILBOX_PEEK")?.ToLowerInvariant() == "overflow")
                 {
@@ -2137,7 +2288,15 @@ public partial class MainWindow : Window
 
                 compose.Opened += async (_, _) =>
                 {
-                    await Task.Delay(700);
+                    // 700ms is enough to lay a window out and is not enough to open a certificate
+                    // store: the first S/MIME send on a fresh store builds certificates.db and
+                    // imports the system roots, and the run exited part-way through with no
+                    // message queued and no line in the log saying why. MAILBOX_COMPOSE_SETTLE
+                    // buys the time, for the poses that need it and no others.
+                    await Task.Delay(
+                        int.TryParse(Environment.GetEnvironmentVariable("MAILBOX_COMPOSE_SETTLE"), out var wait)
+                        && wait is > 0 and <= 60_000 ? wait : 700);
+
                     if (WindowCapture.RequestedPath is { } path)
                     {
                         WindowCapture.Capture(compose, path, WindowCapture.Scale);
@@ -2183,8 +2342,12 @@ public partial class MainWindow : Window
                 // level that lives in a popup, so this line is the only way to see where the
                 // traversal got to — and a level that reports nothing at all reads as a level
                 // that is not there.
+                // The letters as well as the count: a count says a level is populated and cannot
+                // say with what, and "is the collapsed group's own badge there" is exactly the
+                // question a missing group KeyTip answers wrongly.
                 Dispatcher.UIThread.Post(
-                    () => Log.Info($"KeyTips: level {_keyTips.Depth}, {_keyTips.BadgeCount} badges"),
+                    () => Log.Info($"KeyTips: level {_keyTips.Depth}, {_keyTips.BadgeCount} badges"
+                                   + $" [{string.Join(" ", _keyTips.Badges)}]"),
                     DispatcherPriority.Background);
             }, DispatcherPriority.ContextIdle);
         }
@@ -2645,7 +2808,12 @@ public partial class MainWindow : Window
         foreach (var toast in NewMailNotice.Toasts(result, DescribeArrival))
         {
             Log.Info($"Harness: toast “{toast.Summary}” / “{toast.Body.Replace('\n', '|')}” for #{toast.MessageId}.");
-            _notifier.Notify(ToastFor(toast));
+
+            // The buttons and the transient flag as well as the words: neither is in a capture,
+            // and "stays in the server's history" is the claim the flag makes.
+            var notification = ToastFor(toast);
+            Phase4BReportToast(notification);
+            _notifier.Notify(notification);
 
             if (action is { Length: > 0 })
             {
@@ -3381,6 +3549,11 @@ public partial class MainWindow : Window
             compose.EditDraft(draft.Id, message);
             compose.Queued += (_, e) => OnQueued(e);
             compose.Closed += (_, _) => shell.Refresh();
+
+            // The reopened draft answers the same doors a new message does, which is the only way
+            // to ask whether it came back the way it went in: the round trip is a claim about two
+            // windows in two runs, and the second one is this.
+            WirePhase5ADoors(compose);
             compose.Show(this);
             return;
         }
@@ -5175,6 +5348,10 @@ public partial class MainWindow : Window
         host.InvalidateMeasure();
         host.UpdateLayout();
 
+        // Formatting commands over the inline reply's editor — MAILBOX_COMPOSE_RUN — before the
+        // send below, so what they did is what goes on the wire.
+        PoseInlineComposeEditor();
+
         // The harness sends the inline reply too, so its wire form — the threading headers most
         // of all — can be read back out of the outbox exactly as the windowed reply's is.
         if (Environment.GetEnvironmentVariable("MAILBOX_COMPOSE_QUEUE") is { Length: > 0 })
@@ -5360,7 +5537,23 @@ public partial class MainWindow : Window
         if (id == MailCommands.NeverBlockSender.Id) { shell.NeverBlockSenders(rows, domain: false); return true; }
         if (id == MailCommands.NeverBlockDomain.Id) { shell.NeverBlockSenders(rows, domain: true); return true; }
         if (id == MailCommands.NeverBlockGroup.Id) { shell.NeverBlockRecipients(rows); return true; }
-        if (id == MailCommands.NotJunk.Id) { shell.MarkJunk(rows); return true; }
+        // Not Junk belongs to the Junk folder, and the menu greys it everywhere else. The
+        // catalogue lets any command be put on the toolbar or bound to a key, though, and there
+        // nothing greys it: pressed on inbox mail it reached MarkJunk, which reads the folder to
+        // decide which way to go, and marked the message *as* junk — a command doing the exact
+        // opposite of its own label and description. It says so instead, in the words its own
+        // menu entry uses.
+        if (id == MailCommands.NotJunk.Id)
+        {
+            if (shell.CurrentFolderRole != FolderRole.Junk)
+            {
+                shell.StatusRight = "Not Junk is only for messages in the Junk Email folder.";
+                return true;
+            }
+
+            shell.MarkJunk(rows);
+            return true;
+        }
         if (id == MailCommands.JunkOptions.Id) { ShowJunkOptions(shell); return true; }
 
         // The reference's Unread/Read button toggles: unread if the selection is all read, read
@@ -5376,7 +5569,7 @@ public partial class MainWindow : Window
             if (rows.Count == 0) return true;
             if (rows.All(r => r.IsFlagged)) shell.MarkFollowUpComplete(rows);
             else if (App.QuickClick.Flag == QuickFlag.Complete) shell.MarkFollowUpComplete(rows);
-            else shell.FlagForFollowUp(rows, QuickClickSettings.DueDate(App.QuickClick.Flag, DateTimeOffset.Now));
+            else shell.FlagForFollowUp(rows, QuickClickSettings.DueDate(App.QuickClick.Flag, Mailbox.Core.PosedClock.Now));
             return true;
         }
 
@@ -5466,7 +5659,11 @@ public partial class MainWindow : Window
             return flyout;
         }
 
-        var now = DateTimeOffset.Now;
+        // PosedClock, as the Snooze menu's presets are and as the list's own grouping is: "Today"
+        // and "This Week" have to mean the day the list is showing, or a capture of a flagged
+        // message reads a date the run cannot be repeated to. The real clock when nothing is
+        // pinned.
+        var now = Mailbox.Core.PosedClock.Now;
 
         // The reference's own presets, each under the flag. The dates are the Quick Click
         // settings' own arithmetic, so the menu and a single click in the Flag column cannot
@@ -5538,7 +5735,11 @@ public partial class MainWindow : Window
             return;
         }
 
-        foreach (var (header, until) in Mailbox.Core.SnoozePresets.For(DateTimeOffset.Now))
+        // The posed clock, not the machine's: the list groups by it, and a Snooze menu offering
+        // "Later Today" four hours after a day the list is not showing writes captions no capture
+        // can hold still and a return no run can travel to. Live in an ordinary run — PosedClock
+        // is the real clock until MAILBOX_TODAY pins it.
+        foreach (var (header, until) in Mailbox.Core.SnoozePresets.For(Mailbox.Core.PosedClock.Now))
         {
             var item = new MenuItem { Header = header };
             var when = until;
@@ -5549,12 +5750,13 @@ public partial class MainWindow : Window
         var custom = new MenuItem { Header = "Custom…" };
         custom.Click += async (_, _) =>
         {
+            var now = Mailbox.Core.PosedClock.Now.LocalDateTime;
             var entered = await Prompt.AskAsync(this, "Snooze until", "Date and time (yyyy-MM-dd HH:mm):",
-                DateTime.Now.AddHours(4).ToString("yyyy-MM-dd HH:mm"));
+                now.AddHours(4).ToString("yyyy-MM-dd HH:mm"));
             if (entered is null) return;
 
             if (DateTime.TryParse(entered, System.Globalization.CultureInfo.CurrentCulture,
-                    System.Globalization.DateTimeStyles.AssumeLocal, out var when) && when > DateTime.Now)
+                    System.Globalization.DateTimeStyles.AssumeLocal, out var when) && when > now)
             {
                 shell.Snooze(rows, new DateTimeOffset(when));
             }
@@ -5770,7 +5972,19 @@ public partial class MainWindow : Window
     /// menu keeps its shape whatever the selection.
     /// </remarks>
     private void ShowCategorizeMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
-        => CategorizeMenu(shell, rows).ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+    {
+        // MAILBOX_CATEGORIZE presses one of its entries, as it already does for the other
+        // modules' menu. It reached ItemCategoryMenu only, which the mail module does not use —
+        // so the mail Categorize menu had no door at all, and nothing could assign a category to
+        // a message through the real path.
+        if (Environment.GetEnvironmentVariable("MAILBOX_CATEGORIZE") is { Length: > 0 } posed)
+        {
+            PoseCategorizeMail(shell, rows, posed);
+            return;
+        }
+
+        CategorizeMenu(shell, rows).ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+    }
 
     /// <summary>The Categorize entries, shared by the bar and the row menu.</summary>
     private MenuFlyout CategorizeMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
@@ -5842,7 +6056,7 @@ public partial class MainWindow : Window
         {
             if (e.Row.IsFlagged) shell.ClearFollowUpFlag(rows);
             else if (App.QuickClick.Flag == QuickFlag.Complete) shell.MarkFollowUpComplete(rows);
-            else shell.FlagForFollowUp(rows, QuickClickSettings.DueDate(App.QuickClick.Flag, DateTimeOffset.Now));
+            else shell.FlagForFollowUp(rows, QuickClickSettings.DueDate(App.QuickClick.Flag, Mailbox.Core.PosedClock.Now));
             return;
         }
 
@@ -6794,7 +7008,10 @@ public partial class MainWindow : Window
     /// </summary>
     private void WakeSnoozed(ShellViewModel shell)
     {
-        var woken = shell.WakeSnoozed(DateTimeOffset.UtcNow);
+        // PosedClock, so a run that has travelled forward with MAILBOX_TODAY sees the messages
+        // whose time has come by *that* day — the only way the "it returns on time" claim can be
+        // proven without waiting for the time to arrive. The real clock when nothing is pinned.
+        var woken = shell.WakeSnoozed(Mailbox.Core.PosedClock.Now);
         if (woken.Count == 0) return;
 
         AnnounceArrival(woken.Count);

@@ -101,6 +101,18 @@ public sealed class KeyTipSession
     /// <summary>How many badges are on screen at this level.</summary>
     public int BadgeCount => _shown.Count;
 
+    /// <summary>
+    /// The letters on the badges at this level, in the order they were placed.
+    /// </summary>
+    /// <remarks>
+    /// A badge lives in an adorner layer and, below the first level, often in a popup — neither of
+    /// which the in-process capture can photograph, so all seven of the audit's level-3 captures
+    /// came out byte-identical. The count alone says a level is populated; it cannot say
+    /// <em>with what</em>, which is the question a missing group KeyTip is an answer to. Harness
+    /// only.
+    /// </remarks>
+    public IReadOnlyList<string> Badges => [.. _shown.Select(entry => entry.Target.Tip)];
+
     /// <summary>Raised whenever the session opens or closes, so a host can mark its state.</summary>
     public event EventHandler? ActiveChanged;
 

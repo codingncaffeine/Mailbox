@@ -39,6 +39,18 @@ public static class Chooser
     {
         ArgumentNullException.ThrowIfNull(choices);
 
+        // A posed answer, for a harness that cannot click a modal — see HarnessAnswer. Capture
+        // runs only, and only while MAILBOX_ANSWER still has an entry left for this dialog.
+        if (HarnessAnswer.Next(title) is { } posed)
+        {
+            return HarnessAnswer.IsCancel(posed)
+                ? null
+                : choices.FirstOrDefault(c =>
+                        string.Equals(c.Value, posed, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(c.Label, posed, StringComparison.OrdinalIgnoreCase))
+                    ?.Value ?? posed;
+        }
+
         string? answer = null;
 
         var caption = new TextBlock { Text = label };

@@ -22,6 +22,13 @@ public static class Prompt
     public static async Task<string?> AskAsync(
         Window owner, string title, string label, string value = "", bool multiline = false)
     {
+        // A posed answer, for a harness that cannot type into a modal — see HarnessAnswer.
+        // Capture runs only, and only while MAILBOX_ANSWER still has an entry for this dialog.
+        if (HarnessAnswer.Next(title) is { } posed)
+        {
+            return HarnessAnswer.IsCancel(posed) ? null : posed;
+        }
+
         string? answer = null;
 
         var caption = new TextBlock { Text = label };

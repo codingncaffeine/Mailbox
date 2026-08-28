@@ -26,7 +26,7 @@ namespace Mailbox.App.Views;
 /// frame, the caption buttons, its own ribbon, the Backstage overlay, and the save-on-close
 /// prompt. Its public surface is unchanged, so the shell opens it exactly as before.
 /// </remarks>
-public sealed class ComposeWindow : Window
+public sealed partial class ComposeWindow : Window
 {
     private readonly CommandCatalog _catalog;
     private readonly ComposeSurface _surface;

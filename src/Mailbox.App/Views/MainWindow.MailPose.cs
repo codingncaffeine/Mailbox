@@ -57,6 +57,41 @@ public partial class MainWindow
     }
 
     /// <summary>
+    /// The folder a pose names, which may say which account's it means:
+    /// <c>Inbox</c>, or <c>you@example.com/Inbox</c>.
+    /// </summary>
+    /// <remarks>
+    /// A seeded store has three accounts and every one of them has an Inbox, a Sent Items and a
+    /// Deleted Items. Matching on the name alone therefore reaches the first account's and no
+    /// other, which makes the role folders of the second and third accounts unposeable — and the
+    /// same trap rule 3 warns about for reading a write back, one step earlier: a pose that
+    /// silently opened the wrong account's Inbox reported "nothing happened" about mail that was
+    /// never on screen.
+    /// </remarks>
+    private static FolderNode? FolderNamed(ShellViewModel shell, string wanted)
+    {
+        // "unified:Inbox" names one of the All Accounts folders, which otherwise cannot be told
+        // from the six others with the same name.
+        if (wanted.StartsWith("unified:", StringComparison.OrdinalIgnoreCase))
+        {
+            var name = wanted["unified:".Length..];
+            return shell.Folders.FirstOrDefault(
+                f => f.Kind == FolderNodeKind.Unified && f.Name.Contains(name, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var slash = wanted.LastIndexOf('/');
+        if (slash <= 0) return shell.Folders.FirstOrDefault(f => f.Name.Contains(wanted, StringComparison.OrdinalIgnoreCase));
+
+        var address = wanted[..slash];
+        var folder = wanted[(slash + 1)..];
+
+        return shell.Folders.FirstOrDefault(
+            f => f.Name.Contains(folder, StringComparison.OrdinalIgnoreCase)
+                 && shell.FolderOf(f) is { } where
+                 && where.Account.Account.Address.Contains(address, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
     /// Writes the list as it stands: every group header with its count, and every row under it.
     /// </summary>
     /// <remarks>
@@ -91,6 +126,19 @@ public partial class MainWindow
                 case GroupHeaderRow group:
                     Log.Info($"Harness: list group — “{group.Header}” ({group.Count}"
                              + $"{(group.IsCollapsed ? ", collapsed" : string.Empty)})");
+                    break;
+
+                // The folded head of a conversation, which is neither a header nor a row and
+                // which a dump that matched only those two reported as though the thread's other
+                // messages had vanished.
+                case ConversationRow conversation:
+                    Log.Info($"Harness: list thread {index:D3} — “{conversation.Newest.Subject}” "
+                             + $"({conversation.Count} message(s), key “{conversation.Newest.ThreadKey}”, "
+                             + $"{(conversation.IsExpanded ? "expanded" : "collapsed")}"
+                             + $"{(conversation.IsSplit ? ", split across folders" : string.Empty)}) "
+                             + $"newest {conversation.Newest.Received.ToLocalTime():yyyy-MM-dd HH:mm} "
+                             + $"from {conversation.Newest.From}");
+                    index++;
                     break;
 
                 case MessageRow message:
