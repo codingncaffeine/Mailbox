@@ -153,8 +153,9 @@ public static class ViewCommands
         Description = "Advanced View Settings: columns, grouping, sorting, filtering and conditional formatting.",
         Icon = "view-settings",
         Category = "Current View",
+        KeyTip = "VE", // Not VS: Current View, beside it on the same tab, is VS.
         InDefaultLayout = false,
-    };
+};
 
     public static readonly MailboxCommand ResetView = new()
     {
@@ -163,8 +164,9 @@ public static class ViewCommands
         Description = "Put this folder's view back the way it came.",
         Icon = "view-settings",
         Category = "Current View",
+        KeyTip = "RV", // On the View tab of every module and, without this, off the keyboard entirely.
         InDefaultLayout = false,
-    };
+};
 
     public static readonly MailboxCommand Refresh = new()
     {
@@ -173,9 +175,10 @@ public static class ViewCommands
         Description = "Reload the folder pane and the list from the store.",
         Icon = "refresh",
         Category = "Window",
+        KeyTip = "RF", // The Feeds View tab draws this; without a tip that tab had one reachable command.
         DefaultGesture = "F5",
         InDefaultLayout = false,
-    };
+};
 
     public static readonly MailboxCommand ArrangeBy = new()
     {

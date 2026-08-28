@@ -175,9 +175,9 @@ public partial class MainWindow
         if (id == ViewCommands.MessagePreview.Id) { ShowMessagePreviewMenu(shell); return true; }
         if (id == ViewCommands.AddColumns.Id) { _ = AddColumnsAsync(shell); return true; }
         if (id == ViewCommands.ExpandCollapse.Id) { ShowExpandCollapseMenu(shell); return true; }
-        if (id == ViewCommands.FolderPane.Id) { ShowPaneMenu(FillFolderPaneMenu, shell); return true; }
-        if (id == ViewCommands.ReadingPane.Id) { ShowPaneMenu(FillReadingPaneMenu, shell); return true; }
-        if (id == ViewCommands.ToDoBar.Id) { ShowPaneMenu(FillToDoBarMenu, shell); return true; }
+        if (id == ViewCommands.FolderPane.Id) { ShowPaneMenu("Folder Pane", FillFolderPaneMenu, shell); return true; }
+        if (id == ViewCommands.ReadingPane.Id) { ShowPaneMenu("Reading Pane", FillReadingPaneMenu, shell); return true; }
+        if (id == ViewCommands.ToDoBar.Id) { ShowPaneMenu("To-Do Bar", FillToDoBarMenu, shell); return true; }
         if (id == ViewCommands.RemindersWindow.Id) { ShowRemindersWindow(shell); return true; }
         if (id == ViewCommands.OpenInNewWindow.Id) { OpenShellInNewWindow(shell); return true; }
         if (id == ViewCommands.CloseAllItems.Id) { CloseAllItemWindows(shell); return true; }
@@ -274,11 +274,31 @@ public partial class MainWindow
     }
 
     /// <summary>One of the Layout menu's three submenus, opened from its own ribbon button.</summary>
-    private void ShowPaneMenu(Action<ItemCollection, ShellViewModel> fill, ShellViewModel shell)
+    /// <remarks>
+    /// Measured after it is shown rather than photographed. These three are the only popups the
+    /// To-Do Bar has, and a popup is not in the application's window list, so a capture of a run
+    /// that opened one is a picture of the shell behind it — which reads as a success. What the
+    /// menu holds, which entry carries the tick and how big the presenter came out are the claims;
+    /// <see cref="FlyoutProbe"/> reads all three from inside.
+    /// </remarks>
+    private void ShowPaneMenu(string named, Action<ItemCollection, ShellViewModel> fill, ShellViewModel shell)
     {
         var flyout = new MenuFlyout();
         fill(flyout.Items, shell);
         flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+
+        // After ShowAt: the entries have no top level until the popup is presented, and a probe
+        // taken before it would report a menu that was built and never shown.
+        if (!Mailbox.App.Theming.WindowCapture.IsRequested) return;
+
+        Log.Info("Harness: " + FlyoutProbe.Describe(named, flyout));
+
+        // And which entry carries the tick, which the probe does not read and which is the whole
+        // claim of a menu whose entries are states rather than actions: To-Do Bar · Calendar is
+        // ticked when the calendar is docked, and a tick that disagreed with the pane would be
+        // invisible in any picture of the shell.
+        var ticked = flyout.Items.OfType<MenuItem>().Where(i => i.Icon is not null).Select(i => i.Header?.ToString());
+        Log.Info($"Harness: {named} ticks: {(ticked.Any() ? string.Join(", ", ticked) : "none")}.");
     }
 
     /// <summary>Reminders Window: what is due now, and the window even when nothing is.</summary>

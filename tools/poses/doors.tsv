@@ -1,10 +1,11 @@
 # Every MAILBOX_PEEK key, generated from MainWindow's own switch — never transcribed.
 # Regenerate: tools/poses/generate-doors.py
-# 87 keys.
+# 88 keys.
 peek-calendar	MAILBOX_PEEK=calendar
 peek-peoplepeek	MAILBOX_PEEK=peoplepeek
 peek-addmenu	MAILBOX_PEEK=addmenu
 peek-allapps	MAILBOX_PEEK=allapps
+peek-windowmenu	MAILBOX_PEEK=windowmenu
 peek-appointment	MAILBOX_PEEK=appointment
 peek-newmeeting	MAILBOX_PEEK=newmeeting
 peek-recurrence	MAILBOX_PEEK=recurrence

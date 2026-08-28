@@ -43,7 +43,7 @@ public static class FeedCommands
         Icon = "send-receive",
         Category = "Send & Receive",
         Scope = ModuleScope.Feeds,
-        KeyTip = "U",
+        KeyTip = "UF", // Not U: it would fire before UT (Update This Feed) and UN (Unsubscribe).
     };
 
     public static readonly MailboxCommand UpdateThis = new()

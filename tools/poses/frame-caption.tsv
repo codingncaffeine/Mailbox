@@ -1,0 +1,16 @@
+# The caption buttons, in every state, and the frame at two widths.
+# Generated from the code — never transcribed. Regenerate: tools/poses/generate-frame.py
+# 13 poses.
+caption-rest	MAILBOX_TODAY=2026-08-16
+caption-hover-minimize	MAILBOX_TODAY=2026-08-16 MAILBOX_HOVER=minimize
+caption-hover-maximize	MAILBOX_TODAY=2026-08-16 MAILBOX_HOVER=maximize
+caption-hover-close	MAILBOX_TODAY=2026-08-16 MAILBOX_HOVER=close
+caption-hold-minimize	MAILBOX_TODAY=2026-08-16 MAILBOX_CAPTION=hold:minimize
+caption-hold-maximize	MAILBOX_TODAY=2026-08-16 MAILBOX_CAPTION=hold:maximize
+caption-hold-close	MAILBOX_TODAY=2026-08-16 MAILBOX_CAPTION=hold:close
+caption-press-maximize	MAILBOX_TODAY=2026-08-16 MAILBOX_CAPTION=press:maximize
+caption-press-restore	MAILBOX_TODAY=2026-08-16 MAILBOX_CAPTION=press:maximize,press:maximize
+caption-press-minimize	MAILBOX_TODAY=2026-08-16 MAILBOX_CAPTION=press:minimize
+caption-press-close	MAILBOX_TODAY=2026-08-16 MAILBOX_CAPTION=press:close
+frame-minimum	MAILBOX_TODAY=2026-08-16 MAILBOX_SIZE=760x480
+frame-wide	MAILBOX_TODAY=2026-08-16 MAILBOX_SIZE=1600x1000

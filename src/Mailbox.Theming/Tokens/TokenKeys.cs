@@ -357,6 +357,16 @@ public static class TokenKeys
         public const string Background = "rail.background";
         public const string ItemText = "rail.item.text";
         public const string ItemActive = "rail.item.active";
+        /// <summary>
+        /// A rail icon under the pointer, and held. Its own pair rather than the content
+        /// palette's <c>state.hover</c>, which is what the rail's buttons used to take for want
+        /// of a class of their own — and which is tuned for light content rows, so it was two
+        /// units from the rail's own ground in Colorful and White (invisible) and a near-white
+        /// block on Dark Gray's dark chrome. The ribbon has <c>ribbon.button.hover</c> for
+        /// exactly this reason; the rail is chrome too and needs the same.
+        /// </summary>
+        public const string ItemHover = "rail.item.hover";
+        public const string ItemPressed = "rail.item.pressed";
         public const string Width = "rail.width";
         public const string ItemHeight = "rail.item.height";
         public const string Indicator = "rail.indicator";
@@ -873,7 +883,8 @@ public static class TokenKeys
         Avatar.Background, Avatar.Foreground,
         Category.Red, Category.Orange, Category.Yellow,
         Category.Green, Category.Blue, Category.Purple,
-        Rail.Background, Rail.ItemText, Rail.ItemActive, Rail.Width, Rail.ItemHeight,
+        Rail.Background, Rail.ItemText, Rail.ItemActive, Rail.ItemHover, Rail.ItemPressed,
+        Rail.Width, Rail.ItemHeight,
         Rail.Indicator, Rail.IndicatorWidth, Rail.IndicatorHeight, Rail.IndicatorInset,
         Backstage.Rail, Backstage.RailText, Backstage.RailDisabled,
         Backstage.RailRule, Backstage.Field,

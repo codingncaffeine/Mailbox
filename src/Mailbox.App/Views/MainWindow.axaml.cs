@@ -63,6 +63,23 @@ public partial class MainWindow : Window
             _ribbon.ActiveTabId = posedTab.Trim();
         }
 
+        // MAILBOX_RIBBON_TRACE=1 says what the bar actually built — the tabs in the strip, which
+        // one is active, and either the classic groups with the variant each settled on or the
+        // Simplified row's count and its overflow. A capture proves a tab was photographed; only
+        // this says whether the tab holds what the layout document declares, and comparing fifty
+        // pictures by eye is how a missing group goes unnoticed. Read after the layout pass,
+        // because before one the panel has not chosen a variant.
+        if (Environment.GetEnvironmentVariable("MAILBOX_RIBBON_TRACE") == "1")
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(
+                () =>
+                {
+                    _ribbon.UpdateLayout();
+                    Log.Info($"Harness: ribbon {_ribbon.Describe()}");
+                },
+                DispatcherPriority.Background);
+        }
+
         // What is usable given what is selected — and, for Undo and Redo, what has been done.
         // The inline reply strip layers the compose window's own answer over this one and puts
         // it back afterwards, so the two compose rather than replace each other.
@@ -166,6 +183,21 @@ public partial class MainWindow : Window
         shell.Undo.Changed += (_, _) => Dispatcher.UIThread.Post(RefreshCommandEnablement);
 
         DataContext = shell;
+
+        // The status bar, as the bar itself reads it, just before the capture is taken. The
+        // counts are the one part of the shell a photograph shows but nothing can check: a
+        // number rendered at 11px is not evidence it agrees with the store, and every pose that
+        // changes the folder, the filter or the module changes it. Logged rather than read off
+        // the picture, so a claim about the counts can be compared against the store the pose
+        // was given.
+        if (WindowCapture.IsRequested)
+        {
+            Opened += (_, _) => DispatcherTimer.RunOnce(
+                () => Log.Info(
+                    $"Harness: status bar — left “{shell.StatusLeft}”, right “{shell.StatusRight}”, "
+                    + $"zoom “{shell.ZoomLabel}” ({shell.ZoomPercent:0}%)."),
+                TimeSpan.FromMilliseconds(700));
+        }
 
         // The taskbar entry carries the same two mailboxes the notification area does: full
         // while there is unread post in an inbox, empty once it has been read. The title bar
@@ -947,10 +979,40 @@ public partial class MainWindow : Window
                 break;
 
             // The All Apps menu — a flyout no capture shows, so opening it is the point: its
-            // own build logs every entry with the command a press would run.
+            // own build logs every entry with the command a press would run, and the probe adds
+            // the one thing a log line about a popup has to carry, which is its size.
             case "allapps":
                 Opened += (_, _) => Dispatcher.UIThread.Post(
-                    () => RunCommand(ViewCommands.Apps.Id),
+                    async () =>
+                    {
+                        using var hold = WindowCapture.Hold();
+                        RunCommand(ViewCommands.Apps.Id);
+                        await Task.Delay(400);
+                        if (_lastFlyout is { } shown) Log.Info($"Harness: {FlyoutProbe.Describe(shown.What, shown.Menu)}");
+                    },
+                    DispatcherPriority.Background);
+                break;
+
+            // The window menu behind the app icon, which a window drawing its own caption has to
+            // provide itself. A popup, so it is measured rather than photographed; opened through
+            // the button's own Click so the rebuild that greys Restore or Maximize runs first.
+            case "windowmenu":
+                Opened += (_, _) => Dispatcher.UIThread.Post(
+                    async () =>
+                    {
+                        using var hold = WindowCapture.Hold();
+
+                        if (this.FindControl<Button>("WindowMenuButton") is not { Flyout: MenuFlyout menu } button)
+                        {
+                            Log.Info("Harness: this window has no app-icon menu.");
+                            return;
+                        }
+
+                        button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                        menu.ShowAt(button);
+                        await Task.Delay(400);
+                        Log.Info($"Harness: {FlyoutProbe.Describe("the window menu", menu)}");
+                    },
                     DispatcherPriority.Background);
                 break;
 
@@ -1056,10 +1118,22 @@ public partial class MainWindow : Window
 
                         view.Open(which);
 
-                        if (press is { Length: > 0 })
+                        // Two of the Backstage's controls are not actions: the back arrow, and
+                        // Add Account, which raises an event of its own. Both are pressed as the
+                        // real buttons a reader presses — proving that CloseBackstage works is
+                        // not the same as proving the arrow reaches it.
+                        if (press is "back" or "addaccount")
+                        {
+                            Dispatcher.UIThread.Post(
+                                () => PressBackstageButton(view, press),
+                                DispatcherPriority.Background);
+                            ReportBackstageAction(press);
+                        }
+                        else if (press is { Length: > 0 })
                         {
                             Dispatcher.UIThread.Post(
                                 () => _ = BackstageActionAsync(press), DispatcherPriority.Background);
+                            ReportBackstageAction(press);
                         }
                     }
 
@@ -1070,6 +1144,7 @@ public partial class MainWindow : Window
                     {
                         var (which, press) = menu.Split(':', 2) is [var head, var tail] ? (head, tail) : (menu, null);
                         Dispatcher.UIThread.Post(() => view.PoseMenu(which, press), DispatcherPriority.Background);
+                        if (press is { Length: > 0 }) ReportBackstageAction(press);
                     }
                 };
                 break;
@@ -1091,6 +1166,14 @@ public partial class MainWindow : Window
                 {
                     var items = _ribbon?.OpenOverflowMenu() ?? [];
                     Log.Info($"Harness: the \u2026 menu holds {items.Count}: {string.Join(" | ", items)}");
+
+                    // And how big the popup it opened in actually is. The contents alone are
+                    // what a menu was built with; the presenter's size is whether a reader can
+                    // see them, which is the audit's rule about popups and is what the
+                    // in-process capture cannot photograph. Posted rather than read here: a
+                    // flyout shown a statement ago has not been laid out yet, and its entries
+                    // report no top level at all — which reads as a menu that never opened.
+                    Dispatcher.UIThread.Post(DescribeRibbonFlyouts, DispatcherPriority.Background);
                 }, DispatcherPriority.Background);
                 break;
 
@@ -1100,6 +1183,7 @@ public partial class MainWindow : Window
                 {
                     _ribbon?.OpenDisplayOptions();
                     await Task.Yield();
+                    Dispatcher.UIThread.Post(DescribeRibbonFlyouts, DispatcherPriority.Background);
                 };
                 break;
 
@@ -2035,7 +2119,12 @@ public partial class MainWindow : Window
         if (Environment.GetEnvironmentVariable("MAILBOX_KEYTIPS")?.Trim().ToLowerInvariant()
             is { Length: > 0 } keyTips)
         {
-            Opened += (_, _) =>
+            // Posted below background, because MAILBOX_MODULE switches the module — and with it
+            // the whole bar — from a background post of its own. Begun synchronously here, the
+            // first level was taken on the mail bar whatever module the pose asked for: every
+            // module reported the mail strip's badge count, which is a traversal of a ribbon
+            // that is about to be replaced. ContextIdle runs after everything already queued.
+            Opened += (_, _) => Dispatcher.UIThread.Post(() =>
             {
                 _keyTips.Begin(FirstLevelKeyTips());
 
@@ -2061,7 +2150,27 @@ public partial class MainWindow : Window
                 Dispatcher.UIThread.Post(
                     () => Log.Info($"KeyTips: level {_keyTips.Depth}, {_keyTips.BadgeCount} badges"),
                     DispatcherPriority.Background);
-            };
+            }, DispatcherPriority.ContextIdle);
+        }
+    }
+
+    /// <summary>
+    /// Measures whichever of the ribbon's own flyouts are open. Harness only.
+    /// </summary>
+    /// <remarks>
+    /// A menu that reports itself open proves nothing — a 2×2 presenter is an empty one — and a
+    /// popup is not in the application's window list, so the in-process capture photographs the
+    /// shell behind it and reads as a success. <see cref="FlyoutProbe"/> reads the presenter's
+    /// real size from inside the process instead.
+    /// </remarks>
+    private void DescribeRibbonFlyouts()
+    {
+        if (_ribbon is null) return;
+
+        foreach (var (what, flyout) in _ribbon.Flyouts())
+        {
+            if (!flyout.IsOpen) continue;
+            Log.Info($"Harness: {FlyoutProbe.Describe(what, flyout)}");
         }
     }
 
@@ -2792,9 +2901,14 @@ public partial class MainWindow : Window
     {
         if (_reading is null) return;
 
-        shell.StatusRight = await _reading.PrintToPdfAsync()
-            ? "Saved as PDF."
-            : "This message could not be written to PDF.";
+        // A dismissed picker says nothing, as the Save As exports beside it do. Only a write
+        // that was attempted and failed is worth the reader's attention.
+        shell.StatusRight = await _reading.PrintToPdfAsync() switch
+        {
+            PdfSaveResult.Saved => "Saved as PDF.",
+            PdfSaveResult.Failed => "This message could not be written to PDF.",
+            _ => shell.StatusRight,
+        };
     }
 
     /// <summary>
@@ -3408,6 +3522,32 @@ public partial class MainWindow : Window
         => module is MailboxModule.Calendar or MailboxModule.People;
 
     /// <summary>
+    /// The status bar's zoom percentage, which opens the Zoom dialog as the reference's does.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ZoomDialog"/> already existed and was reachable only from the message window;
+    /// the shell drew its own figure as a label, so the one place a reader would press to choose
+    /// a zoom level did nothing. The slider and the ± buttons beside it were the only way.
+    /// </remarks>
+    private async void ShowZoomDialog(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not ShellViewModel shell) return;
+
+        try
+        {
+            if (await ZoomDialog.AskAsync(this, shell.ZoomPercent) is not { } percent) return;
+
+            shell.ZoomPercent = percent;
+            Log.Info($"Harness: zoom {percent:0}%.");
+        }
+        catch (Exception ex)
+        {
+            // An async void handler: an exception here would land on the dispatcher unobserved.
+            Log.Warn("The zoom dialog failed.", ex);
+        }
+    }
+
+    /// <summary>
     /// Opens or closes the peek after a pause, replacing whatever was already waiting. One timer
     /// for both: crossing from the icon to the peek and back is a stream of these, and a second
     /// timer would let an old close fire under a new open.
@@ -3935,6 +4075,13 @@ public partial class MainWindow : Window
     /// <summary>
     /// The window menu behind the app icon. With no system frame the window owns this too.
     /// </summary>
+    /// <summary>
+    /// The last flyout a command opened, so a pose can measure it. Popups are the audit's one
+    /// blind spot — not in the window list, so not in a capture — and the answer is to read the
+    /// presenter's size from inside rather than to photograph it.
+    /// </summary>
+    private (string What, MenuFlyout Menu)? _lastFlyout;
+
     private void WireWindowMenu()
     {
         if (this.FindControl<Button>("WindowMenuButton") is not { } button) return;
@@ -4012,6 +4159,127 @@ public partial class MainWindow : Window
                 },
                 moreCommands: () => _ = ShowOptions("qat"));
         }
+
+        // MAILBOX_QAT=flyout says what the customize menu holds and which entries are ticked;
+        // flyout:<entry> presses one and says what the toolbar holds afterwards. Adding and
+        // removing a button is what that menu is for, and neither the menu nor the result of
+        // pressing it can be photographed.
+        if (Environment.GetEnvironmentVariable("MAILBOX_QAT")?.Trim() is { Length: > 0 } pose
+            && pose.StartsWith("flyout", StringComparison.OrdinalIgnoreCase))
+        {
+            var press = pose.Split(':', 2) is [_, var wanted] ? wanted.Trim() : null;
+            Opened += (_, _) => Dispatcher.UIThread.Post(
+                async () => await PoseQuickAccessFlyoutAsync(customization, press),
+                DispatcherPriority.Background);
+        }
+    }
+
+    /// <summary>
+    /// Harness only: reads the Quick Access Toolbar's customize menu, and presses one of its
+    /// entries.
+    /// </summary>
+    /// <remarks>
+    /// The real menu the chevron opens, filled the way opening it fills it — not a second list
+    /// written for the harness. What the toolbar holds is logged before and after, because the
+    /// question a tick answers is whether the command reached the bar, and the bar is rebuilt
+    /// from the layout rather than from the menu.
+    /// </remarks>
+    private async Task PoseQuickAccessFlyoutAsync(QuickAccessLayout customization, string? press)
+    {
+        // The capture waits, as it does for every other popup pose: a popup takes real time to
+        // reach the platform, and a probe that reads it in the same dispatcher turn measures a
+        // menu that has not been presented yet.
+        using var hold = WindowCapture.Hold();
+
+        var chevron = this.FindControl<Button>(
+            customization.Placement == QuickAccessPlacement.BelowRibbon
+                ? "QuickAccessCustomizeBelow"
+                : "QuickAccessCustomize");
+
+        if (chevron?.Flyout is not MenuFlyout flyout)
+        {
+            Log.Warn("Harness: the toolbar's chevron carries no menu.");
+            return;
+        }
+
+        // The button a reader actually clicks, before anything is asked of its menu: a chevron
+        // with no size is a menu nobody can open, and that would read from a capture as a
+        // toolbar that simply has no editor.
+        Log.Info($"Harness: the toolbar's chevron is {chevron.Bounds.Width:0}x{chevron.Bounds.Height:0}, "
+            + $"visible={chevron.IsEffectivelyVisible}, enabled={chevron.IsEffectivelyEnabled}.");
+
+        // Really opened, so the presenter has a size: rule 6 of the audit's evidence says a
+        // popup's size is the claim and IsOpen alone proves nothing. Filled directly if the
+        // presenter refuses to come up — an offscreen window still has to answer what the menu
+        // holds, and a run that measured nothing would read as a toolbar with no editor.
+        // Through the button's own Click first, which is what a reader does and what opens an
+        // attached flyout; ShowAt after it, as the window-menu pose does, so a menu that the
+        // click did not open is still asked to present itself.
+        chevron.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        if (!flyout.IsOpen) flyout.ShowAt(chevron);
+        if (!flyout.IsOpen) QuickAccessFlyout.Fill(flyout);
+
+        Log.Info($"Harness: the toolbar holds {customization.Commands.Count}: "
+            + string.Join(" | ", customization.Commands.Select(c => c.Value)));
+
+        // Measured twice on purpose. This menu fills itself from its own Opening event, and rule
+        // 6 of the audit's evidence says such a menu measures empty when it is read in the same
+        // pass that opened it — the entries exist but are not yet in the popup's visual tree, so
+        // there is nothing to take a size from. The second reading, a dispatcher turn later, is
+        // the one that says whether a presenter really came up.
+        await Task.Delay(400);
+
+        // The size is the claim. This menu reported open with no presenter at all while a plain
+        // menu shown at the same chevron in the same run presented 103x26 — which is how an
+        // empty popup was told apart from a harness that cannot present one. It was empty
+        // because its entries only ever arrived on Opening, after the popup had been built.
+        Log.Info("Harness: " + FlyoutProbe.Describe("the toolbar's customize menu", flyout));
+
+        foreach (var item in flyout.Items.OfType<MenuItem>())
+        {
+            var header = item.Header as string
+                ?? (item.Header as TextBlock)?.Text
+                ?? "(heading)";
+            Log.Info($"Harness: QAT menu — “{header}”"
+                + (item.Icon is not null ? "  [ticked]" : string.Empty)
+                + (item.IsEnabled ? string.Empty : "  [greyed]"));
+        }
+
+        if (press is not { Length: > 0 }) return;
+
+        // A command id names its own entry, so a pose list generated from QuickAccessCandidates
+        // needs no second copy of every label. Anything else is matched as typed.
+        var wanted = press.Contains('.', StringComparison.Ordinal)
+                     && App.Commands.TryGet(new CommandId(press), out var named)
+            ? named.Label
+            : press;
+
+        var entry = flyout.Items.OfType<MenuItem>().FirstOrDefault(
+            i => (i.Header as string ?? string.Empty)
+                .StartsWith(wanted, StringComparison.OrdinalIgnoreCase));
+
+        if (entry is null)
+        {
+            Log.Warn($"Harness: the toolbar's menu has no entry “{wanted}”.");
+            return;
+        }
+
+        Log.Info($"Harness: pressing “{entry.Header}”.");
+        entry.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        flyout.Hide();
+
+        Log.Info($"Harness: the toolbar now holds {customization.Commands.Count}: "
+            + string.Join(" | ", customization.Commands.Select(c => c.Value)));
+        Log.Info($"Harness: the toolbar is {(customization.IsVisible ? "shown" : "hidden")}, "
+            + $"{(customization.Placement == QuickAccessPlacement.BelowRibbon ? "below" : "above")} the ribbon; "
+            + $"the bar draws {shellButtons(this)} buttons.");
+
+        // More Commands… opens the Options page and changes nothing about the toolbar, so the
+        // counts above cannot tell it from an entry that did nothing at all.
+        ReportBackstageAction($"the toolbar's “{entry.Header}”");
+
+        static int shellButtons(MainWindow window)
+            => window.DataContext is ShellViewModel s ? s.QuickAccess.Count : -1;
     }
 
     /// <summary>
@@ -4110,10 +4378,19 @@ public partial class MainWindow : Window
                         // Through the same handler the pointer reaches, dwell and all: a peek
                         // that only ever opened from a direct call would prove nothing about
                         // what a hover does.
-                        RailPointerEntered(RailButton(module), new PointerEventArgs(
+                        var icon = RailButton(module);
+                        RailPointerEntered(icon, new PointerEventArgs(
                             PointerEnteredEvent, this, new Pointer(0, PointerType.Mouse, true),
                             null, default, 0, new PointerPointProperties(), KeyModifiers.None));
-                        Log.Info($"Harness: hovering the rail's {module} icon.");
+
+                        // And the visual state, which the handler does not set: a pointer over a
+                        // button lights it as well as starting the dwell, and posing only the
+                        // dwell meant the rail's own hover wash had never been photographed in
+                        // any theme.
+                        if (icon is not null) ((IPseudoClasses)icon.Classes).Add(":pointerover");
+
+                        Log.Info($"Harness: hovering the rail's {module} icon"
+                            + (icon is Button b ? $" — background {b.Background?.ToString() ?? "null"}." : " — no such icon."));
                     },
                     DispatcherPriority.Loaded);
             }
@@ -4131,13 +4408,154 @@ public partial class MainWindow : Window
             }
             else
             {
-                Opened += (_, _) => caption.ForceHover(hovered.ToLowerInvariant());
+                var which = hovered.ToLowerInvariant();
+                Opened += (_, _) => Dispatcher.UIThread.Post(
+                    () => Log.Info(
+                        caption.ForceHover(which)
+                            ? $"Harness: hovering the {which} caption button — {caption.Describe(which)}."
+                            : $"Harness: “{hovered}” is not a caption button — minimize, maximize or close."),
+                    DispatcherPriority.Loaded);
             }
         }
+
+        PoseCaption(caption);
+        PoseLiveTheme();
 
         if (this.FindControl<Control>("TitleBar") is not { } bar) return;
 
         WindowFrame.Drags(this, bar);
+    }
+
+    /// <summary>
+    /// <c>MAILBOX_CAPTION=hold:&lt;button&gt;</c> paints a caption button's held state, and
+    /// <c>MAILBOX_CAPTION=press:&lt;button&gt;</c> clicks it. Both name minimize, maximize or
+    /// close; a bare name is a press, and several separated by commas run in order — which is
+    /// how restore is reached, <c>press:maximize,press:maximize</c> being the only way a window
+    /// gets back to where it started through the button rather than through a property.
+    /// </summary>
+    /// <remarks>
+    /// Two doors the audit's inventory found missing on the same surface. Every built-in defines
+    /// <c>titlebar.caption.pressed</c> and <c>titlebar.caption.close.pressed</c> and no capture
+    /// could reach either, which is the shape of bug that made the close button's red wrong for
+    /// two sessions; and maximize/restore could only be proven by assigning
+    /// <see cref="Window.WindowState"/>, which proves nothing about the button. The press goes
+    /// through the button's own <c>Click</c> event and reports the state either side of it, so
+    /// the read-back is what the window did rather than what was asked for.
+    /// </remarks>
+    private void PoseCaption(CaptionButtons caption)
+    {
+        if (Environment.GetEnvironmentVariable("MAILBOX_CAPTION") is not { Length: > 0 } posed) return;
+
+        var steps = posed.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        Opened += (_, _) => Dispatcher.UIThread.Post(
+            async () =>
+            {
+                // Held across every step so the capture waits for the last one: the first press
+                // of a maximize/restore pair is not finished when the second is queued, and a
+                // picture taken between them is of neither state.
+                using var hold = WindowCapture.Hold();
+
+                foreach (var step in steps)
+                {
+                    var colon = step.IndexOf(':');
+                    var verb = (colon > 0 ? step[..colon] : "press").Trim().ToLowerInvariant();
+                    var which = (colon > 0 ? step[(colon + 1)..] : step).Trim().ToLowerInvariant();
+
+                    if (verb is "hold" or "pressed")
+                    {
+                        Log.Info(caption.ForcePressed(which)
+                            ? $"Harness: holding the {which} caption button — {caption.Describe(which)}."
+                            : $"Harness: “{which}” is not a caption button.");
+                        continue;
+                    }
+
+                    var before = WindowState;
+                    var acted = caption.Press(which);
+
+                    // Said at once, because close is one of the three: the window is gone a
+                    // moment later and a line waiting on a delay would never be written, which
+                    // would leave the one button whose effect cannot be photographed with no
+                    // evidence at all.
+                    Log.Info($"Harness: caption press {which} — {(acted ? "the button acted" : "no such button")}, "
+                             + $"from {before}.");
+
+                    // Then again once the windowing system has answered. A maximize is a request
+                    // to the compositor, and reading the property in the same pass reports what
+                    // it was before the reply came back: two presses read that way both saw
+                    // Normal and both maximized, which looked like a restore that did nothing and
+                    // was a measurement taken too early.
+                    await Task.Delay(600);
+
+                    Log.Info(
+                        $"Harness: caption {which} settled — window {before} → {WindowState}, "
+                        + $"{ClientSize.Width:0}x{ClientSize.Height:0}; "
+                        + $"maximize tip “{caption.MaximizeTip}”.");
+                }
+            },
+            DispatcherPriority.Loaded);
+    }
+
+    /// <summary>
+    /// <c>MAILBOX_THEME_SWITCH=&lt;id&gt;</c> applies a second theme once the window is up and
+    /// laid out, so a capture shows a theme this window was *changed* to rather than one it
+    /// started in.
+    /// </summary>
+    /// <remarks>
+    /// <c>MAILBOX_THEME</c> is a startup theme: it proves four themes render, and nothing about
+    /// a live swap, which is a different claim — the resource dictionary is republished under a
+    /// visual tree that already exists, and anything holding a brush rather than a
+    /// <c>DynamicResource</c> keeps the old colour. Pair the two to photograph the swap:
+    /// <c>MAILBOX_THEME=colorful MAILBOX_THEME_SWITCH=black</c>. The chrome tokens are logged
+    /// after the swap so the read-back is a value rather than a picture.
+    /// </remarks>
+    private void PoseLiveTheme()
+    {
+        if (Environment.GetEnvironmentVariable("MAILBOX_THEME_SWITCH") is not { Length: > 0 } wanted) return;
+
+        Opened += (_, _) => Dispatcher.UIThread.Post(
+            () =>
+            {
+                var was = App.Themes.ThemeId;
+                if (App.Themes.Library.Canonical(wanted.Trim()) is not { } id)
+                {
+                    Log.Info($"Harness: no theme “{wanted}” — this build has {string.Join(", ", App.Themes.Library.Ids)}.");
+                    return;
+                }
+
+                try
+                {
+                    App.Themes.Apply(id);
+                }
+                catch (Mailbox.Theming.Tokens.ThemeResolutionException ex)
+                {
+                    Log.Warn($"Harness: theme “{id}” would not apply: {ex.Message}");
+                    return;
+                }
+
+                UpdateLayout();
+
+                // Read out of the live resource dictionary rather than the token set: what the
+                // window is painted from is the dictionary, and a swap that updated the service
+                // and not the bridge would look identical in the tokens and wrong on screen.
+                string Live(string key)
+                {
+                    if (Application.Current is not { } application) return "no application";
+
+                    return application.Resources.TryGetResource(key, application.ActualThemeVariant, out var value)
+                           && value is not null
+                        ? value.ToString() ?? "?"
+                        : "unset";
+                }
+
+                Log.Info(
+                    $"Harness: theme {was} → {App.Themes.ThemeId}; "
+                    + $"titlebar.background {Live("titlebar.background")}, "
+                    + $"rail.background {Live("rail.background")}, "
+                    + $"ribbon.background {Live("ribbon.background")}, "
+                    + $"titlebar.caption.hover {Live("titlebar.caption.hover")}.");
+            },
+            DispatcherPriority.Loaded);
     }
 
     /// <summary>
@@ -4341,8 +4759,12 @@ public partial class MainWindow : Window
         // All Apps: the installed plugins' commands, and the way to the page that manages them.
         if (id == ViewCommands.Apps.Id)
         {
-            AllAppsMenu.Build(RunCommand, () => _ = ShowOptions("addins"))
-                .ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+            var apps = AllAppsMenu.Build(RunCommand, () => _ = ShowOptions("addins"));
+            apps.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+
+            // Kept so a pose can measure it. A flyout is built, shown and forgotten in one
+            // expression, which leaves nothing for a read-back to ask how big it came out.
+            _lastFlyout = ("All Apps", apps);
             return;
         }
 
@@ -5846,6 +6268,73 @@ public partial class MainWindow : Window
         return others.Count == 0 ? "none" : string.Join(", ", others.Select(t => $"\u201c{t}\u201d"));
     }
 
+    /// <summary>
+    /// Harness only: presses one of the Backstage's two plain buttons — the back arrow and Add
+    /// Account — which raise events of their own rather than going through an action name.
+    /// </summary>
+    private static void PressBackstageButton(BackstageView view, string which)
+    {
+        var buttons = Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(view).OfType<Button>();
+
+        var button = which == "back"
+            ? buttons.FirstOrDefault(b => ToolTip.GetTip(b) as string == "Back")
+            : buttons.FirstOrDefault(
+                b => Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(b)
+                    .OfType<TextBlock>()
+                    .Any(t => t.Text == "Add Account"));
+
+        if (button is null)
+        {
+            Log.Warn($"Harness: the Backstage has no “{which}” button.");
+            return;
+        }
+
+        button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+    }
+
+    /// <summary>
+    /// Harness only: what a Backstage action did, once it has had a moment to do it.
+    /// </summary>
+    /// <remarks>
+    /// "The pose ran without throwing" is not "the button acts". Most of these actions open a
+    /// window and say nothing, some only write the status line, and a few — Save As, the
+    /// importers — hand over to the desktop's file dialog and open no window of this
+    /// application's at all. So the read-back names all three: the windows that are up, the
+    /// status line, and whether the Backstage put itself away, which is the tell that an action
+    /// that closes it ran.
+    /// <para>
+    /// On a timer rather than another posted callback because a modal <c>ShowDialog</c> does not
+    /// return: the dialog is up and pumping this same dispatcher, and a continuation queued
+    /// behind the action would report from before it opened.
+    /// </para>
+    /// </remarks>
+    private void ReportBackstageAction(string action)
+        => Dispatcher.UIThread.Post(
+            async () =>
+            {
+                // The capture waits for the read-back rather than racing it: the settle is 900ms
+                // and this used to report at 500, which is a margin and not a guarantee.
+                using var hold = WindowCapture.Hold();
+                await Task.Delay(500);
+
+                var host = this.FindControl<ContentControl>("BackstageHost");
+                var status = (DataContext as ShellViewModel)?.StatusRight ?? string.Empty;
+
+                // An action whose only result is a sentence may still be fetching it — Check for
+                // Updates is the one, and reporting "Checking for updates…" says nothing about
+                // what it found. Waited out, bounded, rather than lengthening every pose.
+                for (var waited = 0; status.EndsWith('…') && waited < 4000; waited += 250)
+                {
+                    await Task.Delay(250);
+                    status = (DataContext as ShellViewModel)?.StatusRight ?? string.Empty;
+                }
+
+                Log.Info($"Harness: {action} — windows: {OtherWindows()}; "
+                    + $"status: “{status}”; "
+                    + $"the Backstage is {(host?.IsVisible == true ? "still up" : "closed")}.");
+            },
+            DispatcherPriority.Background);
+
     /// <summary>What a harness press reports afterwards: the status line, once the press has run.</summary>
     private static Action? Pressed { get; set; }
 
@@ -7300,6 +7789,18 @@ public partial class MainWindow : Window
                 Key = pressed,
                 KeyModifiers = Keystroke.Modifiers(chord.Modifiers),
             });
+
+            // And the release, because a keystroke is two events and some of what the window
+            // does happens on the second: Alt on its own opens the KeyTip traversal from
+            // OnKeyUp — deliberately, so that reaching for Alt+Tab does not badge the ribbon —
+            // so a pose that only pressed the key down could never open it at all.
+            at.RaiseEvent(new Avalonia.Input.KeyEventArgs
+            {
+                RoutedEvent = Avalonia.Input.InputElement.KeyUpEvent,
+                Source = at,
+                Key = pressed,
+                KeyModifiers = Keystroke.Modifiers(chord.Modifiers),
+            });
         }
 
         if (DataContext is not ShellViewModel shell) return;
@@ -7307,7 +7808,11 @@ public partial class MainWindow : Window
         var row = shell.SelectedMessage;
         var after = row is null ? null : shell.SummaryOf(row);
         var focused = FocusManager?.GetFocusedElement() as Control;
-        Log.Info($"Harness: after {key} — focus on {focused?.Name ?? focused?.GetType().Name ?? "nothing"}, "
+        // The module belongs in this line because Ctrl+1..Ctrl+9 are the shell's own keys and
+        // nothing else in a run says which module the press left the window in: the rail's mark
+        // moves, the workspace changes and the ribbon is replaced, all of which are pictures.
+        Log.Info($"Harness: after {key} — module {shell.Module}, "
+            + $"focus on {focused?.Name ?? focused?.GetType().Name ?? "nothing"}, "
             + $"selected “{row?.Subject ?? "nothing"}” of {SelectedRows().Count}, "
             + $"flag {(after?.FollowUpDue is { } due ? due.LocalDateTime.ToString("yyyy-MM-dd HH:mm") : after?.IsFlagged == true ? "set, no date" : "none")}, "
             + $"{(after?.IsRead == true ? "read" : "unread")}, search “{shell.SearchText}”, "

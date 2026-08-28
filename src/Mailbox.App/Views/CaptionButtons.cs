@@ -1,9 +1,11 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Shapes;
 using Avalonia.Data;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 
 namespace Mailbox.App.Views;
 
@@ -46,21 +48,91 @@ public sealed class CaptionButtons : StackPanel
     private const double StrokeWidth = 1;
 
     private readonly Window _window;
+    private readonly Button? _minimize;
     private readonly Button? _maximize;
+    private readonly Button _close;
+
+    /// <summary>
+    /// The button a pose names. Minimize and maximize both wear the <c>caption</c> class, so
+    /// they cannot be told apart by it — asking for the class and taking the first match is
+    /// how <c>MAILBOX_HOVER=maximize</c> spent this project's life photographing the minimize
+    /// button instead, at a size and shape close enough that nobody noticed.
+    /// </summary>
+    private Button? ButtonFor(string which) => which.ToLowerInvariant() switch
+    {
+        "minimize" => _minimize,
+        "maximize" or "restore" => _maximize,
+        "close" => _close,
+        _ => null,
+    };
 
     /// <summary>
     /// Forces a caption button into its hover state so the fidelity harness can photograph it.
     /// A screenshot cannot move the pointer, and the close button's red is the one caption
     /// colour that only exists on hover — it went unverified, and wrong, for two sessions.
     /// </summary>
-    public void ForceHover(string which)
+    public bool ForceHover(string which)
     {
-        var cls = which == "close" ? "caption-close" : "caption";
-        foreach (var button in Children.OfType<Button>().Where(b => b.Classes.Contains(cls)))
-        {
-            ((IPseudoClasses)button.Classes).Add(":pointerover");
-            if (which != "close") break;
-        }
+        if (ButtonFor(which) is not { } button) return false;
+        ((IPseudoClasses)button.Classes).Add(":pointerover");
+        return true;
+    }
+
+    /// <summary>
+    /// Forces a caption button into its held state, which is a different token from the hover
+    /// and was the half of the pair no capture could reach: every theme defines
+    /// <c>titlebar.caption.pressed</c> and <c>titlebar.caption.close.pressed</c>, and until this
+    /// existed nothing in the tree could photograph either.
+    /// </summary>
+    /// <remarks>
+    /// Both pseudo-classes, because that is the real state: a pointer holding a button down is
+    /// also over it, and the styles are written to layer that way.
+    /// </remarks>
+    public bool ForcePressed(string which)
+    {
+        if (ButtonFor(which) is not { } button) return false;
+        ((IPseudoClasses)button.Classes).Add(":pointerover");
+        ((IPseudoClasses)button.Classes).Add(":pressed");
+        return true;
+    }
+
+    /// <summary>
+    /// Clicks a caption button through its own <see cref="Button.ClickEvent"/> — the path a
+    /// pointer takes — so a pose proves the button acts rather than that the window state can
+    /// be assigned.
+    /// </summary>
+    public bool Press(string which)
+    {
+        if (ButtonFor(which) is not { } button) return false;
+        button.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        return true;
+    }
+
+    /// <summary>What the maximize button's tooltip reads, which is how its glyph is known.</summary>
+    public string? MaximizeTip => _maximize is null ? null : ToolTip.GetTip(_maximize) as string;
+
+    /// <summary>
+    /// What a caption button is actually painted with: the brush on the button, and the brush on
+    /// the content presenter inside it, which are two different answers.
+    /// </summary>
+    /// <remarks>
+    /// A capture measures the pixel, and the pixel says which token won without saying why. The
+    /// control theme's own <c>:pressed</c> rule paints <c>PART_ContentPresenter</c>, and a
+    /// presenter with a background of its own covers the button's — so a style that sets the
+    /// button's <see cref="TemplatedControl.Background"/> is drawn underneath and reads as if the
+    /// token were never defined. Reporting both is what tells those two apart from one line of
+    /// log rather than a session of guessing.
+    /// </remarks>
+    public string Describe(string which)
+    {
+        if (ButtonFor(which) is not { } button) return $"“{which}” is not a caption button";
+
+        button.UpdateLayout();
+        var presenter = button.GetVisualDescendants().OfType<ContentPresenter>().FirstOrDefault();
+        return $"{which}: classes [{string.Join(" ", button.Classes)}], "
+               + $"button background {button.Background?.ToString() ?? "null"}, "
+               + $"presenter background {presenter?.Background?.ToString() ?? "null"}, "
+               + $"foreground {button.Foreground?.ToString() ?? "null"}";
     }
 
     /// <param name="dialog">
@@ -86,8 +158,9 @@ public sealed class CaptionButtons : StackPanel
 
         if (!dialog)
         {
-            Children.Add(Build(MinimizeGlyph(), "Minimize", isClose: false, dialog, system,
-                () => _window.WindowState = WindowState.Minimized));
+            _minimize = Build(MinimizeGlyph(), "Minimize", isClose: false, dialog, system,
+                () => _window.WindowState = WindowState.Minimized);
+            Children.Add(_minimize);
 
             _maximize = Build(MaximizeGlyph(), "Maximize", isClose: false, dialog, system, ToggleMaximize);
             Children.Add(_maximize);
@@ -98,7 +171,8 @@ public sealed class CaptionButtons : StackPanel
             };
         }
 
-        Children.Add(Build(CloseGlyph(), "Close", isClose: true, dialog, system, () => _window.Close()));
+        _close = Build(CloseGlyph(), "Close", isClose: true, dialog, system, () => _window.Close());
+        Children.Add(_close);
     }
 
     private void ToggleMaximize()

@@ -40,7 +40,19 @@ public static class UpdateCheck
             http.Timeout = TimeSpan.FromSeconds(15);
             http.DefaultRequestHeaders.UserAgent.ParseAdd($"Mailbox/{Current}");
 
-            var json = await http.GetStringAsync(LatestUrl, cancellation);
+            using var answer = await http.GetAsync(LatestUrl, cancellation);
+
+            // A project with nothing published yet answers 404, which is not a failure to
+            // reach anything: the reader was told "Could not reach the release page: Response
+            // status code does not indicate success: 404 (Not Found)" and learned nothing from
+            // a sentence that is both wrong and unreadable.
+            if (answer.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return $"This is {Current}. There is no published release to compare it with yet.";
+            }
+
+            answer.EnsureSuccessStatusCode();
+            var json = await answer.Content.ReadAsStringAsync(cancellation);
             if (Mailbox.Core.Updates.Releases.LatestFrom(json) is not { } latest)
             {
                 return "The release page did not answer with a release.";

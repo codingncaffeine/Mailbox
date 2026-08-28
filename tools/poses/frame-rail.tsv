@@ -1,0 +1,26 @@
+# Every module accelerator, every rail module posed, every rail icon hovered.
+# Generated from the code — never transcribed. Regenerate: tools/poses/generate-frame.py
+# 23 poses.
+rail-key-ctrl1	MAILBOX_TODAY=2026-08-16 MAILBOX_KEY=Ctrl+1
+rail-key-ctrl2	MAILBOX_TODAY=2026-08-16 MAILBOX_KEY=Ctrl+2
+rail-key-ctrl3	MAILBOX_TODAY=2026-08-16 MAILBOX_KEY=Ctrl+3
+rail-key-ctrl4	MAILBOX_TODAY=2026-08-16 MAILBOX_KEY=Ctrl+4
+rail-key-ctrl5	MAILBOX_TODAY=2026-08-16 MAILBOX_KEY=Ctrl+5
+rail-key-ctrl6	MAILBOX_TODAY=2026-08-16 MAILBOX_KEY=Ctrl+6
+rail-key-ctrl7	MAILBOX_TODAY=2026-08-16 MAILBOX_KEY=Ctrl+7
+rail-key-ctrl8	MAILBOX_TODAY=2026-08-16 MAILBOX_KEY=Ctrl+8
+rail-key-ctrl9	MAILBOX_TODAY=2026-08-16 MAILBOX_KEY=Ctrl+9
+rail-module-mail	MAILBOX_TODAY=2026-08-16 MAILBOX_MODULE=mail
+rail-module-calendar	MAILBOX_TODAY=2026-08-16 MAILBOX_MODULE=calendar
+rail-module-people	MAILBOX_TODAY=2026-08-16 MAILBOX_MODULE=people
+rail-module-tasks	MAILBOX_TODAY=2026-08-16 MAILBOX_MODULE=tasks
+rail-module-notes	MAILBOX_TODAY=2026-08-16 MAILBOX_MODULE=notes
+rail-module-journal	MAILBOX_TODAY=2026-08-16 MAILBOX_MODULE=journal
+rail-module-feeds	MAILBOX_TODAY=2026-08-16 MAILBOX_MODULE=feeds
+rail-hover-mail	MAILBOX_TODAY=2026-08-16 MAILBOX_HOVER=rail:Mail
+rail-hover-calendar	MAILBOX_TODAY=2026-08-16 MAILBOX_HOVER=rail:Calendar
+rail-hover-people	MAILBOX_TODAY=2026-08-16 MAILBOX_HOVER=rail:People
+rail-hover-tasks	MAILBOX_TODAY=2026-08-16 MAILBOX_HOVER=rail:Tasks
+rail-hover-notes	MAILBOX_TODAY=2026-08-16 MAILBOX_HOVER=rail:Notes
+rail-hover-journal	MAILBOX_TODAY=2026-08-16 MAILBOX_HOVER=rail:Journal
+rail-hover-feeds	MAILBOX_TODAY=2026-08-16 MAILBOX_HOVER=rail:Feeds

@@ -1,0 +1,11 @@
+# All four built-ins at startup, and every live swap around the cycle.
+# Generated from the code — never transcribed. Regenerate: tools/poses/generate-frame.py
+# 8 poses.
+theme-colorful	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=colorful
+theme-white	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=white
+theme-darkgray	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=darkgray
+theme-black	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=black
+themeswitch-colorful-to-white	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=colorful MAILBOX_THEME_SWITCH=white MAILBOX_HOVER=close
+themeswitch-white-to-darkgray	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=white MAILBOX_THEME_SWITCH=darkgray MAILBOX_HOVER=close
+themeswitch-darkgray-to-black	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=darkgray MAILBOX_THEME_SWITCH=black MAILBOX_HOVER=close
+themeswitch-black-to-colorful	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=black MAILBOX_THEME_SWITCH=colorful MAILBOX_HOVER=close

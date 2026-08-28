@@ -81,7 +81,7 @@ public static class NotesRibbonLayout
                 Cluster("layout", "Layout",
                     RibbonItem.Small(ViewCommands.LayoutMenu.Id, RibbonItemKind.DropDown))),
 
-            ["help"] = new SimplifiedBar { Groups = [] },
+            ["help"] = DefaultRibbonLayouts.HelpBar,
         },
 
         Tabs =
@@ -263,12 +263,15 @@ public static class NotesRibbonLayout
                 ],
             },
 
+            // Help is the application's tab rather than the module's — the same tab in every
+            // module, as the reference draws it — so both halves come from the shell's copy
+            // rather than being declared empty here and never filled.
             new RibbonTab
             {
                 Id = "help",
                 Label = "Help",
                 KeyTip = "Y",
-                Groups = [],
+                Groups = DefaultRibbonLayouts.HelpGroups,
             },
         ],
     };

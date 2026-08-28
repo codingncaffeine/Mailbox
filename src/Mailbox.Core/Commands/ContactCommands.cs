@@ -40,7 +40,7 @@ public static class ContactCommands
         IconTint = "ribbon.icon.delete",
         Category = "Actions",
         Surface = CommandSurface.Contact,
-        KeyTip = "D",
+        KeyTip = "DL", // Not D: it would fire before DE, the Details page on the same tab.
     };
 
     public static readonly MailboxCommand SaveAndNew = new()

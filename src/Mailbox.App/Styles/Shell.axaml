@@ -602,6 +602,68 @@
         <Setter Property="Foreground" Value="{DynamicResource titlebar.caption.close.text.brush}" />
     </Style>
 
+    <!--
+        The held state, made visible. Every rule above sets the button's own Background and every
+        theme defines all six pressed tokens — but the control theme has its own ":pressed" rule
+        that fills PART_ContentPresenter, which is drawn on top, so a held caption button
+        photographed as the general button wash and not one of those tokens was ever seen. Dark
+        Gray measured #B0B0B0 on all three buttons, the close button's lighter red included.
+
+        The presenter is not drawn *over* the button's Background; it is what draws it, through
+        the control theme's template binding. So that theme's own ":pressed" rule, which sets the
+        presenter's Background to a fixed brush, replaces the binding and the token with it.
+        Standing the presenter aside was tried first and is worse: transparent removes the paint
+        altogether, and a held button then photographs exactly like a resting one — which is what
+        the capture showed, byte-identical, and is why this comment is not the one that was here.
+        The token has to be restated at the presenter, where being later beats the rule that
+        broke it.
+
+        Four rules and not one: each family names a different token and there is nothing to
+        inherit. Hover needs no equivalent — the control theme has no presenter-level
+        :pointerover rule, which is why hover was right all along and only the held state was not.
+    -->
+    <Style Selector="Button.caption:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource titlebar.caption.pressed.brush}" />
+    </Style>
+
+    <Style Selector="Button.caption.on-dialog:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource dialog.caption.pressed.brush}" />
+    </Style>
+
+    <Style Selector="Button.caption.on-system:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource systemdialog.caption.pressed.brush}" />
+    </Style>
+
+    <!--
+        The app rail's icons. Their own pair, for the reason the ribbon's buttons have theirs:
+        with no class of their own these took the generic Button:pointerover above, which is
+        state.hover — the *content* palette. Measured on the rail's own ground that was two units
+        apart in Colorful and White (no hover at all) and a near-white #C9C9C9 block on Dark
+        Gray's dark chrome. The rail is chrome, so it takes a wash over its own ground.
+
+        Transparent at rest so the rail's Background shows: a local value here would beat these
+        rules, which is the fault this file already records twice above.
+    -->
+    <Style Selector="Button.railitem">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+
+    <Style Selector="Button.railitem:pointerover">
+        <Setter Property="Background" Value="{DynamicResource rail.item.hover.brush}" />
+    </Style>
+
+    <Style Selector="Button.railitem:pressed">
+        <Setter Property="Background" Value="{DynamicResource rail.item.pressed.brush}" />
+    </Style>
+
+    <Style Selector="Button.railitem:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource rail.item.pressed.brush}" />
+    </Style>
+
+    <Style Selector="Button.caption-close:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource titlebar.caption.close.pressed.brush}" />
+    </Style>
+
     <!-- ============================= Dialog contents =========================== -->
 
     <!--

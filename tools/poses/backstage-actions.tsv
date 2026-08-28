@@ -1,0 +1,36 @@
+# Every Backstage action, generated from the page builders and the two Info menus.
+# Regenerate: tools/poses/generate-backstage.py
+# 15 section buttons, 9 menu entries.
+act-print.message	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=print:print.message
+act-print.list	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=print:print.list
+act-print.pdf	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=print:print.pdf
+act-account.settings	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=account:account.settings
+act-options.general	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=account:options.general
+act-about	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=account:about
+act-export.eml	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=saveas:export.eml
+act-export.mbox	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=saveas:export.mbox
+act-export.ics	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=saveas:export.ics
+act-export.vcf	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=saveas:export.vcf
+act-import.maildir	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=openexport:import.maildir
+act-import.thunderbird	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=openexport:import.thunderbird
+act-import.files	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=openexport:import.files
+act-rules	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=info:rules
+act-update.check	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=info:update.check
+# Account Settings…
+menu1-account.settings	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE_MENU=settings:account.settings
+# Update Password
+menu2-account.password	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE_MENU=settings:account.password
+# Account Name and Sync Settings
+menu3-account.server	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE_MENU=settings:account.server
+# Server Settings
+menu4-account.server	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE_MENU=settings:account.server
+# Mailbox Cleanup…
+menu5-tools.cleanup	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE_MENU=tools:tools.cleanup
+# Empty Deleted Items Folder
+menu6-tools.emptydeleted	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE_MENU=tools:tools.emptydeleted
+# Clean Up Old Items…
+menu7-tools.archive	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE_MENU=tools:tools.archive
+# Set Archive Folder…
+menu8-tools.archivefolder	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE_MENU=tools:tools.archivefolder
+# Recover Deleted Items…
+menu9-tools.recover	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE_MENU=tools:tools.recover

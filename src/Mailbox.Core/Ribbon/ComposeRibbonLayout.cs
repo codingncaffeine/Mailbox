@@ -150,6 +150,10 @@ internal static class ComposeRibbonLayout
             // Separators measured at x = 512, 633, 767, 887 — each of Speech, Insights and
             // Language is its own cluster of one, which is why the row has so many rules in it.
             ["review"] = ReviewRow,
+
+            // Help is the application's tab rather than this window's, and this window authors
+            // its rows directly instead of as clusters — hence the flatten.
+            ["help"] = DefaultRibbonLayouts.HelpBar.Flatten(),
         },
 
         Tabs =
@@ -424,7 +428,9 @@ internal static class ComposeRibbonLayout
             FormatTextTab,
             ReviewTab,
 
-            new RibbonTab { Id = "help", Label = "Help", KeyTip = "Y", Groups = [] },
+            // Help is the application's tab rather than this window's: the same tab wherever
+            // it appears, so both halves come from the shell's copy.
+            new RibbonTab { Id = "help", Label = "Help", KeyTip = "Y", Groups = DefaultRibbonLayouts.HelpGroups },
         ],
     };
 

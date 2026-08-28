@@ -507,10 +507,19 @@ public sealed class BackstageView : Border
         Grid.SetColumn(icon, 0);
         grid.Children.Add(icon);
 
+        // The account that is actually open, and what it actually is. These two lines were a
+        // pair of literals, so this page drew the same address and the same protocol whatever
+        // was in the store — including an address that was in no store at all.
+        var account = App.Accounts.Default?.Account;
+
         var lines = new StackPanel { Margin = new Thickness(0, 6), VerticalAlignment = VerticalAlignment.Center };
-        var address = new TextBlock { Text = "you@example.com" };
+        var address = new TextBlock { Text = account?.Address ?? "No account yet" };
         Bind(address, TextBlock.ForegroundProperty, "text.primary.brush");
-        var kind = new TextBlock { Text = "POP/SMTP", FontSize = 11 };
+        var kind = new TextBlock
+        {
+            Text = account?.TypeLabel ?? "Add Account sets one up",
+            FontSize = 11,
+        };
         Bind(kind, TextBlock.ForegroundProperty, "text.secondary.brush");
         lines.Children.Add(address);
         lines.Children.Add(kind);

@@ -20,6 +20,27 @@ using MimeKit;
 namespace Mailbox.App.Views;
 
 /// <summary>
+/// How a save-as-PDF ended, for a caller that has something to say about each.
+/// </summary>
+/// <remarks>
+/// Three answers rather than a bool because two of them used to be one. Dismissing the file
+/// picker and failing to write the file both returned false, and the caller told the reader the
+/// message could not be written to PDF either way — an error for something the reader had just
+/// chosen to do.
+/// </remarks>
+public enum PdfSaveResult
+{
+    /// <summary>The file was written.</summary>
+    Saved,
+
+    /// <summary>The reader dismissed the picker. Nothing to report.</summary>
+    Cancelled,
+
+    /// <summary>The write was attempted and did not work. Worth saying.</summary>
+    Failed,
+}
+
+/// <summary>
 /// The reading pane's body: the bars that say what was held back, and the message itself.
 /// </summary>
 /// <remarks>
@@ -1328,10 +1349,10 @@ public sealed class ReadingPaneBody : UserControl, IDisposable
     /// The same Memo layout a printed copy gets: the print stylesheet is part of the document,
     /// so paper and PDF cannot drift apart.
     /// </remarks>
-    public async Task<bool> PrintToPdfAsync()
+    public async Task<PdfSaveResult> PrintToPdfAsync()
     {
-        if (_web is null) return false;
-        if (TopLevel.GetTopLevel(this) is not { } top) return false;
+        if (_web is null) return PdfSaveResult.Failed;
+        if (TopLevel.GetTopLevel(this) is not { } top) return PdfSaveResult.Failed;
 
         var file = await top.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
@@ -1340,7 +1361,10 @@ public sealed class ReadingPaneBody : UserControl, IDisposable
             DefaultExtension = "pdf",
         });
 
-        if (file?.TryGetLocalPath() is not { } path) return false;
+        // Told apart from a failure: changing your mind is not an error, and reporting it as one
+        // is how "This message could not be written to PDF." used to greet a plain Cancel. The
+        // four Save As exports beside this one already say nothing when their picker is dismissed.
+        if (file?.TryGetLocalPath() is not { } path) return PdfSaveResult.Cancelled;
 
         try
         {
@@ -1349,12 +1373,12 @@ public sealed class ReadingPaneBody : UserControl, IDisposable
             await pdf.CopyToAsync(destination);
 
             Log.Info("Wrote a message to PDF.");
-            return true;
+            return PdfSaveResult.Saved;
         }
         catch (Exception ex)
         {
             Log.Warn("Could not write the message to PDF.", ex);
-            return false;
+            return PdfSaveResult.Failed;
         }
     }
 

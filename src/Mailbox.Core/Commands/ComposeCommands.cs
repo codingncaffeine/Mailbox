@@ -703,7 +703,7 @@ public static class ComposeCommands
         Icon = "table",
         Category = "Tables",
         Scope = ModuleScope.Mail,
-        KeyTip = "T",
+        KeyTip = "TA", // Not T: it would fire before TB, the Text Box on the same tab.
     };
 
     public static readonly MailboxCommand Pictures = new()
@@ -887,7 +887,7 @@ public static class ComposeCommands
         Icon = "3d-models",
         Category = "Illustrations",
         Scope = ModuleScope.Mail,
-        KeyTip = "D",
+        KeyTip = "3D", // Not D — it would fire before DC and DT — and not MD, which M (SmartArt) takes.
     };
 
     public static readonly MailboxCommand SmartArt = new()

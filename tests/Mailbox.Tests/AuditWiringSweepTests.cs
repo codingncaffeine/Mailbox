@@ -431,7 +431,14 @@ public class AuditWiringSweepTests
     [Fact]
     public void DumpTheCatalogueOnRequest()
     {
-        if (Environment.GetEnvironmentVariable("MAILBOX_CATALOGUE_DUMP") is not { Length: > 0 } into) return;
+        if (Environment.GetEnvironmentVariable("MAILBOX_CATALOGUE_DUMP") is not { Length: > 0 } asked) return;
+
+        // Resolved against the repository, not the test host's working directory — which is the
+        // binary's own folder, so a caller asking for artifacts/audit/… got it buried under
+        // tests/Mailbox.Tests/bin and wondered where the dump went.
+        var into = Path.IsPathRooted(asked)
+            ? asked
+            : Path.Combine(RepoRootForDump(), asked);
 
         Directory.CreateDirectory(into);
 
@@ -522,5 +529,12 @@ public class AuditWiringSweepTests
         foreach (var (command, chord) in DeadSecondChords()) text.AppendLine($"  {command} (also {chord})");
 
         return text.ToString();
+    }
+
+    private static string RepoRootForDump()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Mailbox.slnx"))) dir = dir.Parent;
+        return dir?.FullName ?? throw new InvalidOperationException("The repository root was not found above the test binary.");
     }
 }

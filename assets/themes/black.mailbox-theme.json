@@ -218,6 +218,8 @@
     "rail.indicator.width": "1.5",
     "rail.item.active": "{palette.brand.itemactive}",
     "rail.item.height": "48",
+    "rail.item.hover": "#33FFFFFF",
+    "rail.item.pressed": "#66FFFFFF",
     "rail.item.text": "#FFFFFF",
     "rail.width": "57",
     "reading.background": "{palette.ground}",

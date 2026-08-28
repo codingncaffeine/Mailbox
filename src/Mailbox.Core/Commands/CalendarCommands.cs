@@ -330,9 +330,10 @@ public static class CalendarCommands
         Description = "Send a stretch of your calendar in a message.",
         Icon = "email-calendar",
         Category = "Share",
+        KeyTip = "EC", // On the bar and, without this, off the keyboard entirely.
         Scope = ModuleScope.Calendar,
         InDefaultLayout = false,
-    };
+};
 
     public static readonly MailboxCommand PublishCalendar = new()
     {
@@ -341,9 +342,10 @@ public static class CalendarCommands
         Description = "Put this calendar on a server others can subscribe to.",
         Icon = "publish-calendar",
         Category = "Share",
+        KeyTip = "PO", // On the bar and, without this, off the keyboard entirely.
         Scope = ModuleScope.Calendar,
         InDefaultLayout = false,
-    };
+};
 
     // ---- An appointment ----------------------------------------------------------------
     public static readonly MailboxCommand OpenItem = new()
@@ -416,8 +418,9 @@ public static class CalendarCommands
         Description = "Open the Calendar page of Options.",
         Icon = "calendar-settings",
         Category = "Arrange",
+        KeyTip = "OP", // A dialog launcher is a control on the bar like any other, and Alt has to reach it.
         Scope = ModuleScope.Calendar,
-    };
+};
 
     public static IEnumerable<MailboxCommand> All =>
     [

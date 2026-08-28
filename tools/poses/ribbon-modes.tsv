@@ -1,0 +1,45 @@
+# The ribbon's display modes, the tab-strip hover, the two menus, and Alt's third level.
+# Hand-written rather than generated: these are one-off states rather than a sweep over the
+# layouts, and each names the exact door it exercises.
+
+# --- the four display modes ------------------------------------------------------------
+mode-classic	MAILBOX_RIBBON=classic MAILBOX_SIZE=1600x1000 MAILBOX_RIBBON_TRACE=1
+mode-simplified	MAILBOX_RIBBON=simplified MAILBOX_SIZE=1600x1000 MAILBOX_RIBBON_TRACE=1
+mode-collapsed	MAILBOX_RIBBON=collapsed MAILBOX_SIZE=1600x1000 MAILBOX_RIBBON_TRACE=1
+mode-revealed	MAILBOX_RIBBON=revealed MAILBOX_SIZE=1600x1000 MAILBOX_RIBBON_TRACE=1
+
+# --- the tab strip's hover, every tab of the mail bar ------------------------------------
+hover-tab-file	MAILBOX_HOVER=tab:file MAILBOX_RIBBON=classic MAILBOX_SIZE=1600x1000
+hover-tab-home	MAILBOX_HOVER=tab:home MAILBOX_RIBBON=classic MAILBOX_SIZE=1600x1000
+hover-tab-sendreceive	MAILBOX_HOVER=tab:sendreceive MAILBOX_RIBBON=classic MAILBOX_SIZE=1600x1000
+hover-tab-folder	MAILBOX_HOVER=tab:folder MAILBOX_RIBBON=classic MAILBOX_SIZE=1600x1000
+hover-tab-view	MAILBOX_HOVER=tab:view MAILBOX_RIBBON=classic MAILBOX_SIZE=1600x1000
+hover-tab-help	MAILBOX_HOVER=tab:help MAILBOX_RIBBON=classic MAILBOX_SIZE=1600x1000
+# The Folder tab is not on the Simplified strip: the door has to say so rather than light
+# something else, which is the trap the tab hover was added to close.
+hover-tab-folder-simplified	MAILBOX_HOVER=tab:folder MAILBOX_RIBBON=simplified MAILBOX_SIZE=1600x1000
+hover-tab-absent	MAILBOX_HOVER=tab:nosuchtab MAILBOX_RIBBON=classic MAILBOX_SIZE=1600x1000
+
+# --- the two menus the bar opens ---------------------------------------------------------
+menu-display-options	MAILBOX_PEEK=menu MAILBOX_RIBBON=simplified MAILBOX_SIZE=1600x1000
+overflow-wide	MAILBOX_PEEK=overflow MAILBOX_RIBBON=simplified MAILBOX_SIZE=1600x1000
+overflow-narrow	MAILBOX_PEEK=overflow MAILBOX_RIBBON=simplified MAILBOX_SIZE=980x900
+overflow-verynarrow	MAILBOX_PEEK=overflow MAILBOX_RIBBON=simplified MAILBOX_SIZE=820x900
+
+# --- Alt's third level: into a collapsed group's flyout ----------------------------------
+# Only reachable while the group has collapsed, so each is posed at a width the ladder has
+# already taken that group to a popup at (see narrow-mail-home-classic-980).
+keytips3-mail-home-speech	MAILBOX_KEYTIPS=home/zs MAILBOX_RIBBON=classic MAILBOX_SIZE=980x900 MAILBOX_RIBBON_TRACE=1
+keytips3-mail-home-apps	MAILBOX_KEYTIPS=home/za MAILBOX_RIBBON=classic MAILBOX_SIZE=980x900 MAILBOX_RIBBON_TRACE=1
+keytips3-mail-home-quicksteps	MAILBOX_KEYTIPS=home/zq MAILBOX_RIBBON=classic MAILBOX_SIZE=980x900 MAILBOX_RIBBON_TRACE=1
+keytips3-mail-home-move	MAILBOX_KEYTIPS=home/zm MAILBOX_RIBBON=classic MAILBOX_SIZE=980x900 MAILBOX_RIBBON_TRACE=1
+keytips3-mail-home-new	MAILBOX_KEYTIPS=home/zn MAILBOX_RIBBON=classic MAILBOX_SIZE=980x900 MAILBOX_RIBBON_TRACE=1
+keytips3-mail-home-delete	MAILBOX_KEYTIPS=home/zd MAILBOX_RIBBON=classic MAILBOX_SIZE=980x900 MAILBOX_RIBBON_TRACE=1
+keytips3-mail-home-sendreceive	MAILBOX_KEYTIPS=home/zy MAILBOX_RIBBON=classic MAILBOX_SIZE=980x900 MAILBOX_RIBBON_TRACE=1
+# A group still on the bar at this width has no badge of its own: its commands carry theirs.
+keytips3-mail-home-respond-uncollapsed	MAILBOX_KEYTIPS=home/zr MAILBOX_RIBBON=classic MAILBOX_SIZE=980x900 MAILBOX_RIBBON_TRACE=1
+
+# --- Alt reaching a command through the real key path -------------------------------------
+# Alt, then H for Home, then the command's own tip: the whole traversal typed, and the log
+# says what the command did.
+key-alt-home-reply	MAILBOX_KEY=LeftAlt,H,R MAILBOX_RIBBON=classic MAILBOX_SIZE=1600x1000

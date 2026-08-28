@@ -1,0 +1,39 @@
+# The Quick Access Toolbar's poses: its two placements, its hidden state, and the
+# customize flyout's candidate list, generated from DefaultRibbonLayouts.
+# Regenerate: tools/poses/generate-backstage.py
+# 11 candidates.
+qat-default	MAILBOX_MODULE=mail
+qat-above	MAILBOX_QAT=above
+qat-below	MAILBOX_QAT=below
+qat-hidden	MAILBOX_QAT=hidden
+qat-labels	MAILBOX_SETTING=ribbon.qat.labels=true
+qat-flyout	MAILBOX_QAT=flyout
+qat-placement	MAILBOX_QAT=flyout:Show
+qat-hide	MAILBOX_QAT=flyout:Hide
+qat-reset	MAILBOX_QAT=flyout:Reset
+qat-more	MAILBOX_QAT=flyout:More
+qat-modify	MAILBOX_PEEK=modifybutton
+qat-order	MAILBOX_SETTING=ribbon.qat.commands=mail.reply,mail.new,app.redo
+qat-badid	MAILBOX_SETTING=ribbon.qat.commands=mail.new,NotACommand,mail.delete
+# MailCommands.NewEmail
+qat-toggle-newemail	MAILBOX_QAT=flyout:mail.new
+# MailCommands.SendReceiveAll
+qat-toggle-sendreceiveall	MAILBOX_QAT=flyout:app.sendreceive.all
+# MailCommands.Undo
+qat-toggle-undo	MAILBOX_QAT=flyout:app.undo
+# ViewCommands.Redo
+qat-toggle-redo	MAILBOX_QAT=flyout:app.redo
+# MailCommands.Delete
+qat-toggle-delete	MAILBOX_QAT=flyout:mail.delete
+# MailCommands.Reply
+qat-toggle-reply	MAILBOX_QAT=flyout:mail.reply
+# MailCommands.ReplyAll
+qat-toggle-replyall	MAILBOX_QAT=flyout:mail.reply.all
+# MailCommands.Forward
+qat-toggle-forward	MAILBOX_QAT=flyout:mail.forward
+# MailCommands.MoveTo
+qat-toggle-moveto	MAILBOX_QAT=flyout:mail.move
+# MailCommands.AddressBook
+qat-toggle-addressbook	MAILBOX_QAT=flyout:app.addressbook
+# MailCommands.WorkOffline
+qat-toggle-workoffline	MAILBOX_QAT=flyout:app.workoffline

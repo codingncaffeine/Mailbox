@@ -75,7 +75,7 @@ public static class MessageRibbonLayout
                 Cluster("zoom", "Zoom",
                     RibbonItem.Sheddable(ViewCommands.Zoom.Id))),
 
-            ["help"] = new SimplifiedBar { Groups = [] },
+            ["help"] = DefaultRibbonLayouts.HelpBar,
         },
 
         Tabs =
@@ -191,7 +191,7 @@ public static class MessageRibbonLayout
                 Id = "help",
                 Label = "Help",
                 KeyTip = "E",
-                Groups = [],
+                Groups = DefaultRibbonLayouts.HelpGroups,
             },
         ],
 

@@ -82,6 +82,10 @@ public static class ContactRibbonLayout
                     RibbonItem.Sheddable(ComposeCommands.WordArt.Id, RibbonItemKind.DropDown),
                     RibbonItem.Sheddable(ComposeCommands.InsertObject.Id))),
 
+            // Help is the application's tab rather than this window's, so its row is the
+            // shell's. Without one the tab drew an empty bar in Simplified while its
+            // classic groups were right there.
+            ["help"] = DefaultRibbonLayouts.HelpBar,
         },
 
         // Format Text and Review are the compose window's own rows: the reference gives both

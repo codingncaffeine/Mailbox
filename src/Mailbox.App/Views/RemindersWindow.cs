@@ -64,9 +64,14 @@ public sealed record DueReminder
         var overdue = span < TimeSpan.Zero;
         span = span.Duration();
 
-        var words = span.TotalDays >= 1 ? $"{(int)span.TotalDays} day{((int)span.TotalDays == 1 ? "" : "s")}"
-            : span.TotalHours >= 1 ? $"{(int)span.TotalHours} hour{((int)span.TotalHours == 1 ? "" : "s")}"
-            : $"{Math.Max(1, (int)span.TotalMinutes)} minute{((int)span.TotalMinutes == 1 ? "" : "s")}";
+        // The count is worked out once and the plural taken from it. Said twice, the two
+        // disagreed for anything under a minute: the number was floored to 1 and the "s" was
+        // decided from the unfloored 0, so a reminder half a minute away read "Due in 1 minutes".
+        var (count, unit) = span.TotalDays >= 1 ? ((int)span.TotalDays, "day")
+            : span.TotalHours >= 1 ? ((int)span.TotalHours, "hour")
+            : (Math.Max(1, (int)span.TotalMinutes), "minute");
+
+        var words = $"{count} {unit}{(count == 1 ? string.Empty : "s")}";
 
         return overdue
             ? (IsAppointment ? $"Started {words} ago" : $"Overdue by {words}")

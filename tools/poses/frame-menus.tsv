@@ -1,0 +1,5 @@
+# The frame's own popups. Measured rather than photographed — rule 6.
+# Generated from the code — never transcribed. Regenerate: tools/poses/generate-frame.py
+# 2 poses.
+menu-allapps	MAILBOX_TODAY=2026-08-16 MAILBOX_PEEK=allapps
+menu-windowmenu	MAILBOX_TODAY=2026-08-16 MAILBOX_PEEK=windowmenu

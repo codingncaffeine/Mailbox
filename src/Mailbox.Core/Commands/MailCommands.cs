@@ -200,8 +200,9 @@ public static class MailCommands
         Description = "Move redundant messages in every conversation of the current folder to Deleted Items.",
         Icon = "cleanup",
         Category = "Delete",
+        KeyTip = "UF", // Not CF, which Copy Folder has on the same tab; without a tip at all it was off the keyboard.
         Scope = ModuleScope.Mail,
-    };
+};
 
     public static readonly MailboxCommand CleanUpFolderAndSubfolders = new()
     {
@@ -658,8 +659,9 @@ public static class MailCommands
         Description = "Bring back mail that was permanently deleted recently.",
         Icon = "undo",
         Category = "Delete",
+        KeyTip = "RD", // On the Folder tab and, without this, off the keyboard entirely.
         Scope = ModuleScope.Mail,
-    };
+};
 
     // Focused Inbox's four: on the row's menu when the view is on, and in the catalogue always.
     public static readonly MailboxCommand MoveToOther = new()
@@ -718,8 +720,9 @@ public static class MailCommands
         Description = "Create a folder that shows the mail matching a saved search.",
         Icon = "search",
         Category = "Find",
+        KeyTip = "NS", // On the Folder tab and, without this, off the keyboard entirely.
         Scope = ModuleScope.Mail,
-    };
+};
 
     public static readonly MailboxCommand AuthenticationDetails = new()
     {

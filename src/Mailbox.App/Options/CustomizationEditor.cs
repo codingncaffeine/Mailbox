@@ -570,10 +570,19 @@ public abstract class CustomizationEditor : UserControl
         return border;
     }
 
+    /// <summary>
+    /// One of the two buttons between the gallery and the placed list.
+    /// </summary>
+    /// <remarks>
+    /// A minimum rather than a width: 80 fits "Add &gt;&gt;" and clipped "&lt;&lt; Remove" to
+    /// "&lt;&lt; Removi", and a fixed width in pixels is a bet on a font. The stack stretches
+    /// both to the wider of the two, so they still match as the reference's do.
+    /// </remarks>
     protected Button MiddleButton(string label)
     {
         var button = DialogButton(label);
-        button.Width = 80;
+        button.MinWidth = 80;
+        button.HorizontalAlignment = HorizontalAlignment.Stretch;
         return button;
     }
 

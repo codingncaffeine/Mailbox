@@ -245,9 +245,14 @@ public class ComposeRibbonTests
         // 54 after the three the table was stale about: Address Book and Plain Text had been
         // running for some time with the table still calling them blocked, and All Apps now
         // opens the installed plugins here as it does in the shell.
-        Assert.Equal(54, ComposeAvailability.WorkingCount);
+        //
+        // 62 after the Help tab, which this window carried empty: the tab was on the strip with
+        // no groups and no Simplified row, so it drew nothing in either layout. It now carries
+        // the application's own Help groups, and those eight commands do here exactly what they
+        // do in the shell.
+        Assert.Equal(62, ComposeAvailability.WorkingCount);
         Assert.Equal(41, ComposeAvailability.BlockedCount);
-        Assert.Equal(95, ComposeAvailability.All.Count);
+        Assert.Equal(103, ComposeAvailability.All.Count);
     }
 
     /// <summary>

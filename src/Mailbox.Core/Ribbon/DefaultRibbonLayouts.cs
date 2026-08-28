@@ -677,4 +677,31 @@ public static class DefaultRibbonLayouts
         },
     ];
 
+    /// <summary>
+    /// The Help tab's Simplified row, which every module that carries the tab carries.
+    /// </summary>
+    /// <remarks>
+    /// The same seven entries as the classic tab's first group, in the same order, with Get
+    /// Diagnostics left to the bar's own "…" — transcribed from the Simplified capture. Written
+    /// once for the same reason <see cref="HelpGroups"/> is: Help is the application's tab
+    /// rather than a module's, and five modules drew it empty in both layouts because each had
+    /// declared its own and filled neither.
+    /// </remarks>
+    internal static SimplifiedBar HelpBar => new()
+    {
+        // No rule closing the row: the bar draws its own "…" behind one after the last cluster,
+        // and that is the single "…" the capture shows after Support Tool.
+        TrailingRule = false,
+        Groups =
+        [
+            Cluster("help", "Help",
+                RibbonItem.Small(ViewCommands.Help.Id),
+                RibbonItem.Small(ViewCommands.ContactSupport.Id),
+                RibbonItem.Small(ViewCommands.Feedback.Id),
+                RibbonItem.Small(ViewCommands.SuggestFeature.Id),
+                RibbonItem.Small(ViewCommands.ShowTraining.Id),
+                RibbonItem.Small(ViewCommands.WhatsNew.Id),
+                RibbonItem.Small(ViewCommands.SupportTool.Id)),
+        ],
+    };
 }

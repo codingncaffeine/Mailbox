@@ -272,6 +272,25 @@ public static class ComposeAvailability
             "Not the application's own accessibility, which is done: this inspects the message "
             + "being written — alt text on its pictures, contrast, a table's header row — and "
             + "nothing reads the document for that."),
+
+        // ---- Help ---------------------------------------------------------------------
+        // The application's own tab rather than the window's, so these do here exactly what
+        // they do in the shell — and each one already says for itself when it is pressed
+        // whether there is anything behind it.
+        new(ViewCommands.Help.Id, ComposeCommandState.Working, "Opens the manual."),
+        new(ViewCommands.ContactSupport.Id, ComposeCommandState.Working,
+            "Opens the issues page, and says there is no support desk behind the application."),
+        new(ViewCommands.Feedback.Id, ComposeCommandState.Working, "Opens the issues page."),
+        new(ViewCommands.SuggestFeature.Id, ComposeCommandState.Working, "Opens the issues page."),
+        new(ViewCommands.ShowTraining.Id, ComposeCommandState.Working,
+            "Says there are no training videos and points at the manual."),
+        new(ViewCommands.WhatsNew.Id, ComposeCommandState.Working,
+            "Opens what the newest release added and fixed."),
+        new(ViewCommands.SupportTool.Id, ComposeCommandState.Working,
+            "Says nothing here diagnoses an installation, and points at the issues page."),
+        new(ViewCommands.GetDiagnostics.Id, ComposeCommandState.Working,
+            "Says a diagnostics report needs a support desk to send it to, and that the logs "
+            + "are on disk either way."),
     ];
 
     public static IReadOnlyList<ComposeCommandStatus> All => Table;

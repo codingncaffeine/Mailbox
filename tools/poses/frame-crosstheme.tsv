@@ -1,0 +1,15 @@
+# The two state-dependent paints, in every built-in but the daily one.
+# Generated from the code — never transcribed. Regenerate: tools/poses/generate-frame.py
+# 12 poses.
+crosstheme-colorful-hold-minimize	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=colorful MAILBOX_CAPTION=hold:minimize
+crosstheme-colorful-hold-maximize	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=colorful MAILBOX_CAPTION=hold:maximize
+crosstheme-colorful-hold-close	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=colorful MAILBOX_CAPTION=hold:close
+crosstheme-colorful-rail-hover	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=colorful MAILBOX_HOVER=rail:calendar
+crosstheme-white-hold-minimize	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=white MAILBOX_CAPTION=hold:minimize
+crosstheme-white-hold-maximize	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=white MAILBOX_CAPTION=hold:maximize
+crosstheme-white-hold-close	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=white MAILBOX_CAPTION=hold:close
+crosstheme-white-rail-hover	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=white MAILBOX_HOVER=rail:calendar
+crosstheme-black-hold-minimize	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=black MAILBOX_CAPTION=hold:minimize
+crosstheme-black-hold-maximize	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=black MAILBOX_CAPTION=hold:maximize
+crosstheme-black-hold-close	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=black MAILBOX_CAPTION=hold:close
+crosstheme-black-rail-hover	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=black MAILBOX_HOVER=rail:calendar

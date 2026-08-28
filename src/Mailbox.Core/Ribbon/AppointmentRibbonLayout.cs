@@ -100,7 +100,7 @@ public static class AppointmentRibbonLayout
                 Cluster("proofing", "Proofing",
                     RibbonItem.Small(ComposeCommands.Spelling.Id))),
 
-            ["help"] = new SimplifiedBar { Groups = [] },
+            ["help"] = DefaultRibbonLayouts.HelpBar,
         },
 
         Tabs =
@@ -194,7 +194,7 @@ public static class AppointmentRibbonLayout
             new RibbonTab { Id = "insert", Label = "Insert", KeyTip = "N", Groups = [] },
             new RibbonTab { Id = "formattext", Label = "Format Text", KeyTip = "O", Groups = [] },
             new RibbonTab { Id = "review", Label = "Review", KeyTip = "R", Groups = [] },
-            new RibbonTab { Id = "help", Label = "Help", KeyTip = "Y", Groups = [] },
+            new RibbonTab { Id = "help", Label = "Help", KeyTip = "Y", Groups = DefaultRibbonLayouts.HelpGroups },
         ],
     };
 }

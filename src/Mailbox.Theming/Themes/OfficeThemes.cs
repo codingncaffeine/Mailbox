@@ -175,6 +175,10 @@ public static class OfficeThemes
         t.Set(TokenKeys.Avatar.Foreground, "{palette.neutral.white}");
         t.Set(TokenKeys.Rail.Background, "#EFE9E6");
         t.Set(TokenKeys.Rail.ItemText, "#242424");
+        // A wash over the rail's own ground, the way the caption buttons take one over theirs.
+        // state.hover is the content palette and sits two units from #EFE9E6 — invisible.
+        t.Set(TokenKeys.Rail.ItemHover, CaptionWashOverLight);
+        t.Set(TokenKeys.Rail.ItemPressed, CaptionWashOverLightPressed);
         t.Set(TokenKeys.Rail.Indicator, "{palette.brand.indicator}");
         t.Set(TokenKeys.Nav.Background, "#F5F5F5");
         t.Set(TokenKeys.StatusBar.Background, "#F5F5F5");
@@ -245,6 +249,10 @@ public static class OfficeThemes
         t.Set(TokenKeys.Avatar.Foreground, "{palette.neutral.white}");
         t.Set(TokenKeys.Rail.Background, "#EFE9E6");
         t.Set(TokenKeys.Rail.ItemText, "#242424");
+        // A wash over the rail's own ground, the way the caption buttons take one over theirs.
+        // state.hover is the content palette and sits two units from #EFE9E6 — invisible.
+        t.Set(TokenKeys.Rail.ItemHover, CaptionWashOverLight);
+        t.Set(TokenKeys.Rail.ItemPressed, CaptionWashOverLightPressed);
         t.Set(TokenKeys.Rail.Indicator, "{palette.brand.indicator}");
         t.Set(TokenKeys.Nav.Background, "#F5F5F5");
         t.Set(TokenKeys.StatusBar.Background, "#F5F5F5");
@@ -435,6 +443,9 @@ public static class OfficeThemes
         t.Set(TokenKeys.Avatar.Foreground, "{palette.neutral.white}");
         t.Set(TokenKeys.Rail.Background, "{palette.chrome.rail}");
         t.Set(TokenKeys.Rail.ItemText, "#E8E8E8");
+        // Dark chrome takes a white wash. state.hover here is #C9C9C9 — a near-white block.
+        t.Set(TokenKeys.Rail.ItemHover, CaptionWashOverDark);
+        t.Set(TokenKeys.Rail.ItemPressed, CaptionWashOverDarkPressed);
         t.Set(TokenKeys.Rail.ItemActive, "{palette.brand.itemactive}");
         t.Set(TokenKeys.Rail.Indicator, "{palette.brand.indicator}");
         t.Set(TokenKeys.Backstage.Field, "#9C9C9C");
@@ -616,6 +627,9 @@ public static class OfficeThemes
         t.Set(TokenKeys.Avatar.Foreground, "{palette.neutral.white}");
         t.Set(TokenKeys.Rail.Background, "#201A17");
         t.Set(TokenKeys.Rail.ItemText, "#FFFFFF");
+        // Already what Black resolved to by accident through state.hover; named now.
+        t.Set(TokenKeys.Rail.ItemHover, CaptionWashOverDarkPressed);
+        t.Set(TokenKeys.Rail.ItemPressed, "#66FFFFFF");
         t.Set(TokenKeys.Rail.ItemActive, "{palette.brand.itemactive}");
         t.Set(TokenKeys.Rail.Indicator, "{palette.brand.itemactive}");
         t.Set(TokenKeys.Backstage.Rail, "#1B1B1B");
@@ -1059,6 +1073,8 @@ public static class OfficeThemes
 
         t.Set(TokenKeys.Rail.Background, "{palette.neutral.lighter}");
         t.Set(TokenKeys.Rail.ItemText, "{palette.neutral.secondary}");
+        t.Set(TokenKeys.Rail.ItemHover, CaptionWashOverLight);
+        t.Set(TokenKeys.Rail.ItemPressed, CaptionWashOverLightPressed);
         t.Set(TokenKeys.Rail.ItemActive, "{palette.brand.primary}");
         t.Set(TokenKeys.Rail.Indicator, "{palette.brand.indicator}");
 

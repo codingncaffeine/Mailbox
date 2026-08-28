@@ -110,7 +110,7 @@ public static class TaskCommands
         Icon = "remove-from-list",
         Category = "Manage Task",
         Scope = ModuleScope.Tasks,
-        KeyTip = "RL",
+        KeyTip = "L", // Not RL: R is Reply, which fires first and takes RL with it.
         RequiresSelection = true,
     };
 
@@ -198,7 +198,7 @@ public static class TaskCommands
         Icon = "reply-all",
         Category = "Respond",
         Scope = ModuleScope.Tasks,
-        KeyTip = "RA",
+        KeyTip = "A", // R is Reply, and RA can never be typed behind it — mail resolves the same pair this way.
         RequiresSelection = true,
     };
 
@@ -247,7 +247,7 @@ public static class TaskCommands
         Icon = "task-simple-list",
         Category = "Current View",
         Scope = ModuleScope.Tasks,
-        KeyTip = "VS",
+        KeyTip = "SL", // Not VS: the View tab draws this beside View Settings, which is VS.
     };
 
     public static readonly MailboxCommand DetailedView = new()

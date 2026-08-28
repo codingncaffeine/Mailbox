@@ -287,7 +287,7 @@ public static class PeopleCommands
         IconArtwork = "categorize",
         Category = "Tags",
         Scope = ModuleScope.People,
-        KeyTip = "G",
+        KeyTip = "CG", // Not G: the contact window draws this beside its General page, which is G.
         RequiresSelection = true,
     };
 

@@ -381,6 +381,7 @@
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Center"
                                     Command="{Binding Activate}"
+                                    Classes="railitem"
                                     Classes.active="{Binding IsActive}"
                                     PointerEntered="RailPointerEntered"
                                     PointerExited="RailPointerExited"
@@ -1198,12 +1199,21 @@
                             VerticalAlignment="Center"
                             Foreground="{DynamicResource statusbar.foreground.brush}"
                             ToolTip.Tip="Zoom in" />
-                    <TextBlock Text="{Binding ZoomLabel}"
-                               MinWidth="34"
-                               TextAlignment="Right"
-                               VerticalAlignment="Center"
-                               Foreground="{DynamicResource statusbar.foreground.brush}"
-                               FontSize="{DynamicResource type.ui.size.small.value}" />
+                    <!-- The percentage opens the Zoom dialog, as it does in the reference. It
+                         was a TextBlock: the dialog existed and was reachable only from the
+                         message window, so the status bar's own figure did nothing at all. -->
+                    <Button Name="ZoomPercentage"
+                            Classes="flat"
+                            MinWidth="34"
+                            Padding="2,0"
+                            VerticalAlignment="Center"
+                            Click="ShowZoomDialog"
+                            ToolTip.Tip="Set the zoom level">
+                        <TextBlock Text="{Binding ZoomLabel}"
+                                   TextAlignment="Right"
+                                   Foreground="{DynamicResource statusbar.foreground.brush}"
+                                   FontSize="{DynamicResource type.ui.size.small.value}" />
+                    </Button>
                 </StackPanel>
             </Grid>
         </Border>

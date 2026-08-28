@@ -1,0 +1,19 @@
+# Every Backstage rail page, generated from BuildRail() — never transcribed.
+# Regenerate: tools/poses/generate-backstage.py
+# 8 rail entries, 5 of which the page switch builds.
+# Info — the page switch builds it
+backstage-info	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=info
+# Open & Export — the page switch builds it
+backstage-openexport	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=openexport
+# Save As — the page switch builds it
+backstage-saveas	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=saveas
+# Save Attachments — greyed in the rail
+backstage-saveattachments	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=saveattachments
+# Print — the page switch builds it
+backstage-print	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=print
+# Mailbox Account — the page switch builds it
+backstage-account	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=account
+# Options — falls through to Placeholder()
+backstage-options	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=options
+# Exit — falls through to Placeholder()
+backstage-exit	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=exit

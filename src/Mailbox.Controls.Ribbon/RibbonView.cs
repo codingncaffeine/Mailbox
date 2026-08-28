@@ -132,16 +132,48 @@ public sealed class RibbonView : ContentControl
     public void OpenDisplayOptions() => _displayOptions?.Flyout?.ShowAt(_displayOptions);
 
     /// <summary>
+    /// The two flyouts the bar owns, for a harness that has to measure a popup rather than
+    /// photograph one: the bar's "…" and the display-options menu, whichever are built.
+    /// </summary>
+    /// <remarks>
+    /// Returned rather than described here, because what a popup has to answer — how big its
+    /// presenter actually is — belongs with the probe that asks it, and this assembly has no
+    /// business knowing about the audit's rule 6.
+    /// </remarks>
+    public IReadOnlyList<(string What, MenuFlyout Flyout)> Flyouts()
+    {
+        var found = new List<(string, MenuFlyout)>();
+
+        if (_barOverflow?.Flyout is MenuFlyout overflow)
+        {
+            // Whether the button is on screen matters as much as whether the menu is open: a
+            // flyout shown from a control that has been rebuilt out of the tree has nowhere to
+            // place itself, and reports open with no presenter at all.
+            found.Add((
+                $"the bar's … menu (its button is {(_barOverflow.IsEffectivelyVisible ? "on screen" : "not on screen")}, "
+                + $"{(TopLevel.GetTopLevel(_barOverflow) is null ? "detached" : "attached")})",
+                overflow));
+        }
+
+        if (_displayOptions?.Flyout is MenuFlyout options) found.Add(("Ribbon Display Options", options));
+        return found;
+    }
+
+    /// <summary>
     /// The bar's "…" and its menu, for the harness: a flyout cannot be photographed, so what it
     /// would list is read back instead.
     /// </summary>
     private Button? _barOverflow;
+
+    /// <summary>Refills the bar's "…" menu against the width it is at now.</summary>
+    private Action? _fillBarOverflow;
 
     /// <summary>Opens the bar's "…" menu and returns what it holds, in order.</summary>
     public IReadOnlyList<string> OpenOverflowMenu()
     {
         if (_barOverflow?.Flyout is not MenuFlyout flyout) return [];
 
+        _fillBarOverflow?.Invoke();
         flyout.ShowAt(_barOverflow);
 
         return [.. flyout.Items
@@ -318,7 +350,16 @@ public sealed class RibbonView : ContentControl
         set
         {
             if (string.Equals(_activeTabId, value, StringComparison.OrdinalIgnoreCase)) return;
-            _activeTabId = value;
+
+            // A tab the strip is not showing cannot be the selected one: asking for Folder while
+            // the bar is Simplified drew an unhighlighted strip over an empty body, which reads
+            // as broken rather than as a tab this mode does not have. The same guard is what
+            // DisplayMode and SetContextualGroupVisible already apply on their side; the strip's
+            // invariant has to hold whoever moved the selection.
+            _activeTabId = VisibleTabs.Any(t => string.Equals(t.Id, value, StringComparison.OrdinalIgnoreCase))
+                ? value
+                : VisibleTabs.FirstOrDefault(t => !t.IsBackstage)?.Id ?? _activeTabId;
+
             Rebuild();
             ActiveTabChanged?.Invoke(this, _activeTabId);
         }
@@ -347,6 +388,11 @@ public sealed class RibbonView : ContentControl
         _menuOpeners.Clear();
         _collapsedGroups.Clear();
         _labelWidth = null;
+
+        // Cleared rather than left over: a rebuild that draws no body must describe none, and a
+        // stale panel would report the tab before this one as though it were still on screen.
+        _groupsPanel = null;
+        _simplifiedPanel = null;
 
         var root = new Grid
         {
@@ -660,6 +706,7 @@ public sealed class RibbonView : ContentControl
         // panel for the rules; the primary command is the first labelled one, and it keeps its
         // label longest.
         var strip = new SimplifiedRowPanel { VerticalAlignment = VerticalAlignment.Center };
+        _simplifiedPanel = strip;
         var primaryClaimed = false;
 
         // Walked cluster by cluster rather than item by item, because a cluster's "…" lists what
@@ -725,9 +772,25 @@ public sealed class RibbonView : ContentControl
 
         var overflow = BuildGlyphButton("more", "More commands", 16, () => { });
         var overflowMenu = new MenuFlyout { Placement = PlacementMode.BottomEdgeAlignedRight };
-        overflowMenu.Opening += (_, _) => FillOverflowMenu(overflowMenu, tab, strip.Overflowed);
+
+        // Filled before the flyout is asked to open, not from its own Opening event. A
+        // MenuFlyout's presenter takes its entries when it is created; entries added while it is
+        // opening arrive after that, and the popup presents nothing at all — measured, not
+        // reasoned: the menu reported itself open with thirteen entries and no presenter, while
+        // the display-options menu beside it, built up front, measured 214x198.
+        void Fill() => FillOverflowMenu(overflowMenu, tab, strip.Overflowed);
+
+        overflow.Click += (_, _) => Fill();
+        strip.OverflowChanged += (_, _) => Fill();
+
+        // Opening as well, so a menu opened after something changed what a command's entry says
+        // is current — but never Opening alone, which is the fault above.
+        overflowMenu.Opening += (_, _) => Fill();
+        Fill();
+
         overflow.Flyout = overflowMenu;
         _barOverflow = overflow;
+        _fillBarOverflow = Fill;
         tail.Children.Add(overflow);
 
         // The panel takes what the column gives it and decides what to show; nothing scrolls
@@ -1087,6 +1150,75 @@ public sealed class RibbonView : ContentControl
 
     /// <summary>Every tab this bar is showing, by id — what a harness lists when a pose names no tab it has.</summary>
     public IReadOnlyList<string> TabIds() => [.. _tabControls.Select(t => t.Tab.Id)];
+
+    /// <summary>
+    /// What the bar actually built, as one line a run can be read back from.
+    /// </summary>
+    /// <remarks>
+    /// A capture proves a tab was photographed; it does not prove the tab holds what the layout
+    /// document says, and comparing 56 pictures by eye is how a missing group goes unnoticed. So
+    /// the strip, the active tab and the body are reported as text: the tabs in the order they
+    /// are drawn, then either the classic groups with the variant each settled on, or the
+    /// Simplified row's entries with what it could not fit.
+    /// <para>
+    /// Read after a layout pass — before one, the panel has not chosen a variant and every group
+    /// reports Normal.
+    /// </para>
+    /// </remarks>
+    public string Describe()
+    {
+        var strip = string.Join(", ", _tabControls.Select(t =>
+            string.Equals(t.Tab.Id, _activeTabId, StringComparison.OrdinalIgnoreCase)
+                ? $"[{t.Tab.Id}]"
+                : t.Tab.Id));
+
+        var body = DisplayMode switch
+        {
+            // Collapsed and revealed are the same mode with the body floating over the content,
+            // and a line that said only "collapsed" for both could not tell a revealed ribbon
+            // from one that never unrolled.
+            RibbonDisplayMode.Collapsed =>
+                $"collapsed, {(_isFloating ? $"floating as {_expandedMode}" : "tab strip only")}",
+            RibbonDisplayMode.Simplified => DescribeSimplifiedRow(),
+            _ => DescribeGroups(),
+        };
+
+        return $"mode={DisplayMode} tabs={_tabControls.Count} strip={strip} body={body}";
+    }
+
+    private string DescribeGroups()
+    {
+        if (_groupsPanel is not { } panel) return "(none)";
+
+        var variants = panel.ChosenVariants;
+        var groups = _layout.FindTab(_activeTabId)?.Groups ?? [];
+
+        return groups.Count == 0
+            ? "(no groups)"
+            : string.Join(", ", groups.Select((g, i) =>
+                $"{g.Id}:{(i < variants.Count ? variants[i].ToString() : "?")}"));
+    }
+
+    private string DescribeSimplifiedRow()
+    {
+        if (_simplifiedPanel is not { } panel) return "(none)";
+
+        var overflowed = panel.Overflowed.Select(id => id.Value).ToList();
+        var row = _layout.SimplifiedRows.TryGetValue(_activeTabId, out var items)
+            ? items.Where(i => !i.IsSentinel).Select(i => i.Command.Value).ToList()
+            : [];
+
+        return row.Count == 0
+            ? "(no row)"
+            : $"{row.Count} entries, {overflowed.Count} overflowed"
+              + (overflowed.Count > 0 ? $" [{string.Join(" ", overflowed)}]" : string.Empty);
+    }
+
+    /// <summary>The panel holding the classic body's groups, for <see cref="Describe"/>.</summary>
+    private RibbonGroupsPanel? _groupsPanel;
+
+    /// <summary>The panel holding the Simplified row, for <see cref="Describe"/>.</summary>
+    private SimplifiedRowPanel? _simplifiedPanel;
 
     public void ForceHover(CommandId id)
     {
@@ -1672,6 +1804,8 @@ public sealed class RibbonView : ContentControl
             Height = RibbonMetrics.BodyHeight,
             HorizontalAlignment = HorizontalAlignment.Left,
         };
+
+        _groupsPanel = groups;
 
         // Same rounded, inset panel as the Simplified row — the classic ribbon is taller, not
         // shaped differently — with the display-options chevron in the same corner. Clipped

@@ -23,6 +23,19 @@ namespace Mailbox.App.Views;
 /// </remarks>
 internal static class QuickAccessFlyout
 {
+    /// <summary>
+    /// How to fill each menu this class has built, so the harness can fill one without showing it.
+    /// </summary>
+    /// <remarks>
+    /// A <see cref="MenuFlyout"/> never appears in a capture, and this one is filled from its own
+    /// <c>Opening</c> event — so a run that only photographs the window measures an empty menu and
+    /// concludes the toolbar has no editor. Keyed weakly so a flyout that goes away takes its
+    /// entry with it. This is the same list the chevron opens, not a second one written for the
+    /// harness, which would agree with the menu right up until somebody edited one of them.
+    /// </remarks>
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<MenuFlyout, Action>
+        Fillers = new();
+
     internal static MenuFlyout Build(
         CommandCatalog catalog,
         QuickAccessLayout layout,
@@ -30,8 +43,23 @@ internal static class QuickAccessFlyout
         Action moreCommands)
     {
         var flyout = new MenuFlyout { Placement = PlacementMode.BottomEdgeAlignedLeft };
-        flyout.Opening += (_, _) => Populate(flyout, catalog, layout, changed, moreCommands);
+        void Fill() => Populate(flyout, catalog, layout, changed, moreCommands);
+
+        // Filled now as well as on every open. The presenter is built from these entries when
+        // the popup is created, and creation happens before Opening is raised: a menu that had
+        // nothing in it at that moment stays empty on screen however many entries the event
+        // then adds. The chevron opened a popup with no rows in it, which is not a menu a reader
+        // can tell from a menu that failed to open.
+        Fill();
+        flyout.Opening += (_, _) => Fill();
+        Fillers.AddOrUpdate(flyout, Fill);
         return flyout;
+    }
+
+    /// <summary>Harness only: fills the menu as opening it would, without showing it.</summary>
+    internal static void Fill(MenuFlyout flyout)
+    {
+        if (Fillers.TryGetValue(flyout, out var fill)) fill();
     }
 
     private static void Populate(

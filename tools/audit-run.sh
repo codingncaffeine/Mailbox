@@ -19,7 +19,7 @@
 # which for a door inventory is the answer, not a failure.
 #
 # Usage:
-#   tools/audit-run.sh <phase> <pose-list> [--seed <dir>] [--theme <id>] [--timeout <s>]
+#   tools/audit-run.sh <phase> <pose-list> [--seed <dir>] [--theme <id>] [--out <name>] [--timeout <s>]
 #   tools/audit-run.sh 0 tools/poses/doors.tsv --theme darkgray
 #
 # Rule 2 of the plan's evidence: a capture without MAILBOX_CAPTURE is not a harness run.
@@ -30,7 +30,7 @@ cd "$(dirname "$0")/.."
 
 die() { echo "audit-run: $*" >&2; exit 2; }
 
-[[ $# -ge 2 ]] || die "usage: audit-run.sh <phase> <pose-list> [--seed <dir>] [--theme <id>] [--timeout <s>]"
+[[ $# -ge 2 ]] || die "usage: audit-run.sh <phase> <pose-list> [--seed <dir>] [--theme <id>] [--out <name>] [--timeout <s>]"
 
 phase=$1; shift
 list=$1; shift
@@ -38,6 +38,7 @@ list=$1; shift
 
 seed=""
 theme=""
+out_suffix=""
 timeout_s=60
 
 while [[ $# -gt 0 ]]; do
@@ -49,6 +50,10 @@ while [[ $# -gt 0 ]]; do
         --seed)    seed=${2:?--seed wants the directory a seeding run produced}; shift 2 ;;
         --theme)   theme=${2:?--theme wants a theme id}; shift 2 ;;
         --timeout) timeout_s=${2:?--timeout wants seconds}; shift 2 ;;
+        # A sub-directory of the phase, so two batches cannot overwrite each other. Without it
+        # a second themed run of the same pose list destroyed the first's captures AND its
+        # exceptions.txt, and two lanes sharing a phase shared one summary.tsv.
+        --out)     out_suffix=${2:?--out wants a name}; shift 2 ;;
         *) die "unknown argument: $1" ;;
     esac
 done
@@ -58,11 +63,16 @@ if [[ -n $seed ]]; then
 fi
 
 out="artifacts/audit/phase${phase}"
+[[ -n $out_suffix ]] && out="$out/$out_suffix"
 mkdir -p "$out"
 summary="$out/summary.tsv"
 
 # The binary. Built once here rather than per pose: a hundred poses is a hundred builds
 # otherwise, and MSBuild's reusable nodes hold on to whatever lock a caller wrapped this in.
+# MSBUILDDISABLENODEREUSE stops MSBuild's own worker nodes lingering; it does not
+# cover the Roslyn compiler server, which is the one that used to inherit a caller's
+# flock descriptor and hold the build lock for ten idle minutes. Callers should use
+# `flock -o`, which closes the descriptor before exec.
 export MSBUILDDISABLENODEREUSE=1
 echo "── building"
 dotnet build src/Mailbox.App -c Debug -v q --nologo > "$out/build.log" 2>&1 \
