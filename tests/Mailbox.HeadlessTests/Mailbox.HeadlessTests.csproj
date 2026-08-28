@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The tests that need a real control tree.
+
+    Mailbox.Tests cannot reference Mailbox.App — every window and view in the application lives
+    there — so everything the audit proved about them had to be proved either by scanning the
+    source as text or by photographing a running application through the pose harness. Both work
+    and neither is a unit test: a regex over source cannot press a button, and a capture cannot
+    see a popup at all.
+
+    This project references the application and starts Avalonia headlessly, so a control can be
+    built, driven and asked what it holds. That is what closes the gap the audit kept running
+    into: 52 context menus and every flyout in the tree have no automated verification, because
+    a popup is not in the window list and never appears in a capture. Its *contents* can be
+    asserted here.
+
+    Separate from Mailbox.Tests rather than merged into it: referencing the application drags in
+    Avalonia's whole desktop stack, and the 2,200 tests next door should not pay for that or risk
+    a platform initialisation failure they have nothing to do with.
+  -->
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <!-- Exe, as Mailbox.Tests is: xunit v3 builds its own app host and refuses to be a library.
+         Referencing a WinExe from here is fine — the application's assembly is a library like
+         any other, and only its entry point is unused. -->
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Headless" Version="$(AvaloniaVersion)" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="$(TestSdkVersion)" />
+    <PackageReference Include="xunit.v3" Version="$(XunitVersion)" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="$(XunitRunnerVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Mailbox.App\Mailbox.App.csproj" />
+  </ItemGroup>
+
+</Project>

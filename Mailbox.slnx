@@ -27,6 +27,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Mailbox.TestPlugin/Mailbox.TestPlugin.csproj" />
+    <Project Path="tests/Mailbox.HeadlessTests/Mailbox.HeadlessTests.csproj" />
     <Project Path="tests/Mailbox.Tests/Mailbox.Tests.csproj" />
   </Folder>
 </Solution>
