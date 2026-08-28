@@ -1394,7 +1394,7 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>How a snooze time is written: a time today, else the day and time.</summary>
     internal static string SnoozeLabel(DateTimeOffset until, DateTimeOffset? today = null)
     {
-        var now = today ?? DateTimeOffset.Now;
+        var now = today ?? Mailbox.Core.PosedClock.Now;
         var local = until.ToLocalTime();
         return local.Date == now.Date ? local.ToString("h:mm tt") : local.ToString("ddd d MMM, h:mm tt");
     }
@@ -1405,7 +1405,7 @@ public sealed partial class ShellViewModel : ObservableObject
     /// </summary>
     internal static string Received(DateTimeOffset when, DateTimeOffset? today = null)
     {
-        var now = today ?? DateTimeOffset.Now;
+        var now = today ?? Mailbox.Core.PosedClock.Now;
         var local = when.ToLocalTime();
 
         if (local.Date == now.Date) return local.ToString("h:mm tt");
@@ -2278,7 +2278,7 @@ public sealed partial class ShellViewModel : ObservableObject
 
     private static DateTimeOffset StartOfThisWeek()
     {
-        var today = DateTimeOffset.Now.Date;
+        var today = Mailbox.Core.PosedClock.Now.Date;
         return new DateTimeOffset(today.AddDays(-(int)today.DayOfWeek));
     }
 
@@ -2494,7 +2494,11 @@ public sealed partial class ShellViewModel : ObservableObject
 
         var rows = Filter == ListFilter.None ? Messages : Messages.Where(Passes);
         if (!_viewFilter.IsEmpty) rows = rows.Where(r => Mailbox.Core.Search.SearchMatcher.Matches(_viewFilter, r.Facts()));
-        var groups = Store.Lists.Arrangements.Group(rows, GroupArrangement, GroupDescending);
+        // The pinned clock, not the machine's: the date bands are Today, Yesterday and the named
+        // days of the past week, so a capture taken against the real clock is a different picture
+        // every day and the wording cannot be held to a reference.
+        var groups = Store.Lists.Arrangements.Group(
+            rows, GroupArrangement, GroupDescending, Mailbox.Core.PosedClock.Now);
 
         // Group By's "All collapsed": every group of this build starts shut, once.
         if (_collapseAllNext)

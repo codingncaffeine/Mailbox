@@ -38,18 +38,17 @@ public partial class MainWindow
     /// calendar is the same picture next year — without it every month view would shade a
     /// different half of itself and no reference comparison would hold.
     /// </summary>
-    internal static DateOnly CalendarToday { get; } =
-        Environment.GetEnvironmentVariable("MAILBOX_TODAY") is { Length: > 0 } pinned
-        && DateOnly.TryParseExact(pinned, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day)
-            ? day
-            : DateOnly.FromDateTime(DateTime.Now);
+    /// <remarks>
+    /// The parse itself lives in <see cref="Mailbox.Core.PosedClock"/>, which the mail list reads
+    /// too — its date bands need pinning for the same reason this does.
+    /// </remarks>
+    internal static DateOnly CalendarToday => Mailbox.Core.PosedClock.Today;
 
     /// <summary>
     /// The moment the now line is drawn at. A pinned day gets no now line: the line would be at
     /// the real clock's time on a day that is not the real one.
     /// </summary>
-    internal static DateTime? CalendarNow { get; } =
-        Environment.GetEnvironmentVariable("MAILBOX_TODAY") is { Length: > 0 } ? null : DateTime.Now;
+    internal static DateTime? CalendarNow => Mailbox.Core.PosedClock.IsPinned ? null : DateTime.Now;
 
     /// <summary>The calendar ribbon: the shipped layout with the reader's edits over it.</summary>
     private static RibbonLayout CalendarRibbon() => App.RibbonEdits.Apply(App.Plugins.InjectRibbon(DefaultRibbonLayouts.Calendar));

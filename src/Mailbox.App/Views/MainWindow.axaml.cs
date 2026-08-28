@@ -793,6 +793,42 @@ public partial class MainWindow : Window
                 DispatcherPriority.Loaded);
         }
 
+        // The arrangement, which is a grouping and a sort together rather than a column press:
+        // MAILBOX_ARRANGE=<name>, or several in order. Through the shell's own setter, which is
+        // what the menu behind the "By Date" label does.
+        if (Environment.GetEnvironmentVariable("MAILBOX_ARRANGE") is { Length: > 0 } arrangePose)
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(
+                () =>
+                {
+                    if (DataContext is ShellViewModel s) PoseArrange(s, arrangePose);
+                },
+                DispatcherPriority.Loaded);
+        }
+
+        // What the list and the folder pane actually hold: MAILBOX_LIST=dump, MAILBOX_FOLDERS=dump.
+        // Last of the posed work and at the lowest priority, so what they report is the list after
+        // every other pose has had its say rather than part-way through the poses.
+        if (Environment.GetEnvironmentVariable("MAILBOX_LIST") == "dump")
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(
+                () =>
+                {
+                    if (DataContext is ShellViewModel s) PoseListDump(s);
+                },
+                DispatcherPriority.ApplicationIdle);
+        }
+
+        if (Environment.GetEnvironmentVariable("MAILBOX_FOLDERS") == "dump")
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(
+                () =>
+                {
+                    if (DataContext is ShellViewModel s) PoseFolderDump(s);
+                },
+                DispatcherPriority.ApplicationIdle);
+        }
+
         // The status bar's progress, pressed: the dialog again. Once "don't show this during
         // Send/Receive" is ticked, this bar is the only way back to it, so it has to be a way
         // back to it.
