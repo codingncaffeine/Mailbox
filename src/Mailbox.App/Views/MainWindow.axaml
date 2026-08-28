@@ -8,7 +8,7 @@
         mc:Ignorable="d"
         x:Class="Mailbox.App.Views.MainWindow"
         x:DataType="vm:ShellViewModel"
-        Title="Mailbox"
+        Title="{Binding WindowTitle}"
         Width="1280" Height="820"
         MinWidth="760" MinHeight="480"
         Background="Transparent"
@@ -347,9 +347,15 @@
             which is why it lives in the outer grid spanning both rows: in the reference the
             ribbon starts to the right of the rail, not across the top of it.
         -->
+        <!-- The rule down its right edge is the reference's, at every row and in every theme:
+             it contrasts against the rail on one side and the folder pane on the other, so it
+             is a rule rather than the edge of either. The width is unchanged — the last of the
+             57 pixels is the rule, which is how the reference spends it. -->
         <Border Grid.Row="1" Grid.RowSpan="2" Grid.Column="0"
                 IsVisible="{Binding ShowAppRail}"
                 Width="{DynamicResource rail.width.value}"
+                BorderThickness="0,0,1,0"
+                BorderBrush="{DynamicResource rail.rule.brush}"
                 Background="{DynamicResource rail.background.brush}">
             <ItemsControl ItemsSource="{Binding Modules}">
                 <ItemsControl.ItemsPanel>

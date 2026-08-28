@@ -221,6 +221,7 @@
     "rail.item.hover": "#33FFFFFF",
     "rail.item.pressed": "#66FFFFFF",
     "rail.item.text": "#FFFFFF",
+    "rail.rule": "#666666",
     "rail.width": "57",
     "reading.background": "{palette.ground}",
     "reading.header.background": "{palette.raised}",

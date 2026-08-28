@@ -33,6 +33,14 @@ public static class OptionsPages
 
         public const string ShowReadingPane = "panes.showreadingpane";
         public const string ReadingPaneAtBottom = "panes.readingpane.bottom";
+
+        /// <summary>
+        /// The reading pane's zoom, as a percentage. <see cref="SettingsStore"/>'s own remarks
+        /// already listed the zoom among the things that survive a run; nothing wrote it, so it
+        /// went back to 100% on every launch and the comment described a behaviour that did not
+        /// exist.
+        /// </summary>
+        public const string ZoomPercent = "panes.zoom";
     }
 
     private static IReadOnlyList<OptionsPage>? _all;

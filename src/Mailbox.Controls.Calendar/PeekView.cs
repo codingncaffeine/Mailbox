@@ -301,7 +301,15 @@ public sealed class PeekView : CalendarSurface
             if (ShowWeekNumbers)
             {
                 var box = layout.WeekCell(row);
-                var week = Ink(ISOWeek.GetWeekOfYear(cursor.ToDateTime(TimeOnly.MinValue)).ToString(Culture), PeekLayout.CellSize, OtherInk);
+
+                // Asked about the row's Thursday, not its first cell. An ISO week runs Monday to
+                // Sunday, so with Sunday first in the grid the row's own first cell belongs to
+                // the week that is ending: the row Sun 16 – Sat 22 August 2026 was labelled 33,
+                // which is Mon 10 – Sun 16. Thursday is in the same ISO week as every other day
+                // of its Monday-week, whichever day the grid starts on, so it is the one cell
+                // that answers correctly for both settings.
+                var thursday = cursor.AddDays((((int)DayOfWeek.Thursday - (int)cursor.DayOfWeek) + 7) % 7);
+                var week = Ink(ISOWeek.GetWeekOfYear(thursday.ToDateTime(TimeOnly.MinValue)).ToString(Culture), PeekLayout.CellSize, OtherInk);
                 DrawAt(context, week, box.X + ((box.Width - week.Width) / 2), box.Y + PeekLayout.CellBaselineOffset);
             }
 

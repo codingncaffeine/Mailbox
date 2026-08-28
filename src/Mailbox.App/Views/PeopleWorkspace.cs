@@ -31,7 +31,11 @@ public sealed class PeopleWorkspace : Border
 
     private readonly ContactBook _book;
     private readonly PeopleOptions _options;
-    private readonly ContactListView _list = new();
+    // The module's own hint, not the favourites one the control defaults to: here a reader who
+    // has no contacts wants to know how to make one, and New Contact on the bar is how. The
+    // sentence that used to be here told them to double-click the empty space, which raises
+    // nothing.
+    private readonly ContactListView _list = new() { EmptyHint = "Use New Contact on the ribbon to add one." };
     private readonly StackPanel _bookList = new();
     private readonly StackPanel _card = new() { Margin = new Thickness(24, 20, 24, 20), Spacing = 2 };
     private readonly ScrollViewer _cardScroll;

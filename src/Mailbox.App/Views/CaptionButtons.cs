@@ -27,7 +27,17 @@ namespace Mailbox.App.Views;
 public sealed class CaptionButtons : StackPanel
 {
     private const double ButtonWidth = 48;
-    private const double ButtonHeight = 44;
+
+    /// <summary>
+    /// The full height of the 49px caption band, less the 1px the frame's own edge takes.
+    /// </summary>
+    /// <remarks>
+    /// Measured off <c>close button.png</c>, where the hovered red runs y1..48 — the whole band.
+    /// It was 44, which left the bottom five pixels bare title bar with <c>WindowFrame.Drags</c>
+    /// on them: a press there began a window drag instead of pressing the button directly above
+    /// it, and the glyphs sat three pixels high of where the reference draws them.
+    /// </remarks>
+    private const double ButtonHeight = 48;
 
     /// <summary>
     /// A dialog's caption is shorter and carries only the close button, as the reference's

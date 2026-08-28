@@ -151,6 +151,29 @@ public sealed class ContactListView : DrawnSurface
         }
     }
 
+    /// <summary>
+    /// The second line drawn when the list is empty: what the reader should do about it.
+    /// </summary>
+    /// <remarks>
+    /// The host's to say, because the answer is not the same everywhere this control is used and
+    /// the control cannot tell where it is. It read "Double-click here to create a new Contact."
+    /// in all of them — including the To-Do bar's favourites section, where a new contact would
+    /// not be a favourite, and where the double click does nothing at all: this raises
+    /// <c>ContactActivated</c> only from a row, so there is no empty-area gesture behind either
+    /// sentence. Telling a reader to do something the control cannot do is worse than saying
+    /// nothing, so the default is the one instruction that is true everywhere.
+    /// </remarks>
+    public string EmptyHint
+    {
+        get;
+        set
+        {
+            if (field == value) return;
+            field = value;
+            InvalidateVisual();
+        }
+    } = "Right-click a person to add them to your favourites.";
+
     /// <summary>The token for a part of the list, in whichever palette it is drawing in.</summary>
     private Color Ink(string themed, string popup) => Colour(OnPopup ? popup : themed);
 
@@ -449,7 +472,7 @@ public sealed class ContactListView : DrawnSurface
     {
         // On the pane, so the pane's ink — the same the index and an unbanded row take.
         var ink = Ink(TokenKeys.List.HeaderText, TokenKeys.Peek.PopText);
-        string[] lines = ["We didn't find anything to show here.", "Double-click here to create a new Contact."];
+        string[] lines = ["We didn't find anything to show here.", EmptyHint];
 
         var baseline = area.Y + EmptyFirstBaseline;
         foreach (var line in lines)

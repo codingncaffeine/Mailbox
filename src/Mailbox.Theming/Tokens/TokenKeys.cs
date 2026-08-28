@@ -367,6 +367,13 @@ public static class TokenKeys
         /// </summary>
         public const string ItemHover = "rail.item.hover";
         public const string ItemPressed = "rail.item.pressed";
+        /// <summary>
+        /// The 1px rule between the rail and the folder pane. Every reference draws one, at every
+        /// row, and it contrasts against both sides — so it is a rule of its own and not the edge
+        /// of either. The rail used to butt straight against the pane; the total width matched
+        /// because the reference spends its last pixel on this and we did not.
+        /// </summary>
+        public const string Rule = "rail.rule";
         public const string Width = "rail.width";
         public const string ItemHeight = "rail.item.height";
         public const string Indicator = "rail.indicator";
@@ -884,7 +891,7 @@ public static class TokenKeys
         Category.Red, Category.Orange, Category.Yellow,
         Category.Green, Category.Blue, Category.Purple,
         Rail.Background, Rail.ItemText, Rail.ItemActive, Rail.ItemHover, Rail.ItemPressed,
-        Rail.Width, Rail.ItemHeight,
+        Rail.Rule, Rail.Width, Rail.ItemHeight,
         Rail.Indicator, Rail.IndicatorWidth, Rail.IndicatorHeight, Rail.IndicatorInset,
         Backstage.Rail, Backstage.RailText, Backstage.RailDisabled,
         Backstage.RailRule, Backstage.Field,

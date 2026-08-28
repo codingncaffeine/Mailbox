@@ -207,6 +207,13 @@ public sealed class BackstageView : Border
     /// <summary>Opens a page by rail id — what a click does, for the harness, which cannot click.</summary>
     internal void Open(string id)
     {
+        // The two rail entries that are not pages. A click on either raises its event and returns
+        // before any page is shown; a posed open went straight to ShowPage and rendered
+        // "exit — not built yet.", which is a photograph of something no reader can ever see.
+        // A door that can pose an impossible state puts a lie in the evidence set.
+        if (id is "exit") { ExitRequested?.Invoke(this, EventArgs.Empty); return; }
+        if (id is "options") { OptionsRequested?.Invoke(this, EventArgs.Empty); return; }
+
         _selected = id;
 
         // The rail as well as the page: a click rebuilds it so the entry it landed on is the

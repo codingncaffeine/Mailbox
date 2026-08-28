@@ -1153,6 +1153,10 @@ public sealed partial class ShellViewModel : ObservableObject
         {
             if (!Set(ref field, value)) return;
             Raise(nameof(ShowsWorkspace));
+
+            // The status bar reads this too: Today is a page inside Mail, so the counts have to
+            // stand down for the page's own line and come back when it closes.
+            Raise(nameof(StatusLeft));
         }
     }
 
@@ -1857,7 +1861,19 @@ public sealed partial class ShellViewModel : ObservableObject
         new(MailboxModule.Feeds, "rss", isActive: false),
     ];
 
-    public string WindowTitle => $"{SelectedFolderName} - you@example.com - Mailbox";
+    /// <summary>
+    /// The window's own title — the folder, the account, the application, as the reference's is.
+    /// </summary>
+    /// <remarks>
+    /// Bound by <c>MainWindow.axaml</c>. It was computed, raised on every folder change, and read
+    /// by nothing: the window declared a literal "Mailbox" and kept it for the whole session,
+    /// while this carried a hard-coded address that was never anybody's. The title bar draws no
+    /// title text — the reference's does not either — so this is what the desktop's task switcher
+    /// and window list show, and it was the same string for every folder of every account.
+    /// </remarks>
+    public string WindowTitle => AccountAddress is { Length: > 0 } signedIn
+        ? $"{SelectedFolderName} - {signedIn} - Mailbox"
+        : $"{SelectedFolderName} - Mailbox";
 
     public string SelectedTheme
     {
@@ -3872,19 +3888,33 @@ public sealed partial class ShellViewModel : ObservableObject
         set
         {
             if (!Set(ref field, Math.Clamp(value, 50, 200))) return;
+
+            // Kept, like the pane placement above it: a reader who chose a size did not choose
+            // it for one run. Clamped before it is written, so a hand-edited settings file
+            // cannot put the pane somewhere the slider can never bring it back from.
+            App.Settings.Set(OptionsPages.Keys.ZoomPercent, field);
             Raise(nameof(ZoomLabel));
             Raise(nameof(ReadingFontSize));
         }
-    } = 100;
+    } = Math.Clamp(App.Settings.GetNumber(OptionsPages.Keys.ZoomPercent, 100), 50, 200);
 
     public string ZoomLabel => $"{ZoomPercent:0}%";
 
     /// <summary>
-    /// The signed-in address. <b>Still a placeholder</b>: the avatar, its tooltip, its initials
-    /// and the account flyout all read from here, so they all show this rather than the account
-    /// that is actually open. One source for the four, which is what makes replacing it one edit.
+    /// The signed-in address — the default account's, or the first one open.
     /// </summary>
-    public string AccountAddress { get; } = "you@example.com";
+    /// <remarks>
+    /// It was the literal "you@example.com" for as long as there was nothing to read, and the
+    /// avatar, its tooltip, its initials and the account flyout all draw from here — so a reader
+    /// with three accounts open still saw the placeholder in the title bar. One source for the
+    /// four, which is what made replacing it one edit.
+    /// <para>
+    /// Read once, at construction: the shell is rebuilt when accounts change, and a disc that
+    /// re-read itself mid-session would be answering a question nobody asked.
+    /// </para>
+    /// </remarks>
+    public string AccountAddress { get; } =
+        App.Accounts?.Default?.Account.Address is { Length: > 0 } signedIn ? signedIn : string.Empty;
 
     /// <summary>
     /// The name and initials from Options. The initials are what the account disc draws when
@@ -3918,7 +3948,18 @@ public sealed partial class ShellViewModel : ObservableObject
         private set => Set(ref field, value);
     } = [];
 
-    public string StatusLeft => Module == MailboxModule.Mail
+    /// <summary>
+    /// The left of the status bar: the mail counts while the message list is what is showing,
+    /// and otherwise whatever the module put there.
+    /// </summary>
+    /// <remarks>
+    /// Today is the case that needed saying. It is a page inside Mail, so asking the module
+    /// alone answered with the mail counts and the bar read "Items: 0   Unread: 0" over a page
+    /// listing eight — while <see cref="TodayWorkspace"/> computed a status, assigned it, and
+    /// could never reach here. <see cref="IsTodayShowing"/> is the one bit of state that tells
+    /// the two apart.
+    /// </remarks>
+    public string StatusLeft => Module == MailboxModule.Mail && !IsTodayShowing
         ? $"Items: {VisibleCount}   Unread: {Messages.Count(m => m.IsUnread)}"
         : ModuleStatusLeft;
 

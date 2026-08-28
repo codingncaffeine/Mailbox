@@ -175,6 +175,10 @@ public static class OfficeThemes
         t.Set(TokenKeys.Avatar.Foreground, "{palette.neutral.white}");
         t.Set(TokenKeys.Rail.Background, "#EFE9E6");
         t.Set(TokenKeys.Rail.ItemText, "#242424");
+        // Measured, and darker than the brand primary the base palette offers: the reference's
+        // active rail icon on a light rail is #1664A7, where {palette.brand.primary} is #0F6CBD.
+        t.Set(TokenKeys.Rail.ItemActive, "#1664A7");
+        t.Set(TokenKeys.Rail.Rule, "#D1D1D1");
         // A wash over the rail's own ground, the way the caption buttons take one over theirs.
         // state.hover is the content palette and sits two units from #EFE9E6 — invisible.
         t.Set(TokenKeys.Rail.ItemHover, CaptionWashOverLight);
@@ -249,6 +253,10 @@ public static class OfficeThemes
         t.Set(TokenKeys.Avatar.Foreground, "{palette.neutral.white}");
         t.Set(TokenKeys.Rail.Background, "#EFE9E6");
         t.Set(TokenKeys.Rail.ItemText, "#242424");
+        // Measured, and darker than the brand primary the base palette offers: the reference's
+        // active rail icon on a light rail is #1664A7, where {palette.brand.primary} is #0F6CBD.
+        t.Set(TokenKeys.Rail.ItemActive, "#1664A7");
+        t.Set(TokenKeys.Rail.Rule, "#D1D1D1");
         // A wash over the rail's own ground, the way the caption buttons take one over theirs.
         // state.hover is the content palette and sits two units from #EFE9E6 — invisible.
         t.Set(TokenKeys.Rail.ItemHover, CaptionWashOverLight);
@@ -442,11 +450,15 @@ public static class OfficeThemes
         t.Set(TokenKeys.Avatar.Background, "{palette.brand.avatar}");
         t.Set(TokenKeys.Avatar.Foreground, "{palette.neutral.white}");
         t.Set(TokenKeys.Rail.Background, "{palette.chrome.rail}");
-        t.Set(TokenKeys.Rail.ItemText, "#E8E8E8");
+        // Measured off three independent captures, which agree exactly: the resting icon is
+        // white and the active one is #B3D6F2 — the shade this theme already carries as
+        // palette.brand.underline. It drew #E8E8E8 and #8FC3F0.
+        t.Set(TokenKeys.Rail.ItemText, "#FFFFFF");
         // Dark chrome takes a white wash. state.hover here is #C9C9C9 — a near-white block.
         t.Set(TokenKeys.Rail.ItemHover, CaptionWashOverDark);
         t.Set(TokenKeys.Rail.ItemPressed, CaptionWashOverDarkPressed);
-        t.Set(TokenKeys.Rail.ItemActive, "{palette.brand.itemactive}");
+        t.Set(TokenKeys.Rail.ItemActive, "{palette.brand.underline}");
+        t.Set(TokenKeys.Rail.Rule, "#6B6B6B");
         t.Set(TokenKeys.Rail.Indicator, "{palette.brand.indicator}");
         t.Set(TokenKeys.Backstage.Field, "#9C9C9C");
         t.Set(TokenKeys.Ribbon.Background, "{palette.chrome.ribbon}");
@@ -631,6 +643,7 @@ public static class OfficeThemes
         t.Set(TokenKeys.Rail.ItemHover, CaptionWashOverDarkPressed);
         t.Set(TokenKeys.Rail.ItemPressed, "#66FFFFFF");
         t.Set(TokenKeys.Rail.ItemActive, "{palette.brand.itemactive}");
+        t.Set(TokenKeys.Rail.Rule, "#666666");
         t.Set(TokenKeys.Rail.Indicator, "{palette.brand.itemactive}");
         t.Set(TokenKeys.Backstage.Rail, "#1B1B1B");
         t.Set(TokenKeys.Backstage.RailText, "{palette.neutral.primary}");
@@ -1076,6 +1089,7 @@ public static class OfficeThemes
         t.Set(TokenKeys.Rail.ItemHover, CaptionWashOverLight);
         t.Set(TokenKeys.Rail.ItemPressed, CaptionWashOverLightPressed);
         t.Set(TokenKeys.Rail.ItemActive, "{palette.brand.primary}");
+        t.Set(TokenKeys.Rail.Rule, "#D1D1D1");
         t.Set(TokenKeys.Rail.Indicator, "{palette.brand.indicator}");
 
         // Backstage keeps a dark rail whatever the theme, so these are literal rather than
