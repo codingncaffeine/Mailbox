@@ -236,7 +236,18 @@ public class ContactStoreTests
 
         // Not in the card: when somebody means to ring a person back is not the address book's
         // business, and a shared book should not learn it.
-        Assert.DoesNotContain("2026-08-28", repository.Item(saved.Id)!.RawPayload, StringComparison.Ordinal);
+        //
+        // REV is the one line that cannot count against that. The vCard library stamps it with
+        // the clock at serialisation, so once the clock reached the date this test asks about,
+        // the card contained that date for a day for a reason that has nothing to do with the
+        // follow-up — and the test failed everywhere at once, having passed for months.
+        var card = string.Join(
+            "\r\n",
+            repository.Item(saved.Id)!.RawPayload
+                .Split("\r\n")
+                .Where(line => !line.StartsWith("REV:", StringComparison.Ordinal)));
+
+        Assert.DoesNotContain("2026-08-28", card, StringComparison.Ordinal);
 
         var back = book.Full(saved.Id)!;
         Assert.Equal(due, back.FollowUpDue);
