@@ -201,17 +201,19 @@ public class AuditRibbonTests
     /// the group's own badge is the only way in, and a group without one takes every command it
     /// holds off the keyboard at narrow widths.
     /// <para>
-    /// Asserted over <see cref="ShellLayouts"/> rather than all of them: forty-eight groups on
-    /// the compose, message and contact-window layouts declare no KeyTip, and those windows run
-    /// no Alt traversal to be locked out of. The exception is the compose Message tab, which the
-    /// shell appends to its own strip while a reply grows inline — the one place the gap bites
-    /// today, and the reason it is recorded rather than shrugged at.
+    /// Over every layout, not only the seven the shell draws. Forty-eight groups across the
+    /// compose, message and contact-window bars used to declare none, on the reasoning that those
+    /// windows run no Alt traversal to be locked out of — but the compose Message tab is appended
+    /// to the shell's own strip while a reply grows inline, where Alt does work, so the gap was
+    /// live rather than dormant. Thirty-seven declarations closed all forty-eight (Format Text and
+    /// Review are one pair of tabs shared by the compose and contact windows), and this now holds
+    /// the whole tree so a forty-ninth cannot arrive silently.
     /// </para>
     /// </remarks>
     [Fact]
     public void EveryCollapsibleGroupCarriesAKeyTip()
     {
-        var missing = ShellLayouts
+        var missing = AllLayouts
             .SelectMany(l => l.Layout.Tabs.SelectMany(t => t.Groups.Select(g => (l.Name, t.Id, Group: g))))
             .Where(x => x.Group.Items.Count > 0 && string.IsNullOrEmpty(x.Group.KeyTip))
             .Select(x => $"{x.Name}/{x.Id}/{x.Group.Id}")

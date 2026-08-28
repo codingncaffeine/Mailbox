@@ -214,4 +214,67 @@ public class UndoStackTests
 
         Assert.Equal(0, changes);
     }
+
+    /// <summary>
+    /// An unnamed batch keeps the first step's own description.
+    /// </summary>
+    /// <remarks>
+    /// What a selection spanning two accounts opens: the shell runs the command once per account
+    /// and each records itself, so the presses have to collapse into one step — but the shell has
+    /// no business naming that step, because the command already named itself. Inventing a word
+    /// there would put a description on the stack that no command ever used.
+    /// </remarks>
+    [Fact]
+    public void AnUnnamedBatchKeepsTheFirstStepsDescription()
+    {
+        var stack = new UndoStack();
+        var back = 0;
+
+        using (stack.Batch(string.Empty))
+        {
+            stack.Push("Delete", () => back++, () => { });
+            stack.Push("Delete", () => back++, () => { });
+            stack.Push("Delete", () => back++, () => { });
+        }
+
+        Assert.Equal(1, stack.Count);
+        Assert.Equal("Delete", stack.NextUndo);
+
+        Assert.Equal("Delete", stack.Undo());
+        Assert.Equal(3, back);
+        Assert.False(stack.CanUndo);
+    }
+
+    /// <summary>
+    /// One press is one step however many times the command ran underneath it.
+    /// </summary>
+    /// <remarks>
+    /// The rule the shell's per-account split has to keep. Without it, deleting a selection that
+    /// spans three accounts left three steps: Ctrl+Z took back one account's share and the rest
+    /// stayed deleted, which is exactly the hole the stack's own contract calls worse than no undo
+    /// at all.
+    /// </remarks>
+    [Fact]
+    public void ManyRecordingsUnderOnePressTakeOnePressToTakeBack()
+    {
+        var stack = new UndoStack();
+        var deleted = new List<string> { "one", "two", "three" };
+
+        using (stack.Batch(string.Empty))
+        {
+            foreach (var account in deleted.ToList())
+            {
+                var which = account;
+                stack.Push("Delete", () => deleted.Remove(which), () => deleted.Add(which));
+            }
+        }
+
+        Assert.Equal(1, stack.Count);
+
+        stack.Undo();
+
+        Assert.Empty(deleted);
+        Assert.Equal(0, stack.Count);
+        Assert.Equal(1, stack.RedoCount);
+    }
 }
