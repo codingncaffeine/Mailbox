@@ -1053,6 +1053,41 @@ public sealed class RibbonView : ContentControl
     /// than a pseudo-class on a button — so posing it means asking the box, not the control that
     /// happens to be on top.
     /// </remarks>
+    /// <summary>
+    /// Lights the tab whose id or label is given, as a pointer resting on it would.
+    /// </summary>
+    /// <remarks>
+    /// The tab strip was the one part of the bar no pose could reach. That mattered: every
+    /// built-in defines <c>ribbon.tab.hover</c> and nothing read it, because the strip set each
+    /// button's Background as a local value and a local value beats a style setter — a fault
+    /// that could be argued about from the code but not photographed. Answers whether it found
+    /// the tab, so a harness can say so rather than capture the wrong thing silently.
+    /// </remarks>
+    public bool ForceHoverTab(string tabIdOrLabel)
+    {
+        var entry = _tabControls.FirstOrDefault(t =>
+            string.Equals(t.Tab.Id, tabIdOrLabel, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(t.Tab.Label, tabIdOrLabel, StringComparison.OrdinalIgnoreCase));
+
+        if (entry.Control is null) return false;
+
+        // The button inside the host, not the host. A tab is a Grid holding the button and the
+        // rule that marks the active one, and Shell.axaml styles Button.ribbontab:pointerover —
+        // so lighting the Grid sets a pseudo-class nothing selects on and photographs exactly
+        // like no hover at all. Which is how this was found: the pose said it had hovered and
+        // the picture was byte-identical to hovering a tab that does not exist.
+        var button = entry.Control as Button
+                     ?? (entry.Control as Panel)?.Children.OfType<Button>().FirstOrDefault();
+
+        if (button is null) return false;
+
+        ((IPseudoClasses)button.Classes).Add(":pointerover");
+        return true;
+    }
+
+    /// <summary>Every tab this bar is showing, by id — what a harness lists when a pose names no tab it has.</summary>
+    public IReadOnlyList<string> TabIds() => [.. _tabControls.Select(t => t.Tab.Id)];
+
     public void ForceHover(CommandId id)
     {
         if (ControlFor(id) is not { } control) return;

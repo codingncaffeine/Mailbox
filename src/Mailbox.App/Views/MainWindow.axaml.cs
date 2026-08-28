@@ -839,6 +839,53 @@ public partial class MainWindow : Window
     /// window, so the harness finds it in the application's window list instead of being given
     /// it. Everything else here is passed the window it is photographing.
     /// </remarks>
+    /// <summary>
+    /// Lights a control inside a dialog about to be photographed, when
+    /// <c>MAILBOX_HOVER=dialog:&lt;text&gt;</c> asks for one.
+    /// </summary>
+    /// <remarks>
+    /// The third door the audit's inventory found missing. Every other hover pose acts on the
+    /// shell, which exists before the pose runs; a dialog does not, so its hover has to be
+    /// applied in the moment between the window opening and the picture being taken. Matched on
+    /// the text a reader would point at — a button's caption — because that is what a capture is
+    /// being asked a question about.
+    /// </remarks>
+    private static void HoverInside(Window dialog)
+    {
+        if (Environment.GetEnvironmentVariable("MAILBOX_HOVER") is not { Length: > 0 } hovered
+            || !hovered.StartsWith("dialog:", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var wanted = hovered["dialog:".Length..].Trim();
+
+        foreach (var control in dialog.GetVisualDescendants().OfType<Control>())
+        {
+            var text = control switch
+            {
+                Button { Content: string label } => label,
+                Button { Content: TextBlock inner } => inner.Text,
+                TextBlock block => block.Text,
+                _ => null,
+            };
+
+            if (text is null || !text.Contains(wanted, StringComparison.OrdinalIgnoreCase)) continue;
+
+            // The button rather than the label inside it: the hover state is the button's, and
+            // lighting a TextBlock paints nothing.
+            var target = control as Button
+                         ?? control.GetVisualAncestors().OfType<Button>().FirstOrDefault()
+                         ?? control;
+
+            ((IPseudoClasses)target.Classes).Add(":pointerover");
+            Log.Info($"Harness: hovering “{text}” in {dialog.GetType().Name}.");
+            return;
+        }
+
+        Log.Info($"Harness: nothing in {dialog.GetType().Name} reads “{wanted}”.");
+    }
+
     private void CaptureNextWindow()
     {
         if (WindowCapture.RequestedPath is not { } path) return;
@@ -863,6 +910,7 @@ public partial class MainWindow : Window
                 // windowing system to confirm the new size before the picture is taken.
                 if (dialog.ClientSize.Height <= 1 && WindowCapture.SizeFromContent(dialog)) await Task.Delay(400);
 
+                HoverInside(dialog);
                 WindowCapture.Capture(dialog, path, WindowCapture.Scale);
                 Console.WriteLine($"Captured {path}");
             }
@@ -3992,8 +4040,62 @@ public partial class MainWindow : Window
         {
             // A pointer is the one thing a capture run does not have, so the state is posed.
             // "ribbon:<command-id>" reaches the bar, "rail:<module>" the rail — which is how
-            // the hover that opens the peek is exercised — and anything else is a caption button.
-            if (hovered.StartsWith("rail:", StringComparison.OrdinalIgnoreCase))
+            // the hover that opens the peek is exercised — "tab:<tab>" the ribbon's tab strip,
+            // "folder:<name>" a row of the folder pane, "dialog:<text>" a control inside
+            // whatever window MAILBOX_CAPTURE_DIALOG is about to photograph, and anything else
+            // is a caption button.
+            //
+            // The last three were added by the audit's door inventory, which is what a no-door
+            // list is for: the tab strip and the folder pane each had a hover token every theme
+            // defined and nothing read, and neither state could be photographed to settle it.
+            if (hovered.StartsWith("tab:", StringComparison.OrdinalIgnoreCase))
+            {
+                var wanted = hovered["tab:".Length..].Trim();
+                Opened += (_, _) => Dispatcher.UIThread.Post(
+                    () =>
+                    {
+                        _ribbon.UpdateLayout();
+                        Log.Info(_ribbon.ForceHoverTab(wanted)
+                            ? $"Harness: hovering the {wanted} tab."
+                            : $"Harness: no {wanted} tab — this bar shows {string.Join(", ", _ribbon.TabIds())}.");
+                    },
+                    DispatcherPriority.Loaded);
+            }
+            else if (hovered.StartsWith("folder:", StringComparison.OrdinalIgnoreCase))
+            {
+                var wanted = hovered["folder:".Length..].Trim();
+                Opened += (_, _) => Dispatcher.UIThread.Post(
+                    () =>
+                    {
+                        if (this.FindControl<ListBox>("FolderList") is not { } list)
+                        {
+                            Log.Info("Harness: no folder pane on this window.");
+                            return;
+                        }
+
+                        list.UpdateLayout();
+
+                        // The row's container rather than its data: the hover is a visual state
+                        // on the ListBoxItem, and a folder pane scrolled past its recycling
+                        // point has no container for a row nobody has looked at.
+                        foreach (var item in list.GetRealizedContainers().OfType<ListBoxItem>())
+                        {
+                            if (item.DataContext is not { } row
+                                || !row.ToString()!.Contains(wanted, StringComparison.OrdinalIgnoreCase))
+                            {
+                                continue;
+                            }
+
+                            ((IPseudoClasses)item.Classes).Add(":pointerover");
+                            Log.Info($"Harness: hovering the folder row “{wanted}”.");
+                            return;
+                        }
+
+                        Log.Info($"Harness: no realised folder row matches “{wanted}”.");
+                    },
+                    DispatcherPriority.Loaded);
+            }
+            else if (hovered.StartsWith("rail:", StringComparison.OrdinalIgnoreCase))
             {
                 var name = hovered["rail:".Length..].Trim();
                 Opened += (_, _) => Dispatcher.UIThread.Post(
