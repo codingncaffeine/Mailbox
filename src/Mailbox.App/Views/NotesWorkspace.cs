@@ -119,12 +119,28 @@ public sealed class NotesWorkspace : Border
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>The folder a new note goes in: the default one, made if there is none.</summary>
+    /// <summary>The folder a new note goes in: the one that holds notes, made if there is none.</summary>
+    /// <remarks>
+    /// Not the collection the store marks default. Notes and journal entries are one component in
+    /// one kind of collection, and the store marks the *first* collection of a kind as that kind's
+    /// default — so "the default" is whichever of the two modules made its folder first, and on a
+    /// store where that was the Journal every note a reader writes is filed on the journal's
+    /// folder, on the journal's server collection, and disappears the moment they untick Journal
+    /// in a pane headed My Notes. The Journal side of this was the same bug and was fixed the same
+    /// way at `73080eb`; the two halves have to agree or they simply swap which one is wrong.
+    /// </remarks>
     public Collection DefaultFolder()
     {
         var folders = _book.Lists();
-        return folders.FirstOrDefault(f => f.IsDefault)
-               ?? folders.FirstOrDefault()
-               ?? _repository.AddCollection(CollectionKind.Journal, "Notes", "#F2C811", string.Empty);
+
+        return folders.FirstOrDefault(Holds)
+               ?? folders.FirstOrDefault(f => string.Equals(f.DisplayName, NotesFolder, StringComparison.OrdinalIgnoreCase))
+               ?? _repository.AddCollection(CollectionKind.Journal, NotesFolder, "#F2C811", string.Empty);
     }
+
+    /// <summary>What this application calls the notes folder when it makes one.</summary>
+    private const string NotesFolder = "Notes";
+
+    /// <summary>Whether a collection already holds notes rather than journal entries.</summary>
+    private bool Holds(Collection list) => _book.Rows(NoteArrangement.Icons, Today, [list.Id]).Count > 0;
 }
