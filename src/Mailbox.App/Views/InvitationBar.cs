@@ -88,7 +88,13 @@ public sealed class InvitationBar : Border
         };
         Bind(headline, TextBlock.ForegroundProperty, "reading.infobar.text.brush");
 
-        var detail = new TextBlock { Text = Imip.Describe(invitation), TextWrapping = TextWrapping.Wrap };
+        // On the reader's own clock, not the organizer's: accepting writes the instant, and a bar
+        // that states the organizer's wall time disagrees with the block it is about to draw.
+        var detail = new TextBlock
+        {
+            Text = Imip.Describe(invitation, reader: TimeZoneInfo.Local),
+            TextWrapping = TextWrapping.Wrap,
+        };
         Bind(detail, TextBlock.ForegroundProperty, "reading.infobar.text.brush");
 
         var lines = new StackPanel { Spacing = 3, Children = { headline, detail } };
@@ -147,7 +153,7 @@ public sealed class InvitationBar : Border
         var current = existing is null ? null : PimEventCodec.FromItem(existing);
 
         PimItem? stored = null;
-        if (Imip.Apply(_invitation, current, response) is { } updated)
+        if (Imip.Apply(_invitation, current, response, _address) is { } updated)
         {
             var row = PimEventCodec.ToItem(updated, calendar.Id, existing);
             stored = existing is null ? _repository.AddItem(row) : Save(row);

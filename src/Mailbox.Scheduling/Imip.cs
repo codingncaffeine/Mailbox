@@ -184,8 +184,15 @@ public static class Imip
     /// What an arriving scheduling message does to the copy this machine already holds, if any.
     /// </summary>
     /// <param name="existing">The event already stored under the same UID, or null.</param>
+    /// <param name="answer">What the reader said to it, when they were the one answering.</param>
+    /// <param name="answeredBy">
+    /// The address the answer was given from, so the stored copy records it. Without this the
+    /// reply that went out said ACCEPTED and the appointment it was about still said
+    /// NEEDS-ACTION — and it is the appointment, not the reply, that goes to the server.
+    /// </param>
     /// <returns>The event to store, or null when the message means "remove it".</returns>
-    public static CalendarEvent? Apply(ItipMessage message, CalendarEvent? existing, ItipResponse? answer = null)
+    public static CalendarEvent? Apply(
+        ItipMessage message, CalendarEvent? existing, ItipResponse? answer = null, string? answeredBy = null)
     {
         ArgumentNullException.ThrowIfNull(message);
 
@@ -226,6 +233,12 @@ public static class Imip
                     {
                         Busy = response == ItipResponse.Tentative ? BusyStatus.Tentative : BusyStatus.Busy,
                         Status = response == ItipResponse.Declined ? "CANCELLED" : "CONFIRMED",
+                        Attendees = answeredBy is { Length: > 0 } me
+                            ? [.. stored.Attendees.Select(a =>
+                                string.Equals(ItipMessage.Strip(a.Address), ItipMessage.Strip(me), StringComparison.OrdinalIgnoreCase)
+                                    ? a with { PartStat = PartStatOf(response), Rsvp = false }
+                                    : a)]
+                            : stored.Attendees,
                     };
                 }
 
@@ -240,20 +253,36 @@ public static class Imip
     /// <summary>
     /// The one-line summary the reading pane's invitation bar leads with — when it is, and where.
     /// </summary>
-    public static string Describe(ItipMessage message, CultureInfo? culture = null)
+    /// <param name="reader">
+    /// The clock to state the time on. An invitation carries the organizer's wall time and the
+    /// zone they wrote it in, and a bar that repeats it is telling a reader in Arizona that a
+    /// meeting written in London is at two in the afternoon — then putting it on their calendar
+    /// seven hours earlier when they accept. Null keeps the stated time, which is what a message
+    /// being composed for somebody else wants.
+    /// </param>
+    public static string Describe(ItipMessage message, CultureInfo? culture = null, TimeZoneInfo? reader = null)
     {
         ArgumentNullException.ThrowIfNull(message);
         culture ??= CultureInfo.CurrentCulture;
         var e = message.Event;
 
+        // An all-day item is a date, not an instant: converting it would move a holiday onto the
+        // evening before for anybody west of the zone it was written in.
+        var start = reader is null || e.AllDay ? e.Start.Wall : Reading(e.Start, reader);
+        var end = reader is null || e.AllDay ? e.End.Wall : Reading(e.End, reader);
+
         var when = e.AllDay
-            ? e.Start.Wall.ToString("dddd, d MMMM yyyy", culture)
-            : $"{e.Start.Wall.ToString("dddd, d MMMM yyyy HH:mm", culture)}–{e.End.Wall.ToString("HH:mm", culture)}";
+            ? start.ToString("dddd, d MMMM yyyy", culture)
+            : $"{start.ToString("dddd, d MMMM yyyy HH:mm", culture)}–{end.ToString("HH:mm", culture)}";
 
         var where = e.Location.Length > 0 ? $"  ·  {e.Location}" : string.Empty;
         var repeats = e.Rrule is { Length: > 0 } rule ? $"  ·  {RecurrenceText.Describe(rule, e.Start, e.End, culture)}" : string.Empty;
         return when + where + repeats;
     }
+
+    /// <summary>What a clock reads at the instant a stated time comes to.</summary>
+    private static DateTime Reading(EventTime time, TimeZoneInfo zone)
+        => TimeZoneInfo.ConvertTime(time.ToUtc(zone), zone).DateTime;
 
     /// <summary>What the bar says above that line, per method.</summary>
     public static string Headline(ItipMessage message, string? organizerName = null)

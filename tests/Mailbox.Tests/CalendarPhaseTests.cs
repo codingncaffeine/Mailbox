@@ -373,6 +373,49 @@ public class CalendarPhaseTests
         Assert.Equal("NEEDS-ACTION", applied.Attendees.First(a => a.Address.Contains("sam@", StringComparison.Ordinal)).PartStat);
     }
 
+    /// <summary>
+    /// The bar says when the meeting is on the reader's clock, because the block it draws when
+    /// they accept is on the reader's clock. Stating the organizer's instead is an invitation
+    /// that disagrees with the appointment it makes.
+    /// </summary>
+    [Fact]
+    public void AnInvitationIsDescribedOnTheReadersOwnClock()
+    {
+        var invitation = Imip.Read(Invitation)!;
+        var culture = System.Globalization.CultureInfo.InvariantCulture;
+
+        var arizona = TimeZoneInfo.FindSystemTimeZoneById("America/Phoenix");
+        var tokyo = TimeZoneInfo.FindSystemTimeZoneById("Asia/Tokyo");
+
+        // 09:00Z on 20 August: two in the morning in Arizona, six in the evening in Tokyo.
+        Assert.Contains("Thursday, 20 August 2026 02:00–03:00", Imip.Describe(invitation, culture, arizona), StringComparison.Ordinal);
+        Assert.Contains("Thursday, 20 August 2026 18:00–19:00", Imip.Describe(invitation, culture, tokyo), StringComparison.Ordinal);
+
+        // And with no clock named, the time exactly as it was written.
+        Assert.Contains("Thursday, 20 August 2026 09:00–10:00", Imip.Describe(invitation, culture), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The reply that goes out and the appointment that stays behind have to say the same thing:
+    /// the appointment is the copy the server gets, and it said NEEDS-ACTION for ever.
+    /// </summary>
+    [Fact]
+    public void AnsweringAnInvitationRecordsTheAnswerOnTheAppointmentToo()
+    {
+        var invitation = Imip.Read(Invitation)!;
+
+        var accepted = Imip.Apply(invitation, null, ItipResponse.Accepted, "you@example.com")!;
+        Assert.Equal("ACCEPTED", accepted.Attendees.First(a => a.Address.Contains("you@", StringComparison.Ordinal)).PartStat);
+        Assert.Equal("NEEDS-ACTION", accepted.Attendees.First(a => a.Address.Contains("sam@", StringComparison.Ordinal)).PartStat);
+
+        var declined = Imip.Apply(invitation, null, ItipResponse.Declined, "mailto:you@example.com")!;
+        Assert.Equal("DECLINED", declined.Attendees.First(a => a.Address.Contains("you@", StringComparison.Ordinal)).PartStat);
+
+        // Nobody named, nothing rewritten — an arrival nobody answered must not claim one.
+        var untouched = Imip.Apply(invitation, null, ItipResponse.Accepted)!;
+        Assert.All(untouched.Attendees, a => Assert.Equal("NEEDS-ACTION", a.PartStat));
+    }
+
     // ---- Reminders ----------------------------------------------------------------------------
 
     [Fact]

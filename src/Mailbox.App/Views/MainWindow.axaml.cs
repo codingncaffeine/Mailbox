@@ -509,6 +509,15 @@ public partial class MainWindow : Window
                 DispatcherPriority.Background);
         }
 
+        // Pressing a chip, a slot or a day in the date navigator, and reading back what the grid
+        // is showing. Its own file; it registers its own Opened handler.
+        WirePhase6ADoors();
+
+        // Writing a task no surface can write, and reading back what each of the three stores
+        // behind the to-do list holds. Its own file; it writes before the window opens and
+        // registers its own Opened handler for the read-back.
+        WirePhase8ADoors();
+
         // The peek's own buttons, pressed the same way. After the peek pose has opened one, and
         // after it has drawn, since what a press aims at is where the view really put it.
         if (Environment.GetEnvironmentVariable("MAILBOX_PEEK_PRESS") is { Length: > 0 } press)
@@ -644,7 +653,7 @@ public partial class MainWindow : Window
 
                 foreach (var item in _reminders?.Current ?? [])
                 {
-                    Log.Info($"Harness: reminder “{item.Subject}” — {item.DueIn(DateTimeOffset.Now)}, "
+                    Log.Info($"Harness: reminder “{item.Subject}” — {item.DueIn(Mailbox.Core.PosedClock.Now)}, "
                         + (item.IsAppointment ? "an appointment" : item.IsTask ? "a task" : "a flagged message") + ".");
                 }
 
@@ -869,6 +878,14 @@ public partial class MainWindow : Window
         // cannot reach because they need a click.
         WireHarnessPeek();
 
+        // The People module's own doors: the favourites, the menu a right-click opens, and what
+        // the list and the card beside it are actually holding.
+        WirePeopleDoors();
+
+        // The address book as a set of records rather than as a list of rows, which is what a
+        // merge, a link and a vCard round trip have to be read back against.
+        WireAddressBookDoors();
+
         // The compose window is its own window, so the harness captures that rather than the
         // shell. The value is which of its tabs to open on.
         WireHarnessCompose();
@@ -886,6 +903,10 @@ public partial class MainWindow : Window
         // act after every pose above has had its say — the stack the run finished with is the
         // claim, not the stack half-way through it.
         WirePhase4APoses();
+
+        // The calendar's clocks, its subscriptions and where an export goes. After the above for
+        // the same reason: what the calendar holds when the run ends is the claim.
+        WirePhase6BDoors();
     }
 
     /// <summary>
@@ -5845,7 +5866,12 @@ public partial class MainWindow : Window
     /// </summary>
     private void CheckReminders(ShellViewModel shell)
     {
-        var now = DateTimeOffset.UtcNow;
+        // The posed clock, not the machine's. Everything in this window is a sentence about the
+        // distance between now and a due date — "Overdue by 14 days" — so a queue asked against
+        // the real date under a pinned run reads a number nothing on screen agrees with, and
+        // *which* items are in the list at all changes with the afternoon it was run. Live when
+        // nothing is pinned, which is every ordinary session.
+        var now = Mailbox.Core.PosedClock.UtcNow;
         var due = new List<DueReminder>();
         foreach (var account in App.Accounts.All)
         {
@@ -5897,7 +5923,7 @@ public partial class MainWindow : Window
             foreach (var item in fresh)
             {
                 _notifier.Notify(ToastFor(new NewMailToast(
-                    "Reminder: " + item.Subject, item.DueIn(DateTimeOffset.Now),
+                    "Reminder: " + item.Subject, item.DueIn(Mailbox.Core.PosedClock.Now),
                     item.Account?.Account.Address ?? string.Empty, item.Message?.Id ?? 0)));
             }
         }
@@ -5928,7 +5954,7 @@ public partial class MainWindow : Window
                 return;
         }
 
-        var now = DateTimeOffset.UtcNow;
+        var now = Mailbox.Core.PosedClock.UtcNow;
         var appointments = Mailbox.Scheduling.AppointmentReminders.Due(App.Pim, now, dismissPast: App.MailOptions.DismissPastReminders).Count;
         var tasks = Mailbox.Scheduling.TaskReminders.Due(App.Pim, now).Count;
         var mail = App.Accounts.All.Sum(a => a.Mail.DueReminders(now).Count);

@@ -65,14 +65,23 @@ public partial class MainWindow
     {
         var calendar = App.Pim.DefaultCalendar();
 
-        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        // A picker is a desktop window and a headless run cannot answer one, so "it wrote
+        // nothing" and "it did nothing" were the same evidence. The harness names the file
+        // instead; a reader is always asked.
+        var path = HarnessSavePath("ics");
+        if (path is null)
         {
-            Title = "Save Calendar As",
-            SuggestedFileName = SafeName(calendar.DisplayName, "calendar") + ".ics",
-            FileTypeChoices = [new FilePickerFileType("iCalendar") { Patterns = ["*.ics"] }],
-        });
+            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "Save Calendar As",
+                SuggestedFileName = SafeName(calendar.DisplayName, "calendar") + ".ics",
+                FileTypeChoices = [new FilePickerFileType("iCalendar") { Patterns = ["*.ics"] }],
+            });
 
-        if (file?.TryGetLocalPath() is not { } path) return;
+            path = file?.TryGetLocalPath();
+        }
+
+        if (path is null) return;
 
         var count = await Task.Run(() =>
         {
@@ -92,14 +101,22 @@ public partial class MainWindow
     {
         var book = App.Contacts.Default();
 
-        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        // The same bargain the calendar export makes: a picker is a desktop window a headless run
+        // cannot answer, so the harness names the file and a reader is always asked.
+        var path = HarnessSavePath("vcf");
+        if (path is null)
         {
-            Title = "Save Contacts As",
-            SuggestedFileName = SafeName(book.DisplayName, "contacts") + ".vcf",
-            FileTypeChoices = [new FilePickerFileType("vCard") { Patterns = ["*.vcf"] }],
-        });
+            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "Save Contacts As",
+                SuggestedFileName = SafeName(book.DisplayName, "contacts") + ".vcf",
+                FileTypeChoices = [new FilePickerFileType("vCard") { Patterns = ["*.vcf"] }],
+            });
 
-        if (file?.TryGetLocalPath() is not { } path) return;
+            path = file?.TryGetLocalPath();
+        }
+
+        if (path is null) return;
 
         var count = await Task.Run(() =>
         {

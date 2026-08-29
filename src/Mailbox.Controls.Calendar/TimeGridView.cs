@@ -493,8 +493,7 @@ public sealed class TimeGridView : CalendarSurface
             var minutes = (firstSlot + s) * SlotMinutes;
             if (minutes % 60 != 0 || minutes >= 24 * 60) continue;
             var y = top + (((minutes - ScrollMinutes) / SlotMinutes) * SlotHeight);
-            var when = TimeOnly.FromTimeSpan(TimeSpan.FromMinutes(minutes));
-            if (zone is not null) when = TimeOnly.FromDateTime(Elsewhere(day, when, zone));
+            var when = HourAt(minutes, zone);
 
             // "%h" rather than "h": a lone custom specifier reads as a standard format, and "h"
             // is not one — the ruler threw rather than drawing.
@@ -505,6 +504,23 @@ public sealed class TimeGridView : CalendarSurface
 
             Fill(context, new Rect(right - 8, Math.Round(y), 8, 1), gridLine);
         }
+    }
+
+    /// <summary>
+    /// What one row of the hour ruler reads: the view's own clock for <paramref name="zone"/>
+    /// null, and the second column's clock otherwise.
+    /// </summary>
+    /// <remarks>
+    /// Public because it is the one claim the ruler makes that a picture cannot settle. On the
+    /// two days a year a zone moves its clocks the two columns are a different distance apart,
+    /// and two numbers in a screenshot prove neither of them right; drawing and reading back call
+    /// the same method so a read-back cannot agree with a paint that is wrong.
+    /// </remarks>
+    public TimeOnly HourAt(int minutesPastMidnight, TimeZoneInfo? zone)
+    {
+        var day = Days() is { Count: > 0 } days ? days[0] : Anchor;
+        var when = TimeOnly.FromTimeSpan(TimeSpan.FromMinutes(minutesPastMidnight));
+        return zone is null ? when : TimeOnly.FromDateTime(Elsewhere(day, when, zone));
     }
 
     /// <summary>What another zone's clock reads at a moment on this one.</summary>
