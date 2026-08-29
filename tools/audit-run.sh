@@ -4,8 +4,11 @@
 # The audit's batch runner. A pose list is a text file of one pose per line:
 #
 #     <name><TAB><VAR=VALUE> [<VAR=VALUE> ...]
+#     <name><TAB><VAR=VALUE><TAB><VAR=VALUE>          <- for a value containing a space
 #
-# Blank lines and lines starting with # are ignored. Each pose is run with
+# Separate the pairs with tabs when any value has a space in it; separate them with spaces and
+# they are split on spaces, which is what every pose list written so far does. Blank lines and
+# lines starting with # are ignored. Each pose is run with
 # MAILBOX_CAPTURE pointed at its own PNG and MAILBOX_STORE pointed at a scratch store,
 # so nothing a pose writes can reach the real one. What comes back per pose:
 #
@@ -118,8 +121,27 @@ while IFS= read -r line || [[ -n $line ]]; do
     )
     [[ -n $theme ]] && env_args+=("MAILBOX_THEME=$theme")
     # The pose's own settings come last so they win over the defaults above.
-    # shellcheck disable=SC2206
-    [[ -n $env_spec ]] && env_args+=($env_spec)
+    #
+    # Tab-separated pairs are taken whole, which is the only way to write a value containing a
+    # space: MAILBOX_SELECT=Design review, MAILBOX_DIALOG_PRESS=Keep Theirs, and every
+    # MAILBOX_ANSWER there has ever been. Splitting those on spaces made the value's tail the
+    # command, so the pose exited 127 and the summary called it REACHED-NOTHING — a door that
+    # does not open and a value that cannot be written read identically, and four phases lost
+    # poses to it. A tab cannot appear inside a value, so no quoting rules are needed.
+    #
+    # A spec with no tabs still splits on spaces, so every pose list written before this reads
+    # exactly as it did.
+    if [[ -n $env_spec ]]; then
+        if [[ $env_spec == *$'\t'* ]]; then
+            IFS=$'\t' read -r -a pose_pairs <<< "$env_spec"
+            for pair in "${pose_pairs[@]}"; do
+                [[ -n ${pair// } ]] && env_args+=("$pair")
+            done
+        else
+            # shellcheck disable=SC2206
+            env_args+=($env_spec)
+        fi
+    fi
 
     timeout --kill-after=5s "${timeout_s}s" \
         env "${env_args[@]}" \
