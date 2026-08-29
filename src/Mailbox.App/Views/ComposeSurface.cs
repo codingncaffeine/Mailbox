@@ -805,7 +805,21 @@ public sealed partial class ComposeSurface : UserControl
         if (link.Body.Length > 0)
         {
             _body.Clear();
-            _body.InsertText(link.Body);
+
+            // Line by line, not one InsertText: the editor holds a single insert as a single
+            // paragraph, so the HTML that left carried a three-line body as one run-on <p> —
+            // for every mailto: the desktop hands over, a forwarded note included. The plain
+            // half always kept its breaks; this makes the HTML half agree with it.
+            var lines = link.Body.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+            if (lines.Length == 1)
+            {
+                _body.InsertText(link.Body);
+            }
+            else
+            {
+                _body.InsertHtml(string.Concat(lines.Select(line =>
+                    $"<p>{System.Net.WebUtility.HtmlEncode(line)}</p>")));
+            }
         }
 
         UpdateTitle();

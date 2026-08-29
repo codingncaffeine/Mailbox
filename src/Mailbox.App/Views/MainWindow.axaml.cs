@@ -4373,6 +4373,86 @@ public partial class MainWindow : Window
         MenuProbe.Show("the change-view menu", flyout, _ribbon ?? (Control)this, atPointer: true);
     }
 
+    /// <summary>
+    /// The View tab's commands over the modules whose lists are not the message list. Honest
+    /// throughout: what acts, acts on the module; what does not exist yet says so instead of
+    /// opening mail's own surface.
+    /// </summary>
+    private bool RunModuleViewCommand(ShellViewModel shell, CommandId id)
+    {
+        if (shell.Module is not (MailboxModule.Notes or MailboxModule.Tasks or MailboxModule.Journal))
+        {
+            return false;
+        }
+
+        if (id == ViewCommands.ReverseSort.Id)
+        {
+            switch (shell.Module)
+            {
+                case MailboxModule.Notes:
+                    var notes = EnsureNotes(shell);
+                    notes.Reversed = !notes.Reversed;
+                    shell.StatusRight = notes.Reversed ? "Oldest first." : "Newest first.";
+                    return true;
+
+                case MailboxModule.Tasks:
+                    var tasks = EnsureTasks(shell);
+                    tasks.Reversed = !tasks.Reversed;
+                    shell.StatusRight = tasks.Reversed ? "Latest due first." : "Earliest due first.";
+                    return true;
+
+                default:
+                    shell.StatusRight = "The timeline runs by date; turn it around from its own views.";
+                    return true;
+            }
+        }
+
+        if (id == ViewCommands.ChangeView.Id)
+        {
+            var flyout = new MenuFlyout();
+
+            void Entry(string header, bool current, Action choose)
+            {
+                var item = new MenuItem { Header = header, Icon = current ? Tick() : null };
+                item.Click += (_, _) => choose();
+                flyout.Items.Add(item);
+            }
+
+            switch (shell.Module)
+            {
+                case MailboxModule.Notes:
+                    var notes = EnsureNotes(shell);
+                    Entry("Icon", notes.Arrangement == Mailbox.Scheduling.NoteArrangement.Icons, () => RunCommand(NoteCommands.IconsView.Id));
+                    Entry("Notes List", notes.Arrangement == Mailbox.Scheduling.NoteArrangement.List, () => RunCommand(NoteCommands.NotesListView.Id));
+                    Entry("Last 7 Days", notes.Arrangement == Mailbox.Scheduling.NoteArrangement.LastSevenDays, () => RunCommand(NoteCommands.LastSevenDaysView.Id));
+                    break;
+
+                case MailboxModule.Tasks:
+                    var tasks = EnsureTasks(shell);
+                    Entry("To-Do List", tasks.Kind == TaskViewKind.Todo, () => RunCommand(TaskCommands.TodoListView.Id));
+                    Entry("Simple List", tasks.Kind == TaskViewKind.Simple, () => RunCommand(TaskCommands.SimpleListView.Id));
+                    Entry("Detailed List", tasks.Kind == TaskViewKind.Detailed, () => RunCommand(TaskCommands.DetailedView.Id));
+                    break;
+
+                default:
+                    shell.StatusRight = "The Journal's views are on its own ribbon tab.";
+                    return true;
+            }
+
+            MenuProbe.Show("the change-view menu", flyout, _ribbon ?? (Control)this, atPointer: true);
+            return true;
+        }
+
+        if (id == ViewCommands.ViewSettings.Id || id == ViewCommands.OpenViewSettings.Id
+            || id == ViewCommands.ArrangeBy.Id)
+        {
+            shell.StatusRight = "This list has no view editor yet; the message list's would not fit it.";
+            return true;
+        }
+
+        return false;
+    }
+
     /// <summary>Current View: View Settings… and Reset View.</summary>
     private void ShowCurrentViewMenu(ShellViewModel shell)
     {
@@ -5174,6 +5254,11 @@ public partial class MainWindow : Window
 
         // The View tab's first cluster: Change View, Current View, Arrange By, Layout, and the
         // entries behind them as commands of their own.
+        // The View tab is one tab over nine modules, and these act on the module on screen:
+        // pressed with Notes or Tasks up they used to flip and edit the message list nobody
+        // could see, or open the mail list's own dialog under a mail view's name.
+        if (RunModuleViewCommand(shell, id)) return;
+
         if (id == ViewCommands.ChangeView.Id) { ShowChangeViewMenu(shell); return; }
         if (id == ViewCommands.ViewSettings.Id) { ShowCurrentViewMenu(shell); return; }
         if (id == ViewCommands.ArrangeBy.Id) { MenuProbe.Show("the arrange-by menu", ArrangeFlyout(shell), _ribbon ?? (Control)this, atPointer: true); return; }

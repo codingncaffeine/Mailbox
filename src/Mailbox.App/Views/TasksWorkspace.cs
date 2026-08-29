@@ -93,6 +93,13 @@ public sealed class TasksWorkspace : Border
 
     public IReadOnlyList<TaskRow> Rows => _list.Rows;
 
+    /// <summary>The View tab's Reverse Sort, acting on this module's own rows.</summary>
+    public bool Reversed
+    {
+        get;
+        set { field = value; Reload(); }
+    }
+
     /// <summary>The drawn list, which the harness presses.</summary>
     internal TaskListView List => _list;
 
@@ -147,8 +154,12 @@ public sealed class TasksWorkspace : Border
         // Detailed is the same rows under every column a task has, which is the whole of what
         // makes it a third view rather than the Simple List again — and a table is sorted by its
         // column rather than banded, so what is finished stays on the date it was due.
+        // After the view's own ordering, so Detailed's date sort is what gets reversed.
+        var shown = _kind == TaskViewKind.Detailed ? TaskBook.ByDueDate(rows) : rows;
+        if (Reversed) shown = [.. shown.Reverse()];
+
         _list.ShowColumns = _kind == TaskViewKind.Detailed;
-        _list.Rows = _kind == TaskViewKind.Detailed ? TaskBook.ByDueDate(rows) : rows;
+        _list.Rows = shown;
         _list.ArrangedBy = _kind == TaskViewKind.Todo ? "Flag: Due Date" : "Due Date";
         Selected = _list.Selected;
         _navPane.Refresh();

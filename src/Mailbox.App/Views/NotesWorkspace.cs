@@ -103,6 +103,13 @@ public sealed class NotesWorkspace : Border
         }
     } = string.Empty;
 
+    /// <summary>The View tab's Reverse Sort, acting on this module's own rows.</summary>
+    public bool Reversed
+    {
+        get;
+        set { field = value; Reload(); }
+    }
+
     public void Reload()
     {
         _view.Arrangement = _arrangement;
@@ -112,6 +119,8 @@ public sealed class NotesWorkspace : Border
             var found = _repository.Search(Search).Select(i => i.Id).ToHashSet();
             rows = [.. rows.Where(r => found.Contains(r.ItemId))];
         }
+
+        if (Reversed) rows = [.. rows.Reverse()];
 
         _view.Rows = rows;
         Selected = _view.Selected;
