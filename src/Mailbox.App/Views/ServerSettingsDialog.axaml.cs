@@ -104,8 +104,13 @@ public sealed class ServerSettingsDialog : Window
     {
         _displayName.Text = _account.DisplayName;
 
+        // The account's own protocol, not autoconfiguration's default. Asked without it, a POP3
+        // account whose servers have never been recorded was offered the IMAP guess — imap.<domain>
+        // on 993 — under the POP3 delivery section, and pressing Save wrote it down.
         var settings = AccountSettings.Load(App.Settings, _account.Address)
-                       ?? AccountSettings.From(Autoconfig.ForAddress(_account.Address));
+                       ?? AccountSettings.From(Autoconfig.ForAddress(
+                           _account.Address,
+                           IsImap ? MailProtocolKind.Imap : MailProtocolKind.Pop3));
 
         _incomingHost.Text = settings.IncomingHost;
         _incomingPort.Text = settings.IncomingPort.ToString();
@@ -297,6 +302,14 @@ public sealed class ServerSettingsDialog : Window
             return;
         }
 
+        // What this form does not show is carried across rather than left to its default. Built
+        // from nothing, a save here turned an account that signs in through a browser back into a
+        // password account — `auth OAuth2` to `auth Password`, the provider and the registration
+        // both wiped — so the next send/receive failed as "authentication failed" against a
+        // keyring that holds only a refresh token; and it put a POP3 account's delivery folder
+        // back to the Inbox, undoing the Change Folder button on the tab this dialog opens from.
+        var held = AccountSettings.Load(App.Settings, _account.Address);
+
         var settings = new AccountSettings(
             incomingHost,
             Port(_incomingPort.Text, 995),
@@ -314,6 +327,11 @@ public sealed class ServerSettingsDialog : Window
             OfflineMonths = OfflineChoices[Math.Clamp(_offlineMonths.SelectedIndex, 0, OfflineChoices.Length - 1)],
             SieveHost = (_sieveHost.Text ?? string.Empty).Trim(),
             SievePort = Port(_sievePort.Text, 4190),
+
+            Auth = held?.Auth ?? AuthKind.Password,
+            OAuthProviderId = held?.OAuthProviderId ?? string.Empty,
+            OAuthClientId = held?.OAuthClientId ?? string.Empty,
+            DeliveryFolderId = held?.DeliveryFolderId,
         };
 
         settings.Save(App.Settings, _account.Address);
