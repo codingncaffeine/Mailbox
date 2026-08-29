@@ -77,6 +77,17 @@
                     <Image Source="/Assets/Icons/mailbox-32.png" Width="16" Height="16" />
                 </Button>
 
+                <!-- While the Backstage is up, the title stands where the toolbar was: the
+                     reference's Backstage title bar carries the title, the avatar and the
+                     caption buttons, and neither the toolbar nor the search box. -->
+                <TextBlock Grid.Column="1"
+                           IsVisible="{Binding BackstageOpen}"
+                           Text="{Binding $parent[Window].Title}"
+                           VerticalAlignment="Center"
+                           Margin="8,0,0,0"
+                           FontSize="12"
+                           Foreground="{DynamicResource titlebar.foreground.brush}" />
+
                 <StackPanel Grid.Column="1"
                             Name="QuickAccessTitleGroup"
                             Orientation="Horizontal"
@@ -1107,10 +1118,11 @@
                         Name="ModuleHost"
                         IsVisible="{Binding !IsMailModule}" />
 
-        <!-- Backstage. A full-window takeover across every row, so it covers the ribbon and
-             the panes alike. -->
+        <!-- Backstage. The takeover starts below the title bar, as the reference's does: the
+             ribbon and the panes are covered, and the window title, the avatar and the caption
+             buttons stay visible and usable — a takeover must never take the close button. -->
 
-        <ContentControl Grid.Row="0" Grid.RowSpan="4" Grid.ColumnSpan="2"
+        <ContentControl Grid.Row="1" Grid.RowSpan="3" Grid.ColumnSpan="2"
                         Name="BackstageHost"
                         ZIndex="10"
                         IsVisible="False" />

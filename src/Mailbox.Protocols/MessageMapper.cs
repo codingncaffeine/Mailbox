@@ -16,6 +16,59 @@ public static class MessageMapper
     /// <summary>How much of the body the list keeps for the preview line.</summary>
     private const int PreviewLength = 200;
 
+    /// <summary>
+    /// What kind of item this message carries, for the list's By Type arrangement and its own
+    /// Icon column one day: a calendar part's METHOD makes it a meeting request, response or
+    /// cancellation, a disposition notification makes it a receipt, and null is an ordinary
+    /// message — which is most of every folder, and what every row stored before this mark
+    /// existed already means.
+    /// </summary>
+    private static string? ItemTypeOf(MimeMessage message)
+    {
+        foreach (var part in message.BodyParts)
+        {
+            if (part is TextPart calendar && calendar.ContentType.IsMimeType("text", "calendar"))
+            {
+                return (calendar.ContentType.Parameters["method"]
+                        ?? MethodLine(calendar)).ToUpperInvariant() switch
+                {
+                    "REQUEST" => "meeting:request",
+                    "REPLY" => "meeting:reply",
+                    "CANCEL" => "meeting:cancel",
+                    _ => "meeting:request",
+                };
+            }
+
+            if (part.ContentType.IsMimeType("message", "disposition-notification"))
+            {
+                return "receipt";
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>The METHOD line of the calendar body, for the senders who omit the parameter.</summary>
+    private static string MethodLine(TextPart calendar)
+    {
+        try
+        {
+            foreach (var line in calendar.Text.Split('\n'))
+            {
+                if (line.StartsWith("METHOD:", StringComparison.OrdinalIgnoreCase))
+                {
+                    return line["METHOD:".Length..].Trim();
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // A part whose text cannot be decoded is not a meeting anyone can answer.
+        }
+
+        return string.Empty;
+    }
+
     public static MessageSummary ToSummary(MimeMessage message, string? serverUid,
         long sizeBytes, DateTimeOffset receivedUtc, bool isRead = false, bool isFlagged = false)
     {
@@ -43,6 +96,7 @@ public static class MessageMapper
             HasAttachment: message.Attachments.Any())
         {
             InReplyTo = string.IsNullOrWhiteSpace(message.InReplyTo) ? null : message.InReplyTo,
+            ItemType = ItemTypeOf(message),
             BodyText = FullText(message),
             Importance = message.Importance switch
             {

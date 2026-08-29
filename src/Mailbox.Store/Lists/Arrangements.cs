@@ -67,6 +67,12 @@ public interface IArrangeable
 
     /// <summary>The account the row belongs to; empty in a view that is one account's.</summary>
     string AccountName => string.Empty;
+
+    /// <summary>
+    /// What kind of item the row is — "meeting:request", "meeting:reply", "meeting:cancel",
+    /// "receipt" — or null for an ordinary message, which is most of every folder.
+    /// </summary>
+    string? ItemType => null;
 }
 
 /// <summary>One group of rows, with the header the list draws above them.</summary>
@@ -172,6 +178,7 @@ public static class Arrangements
             Arrangement.Categories => Direction(
                 rows, r => r.CategoryNames.FirstOrDefault() ?? "\uFFFF", descending, StringComparer.CurrentCultureIgnoreCase),
             Arrangement.Importance => Direction(rows, r => r.Importance, descending),
+            Arrangement.Type => Direction(rows, r => TypeBand(r.ItemType), descending, StringComparer.CurrentCultureIgnoreCase),
             _ => Direction(rows, r => r.Received, descending),
         };
 
@@ -203,11 +210,19 @@ public static class Arrangements
                 : "No category",
             Arrangement.Importance => row.Importance switch { 2 => "High", 0 => "Low", _ => "Normal" },
 
-            // The one arrangement still waiting for its fact: nothing on a row yet says it is
-            // a meeting request or a receipt rather than a message, so every row is one.
-            Arrangement.Type => "Message",
+            Arrangement.Type => TypeBand(row.ItemType),
             _ => DateBand(row.Received, now),
         };
+
+    /// <summary>The By Type bands, from the mark stored when the message arrived.</summary>
+    private static string TypeBand(string? itemType) => itemType switch
+    {
+        "meeting:request" => "Meeting request",
+        "meeting:reply" => "Meeting response",
+        "meeting:cancel" => "Meeting cancellation",
+        "receipt" => "Receipt",
+        _ => "Message",
+    };
 
     /// <summary>
     /// The date buckets. Relative near the present and absolute further back, which is what

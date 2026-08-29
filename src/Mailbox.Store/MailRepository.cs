@@ -310,12 +310,12 @@ public sealed class MailRepository(MailStore store)
                     (folder_id, blob_id, server_uid, message_id, in_reply_to, thread_key,
                      from_name, from_address, subject, preview, body_text, sent_utc, received_utc,
                      size_bytes, is_read, is_flagged, has_attachment, importance, to_addresses, cc_addresses, expires_utc,
-                     header_only, feed_link, feed_image, feed_words)
+                     header_only, feed_link, feed_image, feed_words, item_type)
                 VALUES
                     ($folder, $blob, $uid, $messageId, $inReplyTo, $thread,
                      $fromName, $fromAddress, $subject, $preview, $bodyText, $sent, $received,
                      $size, $read, $flagged, $attachment, $importance, $to, $cc, $expires,
-                     $headerOnly, $feedLink, $feedImage, $feedWords)
+                     $headerOnly, $feedLink, $feedImage, $feedWords, $itemType)
                 """,
                 ("$folder", folderId),
                 ("$blob", blobId),
@@ -323,6 +323,7 @@ public sealed class MailRepository(MailStore store)
                 ("$messageId", message.MessageId),
                 ("$inReplyTo", message.InReplyTo),
                 ("$thread", ThreadKeyFor(message)),
+                ("$itemType", message.ItemType),
                 ("$fromName", message.FromName),
                 ("$fromAddress", message.FromAddress),
                 ("$subject", message.Subject),
@@ -457,7 +458,7 @@ public sealed class MailRepository(MailStore store)
                        body_text = $bodyText, from_name = $fromName, from_address = $fromAddress,
                        sent_utc = $sent, size_bytes = $size, has_attachment = $attachment,
                        thread_key = $thread, feed_link = $feedLink, feed_image = $feedImage,
-                       feed_words = $feedWords
+                       feed_words = $feedWords, item_type = $itemType
                  WHERE id = $id
                 """,
                 ("$blob", blobId),
@@ -471,6 +472,7 @@ public sealed class MailRepository(MailStore store)
                 ("$size", raw.LongLength),
                 ("$attachment", revised.HasAttachment ? 1 : 0),
                 ("$thread", ThreadKeyFor(revised)),
+                ("$itemType", revised.ItemType),
                 ("$feedLink", revised.FeedLink.Length > 0 ? revised.FeedLink : null),
                 ("$feedImage", revised.FeedImage.Length > 0 ? revised.FeedImage : null),
                 ("$feedWords", revised.FeedWords > 0 ? revised.FeedWords : null),
@@ -3108,6 +3110,7 @@ public sealed class MailRepository(MailStore store)
         HeaderOnly = r.GetInt32(r.GetOrdinal("header_only")) != 0,
         MarkedForDownload = r.GetInt32(r.GetOrdinal("marked_download")) != 0,
         ThreadKey = Nullable(r, "thread_key") ?? string.Empty,
+        ItemType = Nullable(r, "item_type"),
         FeedLink = Nullable(r, "feed_link") ?? string.Empty,
         FeedWords = NullableLong(r, "feed_words") is { } words ? (int)words : 0,
         FeedImage = Nullable(r, "feed_image") ?? string.Empty,

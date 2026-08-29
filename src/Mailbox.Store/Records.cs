@@ -214,6 +214,9 @@ public sealed record MessageSummary(
     /// <summary>What groups this message with its replies, decided when it was stored.</summary>
     public string ThreadKey { get; init; } = string.Empty;
 
+    /// <summary>The kind of item this is — a meeting message, a receipt — or null for mail.</summary>
+    public string? ItemType { get; init; }
+
     /// <summary>The Cc addresses, lower-cased.</summary>
     public IReadOnlyList<string> Cc { get; init; } = [];
 

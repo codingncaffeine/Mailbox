@@ -2547,6 +2547,7 @@ public partial class MainWindow : Window
 
         host.Content = backstage;
         host.IsVisible = true;
+        if (DataContext is ShellViewModel shell) shell.BackstageOpen = true;
 
         if (page is { Length: > 0 }) backstage.Open(page);
     }
@@ -2556,6 +2557,7 @@ public partial class MainWindow : Window
         var host = this.FindControl<ContentControl>("BackstageHost")!;
         host.IsVisible = false;
         host.Content = null;
+        if (DataContext is ShellViewModel shell) shell.BackstageOpen = false;
     }
 
     /// <summary>

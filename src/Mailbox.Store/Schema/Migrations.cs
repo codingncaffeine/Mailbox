@@ -739,6 +739,16 @@ public static class Migrations
         CREATE INDEX messages_by_in_reply_to ON messages (in_reply_to)
             WHERE in_reply_to IS NOT NULL;
         """,
+
+        // ---- 33: what kind of item a message is --------------------------------------------
+        //
+        // By Type could only ever say "Message": nothing on a row recorded that it carries a
+        // meeting request or a read receipt. The mark is written when the message is stored —
+        // detection needs the MIME, and the list must not open blobs to draw headers — and
+        // NULL, the ordinary message, is what every existing row already means.
+        """
+        ALTER TABLE messages ADD COLUMN item_type TEXT;
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>

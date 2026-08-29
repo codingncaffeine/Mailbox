@@ -217,6 +217,9 @@ public sealed class MessageRow(
     /// <summary>What threads this with its replies. The subject without its prefixes.</summary>
     public string ThreadKey { get; init; } = string.Empty;
 
+    /// <summary>The kind of item this is — a meeting message, a receipt — or null for mail.</summary>
+    public string? ItemType { get; init; }
+
     /// <summary>Which folder it is filed in, so a conversation can tell it spans two.</summary>
     public long FolderId { get; init; }
 
@@ -679,7 +682,8 @@ public sealed partial class ShellViewModel : ObservableObject
     /// </summary>
     public bool IsQuickAccessAbove =>
         QuickAccessCustomization is not { IsVisible: false }
-        && QuickAccessCustomization?.Placement != QuickAccessPlacement.BelowRibbon;
+        && QuickAccessCustomization?.Placement != QuickAccessPlacement.BelowRibbon
+        && !BackstageOpen;
 
     public bool IsQuickAccessBelow =>
         QuickAccessCustomization is { IsVisible: true, Placement: QuickAccessPlacement.BelowRibbon };
@@ -743,7 +747,24 @@ public sealed partial class ShellViewModel : ObservableObject
     /// Search lives in the title bar in both layouts. Current the reference application builds moved it
     /// there in Classic too — it is not above the message list any more.
     /// </summary>
-    public bool ShowHeaderSearch => true;
+    public bool ShowHeaderSearch => !BackstageOpen;
+
+    /// <summary>
+    /// Whether the Backstage takeover is open. It starts below the title bar — the reference's
+    /// does — and while it is up the bar sheds its search box and toolbar and shows the window
+    /// title where they were, keeping the avatar and the caption buttons in reach: the one
+    /// thing a takeover must never take is the close button.
+    /// </summary>
+    public bool BackstageOpen
+    {
+        get;
+        set
+        {
+            if (!Set(ref field, value)) return;
+            Raise(nameof(ShowHeaderSearch));
+            Raise(nameof(IsQuickAccessAbove));
+        }
+    }
     public bool ShowListSearch => false;
 
     /// <summary>
@@ -1282,6 +1303,7 @@ public sealed partial class ShellViewModel : ObservableObject
                 SnoozedUntil = summary.SnoozedUntil,
                 Importance = summary.Importance,
                 ThreadKey = summary.ThreadKey,
+                ItemType = summary.ItemType,
                 FolderId = summary.FolderId,
                 FromAddress = summary.FromAddress,
                 To = summary.To,
@@ -1376,6 +1398,7 @@ public sealed partial class ShellViewModel : ObservableObject
                     SnoozedUntil = summary.SnoozedUntil,
                     Importance = summary.Importance,
                     ThreadKey = summary.ThreadKey,
+                ItemType = summary.ItemType,
                     FolderId = summary.FolderId,
 
                     // Which account a row came from is what this view exists to show, and it is
@@ -1690,6 +1713,7 @@ public sealed partial class ShellViewModel : ObservableObject
                 IsHeaderOnly = summary.HeaderOnly,
                     Importance = summary.Importance,
                     ThreadKey = summary.ThreadKey,
+                ItemType = summary.ItemType,
                     FolderId = summary.FolderId,
                     FolderLabel = label,
 
@@ -1749,6 +1773,7 @@ public sealed partial class ShellViewModel : ObservableObject
                 SnoozedUntil = summary.SnoozedUntil,
                 Importance = summary.Importance,
                 ThreadKey = summary.ThreadKey,
+                ItemType = summary.ItemType,
                 FolderId = summary.FolderId,
                 FolderLabel = names.GetValueOrDefault(summary.FolderId, string.Empty),
                 Address = account.Account.Address,

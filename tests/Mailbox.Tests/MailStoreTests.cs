@@ -168,7 +168,7 @@ public class MailStoreTests : IDisposable
         // fixtures landed, detectably: AuditStoreMigrationTests takes each step from the commit
         // that introduced it and fails on the exact step that moved. This count is the cheap
         // tripwire in front of that; 31 is the top level's unique name, twins renamed first.
-        Assert.Equal(32, Migrations.Steps.Count);
+        Assert.Equal(33, Migrations.Steps.Count);
         Assert.Equal(Migrations.Steps.Count, Migrations.Latest);
     }
 }
