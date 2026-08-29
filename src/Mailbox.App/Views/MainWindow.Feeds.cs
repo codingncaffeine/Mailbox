@@ -399,9 +399,54 @@ public partial class MainWindow
 
         if (!dialog.Changed) return;
 
+        FollowTheFolder(feed);
+
         _feedModule?.Reload();
         shell.Refresh();
         shell.StatusRight = $"“{feed.Name}” updated.";
+    }
+
+    /// <summary>
+    /// Takes a feed's folder wherever its name and its heading have just been changed to.
+    /// </summary>
+    /// <remarks>
+    /// A feed's folder is named after the feed and sits inside its heading, so both of those boxes
+    /// in the options dialog are really instructions about the folder — and the dialog only writes
+    /// the subscription. Left to itself, changing either in the dialog emptied the feed on the
+    /// spot (its articles were in a folder nothing pointed at any more) and the next poll filed
+    /// every entry a second time under the new name, so a four-article feed became seven articles
+    /// in two folders and the reader's flags and read marks stayed with the copies nothing showed.
+    /// The pane's own Rename and Move have always moved the folder first; this is the same two
+    /// calls, in the same order, for the way in the reference draws.
+    /// <para>
+    /// <paramref name="before"/> is the subscription as it was, because that is what says where
+    /// the folder is now.
+    /// </para>
+    /// </remarks>
+    private void FollowTheFolder(FeedSubscription before)
+    {
+        if (FeedAccount() is not { } account) return;
+        if (App.Feeds.Find(before.Url) is not { } now) return;
+
+        if (!string.Equals(now.Category, before.Category, StringComparison.Ordinal)
+            && !Mailbox.Protocols.FeedReceiver.MoveToHeading(account, before, now.Category))
+        {
+            return;
+        }
+
+        if (!string.Equals(now.Name, before.Name, StringComparison.Ordinal)
+            && Mailbox.Protocols.FeedReceiver.Folder(account, before with { Category = now.Category }) is { } folder)
+        {
+            account.Mail.RenameFolder(folder.Id, now.Name, null);
+        }
+
+        // A heading nothing is filed under any more does not linger in the pane as an empty one.
+        if (before.Category.Length > 0
+            && !string.Equals(now.Category, before.Category, StringComparison.Ordinal)
+            && App.Feeds.Under(before.Category).Count == 0)
+        {
+            Mailbox.Protocols.FeedReceiver.RemoveEmptyHeading(account, before.Category);
+        }
     }
 
     private async Task UnsubscribeAsync(ShellViewModel shell, FeedSubscription? feed)
