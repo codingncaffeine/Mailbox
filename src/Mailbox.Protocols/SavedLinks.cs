@@ -256,6 +256,16 @@ public static class SavedLinks
 
         if (!HasScheme(trimmed) && !trimmed.StartsWith("//", StringComparison.Ordinal))
         {
+            // An address with an @ in its first segment and no scheme is somebody's email address,
+            // not a web address. Prefixing one gives https://a.person@example.org/ — which parses,
+            // whose host is example.org, and which would have this fetch somebody's home page and
+            // file it as a saved link under an address carrying their name. A mail client's
+            // clipboard holds an email address more often than anything else, and the clipboard is
+            // what fills this box.
+            var firstSlash = trimmed.IndexOf('/');
+            var at = trimmed.IndexOf('@');
+            if (at > 0 && (firstSlash < 0 || at < firstSlash)) return null;
+
             trimmed = "https://" + trimmed;
         }
 

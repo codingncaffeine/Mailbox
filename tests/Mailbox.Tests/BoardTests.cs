@@ -328,4 +328,27 @@ public class BoardTests
     [InlineData("mailto:someone@example.com")]
     public void AnythingThatIsNotAWebAddressIsRefused(string typed)
         => Assert.Null(SavedLinks.Normalize(typed));
+
+    /// <summary>
+    /// An email address is not a web address, however much it looks like a host with something in
+    /// front of it.
+    /// </summary>
+    /// <remarks>
+    /// Filling in the missing scheme turned <c>a.person@example.org</c> into
+    /// <c>https://a.person@example.org/</c> — which parses, whose host is example.org, and which
+    /// had Save a Link fetch a stranger's home page and file it under an address carrying somebody's
+    /// name. The box is filled from the clipboard, and this is a mail client: an email address is
+    /// the likeliest thing in it.
+    /// </remarks>
+    [Theory]
+    [InlineData("a.person@example.org")]
+    [InlineData("  someone@example.com  ")]
+    [InlineData("user:secret@example.com")]
+    public void AnEmailAddressIsNotAWebAddress(string typed)
+        => Assert.Null(SavedLinks.Normalize(typed));
+
+    /// <summary>A real URL that carries a user is still one, because it says so with a scheme.</summary>
+    [Fact]
+    public void AnAddressThatNamesItsSchemeMayCarryAUser()
+        => Assert.Equal("https://user@example.com/page", SavedLinks.Normalize("https://user@example.com/page"));
 }
