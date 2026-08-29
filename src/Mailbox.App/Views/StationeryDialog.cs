@@ -57,7 +57,7 @@ public sealed class StationeryDialog : Window
             SelectedIndex = Math.Clamp(tab, 0, 1),
         };
 
-        var ok = ViewDialogKit.Ok(() => { SaveEditing(); Close(); });
+        var ok = EditorDialogKit.Ok(() => { SaveEditing(); Close(); });
         var body = new DockPanel
         {
             Margin = new Thickness(18),
@@ -70,14 +70,13 @@ public sealed class StationeryDialog : Window
                     HorizontalAlignment = HorizontalAlignment.Right,
                     Spacing = 8,
                     Margin = new Thickness(0, 14, 0, 0),
-                    Children = { ok, ViewDialogKit.Cancel(this) },
+                    Children = { ok, EditorDialogKit.Cancel(this) },
                 },
                 tabs,
             },
         };
 
-        DialogChrome.Apply(this, body);
-        ViewDialogKit.Bind(this, BackgroundProperty, "dialog.background.brush");
+        SystemDialogChrome.Apply(this, body);
     }
 
     // ---- E-mail Signature ----------------------------------------------------------------
@@ -97,10 +96,10 @@ public sealed class StationeryDialog : Window
         _account.SelectionChanged += (_, _) => LoadDefaults();
         stack.Children.Add(Row("E-mail account:", _account, 110));
 
-        stack.Children.Add(ViewDialogKit.Label("Select signature to edit"));
+        stack.Children.Add(EditorDialogKit.Label("Select signature to edit"));
 
-        _list = ViewDialogKit.SurfaceList(500, 84);
-        _list.ItemTemplate = new FuncDataTemplate<object>((item, _) => ViewDialogKit.SurfaceText(item?.ToString() ?? string.Empty));
+        _list = EditorDialogKit.SurfaceList(500, 84);
+        _list.ItemTemplate = new FuncDataTemplate<object>((item, _) => EditorDialogKit.SurfaceText(item?.ToString() ?? string.Empty));
         _list.SelectionChanged += (_, _) => { SaveEditing(); LoadEditing(); };
 
         var make = new Button { Content = "New", Width = 74 };
@@ -121,7 +120,7 @@ public sealed class StationeryDialog : Window
             },
         });
 
-        stack.Children.Add(ViewDialogKit.Label("Edit signature"));
+        stack.Children.Add(EditorDialogKit.Label("Edit signature"));
         _editor = new TextBox
         {
             AcceptsReturn = true,
@@ -129,6 +128,7 @@ public sealed class StationeryDialog : Window
             Width = 590,
             Height = 120,
             VerticalContentAlignment = VerticalAlignment.Top,
+            Classes = { "sysfield" },
         };
         stack.Children.Add(_editor);
 
@@ -136,7 +136,7 @@ public sealed class StationeryDialog : Window
         save.Click += (_, _) => SaveEditing();
         stack.Children.Add(save);
 
-        stack.Children.Add(ViewDialogKit.Label("Choose default signature", bold: true));
+        stack.Children.Add(EditorDialogKit.Label("Choose default signature", bold: true));
         _forNew = new ComboBox { MinWidth = 400 };
         _forReply = new ComboBox { MinWidth = 400 };
         _forNew.SelectionChanged += (_, _) => Choose(_forNew, _signatures.UseForNew);
@@ -150,7 +150,7 @@ public sealed class StationeryDialog : Window
 
     private static Control Row(string label, Control control, double labelWidth)
     {
-        var caption = ViewDialogKit.Label(label);
+        var caption = EditorDialogKit.Label(label);
         caption.Width = labelWidth;
         return new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { caption, control } };
     }
@@ -262,14 +262,14 @@ public sealed class StationeryDialog : Window
     {
         var stack = new StackPanel { Margin = new Thickness(0, 12, 0, 0), Spacing = 6 };
 
-        stack.Children.Add(ViewDialogKit.Label("Theme or stationery for new HTML e-mail message", bold: true));
+        stack.Children.Add(EditorDialogKit.Label("Theme or stationery for new HTML e-mail message", bold: true));
         var theme = new Button { Content = "Theme…", Width = 90, IsEnabled = false };
         ToolTip.SetTip(theme, "Stationery themes are not offered: mail set in one is heavier and no more legible.");
         stack.Children.Add(new StackPanel
         {
             Orientation = Orientation.Horizontal,
             Spacing = 10,
-            Children = { theme, ViewDialogKit.Label("No theme currently selected") },
+            Children = { theme, EditorDialogKit.Label("No theme currently selected") },
         });
         var themeFont = new ComboBox { ItemsSource = new[] { "Use theme's font" }, SelectedIndex = 0, MinWidth = 200, IsEnabled = false };
         stack.Children.Add(Row("Font:", themeFont, 40));
@@ -277,15 +277,15 @@ public sealed class StationeryDialog : Window
         stack.Children.Add(FontRow("New mail messages", StationeryUse.NewMessages));
 
         stack.Children.Add(FontRow("Replying or forwarding messages", StationeryUse.Replies));
-        var mark = ViewDialogKit.Ink(new CheckBox { Content = "Mark my comments with:", IsChecked = _fonts.MarkComments });
-        var markWith = new TextBox { Width = 300, Text = _fonts.MarkCommentsWith(_accounts.FirstOrDefault()?.Account.DisplayName ?? string.Empty) };
+        var mark = EditorDialogKit.Ink(new CheckBox { Content = "Mark my comments with:", IsChecked = _fonts.MarkComments });
+        var markWith = new TextBox { Width = 300, Text = _fonts.MarkCommentsWith(_accounts.FirstOrDefault()?.Account.DisplayName ?? string.Empty), Classes = { "sysfield" } };
         mark.IsCheckedChanged += (_, _) => _fonts.MarkComments = mark.IsChecked == true;
         markWith.LostFocus += (_, _) => _fonts.SetMarkCommentsWith(markWith.Text ?? string.Empty);
         stack.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(20, 0, 0, 0), Children = { mark, markWith } });
-        var pick = ViewDialogKit.Ink(new CheckBox { Content = "Pick a new color when replying or forwarding", IsChecked = _fonts.PickColourOnReply, Margin = new Thickness(20, 0, 0, 0) });
+        var pick = EditorDialogKit.Ink(new CheckBox { Content = "Pick a new color when replying or forwarding", IsChecked = _fonts.PickColourOnReply, Margin = new Thickness(20, 0, 0, 0) });
         pick.IsCheckedChanged += (_, _) => _fonts.PickColourOnReply = pick.IsChecked == true;
         stack.Children.Add(pick);
-        stack.Children.Add(ViewDialogKit.Label("Comments in a reply are not yet marked; the choices are kept for when they are.", subtle: true));
+        stack.Children.Add(EditorDialogKit.Label("Comments in a reply are not yet marked; the choices are kept for when they are.", subtle: true));
 
         stack.Children.Add(FontRow("Composing and reading plain text messages", StationeryUse.PlainText));
         return stack;
@@ -300,8 +300,8 @@ public sealed class StationeryDialog : Window
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        var box = ViewDialogKit.Boxed(sample, 400, 30);
-        var summary = ViewDialogKit.Label(string.Empty, subtle: true);
+        var box = EditorDialogKit.Boxed(sample, 400, 30);
+        var summary = EditorDialogKit.Label(string.Empty, subtle: true);
 
         void Draw()
         {
@@ -312,7 +312,7 @@ public sealed class StationeryDialog : Window
             sample.FontWeight = font.Bold ? FontWeight.Bold : FontWeight.Normal;
             sample.FontStyle = font.Italic ? FontStyle.Italic : FontStyle.Normal;
             if (font.Colour is { } hex && Color.TryParse(hex, out var c)) sample.Foreground = new SolidColorBrush(c);
-            else ViewDialogKit.Bind(sample, TextBlock.ForegroundProperty, "dialog.surface.text.brush");
+            else EditorDialogKit.Bind(sample, TextBlock.ForegroundProperty, "systemdialog.foreground.brush");
             summary.Text = font.Summary + (font.Colour is null ? string.Empty : $", {font.Colour}");
         }
 
@@ -335,7 +335,7 @@ public sealed class StationeryDialog : Window
             Margin = new Thickness(0, 8, 0, 0),
             Children =
             {
-                ViewDialogKit.Label(heading, bold: true),
+                EditorDialogKit.Label(heading, bold: true),
                 new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Children = { button, box, summary } },
             },
         };

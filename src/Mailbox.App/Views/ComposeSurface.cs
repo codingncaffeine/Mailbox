@@ -1582,7 +1582,11 @@ public sealed partial class ComposeSurface : UserControl
 
         if (id == ComposeCommands.FormatHtml.Id)
         {
+            // The stationery font follows the format: a window opened in plain text writes in
+            // Personal Stationery's plain-text font, and switching to HTML without leaving it
+            // behind sent the message in that monospace face and size.
             _plainText = false;
+            UseFont(App.Stationery.Get(_prefilled ? StationeryUse.Replies : StationeryUse.NewMessages));
             ApplyAutocorrect();
             UpdateTitle();
             Report("This message will be sent as HTML.");
@@ -1595,6 +1599,7 @@ public sealed partial class ComposeSurface : UserControl
             // so matters, because a writer who bolded a word and sees it still bold would
             // otherwise assume it is going out that way.
             _plainText = true;
+            UseFont(App.Stationery.Get(StationeryUse.PlainText));
             ApplyAutocorrect();
             UpdateTitle();
             Report("This message will be sent as plain text. Formatting stays on screen and "
@@ -2729,8 +2734,21 @@ public sealed partial class ComposeSurface : UserControl
         }
 
         // A forward's attachments, or an attached original — already MIME, carried as they are
-        // rather than decoded and re-encoded, which would be a lossy trip for no reason.
-        foreach (var carried in _carried) builder.Attachments.Add(carried.Entity);
+        // rather than decoded and re-encoded, which would be a lossy trip for no reason. Each
+        // says it is an attachment and what it is called: an attached original arrives as a
+        // bare message/rfc822 entity, and without a disposition and a filename the recipient's
+        // client may render it inline or call it "noname".
+        foreach (var carried in _carried)
+        {
+            var entity = carried.Entity;
+            entity.ContentDisposition ??= new ContentDisposition(ContentDisposition.Attachment);
+            if (string.IsNullOrEmpty(entity.ContentDisposition.FileName) && carried.Name is { Length: > 0 } called)
+            {
+                entity.ContentDisposition.FileName = called;
+            }
+
+            builder.Attachments.Add(entity);
+        }
 
         message.Body = builder.ToMessageBody();
 
