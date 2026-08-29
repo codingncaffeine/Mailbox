@@ -156,8 +156,12 @@ public sealed class ContactSurface : UserControl
         _company.Text = contact.Company;
         _jobTitle.Text = contact.JobTitle;
 
-        _fileAs.ItemsSource = FileAsChoices(contact).ToList();
-        _fileAs.SelectedIndex = 0;
+        // The card's own File As is what the box opens on, not the first thing the name suggests:
+        // it is a decision somebody made, the choices below it are only offers, and a form that
+        // opened on the wrong one wrote it back over the right one the moment Save was pressed.
+        var choices = FileAsChoices(contact).ToList();
+        _fileAs.ItemsSource = choices;
+        _fileAs.SelectedIndex = Math.Max(0, choices.FindIndex(c => string.Equals(c, contact.FileAs, StringComparison.Ordinal)));
 
         _email.Text = contact.PrimaryEmail;
         _displayAs.Text = contact.Emails.Count > 0 && contact.Emails[0].Name is { Length: > 0 } shown
@@ -187,8 +191,17 @@ public sealed class ContactSurface : UserControl
         _name.TextChanged += (_, _) => TitleChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>The File as choices the reference offers, built from the name as typed.</summary>
+    /// <summary>
+    /// The File as choices the reference offers, built from the name as typed.
+    /// </summary>
+    /// <remarks>
+    /// Once each: the reference's own list has no repeats, and every card whose stored File As was
+    /// already one of the offers — which is most of them — drew that offer twice.
+    /// </remarks>
     private static IEnumerable<string> FileAsChoices(Contact contact)
+        => Offers(contact).Where(c => c.Length > 0).Distinct(StringComparer.Ordinal);
+
+    private static IEnumerable<string> Offers(Contact contact)
     {
         var last = contact.LastName;
         var first = contact.FirstName;
@@ -693,6 +706,98 @@ public sealed class ContactSurface : UserControl
 
     /// <summary>The note as text, for a harness run to read back what a command did to it.</summary>
     internal string NoteText => _notes.GetPlainText().Replace("\n", "\u23ce").Trim();
+
+    // ---- What a harness run can pose and read ----------------------------------------------------
+
+    /// <summary>
+    /// Types into one of the form's fields, by the name the label gives it.
+    /// </summary>
+    /// <remarks>
+    /// Through the control rather than around it \u2014 the same <c>Text</c> a keystroke sets \u2014 so what
+    /// is read back afterwards went through whatever the field does with what is typed. A run that
+    /// could not fill the form could only ever prove the fields it was already given.
+    /// </remarks>
+    /// <returns>False when nothing on the form answers to that name.</returns>
+    internal bool PoseField(string field, string value)
+    {
+        switch (field.Trim().ToLowerInvariant())
+        {
+            case "name": _name.Text = value; return true;
+            case "company": _company.Text = value; return true;
+            case "jobtitle": _jobTitle.Text = value; return true;
+            case "email": _email.Text = value; return true;
+            case "displayas": _displayAs.Text = value; return true;
+            case "webpage": _webPage.Text = value; return true;
+            case "im": _im.Text = value; return true;
+            case "business": _phones[0].Text = value; return true;
+            case "home": _phones[1].Text = value; return true;
+            case "businessfax": _phones[2].Text = value; return true;
+            case "mobile": _phones[3].Text = value; return true;
+            case "address": _address.Text = value.Replace("\\n", "\n", StringComparison.Ordinal); return true;
+            case "mailing": _mailing.IsChecked = value is "1" or "true"; return true;
+            case "note": _notes.Clear(); _notes.InsertText(value); return true;
+            case "notehtml": _notes.Clear(); _notes.LoadHtml(value); return true;
+
+            // By the words the box offers rather than by position: the choices are built from the
+            // name, so an index means a different thing on every card.
+            case "fileas":
+                if (_fileAs.ItemsSource?.OfType<string>().ToList() is not { } choices) return false;
+                var wanted = choices.FindIndex(c => c.Contains(value, StringComparison.OrdinalIgnoreCase));
+                if (wanted < 0) return false;
+                _fileAs.SelectedIndex = wanted;
+                return true;
+
+            case "photo":
+                _picture = value.Length == 0
+                    ? null
+                    : new ContactPhoto(File.ReadAllBytes(value), MediaTypeOfFile(value));
+                RefreshPhoto();
+                return true;
+
+            default: return false;
+        }
+    }
+
+    private static string MediaTypeOfFile(string path) => Path.GetExtension(path).ToLowerInvariant() switch
+    {
+        ".png" => "image/png",
+        ".gif" => "image/gif",
+        ".webp" => "image/webp",
+        _ => "image/jpeg",
+    };
+
+    /// <summary>What every field on the form says now, for a run to read back.</summary>
+    internal string DescribeForm()
+        => $"name=\u201c{_name.Text}\u201d company=\u201c{_company.Text}\u201d jobTitle=\u201c{_jobTitle.Text}\u201d "
+           + $"fileAs=\u201c{_fileAs.SelectedItem}\u201d of [{string.Join(" | ", _fileAs.ItemsSource?.OfType<string>() ?? [])}] "
+           + $"email=\u201c{_email.Text}\u201d displayAs=\u201c{_displayAs.Text}\u201d webPage=\u201c{_webPage.Text}\u201d im=\u201c{_im.Text}\u201d "
+           + $"business=\u201c{_phones[0].Text}\u201d home=\u201c{_phones[1].Text}\u201d businessFax=\u201c{_phones[2].Text}\u201d "
+           + $"mobile=\u201c{_phones[3].Text}\u201d address=\u201c{(_address.Text ?? string.Empty).Replace("\n", "\u23ce", StringComparison.Ordinal)}\u201d "
+           + $"mailing={_mailing.IsChecked} photo={(_picture is { Bytes.Length: > 0 } p ? $"{p.Bytes!.Length}B {p.MediaType}" : "none")} "
+           + $"note=\u201c{NoteText}\u201d";
+
+    /// <summary>
+    /// The note as the card would carry it: the plain reading, the document behind it, and the
+    /// markup that comes out.
+    /// </summary>
+    internal string DescribeNote()
+        => $"plain=“{NoteText}” document={(_notes.Document is { } doc ? $"{doc.Blocks.Count} block(s)" : "none")} "
+           + $"html=“{NoteHtml()}”";
+
+    /// <summary>What the form would save, which is the thing a store read-back has to match.</summary>
+    internal string DescribeCurrent()
+    {
+        var c = Current();
+        return $"displayName=\u201c{c.DisplayName}\u201d prefix=\u201c{c.Prefix}\u201d first=\u201c{c.FirstName}\u201d middle=\u201c{c.MiddleName}\u201d "
+               + $"last=\u201c{c.LastName}\u201d suffix=\u201c{c.Suffix}\u201d nick=\u201c{c.NickName}\u201d fileAs=\u201c{c.FileAs}\u201d "
+               + $"filedAs=\u201c{c.FiledAs()}\u201d company=\u201c{c.Company}\u201d jobTitle=\u201c{c.JobTitle}\u201d "
+               + $"emails=[{string.Join(" | ", c.Emails)}] phones=[{string.Join(" | ", c.Phones.Select(p => $"{p.Kind}:{p.Number}"))}] "
+               + $"addresses=[{string.Join(" | ", c.Addresses.Select(a => $"{a.Kind}:{a.OneLine()}"))}] "
+               + $"urls=[{string.Join(" | ", c.Urls)}] im=[{string.Join(" | ", c.InstantMessaging)}] "
+               + $"categories=[{string.Join(" | ", c.Categories)}] birthday={c.Birthday?.ToString("yyyy-MM-dd") ?? "none"} "
+               + $"photo={(c.Photo is { Bytes.Length: > 0 } p ? $"{p.Bytes!.Length}B {p.MediaType}" : "none")} "
+               + $"private={c.IsPrivate} members={c.Members.Count} note=\u201c{c.Notes.Replace("\n", "\u23ce", StringComparison.Ordinal)}\u201d";
+    }
 
     /// <summary>The window this form is in, for the dialogs its commands open.</summary>
     private Window Host()

@@ -48,6 +48,7 @@ WANTED = {
     "mail": "mail",
     "calendar": "calendar_ltr",
     "people": "people",
+    "person": "person",
     "person-add": "person_add",
     "tasks": "task_list_square_ltr",
     "notes": "note",
@@ -62,6 +63,7 @@ WANTED = {
     "settings": "settings",
     "more": "more_horizontal",
     "undo": "arrow_undo",
+    "location": "location",
     "pin": "pin",
     "folder": "folder",
     "folder-open": "folder_open",
@@ -227,6 +229,7 @@ WANTED = {
 
     # ---- Review ------------------------------------------------------------------------
     "spelling": "text_grammar_wand",
+    "edit": "edit",
     "editor": "text_grammar_checkmark",
     "thesaurus": "book",
     "word-count": "text_word_count",

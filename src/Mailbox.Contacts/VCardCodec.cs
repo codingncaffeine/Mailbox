@@ -106,7 +106,7 @@ public static class VCardCodec
             InstantMessaging = card.Messengers?.Where(m => m is { IsEmpty: false }).Select(m => m!.Value!).ToList() ?? [],
             Categories = card.Categories?.Where(c => c is { IsEmpty: false }).SelectMany(c => c!.Value!).Where(v => v is { Length: > 0 }).ToList() ?? [],
             Notes = Text(card.Notes),
-            NotesHtml = Extension(card, NotesHtmlKey) ?? string.Empty,
+            NotesHtml = UnfoldLines(Extension(card, NotesHtmlKey)),
             Birthday = ReadDate(card.BirthDayViews),
             Anniversary = ReadDate(card.AnniversaryViews),
             Photo = ReadPhoto(card),
@@ -239,10 +239,42 @@ public static class VCardCodec
 
         if (photo.Bytes is { Length: > 0 } bytes)
         {
-            return new ContactPhoto([.. bytes], photo.MediaType ?? "image/jpeg");
+            return new ContactPhoto([.. bytes], MediaTypeOf([.. bytes], photo.MediaType));
         }
 
         return photo.Uri is { } uri ? new ContactPhoto(null, photo.MediaType ?? "image/jpeg", uri.ToString()) : null;
+    }
+
+    /// <summary>
+    /// What a photograph's bytes are, preferring what they say about themselves over what the card
+    /// says about them.
+    /// </summary>
+    /// <remarks>
+    /// 3.0 states the format as a bare token — <c>TYPE=PNG</c> — which is not a media type, so a
+    /// reader hands back <c>application/octet-stream</c> for it. Kept as given, that is what the
+    /// next save writes into both the store and the card, and one round trip through this
+    /// application turns everybody's picture into an unnamed blob. The first bytes of an image say
+    /// what it is far more reliably than any header, which is the same call the message renderer
+    /// makes about an attachment with a wrong Content-Type.
+    /// </remarks>
+    private static string MediaTypeOf(byte[] bytes, string? declared)
+    {
+        if (Sniff(bytes) is { } sniffed) return sniffed;
+        return declared is { Length: > 0 } and not "application/octet-stream" ? declared : "image/jpeg";
+
+        static string? Sniff(byte[] b)
+        {
+            if (b.Length >= 8 && b[0] == 0x89 && b[1] == 'P' && b[2] == 'N' && b[3] == 'G') return "image/png";
+            if (b.Length >= 3 && b[0] == 0xFF && b[1] == 0xD8 && b[2] == 0xFF) return "image/jpeg";
+            if (b.Length >= 6 && b[0] == 'G' && b[1] == 'I' && b[2] == 'F' && b[3] == '8') return "image/gif";
+            if (b.Length >= 12 && b[0] == 'R' && b[1] == 'I' && b[2] == 'F' && b[3] == 'F'
+                && b[8] == 'W' && b[9] == 'E' && b[10] == 'B' && b[11] == 'P')
+            {
+                return "image/webp";
+            }
+
+            return b.Length >= 4 && b[0] == '<' && b[1] == 's' && b[2] == 'v' && b[3] == 'g' ? "image/svg+xml" : null;
+        }
     }
 
     /// <summary>
@@ -426,7 +458,7 @@ public static class VCardCodec
         // The formatted reading rides beside the plain one rather than replacing it: NOTE is
         // text in every version of vCard, and a client that has never heard of this property
         // still shows the note.
-        if (contact.NotesHtml.Length > 0) builder.NonStandards.Add(NotesHtmlKey, contact.NotesHtml);
+        if (contact.NotesHtml.Length > 0) builder.NonStandards.Add(NotesHtmlKey, FoldLines(contact.NotesHtml));
 
         if (contact.Birthday is { } birthday) builder.BirthDayViews.Add(birthday.Year, birthday.Month, birthday.Day);
         if (contact.Anniversary is { } anniversary) builder.AnniversaryViews.Add(anniversary.Year, anniversary.Month, anniversary.Day);
@@ -508,6 +540,52 @@ public static class VCardCodec
 
     /// <summary>Where a note's formatting is kept, beside the plain NOTE the standard defines.</summary>
     internal const string NotesHtmlKey = "X-MAILBOX-NOTES-HTML";
+
+    /// <summary>
+    /// A value with line breaks in it, written the way vCard states one: <c>\n</c>, two characters.
+    /// </summary>
+    /// <remarks>
+    /// A property's value ends at the end of its line, and folding only ever inserts a break the
+    /// reader takes back out. A newline that means a newline has to be escaped, which the library
+    /// does for the properties it knows the shape of and cannot do for a non-standard one — the
+    /// value there is written exactly as it is given. Without this, a note's markup went out as
+    /// six lines and came back as its first four characters, and the second save wrote the empty
+    /// document that produced over the note.
+    /// </remarks>
+    private static string FoldLines(string value)
+        => value.Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("\r\n", "\\n", StringComparison.Ordinal)
+            .Replace("\n", "\\n", StringComparison.Ordinal)
+            .Replace("\r", "\\n", StringComparison.Ordinal);
+
+    /// <summary>The reading of <see cref="FoldLines"/>, and of a card written before it.</summary>
+    /// <remarks>
+    /// Left to right in one pass, so an escaped backslash before an <c>n</c> stays a backslash and
+    /// an <c>n</c> rather than becoming a line break.
+    /// </remarks>
+    private static string UnfoldLines(string? value)
+    {
+        if (value is not { Length: > 0 }) return string.Empty;
+
+        var text = new System.Text.StringBuilder(value.Length);
+        for (var i = 0; i < value.Length; i++)
+        {
+            if (value[i] != '\\' || i + 1 >= value.Length)
+            {
+                text.Append(value[i]);
+                continue;
+            }
+
+            switch (value[i + 1])
+            {
+                case 'n' or 'N': text.Append('\n'); i++; break;
+                case '\\': text.Append('\\'); i++; break;
+                default: text.Append(value[i]); break;
+            }
+        }
+
+        return text.ToString();
+    }
 
     private static IReadOnlyList<string> ReadLinks(VCard card)
     {
