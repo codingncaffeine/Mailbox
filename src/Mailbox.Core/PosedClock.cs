@@ -62,4 +62,14 @@ public static class PosedClock
             return new DateTimeOffset(wall, TimeZoneInfo.Local.GetUtcOffset(wall));
         }
     }
+
+    /// <summary>The same instant as <see cref="Now"/>, written in UTC.</summary>
+    /// <remarks>
+    /// Stores stamp in UTC and are queried in it, so the alternative to this was every caller
+    /// reaching for <c>DateTimeOffset.UtcNow</c> beside a pinned clock — which is how the
+    /// reminders queue came to compute "overdue by" from the machine's date while the window
+    /// around it was posed. Offering the pinned moment in the form those queries want is what
+    /// keeps one clock one clock.
+    /// </remarks>
+    public static DateTimeOffset UtcNow => Now.ToUniversalTime();
 }

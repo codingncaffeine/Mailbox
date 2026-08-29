@@ -517,6 +517,12 @@ public static class OfficeThemes
         t.Set(TokenKeys.Dialog.Border, "#808080");
         t.Set(TokenKeys.Dialog.Selection, "#CCCCCC");
 
+        // The one theme where a link on a dialog cannot be the content's link: this theme's
+        // brand blue is tuned for the light content beside it and comes out at 1.45:1 on the
+        // #525252 ground. The blue this theme already uses for a brand mark standing on dark
+        // chrome — the folder pane's unread counts — is the one that reads here, at 4.18:1.
+        t.Set(TokenKeys.Dialog.Link, "{palette.brand.itemactive}");
+
         t.Set(TokenKeys.List.Background, "{palette.content.pane}");
         t.Set(TokenKeys.List.RowBackground, "{palette.content.row}");
         t.Set(TokenKeys.List.HeaderBackground, "{palette.content.pane}");
@@ -749,6 +755,10 @@ public static class OfficeThemes
         t.Set(TokenKeys.Dialog.SurfaceText, "{palette.neutral.primary}");
         t.Set(TokenKeys.Dialog.Border, "{palette.neutral.quaternary}");
         t.Set(TokenKeys.Dialog.Selection, "{palette.brand.light}");
+
+        // This theme's brand blue is already the light-on-dark one, so a link on a dialog is
+        // the same blue as a link anywhere else in it.
+        t.Set(TokenKeys.Dialog.Link, "{palette.brand.primary}");
 
         // The month view, measured. Today's cell stays the same blue as everywhere else and its
         // number stays white — the one part of the grid this theme does not darken.
@@ -1145,6 +1155,7 @@ public static class OfficeThemes
         t.Set(TokenKeys.Dialog.SurfaceText, "{palette.neutral.primary}");
         t.Set(TokenKeys.Dialog.Border, "{palette.neutral.tertiary}");
         t.Set(TokenKeys.Dialog.Selection, "{palette.brand.light}");
+        t.Set(TokenKeys.Dialog.Link, "{palette.brand.primary}");
 
         t.Set(TokenKeys.StatusBar.Background, "{palette.brand.primary}");
         t.Set(TokenKeys.StatusBar.Foreground, "{palette.neutral.white}");

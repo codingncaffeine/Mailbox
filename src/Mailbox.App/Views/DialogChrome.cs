@@ -61,10 +61,14 @@ internal static class DialogChrome
 
         var title = new TextBlock
         {
-            Text = window.Title,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(14, 0, 0, 0),
         };
+
+        // Followed rather than copied. A dialog whose caption says something that changes —
+        // the Reminders window counts what it is holding — set its Title and kept the words it
+        // had been given when the frame was built.
+        title.Bind(TextBlock.TextProperty, window.GetObservable(Window.TitleProperty));
         Bind(title, TextBlock.ForegroundProperty, "dialog.foreground.brush");
         Grid.SetColumn(title, 0);
         grid.Children.Add(title);

@@ -131,6 +131,7 @@
     "dialog.caption.pressed": "#26000000",
     "dialog.foreground": "{palette.neutral.primary}",
     "dialog.foreground.subtle": "{palette.neutral.secondary}",
+    "dialog.link": "{palette.brand.primary}",
     "dialog.selection": "{palette.brand.light}",
     "dialog.surface": "{palette.neutral.white}",
     "dialog.surface.text": "{palette.neutral.primary}",

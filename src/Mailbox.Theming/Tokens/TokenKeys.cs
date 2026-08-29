@@ -504,6 +504,16 @@ public static class TokenKeys
         public const string Selection = "dialog.selection";
 
         /// <summary>
+        /// A link standing on the dialog's ground — the Reminders window's location line.
+        /// </summary>
+        /// <remarks>
+        /// Its own key rather than <see cref="Text.Link"/> for the reason the whole family
+        /// exists: two of the four themes put a dark ground under a dialog while the content
+        /// around it is light, and the content's link blue on that ground measures 1.45:1.
+        /// </remarks>
+        public const string Link = "dialog.link";
+
+        /// <summary>
         /// The wash a caption button on a dialog wears under the pointer, and while held. A
         /// dialog's caption stands on the dialog's ground, which is the opposite end of the
         /// ramp from the title bar's in two of the four themes, so it needs its own pair.
@@ -916,7 +926,7 @@ public static class TokenKeys
         StatusBar.Background, StatusBar.Foreground, StatusBar.Height, StatusBar.Slider,
         Dialog.Background, Dialog.Foreground, Dialog.ForegroundSubtle,
         Dialog.Surface, Dialog.SurfaceText,
-        Dialog.Border, Dialog.Selection,
+        Dialog.Border, Dialog.Selection, Dialog.Link,
         Dialog.CaptionHover, Dialog.CaptionPressed,
         .. SystemDialog.All,
         Calendar.Background, Calendar.PastFill, Calendar.TodayFill, Calendar.TodayText, Calendar.SelectedFill,
