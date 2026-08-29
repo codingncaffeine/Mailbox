@@ -232,8 +232,18 @@ public sealed record Contact
         if (name.Length > 0) return name;
         if (Company.Length > 0) return Company;
         if (PrimaryEmail.Length > 0) return PrimaryEmail;
-        return "(no name)";
+        return NoName;
     }
+
+    /// <summary>
+    /// What a row says when the card gives it nothing to say.
+    /// </summary>
+    /// <remarks>
+    /// Named rather than spelt out twice: it is a stand-in for a list row and never a value, so
+    /// anything that stores what <see cref="Named"/> hands back has to be able to tell the two
+    /// apart. The File as box could not, and filed every nameless draft under it.
+    /// </remarks>
+    public const string NoName = "(no name)";
 
     /// <summary>
     /// How this contact files, given the order the People page asks for.

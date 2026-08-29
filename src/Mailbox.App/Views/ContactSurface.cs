@@ -156,12 +156,7 @@ public sealed class ContactSurface : UserControl
         _company.Text = contact.Company;
         _jobTitle.Text = contact.JobTitle;
 
-        // The card's own File As is what the box opens on, not the first thing the name suggests:
-        // it is a decision somebody made, the choices below it are only offers, and a form that
-        // opened on the wrong one wrote it back over the right one the moment Save was pressed.
-        var choices = FileAsChoices(contact).ToList();
-        _fileAs.ItemsSource = choices;
-        _fileAs.SelectedIndex = Math.Max(0, choices.FindIndex(c => string.Equals(c, contact.FileAs, StringComparison.Ordinal)));
+        RefreshFileAs();
 
         _email.Text = contact.PrimaryEmail;
         _displayAs.Text = contact.Emails.Count > 0 && contact.Emails[0].Name is { Length: > 0 } shown
@@ -188,7 +183,39 @@ public sealed class ContactSurface : UserControl
         _memberList.AddRange(contact.Members);
         _members.ItemsSource = _memberList.Select(m => m.Name is { Length: > 0 } n ? $"{n} <{m.Address}>" : m.Address).ToList();
 
-        _name.TextChanged += (_, _) => TitleChanged?.Invoke(this, EventArgs.Empty);
+        _name.TextChanged += (_, _) =>
+        {
+            TitleChanged?.Invoke(this, EventArgs.Empty);
+            RefreshFileAs();
+        };
+
+        _company.TextChanged += (_, _) => RefreshFileAs();
+    }
+
+    /// <summary>
+    /// Builds the File as box from the name and the company as they now stand.
+    /// </summary>
+    /// <remarks>
+    /// Every time either changes, not once when the window opens. Built once, the box on a new
+    /// contact was built from a card with nothing on it — one offer, the placeholder a nameless
+    /// row is drawn with — and every contact this application created was filed under that. They
+    /// sorted above the numbers, under the index's own <c>#</c>, whatever they were called.
+    /// <para>
+    /// Whatever is picked survives the rebuild where it is still on offer, so a decision made and
+    /// then a job title corrected is still that decision; where it is not, the card's own filing
+    /// wins, and failing that the first offer.
+    /// </para>
+    /// </remarks>
+    private void RefreshFileAs()
+    {
+        var chosen = _fileAs.SelectedItem as string;
+        var choices = FileAsChoices(NameBasis()).ToList();
+        _fileAs.ItemsSource = choices;
+        if (choices.Count == 0) return;
+
+        var index = chosen is null ? -1 : choices.FindIndex(c => string.Equals(c, chosen, StringComparison.Ordinal));
+        if (index < 0) index = choices.FindIndex(c => string.Equals(c, _original.FileAs, StringComparison.Ordinal));
+        _fileAs.SelectedIndex = Math.Max(0, index);
     }
 
     /// <summary>
@@ -196,10 +223,14 @@ public sealed class ContactSurface : UserControl
     /// </summary>
     /// <remarks>
     /// Once each: the reference's own list has no repeats, and every card whose stored File As was
-    /// already one of the offers — which is most of them — drew that offer twice.
+    /// already one of the offers — which is most of them — drew that offer twice. The placeholder
+    /// a nameless card is drawn with is not an offer at all: it is what a list row says when there
+    /// is nothing to say, and filing somebody under it is worse than not filing them.
     /// </remarks>
     private static IEnumerable<string> FileAsChoices(Contact contact)
-        => Offers(contact).Where(c => c.Length > 0).Distinct(StringComparer.Ordinal);
+        => Offers(contact)
+            .Where(c => c.Length > 0 && !string.Equals(c, Contact.NoName, StringComparison.Ordinal))
+            .Distinct(StringComparer.Ordinal);
 
     private static IEnumerable<string> Offers(Contact contact)
     {
@@ -806,17 +837,38 @@ public sealed class ContactSurface : UserControl
 
     public void Cancel() => Cancelled?.Invoke(this, EventArgs.Empty);
 
+    /// <summary>
+    /// The name and the company as the form states them, split into their parts.
+    /// </summary>
+    /// <remarks>
+    /// What the typed name means is the People page's "Default Full Name order" — the string
+    /// itself cannot say whether "Vries Anne" leads with the family name. A card that already
+    /// carries its parts keeps them (the form edits the display name, not the analysis); only a
+    /// name typed onto a card that has none is parsed.
+    /// <para>
+    /// Its own method because the File as box needs the same answer on every keystroke, and it
+    /// must not pay for serialising the note to get it.
+    /// </para>
+    /// </remarks>
+    private Contact NameBasis()
+    {
+        var typed = (_name.Text ?? string.Empty).Trim();
+        var parsed = Mailbox.Core.People.FullNames.Parse(typed, App.PeopleOptions.FullName);
+
+        return _original with
+        {
+            DisplayName = typed,
+            FirstName = _original.FirstName.Length > 0 || parsed.Last.Length == 0 ? _original.FirstName : parsed.First,
+            MiddleName = _original.FirstName.Length > 0 || parsed.Last.Length == 0 ? _original.MiddleName : parsed.Middle,
+            LastName = _original.LastName.Length > 0 || parsed.Last.Length == 0 ? _original.LastName : parsed.Last,
+            Company = (_company.Text ?? string.Empty).Trim(),
+            JobTitle = (_jobTitle.Text ?? string.Empty).Trim(),
+        };
+    }
+
     /// <summary>The contact as the form now states it.</summary>
     public Contact Current()
     {
-        var typed = (_name.Text ?? string.Empty).Trim();
-
-        // What the typed name means is the People page's "Default Full Name order" — the string
-        // itself cannot say whether "Vries Anne" leads with the family name. A card that already
-        // carries its parts keeps them (the form edits the display name, not the analysis); only
-        // a name typed onto a card that has none is parsed.
-        var parsed = Mailbox.Core.People.FullNames.Parse(typed, App.PeopleOptions.FullName);
-
         var emails = new List<ContactEmail>();
         if ((_email.Text ?? string.Empty).Trim() is { Length: > 0 } address)
         {
@@ -836,14 +888,8 @@ public sealed class ContactSurface : UserControl
             }
         }
 
-        return _original with
+        return NameBasis() with
         {
-            DisplayName = typed,
-            FirstName = _original.FirstName.Length > 0 || parsed.Last.Length == 0 ? _original.FirstName : parsed.First,
-            MiddleName = _original.FirstName.Length > 0 || parsed.Last.Length == 0 ? _original.MiddleName : parsed.Middle,
-            LastName = _original.LastName.Length > 0 || parsed.Last.Length == 0 ? _original.LastName : parsed.Last,
-            Company = (_company.Text ?? string.Empty).Trim(),
-            JobTitle = (_jobTitle.Text ?? string.Empty).Trim(),
             FileAs = _fileAs.SelectedItem as string ?? _original.FileAs,
             Emails = emails,
             Phones = phones,
