@@ -190,28 +190,21 @@ public sealed class RibbonCustomization
 
         foreach (var tab in tree.Tabs)
         {
-            var groups = new JsonArray();
-
-            foreach (var group in tab.Groups)
-            {
-                groups.Add(new JsonObject
-                {
-                    ["id"] = group.Id,
-                    ["label"] = group.Label,
-                    ["custom"] = group.IsCustom,
-                    ["commands"] = new JsonArray(
-                        [.. group.Commands.Select(c => JsonValue.Create(c.Value))]),
-                });
-            }
-
-            tabs.Add(new JsonObject
+            var node = new JsonObject
             {
                 ["id"] = tab.Id,
                 ["label"] = tab.Label,
                 ["visible"] = tab.IsVisible,
                 ["custom"] = tab.IsCustom,
-                ["groups"] = groups,
-            });
+                ["groups"] = GroupsNode(tab.Groups),
+            };
+
+            if (tab.ClassicGroups is { } classic)
+            {
+                node["classicGroups"] = GroupsNode(classic);
+            }
+
+            tabs.Add(node);
         }
 
         var document = new JsonObject
@@ -245,6 +238,25 @@ public sealed class RibbonCustomization
         }
     }
 
+    private static JsonArray GroupsNode(IEnumerable<RibbonTreeGroup> groups)
+    {
+        var node = new JsonArray();
+
+        foreach (var group in groups)
+        {
+            node.Add(new JsonObject
+            {
+                ["id"] = group.Id,
+                ["label"] = group.Label,
+                ["custom"] = group.IsCustom,
+                ["commands"] = new JsonArray(
+                    [.. group.Commands.Select(c => JsonValue.Create(c.Value))]),
+            });
+        }
+
+        return node;
+    }
+
     private static RibbonCustomizationFile Read(string json)
     {
         if (JsonNode.Parse(json) is not JsonObject document)
@@ -267,18 +279,13 @@ public sealed class RibbonCustomization
                 IsCustom = Flag(tabNode, "custom", fallback: false),
             };
 
-            foreach (var groupNode in tabNode["groups"] as JsonArray ?? [])
-            {
-                if (groupNode is not JsonObject group) continue;
-                if (Text(group, "id") is not { Length: > 0 } groupId) continue;
+            tab.Groups.AddRange(Groups(tabNode["groups"] as JsonArray));
 
-                tab.Groups.Add(new RibbonTreeGroup
-                {
-                    Id = groupId,
-                    Label = Text(group, "label") ?? groupId,
-                    IsCustom = Flag(group, "custom", fallback: false),
-                    Commands = [.. Commands(group["commands"] as JsonArray)],
-                });
+            // Absent in a document written before the classic groups were recorded, and left
+            // null so Reconcile knows to fill them from the shipped layout.
+            if (tabNode["classicGroups"] is JsonArray classic)
+            {
+                tab.ClassicGroups = [.. Groups(classic)];
             }
 
             tree.Tabs.Add(tab);
@@ -293,6 +300,23 @@ public sealed class RibbonCustomization
             : (MailboxModule?)null;
 
         return new RibbonCustomizationFile(tree, quickAccess, module);
+    }
+
+    private static IEnumerable<RibbonTreeGroup> Groups(JsonArray? array)
+    {
+        foreach (var node in array ?? [])
+        {
+            if (node is not JsonObject group) continue;
+            if (Text(group, "id") is not { Length: > 0 } id) continue;
+
+            yield return new RibbonTreeGroup
+            {
+                Id = id,
+                Label = Text(group, "label") ?? id,
+                IsCustom = Flag(group, "custom", fallback: false),
+                Commands = [.. Commands(group["commands"] as JsonArray)],
+            };
+        }
     }
 
     private static IEnumerable<CommandId> Commands(JsonArray? array)

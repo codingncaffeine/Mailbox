@@ -121,6 +121,174 @@ public class RibbonTreeTests
     }
 
     [Fact]
+    public void ReadsTheClassicGroupsBesideTheClusters()
+    {
+        var home = RibbonTree.From(Shipped).Tabs.Single(t => t.Id == "home");
+
+        Assert.Equal("New", home.ClassicGroups![0].Label);
+        Assert.Equal(
+            ["mail.new", "mail.new.items"],
+            home.ClassicGroups[0].Commands.Select(c => c.Value).ToArray());
+    }
+
+    [Fact]
+    public void AnUneditedTreeRebuildsTheShippedClassicGroups()
+    {
+        var applied = RibbonTree.From(Shipped).ApplyTo(Shipped);
+
+        foreach (var tab in Shipped.Tabs.Where(t => !t.IsBackstage))
+        {
+            var rebuilt = applied.FindTab(tab.Id)!;
+
+            Assert.Equal(
+                tab.Groups.Select(g => g.Id).ToArray(),
+                rebuilt.Groups.Select(g => g.Id).ToArray());
+
+            foreach (var (shipped, again) in tab.Groups.Zip(rebuilt.Groups))
+            {
+                Assert.Equal(
+                    shipped.Items.Select(i => i.Command.Value).ToArray(),
+                    again.Items.Select(i => i.Command.Value).ToArray());
+                Assert.Equal(shipped.DialogLauncher, again.DialogLauncher);
+                Assert.Equal(shipped.KeyTip, again.KeyTip);
+                Assert.Equal(shipped.CollapsePriority, again.CollapsePriority);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The owner's call on which ribbon the editor reaches: the classic one too, as the
+    /// reference's editor does. An edit to a tab's classic groups must land on the classic
+    /// rendering — and only there, since the two renderings are customized apart.
+    /// </summary>
+    [Fact]
+    public void AClassicEditLandsOnTheClassicRibbonAndLeavesTheBarAlone()
+    {
+        var tree = RibbonTree.From(Shipped);
+        var home = tree.Tabs.Single(t => t.Id == "home");
+        home.ClassicGroups!.Single(g => g.Id == "sendreceivegroup")
+            .Commands.Add(new CommandId("mail.workoffline"));
+
+        var applied = tree.ApplyTo(Shipped);
+
+        Assert.Contains(
+            "mail.workoffline",
+            applied.FindTab("home")!.Groups.Single(g => g.Id == "sendreceivegroup")
+                .Items.Select(i => i.Command.Value));
+
+        Assert.Equal(
+            Shipped.Simplified["home"].Flatten().Select(i => i.Command.Value).ToArray(),
+            applied.SimplifiedRows["home"].Select(i => i.Command.Value).ToArray());
+    }
+
+    [Fact]
+    public void ABarEditLeavesTheClassicGroupsAlone()
+    {
+        var tree = RibbonTree.From(Shipped);
+        tree.Tabs.Single(t => t.Id == "home").Groups
+            .Single(g => g.Id == "sendreceivegroup")
+            .Commands.Add(new CommandId("mail.workoffline"));
+
+        var applied = tree.ApplyTo(Shipped);
+
+        Assert.Contains(
+            "mail.workoffline",
+            applied.SimplifiedRows["home"].Select(i => i.Command.Value));
+
+        Assert.DoesNotContain(
+            "mail.workoffline",
+            applied.FindTab("home")!.Groups.SelectMany(g => g.Items).Select(i => i.Command.Value));
+    }
+
+    /// <summary>
+    /// Editing one group must not cost its neighbours their furniture — the corner launcher,
+    /// the KeyTip and the collapse order are not in the command list, so a rebuild from the
+    /// list would silently strip them.
+    /// </summary>
+    [Fact]
+    public void AnEditedClassicGroupKeepsItsLauncherAndKeyTip()
+    {
+        var tree = RibbonTree.From(Shipped);
+        var tags = tree.Tabs.Single(t => t.Id == "home").ClassicGroups!.Single(g => g.Id == "tags");
+        tags.Commands.Add(new CommandId("mail.workoffline"));
+
+        var applied = tree.ApplyTo(Shipped);
+        var rebuilt = applied.FindTab("home")!.Groups.Single(g => g.Id == "tags");
+        var shipped = Shipped.FindTab("home")!.Groups.Single(g => g.Id == "tags");
+
+        Assert.Equal(shipped.DialogLauncher, rebuilt.DialogLauncher);
+        Assert.Equal(shipped.KeyTip, rebuilt.KeyTip);
+        Assert.Equal(shipped.CollapsePriority, rebuilt.CollapsePriority);
+    }
+
+    /// <summary>New Email is a large button in its classic group and must move as one.</summary>
+    [Fact]
+    public void AMovedClassicCommandKeepsItsAuthoredShape()
+    {
+        var tree = RibbonTree.From(Shipped);
+        var home = tree.Tabs.Single(t => t.Id == "home");
+
+        home.ClassicGroups![0].Commands.Remove(new CommandId("mail.new"));
+        home.ClassicGroups.Single(g => g.Id == "respond").Commands.Insert(0, new CommandId("mail.new"));
+
+        var moved = tree.ApplyTo(Shipped).FindTab("home")!.Groups
+            .Single(g => g.Id == "respond").Items[0];
+
+        Assert.Equal("mail.new", moved.Command.Value);
+        Assert.Equal(RibbonItemSize.Large, moved.Size);
+    }
+
+    /// <summary>
+    /// A command the classic ribbon never places becomes what a classic group is made of — a
+    /// large button — keeping its kind when the Simplified bar knows one.
+    /// </summary>
+    [Fact]
+    public void ANewlyPlacedClassicCommandBecomesALargeButton()
+    {
+        var tree = RibbonTree.From(Shipped);
+        var group = tree.Tabs.Single(t => t.Id == "home").ClassicGroups![0];
+        group.Commands.Add(new CommandId("mail.snooze"));
+
+        var item = tree.ApplyTo(Shipped).FindTab("home")!.Groups[0].Items[^1];
+
+        Assert.Equal(RibbonItemSize.Large, item.Size);
+        Assert.Equal(RibbonItemKind.Button, item.Kind);
+    }
+
+    /// <summary>
+    /// The Folder tab has no Simplified bar and must not gain an empty one for being applied —
+    /// the reference does not draw it on that strip at all.
+    /// </summary>
+    [Fact]
+    public void AClassicOnlyTabGetsNoEmptySimplifiedBar()
+    {
+        var applied = RibbonTree.From(Shipped).ApplyTo(Shipped);
+
+        Assert.False(applied.SimplifiedRows.ContainsKey("folder"));
+        Assert.True(applied.FindTab("folder")!.ClassicOnly);
+    }
+
+    [Fact]
+    public void ResettingATabRestoresItsClassicGroupsToo()
+    {
+        var tree = RibbonTree.From(Shipped);
+        tree.Tabs.Single(t => t.Id == "home").ClassicGroups!.Clear();
+
+        Assert.True(tree.ResetTab(Shipped, "home"));
+        Assert.NotEmpty(tree.Tabs.Single(t => t.Id == "home").ClassicGroups!);
+    }
+
+    [Fact]
+    public void DiffersFromSeesAClassicOnlyEdit()
+    {
+        var tree = RibbonTree.From(Shipped);
+        Assert.False(tree.DiffersFrom(Shipped));
+
+        tree.Tabs[0].ClassicGroups![0].Commands.Add(new CommandId("mail.workoffline"));
+        Assert.True(tree.DiffersFrom(Shipped));
+    }
+
+    [Fact]
     public void CustomIdsAreUniqueAcrossTheWholeTree()
     {
         var tree = RibbonTree.From(Shipped);
@@ -321,6 +489,61 @@ public class RibbonCustomizationStoreTests : IDisposable
         Assert.Equal(
             ["mail.new"],
             applied.Simplified["home"].Groups[0].Items.Select(i => i.Command.Value).ToArray());
+    }
+
+    [Fact]
+    public void AClassicEditSurvivesAReopen()
+    {
+        var path = At("ribbon.json");
+        var tree = RibbonTree.From(Shipped);
+        tree.Tabs.Single(t => t.Id == "home").ClassicGroups!
+            .Single(g => g.Id == "sendreceivegroup")
+            .Commands.Add(new CommandId("mail.workoffline"));
+
+        new RibbonCustomization(path).Save(tree, Shipped);
+
+        var applied = new RibbonCustomization(path).Apply(Shipped);
+
+        Assert.Contains(
+            "mail.workoffline",
+            applied.FindTab("home")!.Groups.Single(g => g.Id == "sendreceivegroup")
+                .Items.Select(i => i.Command.Value));
+    }
+
+    /// <summary>
+    /// A document written before the classic groups were recorded described Simplified edits
+    /// alone, so the classic ribbon it applies to is the shipped one — not an empty one.
+    /// </summary>
+    [Fact]
+    public void ADocumentWithNoClassicGroupsLeavesTheClassicRibbonShipped()
+    {
+        var path = At("ribbon.json");
+        File.WriteAllText(path, """
+            {
+              "version": 1,
+              "module": "Mail",
+              "tabs": [
+                {
+                  "id": "home",
+                  "label": "Home",
+                  "visible": true,
+                  "groups": [
+                    { "id": "new", "label": "New", "commands": ["mail.new"] }
+                  ]
+                }
+              ]
+            }
+            """);
+
+        var applied = new RibbonCustomization(path).Apply(Shipped);
+
+        Assert.Equal(
+            ["mail.new"],
+            applied.Simplified["home"].Groups[0].Items.Select(i => i.Command.Value).ToArray());
+
+        Assert.Equal(
+            Shipped.FindTab("home")!.Groups.Select(g => g.Id).ToArray(),
+            applied.FindTab("home")!.Groups.Select(g => g.Id).ToArray());
     }
 
     /// <summary>

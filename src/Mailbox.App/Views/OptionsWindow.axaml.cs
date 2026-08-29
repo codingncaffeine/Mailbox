@@ -380,8 +380,13 @@ public sealed class OptionsWindow : Window
     {
         CustomizationEditor? editor = page.Id switch
         {
+            // The editor targets the rendering the reader is running, as the reference's does —
+            // its heading names which.
             "ribbon" => new RibbonEditorView(
-                App.Commands, App.RibbonEdits, DefaultRibbonLayouts.Mail),
+                App.Commands, App.RibbonEdits, DefaultRibbonLayouts.Mail,
+                App.RibbonDisplay.Get(RibbonWindow.Shell).Layout == RibbonDisplayMode.Classic
+                    ? RibbonEditTarget.Classic
+                    : RibbonEditTarget.Simplified),
 
             "qat" => new QuickAccessEditorView(
                 App.Commands, App.QuickAccess, App.RibbonEdits, DefaultRibbonLayouts.Mail),

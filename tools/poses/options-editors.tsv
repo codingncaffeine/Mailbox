@@ -1,1 +1,2 @@
 ribbon-add	MAILBOX_RIBBON_EDIT=page:ribbon;source:All Commands;gallery:Work Offline;target:Send;add;tree;layout;modules;file	MAILBOX_TODAY=2026-08-16
+ribbon-add-classic	MAILBOX_SETTING=ribbon.layout=classic	MAILBOX_RIBBON_EDIT=page:ribbon;source:All Commands;gallery:Work Offline;target:Send;add;tree;layout;file	MAILBOX_TODAY=2026-08-16

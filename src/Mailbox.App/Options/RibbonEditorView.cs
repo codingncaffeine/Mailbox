@@ -20,6 +20,10 @@ namespace Mailbox.App.Options;
 internal sealed class RibbonTreeRow
 {
     public required RibbonTreeTab Tab { get; init; }
+
+    /// <summary>The tab's groups as the tree is showing them — the edited target's list.</summary>
+    public required List<RibbonTreeGroup> TabGroups { get; init; }
+
     public RibbonTreeGroup? Group { get; init; }
     public CommandId? Command { get; init; }
 
@@ -30,7 +34,7 @@ internal sealed class RibbonTreeRow
     public bool IsCommand => Command is not null;
 
     /// <summary>Whether this row has anything under it to show.</summary>
-    public bool HasChildren => IsTab ? Tab.Groups.Count > 0 : IsGroup && Group!.Commands.Count > 0;
+    public bool HasChildren => IsTab ? TabGroups.Count > 0 : IsGroup && Group!.Commands.Count > 0;
 }
 
 /// <summary>
@@ -40,17 +44,20 @@ internal sealed class RibbonTreeRow
 /// The editor works on a <see cref="RibbonTree"/> and saves it, which is the whole payoff of
 /// the ribbon being a document. Nothing here knows how a ribbon is drawn.
 /// <para>
-/// It edits the Simplified bar, which is what the reference's own editor does — its heading
-/// reads "Customize the Single Line Ribbon". Two deliberate divergences: the reference refuses
-/// to add commands to a built-in group, because its built-ins are fixed resources, and ours are
-/// not; and a built-in group removed here comes back through Reset rather than being offered in
-/// the gallery, which is where the reference's "Main Tabs" source would put it.
+/// It edits the ribbon the reader is running — the reference's own editor does the same, and
+/// its heading says which: "Customize the Single Line Ribbon" over the Simplified bar,
+/// "Customize the Classic Ribbon" over the classic one. Two deliberate divergences: the
+/// reference refuses to add commands to a built-in group, because its built-ins are fixed
+/// resources, and ours are not; and a built-in group removed here comes back through Reset
+/// rather than being offered in the gallery, which is where the reference's "Main Tabs" source
+/// would put it.
 /// </para>
 /// </remarks>
 public sealed class RibbonEditorView : CustomizationEditor
 {
     private readonly RibbonCustomization _store;
     private readonly RibbonLayout _shipped;
+    private readonly RibbonEditTarget _target;
     private readonly ListBox _tree = new();
     private readonly ComboBox _scope = new();
     private readonly TextBlock _band = new() { Text = "Main Tabs" };
@@ -58,17 +65,22 @@ public sealed class RibbonEditorView : CustomizationEditor
 
     private RibbonTree _model;
 
-    public RibbonEditorView(CommandCatalog catalog, RibbonCustomization store, RibbonLayout shipped)
+    public RibbonEditorView(
+        CommandCatalog catalog,
+        RibbonCustomization store,
+        RibbonLayout shipped,
+        RibbonEditTarget target = RibbonEditTarget.Simplified)
         : base(catalog)
     {
         _store = store;
         _shipped = shipped;
+        _target = target;
         _model = store.Load(shipped);
 
         // Groups start folded, and every tab but the first, as the capture shows them — a tab with
         // eight groups each holding three commands is thirty lines before anything has been
         // chosen, and thirteen such tabs is the whole pane.
-        foreach (var group in _model.Tabs.SelectMany(t => t.Groups)) _collapsed.Add(GroupKey(group.Id));
+        foreach (var group in _model.Tabs.SelectMany(GroupsFor)) _collapsed.Add(GroupKey(group.Id));
         foreach (var tab in _model.Tabs.Skip(1)) _collapsed.Add(TabKey(tab.Id));
 
         Build();
@@ -77,7 +89,17 @@ public sealed class RibbonEditorView : CustomizationEditor
     /// <summary>The edited tree, for a host that wants to apply it without reloading.</summary>
     public RibbonTree Model => _model;
 
-    protected override string TargetHeading => "Customize the Single Line Ribbon:";
+    /// <summary>The groups the tree shows for a tab: the edited target's.</summary>
+    /// <remarks>
+    /// The classic list is filled by <see cref="RibbonCustomization.Load"/>'s reconcile before
+    /// this view ever sees the tree; the fallback is for nothing but safety.
+    /// </remarks>
+    private List<RibbonTreeGroup> GroupsFor(RibbonTreeTab tab)
+        => _target == RibbonEditTarget.Classic ? tab.ClassicGroups ??= [] : tab.Groups;
+
+    protected override string TargetHeading => _target == RibbonEditTarget.Classic
+        ? "Customize the Classic Ribbon:"
+        : "Customize the Single Line Ribbon:";
 
     protected override bool HasPerTabReset => true;
 
@@ -158,17 +180,20 @@ public sealed class RibbonEditorView : CustomizationEditor
 
         foreach (var tab in _model.Tabs.Where(InScope))
         {
-            rows.Add(new RibbonTreeRow { Tab = tab });
+            var groups = GroupsFor(tab);
+
+            rows.Add(new RibbonTreeRow { Tab = tab, TabGroups = groups });
             if (_collapsed.Contains(TabKey(tab.Id))) continue;
 
-            foreach (var group in tab.Groups)
+            foreach (var group in groups)
             {
-                rows.Add(new RibbonTreeRow { Tab = tab, Group = group });
+                rows.Add(new RibbonTreeRow { Tab = tab, TabGroups = groups, Group = group });
                 if (_collapsed.Contains(GroupKey(group.Id))) continue;
 
                 rows.AddRange(group.Commands.Select(command => new RibbonTreeRow
                 {
                     Tab = tab,
+                    TabGroups = groups,
                     Group = group,
                     Command = command,
                 }));
@@ -326,12 +351,12 @@ public sealed class RibbonEditorView : CustomizationEditor
 
     private int SiblingCount(RibbonTreeRow row)
         => row.IsCommand ? row.Group!.Commands.Count
-            : row.IsGroup ? row.Tab.Groups.Count
+            : row.IsGroup ? row.TabGroups.Count
             : _model.Tabs.Count;
 
     private int IndexOf(RibbonTreeRow row)
         => row.IsCommand ? row.Group!.Commands.IndexOf(row.Command!.Value)
-            : row.IsGroup ? row.Tab.Groups.IndexOf(row.Group!)
+            : row.IsGroup ? row.TabGroups.IndexOf(row.Group!)
             : _model.Tabs.IndexOf(row.Tab);
 
     protected override void OnAdd(GalleryEntry entry)
@@ -353,7 +378,7 @@ public sealed class RibbonEditorView : CustomizationEditor
         if (SelectedRow is not { } row) return;
 
         if (row.IsCommand) row.Group!.Commands.Remove(row.Command!.Value);
-        else if (row.IsGroup) row.Tab.Groups.Remove(row.Group!);
+        else if (row.IsGroup) row.TabGroups.Remove(row.Group!);
         else if (row.Tab.IsCustom) _model.Tabs.Remove(row.Tab);
         else return;
 
@@ -369,7 +394,7 @@ public sealed class RibbonEditorView : CustomizationEditor
         if (index < 0 || to < 0 || to >= SiblingCount(row)) return;
 
         if (row.IsCommand) Move(row.Group!.Commands, index, to);
-        else if (row.IsGroup) Move(row.Tab.Groups, index, to);
+        else if (row.IsGroup) Move(row.TabGroups, index, to);
         else Move(_model.Tabs, index, to);
 
         Save();
@@ -489,13 +514,16 @@ public sealed class RibbonEditorView : CustomizationEditor
             IsCustom = true,
         };
 
+        // The seed group goes to the rendering being edited; the other list starts empty, which
+        // for a tab nobody shipped is the truth.
         var tab = new RibbonTreeTab
         {
             Id = _model.NextTabId(),
             Label = "New Tab",
             IsCustom = true,
-            Groups = { group },
+            ClassicGroups = [],
         };
+        GroupsFor(tab).Add(group);
 
         var after = SelectedRow is { } row ? _model.Tabs.IndexOf(row.Tab) + 1 : _model.Tabs.Count;
         _model.Tabs.Insert(after, tab);
@@ -513,8 +541,8 @@ public sealed class RibbonEditorView : CustomizationEditor
             IsCustom = true,
         };
 
-        var after = row.Group is null ? row.Tab.Groups.Count : row.Tab.Groups.IndexOf(row.Group) + 1;
-        row.Tab.Groups.Insert(after, group);
+        var after = row.Group is null ? row.TabGroups.Count : row.TabGroups.IndexOf(row.Group) + 1;
+        row.TabGroups.Insert(after, group);
         Save();
     }
 

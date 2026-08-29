@@ -683,6 +683,10 @@ public partial class MainWindow
                          + $"{(tab.IsVisible ? string.Empty : " [unticked]")}"
                          + $"{(tab.IsCustom ? " (Custom)" : string.Empty)} — "
                          + string.Join(", ", tab.Groups.Select(g => $"{g.Label}[{g.Commands.Count}]")));
+                Log.Info("Harness:     stored classic: "
+                         + (tab.ClassicGroups is { } classic
+                             ? string.Join(", ", classic.Select(g => $"{g.Label}[{g.Commands.Count}]"))
+                             : "(not recorded — shipped)"));
             }
         }
 
