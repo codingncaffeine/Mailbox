@@ -183,14 +183,11 @@ public partial class MainWindow
     /// query finds.
     /// </summary>
     /// <remarks>
-    /// Counted off <c>messages_fts_docsize</c> rather than the index itself: nothing can be
-    /// selected <em>from</em> this index, because it is declared over a content column
-    /// (<c>body</c>) that <c>messages</c> does not have — it is called <c>body_text</c> — so every
-    /// read-through answers "no such column: T.body". The triggers pass their values explicitly
-    /// and so are unaffected, and the application only ever matches and joins on the rowid, which
-    /// is why nothing has ever noticed. It is recorded here because a search index that cannot be
-    /// read through also cannot be rebuilt, and the size of a store is not evidence that its index
-    /// survived a compaction.
+    /// Counted off <c>messages_fts_docsize</c>, which serves any vintage of the store: before
+    /// schema step 30 the index was declared over a column <c>messages</c> did not have, so it
+    /// could not be read through — or rebuilt — at all. Step 30 redeclared it over
+    /// <c>body_text</c> and ran the rebuild as its own proof; this report is what found the
+    /// class, and the docsize count still reads on a store from either side of the step.
     /// </remarks>
     private static string Indexed(SqliteStore store)
     {

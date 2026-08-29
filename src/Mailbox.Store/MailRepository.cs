@@ -1719,7 +1719,7 @@ public sealed class MailRepository(MailStore store)
         var match = new List<string>();
         match.AddRange(query.Words.Select(Quote1));
         match.AddRange(query.Subject.Select(w => "subject:" + Quote1(w)));
-        match.AddRange(query.Body.Select(w => "body:" + Quote1(w)));
+        match.AddRange(query.Body.Select(w => "body_text:" + Quote1(w)));
         match.AddRange(query.From.Select(w => "{from_name from_address}:" + Quote1(w)));
 
         var sql = match.Count > 0

@@ -656,6 +656,56 @@ public static class Migrations
         """
         ALTER TABLE messages ADD COLUMN feed_words INTEGER;
         """,
+
+        // ---- 30: the search index, redeclared over the column messages actually has ---------
+        //
+        // messages_fts declared `body` while the content table calls the column `body_text`, so
+        // every read-through and the rebuild command answered "no such column: T.body". Nothing
+        // ever noticed — the triggers pass their values explicitly and every query joins on the
+        // rowid — but an index that cannot be rebuilt is an index that cannot be repaired.
+        // Dropping the virtual table drops its shadow tables; the triggers are dropped and
+        // remade against the new name, and the rebuild refills the index from the content table
+        // itself — the operation this step exists to make possible, run here as its own proof.
+        """
+        DROP TRIGGER messages_fts_insert;
+        DROP TRIGGER messages_fts_delete;
+        DROP TRIGGER messages_fts_update;
+        DROP TABLE messages_fts;
+
+        CREATE VIRTUAL TABLE messages_fts USING fts5 (
+            subject,
+            from_name,
+            from_address,
+            preview,
+            body_text,
+            content = 'messages',
+            content_rowid = 'id',
+            tokenize = 'unicode61 remove_diacritics 2'
+        );
+
+        INSERT INTO messages_fts (messages_fts) VALUES ('rebuild');
+
+        CREATE TRIGGER messages_fts_insert AFTER INSERT ON messages BEGIN
+            INSERT INTO messages_fts (rowid, subject, from_name, from_address, preview, body_text)
+            VALUES (new.id, new.subject, new.from_name, new.from_address, new.preview, new.body_text);
+        END;
+
+        CREATE TRIGGER messages_fts_delete AFTER DELETE ON messages BEGIN
+            INSERT INTO messages_fts (messages_fts, rowid, subject, from_name, from_address,
+                                      preview, body_text)
+            VALUES ('delete', old.id, old.subject, old.from_name, old.from_address,
+                    old.preview, old.body_text);
+        END;
+
+        CREATE TRIGGER messages_fts_update AFTER UPDATE ON messages BEGIN
+            INSERT INTO messages_fts (messages_fts, rowid, subject, from_name, from_address,
+                                      preview, body_text)
+            VALUES ('delete', old.id, old.subject, old.from_name, old.from_address,
+                    old.preview, old.body_text);
+            INSERT INTO messages_fts (rowid, subject, from_name, from_address, preview, body_text)
+            VALUES (new.id, new.subject, new.from_name, new.from_address, new.preview, new.body_text);
+        END;
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>
