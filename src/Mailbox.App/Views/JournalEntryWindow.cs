@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Threading;
+using Mailbox.Core;
 using Mailbox.Scheduling;
 
 namespace Mailbox.App.Views;
@@ -42,6 +43,9 @@ public sealed class JournalEntryWindow : Window
     private readonly TextBox _contacts = new() { PlaceholderText = "Contacts" };
     private readonly TextBox _categories = new() { PlaceholderText = "Categories" };
     private readonly TextBox _notes = new() { AcceptsReturn = true, TextWrapping = Avalonia.Media.TextWrapping.Wrap, MinHeight = 120 };
+    private readonly Button _save = new() { Content = "Save & Close", Width = 110, IsDefault = true };
+    private readonly Button _delete = new() { Content = "Delete", Width = 84 };
+    private readonly Button _cancel = new() { Content = "Cancel", Width = 84, IsCancel = true };
 
     /// <summary>The reference's own list, in its order — the last is what a timer produces.</summary>
     private static readonly TimeSpan[] Durations =
@@ -69,7 +73,11 @@ public sealed class JournalEntryWindow : Window
         Height = 520;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
-        var when = entry.When?.Wall ?? DateTime.Now;
+        // The application's own clock rather than the machine's, so an entry made under a pinned
+        // day opens on that day: this form is the one surface that puts a moment on screen before
+        // anything has been written, and a picture of it was otherwise unique to the afternoon it
+        // was taken.
+        var when = entry.When?.Wall ?? PosedClock.Now.DateTime;
         _subject.Text = entry.Summary;
 
         // Editable rather than a closed list: the reference's own types are a starting point and
@@ -78,9 +86,12 @@ public sealed class JournalEntryWindow : Window
         _type.SelectedIndex = Math.Max(0, Types(entry.EntryType).ToList().IndexOf(entry.EntryType));
         _startDate.SelectedDate = when.Date;
         _startTime.Text = when.ToString("t", CultureInfo.CurrentCulture);
-        _duration.ItemsSource = Durations.Select(Label).ToList();
-        _duration.SelectedIndex = Nearest(entry.Duration ?? TimeSpan.Zero);
+        // The entry's own duration, put in the list rather than snapped to the nearest thing on
+        // it: a timer produces seventeen minutes and no dropdown offers that, so choosing the
+        // nearest meant opening a timed entry and pressing Save wrote fifteen — two minutes of a
+        // recorded call destroyed by reading it.
         _timed = entry.Duration ?? TimeSpan.Zero;
+        ShowDuration(_timed);
         _contacts.Text = string.Join("; ", entry.Contacts);
         _categories.Text = string.Join(", ", entry.Categories);
         _notes.Text = entry.Description;
@@ -132,23 +143,20 @@ public sealed class JournalEntryWindow : Window
         Place(grid, 3, 0, "Contacts:", _contacts);
         Place(grid, 3, 2, "Categories:", _categories);
 
-        var save = new Button { Content = "Save & Close", Width = 110, IsDefault = true };
-        save.Click += (_, _) =>
+        _save.Click += (_, _) =>
         {
             StopTimer();
             Result = Collect();
             Close();
         };
 
-        var delete = new Button { Content = "Delete", Width = 84 };
-        delete.Click += (_, _) =>
+        _delete.Click += (_, _) =>
         {
             Deleted = true;
             Close();
         };
 
-        var cancel = new Button { Content = "Cancel", Width = 84, IsCancel = true };
-        cancel.Click += (_, _) => Close();
+        _cancel.Click += (_, _) => Close();
 
         return new DockPanel
         {
@@ -162,7 +170,7 @@ public sealed class JournalEntryWindow : Window
                     HorizontalAlignment = HorizontalAlignment.Right,
                     Spacing = 8,
                     Margin = new Thickness(0, 16, 0, 0),
-                    Children = { save, delete, cancel },
+                    Children = { _save, _delete, _cancel },
                 },
                 new DockPanel
                 {
@@ -178,6 +186,13 @@ public sealed class JournalEntryWindow : Window
 
     // ---- The timer -----------------------------------------------------------------------------
 
+    /// <summary>
+    /// The clock the timer counts against. Real time in the application; a harness pose replaces
+    /// it, because an elapsed duration read off the wall is a different number every run and no
+    /// claim about what the timer wrote could ever be repeated.
+    /// </summary>
+    internal Func<DateTimeOffset> TimerClock { get; set; } = () => DateTimeOffset.UtcNow;
+
     private void ToggleTimer()
     {
         if (_startedAt is not null)
@@ -187,7 +202,7 @@ public sealed class JournalEntryWindow : Window
         }
 
         _timed = Chosen();
-        _startedAt = DateTimeOffset.UtcNow;
+        _startedAt = TimerClock();
         _timer.Content = "Pause Timer";
 
         // A second rather than a minute, so that the duration a reader sees moves while they
@@ -201,7 +216,7 @@ public sealed class JournalEntryWindow : Window
     {
         if (_startedAt is not { } since) return;
 
-        _timed += DateTimeOffset.UtcNow - since;
+        _timed += TimerClock() - since;
         _startedAt = null;
         _ticking?.Stop();
         _ticking = null;
@@ -212,7 +227,7 @@ public sealed class JournalEntryWindow : Window
     private void ShowElapsed()
     {
         if (_startedAt is not { } since) return;
-        ShowDuration(_timed + (DateTimeOffset.UtcNow - since));
+        ShowDuration(_timed + (TimerClock() - since));
     }
 
     /// <summary>
@@ -237,18 +252,7 @@ public sealed class JournalEntryWindow : Window
 
         // The one entry beyond the list is what the timer put there, and while it is running
         // that entry is already stale by however long the tick was ago.
-        return _startedAt is { } since ? _timed + (DateTimeOffset.UtcNow - since) : _timed;
-    }
-
-    private static int Nearest(TimeSpan duration)
-    {
-        var best = 0;
-        for (var i = 0; i < Durations.Length; i++)
-        {
-            if (Durations[i] <= duration) best = i;
-        }
-
-        return best;
+        return _startedAt is { } since ? _timed + (TimerClock() - since) : _timed;
     }
 
     private static string Label(TimeSpan duration)
@@ -257,8 +261,10 @@ public sealed class JournalEntryWindow : Window
     /// <summary>What the form now says the entry is.</summary>
     private JournalEntry Collect()
     {
-        var date = _startDate.SelectedDate?.Date ?? DateTime.Today;
-        var time = TimeOnly.TryParse(_startTime.Text, CultureInfo.CurrentCulture, out var parsed) ? parsed : TimeOnly.FromDateTime(DateTime.Now);
+        var date = _startDate.SelectedDate?.Date ?? PosedClock.Today.ToDateTime(TimeOnly.MinValue);
+        var time = TimeOnly.TryParse(_startTime.Text, CultureInfo.CurrentCulture, out var parsed)
+            ? parsed
+            : TimeOnly.FromDateTime(PosedClock.Now.DateTime);
         var duration = Chosen();
 
         return _original with
@@ -272,8 +278,108 @@ public sealed class JournalEntryWindow : Window
                 .Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
             Categories = (_categories.Text ?? string.Empty)
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
-            LastModified = DateTimeOffset.UtcNow,
+            LastModified = PosedClock.UtcNow,
         };
+    }
+
+    // ---- The door onto this form -----------------------------------------------------------
+    //
+    // Every seed in this project writes through the repository rather than through a form, so
+    // nothing had ever typed into this one, chosen a duration from its list, or pressed its
+    // timer. What a form does to a value on the way past is precisely what that arrangement
+    // cannot see.
+
+    /// <summary>
+    /// One posed step against this form: <c>field=value</c> for a box, or a bare verb for a
+    /// button. Answers what it did, so a step that named nothing is not read as a step that
+    /// worked.
+    /// </summary>
+    internal string Pose(string step)
+    {
+        var text = (step ?? string.Empty).Trim();
+        if (text.Length == 0) return "nothing to do";
+
+        var equals = text.IndexOf('=', StringComparison.Ordinal);
+        var verb = (equals > 0 ? text[..equals] : text).Trim().ToLowerInvariant();
+        var value = equals > 0 ? text[(equals + 1)..].Trim() : string.Empty;
+
+        switch (verb)
+        {
+            case "subject": _subject.Text = value; return $"subject is now “{_subject.Text}”";
+            case "notes": _notes.Text = value; return $"notes are now {(_notes.Text ?? string.Empty).Length} characters";
+            case "contacts": _contacts.Text = value; return $"contacts box says “{_contacts.Text}”";
+            case "categories": _categories.Text = value; return $"categories box says “{_categories.Text}”";
+
+            case "type":
+            {
+                var items = _type.ItemsSource?.Cast<string>().ToList() ?? [];
+                var index = items.FindIndex(i => string.Equals(i, value, StringComparison.OrdinalIgnoreCase));
+                if (index < 0) return $"“{value}” is not one of the {items.Count} entry types the list offers";
+                _type.SelectedIndex = index;
+                return $"entry type is now “{_type.SelectedItem}”";
+            }
+
+            case "date":
+                if (!DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var day))
+                    return $"“{value}” is not a date";
+                _startDate.SelectedDate = day.Date;
+                return $"start date is now {_startDate.SelectedDate:yyyy-MM-dd}";
+
+            case "time": _startTime.Text = value; return $"start time box says “{_startTime.Text}”";
+
+            case "duration":
+            {
+                var items = _duration.ItemsSource?.Cast<string>().ToList() ?? [];
+                var index = items.FindIndex(i => string.Equals(i, value, StringComparison.OrdinalIgnoreCase));
+                if (index < 0) return $"“{value}” is not one of the {items.Count} durations the list offers: {string.Join(", ", items)}";
+                _duration.SelectedIndex = index;
+                return $"duration list is now on “{_duration.SelectedItem}”";
+            }
+
+            // The button, not the method behind it: whether the button is wired is half the claim.
+            case "timer":
+                _timer.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+                return $"the timer button says “{_timer.Content}”, running: {IsTiming}";
+
+            // Moves the clock the timer is counting against, which is the only way an elapsed
+            // duration can be the same number twice.
+            case "elapse":
+                if (!double.TryParse(value, CultureInfo.InvariantCulture, out var seconds))
+                    return $"“{value}” is not a number of seconds";
+                _posedElapsed += TimeSpan.FromSeconds(seconds);
+                return $"the timer's clock is {_posedElapsed.TotalSeconds:0} second(s) on";
+
+            case "save": _save.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); return "Save & Close pressed";
+            case "delete": _delete.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); return "Delete pressed";
+            case "cancel": _cancel.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); return "Cancel pressed";
+
+            default: return $"“{verb}” is not a field or a button on this form";
+        }
+    }
+
+    /// <summary>Pins the timer's clock, so what it counts is stated rather than observed.</summary>
+    internal void PoseTimerClock()
+    {
+        var from = PosedClock.UtcNow;
+        _posedElapsed = TimeSpan.Zero;
+        TimerClock = () => from + _posedElapsed;
+    }
+
+    private TimeSpan _posedElapsed;
+
+    /// <summary>What every box on the form says, and what Save would write from it.</summary>
+    internal string FormState()
+    {
+        var would = Collect();
+        return $"subject “{_subject.Text}”, type “{_type.SelectedItem}”, "
+               + $"start {_startDate.SelectedDate:yyyy-MM-dd} {_startTime.Text}, "
+               + $"duration list “{_duration.SelectedItem}” of {_duration.ItemsSource?.Cast<string>().Count() ?? 0}, "
+               + $"timer {(IsTiming ? "running" : "stopped")}, "
+               + $"contacts “{_contacts.Text}”, categories “{_categories.Text}”, "
+               + $"notes {(_notes.Text ?? string.Empty).Length} characters "
+               + $"→ would save: duration {(would.Duration is { } d ? JournalCodec.DurationText(d, CultureInfo.InvariantCulture) + $" ({d})" : "none")}, "
+               + $"starts {would.When?.Wall:yyyy-MM-dd HH:mm}, type “{would.EntryType}”, "
+               + $"contacts [{string.Join(" | ", would.Contacts)}], categories [{string.Join(" | ", would.Categories)}]";
     }
 
     private static void Place(Grid grid, int row, int column, string label, Control control, int span = 1)

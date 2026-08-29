@@ -33,15 +33,17 @@ public sealed class JournalView : DrawnSurface
     public const double HeadingHeight = SpanRowHeight + DayRowHeight;
 
     /// <summary>Authored: one entry's box on the timeline, and the gap under it.</summary>
-    private const double EntryHeight = 18;
-    private const double LaneGap = 3;
+    public const double EntryHeight = 18;
+    public const double LaneGap = 3;
     private const double EntryGlyph = 11;
     private const double EntryPad = 5;
 
     /// <summary>What the bar and the glyph take before the text, and the gap after it.</summary>
     private const double EntryLead = EntryPad + 3 + EntryGlyph + EntryPad;
     private const double EntryTail = EntryPad * 2;
-    private const double TimelineInset = 6;
+
+    /// <summary>The margin the columns are drawn inside, left and right.</summary>
+    public const double TimelineInset = 6;
 
     /// <summary>The same 26 and 21 the message list and the to-do list are measured at.</summary>
     public const double GroupHeight = 26;
@@ -534,4 +536,45 @@ public sealed class JournalView : DrawnSurface
 
         return null;
     }
+
+    // ---- What a reader can only measure --------------------------------------------------------
+    //
+    // A drawn view has no children to walk, so the axis, the bands and where an entry ended up are
+    // invisible to everything but the eye — and an eye reading a picture cannot say whether a box
+    // is as wide as the time it stands for or merely as wide as its own words. These four hand the
+    // same numbers Render draws with to whoever asks.
+
+    /// <summary>Where each column of the timeline falls, what it is labelled, and which is today.</summary>
+    public IReadOnlyList<(int Index, string Label, DateOnly Day, double Left, double Width, bool IsToday)> Columns()
+    {
+        var columns = new List<(int, string, DateOnly, double, double, bool)>();
+        if (!IsTimeline) return columns;
+
+        var columnWidth = ColumnWidth;
+        for (var i = 0; i < ColumnCount; i++)
+        {
+            var day = Scale == TimelineScale.Day ? SpanStart : SpanStart.AddDays(i);
+            var label = Scale == TimelineScale.Day
+                ? SpanStart.ToDateTime(new TimeOnly(i, 0)).ToString("%h tt", Culture)
+                : ColumnLabel(day, columnWidth);
+
+            columns.Add((i, label, day, TimelineInset + (i * columnWidth), columnWidth,
+                Scale != TimelineScale.Day && day == Today));
+        }
+
+        return columns;
+    }
+
+    /// <summary>Every entry the span holds, with the lane and the width the packer gave it.</summary>
+    public IReadOnlyList<(JournalRow Row, double Left, double Width, int Lane)> Laid() => Packed();
+
+    /// <summary>The rows actually drawn, with their boxes — the timeline's, or the list's.</summary>
+    public IReadOnlyList<(JournalRow Row, Rect Box)> DrawnRows() => [.. Hits()];
+
+    /// <summary>The list's lines as drawn: a heading carries no row.</summary>
+    public IReadOnlyList<(string Type, JournalRow? Row, Rect Box)> DrawnLines()
+        => [.. PlacedLines().Select(p => (p.Line.Type, p.Line.Row, p.Box))];
+
+    /// <summary>Where a moment lands across the view, which is where an entry is hung.</summary>
+    public double XOf(DateTime moment) => X(moment);
 }

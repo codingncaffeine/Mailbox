@@ -1,4 +1,5 @@
 using System.Globalization;
+using Avalonia.Threading;
 using Mailbox.App.ViewModels;
 using Mailbox.Controls.Journal;
 using Mailbox.Core.Commands;
@@ -77,6 +78,11 @@ public partial class MainWindow
 
             case "journal.today":
                 journal.GoToday();
+
+                // Says which span it landed on, as Back and Forward do. Without this the status
+                // bar kept whichever span the last Back had named, so Today moved the timeline
+                // and left a line beside it stating the week it had just left.
+                shell.StatusRight = journal.SpanText;
                 return true;
 
             case "journal.back":
@@ -177,9 +183,10 @@ public partial class MainWindow
             // than as a note: a note is what the other module makes.
             EntryType = JournalBook.PhoneCall,
             When = EventTime.At(Now(), TimeZoneInfo.Local.Id),
-            LastModified = DateTimeOffset.UtcNow,
+            LastModified = Mailbox.Core.PosedClock.UtcNow,
         });
 
+        WireJournalFormDoor(window);
         await window.ShowDialog(this);
         if (window.Result is not { } made) return;
 
@@ -192,6 +199,7 @@ public partial class MainWindow
         if (App.Pim.Item(row.ItemId) is not { } item) return;
 
         var window = new JournalEntryWindow(PimJournalCodec.FromItem(item));
+        WireJournalFormDoor(window);
         await window.ShowDialog(this);
 
         if (window.Deleted)
@@ -245,6 +253,24 @@ public partial class MainWindow
         if (Environment.GetEnvironmentVariable("MAILBOX_JOURNAL_PRESS") is { Length: > 0 } press)
         {
             PressJournal(shell, journal, press.Trim());
+        }
+
+        // Where everything ended up, and what the store holds once a form pose has finished with
+        // it. Both below the Background the poses above run at, so each measures the arrangement
+        // they made rather than the one they were about to replace.
+        if (Environment.GetEnvironmentVariable("MAILBOX_JOURNAL_LAYOUT") is { Length: > 0 })
+        {
+            Dispatcher.UIThread.Post(() => DumpJournalLayout(journal), DispatcherPriority.ApplicationIdle);
+        }
+
+        if (Environment.GetEnvironmentVariable("MAILBOX_JOURNAL_STORE") is { Length: > 0 } why)
+        {
+            Dispatcher.UIThread.Post(() => DumpJournalStore(why.Trim()), DispatcherPriority.ApplicationIdle);
+        }
+
+        if (Environment.GetEnvironmentVariable("MAILBOX_JOURNAL_FORWARD") is { Length: > 0 })
+        {
+            Dispatcher.UIThread.Post(DumpForwardedEntry, DispatcherPriority.ApplicationIdle);
         }
     }
 
