@@ -1,7 +1,9 @@
+using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
+using Mailbox.Core.Diagnostics;
 
 namespace Mailbox.App.Views;
 
@@ -81,6 +83,34 @@ public sealed class GoToDateDialog : Window
 
         DialogChrome.Apply(this, body);
         Bind(this, BackgroundProperty, "dialog.background.brush");
+
+        // MAILBOX_GOTODATE=<yyyy-MM-dd>[:<view>] types the date, picks the arrangement and presses
+        // OK, on a capture run only. Ctrl+G and the group's corner arrow both stop here, so
+        // without it the command could be pressed and nothing past the prompt could be seen.
+        if (Theming.WindowCapture.IsRequested
+            && Environment.GetEnvironmentVariable("MAILBOX_GOTODATE") is { Length: > 0 } posed)
+        {
+            Opened += (_, _) =>
+            {
+                var parts = posed.Split(':', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                if (parts.Length > 0
+                    && DateOnly.TryParseExact(parts[0], "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var wanted))
+                {
+                    date.SelectedDate = wanted.ToDateTime(TimeOnly.MinValue);
+                }
+
+                if (parts.Length > 1)
+                {
+                    picker.SelectedIndex = Math.Max(0, Array.IndexOf(kinds, CalendarWorkspace.Parse(parts[1])));
+                }
+
+                // The button's own handler, not a copy of it: a pose that set Chosen itself would
+                // prove the pose rather than the dialog.
+                ok.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+                Log.Info($"Harness: Go To Date — {Chosen?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "nothing"} "
+                         + $"in {CalendarWorkspace.Label(View)}.");
+            };
+        }
     }
 
     private static void Place(Grid grid, int row, string label, Control control)

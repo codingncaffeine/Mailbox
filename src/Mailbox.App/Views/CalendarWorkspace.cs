@@ -149,6 +149,12 @@ public sealed class CalendarWorkspace : Border
     /// <summary>The schedule, when it is the one on show.</summary>
     internal ScheduleView? Schedule => _kind == CalendarViewKind.Schedule ? _schedule : null;
 
+    /// <summary>The date navigator down the left, for a pose that presses a day in it.</summary>
+    internal DateNavigator Navigator => _navigator;
+
+    /// <summary>What the toolbar's date reads, which a capture can show and a log cannot.</summary>
+    internal string TitleForHarness => _title.Text ?? string.Empty;
+
     public event EventHandler? Changed;
 
     /// <summary>A double click on empty time, or the New Appointment command with a day chosen.</summary>

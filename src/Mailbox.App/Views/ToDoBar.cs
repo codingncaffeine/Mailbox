@@ -118,9 +118,12 @@ internal sealed class ToDoBar : Border
             height += PeekLayout.EntryHeight(row.Lines) + PeekLayout.EntryGap;
         }
 
-        // A day with nothing on it still leaves room for the line that says so.
-        if (peek.Agenda.Count == 0) height += PeekLayout.EntryHeight(1) + PeekLayout.EntryGap;
-
+        // A day with nothing on it used to leave room for the line that says so, and there is no
+        // such line: the agenda draws the day's name and then its entries, and neither the
+        // reference's docked bar nor its floating peek — the two captures there are — says
+        // anything at all about a day that is empty. So an empty day's section stood twenty
+        // pixels taller than what it drew, pushing the tasks down to make room for a sentence
+        // nothing was going to write.
         return Math.Round(height + PeekLayout.EntryGap);
     }
 }

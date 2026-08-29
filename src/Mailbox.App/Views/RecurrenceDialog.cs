@@ -5,6 +5,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Mailbox.Core.Diagnostics;
 using Mailbox.Scheduling;
 
 namespace Mailbox.App.Views;
@@ -149,6 +150,164 @@ public sealed class RecurrenceDialog : Window
         DialogChrome.Apply(this, body);
         Bind(this, BackgroundProperty, "dialog.background.brush");
         Refresh();
+
+        // MAILBOX_RECURRENCE states a pattern in this dialog's own terms and presses one of its
+        // three buttons. Every route to a repeating appointment runs through here, so without it
+        // the only pattern anything could ever be given is the one the dialog opens on.
+        if (Theming.WindowCapture.IsRequested
+            && Environment.GetEnvironmentVariable("MAILBOX_RECURRENCE") is { Length: > 0 } posed)
+        {
+            Opened += (_, _) => Pose(posed);
+        }
+    }
+
+    /// <summary>
+    /// Fills the dialog from a pose and presses a button. Harness only.
+    /// </summary>
+    /// <remarks>
+    /// The spec is <c>&lt;pattern&gt;[;&lt;range&gt;]</c>, both stated the way the dialog asks
+    /// them rather than as an RRULE — the point is to prove the editor, and a pose that handed it
+    /// a rule would prove the parser instead:
+    /// <list type="bullet">
+    /// <item><description><c>daily:3</c>, <c>daily:weekday</c></description></item>
+    /// <item><description><c>weekly:2:MO,WE</c></description></item>
+    /// <item><description><c>monthly:1:day:15</c>, <c>monthly:2:the:second:tuesday</c>,
+    /// <c>monthly:1:the:last:friday</c></description></item>
+    /// <item><description><c>yearly:11:5</c> — month then day</description></item>
+    /// <item><description>range: <c>;count=10</c>, <c>;until=2026-12-31</c>, or nothing for no
+    /// end</description></item>
+    /// <item><description><c>remove</c> presses Remove Recurrence, <c>cancel</c> presses
+    /// Cancel</description></item>
+    /// </list>
+    /// </remarks>
+    internal void Pose(string spec)
+    {
+        var text = spec.Trim();
+
+        if (string.Equals(text, "cancel", StringComparison.OrdinalIgnoreCase))
+        {
+            Log.Info("Harness: recurrence — Cancel.");
+            Close();
+            return;
+        }
+
+        if (string.Equals(text, "remove", StringComparison.OrdinalIgnoreCase))
+        {
+            Rrule = null;
+            Cancelled = false;
+            Log.Info("Harness: recurrence — Remove Recurrence.");
+            Close();
+            return;
+        }
+
+        var halves = text.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var parts = halves[0].Split(':', StringSplitOptions.TrimEntries);
+
+        switch (parts[0].ToLowerInvariant())
+        {
+            case "daily":
+                _daily.IsChecked = true;
+                if (parts.Length > 1 && string.Equals(parts[1], "weekday", StringComparison.OrdinalIgnoreCase))
+                {
+                    _dailyWeekday.IsChecked = true;
+                }
+                else
+                {
+                    _dailyEveryDay.IsChecked = true;
+                    _dailyEvery.Value = Number(parts, 1, 1);
+                }
+
+                break;
+
+            case "weekly":
+                _weekly.IsChecked = true;
+                _weeklyEvery.Value = Number(parts, 1, 1);
+                foreach (var box in _weekDays) box.IsChecked = false;
+                if (parts.Length > 2)
+                {
+                    foreach (var day in parts[2].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    {
+                        if (WeekdayIndex(day) is { } at) _weekDays[at].IsChecked = true;
+                    }
+                }
+
+                break;
+
+            case "monthly":
+                _monthly.IsChecked = true;
+                _monthlyEvery.Value = Number(parts, 1, 1);
+                if (parts.Length > 2 && string.Equals(parts[2], "the", StringComparison.OrdinalIgnoreCase))
+                {
+                    _monthlyByWeekday.IsChecked = true;
+                    if (parts.Length > 3)
+                    {
+                        var ordinal = Array.FindIndex(Ordinals, o => string.Equals(o, parts[3], StringComparison.OrdinalIgnoreCase));
+                        _monthlyOrdinal.SelectedIndex = ordinal < 0 ? 0 : ordinal;
+                    }
+
+                    if (parts.Length > 4 && WeekdayIndex(parts[4]) is { } weekday) _monthlyWeekday.SelectedIndex = weekday;
+                }
+                else
+                {
+                    _monthlyByDay.IsChecked = true;
+                    _monthlyDay.Value = Number(parts, 3, 1);
+                }
+
+                break;
+
+            case "yearly":
+                _yearly.IsChecked = true;
+                _yearlyMonth.SelectedIndex = Math.Clamp(Number(parts, 1, 1) - 1, 0, 11);
+                _yearlyDay.Value = Number(parts, 2, 1);
+                break;
+
+            default:
+                Log.Info($"Harness: “{halves[0]}” is not a recurrence pattern — say daily:, weekly:, monthly: or yearly:.");
+                Close();
+                return;
+        }
+
+        var range = halves.Length > 1 ? halves[1] : string.Empty;
+        if (range.StartsWith("count=", StringComparison.OrdinalIgnoreCase)
+            && int.TryParse(range[6..], CultureInfo.InvariantCulture, out var count))
+        {
+            _endAfter.IsChecked = true;
+            _occurrences.Value = count;
+        }
+        else if (range.StartsWith("until=", StringComparison.OrdinalIgnoreCase)
+                 && DateOnly.TryParseExact(range[6..], "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var until))
+        {
+            _endBy.IsChecked = true;
+            _until.SelectedDate = until.ToDateTime(TimeOnly.MinValue);
+        }
+        else
+        {
+            _noEnd.IsChecked = true;
+        }
+
+        Refresh();
+        Rrule = Build().ToRrule();
+        Cancelled = false;
+        Log.Info($"Harness: recurrence — “{spec}” built RRULE={Rrule ?? "(none)"}.");
+        Close();
+    }
+
+    private static int Number(string[] parts, int at, int fallback)
+        => parts.Length > at && int.TryParse(parts[at], CultureInfo.InvariantCulture, out var value) ? value : fallback;
+
+    /// <summary>A weekday by its English two-letter iCalendar code or by its own name.</summary>
+    private static int? WeekdayIndex(string text)
+    {
+        var code = text.Trim().ToUpperInvariant();
+        var at = Array.IndexOf(new[] { "SU", "MO", "TU", "WE", "TH", "FR", "SA" }, code);
+        if (at >= 0) return at;
+
+        for (var i = 0; i < 7; i++)
+        {
+            if (Enum.GetName((DayOfWeek)i)?.Equals(text, StringComparison.OrdinalIgnoreCase) == true) return i;
+        }
+
+        return null;
     }
 
     private static string Length(TimeSpan duration)

@@ -115,6 +115,10 @@ public sealed class AppointmentWindow : Window
                 {
                     foreach (var id in presses.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                     {
+                        // A step that fills the form rather than pressing a command, so a pose can
+                        // make an appointment and keep it. Anything else is still a command id.
+                        if (RunStep(id)) continue;
+
                         Log.Info($"Harness: appointment window running {id}.");
                         Press(new CommandId(id));
                     }
@@ -239,6 +243,57 @@ public sealed class AppointmentWindow : Window
         FontFamily = IconFont.Family,
         FontSize = 12,
     };
+
+    /// <summary>
+    /// One step of <c>MAILBOX_APPOINTMENT_RUN</c> that is not a command: filling the form, or
+    /// leaving the window. Returns false for anything that is a command id after all.
+    /// </summary>
+    /// <remarks>
+    /// The window could be opened and photographed and its ribbon pressed, and it could not be
+    /// <em>filled in and kept</em> — the form is typed into and the big button is clicked, neither
+    /// of which a pose can do, so no appointment had ever been created through the real path.
+    /// Steps: <c>title:…</c>, <c>location:…</c>, <c>notes:…</c>, <c>allday</c>, <c>timed</c>,
+    /// <c>start:yyyy-MM-ddTHH:mm</c>, <c>end:…</c>, then <c>save</c>, <c>delete</c> or
+    /// <c>cancel</c>.
+    /// </remarks>
+    private bool RunStep(string step)
+    {
+        var colon = step.IndexOf(':', StringComparison.Ordinal);
+        var verb = (colon < 0 ? step : step[..colon]).Trim().ToLowerInvariant();
+        var value = colon < 0 ? string.Empty : step[(colon + 1)..].Trim();
+
+        switch (verb)
+        {
+            case "title": _surface.PoseField("title", value); break;
+            case "location": _surface.PoseField("location", value); break;
+            case "notes": _surface.PoseField("notes", value); break;
+            case "start": _surface.PoseField("start", value); break;
+            case "end": _surface.PoseField("end", value); break;
+            case "allday": _surface.PoseAllDay(true); break;
+            case "timed": _surface.PoseAllDay(false); break;
+
+            case "save":
+                Log.Info("Harness: appointment window pressing the big button.");
+                _surface.PressPrimary();
+                return true;
+
+            case "delete":
+                Log.Info("Harness: appointment window pressing Delete.");
+                Press(AppointmentCommands.Delete.Id);
+                return true;
+
+            case "cancel":
+                Log.Info("Harness: appointment window pressing Escape.");
+                _surface.Cancel();
+                return true;
+
+            default:
+                return false;
+        }
+
+        Log.Info($"Harness: appointment form — {_surface.FormLine}.");
+        return true;
+    }
 
     /// <summary>Selects a ribbon tab by id. Used by the fidelity harness, which cannot click.</summary>
     public void SelectTab(string tabId) => _ribbon.ActiveTabId = tabId;

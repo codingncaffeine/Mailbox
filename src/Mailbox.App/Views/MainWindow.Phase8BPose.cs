@@ -109,6 +109,24 @@ public partial class MainWindow
                      + (over > 0.5 ? "PAST the To-Do Bar's left edge  ← OVERLAPS" : "before the To-Do Bar."));
         }
 
+        // How the bar divided itself between its sections. The calendar section's height is
+        // worked out from the peek's own layout plus a row per appointment, so an empty day is
+        // the case where that sum has nothing to add and the section is whatever the month block
+        // and its margins come to.
+        if (this.FindControl<ContentControl>("DockHost")?.Content is ToDoBar sections)
+        {
+            foreach (var (name, section) in new (string, Control?)[]
+                     { ("calendar", sections.Peek), ("tasks", sections.Tasks), ("people", sections.People) })
+            {
+                Log.Info(section is null
+                    ? $"Harness: bar section {name} — off."
+                    : $"Harness: bar section {name} — y {section.Bounds.Y:0}..{section.Bounds.Bottom:0} "
+                      + $"({section.Bounds.Height:0} tall)"
+                      + (name == "calendar" ? $", {sections.Peek!.Agenda.Count} appointment(s)" : string.Empty)
+                      + ".");
+            }
+        }
+
         if (spec is "todobar" or "dump") LogToDoBar((ShellViewModel)DataContext!);
     }
 

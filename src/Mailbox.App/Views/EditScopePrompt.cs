@@ -4,6 +4,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Mailbox.Core.Diagnostics;
 
 namespace Mailbox.App.Views;
 
@@ -95,8 +96,31 @@ public sealed class EditScopePrompt : Window
     }
 
     /// <summary>Asks, and returns what was chosen. A one-off appointment is never asked about.</summary>
+    /// <remarks>
+    /// <c>MAILBOX_EDITSCOPE=occurrence|series|cancel</c> answers it without showing it, on a
+    /// capture run only. Everything past this prompt — opening one week of a series, deleting one,
+    /// overriding one — is on the far side of a modal window the harness cannot click, so without
+    /// this the whole occurrence-versus-series half of the calendar has no route to a read-back
+    /// at all. The wording it would have shown is logged, since that is the other half of the
+    /// claim and the capture of a dialog that never opened cannot carry it.
+    /// </remarks>
     public static async Task<EditScope> AskAsync(Window owner, string summary, bool deleting)
     {
+        if (Theming.WindowCapture.IsRequested
+            && Environment.GetEnvironmentVariable("MAILBOX_EDITSCOPE") is { Length: > 0 } posed)
+        {
+            var scope = posed.Trim().ToLowerInvariant() switch
+            {
+                "occurrence" or "this" => EditScope.Occurrence,
+                "series" or "all" => EditScope.Series,
+                _ => EditScope.None,
+            };
+
+            Log.Info($"Harness: “{(deleting ? "Confirm Delete" : "Open Recurring Item")}” asked about "
+                     + $"“{summary}” and was answered {scope}.");
+            return scope;
+        }
+
         var prompt = new EditScopePrompt(summary, deleting);
         await prompt.ShowDialog(owner);
         return prompt.Scope;

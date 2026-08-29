@@ -315,4 +315,31 @@ public sealed class DateNavigator : CalendarSurface
 
         return null;
     }
+
+    // ---- Where things were drawn -------------------------------------------------------------
+
+    /// <summary>The days this navigator last drew, in order.</summary>
+    /// <remarks>
+    /// Which days are on show is the question a bold-day check has to start from: a day outside
+    /// the drawn run is neither bold nor not bold, and counting it either way is wrong.
+    /// </remarks>
+    public IReadOnlyList<DateOnly> DrawnDays => [.. _dayHits.Select(hit => hit.Day)];
+
+    /// <summary>The middle of a day's cell, or null when that day was not drawn.</summary>
+    public Point? PointAt(DateOnly day)
+    {
+        foreach (var (box, drawn) in _dayHits)
+        {
+            if (drawn == day) return box.Center;
+        }
+
+        return null;
+    }
+
+    /// <summary>The middle of one of the two month arrows, or null before the first render.</summary>
+    public Point? ArrowAt(bool back)
+    {
+        var box = back ? _previous : _next;
+        return box.Width > 0 ? box.Center : null;
+    }
 }

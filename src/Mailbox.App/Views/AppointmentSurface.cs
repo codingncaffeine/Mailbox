@@ -814,6 +814,53 @@ public sealed class AppointmentSurface : UserControl
         if (notes.Length > 0) _notes.Text = notes;
     }
 
+    /// <summary>Types into one field of the form, named the way the pose names it.</summary>
+    /// <remarks>
+    /// A start or an end is written <c>yyyy-MM-ddTHH:mm</c> and lands in the two controls the row
+    /// really has — the date picker and the half-hour list — so what a pose can ask for is exactly
+    /// what a reader can, half-hours included.
+    /// </remarks>
+    public void PoseField(string field, string value)
+    {
+        switch (field.ToLowerInvariant())
+        {
+            case "title": _title.Text = value; break;
+            case "location": _location.Text = value; break;
+            case "notes": _notes.Text = value.Replace("\\n", "\n", StringComparison.Ordinal); break;
+
+            case "start" when DateTime.TryParse(value, CultureInfo.InvariantCulture, out var start):
+                _startDate.SelectedDate = start.Date;
+                _startTime.SelectedIndex = Slot(start);
+                break;
+
+            case "end" when DateTime.TryParse(value, CultureInfo.InvariantCulture, out var end):
+                _endDate.SelectedDate = end.Date;
+                _endTime.SelectedIndex = Slot(end);
+                break;
+
+            default:
+                Log.Info($"Harness: the appointment form has no field called “{field}”, or “{value}” is not a time.");
+                break;
+        }
+    }
+
+    /// <summary>Ticks or clears All day, which is a checkbox and so out of a pose's reach.</summary>
+    public void PoseAllDay(bool whole) => _allDay.IsChecked = whole;
+
+    /// <summary>What the form now states, for a run to read back before it presses anything.</summary>
+    public string FormLine
+    {
+        get
+        {
+            var current = Current();
+            return $"“{current.Summary}” {current.Start.ToLocalText()}–{current.End.ToLocalText()}"
+                   + $"{(current.AllDay ? " all-day" : string.Empty)} at “{current.Location}”, "
+                   + $"{ShowAsText}, reminder {ReminderText}, "
+                   + $"repeats {(current.Rrule is { Length: > 0 } rule ? rule : "never")}, "
+                   + $"categories {(_categories.Count == 0 ? "none" : string.Join("/", _categories))}";
+        }
+    }
+
     /// <summary>Presses Save &amp; Close (or Send) from the harness, which cannot click.</summary>
     public void PressPrimary() => Commit(deleted: false, sent: _meeting);
 }
