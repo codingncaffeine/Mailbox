@@ -49,6 +49,18 @@ public sealed record EmailHtmlOptions
 
     /// <summary>The colour the message is written in — <c>#RRGGBB</c> — or null for the reader's own.</summary>
     public string? BaseColour { get; init; }
+
+    /// <summary>
+    /// The family the writer actually chose, given the one the machine rendered it with —
+    /// null when nothing was chosen, or nothing is known.
+    /// </summary>
+    /// <remarks>
+    /// The document has no slot for the requested name beside the rendered one, and working it
+    /// back from the substitution table alone is many-to-one: Georgia and Times New Roman both
+    /// render in Liberation Serif here, and the table's answer named the wrong one on the wire.
+    /// The picker knows exactly what was asked for, so it hands that knowledge in.
+    /// </remarks>
+    public Func<string, string?>? RequestedFamily { get; init; }
 }
 
 /// <summary>
@@ -134,7 +146,7 @@ public static class EmailHtml
 
         if (options.BaseFontFamily is { Length: > 0 } face)
         {
-            baseStyle.Add($"font-family:{(options.SubstituteFonts ? Stack(face) : face)}");
+            baseStyle.Add($"font-family:{(options.SubstituteFonts ? Stack(face, options) : face)}");
         }
 
         if (options.BaseFontPoints > 0)
@@ -445,7 +457,7 @@ public static class EmailHtml
         if (run.FontFamily is { Length: > 0 } family
             && !string.Equals(family, UntouchedFontFamily, StringComparison.Ordinal))
         {
-            style.Add($"font-family:{(options.SubstituteFonts ? Stack(family) : family)}");
+            style.Add($"font-family:{(options.SubstituteFonts ? Stack(family, options) : family)}");
         }
 
         if (run.FontSize > 0 && Math.Abs(run.FontSize - UntouchedFontSize) > 0.01)
@@ -476,10 +488,23 @@ public static class EmailHtml
     /// would reflow it for every Windows reader — which is the failure this rule exists for, and
     /// it is invisible from the sending end.
     /// </remarks>
-    private static string Stack(string family)
+    private static string Stack(string family, EmailHtmlOptions options)
     {
         var trimmed = family.Trim();
         if (trimmed.Length == 0) return trimmed;
+
+        // The picker's own answer first: it knows which family the writer asked for when this
+        // one was rendered, where the table below can only guess — and guesses wrong for every
+        // requested name that shares its substitute with another.
+        if (options.RequestedFamily?.Invoke(trimmed) is { Length: > 0 } requested
+            && !string.Equals(requested, trimmed, StringComparison.OrdinalIgnoreCase)
+            && FontSubstitution.Lookup(requested) is { } asAsked)
+        {
+            var stack = new List<string> { requested };
+            if (asAsked.Substitute is { Length: > 0 } standIn) stack.Add(standIn);
+            stack.Add(asAsked.Generic);
+            return string.Join(", ", stack.Select(Quote));
+        }
 
         // The Microsoft name, chosen by the writer or pasted in: name it, then what stands in
         // for it, then the generic.

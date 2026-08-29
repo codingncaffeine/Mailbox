@@ -195,6 +195,28 @@ public class EmailHtmlTests
     }
 
     /// <summary>
+    /// Working the requested name back from the substitution table alone is many-to-one —
+    /// Georgia and Times New Roman can both render in Liberation Serif — so the picker's own
+    /// record of what was asked for outranks the table's guess.
+    /// </summary>
+    [Fact]
+    public void TheFamilyTheWriterChoseOutranksTheTablesGuess()
+    {
+        var document = new FlowDocument();
+        document.Blocks.Add(Para(new Run { Text = "x", FontFamily = "Liberation Serif" }));
+
+        var body = EmailHtml.Serialize(document, new EmailHtmlOptions
+        {
+            Fragment = true,
+            RequestedFamily = rendered =>
+                string.Equals(rendered, "Liberation Serif", StringComparison.OrdinalIgnoreCase) ? "Georgia" : null,
+        });
+
+        Assert.Contains("font-family:Georgia, Gelasio, serif", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("Times New Roman", body, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Said once on the body, not on every run. A run nobody restyled says nothing about its
     /// font — the editor's own default is not a choice the writer made, and repeating it on
     /// every run is what makes composed mail several times the size of the message in it.

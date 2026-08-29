@@ -182,12 +182,29 @@ public class ReplyTests
         Assert.DoesNotContain("tracker.example", draft.QuotedHtml, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// No blockquote in the markup, whatever the style: the editor's parser keeps one only
+    /// when its content is inline, so a wrapper here loaded as plain text at indent zero and
+    /// three of the five styles left byte-identical. The style travels on the draft and the
+    /// compose window marks the loaded paragraphs themselves.
+    /// </summary>
     [Fact]
-    public void IndentedStyleWrapsTheOriginalInAQuote()
+    public void IndentedStyleTravelsOnTheDraftNotInTheMarkup()
     {
         var draft = Reply.Build(Original(), ReplyKind.Reply, Options(QuoteStyle.IncludeIndented));
 
-        Assert.Contains("<blockquote", draft.QuotedHtml, StringComparison.Ordinal);
+        Assert.Equal(QuoteStyle.IncludeIndented, draft.Style);
+        Assert.DoesNotContain("<blockquote", draft.QuotedHtml, StringComparison.Ordinal);
+    }
+
+    /// <summary>Include-and-indent's plain-text form: every line moved in, headers too.</summary>
+    [Fact]
+    public void IndentedStyleIndentsThePlainTextLines()
+    {
+        var draft = Reply.Build(Original(), ReplyKind.Reply, Options(QuoteStyle.IncludeIndented));
+
+        Assert.Contains("\t-----Original Message-----", draft.QuotedText, StringComparison.Ordinal);
+        Assert.Contains("\tFrom:", draft.QuotedText, StringComparison.Ordinal);
     }
 
     [Fact]

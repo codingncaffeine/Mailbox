@@ -46,6 +46,13 @@ internal sealed class EditorCommands(
     /// <summary>
     /// Runs one of the formatting commands, or says it is none of them.
     /// </summary>
+    /// <summary>The family the writer chose whenever the machine rendered it with this one.</summary>
+    private readonly Dictionary<string, string> _requested = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>What the writer asked for when this rendered family went in, or null.</summary>
+    public string? RequestedFamily(string rendered)
+        => _requested.TryGetValue(rendered, out var family) ? family : null;
+
     public bool Handle(CommandId id)
     {
         if (id == MailCommands.Undo.Id) { _editor.Undo(); _editor.Focus(); return true; }
@@ -222,8 +229,12 @@ internal sealed class EditorCommands(
         }
 
         // The wire name and the substitute both: §6's split, and what keeps a document the size
-        // it was written at on a machine that has neither font.
-        _editor.SetFontFamily(App.Fonts.Resolve(family).Rendered);
+        // it was written at on a machine that has neither font. The requested name is written
+        // down beside the rendered one, because the runs will only ever carry the rendered one
+        // and more than one requested family can share it.
+        var rendered = App.Fonts.Resolve(family).Rendered;
+        _requested[rendered] = family;
+        _editor.SetFontFamily(rendered);
         _editor.Focus();
         report?.Invoke($"Font {family}.");
         changed?.Invoke();

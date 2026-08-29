@@ -81,6 +81,13 @@ public sealed record ReplyDraft
 
     /// <summary>What travels with the message: a forward's attachments, or the attached original.</summary>
     public IReadOnlyList<CarriedPart> Attachments { get; init; } = [];
+
+    /// <summary>
+    /// How the original is quoted, for the compose window to finish the job: the editor's
+    /// parser keeps a quotation only as a property of its own paragraphs, so indenting and
+    /// prefixing are done on the loaded document rather than in this markup.
+    /// </summary>
+    public QuoteStyle Style { get; init; } = QuoteStyle.Include;
 }
 
 /// <summary>
@@ -144,8 +151,9 @@ public static class Reply
         return draft with
         {
             Attachments = attachments,
-            QuotedHtml = options.PlainText ? string.Empty : QuoteHtml(original, options.Style),
+            QuotedHtml = options.PlainText ? string.Empty : QuoteHtml(original),
             QuotedText = QuoteText(original, options.Style, options.Prefix),
+            Style = options.Style,
         };
     }
 
@@ -234,11 +242,17 @@ public static class Reply
     /// <summary>
     /// The header block the reference puts above a quoted message, and the message under it.
     /// </summary>
-    private static string QuoteHtml(MimeMessage original, QuoteStyle style)
+    private static string QuoteHtml(MimeMessage original)
     {
         // A text-only original as paragraphs of its own lines. The renderer's plain-text form
         // relies on the reading pane's stylesheet to keep the line breaks, and a fragment has
         // no stylesheet — so the breaks are made structural here.
+        //
+        // No blockquote here, whatever the style asks: the editor's parser keeps a blockquote
+        // only when its content is inline, so one wrapped around paragraphs loaded as ordinary
+        // text at indent zero — which made three of the five styles byte-identical on the
+        // wire. The style travels on the draft instead, and the compose window marks the
+        // loaded paragraphs themselves.
         var body = original.HtmlBody is { Length: > 0 }
             ? MessageRenderer.Render(original, new RenderOptions { Fragment = true }).Html
             : TextAsHtml(original.TextBody ?? string.Empty);
@@ -247,17 +261,7 @@ public static class Reply
         quoted.Append("<p>&nbsp;</p>");
         quoted.Append("<hr />");
         quoted.Append(HeaderBlock(original));
-
-        if (style == QuoteStyle.IncludeIndented || style == QuoteStyle.Prefix)
-        {
-            quoted.Append("<blockquote style=\"border-left:2px solid #CCCCCC;margin:0 0 0 8px;padding-left:10px\">")
-                  .Append(body)
-                  .Append("</blockquote>");
-        }
-        else
-        {
-            quoted.Append(body);
-        }
+        quoted.Append(body);
 
         return quoted.ToString();
     }
@@ -309,14 +313,29 @@ public static class Reply
             return quoted.ToString();
         }
 
-        quoted.AppendLine("-----Original Message-----");
-        quoted.AppendLine($"From: {original.From}");
-        quoted.AppendLine($"Sent: {original.Date.ToLocalTime():dddd, d MMMM yyyy HH:mm}");
-        if (original.To.Count > 0) quoted.AppendLine($"To: {original.To}");
-        if (original.Cc.Count > 0) quoted.AppendLine($"Cc: {original.Cc}");
-        quoted.AppendLine($"Subject: {original.Subject}");
-        quoted.AppendLine();
-        quoted.Append(text);
+        // Include-and-indent's plain-text form: every line of the original — headers too, as
+        // the reference does it — moved in by one tab. Include leaves the lines where they are.
+        var lead = style == QuoteStyle.IncludeIndented ? "\t" : string.Empty;
+
+        quoted.AppendLine($"{lead}-----Original Message-----");
+        quoted.AppendLine($"{lead}From: {original.From}");
+        quoted.AppendLine($"{lead}Sent: {original.Date.ToLocalTime():dddd, d MMMM yyyy HH:mm}");
+        if (original.To.Count > 0) quoted.AppendLine($"{lead}To: {original.To}");
+        if (original.Cc.Count > 0) quoted.AppendLine($"{lead}Cc: {original.Cc}");
+        quoted.AppendLine($"{lead}Subject: {original.Subject}");
+        if (lead.Length == 0)
+        {
+            quoted.AppendLine();
+            quoted.Append(text);
+            return quoted.ToString();
+        }
+
+        quoted.AppendLine(lead);
+
+        foreach (var line in text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'))
+        {
+            quoted.AppendLine(line.Length == 0 ? lead : $"{lead}{line}");
+        }
 
         return quoted.ToString();
     }

@@ -654,6 +654,21 @@ public sealed partial class ComposeSurface : UserControl
         _signatureBlocks = _body.Document is { } loaded ? [.. loaded.Blocks.Skip(2).Take(signed)] : [];
         _signatureAnchor = _body.Document?.Blocks.Skip(2 + signed).FirstOrDefault();
 
+        // Include-and-indent and Prefix draw the original as a quotation. The markup cannot
+        // say so — the parser keeps a blockquote only when its content is inline — so the
+        // loaded paragraphs are marked themselves, from the header block below the rule down,
+        // and the serializer turns the mark back into the bordered blockquote on the wire.
+        if (!_plainText && draft.Style is QuoteStyle.IncludeIndented or QuoteStyle.Prefix
+            && _body.Document is { } document)
+        {
+            var pastRule = false;
+            foreach (var block in document.Blocks.Skip(2 + signed))
+            {
+                if (block is DividerBlock) { pastRule = true; continue; }
+                if (pastRule && block is Paragraph paragraph) paragraph.IsQuote = true;
+            }
+        }
+
         // What the document reads before a word has been typed — the signature and the quoted
         // original — kept so the spelling check can leave the original alone (the Options row
         // "Ignore original message text in reply or forward"). Taken as plain text so the same
@@ -2711,6 +2726,7 @@ public sealed partial class ComposeSurface : UserControl
             BaseFontFamily = _font.Family,
             BaseFontPoints = _font.Points,
             BaseColour = _font.Colour,
+            RequestedFamily = _editorCommands.RequestedFamily,
 
             // An image the writer put in the body becomes a related part and a cid: reference,
             // which is how mail carries one. Several large clients drop a data: image outright.
