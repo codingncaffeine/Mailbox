@@ -706,6 +706,28 @@ public static class Migrations
             VALUES (new.id, new.subject, new.from_name, new.from_address, new.preview, new.body_text);
         END;
         """,
+
+        // ---- 31: one name per shelf, the top level included ---------------------------------
+        //
+        // folders has carried UNIQUE (account_id, parent_id, name) from the start and it never
+        // fired at an account's top level, because SQLite holds two NULL parent_ids to be
+        // distinct rows. Two Archives could stand side by side — and Favourites, keyed on the
+        // path, marked both for either. The partial index is the constraint the original
+        // declaration meant. Twins a store already holds are renamed first, the id as the
+        // suffix because it is the one string guaranteed not to make a third twin; the first
+        // of each name keeps it.
+        """
+        UPDATE folders SET name = name || ' (' || id || ')'
+        WHERE parent_id IS NULL
+          AND EXISTS (SELECT 1 FROM folders earlier
+                      WHERE earlier.account_id = folders.account_id
+                        AND earlier.parent_id IS NULL
+                        AND earlier.name = folders.name
+                        AND earlier.id < folders.id);
+
+        CREATE UNIQUE INDEX folders_top_level_name
+            ON folders (account_id, name) WHERE parent_id IS NULL;
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>

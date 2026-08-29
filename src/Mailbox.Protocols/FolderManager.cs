@@ -25,6 +25,7 @@ public sealed class FolderManager(MailRepository repository)
     {
         var trimmed = (name ?? string.Empty).Trim();
         if (trimmed.Length == 0) throw new ArgumentException("A folder needs a name.", nameof(name));
+        RefuseBadName(accountId, trimmed, parentId, renaming: null);
 
         var parent = parentId is { } id ? _repository.GetFolder(id) : null;
 
@@ -50,11 +51,37 @@ public sealed class FolderManager(MailRepository repository)
     }
 
     /// <summary>Renames a folder; the folders under it keep their place. On IMAP the server renames first.</summary>
+    /// <summary>
+    /// What a folder may not be called, said in the reader's words before any store or server
+    /// is asked. The separator, because the name is part of a path here and the hierarchy
+    /// delimiter on the server — "One/Two" made a folder whose path collided with a real
+    /// One/Two and whose server name meant something else entirely. A twin beside it, because
+    /// Favourites keys on the path and two same-named folders on one shelf were one key.
+    /// </summary>
+    private void RefuseBadName(long accountId, string name, long? parentId, long? renaming)
+    {
+        if (name.Contains('/', StringComparison.Ordinal) || name.Contains('\\', StringComparison.Ordinal))
+        {
+            throw new ArgumentException("A folder name cannot contain \"/\" or \"\\\".");
+        }
+
+        var twin = _repository.Folders(accountId).FirstOrDefault(f =>
+            f.ParentId == parentId
+            && string.Equals(f.Name, name, StringComparison.OrdinalIgnoreCase)
+            && f.Id != renaming);
+
+        if (twin is not null)
+        {
+            throw new ArgumentException($"There is already a folder called “{name}” here.");
+        }
+    }
+
     public async Task RenameAsync(AccountConnection? connection, Folder folder, string newName, CancellationToken cancellation = default)
     {
         ArgumentNullException.ThrowIfNull(folder);
         var trimmed = (newName ?? string.Empty).Trim();
         if (trimmed.Length == 0 || trimmed == folder.Name) return;
+        RefuseBadName(folder.AccountId, trimmed, folder.ParentId, renaming: folder.Id);
 
         if (connection is { Protocol: MailProtocol.Imap } && folder.ImapPath is { } path)
         {
