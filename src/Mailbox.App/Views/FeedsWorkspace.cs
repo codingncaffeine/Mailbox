@@ -1763,6 +1763,12 @@ internal sealed class FeedsWorkspace : Border
 
         // Rebuilt so the pressed row takes the mark. Cheap: the pane is tens of rows.
         BuildNav();
+
+        // And the window is told, because choosing a row in the pane is the commonest gesture in
+        // the module and nothing else told it: the status bar's left half is written from this
+        // event, so it went on reporting the row before this one — "Today: 194 articles" under a
+        // column headed Keep — until something else happened to raise it.
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
     private string Describe(FeedNavRow row, int count) => row.Kind switch
