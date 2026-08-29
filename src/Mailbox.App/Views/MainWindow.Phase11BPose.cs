@@ -81,6 +81,8 @@ public partial class MainWindow
     /// <item><description><c>press:&lt;n&gt;:&lt;tip&gt;</c> — presses the button on the nth row
     /// whose tooltip carries that text, which is how the four hover buttons are reached.</description></item>
     /// <item><description><c>buttons:&lt;n&gt;</c> — what the nth row's strip actually offers.</description></item>
+    /// <item><description><c>enabled:&lt;command&gt;</c> — whether the bar draws that command black
+    /// or greyed in the state the steps before it have made.</description></item>
     /// <item><description><c>report</c> — the boards, read back out of the store.</description></item>
     /// <item><description><c>folders</c> — the feed folder tree, read back out of the store, which
     /// is where an organise verb has to land and the one place a status line cannot say it
@@ -151,6 +153,18 @@ public partial class MainWindow
 
                 case "buttons":
                     ReportRowButtons(feeds, arg);
+                    break;
+
+                case "enabled":
+                    // Whether the bar draws a command black or greyed, which is a different
+                    // question from whether pressing it does anything: a command that cannot act
+                    // and is drawn black is a button that answers with a sentence in the status
+                    // bar, and a screenshot cannot tell the two states apart at a glance.
+                    RefreshCommandEnablement();
+                    Log.Info($"Harness: {arg} is "
+                        + (_ribbon?.ControlFor(new CommandId(arg)) is { } control
+                            ? control.IsEnabled ? "drawn black" : "greyed"
+                            : "not on this bar"));
                     break;
 
                 case "report":
