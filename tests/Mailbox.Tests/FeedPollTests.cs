@@ -216,6 +216,43 @@ public class FeedPollTests
     }
 
     [Fact]
+    public async Task ATeaserWrappedInKilobytesOfMarkupIsStillATeaserWhenItIsOpened()
+    {
+        // Measured on the eight feeds the seed subscribes to: TechRadar's fifty most recent
+        // articles are a median 270 characters of text inside a median eight kilobytes of markup,
+        // and Ars Technica's 207 inside four. The size of the message used to decide whether
+        // opening one was worth a request, so every one of them was over the ceiling and the
+        // publishers this feature exists for were the ones it never reached.
+        var padding = string.Concat(Enumerable.Repeat(
+            "&lt;span class=\"tracking wrapper deeply nested\" data-analytics=\"yes\"&gt;&lt;/span&gt;", 80));
+
+        var server = new FakeFeedServer()
+            .Serve(Url, Feed(Item("1", "First", "Two sentences and a link. That is all there is." + padding)))
+            .Serve("https://example.com/1", ArticlePage("First"));
+
+        var feeds = new FeedSubscriptions(SettingsStore.Transient());
+        feeds.Add(Url, "Example");
+        feeds.Update(Url, f => f with { ReadFullArticle = false });
+
+        var (account, store, mail) = Account();
+        using var _s = store;
+
+        using (var receiver = new FeedReceiver(feeds, server))
+        {
+            await receiver.PollAsync(account, DateTimeOffset.UtcNow, TestContext.Current.CancellationToken);
+        }
+
+        var folder = mail.Folders(account.Account.Id).Single(f => f.Name == "Example");
+        var teaser = Assert.Single(mail.Messages(folder.Id));
+
+        Assert.True(teaser.SizeBytes > 3 * 1024, "the fixture is not the shape the fault needs");
+        Assert.True(ArticleFill.LooksLikeTeaser(teaser));
+
+        using var fetch = new FeedFetch(server);
+        Assert.True(await ArticleFill.FillAsync(account, teaser.Id, fetch, TestContext.Current.CancellationToken) > 0);
+    }
+
+    [Fact]
     public async Task APausedFeedIsNotAskedForAtAll()
     {
         var server = new FakeFeedServer().Serve(Url, Feed(Item("1", "First", "x", "https://example.com/p.jpg")));
