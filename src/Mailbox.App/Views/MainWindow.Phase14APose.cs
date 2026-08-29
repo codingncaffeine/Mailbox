@@ -35,14 +35,16 @@ public partial class MainWindow
         // the file being compared is the one the export command actually finished writing.
         if (Environment.GetEnvironmentVariable("MAILBOX_EXPORT_REPORT") is { Length: > 0 } spec)
         {
+            var hold = Theming.WindowCapture.IsRequested ? Theming.WindowCapture.Hold() : null;
             Opened += (_, _) => Dispatcher.UIThread.Post(
                 () => Dispatcher.UIThread.Post(
-                    () => ReportExport(spec), DispatcherPriority.ContextIdle),
+                    async () => { try { await ReportExportAsync(spec); } finally { hold?.Dispose(); } },
+                    DispatcherPriority.ContextIdle),
                 DispatcherPriority.Background);
         }
     }
 
-    private void ReportExport(string spec)
+    private async Task ReportExportAsync(string spec)
     {
         if (DataContext is not ShellViewModel shell || shell.CurrentMail is not { } mail)
         {
@@ -57,7 +59,33 @@ public partial class MainWindow
             var kind = part[..split].Trim().ToLowerInvariant();
             var path = part[(split + 1)..].Trim();
 
-            if (!File.Exists(path))
+            // The mbox export writes on a worker, so the file can exist before it is finished
+            // and be held while it is written. Waiting for the writer to let go is the report's
+            // job — reading a torn file would report a truncation the export never made.
+            var ready = false;
+            for (var waited = 0; waited < 5000; waited += 200)
+            {
+                try
+                {
+                    if (File.Exists(path))
+                    {
+                        using (File.Open(path, FileMode.Open, FileAccess.Read, FileShare.None))
+                        {
+                        }
+
+                        ready = true;
+                        break;
+                    }
+                }
+                catch (IOException)
+                {
+                    // Still being written.
+                }
+
+                await Task.Delay(200);
+            }
+
+            if (!ready)
             {
                 Log.Warn($"Harness: export report — nothing was written to {path}.");
                 continue;

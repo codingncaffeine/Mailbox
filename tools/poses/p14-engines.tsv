@@ -1,0 +1,3 @@
+backup-full	MAILBOX_BACKUP=write:20;to:/tmp/p14-b.db;during:150@/tmp/p14-d.db;open:/tmp/p14-d.db;carry:/tmp/p14-d.db>/tmp/p14-c.db;from:/tmp/p14-b.db	MAILBOX_TODAY=2026-08-16
+age-archive	MAILBOX_AGE=*:400	MAILBOX_AUTOARCHIVE=run	MAILBOX_STORE_REPORT=all@4000	MAILBOX_TODAY=2026-08-16
+cleanup-numbers	MAILBOX_PEEK=cleanup	MAILBOX_DIALOG_DUMP=1200	MAILBOX_STORE_REPORT=1	MAILBOX_TODAY=2026-08-16

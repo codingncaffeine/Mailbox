@@ -1,0 +1,2 @@
+export-roundtrip	MAILBOX_PEEK=backstage	MAILBOX_BACKSTAGE=export:export.eml	MAILBOX_EXPORT=eml:/tmp/mailbox-p14-out.eml	MAILBOX_EXPORT_REPORT=eml:/tmp/mailbox-p14-out.eml	MAILBOX_SELECT=0	MAILBOX_TODAY=2026-08-16
+export-mbox	MAILBOX_PEEK=backstage	MAILBOX_BACKSTAGE=export:export.mbox	MAILBOX_EXPORT=mbox:/tmp/mailbox-p14-out.mbox	MAILBOX_EXPORT_REPORT=mbox:/tmp/mailbox-p14-out.mbox	MAILBOX_TODAY=2026-08-16
