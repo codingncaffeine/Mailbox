@@ -728,6 +728,17 @@ public static class Migrations
         CREATE UNIQUE INDEX folders_top_level_name
             ON folders (account_id, name) WHERE parent_id IS NULL;
         """,
+
+        // ---- 32: replies find their parents ------------------------------------------------
+        //
+        // The thread key is decided by the reply headers now, and storing a message asks two
+        // questions the schema had no index for: whose reply is this, and has this message's
+        // reply already arrived. message_id has carried an index from the start; this is the
+        // other half, partial because most mail is not a reply.
+        """
+        CREATE INDEX messages_by_in_reply_to ON messages (in_reply_to)
+            WHERE in_reply_to IS NOT NULL;
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>

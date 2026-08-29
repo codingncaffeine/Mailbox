@@ -215,10 +215,13 @@ public sealed class MessageCells : Grid
                 return Glyph(nameof(MessageRow.ReminderGlyph), "text.secondary.brush");
             case ViewFields.Icon:
             {
-                var text = new TextBlock { Text = "✉", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-                text.Classes.Add("small");
-                text[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("text.secondary.brush");
-                return text;
+                var icon = new MessageStateIcon
+                {
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                };
+                icon[!MessageStateIcon.IsUnreadProperty] = new Avalonia.Data.Binding(nameof(MessageRow.IsUnread));
+                return icon;
             }
             case ViewFields.Flag:
                 // The application's one flag colour, the same the ribbon's button and the to-do

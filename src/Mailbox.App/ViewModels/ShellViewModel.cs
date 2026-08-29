@@ -1281,7 +1281,7 @@ public sealed partial class ShellViewModel : ObservableObject
                 IsHeaderOnly = summary.HeaderOnly,
                 SnoozedUntil = summary.SnoozedUntil,
                 Importance = summary.Importance,
-                ThreadKey = Store.Lists.Arrangements.NormalisedSubject(summary.Subject),
+                ThreadKey = summary.ThreadKey,
                 FolderId = summary.FolderId,
                 FromAddress = summary.FromAddress,
                 To = summary.To,
@@ -1375,7 +1375,7 @@ public sealed partial class ShellViewModel : ObservableObject
                 IsHeaderOnly = summary.HeaderOnly,
                     SnoozedUntil = summary.SnoozedUntil,
                     Importance = summary.Importance,
-                    ThreadKey = Store.Lists.Arrangements.NormalisedSubject(summary.Subject),
+                    ThreadKey = summary.ThreadKey,
                     FolderId = summary.FolderId,
 
                     // Which account a row came from is what this view exists to show, and it is
@@ -1689,7 +1689,7 @@ public sealed partial class ShellViewModel : ObservableObject
                 FollowUpStart = summary.FollowUpStart,
                 IsHeaderOnly = summary.HeaderOnly,
                     Importance = summary.Importance,
-                    ThreadKey = Store.Lists.Arrangements.NormalisedSubject(summary.Subject),
+                    ThreadKey = summary.ThreadKey,
                     FolderId = summary.FolderId,
                     FolderLabel = label,
 
@@ -1748,7 +1748,7 @@ public sealed partial class ShellViewModel : ObservableObject
                 IsHeaderOnly = summary.HeaderOnly,
                 SnoozedUntil = summary.SnoozedUntil,
                 Importance = summary.Importance,
-                ThreadKey = Store.Lists.Arrangements.NormalisedSubject(summary.Subject),
+                ThreadKey = summary.ThreadKey,
                 FolderId = summary.FolderId,
                 FolderLabel = names.GetValueOrDefault(summary.FolderId, string.Empty),
                 Address = account.Account.Address,
@@ -2082,12 +2082,8 @@ public sealed partial class ShellViewModel : ObservableObject
     public bool IsIgnored(IReadOnlyList<MessageRow> rows)
         => rows.Count > 0 && Mail(rows) is { } mail && rows.All(r => mail.IsIgnored(StoreKey(r)));
 
-    /// <summary>
-    /// The store's thread key for a row. The row's own <see cref="MessageRow.ThreadKey"/> keeps
-    /// the subject's case for the conversation view; the store folds it, and the ignore list is
-    /// the store's.
-    /// </summary>
-    private static string StoreKey(MessageRow row) => MailRepository.ThreadKeyOf(row.Subject);
+    /// <summary>The store's thread key for a row, which the row carries as stored.</summary>
+    private static string StoreKey(MessageRow row) => row.ThreadKey;
 
     /// <summary>
     /// Ignore Conversation: the selection's conversations go to Deleted Items — every message of
@@ -2167,7 +2163,7 @@ public sealed partial class ShellViewModel : ObservableObject
         }
 
         var keys = wholeFolder
-            ? folders.SelectMany(f => mail.Messages(f, int.MaxValue)).Select(m => MailRepository.ThreadKeyOf(m.Subject)).Where(k => k.Length > 0).Distinct().ToList()
+            ? folders.SelectMany(f => mail.Messages(f, int.MaxValue)).Select(m => m.ThreadKey).Where(k => k.Length > 0).Distinct().ToList()
             : rows.Select(StoreKey).Where(k => k.Length > 0).Distinct().ToList();
 
         var doomed = new List<long>();

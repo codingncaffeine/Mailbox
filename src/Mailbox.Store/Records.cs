@@ -211,6 +211,9 @@ public sealed record MessageSummary(
     /// </summary>
     public string? InReplyTo { get; init; }
 
+    /// <summary>What groups this message with its replies, decided when it was stored.</summary>
+    public string ThreadKey { get; init; } = string.Empty;
+
     /// <summary>The Cc addresses, lower-cased.</summary>
     public IReadOnlyList<string> Cc { get; init; } = [];
 

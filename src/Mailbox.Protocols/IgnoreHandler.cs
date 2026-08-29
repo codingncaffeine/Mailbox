@@ -14,7 +14,9 @@ public sealed class IgnoreHandler : IArrivalHandler
     {
         if (folder.Role != FolderRole.Inbox) return folder.Id;
 
-        var key = MailRepository.ThreadKeyOf(message.Subject ?? string.Empty);
+        // The stored key, not the subject's shape of it: the reply headers decide what
+        // conversation an arrival belongs to, and the ignore list holds those keys.
+        var key = mail.GetMessage(messageId)?.ThreadKey ?? string.Empty;
         if (key.Length == 0 || !mail.IsIgnored(key)) return folder.Id;
 
         if (mail.FolderWithRole(folder.AccountId, FolderRole.Deleted) is not { } deleted) return folder.Id;

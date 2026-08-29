@@ -322,7 +322,7 @@ public sealed class MailRepository(MailStore store)
                 ("$uid", message.ServerUid),
                 ("$messageId", message.MessageId),
                 ("$inReplyTo", message.InReplyTo),
-                ("$thread", ThreadKey(message.Subject)),
+                ("$thread", ThreadKeyFor(message)),
                 ("$fromName", message.FromName),
                 ("$fromAddress", message.FromAddress),
                 ("$subject", message.Subject),
@@ -470,7 +470,7 @@ public sealed class MailRepository(MailStore store)
                 ("$sent", revised.Sent?.ToUnixTimeSeconds()),
                 ("$size", raw.LongLength),
                 ("$attachment", revised.HasAttachment ? 1 : 0),
-                ("$thread", ThreadKey(revised.Subject)),
+                ("$thread", ThreadKeyFor(revised)),
                 ("$feedLink", revised.FeedLink.Length > 0 ? revised.FeedLink : null),
                 ("$feedImage", revised.FeedImage.Length > 0 ? revised.FeedImage : null),
                 ("$feedWords", revised.FeedWords > 0 ? revised.FeedWords : null),
@@ -656,6 +656,42 @@ public sealed class MailRepository(MailStore store)
 
     /// <summary>The thread key the list groups by, for a subject — the store's own rule, exposed.</summary>
     public static string ThreadKeyOf(string subject) => ThreadKey(subject ?? string.Empty);
+
+    /// <summary>
+    /// The key a message threads under, decided when it is stored. A conversation is a reply
+    /// relationship, so the headers outrank the subject line: a reply takes its parent's key; a
+    /// message whose replies arrived first — sync fetches newest first — takes theirs, which is
+    /// also what knits a chain back together when the parent turns up last; a fresh root that
+    /// carries an identity is its own conversation, which is what keeps two strangers who both
+    /// wrote "Lunch" out of each other's; and mail with no usable identity falls back to the
+    /// normalised subject, as everything did before the headers were read.
+    /// </summary>
+    private string ThreadKeyFor(MessageSummary message)
+    {
+        if (message.InReplyTo is { Length: > 0 } parent
+            && _store.Query(
+                "SELECT thread_key FROM messages WHERE message_id = $id LIMIT 1",
+                r => r.GetString(0), ("$id", parent)).FirstOrDefault() is { } inherited)
+        {
+            return inherited;
+        }
+
+        if (message.MessageId is { Length: > 0 } id)
+        {
+            if (_store.Query(
+                    "SELECT thread_key FROM messages WHERE in_reply_to = $id LIMIT 1",
+                    r => r.GetString(0), ("$id", id)).FirstOrDefault() is { } adopted)
+            {
+                return adopted;
+            }
+
+            // A reply whose parent is not stored keeps the subject key instead of its own
+            // identity, so a late-arriving parent can adopt the chain whole.
+            if (string.IsNullOrEmpty(message.InReplyTo)) return "id:" + id;
+        }
+
+        return ThreadKey(message.Subject);
+    }
 
     /// <summary>Whether a conversation is ignored, by its thread key.</summary>
     public bool IsIgnored(string threadKey) => _store.ScalarLong(
@@ -3071,6 +3107,7 @@ public sealed class MailRepository(MailStore store)
         Expires = NullableLong(r, "expires_utc") is { } expires ? DateTimeOffset.FromUnixTimeSeconds(expires) : null,
         HeaderOnly = r.GetInt32(r.GetOrdinal("header_only")) != 0,
         MarkedForDownload = r.GetInt32(r.GetOrdinal("marked_download")) != 0,
+        ThreadKey = Nullable(r, "thread_key") ?? string.Empty,
         FeedLink = Nullable(r, "feed_link") ?? string.Empty,
         FeedWords = NullableLong(r, "feed_words") is { } words ? (int)words : 0,
         FeedImage = Nullable(r, "feed_image") ?? string.Empty,
@@ -3092,10 +3129,10 @@ public sealed class MailRepository(MailStore store)
     };
 
     /// <summary>
-    /// Groups replies with what they reply to, by normalised subject. <b>Subject-based, and
-    /// this is what the conversation view threads on</b> — <c>message_id</c> and
-    /// <c>in_reply_to</c> are stored beside it but nothing reads them yet, so a reply whose
-    /// subject was edited threads as its own conversation.
+    /// The subject's shape of a thread key: prefixes stripped, case folded. The fallback half
+    /// of <see cref="ThreadKeyFor"/> — the reply headers outrank it — and still the whole rule
+    /// for mail that carries no usable identity. A reply whose subject was edited and whose
+    /// parent is unknown threads as its own conversation until the parent arrives.
     /// </summary>
     internal static string ThreadKey(string subject)
     {

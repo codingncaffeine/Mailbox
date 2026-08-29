@@ -79,13 +79,15 @@ public class CleanUpTests
         return (store, repo, repo.FolderWithRole(account.Id, FolderRole.Inbox)!);
     }
 
-    private static (long Id, MimeMessage Message) Deliver(MailRepository repo, Folder inbox, string subject)
+    private static (long Id, MimeMessage Message) Deliver(MailRepository repo, Folder inbox, string subject,
+        string? inReplyTo = null)
     {
         var message = new MimeMessage { Subject = subject };
         message.From.Add(new MailboxAddress("Sender", "a@example.org"));
         message.To.Add(new MailboxAddress(string.Empty, "you@example.com"));
         message.Body = new TextPart("plain") { Text = "Body" };
         message.MessageId = $"<{Guid.NewGuid():n}@example.com>";
+        if (inReplyTo is not null) message.InReplyTo = inReplyTo;
         using var buffer = new MemoryStream();
         message.WriteTo(buffer);
         var raw = buffer.ToArray();
@@ -103,11 +105,12 @@ public class CleanUpTests
         var (first, firstMessage) = Deliver(repo, inbox, "Lunch plans");
         Assert.Equal(inbox.Id, handler.Handle(repo, inbox, first, firstMessage));
 
-        var key = MailRepository.ThreadKeyOf("Re: Lunch plans");
+        // Ignored by the conversation's stored key — the one every reply inherits.
+        var key = repo.GetMessage(first)!.ThreadKey;
         repo.Ignore(key, "Lunch plans", T0);
         Assert.True(repo.IsIgnored(key));
 
-        var (reply, replyMessage) = Deliver(repo, inbox, "RE: Lunch plans");
+        var (reply, replyMessage) = Deliver(repo, inbox, "RE: Lunch plans", inReplyTo: firstMessage.MessageId);
         Assert.Equal(deleted.Id, handler.Handle(repo, inbox, reply, replyMessage));
         Assert.Equal(deleted.Id, repo.GetMessage(reply)!.FolderId);
 
@@ -116,7 +119,7 @@ public class CleanUpTests
         Assert.Equal(2, repo.MessagesInThread(key, includeDeleted: true).Count);
 
         repo.Unignore(key);
-        var (later, laterMessage) = Deliver(repo, inbox, "Re: Lunch plans");
+        var (later, laterMessage) = Deliver(repo, inbox, "Re: Lunch plans", inReplyTo: firstMessage.MessageId);
         Assert.Equal(inbox.Id, handler.Handle(repo, inbox, later, laterMessage));
     }
 }
