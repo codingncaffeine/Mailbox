@@ -33,6 +33,28 @@ public static class SeriesEditor
         };
     }
 
+    /// <summary>
+    /// Whether an edit has taken the pattern away, which orphans every override the series had.
+    /// </summary>
+    /// <remarks>
+    /// An override is only meaningful beside a master that still generates the occurrence its
+    /// RECURRENCE-ID names. Drop the RRULE and what is left is a row pointing at an occurrence
+    /// nothing produces — unreadable to any other client and to a CalDAV server, and still drawn
+    /// on its own day here, so an appointment told to stop repeating appears once more anyway.
+    /// The reference discards them along with the pattern.
+    /// <para>
+    /// The predicate lives here because it is a fact about the iCalendar model; *which* rows to
+    /// discard is a question for whoever holds the store.
+    /// </para>
+    /// </remarks>
+    public static bool PatternDropped(CalendarEvent before, CalendarEvent after)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+        ArgumentNullException.ThrowIfNull(after);
+
+        return before.Rrule is { Length: > 0 } && string.IsNullOrEmpty(after.Rrule);
+    }
+
     /// <summary>The master with one occurrence taken out of the series.</summary>
     public static CalendarEvent Exclude(CalendarEvent master, EventTime occurrenceStart)
     {

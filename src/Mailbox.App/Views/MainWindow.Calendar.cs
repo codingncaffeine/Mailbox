@@ -483,9 +483,35 @@ public partial class MainWindow
             LastModified = DateTimeOffset.UtcNow,
         };
 
+        var patternDropped = SeriesEditor.PatternDropped(master, changed);
+
         SaveAppointment(changed, stored, stored.CollectionId);
+
+        // An exception to a series that no longer repeats is not an appointment. It is a row
+        // carrying a RECURRENCE-ID that points at an occurrence nothing generates any more, which
+        // no other client and no CalDAV server can make sense of — and it goes on being drawn on
+        // its own day, so the appointment the reader just told to stop repeating still appears
+        // once more. The reference discards them with the pattern, so this does.
+        //
+        // It has to happen here rather than in the store's delete cascade: that one is guarded on
+        // the master still having an RRULE, which is precisely what has just been taken away.
+        var orphans = patternDropped
+            ? App.Pim.ItemsByUid(stored.CollectionId, stored.Uid).Where(i => i.IsOverride).ToList()
+            : [];
+
+        foreach (var orphan in orphans)
+        {
+            App.PimSync.Remove(orphan);
+            Log.Info($"Calendar: override {orphan.Id} discarded with the pattern it belonged to.");
+        }
+
         shell.StatusRight = changed.Rrule is null
-            ? $"“{Named(changed)}” no longer repeats."
+            ? orphans.Count switch
+            {
+                0 => $"“{Named(changed)}” no longer repeats.",
+                1 => $"“{Named(changed)}” no longer repeats; one changed occurrence was discarded.",
+                var n => $"“{Named(changed)}” no longer repeats; {n} changed occurrences were discarded.",
+            }
             : $"“{Named(changed)}” {Uncapitalized(RecurrenceText.Describe(changed.Rrule, changed.Start, changed.End))}";
         Log.Info($"Calendar: item {stored.Id} RRULE = {changed.Rrule ?? "(none)"}.");
         AfterStoreChange(shell);

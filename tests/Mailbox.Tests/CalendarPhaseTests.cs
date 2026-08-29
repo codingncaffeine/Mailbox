@@ -22,6 +22,43 @@ public class CalendarPhaseTests
         Rrule = rrule,
     };
 
+    // ---- Dropping the pattern ------------------------------------------------------------------
+
+    /// <summary>
+    /// Taking the RRULE off a series orphans its overrides, and something has to discard them.
+    /// </summary>
+    /// <remarks>
+    /// The audit found a series made single leaving its exception behind: a row with a
+    /// RECURRENCE-ID naming an occurrence nothing generates any more, still drawn on its own day,
+    /// so the appointment somebody had just told to stop repeating turned up once more. The store
+    /// could not catch it either — its delete cascade is guarded on the master still having a
+    /// pattern, which is exactly what the edit takes away.
+    /// </remarks>
+    [Fact]
+    public void RemovingAPatternIsRecognisedAsOrphaningItsOverrides()
+    {
+        var master = At("series", new DateTime(2026, 8, 2, 10, 0, 0), rrule: "FREQ=WEEKLY;BYDAY=SU");
+
+        Assert.True(SeriesEditor.PatternDropped(master, master with { Rrule = null }));
+        Assert.True(SeriesEditor.PatternDropped(master, master with { Rrule = "" }));
+    }
+
+    /// <summary>
+    /// And every other edit leaves them alone — changing the pattern, or editing a series that
+    /// never had one, must not take an exception with it.
+    /// </summary>
+    [Fact]
+    public void ChangingOrKeepingAPatternDoesNotOrphanAnything()
+    {
+        var master = At("series", new DateTime(2026, 8, 2, 10, 0, 0), rrule: "FREQ=WEEKLY;BYDAY=SU");
+        var single = At("single", new DateTime(2026, 8, 2, 10, 0, 0));
+
+        Assert.False(SeriesEditor.PatternDropped(master, master with { Rrule = "FREQ=DAILY" }));
+        Assert.False(SeriesEditor.PatternDropped(master, master));
+        Assert.False(SeriesEditor.PatternDropped(single, single));
+        Assert.False(SeriesEditor.PatternDropped(single, single with { Rrule = "FREQ=DAILY" }));
+    }
+
     // ---- The recurrence pattern ---------------------------------------------------------------
 
     [Theory]
