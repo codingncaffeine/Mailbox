@@ -56,6 +56,31 @@ public class CharsetDecodeTests
     [InlineData("windows-1252", "Curly quotes — and an em dash.")]
     public void AMessageInALegacyCodePageKeepsItsWords(string charset, string body)
     {
+        LegacyCodePages.Register();
+
+        // Whether this platform can hold these words in this charset at all, asked before the
+        // message is built. `CodePagesEncodingProvider` does not ship the same tables everywhere —
+        // the CJK double-byte pages are present on some Linux images and not others — and a test
+        // that asserts through a table the platform does not have is testing the platform. What
+        // this test is for is the decode: that a message whose charset *is* resolvable comes back
+        // as the words that were sent, which is what stops the Latin-1 fallback returning.
+        Encoding encoding;
+        try
+        {
+            encoding = Encoding.GetEncoding(charset);
+        }
+        catch (ArgumentException)
+        {
+            Assert.Skip($"This platform has no table for {charset}.");
+            return;
+        }
+
+        if (encoding.GetString(encoding.GetBytes(body)) != body)
+        {
+            Assert.Skip($"This platform's {charset} table cannot hold these characters.");
+            return;
+        }
+
         var raw = Message(charset, body);
 
         using var stream = new MemoryStream(raw);
