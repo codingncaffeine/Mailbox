@@ -204,6 +204,13 @@ public sealed record MessageSummary(
     /// <summary>What By To groups on, for the views that arrange summaries directly.</summary>
     public IReadOnlyList<string> ToNames => To;
 
+    /// <summary>
+    /// The Message-Id this one answers, from its own In-Reply-To header. Written at insert so
+    /// the reply chain is in the store the day header threading reads it; null for a message
+    /// that answers nothing, and for rows filed before this was recorded.
+    /// </summary>
+    public string? InReplyTo { get; init; }
+
     /// <summary>The Cc addresses, lower-cased.</summary>
     public IReadOnlyList<string> Cc { get; init; } = [];
 

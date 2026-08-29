@@ -2575,21 +2575,58 @@ public sealed partial class ShellViewModel : ObservableObject
             return;
         }
 
-        foreach (var group in groups)
+        // With conversations on, the whole folder threads first and each conversation is
+        // banded by its newest message — threading one band at a time drew a thread spanning
+        // Today and Yesterday as one conversation per band, its own newest message detached
+        // from it.
+        if (ShowAsConversations)
         {
-            var collapsed = _collapsed.Contains(group.Header);
+            var bandOf = new Dictionary<MessageRow, string>();
+            foreach (var group in groups)
+            {
+                foreach (var row in group.Items) bandOf[row] = group.Header;
+            }
 
-            // The header counts what the group will show. With conversations on, a thread of
-            // five is one row, and a header claiming five would not match what is beneath it.
-            var content = ShowAsConversations
-                ? Threaded(group.Items)
-                : [.. group.Items.Select(r => (object)Reset(r))];
+            var perBand = groups.ToDictionary(g => g.Header, _ => new List<object>());
+            var current = groups.Count > 0 ? groups[0].Header : string.Empty;
 
-            built.Add(new GroupHeaderRow(group.Header, Countable(content), collapsed));
+            foreach (var unit in Threaded([.. groups.SelectMany(g => g.Items)]))
+            {
+                // A conversation row bands by its newest message; an expanded child follows
+                // whichever band its conversation went to, so a thread never splits again.
+                current = unit switch
+                {
+                    ConversationRow conversation when bandOf.TryGetValue(conversation.Newest, out var band) => band,
+                    MessageRow { Depth: 0 } top when bandOf.TryGetValue(top, out var band) => band,
+                    _ => current,
+                };
 
-            if (collapsed) continue;
+                if (perBand.TryGetValue(current, out var band2)) band2.Add(unit);
+            }
 
-            built.AddRange(content);
+            foreach (var group in groups)
+            {
+                var content = perBand[group.Header];
+                if (content.Count == 0) continue;
+
+                var collapsed2 = _collapsed.Contains(group.Header);
+                built.Add(new GroupHeaderRow(group.Header, Countable(content), collapsed2));
+                if (!collapsed2) built.AddRange(content);
+            }
+        }
+        else
+        {
+            foreach (var group in groups)
+            {
+                var collapsed = _collapsed.Contains(group.Header);
+                var content = group.Items.Select(r => (object)Reset(r)).ToList();
+
+                built.Add(new GroupHeaderRow(group.Header, Countable(content), collapsed));
+
+                if (collapsed) continue;
+
+                built.AddRange(content);
+            }
         }
 
         VisibleRows = built;

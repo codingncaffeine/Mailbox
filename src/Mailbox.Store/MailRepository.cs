@@ -312,7 +312,7 @@ public sealed class MailRepository(MailStore store)
                      size_bytes, is_read, is_flagged, has_attachment, importance, to_addresses, cc_addresses, expires_utc,
                      header_only, feed_link, feed_image, feed_words)
                 VALUES
-                    ($folder, $blob, $uid, $messageId, NULL, $thread,
+                    ($folder, $blob, $uid, $messageId, $inReplyTo, $thread,
                      $fromName, $fromAddress, $subject, $preview, $bodyText, $sent, $received,
                      $size, $read, $flagged, $attachment, $importance, $to, $cc, $expires,
                      $headerOnly, $feedLink, $feedImage, $feedWords)
@@ -321,6 +321,7 @@ public sealed class MailRepository(MailStore store)
                 ("$blob", blobId),
                 ("$uid", message.ServerUid),
                 ("$messageId", message.MessageId),
+                ("$inReplyTo", message.InReplyTo),
                 ("$thread", ThreadKey(message.Subject)),
                 ("$fromName", message.FromName),
                 ("$fromAddress", message.FromAddress),

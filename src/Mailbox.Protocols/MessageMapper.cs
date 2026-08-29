@@ -42,6 +42,7 @@ public static class MessageMapper
             IsFlagged: isFlagged,
             HasAttachment: message.Attachments.Any())
         {
+            InReplyTo = string.IsNullOrWhiteSpace(message.InReplyTo) ? null : message.InReplyTo,
             BodyText = FullText(message),
             Importance = message.Importance switch
             {
