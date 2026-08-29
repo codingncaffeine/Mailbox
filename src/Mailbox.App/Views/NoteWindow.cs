@@ -89,7 +89,7 @@ public sealed class NoteWindow : Window
     /// chrome is round it — a note has no Save button, so the only proof that closing saved is the
     /// text before, the text after and the store afterwards.
     /// </remarks>
-    internal IReadOnlyList<(string Field, string Value)> FormFields =>
+    public IReadOnlyList<(string Field, string Value)> FormFields =>
     [
         ("Body", (_body.Text ?? string.Empty).Replace("\r", string.Empty, StringComparison.Ordinal).Replace('\n', '⏎')),
         ("Categories", _categories.Text ?? string.Empty),
@@ -108,7 +108,7 @@ public sealed class NoteWindow : Window
 
     /// <summary>Sets one field by the name <see cref="FormFields"/> reports it under.</summary>
     /// <returns>False for a name this window has no field for, which is itself an answer.</returns>
-    internal bool SetFormField(string field, string value)
+    public bool SetFormField(string field, string value)
     {
         switch (field.Trim().ToLowerInvariant())
         {
@@ -119,7 +119,7 @@ public sealed class NoteWindow : Window
     }
 
     /// <summary>Presses the close the caption draws, which is the only way a note is saved.</summary>
-    internal bool PressClose()
+    public bool PressClose()
         => this.GetVisualDescendants().OfType<CaptionButtons>().FirstOrDefault() is { } caption
            && caption.Press("close");
 
