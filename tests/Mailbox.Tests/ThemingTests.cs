@@ -247,6 +247,60 @@ public class ThemeServiceTests
         Assert.True(service.Tokens.GetDouble(TokenKeys.List.RowHeight) > cozyRow);
     }
 
+    /// <summary>
+    /// The half of hot reload the file watcher hands off to: a library reloaded from disk
+    /// re-applies the active theme, so an edit saved to its file reaches the running
+    /// application without a restart. The watcher itself is an operating-system primitive,
+    /// wired in App and deliberately off under capture runs — this is the machinery it fires.
+    /// </summary>
+    [Fact]
+    public void AReloadedLibraryReappliesTheActiveThemesChangedFile()
+    {
+        var directory = Path.Combine(
+            Path.GetTempPath(), "mailbox-theme-reload", Guid.NewGuid().ToString("n"));
+        Directory.CreateDirectory(directory);
+
+        try
+        {
+            var path = Path.Combine(
+                directory, "workbench" + Mailbox.Theming.Files.ThemeFileFormat.Extension);
+
+            File.WriteAllText(path, Workbench("#112233"));
+
+            var service = new ThemeService(
+                new FontResolver(["Liberation Sans", "Liberation Serif", "Liberation Mono"]),
+                Mailbox.Theming.Files.ThemeLibrary.Load(directory));
+
+            service.Apply("workbench");
+            Assert.Equal("#112233", service.Tokens.GetString(TokenKeys.Surface.Ground));
+
+            // The edit lands in the file, the watcher's reload lands in the service, and the
+            // running theme is the new value — same id, new paint.
+            File.WriteAllText(path, Workbench("#445566"));
+            service.ReplaceLibrary(Mailbox.Theming.Files.ThemeLibrary.Load(directory));
+
+            Assert.Equal("workbench", service.ThemeId);
+            Assert.Equal("#445566", service.Tokens.GetString(TokenKeys.Surface.Ground));
+
+            // A file deleted out from under its theme falls back rather than wedging.
+            File.Delete(path);
+            service.ReplaceLibrary(Mailbox.Theming.Files.ThemeLibrary.Load(directory));
+            Assert.Equal(OfficeThemes.Colorful, service.ThemeId);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+
+        static string Workbench(string ground)
+        {
+            var tokens = new TokenSet();
+            tokens.Set("surface.ground", ground);
+            return Mailbox.Theming.Files.ThemeFileFormat.Write(new Mailbox.Theming.Files.ThemeFile(
+                "workbench", "Workbench", OfficeThemes.Colorful, IsDark: null, tokens));
+        }
+    }
+
     [Fact]
     public void UserOverridesApplyOverTheBuiltIn()
     {

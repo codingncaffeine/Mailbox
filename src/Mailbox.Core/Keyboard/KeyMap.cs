@@ -334,7 +334,11 @@ public sealed class KeyMap
 
     private void Save()
     {
-        _settings.Set(OverridesKey, JsonSerializer.Serialize(_overrides));
+        // No overrides is no key, not an empty document — the same rule the ribbon's
+        // customization follows by deleting its file when nothing differs from shipped.
+        if (_overrides.Count == 0) _settings.Remove(OverridesKey);
+        else _settings.Set(OverridesKey, JsonSerializer.Serialize(_overrides));
+
         Changed?.Invoke(this, EventArgs.Empty);
     }
 }

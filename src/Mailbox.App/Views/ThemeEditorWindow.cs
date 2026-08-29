@@ -380,6 +380,24 @@ public sealed class ThemeEditorWindow : Window
     internal string SaveTheme(string name)
     {
         var id = Slug(name);
+
+        // The four built-ins are untouchable, and a save must not pretend otherwise. A file
+        // carrying a built-in's id is ignored at load, so that save would report success, apply
+        // the untouched built-in and lose the reader's edits behind a sentence saying the
+        // opposite; a file named after a built-in without its id — "Dark Gray" slugs to
+        // dark-gray, the built-in is darkgray — loads fine and puts two identical names in
+        // every theme list. Both are the same mistake from the reader's chair.
+        var shadows = ThemeLibrary.IsBuiltIn(id)
+                      || Mailbox.Theming.Themes.OfficeThemes.All.Any(
+                          b => Slug(_themes.DisplayName(b)).Equals(id, StringComparison.OrdinalIgnoreCase));
+
+        if (shadows)
+        {
+            _status.Text = $"“{name}” is a built-in theme's name. Save under another.";
+            Log.Info($"Theme editor: refused to save under the built-in name \"{name}\".");
+            return string.Empty;
+        }
+
         var directory = ThemeLibrary.DefaultDirectory();
         Directory.CreateDirectory(directory);
         var path = System.IO.Path.Combine(directory, id + ThemeFileFormat.Extension);
@@ -449,8 +467,19 @@ public sealed class ThemeEditorWindow : Window
             else if (op.StartsWith("save:", StringComparison.OrdinalIgnoreCase))
             {
                 var path = SaveTheme(op[5..]);
-                Log.Info($"Harness: theme editor — saved {path}; active theme is {_themes.ThemeId}; "
-                         + $"library has it: {_themes.Library.Contains(_themes.ThemeId)}.");
+                Log.Info(path.Length == 0
+                    ? $"Harness: theme editor — save refused: {_status.Text}"
+                    : $"Harness: theme editor — saved {path}; active theme is {_themes.ThemeId}; "
+                      + $"library has it: {_themes.Library.Contains(_themes.ThemeId)}.");
+            }
+            else if (string.Equals(op, "audit", StringComparison.OrdinalIgnoreCase))
+            {
+                // The contrast audit as the reader sees it, refreshed on every apply.
+                var findings = Mailbox.Theming.Tokens.ContrastAudit.Check(_themes.Tokens);
+                Log.Info($"Harness: theme editor — contrast audit: "
+                         + (findings.Count == 0
+                             ? "every pair reads."
+                             : $"{findings.Count} finding(s): {string.Join(" | ", findings)}"));
             }
         }
     }
