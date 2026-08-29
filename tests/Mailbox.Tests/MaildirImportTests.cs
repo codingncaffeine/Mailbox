@@ -174,10 +174,12 @@ public class MaildirImportTests : IDisposable
 
         new MaildirImporter(mail, account).Run(tree, cancellation: TestContext.Current.CancellationToken);
 
-        // A plain folder named Outbox, not the account's own — somebody's unsent 2019 mail
-        // must not arrive looking ready to send.
+        // A plain folder beside the account's own — somebody's unsent 2019 mail must not
+        // arrive looking ready to send. Named apart, because one shelf holds one of each name.
         var own = mail.FolderWithRole(account, FolderRole.Outbox)!;
         Assert.Empty(mail.Messages(own.Id));
-        Assert.Contains(mail.Folders(account), f => f.Name == "Outbox" && f.Id != own.Id);
+        var imported = Assert.Single(mail.Folders(account), f => f.Name == "Outbox (2)");
+        Assert.NotEqual(own.Id, imported.Id);
+        Assert.Single(mail.Messages(imported.Id));
     }
 }

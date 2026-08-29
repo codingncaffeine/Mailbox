@@ -102,7 +102,7 @@ public class BoardTests
         var (mail, store, account) = Store();
         using var _ = store;
 
-        var feed = mail.AddFolder(account, "Archive").Id;
+        var feed = mail.AddFolder(account, "Saved Pieces").Id;
         var now = DateTimeOffset.UtcNow;
 
         var old = Article(mail, feed, "Written in 2019", now.AddYears(-6));

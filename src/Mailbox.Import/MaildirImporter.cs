@@ -127,7 +127,7 @@ public sealed class MaildirImporter(MailRepository mail, long accountId)
                 var found = _mail.Folders(accountId).FirstOrDefault(f =>
                     f.Role == Store.FolderRole.None && f.ParentId == parent
                     && string.Equals(f.Name, path[i], StringComparison.OrdinalIgnoreCase));
-                levelId = found?.Id ?? _mail.AddFolder(accountId, path[i], parentId: parent).Id;
+                levelId = found?.Id ?? _mail.AddFolder(accountId, Untaken(accountId, path[i], parent), parentId: parent).Id;
                 known[partial] = levelId;
             }
 
@@ -135,6 +135,27 @@ public sealed class MaildirImporter(MailRepository mail, long accountId)
         }
 
         return known[key];
+    }
+
+    /// <summary>
+    /// The name, or the first free numbered variant of it. The one way here is a source folder
+    /// named like a role folder — an imported Outbox must not merge into anything that sends,
+    /// and since one shelf holds one of each name, it stands beside it as "Outbox (2)".
+    /// </summary>
+    private string Untaken(long accountId, string name, long? parent)
+    {
+        var siblings = _mail.Folders(accountId)
+            .Where(f => f.ParentId == parent)
+            .Select(f => f.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (!siblings.Contains(name)) return name;
+
+        for (var n = 2; ; n++)
+        {
+            var candidate = $"{name} ({n})";
+            if (!siblings.Contains(candidate)) return candidate;
+        }
     }
 
 }
