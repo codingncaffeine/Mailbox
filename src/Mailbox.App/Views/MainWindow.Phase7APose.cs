@@ -105,35 +105,30 @@ public partial class MainWindow
     /// Puts people into the favourites list before anything that draws it runs.
     /// </summary>
     /// <remarks>
-    /// At <see cref="DispatcherPriority.Loaded"/> for the reason the posed selection is there: the
-    /// peek and the To-Do Bar's People section are built at Background, and a list filled after
-    /// them is a list they never saw. Without it every capture of either was of an empty section
-    /// saying how somebody gets into it.
+    /// In the handler rather than posted from it, and wired before the peeks are: the People peek
+    /// and the To-Do Bar's People section are both built inside their own <c>Opened</c> handler,
+    /// so anything posted from this one arrives after they have drawn. Posted, it read "0
+    /// favourite(s)" and then added two, which is a pose that proves nothing.
     /// </remarks>
     private void ApplyFavouritesPose(ShellViewModel shell)
     {
         if (Environment.GetEnvironmentVariable("MAILBOX_FAVOURITES") is not { Length: > 0 } wanted) return;
 
-        Dispatcher.UIThread.Post(
-            () =>
+        foreach (var name in wanted.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (App.Contacts.Rows().FirstOrDefault(
+                    r => r.Named().Contains(name, StringComparison.OrdinalIgnoreCase)) is not { } row)
             {
-                foreach (var name in wanted.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-                {
-                    if (App.Contacts.Rows().FirstOrDefault(
-                            r => r.Named().Contains(name, StringComparison.OrdinalIgnoreCase)) is not { } row)
-                    {
-                        Log.Info($"Harness: nobody called “{name}” to make a favourite.");
-                        continue;
-                    }
+                Log.Info($"Harness: nobody called “{name}” to make a favourite.");
+                continue;
+            }
 
-                    App.ContactFavourites.Add(row.Contact.Uid);
-                    Log.Info($"Harness: “{row.Named()}” ({row.Contact.Uid}) is a favourite.");
-                }
+            App.ContactFavourites.Add(row.Contact.Uid);
+            Log.Info($"Harness: “{row.Named()}” ({row.Contact.Uid}) is a favourite.");
+        }
 
-                Log.Info($"Harness: the favourites are [{string.Join(" | ", App.ContactFavourites.All)}].");
-                RebuildToDoBar(shell);
-            },
-            DispatcherPriority.Loaded);
+        Log.Info($"Harness: the favourites are [{string.Join(" | ", App.ContactFavourites.All)}].");
+        RebuildToDoBar(shell);
     }
 
     /// <summary>
@@ -173,8 +168,15 @@ public partial class MainWindow
                     return;
                 }
 
-                Log.Info($"Harness: pressing the contact menu's “{chosen.Header}” "
-                         + $"({(chosen.IsEnabled ? "enabled" : "greyed")}).");
+                // Raising Click reaches a greyed entry that a pointer cannot, which is a door that
+                // lies about what a reader can do. Refused rather than pressed, and said so.
+                if (!chosen.IsEnabled)
+                {
+                    Log.Info($"Harness: the contact menu's “{chosen.Header}” is greyed and was not pressed.");
+                    return;
+                }
+
+                Log.Info($"Harness: pressing the contact menu's “{chosen.Header}”.");
                 chosen.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
                 Log.Info($"Harness: status “{shell.StatusRight}”, windows: {OtherWindows()}");
             },

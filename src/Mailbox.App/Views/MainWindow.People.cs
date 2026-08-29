@@ -47,6 +47,18 @@ public partial class MainWindow
         workspace.ContactOpened += (_, row) => _ = OpenContactAsync(shell, row);
         workspace.ContactMenuRequested += (_, row) => ShowContactMenu(shell, row);
         workspace.NewRequested += (_, _) => _ = NewContactAsync(shell);
+
+        // The ellipsis under the name on the card, which is drawn because the reference draws it
+        // and until now raised an event nobody was listening for: pressing it did nothing at all,
+        // and a button that does nothing photographs exactly like one that works. What it is for
+        // is everything the card can do that is not one of the buttons above it, which is the menu
+        // a right-click already opens — so it opens that one rather than a second list that would
+        // drift away from it.
+        workspace.MoreRequested += (_, _) =>
+        {
+            if (workspace.Selected is { } row) ShowContactMenu(shell, row);
+        };
+
         _people = workspace;
         return workspace;
     }

@@ -874,13 +874,15 @@ public partial class MainWindow : Window
             transferBar.Click += (_, _) => ShowProgressDialog(force: true);
         }
 
+        // The People module's own doors: the favourites, the menu a right-click opens, and what
+        // the list and the card beside it are actually holding. Before the peeks, because two of
+        // them draw the favourites and do it in their own Opened handler: a list filled after
+        // them is a list they never saw.
+        WirePeopleDoors();
+
         // Lets the fidelity harness capture the peek states, which a screenshot otherwise
         // cannot reach because they need a click.
         WireHarnessPeek();
-
-        // The People module's own doors: the favourites, the menu a right-click opens, and what
-        // the list and the card beside it are actually holding.
-        WirePeopleDoors();
 
         // The address book as a set of records rather than as a list of rows, which is what a
         // merge, a link and a vCard round trip have to be read back against.
