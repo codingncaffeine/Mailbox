@@ -500,18 +500,22 @@ public sealed class OptionsWindow : Window
         {
             var customize = new Button { Content = "Customize…", VerticalAlignment = VerticalAlignment.Center };
             customize.Click += async (_, _) => await new ThemeEditorWindow(_themes).ShowDialog(this);
-            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { ThemeCombo(), customize } };
+            var combo = ThemeCombo();
+            renderer.Remember(combo, App.ThemeSetting);
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { combo, customize } };
             theme.Content = LabelledLive("Mailbox Theme:", row);
         }
 
         if (renderer.Slots.TryGetValue("density", out var density))
         {
-            density.Content = LabelledLive("Density:", DensityCombo());
+            var combo = DensityCombo();
+            renderer.Remember(combo, App.DensitySetting);
+            density.Content = LabelledLive("Density:", combo);
         }
 
         if (renderer.Slots.TryGetValue("undosend", out var undo))
         {
-            undo.Content = UndoSendRow();
+            undo.Content = UndoSendRow(renderer);
         }
 
         if (renderer.Slots.TryGetValue("schedule", out var schedule))
@@ -521,7 +525,7 @@ public sealed class OptionsWindow : Window
 
         if (renderer.Slots.TryGetValue("autocomplete", out var autocomplete))
         {
-            autocomplete.Content = AutoCompleteRow();
+            autocomplete.Content = AutoCompleteRow(renderer);
         }
 
         if (renderer.Slots.TryGetValue("plugins", out var plugins))
@@ -546,12 +550,12 @@ public sealed class OptionsWindow : Window
 
         if (renderer.Slots.TryGetValue("cleanupfolder", out var cleanupFolder))
         {
-            cleanupFolder.Content = CleanUpFolderRow();
+            cleanupFolder.Content = CleanUpFolderRow(renderer);
         }
 
         if (renderer.Slots.TryGetValue("arrivalsound", out var arrivalSound))
         {
-            arrivalSound.Content = ArrivalSoundRow();
+            arrivalSound.Content = ArrivalSoundRow(renderer);
         }
 
         if (renderer.Slots.TryGetValue("remindersound", out var reminderSound))
@@ -634,13 +638,14 @@ public sealed class OptionsWindow : Window
     /// comes to where the switch is — drawn in the idiom the reference uses for the one sound
     /// picker it does have, the reminder's.
     /// </remarks>
-    private Control ArrivalSoundRow()
+    private Control ArrivalSoundRow(OptionsPageRenderer renderer)
         => SoundPicker(
             "Sound to play:",
             () => App.MailOptions.ArrivalSoundFile,
             chosen => App.MailOptions.ArrivalSoundFile = chosen,
             chosen => Notifications.Sounds.NameFor(chosen, "new-mail.ogg"),
-            Notifications.Sounds.PlayArrival);
+            Notifications.Sounds.PlayArrival,
+            renderer, MailOptions.ArrivalSoundFileKey);
 
     /// <summary>
     /// The reference's reminder row: the tick, the label, the file and a Browse…, all on a line.
@@ -673,7 +678,8 @@ public sealed class OptionsWindow : Window
             () => App.MailOptions.ReminderSoundFile,
             chosen => App.MailOptions.ReminderSoundFile = chosen,
             chosen => Notifications.Sounds.NameFor(chosen, "reminder.ogg"),
-            Notifications.Sounds.PlayReminder);
+            Notifications.Sounds.PlayReminder,
+            renderer, MailOptions.ReminderSoundFileKey);
     }
 
     private Control SoundPicker(
@@ -681,11 +687,13 @@ public sealed class OptionsWindow : Window
         Func<string> read,
         Action<string> write,
         Func<string, string> name,
-        Action<string> play)
+        Action<string> play,
+        OptionsPageRenderer renderer,
+        string fileKey)
     {
         var label = new TextBlock { Text = caption, VerticalAlignment = VerticalAlignment.Center, Width = 150 };
         Bind(label, TextBlock.ForegroundProperty, "dialog.foreground.brush");
-        return SoundPicker(label, read, write, name, play);
+        return SoundPicker(label, read, write, name, play, renderer, fileKey);
     }
 
     /// <summary>
@@ -707,9 +715,12 @@ public sealed class OptionsWindow : Window
         Func<string> read,
         Action<string> write,
         Func<string, string> name,
-        Action<string> play)
+        Action<string> play,
+        OptionsPageRenderer renderer,
+        string fileKey)
     {
         var field = new TextBox { Width = 240, Text = read(), VerticalAlignment = VerticalAlignment.Center };
+        renderer.Remember(field, fileKey);
         void Describe() => field.PlaceholderText = name(string.Empty);
         Describe();
 
@@ -741,11 +752,12 @@ public sealed class OptionsWindow : Window
         };
     }
 
-    private Control CleanUpFolderRow()
+    private Control CleanUpFolderRow(OptionsPageRenderer renderer)
     {
         var caption = new TextBlock { Text = "Cleaned-up items will go to this folder:", VerticalAlignment = VerticalAlignment.Center, Width = 240 };
         Bind(caption, TextBlock.ForegroundProperty, "dialog.foreground.brush");
         var name = new TextBox { Width = 200, IsReadOnly = true, Text = App.MailOptions.CleanUpFolder is { Length: > 0 } chosen ? chosen : "Deleted Items" };
+        renderer.Remember(name, MailOptions.CleanUpFolderKey);
         var browse = new Button { Content = "Browse…" };
         browse.Click += async (_, _) =>
         {
@@ -1267,7 +1279,7 @@ public sealed class OptionsWindow : Window
     /// Emptying is across every account, because the list is offered merged across them — a
     /// button that emptied one file's list would leave the names coming back from another's.
     /// </remarks>
-    private Control AutoCompleteRow()
+    private Control AutoCompleteRow(OptionsPageRenderer renderer)
     {
         var enabled = new CheckBox
         {
@@ -1276,6 +1288,7 @@ public sealed class OptionsWindow : Window
             VerticalAlignment = VerticalAlignment.Center,
         };
         Bind(enabled, TemplatedControl.ForegroundProperty, "dialog.foreground.brush");
+        renderer.Remember(enabled, MailOptions.UseAutoCompleteListKey);
         enabled.IsCheckedChanged += (_, _) =>
             App.Settings.Set(MailOptions.UseAutoCompleteListKey, enabled.IsChecked == true);
 
@@ -1351,6 +1364,7 @@ public sealed class OptionsWindow : Window
             IsChecked = group.ScheduleEnabled,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        Bind(enabled, TemplatedControl.ForegroundProperty, "dialog.foreground.brush");
 
         void Save()
         {
@@ -1393,7 +1407,7 @@ public sealed class OptionsWindow : Window
     /// One row rather than two, because the number means nothing without the checkbox and the
     /// checkbox is not worth a line of its own. Writing as it goes, like every other page here.
     /// </remarks>
-    private Control UndoSendRow()
+    private Control UndoSendRow(OptionsPageRenderer renderer)
     {
         var seconds = new NumericUpDown
         {
@@ -1406,6 +1420,7 @@ public sealed class OptionsWindow : Window
             VerticalAlignment = VerticalAlignment.Center,
             IsEnabled = App.UndoSend.IsEnabled,
         };
+        renderer.Remember(seconds, UndoSend.SecondsKey);
 
         var enabled = new CheckBox
         {
@@ -1413,6 +1428,8 @@ public sealed class OptionsWindow : Window
             IsChecked = App.UndoSend.IsEnabled,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        Bind(enabled, TemplatedControl.ForegroundProperty, "dialog.foreground.brush");
+        renderer.Remember(enabled, UndoSend.EnabledKey);
 
         enabled.IsCheckedChanged += (_, _) =>
         {

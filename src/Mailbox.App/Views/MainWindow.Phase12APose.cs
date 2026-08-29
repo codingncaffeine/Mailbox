@@ -64,10 +64,18 @@ internal static class OptionsPageAudit
 
             // The key a row would write, and what is stored under it now. A row keyed by its own
             // label is one of the backlog's — said plainly, because "persists something" and
-            // "drives something" look identical from a photograph and from a press.
-            var stored = key is null
-                ? "no key of its own — persists under its label, read by no feature"
-                : $"{key} = {App.Settings.Stored(key) ?? "(unset)"}";
+            // "drives something" look identical from a photograph and from a press. A control a
+            // slot built without registering a key is different again: it drives live state —
+            // the send/receive schedule, an autostart entry — and calling it unread would report
+            // §20's backlog about a wired row.
+            var caption = Caption(control) is { Length: > 0 } own ? own : LabelBeside(control);
+            var stored = key is not null
+                ? string.Equals(key, caption, StringComparison.Ordinal)
+                    ? $"persists under its label, read by no feature — {App.Settings.Stored(key) ?? "(unset)"}"
+                    : $"{key} = {App.Settings.Stored(key) ?? "(unset)"}"
+                : InSlot(control, renderer)
+                    ? "a live control the window wires — state of its own, no key to read back"
+                    : "no key of its own — persists under its label, read by no feature";
 
             Log.Info($"Harness: options row — {pageId}: {line}"
                      + (control.IsEffectivelyEnabled ? string.Empty : "  [greyed]")
@@ -111,6 +119,10 @@ internal static class OptionsPageAudit
             Log.Info($"Harness: pressed '{named}', now {what}, wrote {wrote}.");
         }
     }
+
+    /// <summary>Whether the control lives inside one of the page's live slots.</summary>
+    private static bool InSlot(Control control, OptionsPageRenderer renderer)
+        => renderer.Slots.Values.Any(host => control.GetLogicalAncestors().Contains(host));
 
     /// <summary>The row named, preferring a toggle when no value was given and a field when one was.</summary>
     private static Control? Find(Control page, string wanted, bool toggle)

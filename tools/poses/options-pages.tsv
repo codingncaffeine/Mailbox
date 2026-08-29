@@ -1,0 +1,15 @@
+# Phase 12A: every Options page, dumped row by row — kind, label, key, stored value,
+# dropdown length, spinner bounds. Regenerate by hand from OptionsPages.cs's factories.
+opt-general	MAILBOX_PEEK=options	MAILBOX_OPTIONS_PAGE=general	MAILBOX_OPTIONS_DUMP=1
+opt-mail	MAILBOX_PEEK=options	MAILBOX_OPTIONS_PAGE=mail	MAILBOX_OPTIONS_DUMP=1
+opt-calendar	MAILBOX_PEEK=options	MAILBOX_OPTIONS_PAGE=calendar	MAILBOX_OPTIONS_DUMP=1
+opt-people	MAILBOX_PEEK=options	MAILBOX_OPTIONS_PAGE=people	MAILBOX_OPTIONS_DUMP=1
+opt-tasks	MAILBOX_PEEK=options	MAILBOX_OPTIONS_PAGE=tasks	MAILBOX_OPTIONS_DUMP=1
+opt-search	MAILBOX_PEEK=options	MAILBOX_OPTIONS_PAGE=search	MAILBOX_OPTIONS_DUMP=1
+opt-language	MAILBOX_PEEK=options	MAILBOX_OPTIONS_PAGE=language	MAILBOX_OPTIONS_DUMP=1
+opt-accessibility	MAILBOX_PEEK=options	MAILBOX_OPTIONS_PAGE=accessibility	MAILBOX_OPTIONS_DUMP=1
+opt-advanced	MAILBOX_PEEK=options	MAILBOX_OPTIONS_PAGE=advanced	MAILBOX_OPTIONS_DUMP=1
+opt-ribbon	MAILBOX_PEEK=options	MAILBOX_OPTIONS_PAGE=ribbon	MAILBOX_OPTIONS_DUMP=1
+opt-qat	MAILBOX_PEEK=options	MAILBOX_OPTIONS_PAGE=qat	MAILBOX_OPTIONS_DUMP=1
+opt-addins	MAILBOX_PEEK=options	MAILBOX_OPTIONS_PAGE=addins	MAILBOX_OPTIONS_DUMP=1
+opt-trust	MAILBOX_PEEK=options	MAILBOX_OPTIONS_PAGE=trust	MAILBOX_OPTIONS_DUMP=1

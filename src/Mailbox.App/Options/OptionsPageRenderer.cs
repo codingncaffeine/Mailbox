@@ -193,6 +193,7 @@ public sealed class OptionsPageRenderer
                 }
             };
 
+            _keys[combo] = key;
             return Labelled(row.Label, combo, row.LabelWidth, row.HasInfo);
         }
 
@@ -200,6 +201,7 @@ public sealed class OptionsPageRenderer
         if (key is not null)
         {
             combo.SelectionChanged += (_, _) => _settings.Set(key, combo.SelectedIndex);
+            _keys[combo] = key;
         }
 
         return Labelled(row.Label, combo, row.LabelWidth, row.HasInfo);
@@ -218,6 +220,7 @@ public sealed class OptionsPageRenderer
         if (key is not null)
         {
             box.LostFocus += (_, _) => _settings.Set(key, box.Text ?? string.Empty);
+            _keys[box] = key;
         }
 
         return Labelled(row.Label, box, row.LabelWidth, row.HasInfo);
@@ -239,6 +242,7 @@ public sealed class OptionsPageRenderer
         {
             spinner.ValueChanged += (_, _) =>
                 _settings.Set(key, (double)(spinner.Value ?? row.Value));
+            _keys[spinner] = key;
         }
 
         return Labelled(row.Label, spinner, row.LabelWidth, row.HasInfo);
