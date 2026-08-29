@@ -205,7 +205,14 @@ public static class Autoconfig
     /// makes MailKit probe, which is slower and occasionally picks the wrong one on a server
     /// that advertises both.
     /// </summary>
-    internal static SecureSocketOptions Security(int port) => port switch
+    /// <remarks>
+    /// Public because it is the answer for a port a <em>reader</em> typed as much as for one this
+    /// table guessed. The account wizard offers a port box and no encryption box, so the port is
+    /// the only thing there that can decide the question; every result in this file is built from
+    /// this method, so asking it again about a corrected port gives the same answer wherever the
+    /// port was not corrected.
+    /// </remarks>
+    public static SecureSocketOptions Security(int port) => port switch
     {
         465 or 993 or 995 => SecureSocketOptions.SslOnConnect,
         587 or 143 or 110 => SecureSocketOptions.StartTls,

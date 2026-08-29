@@ -401,14 +401,27 @@ public sealed class AccountWizard : Window
             var opened = App.Accounts.Add(address, address, protocol);
             var account = opened.Account;
 
+            var incomingPort = Port(_incomingPort.Text, 995);
+            var outgoingPort = Port(_outgoingPort.Text, 587);
+
             var settings = (_found is null
                 ? AccountSettings.From(Autoconfig.ForAddress(address))
                 : AccountSettings.From(_found)) with
             {
                 IncomingHost = (_incomingHost.Text ?? string.Empty).Trim(),
-                IncomingPort = Port(_incomingPort.Text, 995),
+                IncomingPort = incomingPort,
                 OutgoingHost = (_outgoingHost.Text ?? string.Empty).Trim(),
-                OutgoingPort = Port(_outgoingPort.Text, 587),
+                OutgoingPort = outgoingPort,
+
+                // From the port that is actually there rather than the one the guess put in the
+                // box. This panel offers a port and no encryption, so the port is the only thing
+                // in it that can answer the question — and correcting 995 to 110 while implicit
+                // TLS stayed behind produced an account that could never connect and said only
+                // that the server "could not be reached". Every guess in Autoconfig is built from
+                // this same method, so a port nobody touched still gets the answer it had.
+                IncomingSecurity = Autoconfig.Security(incomingPort),
+                OutgoingSecurity = Autoconfig.Security(outgoingPort),
+
                 Auth = SignsIn ? AuthKind.OAuth2 : _found?.Auth ?? AuthKind.Password,
                 OAuthProviderId = SignsIn ? _provider!.Id : string.Empty,
 
@@ -426,7 +439,11 @@ public sealed class AccountWizard : Window
             // It is also the first thing here that meets a certificate, so it is where a server
             // Mailbox cannot verify gets shown and asked about — the probe refuses, records what
             // it refused, and this asks and tries once more.
-            var outgoing = new ServerSettings(settings.OutgoingHost, settings.OutgoingPort)
+            // With the account's own encryption, not the record's default of Automatic: the point
+            // of the check is whether the connection this account is about to make works, and a
+            // probe that negotiates differently answers about a connection nobody will make.
+            var outgoing = new ServerSettings(
+                settings.OutgoingHost, settings.OutgoingPort, settings.OutgoingSecurity)
             {
                 Trust = App.Trust,
             };
