@@ -360,6 +360,23 @@ public class FeedRobustnessTests
         Assert.Equal(expectedHourUtc, parsed!.Value.UtcDateTime.Hour);
     }
 
+    [Theory]
+    [InlineData("Sat, 16 Aug 2026 09:00:00 GMT")]
+    [InlineData("Mon, 16 Aug 2026 09:00:00 +0000")]
+    [InlineData("Tue, 16 Aug 2026 04:00:00 EST")]
+    public void ADayOfTheWeekThatDisagreesWithTheDateDoesNotCostTheDate(string written)
+    {
+        // 16 August 2026 is a Sunday. The parser checks the name against the date and refuses
+        // the pair when they disagree — so one publisher's off-by-one weekday used to cost every
+        // entry in their feed its date, and an entry with no date is filed under the moment it
+        // was downloaded: the whole feed then sorts to the top of the list on the day it arrives,
+        // and the retention trim's "newest first" is not newest first at all.
+        var parsed = FeedDates.Parse(written);
+
+        Assert.NotNull(parsed);
+        Assert.Equal(new DateTimeOffset(2026, 8, 16, 9, 0, 0, TimeSpan.Zero), parsed!.Value.ToUniversalTime());
+    }
+
     [Fact]
     public void ADateThatMeansNothingIsNullRatherThanNow()
     {

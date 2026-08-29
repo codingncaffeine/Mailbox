@@ -52,10 +52,42 @@ public static class FeedDates
             return parsed;
         }
 
+        // Without the day of the week, which is where a great many feeds are wrong. The parser
+        // checks the name against the date and refuses the pair when they disagree, so one
+        // publisher's off-by-one weekday costs every entry in their feed its date — and an entry
+        // with no date is filed under the moment it was downloaded, which is the very thing this
+        // file's own remark says is worse than having none. The day name carries no information
+        // the rest of the line does not, and RFC 5322 makes it optional; dropping it and asking
+        // again is what every other reader does.
+        if (WithoutWeekday(value) is { } plain
+            && DateTimeOffset.TryParse(plain, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out parsed))
+        {
+            return parsed;
+        }
+
         // A bare date with no time at all — "2026-08-16" reads above, but "16 Aug 2026" does not.
         return DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.AssumeUniversal, out var date)
             ? new DateTimeOffset(date, TimeSpan.Zero)
             : null;
+    }
+
+    /// <summary>
+    /// The same date without a leading day name, or null when it did not start with one.
+    /// </summary>
+    /// <remarks>
+    /// Rewritten as well as stripped, because a date that needed its zone rewriting needs that
+    /// doing whichever way it is read.
+    /// </remarks>
+    private static string? WithoutWeekday(string value)
+    {
+        var comma = value.IndexOf(',');
+        if (comma is < 2 or > 12) return null;
+
+        var day = value[..comma].Trim();
+        if (day.Length is < 3 or > 9 || !day.All(char.IsAsciiLetter)) return null;
+
+        var rest = value[(comma + 1)..].Trim();
+        return rest.Length == 0 ? null : Rewritten(rest) ?? rest;
     }
 
     /// <summary>
