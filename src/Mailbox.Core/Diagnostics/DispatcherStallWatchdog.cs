@@ -117,14 +117,11 @@ public sealed class DispatcherStallWatchdog : IDisposable
                 });
             }
 
-            try
-            {
-                Task.Delay(_interval, _stop.Token).Wait(_stop.Token);
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
+            // A kernel wait on this thread, not Task.Delay: a delay task wakes through the
+            // thread pool, and a starved pool — which is company the stalls being hunted often
+            // keep — stretches the cadence from milliseconds to seconds. The wait ends early
+            // when the token's handle is signalled, which is what stopping does.
+            if (_stop.Token.WaitHandle.WaitOne(_interval)) return;
         }
     }
 
@@ -135,6 +132,10 @@ public sealed class DispatcherStallWatchdog : IDisposable
     {
         if (_stop.IsCancellationRequested) return;
         _stop.Cancel();
+
+        // The loop wakes on the cancel and leaves; seen out before the token is disposed, so
+        // its wait handle cannot be pulled from under a thread still waiting on it.
+        if (_thread.IsAlive) _thread.Join(TimeSpan.FromSeconds(2));
 
         if (_stalls > 0)
         {

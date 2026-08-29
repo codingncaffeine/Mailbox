@@ -238,6 +238,30 @@ public sealed partial class ComposeSurface : UserControl
     private string _pristineQuoted = string.Empty;
 
     /// <summary>
+    /// The blocks the automatic signature occupies, so changing the sending account can replace
+    /// that signature in place. Empty when none stands — the account has no signature, or a
+    /// switch took it out.
+    /// </summary>
+    private List<Block> _signatureBlocks = [];
+
+    /// <summary>
+    /// Where a signature would go when none stands: above this block for a reply — the quote's
+    /// first — and at the end of the document when null, which is where a new message keeps it.
+    /// </summary>
+    private Block? _signatureAnchor;
+
+    /// <summary>
+    /// Whether changing the sending account may touch the signature at all. Off for a reopened
+    /// draft or a restored message, whose signature is part of the stored words and cannot be
+    /// told from them — and off for good once the writer deletes the signature, because that
+    /// was a choice.
+    /// </summary>
+    private bool _signatureSwaps;
+
+    /// <summary>Whether this window opened on a reply or forward, which signs with the reply signature.</summary>
+    private bool _prefilled;
+
+    /// <summary>
     /// Loaded the first time spelling is asked for, not at startup.
     /// </summary>
     /// <remarks>
@@ -502,6 +526,10 @@ public sealed partial class ComposeSurface : UserControl
     {
         ArgumentNullException.ThrowIfNull(message);
 
+        // The stored words carry their signature as ordinary text, indistinguishable from the
+        // rest — so from here on, changing the sending account leaves the document alone.
+        _signatureSwaps = false;
+
         _to.Text = string.Join("; ", message.To.Mailboxes.Select(m => m.Address));
         _cc.Text = string.Join("; ", message.Cc.Mailboxes.Select(m => m.Address));
         _bcc.Text = string.Join("; ", message.Bcc.Mailboxes.Select(m => m.Address));
@@ -557,6 +585,10 @@ public sealed partial class ComposeSurface : UserControl
             _ => MessageImportance.Normal,
         };
 
+        // Restored words are worth keeping, whichever account they will go out from. A reopened
+        // draft says otherwise right after, because reopening changed nothing.
+        _dirty = true;
+
         UpdateStatus();
         RaiseEnablementChanged();
     }
@@ -611,6 +643,16 @@ public sealed partial class ComposeSurface : UserControl
 
         _body.LoadHtml(html.ToString());
         _dirty = false;
+
+        // Which blocks are the signature's, so the From menu can swap it for another account's:
+        // everything between the two blank lines and the quote. Counted by parsing the signature
+        // alone — fragments are block-level, so the parts parse to the same blocks joined or
+        // apart. A reply's replacement goes above the quote, and signs with the reply signature.
+        _prefilled = true;
+        _signatureSwaps = true;
+        var signed = signature is { IsEmpty: false } s ? SignatureBlocks.Parse(s.Html).Count : 0;
+        _signatureBlocks = _body.Document is { } loaded ? [.. loaded.Blocks.Skip(2).Take(signed)] : [];
+        _signatureAnchor = _body.Document?.Blocks.Skip(2 + signed).FirstOrDefault();
 
         // What the document reads before a word has been typed — the signature and the quoted
         // original — kept so the spelling check can leave the original alone (the Options row
@@ -1370,11 +1412,37 @@ public sealed partial class ComposeSurface : UserControl
     /// <summary>Sends from this account, and says so where it is being read from.</summary>
     private void SendFrom(string address)
     {
+        if (string.Equals(address, _sendingAddress, StringComparison.OrdinalIgnoreCase)) return;
+
         _sendingAddress = address;
         _fromAddress.Text = address;
         _dirty = true;
 
+        SwapSignature();
         Report($"This message will be sent from {address}.");
+    }
+
+    /// <summary>
+    /// The signature is the account's, so a different account means a different one — or none —
+    /// put where the old one stands, around whatever has been written.
+    /// </summary>
+    private void SwapSignature()
+    {
+        if (!_signatureSwaps || _body.Document is not { } document) return;
+
+        var chosen = SendingAccount() is { } account
+            ? _prefilled
+                ? App.Signatures.ForReply(account.Account.Address)
+                : App.Signatures.ForNew(account.Account.Address)
+            : null;
+
+        List<Block> replacement = chosen is { IsEmpty: false } signature && signature.Html.Trim().Length > 0
+            ? SignatureBlocks.Parse(signature.Html)
+            : [];
+        var (tracked, writerRemovedIt) = SignatureBlocks.Swap(document, _signatureBlocks, _signatureAnchor, replacement);
+
+        _signatureBlocks = tracked;
+        if (writerRemovedIt) _signatureSwaps = false;
     }
 
     // ----------------------------------------------------------------------------------
@@ -1899,6 +1967,12 @@ public sealed partial class ComposeSurface : UserControl
     {
         if (SendingAccount() is not { } account) return;
 
+        // A new message's signature lives at the end of the document, and from here on the
+        // From menu may swap it for another account's.
+        _signatureSwaps = true;
+        _signatureAnchor = null;
+        _signatureBlocks = [];
+
         if (App.Signatures.ForNew(account.Account.Address) is not { IsEmpty: false } signature)
         {
             // No signature for this account: an empty document, which also undoes the one
@@ -1912,6 +1986,7 @@ public sealed partial class ComposeSurface : UserControl
         // inserted, so the writer would type below their own signature. LoadHtml starts a fresh
         // document with the caret at the top, which is where the reply goes.
         _body.LoadHtml("<p>&nbsp;</p><p>&nbsp;</p>" + signature.Html);
+        _signatureBlocks = _body.Document is { } loaded ? [.. loaded.Blocks.Skip(2)] : [];
     }
 
     /// <summary>The first line of a signature, so the list says which one it is.</summary>
