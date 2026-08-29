@@ -96,12 +96,20 @@ public sealed class CalendarSource(PimRepository repository)
         return entries;
     }
 
-    /// <summary>The days in a span that have anything on them, which the navigator draws in bold.</summary>
+    /// <summary>The days in a span that are claimed, which the navigator draws in bold.</summary>
+    /// <remarks>
+    /// An appointment shown as Free does not make its day bold. That is the reference's own rule,
+    /// and its captures show it: the one day in <c>calendar/colorful.png</c> that carries an item
+    /// and is not bold carries exactly one, drawn hollow — the way that build draws Free. A day
+    /// whose only entry is somebody's lunch is not a claimed day, and bolding it makes the bold
+    /// mean nothing.
+    /// </remarks>
     public IReadOnlySet<DateOnly> DaysWithItems(DateTimeOffset fromUtc, DateTimeOffset toUtc, TimeZoneInfo? zone = null)
     {
         var days = new HashSet<DateOnly>();
         foreach (var entry in Between(fromUtc, toUtc, zone: zone))
         {
+            if (entry.Busy == BusyStatus.Free) continue;
             var (first, last) = entry.Days();
             for (var day = first; day <= last; day = day.AddDays(1)) days.Add(day);
         }

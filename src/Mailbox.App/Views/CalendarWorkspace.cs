@@ -405,7 +405,11 @@ public sealed class CalendarWorkspace : Border
 
     private void WireViews()
     {
-        _navigator.DayPicked += (_, day) => GoTo(day);
+        // One day picked is one day shown, in whatever arrangement was up. The reference answers
+        // a single date with the Day view; picking the 3rd out of a month grid and being given the
+        // month it falls in is not an answer to that gesture. GoToRange already says what a run of
+        // days means, and one day is the run of length one.
+        _navigator.DayPicked += (_, day) => GoToRange(day, day);
         _navigator.RangePicked += (_, range) => GoToRange(range.First, range.Last);
 
         // The arrows scroll the little months on their own, as the reference's do — looking

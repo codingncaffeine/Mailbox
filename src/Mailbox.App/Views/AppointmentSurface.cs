@@ -155,6 +155,13 @@ public sealed class AppointmentSurface : UserControl
         _allDay.IsCheckedChanged += (_, _) =>
         {
             ApplyAllDay();
+
+            // Ticking All day shows the day as free, and clearing it shows it as busy — the
+            // reference's own behaviour, and the reason its all-day events do not claim the day in
+            // the date navigator. Only on a change, never on the way in: an all-day event somebody
+            // deliberately marked Busy has to survive being looked at. It sets the value; it does
+            // not lock it, and the picker still overrides it afterwards.
+            _showAs = _allDay.IsChecked == true ? 0 : 2;
             Changed?.Invoke(this, EventArgs.Empty);
         };
         _title.TextChanged += (_, _) => TitleChanged?.Invoke(this, EventArgs.Empty);

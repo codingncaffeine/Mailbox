@@ -486,7 +486,7 @@ public partial class MainWindow
         SaveAppointment(changed, stored, stored.CollectionId);
         shell.StatusRight = changed.Rrule is null
             ? $"“{Named(changed)}” no longer repeats."
-            : $"“{Named(changed)}” {RecurrenceText.Describe(changed.Rrule, changed.Start, changed.End).ToLowerInvariant()}";
+            : $"“{Named(changed)}” {Uncapitalized(RecurrenceText.Describe(changed.Rrule, changed.Start, changed.End))}";
         Log.Info($"Calendar: item {stored.Id} RRULE = {changed.Rrule ?? "(none)"}.");
         AfterStoreChange(shell);
     }
@@ -1509,6 +1509,17 @@ public partial class MainWindow
 
     private static string Named(CalendarEvent appointment)
         => appointment.Summary.Length > 0 ? appointment.Summary : "(no subject)";
+
+    /// <summary>
+    /// A sentence that has to continue one: its first letter lowered and nothing else touched.
+    /// </summary>
+    /// <remarks>
+    /// It used to be lowered whole, which took the weekday and month names down with it —
+    /// "occurs every 2 weeks on monday and wednesday … from 9:00 am to 9:15 am". Only the leading
+    /// "Occurs" was ever meant.
+    /// </remarks>
+    private static string Uncapitalized(string sentence)
+        => sentence.Length == 0 ? sentence : char.ToLower(sentence[0], CultureInfo.CurrentCulture) + sentence[1..];
 
     /// <summary>Go to Date: the reference's small prompt with a date and which view to show it in.</summary>
     private async Task GoToDateAsync(ShellViewModel shell)
