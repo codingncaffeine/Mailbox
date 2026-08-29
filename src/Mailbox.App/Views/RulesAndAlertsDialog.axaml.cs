@@ -388,6 +388,15 @@ public sealed class RulesAndAlertsDialog : Window
         flyout.Items.Add(rename);
 
         button.Flyout = flyout;
+
+        // As above: the menu is a popup no capture shows, so a posed run reads it back here,
+        // where its entries exist.
+        if (Mailbox.App.Theming.WindowCapture.IsRequested)
+        {
+            Mailbox.Core.Diagnostics.Log.Info(
+                "Harness: " + FlyoutProbe.Describe("the Change Rule menu", flyout));
+        }
+
         return button;
     }
 

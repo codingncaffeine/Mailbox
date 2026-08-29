@@ -246,7 +246,7 @@ internal sealed class FeedsWorkspace : Border
 
             _articleMenu?.Hide();
             _articleMenu = ArticleMenu(article);
-            _articleMenu.ShowAt(_articles, showAtPointer: true);
+            MenuProbe.Show("the article menu", _articleMenu, _articles, atPointer: true);
         }, RoutingStrategies.Bubble);
 
         // Marking read by scrolling past, which is how a river is actually cleared. Watched on the
@@ -636,11 +636,49 @@ internal sealed class FeedsWorkspace : Border
     }
 
     /// <summary>
+    /// Opens one of the workspace's three context menus for a posed run to read back — the same
+    /// builders a right-click runs, through <see cref="MenuProbe"/> so each logs itself.
+    /// </summary>
+    public string PoseMenu(string which)
+    {
+        switch (which)
+        {
+            case "nav" when _rows.FirstOrDefault(r => r.Kind == FeedNavKind.Feed) is { } row:
+                _navMenu?.Hide();
+                _navMenu = NavMenu(row);
+                MenuProbe.Show("the feeds nav menu", _navMenu, this);
+                return $"the nav menu over “{row.Label}”";
+
+            case "nav":
+                return "no feed row to open the nav menu over";
+
+            case "pane":
+                _navMenu?.Hide();
+                _navMenu = PaneMenu();
+                MenuProbe.Show("the feeds pane menu", _navMenu, this);
+                return "the pane menu";
+
+            case "article" when (SelectedArticle ?? _showing.FirstOrDefault()) is { } article:
+                _articleMenu?.Hide();
+                _articleMenu = ArticleMenu(article);
+                MenuProbe.Show("the article menu", _articleMenu, _articles);
+                return $"the article menu over “{article.Subject}”";
+
+            case "article":
+                return "no article to open the menu over";
+
+            default:
+                return $"“{which}” is not a menu here — say nav, pane or article";
+        }
+    }
+
+    /// <summary>
     /// Selects the nth article showing, without opening it, for a harness run.
     /// </summary>
     /// <remarks>
     /// A run has to be able to say "this article" before it presses a command that acts on one,
     /// and clicking a row is the one thing a capture cannot do.
+    /// </remarks>
     public string PoseSelect(int at, bool open = false)
     {
         if (_showing.Count == 0) return "nothing is showing";
@@ -1587,7 +1625,7 @@ internal sealed class FeedsWorkspace : Border
             _navMenu = PaneMenu();
         }
 
-        _navMenu.ShowAt(pane, showAtPointer: true);
+        MenuProbe.Show(row is null ? "the feeds pane menu" : "the feeds nav menu", _navMenu, pane, atPointer: true);
     }
 
     /// <summary>Shows which row a drop would land on, and takes the mark off the last one.</summary>

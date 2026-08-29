@@ -21,6 +21,11 @@
     <InformationalVersion>$(VersionPrefix)+$([System.DateTime]::Now.ToString('yyyy-MM-dd HH:mm'))</InformationalVersion>
   </PropertyGroup>
 
+  <!-- The headless suite asserts menu contents, and several menus are internal statics. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Mailbox.HeadlessTests" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />
     <PackageReference Include="Avalonia.Controls.WebView" Version="$(AvaloniaWebViewVersion)" />

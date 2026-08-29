@@ -25,14 +25,32 @@ namespace Mailbox.Tests;
 public class LocalBackgroundBindTests
 {
     /// <summary>
-    /// The buttons that bind their own Background today, each to be reviewed and then either
-    /// moved to a style or kept with a reason written beside it.
+    /// The buttons that bind their own Background, each reviewed against the reference and kept
+    /// with its reason. The fourteenth still cannot be added without this test failing, which is
+    /// the property the three bugs above all lacked.
     /// </summary>
     /// <remarks>
-    /// A backlog, not an approval. The point of listing them is that the fourteenth cannot be
-    /// added without this test failing, which is the property the three bugs above all lacked.
-    /// Reviewing one means asking what its hover and held states should be, which needs the
-    /// reference — so they are recorded here rather than changed blind.
+    /// Reviewed 29 August 2026, the question being what each button's hover and held states
+    /// should be. No reference capture shows any of these thirteen hovered, and the precedent
+    /// for that state of evidence is the hovered selected ribbon tab: the current paint stands
+    /// until a capture — or the owner — says otherwise. What each one is:
+    /// <list type="bullet">
+    /// <item><c>CustomizationEditor</c> — the editors' push buttons, menu button and reorder
+    /// arrows, drawn to the Options captures' flat boxes in a line.</item>
+    /// <item><c>AppointmentSurface</c> — the form's Save &amp; Close tile and its pressable
+    /// faces: a light face inside a line, as the reference draws them.</item>
+    /// <item><c>AttachmentStrip</c> — the attachment chip, a raised face in a line.</item>
+    /// <item><c>BackstageView</c> — the Backstage's big tiles, drawn on the field colour the
+    /// backstage captures show.</item>
+    /// <item><c>EditorOptionsDialog</c> — a selected-state marker, not a rest ground: hover
+    /// must not disturb what selection is saying.</item>
+    /// <item><c>OptionsWindow</c> — the dialog's own nav rail: flat rows with the selected one
+    /// boxed, exactly as the Options captures draw it.</item>
+    /// <item><c>ReadingPaneBody</c> — the InfoBar's action button, a raised face in a line.</item>
+    /// <item><c>SendReceiveProgressDialog</c> — the dialog's push buttons, the editors' shape.</item>
+    /// <item><c>UndoSendToast</c> — the toast's Undo, a raised face; the toast is this
+    /// application's own surface with no reference counterpart to hover like.</item>
+    /// </list>
     /// </remarks>
     private static readonly string[] KnownLocalBackgroundButtons =
     [

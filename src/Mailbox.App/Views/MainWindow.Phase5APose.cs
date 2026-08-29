@@ -45,9 +45,11 @@ public partial class MainWindow
         var attach = Environment.GetEnvironmentVariable("MAILBOX_COMPOSE_ATTACH");
         var probe = Environment.GetEnvironmentVariable("MAILBOX_COMPOSE_PROBE");
         var typeLine = Environment.GetEnvironmentVariable("MAILBOX_COMPOSE_TYPE_LINE");
+        var menu = Environment.GetEnvironmentVariable("MAILBOX_COMPOSE_MENU");
 
         if (from is null && to is null && cc is null && subject is null
-            && bcc is null && run is null && attach is null && probe is null && typeLine is null)
+            && bcc is null && run is null && attach is null && probe is null && typeLine is null
+            && menu is null)
         {
             return;
         }
@@ -64,6 +66,13 @@ public partial class MainWindow
                 try
                 {
                     await RunPhase5ADoorsAsync(compose, to, cc, bcc, subject, run, attach, probe, typeLine);
+
+                    // The From button's account menu, read back the way every menu is now.
+                    if (menu is "from" && compose.Surface is { } surface
+                        && !surface.PoseFromMenu())
+                    {
+                        Log.Info("Harness: compose — the From button is not on this window.");
+                    }
                 }
                 catch (Exception ex)
                 {

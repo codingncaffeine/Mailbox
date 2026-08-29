@@ -94,7 +94,7 @@ internal static class ItemCategoryMenu
 
         Log.Info($"Categorize: the item carries {(carried.Count == 0 ? "nothing" : string.Join(", ", carried))}.");
         Log.Debug($"Categorize: the item is “{subject}”.");
-        flyout.ShowAt(anchor, showAtPointer: true);
+        MenuProbe.Show("the item categorize menu", flyout, anchor, atPointer: true);
     }
 
     private static void Pose(

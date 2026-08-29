@@ -265,6 +265,16 @@ public sealed class RibbonView : ContentControl
     public RibbonDisplayMode ExpandedMode => _expandedMode;
 
     /// <summary>
+    /// Raised just before a command's menu is shown under its button, with the menu itself.
+    /// </summary>
+    /// <remarks>
+    /// The host's window records what opened, because a popup is not in the window list and a
+    /// capture cannot photograph one — reading the menu back from inside the process is the
+    /// only measurement a headless run can make of it.
+    /// </remarks>
+    public event Action<CommandId, MenuFlyout>? MenuOpened;
+
+    /// <summary>
     /// Raised after <see cref="DisplayMode"/> changes — from the chevron's menu or by code — so
     /// the host can remember the choice. A host that sets the opening mode first and subscribes
     /// second hears only the reader's changes, which is what it wants to write down.
@@ -1303,6 +1313,7 @@ public sealed class RibbonView : ContentControl
 
         var boxed = Box(anchor);
         menu.Closed += OnClosed;
+        MenuOpened?.Invoke(id, menu);
         menu.ShowAt(anchor);
 
         void OnClosed(object? sender, EventArgs e)

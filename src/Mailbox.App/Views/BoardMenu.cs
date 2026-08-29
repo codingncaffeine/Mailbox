@@ -96,7 +96,7 @@ internal static class BoardMenu
 
         Log.Info($"Boards: the item is on {(on.Count == 0 ? "no board" : $"{on.Count} board(s)")}.");
         Log.Debug($"Boards: the item is “{subject}”.");
-        flyout.ShowAt(anchor, showAtPointer: true);
+        MenuProbe.Show("the boards menu", flyout, anchor, atPointer: true);
     }
 
     /// <summary>

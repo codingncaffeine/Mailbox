@@ -155,6 +155,17 @@ public sealed class TasksWorkspace : Border
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>Selects the nth row, as a click does, for a harness run.</summary>
+    public string PoseSelect(int at)
+    {
+        if (at < 0 || at >= Rows.Count) return $"only {Rows.Count} row(s) are showing";
+
+        _list.Selected = Rows[at];
+        Selected = Rows[at];
+        Changed?.Invoke(this, EventArgs.Empty);
+        return $"“{Rows[at].Summary}”";
+    }
+
     /// <summary>The list a new task goes on: the default one, made if there is none.</summary>
     public Collection DefaultList()
     {

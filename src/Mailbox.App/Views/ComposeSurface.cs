@@ -1042,7 +1042,7 @@ public sealed partial class ComposeSurface : UserControl
                     flyout.Items.Add(item);
                 }
 
-                flyout.ShowAt(button, showAtPointer: false);
+                MenuProbe.Show("the From account menu", flyout, button);
             };
 
             caption = button;
@@ -1445,8 +1445,11 @@ public sealed partial class ComposeSurface : UserControl
         // window ran it. Manage Add-ins… belongs to the shell, which owns the Options window.
         if (id == ViewCommands.Apps.Id)
         {
-            AllAppsMenu.Build(Invoke, () => ManageAddInsRequested?.Invoke(this, EventArgs.Empty))
-                .ShowAt(this, showAtPointer: true);
+            MenuProbe.Show(
+                "All Apps",
+                AllAppsMenu.Build(Invoke, () => ManageAddInsRequested?.Invoke(this, EventArgs.Empty)),
+                this,
+                atPointer: true);
             return true;
         }
 

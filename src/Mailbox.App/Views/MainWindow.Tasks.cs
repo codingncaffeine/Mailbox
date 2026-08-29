@@ -517,7 +517,7 @@ public partial class MainWindow
             flyout.Items.Add(entry);
         }
 
-        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+        MenuProbe.Show("the move-task menu", flyout, _ribbon ?? (Control)this, atPointer: true);
     }
 
     // ---- A row is a task or a flagged message ---------------------------------------------------

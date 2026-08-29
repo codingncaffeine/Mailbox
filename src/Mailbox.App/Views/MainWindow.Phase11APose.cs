@@ -160,6 +160,10 @@ public partial class MainWindow
 
                 break;
 
+            case "menu":
+                Log.Info($"Harness: feed script — {EnsureFeeds(shell).PoseMenu(arg)}.");
+                break;
+
             case "hit":
                 var answer = await App.FeedReader.Fetch.GetAsync(arg).ConfigureAwait(true);
                 Log.Info($"Harness: feed script — asked {arg}, {(int)answer.Status} "

@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Mailbox.App.Theming;
@@ -40,6 +41,7 @@ public sealed class MessageWindow : Window
     private readonly AttachmentStrip _attachments = new();
     private readonly Func<MailRepository?> _mail;
     private readonly RibbonView _ribbon;
+    private Button? _moreButton;
 
     private MimeMessage _message;
     private byte[]? _raw;
@@ -166,6 +168,7 @@ public sealed class MessageWindow : Window
             OnCommand(e.Command, e.FromChevron);
         };
         _ribbon.BackstageRequested += (_, _) => ShowBackstage();
+        _ribbon.MenuOpened += (id, menu) => MenuProbe.Record($"the menu under {id.Value}", menu);
         _ribbon.FloatingBodyChanged += (_, e) => ShowFloatingRibbon(e.Body);
         AddHandler(PointerPressedEvent, OnWindowPointerPressed, Avalonia.Interactivity.RoutingStrategies.Tunnel);
 
@@ -259,6 +262,12 @@ public sealed class MessageWindow : Window
     /// <summary>Presses a ribbon command by id, exactly as a click does. For the harness.</summary>
     internal void Press(CommandId id) => OnCommand(id, fromChevron: false);
 
+    /// <summary>Presses a command's chevron half, which is what opens its menu. For the harness.</summary>
+    internal void PressChevron(CommandId id) => OnCommand(id, fromChevron: true);
+
+    /// <summary>Opens the quick strip's "…" menu, exactly as a click does. For the harness.</summary>
+    internal void PressMore() => _moreButton?.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
     private void OnCommand(CommandId id, bool fromChevron)
     {
         Log.Debug($"Message window command: {id}{(fromChevron ? " (chevron)" : string.Empty)}");
@@ -287,10 +296,13 @@ public sealed class MessageWindow : Window
 
         if (id == ViewCommands.Apps.Id)
         {
-            AllAppsMenu.Build(
+            MenuProbe.Show(
+                "All Apps",
+                AllAppsMenu.Build(
                     pressed => OnCommand(pressed, fromChevron: false),
-                    () => _ = new OptionsWindow(App.Themes, "addins").ShowDialog<bool>(this))
-                .ShowAt(this, showAtPointer: true);
+                    () => _ = new OptionsWindow(App.Themes, "addins").ShowDialog<bool>(this)),
+                this,
+                atPointer: true);
             return;
         }
 
@@ -397,7 +409,7 @@ public sealed class MessageWindow : Window
         };
         flyout.Items.Add(junk);
 
-        flyout.ShowAt(this, showAtPointer: true);
+        MenuProbe.Show("the message window's delete menu", flyout, this, atPointer: true);
     }
 
     private void MoveMenu(OpenedMessageContext context, MailRepository mail)
@@ -420,7 +432,7 @@ public sealed class MessageWindow : Window
             flyout.Items.Add(entry);
         }
 
-        flyout.ShowAt(this, showAtPointer: true);
+        MenuProbe.Show("the message window's move menu", flyout, this, atPointer: true);
     }
 
     private void CategorizeMenu(OpenedMessageContext context, MailRepository mail)
@@ -445,7 +457,7 @@ public sealed class MessageWindow : Window
             flyout.Items.Add(entry);
         }
 
-        flyout.ShowAt(this, showAtPointer: true);
+        MenuProbe.Show("the message window's categorize menu", flyout, this, atPointer: true);
     }
 
     private void FollowUpMenu(OpenedMessageContext context, MailRepository mail)
@@ -473,7 +485,7 @@ public sealed class MessageWindow : Window
         Entry("Mark Complete", () => mail.CompleteFollowUp([context.MessageId]));
         Entry("Clear Flag", () => mail.ClearFollowUp([context.MessageId]));
 
-        flyout.ShowAt(this, showAtPointer: true);
+        MenuProbe.Show("the message window's follow-up menu", flyout, this, atPointer: true);
 
         static DateTimeOffset EndOfWeek(DateTime from)
         {
@@ -700,6 +712,7 @@ public sealed class MessageWindow : Window
         Bind(button, Button.BackgroundProperty, "surface.raised.brush");
         Bind((TextBlock)button.Content!, TextBlock.ForegroundProperty, "text.primary.brush");
         ToolTip.SetTip(button, "More actions");
+        _moreButton = button;
 
         button.Click += (_, _) =>
         {
@@ -718,7 +731,7 @@ public sealed class MessageWindow : Window
             flyout.Items.Add(new Separator());
             Entry("View Source", MailCommands.ViewSource.Id);
 
-            flyout.ShowAt(button, showAtPointer: false);
+            MenuProbe.Show("the message window's more menu", flyout, button);
         };
 
         return button;

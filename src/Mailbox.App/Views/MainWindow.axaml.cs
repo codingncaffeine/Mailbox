@@ -86,6 +86,7 @@ public partial class MainWindow : Window
         _ribbon.CommandEnabled = IsCommandUsable;
         _ribbon.CommandChecked = IsCommandChecked;
         _ribbon.CommandInvoked += OnRibbonCommand;
+        _ribbon.MenuOpened += (id, menu) => MenuProbe.Record($"the menu under {id.Value}", menu);
         _ribbon.BackstageRequested += (_, _) => ShowBackstage();
         _ribbon.FloatingBodyChanged += (_, e) => ShowFloatingRibbon(e.Body);
 
@@ -983,6 +984,9 @@ public partial class MainWindow : Window
         // switches hold in this run. The delivery goes in before the folder pose picks a row.
         WirePhase12ADoors();
 
+        // The menus a pointer opens, walked so every context menu can be read back.
+        WirePhase17bDoors();
+
         // Typing into a system dialog's own fields, and reading back where a credential went.
         // Last, so a form is driven over whatever the poses above have already opened.
         WirePhase13ADoors();
@@ -1173,7 +1177,7 @@ public partial class MainWindow : Window
                         using var hold = WindowCapture.Hold();
                         RunCommand(ViewCommands.Apps.Id);
                         await Task.Delay(400);
-                        if (_lastFlyout is { } shown) Log.Info($"Harness: {FlyoutProbe.Describe(shown.What, shown.Menu)}");
+                        if (MenuProbe.Last is { } shown) Log.Info($"Harness: {FlyoutProbe.Describe(shown.What, shown.Menu)}");
                     },
                     DispatcherPriority.Background);
                 break;
@@ -1194,7 +1198,7 @@ public partial class MainWindow : Window
                         }
 
                         button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                        menu.ShowAt(button);
+                        MenuProbe.Show("the window menu", menu, button);
                         await Task.Delay(400);
                         Log.Info($"Harness: {FlyoutProbe.Describe("the window menu", menu)}");
                     },
@@ -3702,7 +3706,7 @@ public partial class MainWindow : Window
 
             var menu = _folderMenu = new MenuFlyout();
             FillFolderContextMenu(menu);
-            menu.ShowAt(folders, showAtPointer: true);
+            MenuProbe.Show("the folder menu", menu, folders, atPointer: true);
             e.Handled = true;
         });
     }
@@ -4355,7 +4359,7 @@ public partial class MainWindow : Window
         Entry(ViewCommands.SaveViewAs.Label, () => _ = SaveViewAsAsync(shell), enabled: shell.ViewAccount is not null);
         Entry(ViewCommands.ApplyViewToFolders.Label, () => _ = ApplyViewToFoldersAsync(shell), enabled: shell.ViewAccount is not null);
 
-        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+        MenuProbe.Show("the change-view menu", flyout, _ribbon ?? (Control)this, atPointer: true);
     }
 
     /// <summary>Current View: View Settings… and Reset View.</summary>
@@ -4368,7 +4372,7 @@ public partial class MainWindow : Window
         reset.Click += (_, _) => shell.ResetView();
         flyout.Items.Add(settings);
         flyout.Items.Add(reset);
-        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+        MenuProbe.Show("the current-view menu", flyout, _ribbon ?? (Control)this, atPointer: true);
     }
 
     /// <summary>Layout: the folder pane, the reading pane and the To-Do Bar, as the reference's menu has them.</summary>
@@ -4386,7 +4390,7 @@ public partial class MainWindow : Window
         FillReadingPaneMenu(Sub("Reading Pane").Items, shell);
         FillToDoBarMenu(Sub("To-Do Bar").Items, shell);
 
-        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+        MenuProbe.Show("the layout menu", flyout, _ribbon ?? (Control)this, atPointer: true);
     }
 
     /// <summary>One entry of a layout menu: a tick where it is the state, and what it sets.</summary>
@@ -4475,13 +4479,6 @@ public partial class MainWindow : Window
     /// <summary>
     /// The window menu behind the app icon. With no system frame the window owns this too.
     /// </summary>
-    /// <summary>
-    /// The last flyout a command opened, so a pose can measure it. Popups are the audit's one
-    /// blind spot — not in the window list, so not in a capture — and the answer is to read the
-    /// presenter's size from inside rather than to photograph it.
-    /// </summary>
-    private (string What, MenuFlyout Menu)? _lastFlyout;
-
     private void WireWindowMenu()
     {
         if (this.FindControl<Button>("WindowMenuButton") is not { } button) return;
@@ -5160,11 +5157,7 @@ public partial class MainWindow : Window
         if (id == ViewCommands.Apps.Id)
         {
             var apps = AllAppsMenu.Build(RunCommand, () => _ = ShowOptions("addins"));
-            apps.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
-
-            // Kept so a pose can measure it. A flyout is built, shown and forgotten in one
-            // expression, which leaves nothing for a read-back to ask how big it came out.
-            _lastFlyout = ("All Apps", apps);
+            MenuProbe.Show("All Apps", apps, _ribbon ?? (Control)this, atPointer: true);
             return;
         }
 
@@ -5172,7 +5165,7 @@ public partial class MainWindow : Window
         // entries behind them as commands of their own.
         if (id == ViewCommands.ChangeView.Id) { ShowChangeViewMenu(shell); return; }
         if (id == ViewCommands.ViewSettings.Id) { ShowCurrentViewMenu(shell); return; }
-        if (id == ViewCommands.ArrangeBy.Id) { ArrangeFlyout(shell).ShowAt(_ribbon ?? (Control)this, showAtPointer: true); return; }
+        if (id == ViewCommands.ArrangeBy.Id) { MenuProbe.Show("the arrange-by menu", ArrangeFlyout(shell), _ribbon ?? (Control)this, atPointer: true); return; }
         if (id == ViewCommands.LayoutMenu.Id) { ShowLayoutMenu(shell); return; }
         if (id == ViewCommands.ChangeViewCompact.Id) { shell.ChangeView(Mailbox.Core.Views.MailView.CompactName); return; }
         if (id == ViewCommands.ChangeViewSingle.Id) { shell.ChangeView(Mailbox.Core.Views.MailView.SingleName); return; }
@@ -5837,7 +5830,7 @@ public partial class MainWindow : Window
     /// Follow Up opens.
     /// </summary>
     private void ShowFollowUpMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
-        => FollowUpMenu(shell, rows).ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+        => MenuProbe.Show("the follow-up menu", FollowUpMenu(shell, rows), _ribbon ?? (Control)this, atPointer: true);
 
     /// <summary>The Follow Up entries, for the bar's flyout and the row menu's submenu alike.</summary>
     private MenuFlyout FollowUpMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
@@ -5922,7 +5915,7 @@ public partial class MainWindow : Window
         if (rows.Count == 0)
         {
             flyout.Items.Add(new MenuItem { Header = "Select a message first", IsEnabled = false });
-            flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+            MenuProbe.Show("the snooze menu", flyout, _ribbon ?? (Control)this, atPointer: true);
             return;
         }
 
@@ -5966,7 +5959,7 @@ public partial class MainWindow : Window
             flyout.Items.Add(wake);
         }
 
-        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+        MenuProbe.Show("the snooze menu", flyout, _ribbon ?? (Control)this, atPointer: true);
     }
 
     /// <summary>
@@ -6005,7 +5998,7 @@ public partial class MainWindow : Window
         Entry(MailCommands.CleanUpFolder.Label, shell.CurrentFolder is not null, () => RunCommand(MailCommands.CleanUpFolder.Id));
         Entry(MailCommands.CleanUpFolderAndSubfolders.Label, shell.CurrentFolder is not null, () => RunCommand(MailCommands.CleanUpFolderAndSubfolders.Id));
 
-        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+        MenuProbe.Show("the clean-up menu", flyout, _ribbon ?? (Control)this, atPointer: true);
     }
 
     /// <summary>The Custom flag dialog over the selection — from Custom… or Add Reminder….</summary>
@@ -6229,7 +6222,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        CategorizeMenu(shell, rows).ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+        MenuProbe.Show("the categorize menu", CategorizeMenu(shell, rows), _ribbon ?? (Control)this, atPointer: true);
     }
 
     /// <summary>The Categorize entries, shared by the bar and the row menu.</summary>
@@ -6342,7 +6335,7 @@ public partial class MainWindow : Window
     /// button, greyed unless the selection is in the Junk folder.
     /// </remarks>
     private void ShowJunkMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
-        => JunkMenu(shell, rows).ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+        => MenuProbe.Show("the junk menu", JunkMenu(shell, rows), _ribbon ?? (Control)this, atPointer: true);
 
     /// <summary>The Junk entries, shared by the bar and the row menu.</summary>
     private MenuFlyout JunkMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
@@ -6398,7 +6391,7 @@ public partial class MainWindow : Window
     /// Rules &amp; Alerts.
     /// </summary>
     private void ShowRulesMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
-        => RulesMenu(shell, rows).ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+        => MenuProbe.Show("the rules menu", RulesMenu(shell, rows), _ribbon ?? (Control)this, atPointer: true);
 
     /// <summary>The Rules entries, shared by the bar and the row menu.</summary>
     private MenuFlyout RulesMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
@@ -6406,6 +6399,23 @@ public partial class MainWindow : Window
         var flyout = new MenuFlyout();
         var account = shell.CurrentAccountForCategories();
         var message = rows.Count == 1 ? _openMessage : null;
+
+        // The reading pane may be off — the owner reads that way — and then nothing has opened
+        // the selection, so the menu built from the open message alone greyed its own point:
+        // the reference arms "Always Move Messages From:" from the selected row. The row knows
+        // its store id, so the message is loaded rather than waited for.
+        if (message is null && rows.Count == 1 && account?.Mail.LoadRaw(rows[0].Id) is { } raw)
+        {
+            try
+            {
+                message = MimeKit.MimeMessage.Load(new MemoryStream(raw));
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("Could not read the selected message for the rules menu.", ex);
+            }
+        }
+
         var from = message?.From.Mailboxes.FirstOrDefault();
         var to = message?.To.Mailboxes.FirstOrDefault(m => !App.Accounts.All.Any(a => string.Equals(a.Account.Address, m.Address, StringComparison.OrdinalIgnoreCase)))
                  ?? message?.To.Mailboxes.FirstOrDefault();
@@ -6483,7 +6493,7 @@ public partial class MainWindow : Window
 
     /// <summary>The Move menu: every folder of the account the selection is in.</summary>
     private void ShowMoveMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
-        => MoveMenu(shell, rows).ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+        => MenuProbe.Show("the move menu", MoveMenu(shell, rows), _ribbon ?? (Control)this, atPointer: true);
 
     /// <summary>The Move entries, shared by the bar and the row menu.</summary>
     private MenuFlyout MoveMenu(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
@@ -6506,8 +6516,9 @@ public partial class MainWindow : Window
         }
 
         // The reference closes this menu with the two that reach past the list of folders: one
-        // that asks for any folder, and one that copies rather than moves.
-        flyout.Items.Add(new Separator());
+        // that asks for any folder, and one that copies rather than moves. The rule only earns
+        // its place when there is a list above it to close.
+        if (flyout.Items.Count > 0) flyout.Items.Add(new Separator());
 
         var other = new MenuItem { Header = "_Other Folder…", IsEnabled = rows.Count > 0 };
         other.Click += (_, _) => _ = MoveToOtherFolderAsync(shell, rows);
@@ -6605,7 +6616,7 @@ public partial class MainWindow : Window
         snoozed.Click += (_, _) => shell.ShowSnoozed = !shell.ShowSnoozed;
         flyout.Items.Add(snoozed);
 
-        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+        MenuProbe.Show("the filter-email menu", flyout, _ribbon ?? (Control)this, atPointer: true);
     }
 
     /// <summary>
@@ -7353,7 +7364,7 @@ public partial class MainWindow : Window
 
         // Dropped from the ribbon control that raised it where there is one, and from the
         // window otherwise — a menu with nothing to hang off still has to appear somewhere.
-        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+        MenuProbe.Show("the send/receive groups menu", flyout, _ribbon ?? (Control)this, atPointer: true);
     }
 
     /// <summary>Which mailbox the taskbar is showing, so it is only set when it changes.</summary>
@@ -8583,7 +8594,7 @@ public partial class MainWindow : Window
             if (e.Handled) return;
 
             _rowMenu = RowMenu(shell);
-            _rowMenu.ShowAt(list, showAtPointer: true);
+            MenuProbe.Show("the row menu", _rowMenu, list, atPointer: true);
             e.Handled = true;
         });
 

@@ -102,7 +102,7 @@ public partial class MainWindow
         Log.Info($"Flag Task: the row is due {(row.Task.Due is { } due ? due.Wall.ToString("yyyy-MM-dd") : "—")}"
             + (row.IsMessage ? ", a flagged message." : "."));
         Log.Debug($"Flag Task: the row is “{row.Summary}”.");
-        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+        MenuProbe.Show("the task flag menu", flyout, _ribbon ?? (Control)this, atPointer: true);
     }
 
     /// <summary>
@@ -167,7 +167,7 @@ public partial class MainWindow
 
         Log.Info($"Flag: the item is due {current?.LocalDateTime.ToString("yyyy-MM-dd") ?? "—"}.");
         Log.Debug($"Flag: the item is “{subject}”.");
-        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+        MenuProbe.Show("the flag menu", flyout, _ribbon ?? (Control)this, atPointer: true);
     }
 
     /// <summary>The harness's press of one entry on the flag menu.</summary>

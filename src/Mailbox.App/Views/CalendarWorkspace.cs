@@ -367,6 +367,15 @@ public sealed class CalendarWorkspace : Border
         }
 
         button.Flyout = menu;
+
+        // An attached flyout is built once, here, and a posed run can only read it back at the
+        // moment it exists — a popup never reaches a capture.
+        if (Mailbox.App.Theming.WindowCapture.IsRequested)
+        {
+            Mailbox.Core.Diagnostics.Log.Info(
+                "Harness: " + FlyoutProbe.Describe("the calendar view picker", menu));
+        }
+
         return button;
     }
 

@@ -119,6 +119,17 @@ public sealed class NotesWorkspace : Border
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>Selects the nth note, as a click does, for a harness run.</summary>
+    public string PoseSelect(int at)
+    {
+        if (at < 0 || at >= Rows.Count) return $"only {Rows.Count} note(s) are showing";
+
+        _view.Selected = Rows[at];
+        Selected = Rows[at];
+        Changed?.Invoke(this, EventArgs.Empty);
+        return $"“{Rows[at].Title}”";
+    }
+
     /// <summary>The folder a new note goes in: the one that holds notes, made if there is none.</summary>
     /// <remarks>
     /// Not the collection the store marks default. Notes and journal entries are one component in

@@ -191,7 +191,7 @@ public partial class MainWindow
             flyout.Items.Add(entry);
         }
 
-        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+        MenuProbe.Show("the move-note menu", flyout, _ribbon ?? (Control)this, atPointer: true);
     }
 
     private void MoveNoteTo(ShellViewModel shell, PimItem item, Collection folder)

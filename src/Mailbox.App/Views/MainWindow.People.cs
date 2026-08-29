@@ -415,7 +415,7 @@ public partial class MainWindow
     {
         var flyout = ContactMenu(shell, row);
         Log.Info($"People: the menu for “{row.Named()}” is open.");
-        flyout.ShowAt(EnsurePeople(shell), showAtPointer: true);
+        MenuProbe.Show("the contact menu", flyout, EnsurePeople(shell), atPointer: true);
     }
 
     /// <summary>The entries themselves, built once so a harness run can press one of them.</summary>
@@ -551,7 +551,7 @@ public partial class MainWindow
             flyout.Items.Add(entry);
         }
 
-        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+        MenuProbe.Show("the move-contact menu", flyout, _ribbon ?? (Control)this, atPointer: true);
     }
 
     private void MoveContactTo(ShellViewModel shell, ContactRow row, PimItem stored, Collection book)

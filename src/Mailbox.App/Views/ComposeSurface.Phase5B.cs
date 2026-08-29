@@ -18,4 +18,21 @@ public sealed partial class ComposeSurface
 
     /// <summary>The account this message will be sent from, for a read-back.</summary>
     public string? HarnessSendingAddress => _sendingAddress;
+
+    /// <summary>
+    /// Opens the From button's account menu through its own Click, so a posed run can read the
+    /// menu back — <see cref="MenuProbe"/> logs what it holds. Harness only.
+    /// </summary>
+    public bool PoseFromMenu()
+    {
+        var button = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(this)
+            .OfType<Avalonia.Controls.Button>()
+            .FirstOrDefault(b => Equals(
+                Avalonia.Controls.ToolTip.GetTip(b), "Send this message from a different account"));
+
+        if (button is null) return false;
+
+        button.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
+        return true;
+    }
 }

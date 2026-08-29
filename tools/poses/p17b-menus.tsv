@@ -1,0 +1,18 @@
+# Phase 17b — the menus a capture cannot see, opened through their real sites and
+# read back through MenuProbe/FlyoutProbe. Command-opened menus log themselves;
+# MAILBOX_MENUS walks the pointer-opened rest.
+menus-mail-1	MAILBOX_SELECT=Q3 numbers	MAILBOX_MENUS=run:item.followup;hide;run:mail.snooze;hide;run:item.categorize;hide;run:mail.junk;hide;run:mail.cleanup;hide	MAILBOX_TODAY=2026-08-16
+menus-mail-2	MAILBOX_SELECT=Q3 numbers	MAILBOX_MENUS=run:mail.move;hide;run:mail.rules;hide;run:mail.new.items;hide;run:mail.filter;hide;run:mail.respond.more;hide	MAILBOX_TODAY=2026-08-16
+menus-mail-3	MAILBOX_MENUS=run:view.change;hide;run:view.settings;hide;run:view.arrangeby;hide;run:view.layout;hide;run:app.sendreceive.groups;hide	MAILBOX_TODAY=2026-08-16
+menus-mail-4	MAILBOX_MENUS=run:view.messagepreview;hide;run:view.expandcollapse;hide;run:view.folderpane;hide;run:view.readingpane;hide;run:view.todobar;hide	MAILBOX_TODAY=2026-08-16
+menus-rowmenu	MAILBOX_SELECT=Q3 numbers	MAILBOX_PEEK=rowmenu	MAILBOX_TODAY=2026-08-16
+menus-msgwin	MAILBOX_SELECT=Q3 numbers	MAILBOX_MENUS=wait;wait;wait;openmsg;wait;msgwin:delete;hide;msgwin:move;hide;msgwin:categorize;hide;msgwin:followup;hide;msgwin:more;hide;msgwin:apps;hide	MAILBOX_TODAY=2026-08-16
+menus-calendar	MAILBOX_MODULE=calendar	MAILBOX_MENUS=run:calendar.timescale;hide;run:calendar.colour;hide;run:calendar.view.tasklist;hide;run:calendar.open;hide;run:calendar.share;hide	MAILBOX_TODAY=2026-08-16
+menus-people	MAILBOX_MODULE=people	MAILBOX_SELECT=Person	MAILBOX_PEOPLE_MENU=Open	MAILBOX_MENUS=wait;run:people.move;hide;run:people.share;hide	MAILBOX_TODAY=2026-08-16
+menus-tasks	MAILBOX_MODULE=tasks	MAILBOX_MENUS=taskflag;hide;taskselect:5;run:tasks.moveto;hide	MAILBOX_TODAY=2026-08-16
+menus-notes	MAILBOX_MODULE=notes	MAILBOX_MENUS=noteselect;run:notes.moveto;hide	MAILBOX_TODAY=2026-08-16
+menus-mail-5	MAILBOX_SELECT=Q3 numbers	MAILBOX_MENUS=findrelated;hide;quicksteps;hide	MAILBOX_TODAY=2026-08-16
+menus-foldermenu	MAILBOX_FOLDERMENU=dump	MAILBOX_TODAY=2026-08-16
+menus-windowmenu	MAILBOX_PEEK=windowmenu	MAILBOX_TODAY=2026-08-16
+# menus-feeds wants a live local feed: serve tools' fixture, subscribe once, then
+# MAILBOX_FEED_POLL=settle:1500;menu:nav;settle:500;menu:pane;settle:500;pick:0;menu:article — run manually.

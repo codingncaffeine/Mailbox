@@ -236,7 +236,7 @@ public partial class MainWindow
         Entry("1 Line", 1);
         Entry("2 Lines", 2);
         Entry("3 Lines", 3);
-        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+        MenuProbe.Show("the message-preview menu", flyout, _ribbon ?? (Control)this, atPointer: true);
     }
 
     /// <summary>Expand/Collapse: this group or every group, opened or shut.</summary>
@@ -259,7 +259,7 @@ public partial class MainWindow
         Entry("Collapse All Groups", () => shell.SetAllGroupsCollapsed(true));
         Entry("Expand All Groups", () => shell.SetAllGroupsCollapsed(false));
 
-        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+        MenuProbe.Show("the expand/collapse menu", flyout, _ribbon ?? (Control)this, atPointer: true);
     }
 
     /// <summary>Add Columns: the column chooser the View Settings dialog opens, opened directly.</summary>
@@ -285,7 +285,7 @@ public partial class MainWindow
     {
         var flyout = new MenuFlyout();
         fill(flyout.Items, shell);
-        flyout.ShowAt(_ribbon ?? (Control)this, showAtPointer: true);
+        MenuProbe.Show($"the {named} menu", flyout, _ribbon ?? (Control)this, atPointer: true);
 
         // After ShowAt: the entries have no top level until the popup is presented, and a probe
         // taken before it would report a menu that was built and never shown.

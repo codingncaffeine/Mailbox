@@ -167,6 +167,10 @@ public partial class MainWindow
                             : "not on this bar"));
                     break;
 
+                case "menu":
+                    Log.Info($"Harness: step menu {arg} — {feeds.PoseMenu(arg)}.");
+                    break;
+
                 case "report":
                     ReportBoards();
                     break;

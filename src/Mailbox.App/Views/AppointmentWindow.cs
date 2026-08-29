@@ -72,6 +72,7 @@ public sealed class AppointmentWindow : Window
             else RefreshPickers();
         };
         _ribbon.FloatingBodyChanged += (_, e) => ShowFloatingRibbon(e.Body);
+        _ribbon.MenuOpened += (id, menu) => MenuProbe.Record($"the menu under {id.Value}", menu);
 
         // Scheduling Assistant and Tracking replace the form rather than adding buttons over it,
         // which is what the reference's own Show group does.
