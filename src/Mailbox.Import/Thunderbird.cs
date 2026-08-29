@@ -366,6 +366,20 @@ public static class ThunderbirdFilters
         void Take()
         {
             if (name is null) return;
+
+            // An action with no value of its own — Mark read, Mark flagged, Delete, Stop
+            // execution — is still pending when the next filter's name arrives, and was thrown
+            // away here rather than kept. Every filter whose last action takes no value was
+            // therefore refused as "no action translates", except the last one in the file,
+            // which the loop below flushes. Four of the seven actions that translate take no
+            // value, so a real .dat lost most of what it carried and said something untrue
+            // about why.
+            if (pendingAction is not null)
+            {
+                actions.Add((pendingAction, string.Empty));
+                pendingAction = null;
+            }
+
             results.Add(Translate(name, enabled, conditionText, actions));
             name = null;
             enabled = true;
@@ -404,7 +418,8 @@ public static class ThunderbirdFilters
             }
         }
 
-        if (pendingAction is not null) actions.Add((pendingAction, string.Empty));
+        // The file's last filter needs no flush of its own any more: Take does it, for that one
+        // and for every filter before it.
         Take();
         return results;
     }

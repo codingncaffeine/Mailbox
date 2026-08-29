@@ -402,6 +402,56 @@ public class ImportFormatsTests : IDisposable
         Assert.Equal("Invoices", Assert.Single(rule.Actions).FolderName);
     }
 
+    /// <summary>
+    /// Four of the seven actions that translate carry no value of their own, and a filter is
+    /// ended by the next filter's name rather than by anything of its own. So a value-less
+    /// action has to survive that boundary: every one of these but the last is a filter whose
+    /// action would otherwise have been thrown away and refused as "no action translates".
+    /// </summary>
+    [Fact]
+    public void AFilterWhoseActionCarriesNoValueTranslatesWhereverItSitsInTheFile()
+    {
+        var filters = ThunderbirdFilters.Parse([
+            "version=\"9\"",
+            "name=\"Read it\"",
+            "enabled=\"yes\"",
+            "action=\"Mark read\"",
+            "condition=\"AND (subject,contains,plum)\"",
+            "name=\"Flag it\"",
+            "enabled=\"no\"",
+            "action=\"Mark flagged\"",
+            "condition=\"AND (from,is,a.person@example.com)\"",
+            "name=\"Bin it\"",
+            "enabled=\"yes\"",
+            "action=\"Delete\"",
+            "action=\"Stop execution\"",
+            "condition=\"AND (subject,contains,quince)\"",
+            "name=\"File it\"",
+            "enabled=\"yes\"",
+            "action=\"Move to folder\"",
+            "actionValue=\"mailbox://nobody@Local%20Folders/Damsons\"",
+            "condition=\"AND (subject,contains,damson)\"",
+        ]);
+
+        Assert.Equal(4, filters.Count);
+        Assert.All(filters, f => Assert.Null(f.Why));
+
+        Assert.Equal(Mailbox.Core.Rules.RuleActionKind.MarkAsRead,
+            Assert.Single(filters[0].Rule!.Actions).Kind);
+        Assert.True(filters[0].Rule!.Enabled);
+
+        Assert.Equal(Mailbox.Core.Rules.RuleActionKind.FlagForFollowUp,
+            Assert.Single(filters[1].Rule!.Actions).Kind);
+        Assert.False(filters[1].Rule!.Enabled);
+
+        // Two value-less actions in a row, in the order the file wrote them.
+        Assert.Equal(
+            [Mailbox.Core.Rules.RuleActionKind.Delete, Mailbox.Core.Rules.RuleActionKind.StopProcessing],
+            filters[2].Rule!.Actions.Select(a => a.Kind));
+
+        Assert.Equal("Damsons", Assert.Single(filters[3].Rule!.Actions).FolderName);
+    }
+
     [Fact]
     public void ProfilesIniIsReadWithRelativeAndAbsolutePaths()
     {
