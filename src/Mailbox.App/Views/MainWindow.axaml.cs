@@ -893,6 +893,13 @@ public partial class MainWindow : Window
 
         // Lets the fidelity harness capture the peek states, which a screenshot otherwise
         // cannot reach because they need a click.
+        // The store engines: the corpus poses that fill and age a store, the backup engine, and
+        // the read-backs that hold a dialog's numbers against SQLite's. Before the peek, because
+        // Mailbox Cleanup and the Data File dialog take their numbers in their constructors — a
+        // pose that fills a store from a handler registered after theirs is photographed by
+        // neither. What has to run late runs late by priority instead.
+        WirePhase14BDoors();
+
         WireHarnessPeek();
 
         // The address book as a set of records rather than as a list of rows, which is what a
@@ -937,6 +944,10 @@ public partial class MainWindow : Window
         // agenda is hiding — all of which want the arrangement above to have settled first.
         WirePhase10BDoors();
 
+        // What an export wrote, against the bytes the store holds. Last of all: the file has to
+        // have been written before it can be compared with anything.
+        WirePhase14ADoors();
+
         // The customization editors, which live inside a modal dialog and one of them behind a
         // button on the other, so nothing could reach either. Last, because both open a window
         // over this one and the claims they make are about what the shell holds afterwards.
@@ -946,14 +957,25 @@ public partial class MainWindow : Window
         // switches hold in this run. The delivery goes in before the folder pose picks a row.
         WirePhase12ADoors();
 
-        // The store engines: what a file actually holds, what a dialog actually drew, the backup
-        // engine, and a corpus whose ages can be posed. Last, because every one of them is a
-        // measurement of what everything above has finished doing.
-        WirePhase14BDoors();
-
         // Typing into a system dialog's own fields, and reading back where a credential went.
         // Last, so a form is driven over whatever the poses above have already opened.
         WirePhase13ADoors();
+
+        // An adversarial corpus through the reading pane, one case at a time, with the document
+        // the engine was handed written out for each. After everything above: the cases are filed
+        // into whichever folder the poses have left open.
+        WirePhase15ADoors();
+
+        // The chain states, the signature verdicts, the keyring's failure modes and where an
+        // OAuth token ends up. The two deliveries go in at Send priority so a message is filed
+        // before the folder pose builds the list it is meant to appear in.
+        WirePhase15BDoors();
+
+        // The system dialogs' tabbed pages, their report lists and — the door the plan listed as
+        // missing — a dialog's own caption in its hovered and held states. Last of all, because
+        // both hold the capture open and what they photograph is the window every pose above has
+        // finished opening.
+        WirePhase13BDoors();
     }
 
     /// <summary>
@@ -1405,11 +1427,26 @@ public partial class MainWindow : Window
                             string.Empty,
                             (DataContext as ShellViewModel)?.CurrentAddress ?? "work@example.net");
 
-                        if (keys.SigningKey(who) is not { } key)
+                        // Whichever secret key the ring holds, when the open account has none.
+                        // This pose runs from Opened and MAILBOX_FOLDER switches accounts a
+                        // moment later, so the address in hand here is whichever account came up
+                        // first — and with a seeded store that is not the one the ring has a key
+                        // for. The dialog is about a key, not about an account, so the fallback
+                        // is the right answer rather than a workaround: without it the pose
+                        // reported "pose a seeded store" over a seeded store, and the one surface
+                        // the whole doors programme exists for could not be photographed.
+                        var key = keys.SigningKey(who)
+                                  ?? keys.SecretRings().FirstOrDefault()?.GetSecretKey();
+
+                        if (key is null)
                         {
-                            Log.Warn($"Harness: no OpenPGP key for {who.Address} — pose a seeded store.");
+                            Log.Warn($"Harness: no OpenPGP key for {who.Address}, and none in the "
+                                     + "ring either — pose a seeded store.");
                             return;
                         }
+
+                        Log.Info($"Harness: passphrase — asking about "
+                                 + $"{Convert.ToHexString(key.PublicKey.GetFingerprint())[^8..]}.");
 
                         CaptureNextWindow();
                         await PassphraseDialog.UnlockAsync(

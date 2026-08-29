@@ -344,6 +344,13 @@ public sealed class OptionsWindow : Window
             scroller.Loaded += (_, _) => scroller.Offset = new Vector(0, offset);
         }
 
+        // Every value-carrying row on the page, with the key it declared and what is stored under
+        // it — the sweep that says whether a dropdown is populated and a spinner really bounded.
+        if (Environment.GetEnvironmentVariable("MAILBOX_OPTIONS_DUMP") == "1")
+        {
+            content.Loaded += (_, _) => OptionsPageAudit.Dump(page.Id, content, renderer);
+        }
+
         if (Environment.GetEnvironmentVariable("MAILBOX_OPTIONS_PRESS") is { Length: > 0 } press)
         {
             PressRows(content, renderer, press);
@@ -355,42 +362,19 @@ public sealed class OptionsWindow : Window
     /// </summary>
     /// <param name="rows">
     /// Comma-separated; each names part of a row's label, matched case-insensitively. A tick box is
-    /// toggled and a radio is chosen.
+    /// toggled and a radio is chosen; <c>label=value</c> puts a value into a dropdown, a spinner or
+    /// a text field.
     /// </param>
     /// <remarks>
     /// §20 lists a hundred-odd rows waiting on the feature behind them, and each becomes a claim the
     /// day it is wired up. This is how that claim gets read back: press the row the reader would
     /// press and print the key it wrote, rather than photographing a tick and calling it done. A
-    /// capture cannot click, so the press is raised here — on the control the renderer really made,
-    /// found by the label the reader really sees.
+    /// capture cannot click, so the press is raised on the control the renderer really made, found
+    /// by the label the reader really sees — see <see cref="OptionsPageAudit"/>, which is also
+    /// where the whole-page sweep lives.
     /// </remarks>
     private static void PressRows(Control page, OptionsPageRenderer renderer, string rows)
-    {
-        foreach (var wanted in rows.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            var control = page.GetLogicalDescendants()
-                .OfType<Avalonia.Controls.Primitives.ToggleButton>()
-                .FirstOrDefault(c => c.Content?.ToString()?.Contains(wanted, StringComparison.OrdinalIgnoreCase) == true);
-
-            if (control is null)
-            {
-                Mailbox.Core.Diagnostics.Log.Info($"Harness: no options row reads '{wanted}'.");
-                continue;
-            }
-
-            // A radio is chosen rather than toggled: unticking one answers nothing.
-            control.IsChecked = control is RadioButton || control.IsChecked != true;
-
-            // What it wrote, not what it looks like. A row whose key nothing reads yet is one of
-            // §20's hundred, and this says so rather than photographing a tick and calling it done.
-            var wrote = renderer.Keys.TryGetValue(control, out var key)
-                ? $"{key} = {App.Settings.Stored(key) ?? "(unset)"}"
-                : "nothing — the row carries no key";
-
-            Mailbox.Core.Diagnostics.Log.Info(
-                $"Harness: pressed '{control.Content}', now {(control.IsChecked == true ? "on" : "off")}, wrote {wrote}.");
-        }
-    }
+        => OptionsPageAudit.Press(page, renderer, rows);
 
     private Control? BuildEditor(OptionsPage page)
     {

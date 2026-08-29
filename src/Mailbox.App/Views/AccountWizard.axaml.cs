@@ -336,7 +336,7 @@ public sealed class AccountWizard : Window
 
         try
         {
-            using var flow = new OAuthFlow(openBrowser: OpenBrowser);
+            using var flow = new OAuthFlow(PosedAuthorizationServer.HandlerOrNull(), OpenBrowser);
             _tokens = await flow.SignInAsync(provider, ClientIdInUse(), address, _signingIn.Token);
 
             _signedIn.Tag = address;
@@ -378,11 +378,25 @@ public sealed class AccountWizard : Window
         // is left here is this surface's own half of it, which is that a posed sign-in must also
         // stop waiting on a loopback socket nobody is going to answer.
         if (Mailbox.Core.Platform.DesktopOpen.Open(url.AbsoluteUri)
-            == Mailbox.Core.Platform.DesktopOpenResult.Posed)
+            != Mailbox.Core.Platform.DesktopOpenResult.Posed)
         {
-            Log.Info($"Harness: sign-in — would open {url.AbsoluteUri}");
-            _signingIn?.Cancel();
+            return;
         }
+
+        Log.Info($"Harness: sign-in — would open {url.AbsoluteUri}");
+
+        // MAILBOX_OAUTH_FAKE answers instead of giving up: the redirect the browser would have
+        // been sent back to is knocked on from here, so the wait ends the way a real sign-in ends
+        // it and the rest of the flow — the state check, the exchange, the token parse, the
+        // refresh token going to the keyring — runs for real against an authorization server the
+        // run controls. Without it there is nobody to answer, so the wait is stopped instead.
+        if (PosedAuthorizationServer.IsRequested)
+        {
+            _ = PosedAuthorizationServer.AnswerAsync(url);
+            return;
+        }
+
+        _signingIn?.Cancel();
     }
 
     private async Task AddAsync()

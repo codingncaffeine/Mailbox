@@ -24,14 +24,24 @@ public partial class MainWindow
             return;
         }
 
-        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        // The same bargain the calendar and contacts exports make: a picker is a desktop window
+        // a headless run cannot answer, so "it wrote nothing" and "it did nothing" were the same
+        // evidence. §7.6a's promise — that what leaves is the stored bytes, verbatim — could
+        // therefore not be checked through the command at all, only through the method under it.
+        var path = HarnessSavePath("eml");
+        if (path is null)
         {
-            Title = "Save Message As",
-            SuggestedFileName = SafeName(row.Subject, "message") + ".eml",
-            FileTypeChoices = [new FilePickerFileType("Email message") { Patterns = ["*.eml"] }],
-        });
+            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "Save Message As",
+                SuggestedFileName = SafeName(row.Subject, "message") + ".eml",
+                FileTypeChoices = [new FilePickerFileType("Email message") { Patterns = ["*.eml"] }],
+            });
 
-        if (file?.TryGetLocalPath() is not { } path) return;
+            path = file?.TryGetLocalPath();
+        }
+
+        if (path is null) return;
 
         shell.StatusRight = MailFileImport.ExportEml(mail, row.Id, path)
             ? $"Saved to {System.IO.Path.GetFileName(path)}."
@@ -47,14 +57,20 @@ public partial class MainWindow
         }
 
         var folderId = folder.Id;
-        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        var path = HarnessSavePath("mbox");
+        if (path is null)
         {
-            Title = "Save Folder As mbox",
-            SuggestedFileName = SafeName(folder.Name, "folder") + ".mbox",
-            FileTypeChoices = [new FilePickerFileType("mbox mailbox") { Patterns = ["*.mbox"] }],
-        });
+            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "Save Folder As mbox",
+                SuggestedFileName = SafeName(folder.Name, "folder") + ".mbox",
+                FileTypeChoices = [new FilePickerFileType("mbox mailbox") { Patterns = ["*.mbox"] }],
+            });
 
-        if (file?.TryGetLocalPath() is not { } path) return;
+            path = file?.TryGetLocalPath();
+        }
+
+        if (path is null) return;
 
         var written = await Task.Run(() => MailFileImport.ExportMbox(mail, folderId, path));
         shell.StatusRight = $"{written:N0} message(s) saved to {System.IO.Path.GetFileName(path)}.";

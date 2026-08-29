@@ -1,4 +1,10 @@
+using System.Globalization;
+using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
+using Avalonia.Interactivity;
+using Avalonia.LogicalTree;
 using Avalonia.Threading;
+using Mailbox.App.Options;
 using Mailbox.App.Theming;
 using Mailbox.App.ViewModels;
 using Mailbox.Core.Diagnostics;
@@ -6,6 +12,191 @@ using Mailbox.Store;
 using MimeKit;
 
 namespace Mailbox.App.Views;
+
+/// <summary>
+/// Reads an Options page back control by control, and sets one to a chosen value.
+/// </summary>
+/// <remarks>
+/// <c>MAILBOX_OPTIONS_PRESS</c> could toggle a tick and nothing else, so two thirds of what is on
+/// these pages — every dropdown, every spinner, every text field — had no door at all: a capture
+/// could photograph a combo but not say how many entries it held, and nothing could type a number
+/// past a spinner's maximum to find out whether the maximum was real. The three questions the
+/// audit asks of a row are whether it reads its setting, whether it writes it, and whether the
+/// value it writes means anything, and the first two need a value put in and read back rather than
+/// a tick flipped.
+/// <para>
+/// Everything here goes through the control the renderer really built, found by the label the
+/// reader really sees, and reports the key the row declared — <see cref="OptionsPageRenderer.Keys"/>
+/// is the one place a row's key is worked out, so nothing here can guess one.
+/// </para>
+/// </remarks>
+internal static class OptionsPageAudit
+{
+    /// <summary>
+    /// Every value-carrying row on the rendered page: its kind, label, key, what the store holds
+    /// and what the control shows — with a dropdown's length and a spinner's bounds, which are
+    /// what "populated" and "bounded" mean.
+    /// </summary>
+    internal static void Dump(string pageId, Control page, OptionsPageRenderer renderer)
+    {
+        var rows = 0;
+
+        foreach (var control in page.GetLogicalDescendants().OfType<Control>())
+        {
+            var key = renderer.Keys.TryGetValue(control, out var declared) ? declared : null;
+
+            var line = control switch
+            {
+                CheckBox box => $"check   “{Caption(box)}” = {box.IsChecked == true}",
+                RadioButton button => $"radio   “{Caption(button)}” [{button.GroupName}] = {button.IsChecked == true}",
+                ComboBox combo =>
+                    $"combo   “{LabelBeside(combo)}” = [{combo.SelectedIndex}] "
+                    + $"“{combo.SelectedItem}” of {combo.ItemCount} entr{(combo.ItemCount == 1 ? "y" : "ies")}",
+                NumericUpDown spinner =>
+                    $"spinner “{LabelBeside(spinner)}” = {spinner.Value} "
+                    + $"({spinner.Minimum}–{spinner.Maximum} step {spinner.Increment})",
+                TextBox text => $"text    “{LabelBeside(text)}” = “{text.Text}”",
+                _ => null,
+            };
+
+            if (line is null) continue;
+            rows++;
+
+            // The key a row would write, and what is stored under it now. A row keyed by its own
+            // label is one of the backlog's — said plainly, because "persists something" and
+            // "drives something" look identical from a photograph and from a press.
+            var stored = key is null
+                ? "no key of its own — persists under its label, read by no feature"
+                : $"{key} = {App.Settings.Stored(key) ?? "(unset)"}";
+
+            Log.Info($"Harness: options row — {pageId}: {line}"
+                     + (control.IsEffectivelyEnabled ? string.Empty : "  [greyed]")
+                     + $"  · {stored}");
+        }
+
+        Log.Info($"Harness: options page — {pageId} drew {rows} value-carrying row(s).");
+    }
+
+    /// <summary>
+    /// Sets rows on the page that is up, and says what each wrote.
+    /// </summary>
+    /// <param name="spec">
+    /// Comma-separated. <c>label</c> toggles a tick or chooses a radio. <c>label=value</c> sets a
+    /// dropdown (by index when the value is a number, otherwise by the entry that contains it), a
+    /// spinner (to that number, out of range included — a bound that is not enforced is the thing
+    /// worth finding) or a text field.
+    /// </param>
+    internal static void Press(Control page, OptionsPageRenderer renderer, string spec)
+    {
+        foreach (var step in spec.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var eq = step.IndexOf('=', StringComparison.Ordinal);
+            var wanted = eq > 0 ? step[..eq].Trim() : step;
+            var value = eq > 0 ? step[(eq + 1)..].Trim() : null;
+
+            if (Find(page, wanted, value is null) is not { } control)
+            {
+                Log.Info($"Harness: no options row reads '{wanted}'"
+                         + (value is null ? string.Empty : " as something a value can be put into") + ".");
+                continue;
+            }
+
+            var what = Set(control, value);
+
+            var wrote = renderer.Keys.TryGetValue(control, out var key)
+                ? $"{key} = {App.Settings.Stored(key) ?? "(unset)"}"
+                : "nothing — the row carries no key";
+
+            var named = Caption(control) is { Length: > 0 } caption ? caption : LabelBeside(control);
+            Log.Info($"Harness: pressed '{named}', now {what}, wrote {wrote}.");
+        }
+    }
+
+    /// <summary>The row named, preferring a toggle when no value was given and a field when one was.</summary>
+    private static Control? Find(Control page, string wanted, bool toggle)
+    {
+        var all = page.GetLogicalDescendants().OfType<Control>().ToList();
+
+        if (toggle)
+        {
+            return all.OfType<ToggleButton>()
+                .FirstOrDefault(c => Caption(c).Contains(wanted, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return all.FirstOrDefault(c =>
+            c is ComboBox or NumericUpDown or TextBox
+            && LabelBeside(c).Contains(wanted, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>Puts the value in through the control, so the row's own handler is what writes it.</summary>
+    private static string Set(Control control, string? value)
+    {
+        switch (control)
+        {
+            case RadioButton radio:
+                radio.IsChecked = true;
+                return "on";
+
+            case ToggleButton toggle:
+                toggle.IsChecked = toggle.IsChecked != true;
+                return toggle.IsChecked == true ? "on" : "off";
+
+            case ComboBox combo when value is not null:
+                if (int.TryParse(value, CultureInfo.InvariantCulture, out var index))
+                {
+                    combo.SelectedIndex = index;
+                }
+                else
+                {
+                    var at = combo.Items.ToList()
+                        .FindIndex(i => i?.ToString()?.Contains(value, StringComparison.OrdinalIgnoreCase) == true);
+
+                    if (at < 0) return $"unchanged — no entry reads “{value}”";
+                    combo.SelectedIndex = at;
+                }
+
+                return $"[{combo.SelectedIndex}] “{combo.SelectedItem}”";
+
+            case NumericUpDown spinner when value is not null:
+                spinner.Value = decimal.TryParse(value, CultureInfo.InvariantCulture, out var number)
+                    ? number
+                    : spinner.Value;
+
+                // What the control kept, which is not what was asked for when a bound holds.
+                return $"{spinner.Value} (asked for {value}, bounds {spinner.Minimum}–{spinner.Maximum})";
+
+            case TextBox text when value is not null:
+                text.Text = value;
+
+                // The write is on LostFocus, as a reader's would be: assigning Text alone leaves
+                // the store holding the old value and the page looking as though it took.
+                text.RaiseEvent(new RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent));
+                return $"“{text.Text}”";
+
+            default:
+                return "unchanged";
+        }
+    }
+
+    private static string Caption(Control control)
+        => control is ContentControl { Content: { } content } ? content.ToString() ?? string.Empty : string.Empty;
+
+    /// <summary>The label the renderer stood to the left of a control, or empty for one with none.</summary>
+    private static string LabelBeside(Control control)
+    {
+        for (ILogical? node = control; node is not null; node = node.LogicalParent)
+        {
+            if (node is not StackPanel row) continue;
+
+            if (row.Children.OfType<TextBlock>().FirstOrDefault() is { Text: { Length: > 0 } text })
+            {
+                return text;
+            }
+        }
+
+        return string.Empty;
+    }
+}
 
 /// <summary>
 /// The doors Phase 12A needed: a message whose remote picture really can be fetched, and a report
