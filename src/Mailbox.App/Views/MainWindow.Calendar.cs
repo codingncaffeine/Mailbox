@@ -483,7 +483,7 @@ public partial class MainWindow
         }
 
         var start = master.Start.Wall;
-        var dialog = new RecurrenceDialog(master.Rrule, DateOnly.FromDateTime(start), master.End.Wall - start);
+        var dialog = new RecurrenceDialog(master.Rrule, DateOnly.FromDateTime(start), master.End.Wall - start, master.Start.Zone());
         await dialog.ShowDialog(this);
         if (dialog.Cancelled) return;
 

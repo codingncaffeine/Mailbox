@@ -64,9 +64,13 @@ public sealed class RecurrenceDialog : Window
 
     private readonly string? _existing;
 
-    public RecurrenceDialog(string? rrule, DateOnly start, TimeSpan duration)
+    /// <summary>The appointment's zone, which is what "end by" a date means in.</summary>
+    private readonly TimeZoneInfo? _zone;
+
+    public RecurrenceDialog(string? rrule, DateOnly start, TimeSpan duration, TimeZoneInfo? zone = null)
     {
         _existing = rrule;
+        _zone = zone;
         Title = "Appointment Recurrence";
         Width = 520;
         Height = 520;
@@ -103,7 +107,7 @@ public sealed class RecurrenceDialog : Window
         var ok = new Button { Content = "OK", Width = 84, IsDefault = true };
         ok.Click += (_, _) =>
         {
-            Rrule = Build().ToRrule();
+            Rrule = Build().ToRrule(_zone);
             Cancelled = false;
             Close();
         };
@@ -286,7 +290,7 @@ public sealed class RecurrenceDialog : Window
         }
 
         Refresh();
-        Rrule = Build().ToRrule();
+        Rrule = Build().ToRrule(_zone);
         Cancelled = false;
         Log.Info($"Harness: recurrence — “{spec}” built RRULE={Rrule ?? "(none)"}.");
         Close();

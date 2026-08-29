@@ -98,6 +98,12 @@ public sealed class AppointmentSurface : UserControl
     private readonly ComboBox _endTime = new() { Width = 110, Height = 28 };
     private readonly CheckBox _allDay = new() { Content = "All day" };
     private readonly CheckBox _timeZones = new();
+    private readonly ComboBox _startZone = ZonePicker();
+    private readonly ComboBox _endZone = ZonePicker();
+
+    /// <summary>The system's zones, offset-ordered, which is how the reference lists them.</summary>
+    private static readonly IReadOnlyList<TimeZoneInfo> Zones =
+        [.. TimeZoneInfo.GetSystemTimeZones().OrderBy(z => z.BaseUtcOffset)];
     private readonly Button _recurring = new();
     private readonly TextBlock _infoBarText = new();
     private readonly Border _infoBar;
@@ -169,6 +175,22 @@ public sealed class AppointmentSurface : UserControl
         _startTime.SelectedIndex = Slot(appointment.Start.Wall);
         _endTime.SelectedIndex = Slot(appointment.End.Wall);
         _allDay.IsChecked = appointment.AllDay;
+
+        // The zone pickers carry the appointment's own zones, and the tick starts on for an
+        // appointment already written in a zone that is not this machine's — otherwise saving
+        // it would quietly re-file it as local.
+        _startZone.ItemsSource = Zones.Select(z => z.DisplayName).ToList();
+        _endZone.ItemsSource = _startZone.ItemsSource;
+        SelectZone(_startZone, appointment.Start.TzId);
+        SelectZone(_endZone, appointment.End.TzId);
+        _timeZones.IsChecked = !IsLocal(appointment.Start.TzId) || !IsLocal(appointment.End.TzId);
+        _timeZones.IsCheckedChanged += (_, _) =>
+        {
+            ApplyAllDay();
+            Changed?.Invoke(this, EventArgs.Empty);
+        };
+        _startZone.SelectionChanged += (_, _) => Changed?.Invoke(this, EventArgs.Empty);
+        _endZone.SelectionChanged += (_, _) => Changed?.Invoke(this, EventArgs.Empty);
         _allDay.IsCheckedChanged += (_, _) =>
         {
             ApplyAllDay();
@@ -250,8 +272,8 @@ public sealed class AppointmentSurface : UserControl
             rows.Children.Add(Row("Title", _title, underline: true));
         }
 
-        rows.Children.Add(Row("Start time", TimeLine(_startDate, _startTime, AllDayBlock()), underline: false));
-        rows.Children.Add(Row("End time", TimeLine(_endDate, _endTime, RecurringButton()), underline: false));
+        rows.Children.Add(Row("Start time", Line(_startDate, _startTime, _startZone, AllDayBlock()), underline: false));
+        rows.Children.Add(Row("End time", Line(_endDate, _endTime, _endZone, RecurringButton()), underline: false));
 
         var rule = new Border { Height = 1, Margin = new Thickness(FieldLeft, 6, 0, 0) };
         Bind(rule, BackgroundProperty, "border.subtle.brush");
@@ -544,9 +566,6 @@ public sealed class AppointmentSurface : UserControl
         return grid;
     }
 
-    private static Control TimeLine(Control date, Control time, Control tail)
-        => Line(date, time, tail);
-
     private static Control Line(params Control[] children)
     {
         var stack = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
@@ -598,7 +617,46 @@ public sealed class AppointmentSurface : UserControl
         var whole = _allDay.IsChecked == true;
         _startTime.IsVisible = !whole;
         _endTime.IsVisible = !whole;
+
+        // The reference's Time Zones control: the tick reveals a zone beside each time, and an
+        // all-day event has no time for a zone to qualify.
+        var zoned = !whole && _timeZones.IsChecked == true;
+        _startZone.IsVisible = zoned;
+        _endZone.IsVisible = zoned;
     }
+
+    /// <summary>The picker's zone, or the machine's when the tick is off.</summary>
+    private string ZoneId(ComboBox picker)
+        => _timeZones.IsChecked == true && picker.SelectedIndex >= 0
+            ? Zones[picker.SelectedIndex].Id
+            : TimeZoneInfo.Local.Id;
+
+    private static void SelectZone(ComboBox picker, string? tzId)
+    {
+        var wanted = tzId is { Length: > 0 } && !string.Equals(tzId, "UTC", StringComparison.OrdinalIgnoreCase)
+            ? tzId
+            : TimeZoneInfo.Local.Id;
+
+        var at = 0;
+        for (var i = 0; i < Zones.Count; i++)
+        {
+            if (string.Equals(Zones[i].Id, wanted, StringComparison.OrdinalIgnoreCase)) { at = i; break; }
+            if (string.Equals(Zones[i].Id, TimeZoneInfo.Local.Id, StringComparison.OrdinalIgnoreCase)) at = i;
+        }
+
+        picker.SelectedIndex = at;
+    }
+
+    private static bool IsLocal(string? tzId)
+        => tzId is null or { Length: 0 }
+           || string.Equals(tzId, TimeZoneInfo.Local.Id, StringComparison.OrdinalIgnoreCase);
+
+    private static ComboBox ZonePicker() => new()
+    {
+        Width = 230,
+        Height = 28,
+        IsVisible = false,
+    };
 
     // ---- Commands the ribbon presses ----------------------------------------------------------
 
@@ -722,7 +780,7 @@ public sealed class AppointmentSurface : UserControl
     {
         if (TopLevel.GetTopLevel(this) is not Window owner) return;
         var start = StartWall();
-        var dialog = new RecurrenceDialog(_rrule, DateOnly.FromDateTime(start), EndWall() - start);
+        var dialog = new RecurrenceDialog(_rrule, DateOnly.FromDateTime(start), EndWall() - start, TimeZoneInfo.Local);
         await dialog.ShowDialog(owner);
         if (dialog.Cancelled) return;
         _rrule = dialog.Rrule;
@@ -735,8 +793,8 @@ public sealed class AppointmentSurface : UserControl
             ? "Make Recurring"
             : RecurrenceText.Describe(
                 _rrule,
-                EventTime.At(StartWall(), TimeZoneInfo.Local.Id),
-                EventTime.At(EndWall(), TimeZoneInfo.Local.Id));
+                EventTime.At(StartWall(), ZoneId(_startZone)),
+                EventTime.At(EndWall(), ZoneId(_endZone)));
 
     private DateTime StartWall()
     {
@@ -755,10 +813,9 @@ public sealed class AppointmentSurface : UserControl
     /// <summary>The appointment as the form now states it.</summary>
     public CalendarEvent Current()
     {
-        var zone = TimeZoneInfo.Local.Id;
         var whole = _allDay.IsChecked == true;
-        var start = whole ? EventTime.Date(DateOnly.FromDateTime(StartWall())) : EventTime.At(StartWall(), zone);
-        var end = whole ? EventTime.Date(DateOnly.FromDateTime(EndWall())) : EventTime.At(EndWall(), zone);
+        var start = whole ? EventTime.Date(DateOnly.FromDateTime(StartWall())) : EventTime.At(StartWall(), ZoneId(_startZone));
+        var end = whole ? EventTime.Date(DateOnly.FromDateTime(EndWall())) : EventTime.At(EndWall(), ZoneId(_endZone));
 
         // Somebody already asked keeps their name and their answer: the form holds addresses and
         // nothing else, so rebuilding an attendee from the box alone would throw away every reply

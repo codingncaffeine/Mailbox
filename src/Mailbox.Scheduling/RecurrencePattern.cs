@@ -69,7 +69,14 @@ public sealed record RecurrencePattern
     public DateOnly? Until { get; init; }
 
     /// <summary>The RRULE value, without the property name.</summary>
-    public string ToRrule()
+    /// <param name="zone">
+    /// The zone "end by" is meant in — the appointment's own. UNTIL is a UTC instant, so the
+    /// end of that day has to be the end of the day <em>there</em>: written as 23:59:59Z
+    /// regardless, an evening series west of Greenwich lost its last occurrence while the
+    /// dialog said the day was included. Null keeps the plain-UTC reading for a caller with no
+    /// zone to say.
+    /// </param>
+    public string ToRrule(TimeZoneInfo? zone = null)
     {
         var text = new StringBuilder();
 
@@ -121,7 +128,16 @@ public sealed record RecurrencePattern
         else if (Until is { } until)
         {
             // Through the end of that day, so "end by the 5th" includes the 5th.
-            text.Append(";UNTIL=").Append(until.ToString("yyyyMMdd", CultureInfo.InvariantCulture)).Append("T235959Z");
+            if (zone is null)
+            {
+                text.Append(";UNTIL=").Append(until.ToString("yyyyMMdd", CultureInfo.InvariantCulture)).Append("T235959Z");
+            }
+            else
+            {
+                var endOfDay = until.ToDateTime(new TimeOnly(23, 59, 59));
+                var instant = new DateTimeOffset(endOfDay, zone.GetUtcOffset(endOfDay)).ToUniversalTime();
+                text.Append(";UNTIL=").Append(instant.ToString("yyyyMMdd'T'HHmmss'Z'", CultureInfo.InvariantCulture));
+            }
         }
 
         return text.ToString();

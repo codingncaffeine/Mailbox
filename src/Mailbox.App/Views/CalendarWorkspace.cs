@@ -62,6 +62,12 @@ public sealed class CalendarWorkspace : Border
     private readonly Border _navPane;
 
     private CalendarViewKind _kind = CalendarViewKind.Month;
+
+    /// <summary>
+    /// True while the Week view shows seven days from the anchor rather than the calendar week —
+    /// Next 7 Days. Cleared the moment the reader chooses a view or a range of their own.
+    /// </summary>
+    private bool _rolling;
     private DateOnly _anchor;
     private IReadOnlyList<CalendarEntry> _entries = [];
     private DailyTaskListMode _dailyTaskList;
@@ -475,6 +481,7 @@ public sealed class CalendarWorkspace : Border
     {
         var days = last.DayNumber - first.DayNumber + 1;
         _anchor = first;
+        _rolling = false;
         _kind = days switch
         {
             1 => CalendarViewKind.Day,
@@ -486,11 +493,16 @@ public sealed class CalendarWorkspace : Border
     }
 
     /// <summary>The next seven days, as the Go To group's second button asks for.</summary>
+    /// <remarks>
+    /// Rolling, not the calendar week containing today: pinned to a Thursday, the week view
+    /// showed four days already past and three ahead, and was only ever right when today was
+    /// the week's first day.
+    /// </remarks>
     public void ShowNextSevenDays()
     {
         _kind = CalendarViewKind.Week;
+        _rolling = true;
         _anchor = Today;
-        _timeGrid.Span = TimeGridSpan.Week;
         AfterMove();
     }
 
@@ -510,6 +522,7 @@ public sealed class CalendarWorkspace : Border
     public void SetView(CalendarViewKind kind)
     {
         _kind = kind;
+        _rolling = false;
         if (kind == CalendarViewKind.Month) _month.FirstDay = WeekStart(new DateOnly(_anchor.Year, _anchor.Month, 1));
         _options.SetDefaultView(kind.ToString().ToLowerInvariant());
         AfterMove();
@@ -575,7 +588,9 @@ public sealed class CalendarWorkspace : Border
     {
         _timeGrid.Anchor = _anchor;
         _timeGrid.FirstDayOfWeek = FirstDayOfWeek;
-        _timeGrid.Span = kind == CalendarViewKind.WorkWeek ? TimeGridSpan.WorkWeek : TimeGridSpan.Week;
+        _timeGrid.Span = kind == CalendarViewKind.WorkWeek
+            ? TimeGridSpan.WorkWeek
+            : _rolling ? TimeGridSpan.Rolling : TimeGridSpan.Week;
         return _timeGrid.Days();
     }
 

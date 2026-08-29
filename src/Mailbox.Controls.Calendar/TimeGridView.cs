@@ -13,6 +13,9 @@ public enum TimeGridSpan
     Day,
     WorkWeek,
     Week,
+
+    /// <summary>Seven days from the anchor itself — Next 7 Days, which no week-snap answers.</summary>
+    Rolling,
 }
 
 /// <summary>
@@ -264,6 +267,9 @@ public sealed class TimeGridView : CalendarSurface
 
                 return days.Count > 0 ? days : [Anchor];
             }
+
+            case TimeGridSpan.Rolling:
+                return Enumerable.Range(0, 7).Select(Anchor.AddDays).ToList();
 
             default:
             {
