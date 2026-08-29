@@ -625,6 +625,26 @@ public sealed class AccountWizard : Window
                     }
 
                     _signIn.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+
+                    // The press starts an exchange that outlives this pass. The outcome is what
+                    // the next action needs: an `add` sent while the flow is still running
+                    // presses a button that is honestly off, and reads as a sign-in that saved
+                    // nothing. Done means tokens arrived, Add came on, or the status stopped
+                    // being the waiting line and became an answer.
+                    for (var waited = 0; waited < 8000; waited += 100)
+                    {
+                        if (_tokens is not null || _add.IsEnabled) break;
+                        if (_status.Text is { Length: > 0 } text
+                            && !text.Contains("Waiting", StringComparison.Ordinal))
+                        {
+                            break;
+                        }
+
+                        await Task.Delay(100);
+                    }
+
+                    Log.Info($"Harness: sign-in settled — add {(_add.IsEnabled ? "on" : "off")}, "
+                             + $"status “{_status.Text}”.");
                     break;
 
                 default:

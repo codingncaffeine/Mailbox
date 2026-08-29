@@ -139,8 +139,11 @@ public sealed class LoopbackRedirect : IDisposable
             var equals = pair.IndexOf('=');
             if (equals <= 0) continue;
 
+            // Query values are form-encoded: a space travels as '+', and UnescapeDataString
+            // alone leaves every one in place — a provider's error_description read
+            // "The+sign-in+was+refused." on screen. A literal plus arrives as %2B and is safe.
             var name = Uri.UnescapeDataString(pair[..equals]);
-            var value = Uri.UnescapeDataString(pair[(equals + 1)..]);
+            var value = Uri.UnescapeDataString(pair[(equals + 1)..].Replace('+', ' '));
 
             // First wins. A duplicated parameter is how a request smuggles a second value past
             // whichever end of a pipeline reads the other one.

@@ -1,0 +1,7 @@
+e-new	MAILBOX_PEEK=accounts	MAILBOX_SYSDIALOG=press:New;windows	MAILBOX_TODAY=2026-08-16
+e-default	MAILBOX_PEEK=accounts	MAILBOX_SYSDIALOG=row:1;press:Set as Default;rows;store	MAILBOX_TODAY=2026-08-16
+e-reorder	MAILBOX_PEEK=accounts	MAILBOX_SYSDIALOG=row:1;press:Move down;rows;store	MAILBOX_TODAY=2026-08-16
+e-remove	MAILBOX_PEEK=accounts	MAILBOX_SYSDIALOG=row:2;press:Remove;windows;press:Remove;wait;rows;store	MAILBOX_TODAY=2026-08-16
+e-change	MAILBOX_PEEK=accounts	MAILBOX_SYSDIALOG=row:0;press:Change;windows	MAILBOX_TODAY=2026-08-16
+e-repair	MAILBOX_PEEK=accounts	MAILBOX_SYSDIALOG=row:0;press:Repair;windows;text	MAILBOX_TODAY=2026-08-16
+e-changefolder	MAILBOX_PEEK=accounts	MAILBOX_SYSDIALOG=row:1;press:Change Folder;windows	MAILBOX_TODAY=2026-08-16

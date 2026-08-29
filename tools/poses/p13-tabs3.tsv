@@ -1,0 +1,5 @@
+rss-flow	MAILBOX_PEEK=accounts	MAILBOX_SYSDIALOG=seed:feed:Audit Feed=https://example.com/f.xml;tab:2;rows;row:0;press:Change;windows;store	MAILBOX_TODAY=2026-08-16
+rss-remove	MAILBOX_PEEK=accounts	MAILBOX_SYSDIALOG=seed:feed:Audit Feed=https://example.com/f.xml;tab:2;row:0;press:Remove;windows;wait;press:Remove;wait;rows;store	MAILBOX_TODAY=2026-08-16
+pub-flow	MAILBOX_PEEK=accounts	MAILBOX_SYSDIALOG=seed:published:Team=https://example.com/team.ics;tab:4;rows;row:0;buttons;press:Remove;windows;wait;press:Remove;wait;rows;store	MAILBOX_TODAY=2026-08-16
+books-create	MAILBOX_PEEK=accounts	MAILBOX_SYSDIALOG=tab:5;press:New;wait	MAILBOX_SYSFORM=set:Name:=Audit Book;press:OK;wait	MAILBOX_SYSDIALOG_REPORT=1	MAILBOX_TODAY=2026-08-16
+inetcal-remove	MAILBOX_PEEK=accounts	MAILBOX_ACCOUNTS_ACTION=tab:3,subscribe:http://127.0.0.1:1/cal.ics,calendar:0,removecalendar	MAILBOX_SYSDIALOG=tab:3;rows;store	MAILBOX_TODAY=2026-08-16

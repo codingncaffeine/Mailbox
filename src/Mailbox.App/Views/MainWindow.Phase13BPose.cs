@@ -308,10 +308,15 @@ public partial class MainWindow
     {
         var buttons = ButtonsOf(dialog);
 
-        if (buttons.FirstOrDefault(b => Reads(CaptionOf(b), wanted)) is not { } button)
+        // By caption first, then by tooltip: the account list's reorder arrows carry a glyph
+        // and a tip and no text, and nothing could press them at all.
+        var button = buttons.FirstOrDefault(b => Reads(CaptionOf(b), wanted))
+                     ?? buttons.FirstOrDefault(b => ToolTip.GetTip(b) is string tip && Reads(tip, wanted));
+
+        if (button is null)
         {
             Log.Warn($"Harness: sysdialog — nothing reads “{wanted}”. The page offers: "
-                     + $"{string.Join(", ", buttons.Select(CaptionOf).Where(t => t.Length > 0))}.");
+                     + $"{string.Join(", ", buttons.Select(b => CaptionOf(b) is { Length: > 0 } c ? c : ToolTip.GetTip(b) as string ?? string.Empty).Where(t => t.Length > 0))}.");
             return;
         }
 

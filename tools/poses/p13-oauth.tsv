@@ -1,0 +1,4 @@
+wiz-oauth-ok	MAILBOX_PEEK=addaccount	MAILBOX_OAUTH_FAKE=1	MAILBOX_ACCOUNT_ACTION=address:person@outlook.com,client:audit-client-id,signin,add	MAILBOX_SYSFORM=wait:6000;accounts;settings:person@outlook.com;secret:person@outlook.com=posed-refresh-token	MAILBOX_TODAY=2026-08-16
+wiz-oauth-deny	MAILBOX_PEEK=addaccount	MAILBOX_OAUTH_FAKE=deny	MAILBOX_ACCOUNT_ACTION=address:person@outlook.com,client:audit-client-id,signin	MAILBOX_SYSFORM=wait:6000;dump	MAILBOX_TODAY=2026-08-16
+wiz-oauth-error	MAILBOX_PEEK=addaccount	MAILBOX_OAUTH_FAKE=error	MAILBOX_ACCOUNT_ACTION=address:person@outlook.com,client:audit-client-id,signin	MAILBOX_SYSFORM=wait:6000;dump	MAILBOX_TODAY=2026-08-16
+wiz-oauth-norefresh	MAILBOX_PEEK=addaccount	MAILBOX_OAUTH_FAKE=norefresh	MAILBOX_ACCOUNT_ACTION=address:person@outlook.com,client:audit-client-id,signin,add	MAILBOX_SYSFORM=wait:6000;secret:person@outlook.com	MAILBOX_TODAY=2026-08-16

@@ -1,0 +1,1 @@
+pass-flow	MAILBOX_PEEK=backstage	MAILBOX_BACKSTAGE_MENU=settings:account.password	MAILBOX_SYSFORM=wait:1500;set:Password=updated-secret-99;press:Save;wait;secret:imap@example.org=updated-secret-99	MAILBOX_TODAY=2026-08-16

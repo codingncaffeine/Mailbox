@@ -1,0 +1,8 @@
+e-reorder2	MAILBOX_PEEK=accounts	MAILBOX_ACCOUNTS_ACTION=select:1,down	MAILBOX_TODAY=2026-08-16
+d-actions	MAILBOX_PEEK=accounts	MAILBOX_ACCOUNTS_ACTION=tab:1,select:2,detach,compact,filedefault	MAILBOX_SYSDIALOG_REPORT=1	MAILBOX_TODAY=2026-08-16
+d-settings	MAILBOX_PEEK=accounts	MAILBOX_SYSDIALOG=tab:1;row:0;press:Settings;windows;text	MAILBOX_TODAY=2026-08-16
+rss-flow	MAILBOX_PEEK=accounts	MAILBOX_SYSDIALOG=seed:feed:Audit Feed=https://example.com/f.xml;tab:2;rows;press:Change;windows;store	MAILBOX_TODAY=2026-08-16
+rss-remove	MAILBOX_PEEK=accounts	MAILBOX_SYSDIALOG=seed:feed:Audit Feed=https://example.com/f.xml;tab:2;row:0;press:Remove;windows;wait;press:Remove;store	MAILBOX_TODAY=2026-08-16
+inetcal-flow	MAILBOX_PEEK=accounts	MAILBOX_ACCOUNTS_ACTION=tab:3,subscribe:http://127.0.0.1:1/cal.ics,calendar:0,renamecalendar:Renamed Audit	MAILBOX_SYSDIALOG=tab:3;rows;store	MAILBOX_TODAY=2026-08-16
+pub-flow	MAILBOX_PEEK=accounts	MAILBOX_SYSDIALOG=seed:published:Team=https://example.com/team.ics;tab:4;rows;buttons;press:Remove;windows;store	MAILBOX_TODAY=2026-08-16
+books-new	MAILBOX_PEEK=accounts	MAILBOX_SYSDIALOG=tab:5;press:New;windows;text	MAILBOX_TODAY=2026-08-16

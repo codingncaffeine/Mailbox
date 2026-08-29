@@ -1,0 +1,1 @@
+books-create	MAILBOX_PEEK=accounts	MAILBOX_SYSDIALOG=tab:5;press:New;wait:3500;rows;store	MAILBOX_SYSFORM=wait:1600;set:Name:=Audit Book;press:OK;wait	MAILBOX_TODAY=2026-08-16
