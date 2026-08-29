@@ -1,0 +1,5 @@
+pg-good	MAILBOX_PGPMAIL=good	MAILBOX_FOLDER=imap@example.org/Inbox	MAILBOX_SELECT=a good signature	MAILBOX_SETTING=security.openpgp.enabled=true	MAILBOX_READING=dump	MAILBOX_TODAY=2026-08-16
+pg-tampered	MAILBOX_PGPMAIL=tampered	MAILBOX_FOLDER=imap@example.org/Inbox	MAILBOX_SELECT=changed after signing	MAILBOX_SETTING=security.openpgp.enabled=true	MAILBOX_READING=dump	MAILBOX_TODAY=2026-08-16
+pg-unknown	MAILBOX_PGPMAIL=unknown	MAILBOX_FOLDER=imap@example.org/Inbox	MAILBOX_SELECT=not got	MAILBOX_SETTING=security.openpgp.enabled=true	MAILBOX_READING=dump	MAILBOX_TODAY=2026-08-16
+pg-expired	MAILBOX_PGPMAIL=expired	MAILBOX_FOLDER=imap@example.org/Inbox	MAILBOX_SELECT=already expired	MAILBOX_SETTING=security.openpgp.enabled=true	MAILBOX_READING=dump	MAILBOX_TODAY=2026-08-16
+pg-revoked	MAILBOX_PGPMAIL=revoked	MAILBOX_FOLDER=imap@example.org/Inbox	MAILBOX_SELECT=owner withdrew	MAILBOX_SETTING=security.openpgp.enabled=true	MAILBOX_READING=dump	MAILBOX_TODAY=2026-08-16

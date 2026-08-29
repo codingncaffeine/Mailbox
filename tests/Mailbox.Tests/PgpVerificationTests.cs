@@ -202,6 +202,111 @@ public class PgpVerificationTests : IDisposable
         return PgpKeys.Reload(message);
     }
 
+    /// <summary>
+    /// A message signed by a key that had already run out when it was used. Trustworthy chain,
+    /// sound maths, and still not a signature to report as one.
+    /// </summary>
+    /// <remarks>
+    /// This verdict is receive-only and cannot be produced through the ordinary signing path:
+    /// MimeKit refuses to sign with an expired key — the reason the harness door for this case
+    /// documents it rather than manufacturing it. So the signature is built here at the
+    /// BouncyCastle layer, over the same canonical bytes MimeKit re-verifies, with the expired
+    /// secret key, which is exactly the shape a message from another client would carry.
+    /// </remarks>
+    [Fact]
+    public void AnExpiredKeySignatureIsNotCalledSigned()
+    {
+        var expired = ExpiredIdentity("a.person@example.com");
+        using var context = PgpKeys.PublicOnly(_root, expired);
+
+        var message = ExpiredSigned(expired, from: "a.person@example.com");
+        var report = PgpVerification.Verify(message, context);
+
+        Assert.Equal(SignatureState.Invalid, report.State);
+        Assert.Contains("had already expired", report.Detail);
+    }
+
+    /// <summary>A key made in the past with a short life, so it is expired by now.</summary>
+    private static PgpIdentity ExpiredIdentity(string address)
+    {
+        var random = new Org.BouncyCastle.Security.SecureRandom();
+        var rsa = new Org.BouncyCastle.Crypto.Generators.RsaKeyPairGenerator();
+        rsa.Init(new Org.BouncyCastle.Crypto.Parameters.RsaKeyGenerationParameters(
+            Org.BouncyCastle.Math.BigInteger.ValueOf(0x10001), random, 2048, 25));
+
+        var made = DateTime.UtcNow.AddDays(-400);
+        var pair = new Org.BouncyCastle.Bcpg.OpenPgp.PgpKeyPair(
+            Org.BouncyCastle.Bcpg.PublicKeyAlgorithmTag.RsaGeneral, rsa.GenerateKeyPair(), made);
+
+        var packets = new Org.BouncyCastle.Bcpg.OpenPgp.PgpSignatureSubpacketGenerator();
+        packets.SetKeyExpirationTime(false, (long)TimeSpan.FromDays(30).TotalSeconds);
+
+        var rings = new Org.BouncyCastle.Bcpg.OpenPgp.PgpKeyRingGenerator(
+            Org.BouncyCastle.Bcpg.OpenPgp.PgpSignature.PositiveCertification,
+            pair,
+            $"A. Person <{address}>",
+            Org.BouncyCastle.Bcpg.SymmetricKeyAlgorithmTag.Aes256,
+            Array.Empty<char>(),
+            useSha1: true,
+            hashedPackets: packets.Generate(),
+            unhashedPackets: null,
+            random);
+
+        return new PgpIdentity(address, rings.GenerateSecretKeyRing(), rings.GeneratePublicKeyRing());
+    }
+
+    /// <summary>
+    /// A multipart/signed whose detached signature is made by an expired key, over the exact
+    /// canonical bytes MimeKit will re-verify.
+    /// </summary>
+    private static MimeMessage ExpiredSigned(PgpIdentity signer, string from)
+    {
+        var content = new TextPart("plain") { Text = "The signed part.\n" };
+
+        // The bytes RFC 3156 signs: the part in canonical CRLF form, which is what MimeKit
+        // re-derives when it verifies. Sign those with the expired secret key directly —
+        // BouncyCastle does not refuse an expired key the way MimeKit's wrapper does.
+        using var canonical = new MemoryStream();
+        var options = FormatOptions.Default.Clone();
+        options.NewLineFormat = NewLineFormat.Dos;
+        content.WriteTo(options, canonical);
+        canonical.Position = 0;
+
+        var secret = signer.Secret.GetSecretKey();
+        var privateKey = secret.ExtractPrivateKey([]);
+
+        var generator = new Org.BouncyCastle.Bcpg.OpenPgp.PgpSignatureGenerator(
+            secret.PublicKey.Algorithm, Org.BouncyCastle.Bcpg.HashAlgorithmTag.Sha256);
+        generator.InitSign(Org.BouncyCastle.Bcpg.OpenPgp.PgpSignature.CanonicalTextDocument, privateKey);
+
+        int b;
+        while ((b = canonical.ReadByte()) >= 0) generator.Update((byte)b);
+
+        using var armored = new MemoryStream();
+        using (var bcpg = new Org.BouncyCastle.Bcpg.BcpgOutputStream(
+            new Org.BouncyCastle.Bcpg.ArmoredOutputStream(armored)))
+        {
+            generator.Generate().Encode(bcpg);
+        }
+
+        armored.Position = 0;
+        var signaturePart = new MimePart("application", "pgp-signature")
+        {
+            Content = new MimeContent(new MemoryStream(armored.ToArray())),
+        };
+
+        var signed = new MultipartSigned();
+        signed.ContentType.Parameters["protocol"] = "application/pgp-signature";
+        signed.ContentType.Parameters["micalg"] = "pgp-sha256";
+        signed.Add(content);
+        signed.Add(signaturePart);
+
+        var message = new MimeMessage { Subject = "Signed", Date = DateTimeOffset.Now, Body = signed };
+        message.From.Add(new MailboxAddress("A. Person", from));
+
+        return PgpKeys.Reload(message);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true);

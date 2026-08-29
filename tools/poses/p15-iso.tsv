@@ -1,0 +1,2 @@
+iso-expired	MAILBOX_SMIME=expired	MAILBOX_FOLDER=imap@example.org/Inbox	MAILBOX_SELECT=expired certificate	MAILBOX_SETTING=security.smime.enabled=true	MAILBOX_READING=dump	MAILBOX_TODAY=2026-08-16
+iso-untrusted	MAILBOX_SMIME=untrusted	MAILBOX_FOLDER=imap@example.org/Inbox	MAILBOX_SELECT=nobody vouched	MAILBOX_SETTING=security.smime.enabled=true	MAILBOX_READING=dump	MAILBOX_TODAY=2026-08-16

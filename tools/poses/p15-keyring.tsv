@@ -1,0 +1,3 @@
+keyring	MAILBOX_KEYRING=probe;best;save:incoming=audit-secret-15;load:incoming=audit-secret-15;delete:incoming;load:incoming	MAILBOX_TODAY=2026-08-16
+oauth-tokens	MAILBOX_OAUTH=token:https://127.0.0.1:8899/token;seed:posed-refresh-15;report;forget;report	MAILBOX_TODAY=2026-08-16
+typography	MAILBOX_PEEK=passphrase	MAILBOX_TYPOGRAPHY=1	MAILBOX_TODAY=2026-08-16

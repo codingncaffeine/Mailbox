@@ -88,8 +88,13 @@ public partial class MainWindow
 
         if (Environment.GetEnvironmentVariable("MAILBOX_TYPOGRAPHY") is "1" or "true")
         {
+            // The hold keeps the capture — and the process — from exiting before the dialog this
+            // reads has been laid out. Without it the peek that opened the dialog photographs and
+            // leaves, and the typography read never runs; that was the whole failure mode here.
+            var hold = Theming.WindowCapture.IsRequested ? Theming.WindowCapture.Hold() : null;
             Opened += (_, _) => Dispatcher.UIThread.Post(
-                async () => await DescribeTypographyAsync(), DispatcherPriority.Background);
+                async () => { try { await DescribeTypographyAsync(); } finally { hold?.Dispose(); } },
+                DispatcherPriority.Background);
         }
     }
 
@@ -397,9 +402,14 @@ public partial class MainWindow
 
                     case "expired":
                     {
-                        var pair = MakeKey("A. Person", "expired@example.com", madeDaysAgo: 400, livesDays: 30);
-                        ring.Import(pair.Public);
-                        FileMessage(box, PgpSigned("OpenPGP: a key that had already expired", pair, "expired@example.com"));
+                        // A message signed by a key that had already expired cannot be
+                        // manufactured here: MimeKit refuses to sign with an expired key —
+                        // itself the useful fact, since it means this application will never
+                        // *send* with one. The receiving verdict (PgpVerification.Expired) is
+                        // reached instead by a message from another client, and is covered by
+                        // AnExpiredKeySignatureIsNotCalledSigned in PgpVerificationTests.
+                        Log.Info("Harness: pgp — the expired-key case is a receive-only verdict; "
+                                 + "MimeKit will not sign with an expired key. See the unit test.");
                         break;
                     }
 
@@ -718,12 +728,19 @@ public partial class MainWindow
     private sealed record InboxTarget(string Address, MailRepository Mail, long FolderId);
 
     /// <summary>An invented message with a body the tamper step can change one word of.</summary>
+    /// <remarks>
+    /// Dated now, not on the posed clock: a signature carries the moment it was made, and
+    /// <c>MultipartSigned.Create</c> stamps that at real wall-clock time. A message dated
+    /// 2026-08-16 but signed today disagrees with itself, and §19's signing-time check —
+    /// rightly — calls that invalid. The good chain has to be a message whose sent time and
+    /// signing time are the same, which is any message actually created now.
+    /// </remarks>
     private static MimeMessage Envelope(string subject, string from)
     {
         var message = new MimeMessage
         {
             Subject = subject,
-            Date = new DateTimeOffset(2026, 8, 16, 9, 15, 0, TimeSpan.Zero),
+            Date = DateTimeOffset.UtcNow,
             MessageId = $"harness-15b-{Guid.NewGuid():N}@example.invalid",
         };
 

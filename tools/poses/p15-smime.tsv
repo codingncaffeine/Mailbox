@@ -1,0 +1,5 @@
+sm-good	MAILBOX_SMIME=good	MAILBOX_FOLDER=imap@example.org/Inbox	MAILBOX_SELECT=a good chain	MAILBOX_SETTING=security.smime.enabled=true	MAILBOX_READING=dump	MAILBOX_TODAY=2026-08-16
+sm-expired	MAILBOX_SMIME=expired	MAILBOX_FOLDER=imap@example.org/Inbox	MAILBOX_SELECT=an expired certificate	MAILBOX_SETTING=security.smime.enabled=true	MAILBOX_READING=dump	MAILBOX_TODAY=2026-08-16
+sm-untrusted	MAILBOX_SMIME=untrusted	MAILBOX_FOLDER=imap@example.org/Inbox	MAILBOX_SELECT=nobody vouched for	MAILBOX_SETTING=security.smime.enabled=true	MAILBOX_READING=dump	MAILBOX_TODAY=2026-08-16
+sm-tampered	MAILBOX_SMIME=tampered	MAILBOX_FOLDER=imap@example.org/Inbox	MAILBOX_SELECT=changed after signing	MAILBOX_SETTING=security.smime.enabled=true	MAILBOX_READING=dump	MAILBOX_TODAY=2026-08-16
+sm-encrypted	MAILBOX_SMIME=encrypted	MAILBOX_FOLDER=imap@example.org/Inbox	MAILBOX_SELECT=sealed to the reader	MAILBOX_SETTING=security.smime.enabled=true	MAILBOX_READING=dump	MAILBOX_TODAY=2026-08-16

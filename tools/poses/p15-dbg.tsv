@@ -1,0 +1,1 @@
+sm-dbg	MAILBOX_SMIME=good,untrusted	MAILBOX_FOLDER=imap@example.org/Inbox	MAILBOX_SELECT=a good chain	MAILBOX_LIST=dump	MAILBOX_READING=dump	MAILBOX_TODAY=2026-08-16
