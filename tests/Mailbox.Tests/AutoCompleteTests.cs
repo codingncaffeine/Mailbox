@@ -11,6 +11,32 @@ namespace Mailbox.Tests;
 /// </summary>
 public class AutoCompleteTests
 {
+    /// <summary>
+    /// A quoted display name carries the comma; splitting on it broke the address in two and
+    /// the message could not be sent. The splitter is shared with the compose window, so the
+    /// popup and the wire agree about where an entry ends.
+    /// </summary>
+    [Fact]
+    public void AQuotedCommaDoesNotSplitARecipient()
+    {
+        var entries = RecipientCompletion.SplitEntries(
+            "\"Person, A.\" <a.person@example.com>, b.other@example.net", commasSeparate: true).ToList();
+
+        Assert.Equal(2, entries.Count);
+        Assert.Equal("\"Person, A.\" <a.person@example.com>", entries[0]);
+        Assert.Equal("b.other@example.net", entries[1]);
+    }
+
+    [Fact]
+    public void WithCommasOffOnlySemicolonsSeparate()
+    {
+        var entries = RecipientCompletion.SplitEntries(
+            "Person, A. <a@example.com>; b@example.net", commasSeparate: false).ToList();
+
+        Assert.Equal(2, entries.Count);
+        Assert.Equal("Person, A. <a@example.com>", entries[0]);
+    }
+
     private static readonly DateTimeOffset Now = new(2026, 8, 15, 12, 0, 0, TimeSpan.Zero);
 
     private static (MailStore Store, MailRepository Repo) Fresh()

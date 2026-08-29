@@ -45,11 +45,12 @@ public partial class MainWindow
         var attach = Environment.GetEnvironmentVariable("MAILBOX_COMPOSE_ATTACH");
         var probe = Environment.GetEnvironmentVariable("MAILBOX_COMPOSE_PROBE");
         var typeLine = Environment.GetEnvironmentVariable("MAILBOX_COMPOSE_TYPE_LINE");
+        var body = Environment.GetEnvironmentVariable("MAILBOX_COMPOSE_BODY");
         var menu = Environment.GetEnvironmentVariable("MAILBOX_COMPOSE_MENU");
 
         if (from is null && to is null && cc is null && subject is null
             && bcc is null && run is null && attach is null && probe is null && typeLine is null
-            && menu is null)
+            && menu is null && body is null)
         {
             return;
         }
@@ -65,6 +66,10 @@ public partial class MainWindow
             {
                 try
                 {
+                    // The body goes in before the presses, so a Save or Send acts on it —
+                    // which is the order a writer works in.
+                    if (body is { Length: > 0 }) compose.Surface.PoseBodyText(body);
+
                     await RunPhase5ADoorsAsync(compose, to, cc, bcc, subject, run, attach, probe, typeLine);
 
                     // The From button's account menu, read back the way every menu is now.

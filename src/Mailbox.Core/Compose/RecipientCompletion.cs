@@ -26,13 +26,10 @@ public static class RecipientCompletion
         caret = Math.Clamp(caret, 0, text.Length);
 
         var start = 0;
-        for (var i = caret - 1; i >= 0; i--)
+        foreach (var boundary in SeparatorsIn(text, commasSeparate))
         {
-            if (IsSeparator(text[i], commasSeparate))
-            {
-                start = i + 1;
-                break;
-            }
+            if (boundary >= caret) break;
+            start = boundary + 1;
         }
 
         while (start < caret && char.IsWhiteSpace(text[start])) start++;
@@ -67,8 +64,13 @@ public static class RecipientCompletion
 
         // The tail of the entry the caret was inside goes with the head, so a caret in the
         // middle of "ali|ce@" replaces the whole of it. The tail ends at the next separator.
-        var end = caret;
-        while (end < text.Length && !IsSeparator(text[end], commasSeparate)) end++;
+        var end = text.Length;
+        foreach (var boundary in SeparatorsIn(text, commasSeparate))
+        {
+            if (boundary < caret) continue;
+            end = boundary;
+            break;
+        }
 
         // Either nothing, or the rest of the line from its separator on.
         var remainder = text[end..].TrimStart();
@@ -87,6 +89,56 @@ public static class RecipientCompletion
     }
 
     private static bool IsSeparator(char c, bool commasSeparate) => c == ';' || (commasSeparate && c == ',');
+
+    /// <summary>
+    /// Splits a recipient line into entries: semicolons always separate, commas when asked —
+    /// and neither inside quotes or angle brackets, where <c>"Person, A." &lt;a@example.com&gt;</c>
+    /// is one recipient however it is punctuated. The compose window and this completion both
+    /// read the line through here, so the popup and the wire agree about where an entry ends.
+    /// </summary>
+    public static IEnumerable<string> SplitEntries(string? line, bool commasSeparate)
+    {
+        var text = line ?? string.Empty;
+        var start = 0;
+
+        foreach (var boundary in SeparatorsIn(text, commasSeparate))
+        {
+            var entry = text[start..boundary].Trim();
+            if (entry.Length > 0) yield return entry;
+            start = boundary + 1;
+        }
+
+        var last = text[start..].Trim();
+        if (last.Length > 0) yield return last;
+    }
+
+    /// <summary>The separator positions that really separate — outside quotes and angles.</summary>
+    private static IEnumerable<int> SeparatorsIn(string text, bool commasSeparate)
+    {
+        var quoted = false;
+        var angled = false;
+
+        for (var i = 0; i < text.Length; i++)
+        {
+            var c = text[i];
+            if (c == '"')
+            {
+                quoted = !quoted;
+            }
+            else if (!quoted && c == '<')
+            {
+                angled = true;
+            }
+            else if (!quoted && c == '>')
+            {
+                angled = false;
+            }
+            else if (!quoted && !angled && IsSeparator(c, commasSeparate))
+            {
+                yield return i;
+            }
+        }
+    }
 }
 
 /// <summary>

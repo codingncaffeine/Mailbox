@@ -225,6 +225,9 @@ public sealed partial class ComposeSurface : UserControl
     /// <summary>The Drafts row this window is editing, so saving again replaces it.</summary>
     private long? _draftId;
 
+    /// <summary>This composition's Message-Id, minted once and kept across every save.</summary>
+    private string? _messageId;
+
     /// <summary>Saves a message being written, on the interval the Options page sets.</summary>
     private DispatcherTimer? _autosave;
 
@@ -670,6 +673,9 @@ public sealed partial class ComposeSurface : UserControl
     {
         Restore(message);
         _draftId = messageId;
+
+        // The reopened draft keeps the identity it was saved under.
+        _messageId = string.IsNullOrWhiteSpace(message.MessageId) ? null : message.MessageId;
         _dirty = false;
     }
 
@@ -1731,13 +1737,12 @@ public sealed partial class ComposeSurface : UserControl
 
     /// <summary>
     /// The addresses in a field. Semicolons always separate; commas only when the Options page
-    /// says so, because a display name can carry one — "Person, A." — and a reader who has
-    /// turned commas off is a reader whose address book is written that way.
+    /// says so — and never inside quotes or angles, where "Person, A." is a name, not two
+    /// recipients. Shared with the completion popup, so both read the line the same way.
     /// </summary>
     private static IEnumerable<string> Split(string? value)
-        => (value ?? string.Empty)
-            .Split(App.MailOptions.CommasSeparateRecipients ? [',', ';'] : [';'],
-                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        => Mailbox.Core.Compose.RecipientCompletion.SplitEntries(
+            value, App.MailOptions.CommasSeparateRecipients);
 
     /// <summary>
     /// Restates whatever is worth stating about the message, or hides the bar when nothing is.
@@ -2552,8 +2557,10 @@ public sealed partial class ComposeSurface : UserControl
         {
             // Under the sender's own domain, as every client does. Left alone, MimeKit stamps
             // the machine's hostname into it — and into every cid: below — which is a name a
-            // recipient has no business learning from a message header. §19.
-            MessageId = MimeUtils.GenerateMessageId(domain),
+            // recipient has no business learning from a message header. §19. Minted once per
+            // composition: a fresh id per save made every autosave a different message by
+            // identity, which on an IMAP Drafts folder is a new message per autosave.
+            MessageId = _messageId ??= MimeUtils.GenerateMessageId(domain),
         };
 
         // A display name only when there is one. The seed, and an account added with nothing
@@ -2651,6 +2658,14 @@ public sealed partial class ComposeSurface : UserControl
         foreach (var carried in _carried) builder.Attachments.Add(carried.Entity);
 
         message.Body = builder.ToMessageBody();
+
+        // Every body part declares its transfer encoding. Without this a body holding an
+        // accented word or an em dash was stored — in Drafts, the outbox, the Sent copy and
+        // every .eml export — as raw 8-bit bytes with no Content-Transfer-Encoding anywhere,
+        // 7bit by definition and wrong. The wire was saved by MailKit preparing inside its own
+        // send; the stored form is this method's, so it prepares here.
+        message.Prepare(EncodingConstraint.SevenBit);
+
         return message;
     }
 
