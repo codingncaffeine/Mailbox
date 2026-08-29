@@ -135,8 +135,13 @@ public class SeedHarness
         var team = pim.AddCollection(CollectionKind.Events, "Team", "#107C10").Id;
         var zone = TimeZoneInfo.Local.Id;
 
+        // Stamped from the posed clock, not the minute the seed was built. CalendarEvent defaults
+        // LastModified to UtcNow, and the conflict prompt draws it — so without this a capture of
+        // that dialog is unique to the afternoon its seed was made, and re-seeding moves a picture
+        // nobody changed. The tasks, notes and journal seeds already pin theirs; this was the one
+        // that did not.
         void Add(long collection, CalendarEvent calendarEvent)
-            => pim.AddItem(PimEventCodec.ToItem(calendarEvent, collection));
+            => pim.AddItem(PimEventCodec.ToItem(calendarEvent with { LastModified = SeedNow() }, collection));
 
         CalendarEvent At(string summary, string location, DateOnly on, int hour, int minutes, BusyStatus busy)
             => new()
