@@ -96,11 +96,14 @@ public sealed class JournalWorkspace : Border
 
     public void SetScale(TimelineScale scale)
     {
-        if (_view.Scale == scale) return;
-        _view.Scale = scale;
-
         // Coming back to the timeline is what a scale means, the way pressing Week in the
-        // calendar means "show me a week" rather than "remember that I like weeks".
+        // calendar means "show me a week" rather than "remember that I like weeks". Tested
+        // before the scale rather than after it: a week is the scale the module opens at, so
+        // leaving early when the scale had not changed meant Week did nothing at all from the
+        // Entry List — the one arrangement a reader presses it from.
+        if (_view.Scale == scale && _arrangement == JournalArrangement.Timeline) return;
+
+        _view.Scale = scale;
         _arrangement = JournalArrangement.Timeline;
         Reload();
     }
@@ -154,12 +157,28 @@ public sealed class JournalWorkspace : Border
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>The journal a new entry goes in: the default one, made if there is none.</summary>
+    /// <summary>The journal a new entry goes in: the one that holds them, made if there is none.</summary>
+    /// <remarks>
+    /// Not the collection marked default, which is what this asked for and what put every entry a
+    /// reader ever recorded on the <i>Notes</i> folder. Notes and journal entries share a
+    /// collection kind, and the store marks the first collection of a kind as its default — so the
+    /// default is whichever of the two modules made its folder first, and the other module then
+    /// writes into it. The journal is the collection that holds journal entries; failing that, the
+    /// one this application names for it; failing both, a new one, so the two modules never share
+    /// a folder.
+    /// </remarks>
     public Collection DefaultJournal()
     {
         var journals = _book.Lists();
-        return journals.FirstOrDefault(j => j.IsDefault)
-               ?? journals.FirstOrDefault()
-               ?? _repository.AddCollection(CollectionKind.Journal, "Journal", "#8764B8", string.Empty);
+
+        return journals.FirstOrDefault(Holds)
+               ?? journals.FirstOrDefault(j => string.Equals(j.DisplayName, JournalFolder, StringComparison.OrdinalIgnoreCase))
+               ?? _repository.AddCollection(CollectionKind.Journal, JournalFolder, "#8764B8", string.Empty);
     }
+
+    /// <summary>What this application calls the journal's own folder when it makes one.</summary>
+    private const string JournalFolder = "Journal";
+
+    /// <summary>Whether a collection already holds journal entries rather than notes.</summary>
+    private bool Holds(Collection list) => _book.Rows(JournalArrangement.EntryList, Today, [list.Id]).Count > 0;
 }
