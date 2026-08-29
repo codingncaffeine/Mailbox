@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metainfo, so Mailbox appears in the software centre on the desktops most of its
+     audience runs. The component id is reverse-DNS of the project's home; the desktop entry it
+     launches keeps its own short name, tied here by <launchable>. -->
+<component type="desktop-application">
+  <id>io.github.codingncaffeine.Mailbox</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+
+  <name>Mailbox</name>
+  <summary>Mail, calendar, contacts, tasks and notes for the Linux desktop</summary>
+
+  <description>
+    <p>
+      Mailbox is a full personal-information client for the Linux desktop: mail, calendar,
+      contacts, tasks, notes, a journal and RSS feeds, in one window with a classic ribbon.
+    </p>
+    <p>It works with the servers you already have:</p>
+    <ul>
+      <li>IMAP, POP3 and SMTP mail, with OAuth 2.0 sign-in where a provider needs it</li>
+      <li>CalDAV and CardDAV for calendars and contacts across your devices</li>
+      <li>Client-side and server-side rules, junk filtering trained on your own marks, and search across every module</li>
+      <li>S/MIME and OpenPGP, remote-image blocking, and DKIM, SPF and DMARC results shown on the message</li>
+      <li>Four themes, a rebindable keyboard, and a customisable ribbon and toolbar</li>
+    </ul>
+    <p>
+      Your mail stays on your machine: one SQLite file per account, passwords in the desktop
+      keyring, and nothing phones home unless you turn it on.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">mailbox.desktop</launchable>
+
+  <categories>
+    <category>Network</category>
+    <category>Email</category>
+    <category>Office</category>
+  </categories>
+
+  <keywords>
+    <keyword>email</keyword>
+    <keyword>mail</keyword>
+    <keyword>calendar</keyword>
+    <keyword>contacts</keyword>
+    <keyword>tasks</keyword>
+    <keyword>notes</keyword>
+    <keyword>imap</keyword>
+    <keyword>caldav</keyword>
+    <keyword>carddav</keyword>
+  </keywords>
+
+  <provides>
+    <binary>mailbox</binary>
+    <mediatype>x-scheme-handler/mailto</mediatype>
+    <mediatype>message/rfc822</mediatype>
+    <mediatype>text/calendar</mediatype>
+    <mediatype>text/vcard</mediatype>
+  </provides>
+
+  <url type="homepage">https://github.com/codingncaffeine/Mailbox</url>
+  <url type="bugtracker">https://github.com/codingncaffeine/Mailbox/issues</url>
+
+  <developer id="io.github.codingncaffeine">
+    <name>codingncaffeine</name>
+  </developer>
+
+  <content_rating type="oars-1.1"/>
+
+  <releases>
+    <release version="0.1.0" date="2026-08-29">
+      <description>
+        <p>The first tagged build.</p>
+      </description>
+    </release>
+  </releases>
+</component>

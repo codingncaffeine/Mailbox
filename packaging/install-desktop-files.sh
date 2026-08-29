@@ -12,8 +12,15 @@ ROOT="$(dirname "$HERE")"
 
 APPS="$DESTDIR$PREFIX/share/applications"
 ICONS="$DESTDIR$PREFIX/share/icons/hicolor"
+METAINFO="$DESTDIR$PREFIX/share/metainfo"
 
 install -Dm644 "$HERE/mailbox.desktop" "$APPS/mailbox.desktop"
+
+# AppStream metainfo, so the application appears in the software centre. Installed from beside
+# the desktop entry, which is what all three packaging paths copy here.
+[ -f "$HERE/io.github.codingncaffeine.Mailbox.metainfo.xml" ] \
+    && install -Dm644 "$HERE/io.github.codingncaffeine.Mailbox.metainfo.xml" \
+        "$METAINFO/io.github.codingncaffeine.Mailbox.metainfo.xml"
 
 # The panel's icon is the mailbox itself — the drawing the reader gave us for the taskbar —
 # rather than the tile the application wears inside its own title bar. Two icons on purpose:

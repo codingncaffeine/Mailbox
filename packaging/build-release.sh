@@ -28,6 +28,7 @@ cp packaging/NOTICES.txt "$PUB/NOTICES.txt"
 cp assets/fonts/Selawik-LICENSE.txt "$PUB/Selawik-LICENSE.txt"
 mkdir -p "$PUB/packaging"
 cp packaging/mailbox.desktop packaging/install-desktop-files.sh "$PUB/packaging/"
+cp packaging/io.github.codingncaffeine.Mailbox.metainfo.xml "$PUB/packaging/"
 mkdir -p "$PUB/assets/icons"
 cp assets/icons/mailbox-*.png "$PUB/assets/icons/"
 
