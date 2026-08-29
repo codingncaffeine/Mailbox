@@ -200,6 +200,9 @@ public sealed partial class ShellViewModel
 
     private bool GroupDescending => CurrentView.GroupBy is null ? SortDescending : !CurrentView.GroupAscending;
 
+    /// <summary>The applied rule's name, for the harness — the paint itself cannot be read off a log.</summary>
+    internal string AppliedFormatName(MessageRow row) => FormatFor(row)?.Name ?? string.Empty;
+
     /// <summary>The first conditional-formatting rule of the reader's own that a row meets, or null.</summary>
     private ConditionalFormat? FormatFor(MessageRow row)
     {

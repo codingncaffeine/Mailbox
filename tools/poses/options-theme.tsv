@@ -1,0 +1,2 @@
+theme-builtin	MAILBOX_PEEK=themeeditor	MAILBOX_THEME_EDIT=set:surface.ground=#00FF00,save:Dark Gray,save:Kept Anyway	MAILBOX_TODAY=2026-08-16
+theme-unreadable	MAILBOX_PEEK=themeeditor	MAILBOX_THEME_EDIT=set:surface.ground=#262626,audit,reset:surface.ground,audit	MAILBOX_TODAY=2026-08-16

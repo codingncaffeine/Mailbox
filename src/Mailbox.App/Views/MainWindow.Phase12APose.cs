@@ -251,6 +251,60 @@ public partial class MainWindow
         {
             Opened += (_, _) => Dispatcher.UIThread.Post(ReportTrustSwitches, DispatcherPriority.Background);
         }
+
+        // The current view, read after everything else has driven it. This is the read-back the
+        // carried Phase 3 item wanted: columns, the formatting rules, and which rule each drawn
+        // row actually meets, which a photograph of the dialog cannot say. `=1` reads on the
+        // next idle pass; a number is milliseconds to wait first, for a dialog chain whose
+        // presses take seconds — the store report's `@ms` lesson, learned once already.
+        if (Environment.GetEnvironmentVariable("MAILBOX_VIEW_REPORT") is { Length: > 0 } when)
+        {
+            var hold = int.TryParse(when, out var ms) && ms > 1 && WindowCapture.IsRequested
+                ? WindowCapture.Hold()
+                : null;
+
+            Opened += (_, _) => Dispatcher.UIThread.Post(
+                async () =>
+                {
+                    try
+                    {
+                        if (ms > 1) await Task.Delay(ms);
+                        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.ContextIdle);
+                        ReportCurrentView();
+                    }
+                    finally
+                    {
+                        hold?.Dispose();
+                    }
+                },
+                DispatcherPriority.Background);
+        }
+    }
+
+    private void ReportCurrentView()
+    {
+        if (DataContext is not ShellViewModel shell) return;
+
+        var view = shell.CurrentView;
+        Log.Info($"Harness: view — “{view.Name}”, columns "
+                 + string.Join(", ", view.Columns.Select(c => $"{c.Id}={c.Width}")) + ".");
+
+        foreach (var format in view.Formats)
+        {
+            Log.Info($"Harness: view format — “{format.Name}”"
+                     + (format.Enabled ? string.Empty : " (off)")
+                     + (format.BuiltIn ? " (built-in)" : string.Empty)
+                     + $", condition “{format.Condition}”,"
+                     + $"{(format.Bold ? " bold" : string.Empty)}{(format.Italic ? " italic" : string.Empty)}"
+                     + $" ink {format.ColourToken ?? "(theme)"}.");
+        }
+
+        foreach (var row in shell.VisibleRows.OfType<MessageRow>())
+        {
+            var name = shell.AppliedFormatName(row);
+            Log.Info($"Harness: view row — “{row.Subject}” formatted by "
+                     + $"{(name.Length > 0 ? $"“{name}”" : "nothing")}.");
+        }
     }
 
     /// <summary>

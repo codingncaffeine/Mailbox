@@ -1,0 +1,2 @@
+view-cond-drive	MAILBOX_FOLDER=you@example.com/Inbox	MAILBOX_RUN=view.viewsettings	MAILBOX_SYSFORM=press:Conditional Formatting;wait;press:Add;set:Name:=Briefings stand out;press:Condition;wait;set:Search for the word=briefing;press:OK;wait;press:OK;wait;press:OK	MAILBOX_VIEW_REPORT=9000	MAILBOX_TODAY=2026-08-16
+view-columns-drive	MAILBOX_FOLDER=you@example.com/Inbox	MAILBOX_RUN=view.viewsettings	MAILBOX_SYSFORM=press:Columns;wait;pick:Sent;press:Add;press:OK;wait;press:OK	MAILBOX_VIEW_REPORT=8000	MAILBOX_TODAY=2026-08-16
