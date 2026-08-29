@@ -45,18 +45,16 @@ public sealed class DispatcherStallWatchdogTests
         using var watchdog = new DispatcherStallWatchdog(ui.Post, TimeSpan.FromMilliseconds(100));
         watchdog.Start();
 
-        // Let it settle into a clean rhythm, then block the thread for well over the threshold.
+        // Let it settle into a clean rhythm, then block — and keep blocking until a ping lands
+        // inside a block. On a starved runner the watchdog's own thread can sleep through a
+        // whole 600ms window, so a single block is a race and a fixed count of them still is;
+        // bounding by time instead makes the overlap a certainty, not a probability.
         Thread.Sleep(150);
-        ui.BlockFor(TimeSpan.FromMilliseconds(600));
-
-        // Poll rather than sleep one fixed beat: on a loaded runner the ping that measures the
-        // block can itself be scheduled late, and a single wait raced it — the whole block fell
-        // between pings and the test saw nothing. The stall is still asserted; only the waiting
-        // is patient.
-        var deadline = DateTime.UtcNow.AddSeconds(10);
+        var deadline = DateTime.UtcNow.AddSeconds(12);
         while (watchdog.Summary.Count < 1 && DateTime.UtcNow < deadline)
         {
-            Thread.Sleep(50);
+            ui.BlockFor(TimeSpan.FromMilliseconds(600));
+            Thread.Sleep(700);
         }
 
         var (count, worst) = watchdog.Summary;
