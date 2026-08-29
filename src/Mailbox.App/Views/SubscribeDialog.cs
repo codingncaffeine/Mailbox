@@ -159,20 +159,63 @@ public sealed class SubscribeDialog : Window
         };
     }
 
-    /// <summary>Types an address and searches, for a capture run. Holds the shot until it is done.</summary>
-    public void Pose(string address)
+    /// <summary>
+    /// Types an address and searches, for a capture run. Holds the shot until it is done.
+    /// </summary>
+    /// <remarks>
+    /// <c>MAILBOX_SUBSCRIBE=&lt;address&gt;[|heading:&lt;name&gt;][|subscribe]</c>. Without
+    /// <c>subscribe</c> the box is typed into and searched, which is what a photograph of the
+    /// results wants; with it the Subscribe button is pressed as a pointer would press it, which
+    /// is the only way to prove that finding a site and taking up what it found are joined —
+    /// the search half was posable and the committing half was not, so the flow could be
+    /// photographed and never finished.
+    /// </remarks>
+    public void Pose(string spec)
     {
-        _address.Text = address;
-        _ = PoseAsync();
+        var parts = spec.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        _address.Text = parts.Length > 0 ? parts[0] : spec;
+
+        var heading = parts.FirstOrDefault(p => p.StartsWith("heading:", StringComparison.OrdinalIgnoreCase));
+        var press = parts.Any(p => p.Equals("subscribe", StringComparison.OrdinalIgnoreCase));
+
+        _ = PoseAsync(heading?["heading:".Length..].Trim() ?? string.Empty, press);
     }
 
-    private async Task PoseAsync()
+    private async Task PoseAsync(string heading, bool press)
     {
-        using var hold = Mailbox.App.Theming.WindowCapture.IsRequested
+        using (var hold = Mailbox.App.Theming.WindowCapture.IsRequested
             ? Mailbox.App.Theming.WindowCapture.Hold()
-            : null;
+            : null)
+        {
+            await SearchAsync();
 
-        await SearchAsync();
+            if (heading.Length > 0)
+            {
+                var headings = (_category.ItemsSource as IEnumerable<string>)?.ToList() ?? [];
+                var at = headings.FindIndex(h => string.Equals(h, heading, StringComparison.OrdinalIgnoreCase));
+
+                if (at >= 0) _category.SelectedIndex = at;
+                else Log.Warn($"Harness: the subscribe box offers no heading “{heading}” — "
+                    + $"it offers {string.Join(", ", headings)}.");
+            }
+
+            Log.Info($"Harness: subscribe — “{_message.Text}”, {_offered.Count} offered, "
+                + $"{_offered.Count(o => o.Tick.IsChecked == true)} ticked"
+                + (_offered.Count == 0 ? string.Empty
+                    : $": {string.Join(", ", _offered.Select(o => $"“{o.Feed.Label}” {o.Feed.Url}"
+                        + (o.Tick.IsChecked == true ? " [ticked]" : string.Empty)))}"));
+        }
+
+        if (!press) return;
+
+        Log.Info($"Harness: subscribe — pressing “{_subscribe.Content}”"
+            + (_subscribe.IsEffectivelyEnabled ? string.Empty : " (which is greyed)"));
+
+        _subscribe.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+
+        Log.Info($"Harness: subscribe — took up {Subscribed.Count}: "
+            + string.Join(", ", Subscribed.Select(f => $"“{f.Name}” {f.Url} under “{f.Category}”")));
     }
 
     // ---- Finding ---------------------------------------------------------------------------------

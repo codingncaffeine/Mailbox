@@ -920,6 +920,10 @@ public partial class MainWindow : Window
         // Where the panes ended up, and whether the bar's tasks and the module's agree. Last,
         // because both are measurements of the arrangement everything above has finished making.
         WirePhase8BPoses();
+
+        // A scripted sequence of feed presses in one run, which is the only way at what a second
+        // poll of a feed does.
+        WirePhase11APoses();
     }
 
     /// <summary>

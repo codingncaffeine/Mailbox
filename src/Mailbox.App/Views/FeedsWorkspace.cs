@@ -746,6 +746,20 @@ internal sealed class FeedsWorkspace : Border
     /// <summary>Flips one of the row's two switches, for a harness run.</summary>
     public void PoseToggle(bool unreadOnly) => Toggle(unreadOnly ? UnreadOnlyKey : OrderKey);
 
+    /// <summary>
+    /// A nav row's own button, so a run can press one rather than select round it.
+    /// </summary>
+    /// <remarks>
+    /// Choosing a feed in the pane is what makes it the selected feed, and the selected feed is
+    /// what Update This Feed, Pause and the options dialog act on — so with no way to press a row
+    /// none of those three could be exercised over a feed the run had chosen. The button rather
+    /// than the row, because pressing it is what a reader does; handing back a control the caller
+    /// raises a click on keeps this a door onto the wiring rather than a second way in.
+    /// </remarks>
+    public Button? NavButton(string label)
+        => _rowButtons.FirstOrDefault(pair =>
+            pair.Key.Label.Contains(label, StringComparison.OrdinalIgnoreCase)).Value;
+
     /// <summary>What is on the boards, as lines a harness run can read back.</summary>
     public IEnumerable<string> BoardReport()
     {

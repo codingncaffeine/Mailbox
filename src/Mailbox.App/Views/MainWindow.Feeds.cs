@@ -235,6 +235,14 @@ public partial class MainWindow
     private async Task SubscribeToFeedAsync(ShellViewModel shell)
     {
         var dialog = new SubscribeDialog(App.FeedReader.Finder, App.Feeds);
+
+        // MAILBOX_SUBSCRIBE types the address and, when it says so, presses Subscribe — so the
+        // whole flow, finding through to the first read, is provable rather than only the box.
+        if (Environment.GetEnvironmentVariable("MAILBOX_SUBSCRIBE") is { Length: > 0 } typed)
+        {
+            dialog.Opened += (_, _) => dialog.Pose(typed);
+        }
+
         await dialog.ShowDialog(this);
 
         if (dialog.Subscribed is not { Count: > 0 } added) return;
@@ -380,6 +388,13 @@ public partial class MainWindow
         }
 
         var dialog = new RssFeedOptionsDialog(feed, App.Feeds);
+
+        // MAILBOX_FEED_OPTIONS fills the boxes in and presses a button, which a capture cannot.
+        if (Environment.GetEnvironmentVariable("MAILBOX_FEED_OPTIONS") is { Length: > 0 } posed)
+        {
+            dialog.Opened += (_, _) => dialog.Pose(posed);
+        }
+
         await dialog.ShowDialog(this);
 
         if (!dialog.Changed) return;
@@ -1026,22 +1041,31 @@ public partial class MainWindow
     /// <summary>Brings in a subscription list from another reader.</summary>
     private async Task ImportFeedsAsync(ShellViewModel shell)
     {
-        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        // A picker is a desktop window a headless run cannot answer, so the harness names the
+        // file and a reader is always asked — the same bargain the calendar's export makes.
+        var chosen = HarnessOpenPath("opml");
+        if (chosen is null)
         {
-            Title = "Import Feeds",
-            AllowMultiple = false,
-            FileTypeFilter =
-            [
-                new FilePickerFileType("Outline files") { Patterns = ["*.opml", "*.xml"] },
-                FilePickerFileTypes.All,
-            ],
-        });
+            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "Import Feeds",
+                AllowMultiple = false,
+                FileTypeFilter =
+                [
+                    new FilePickerFileType("Outline files") { Patterns = ["*.opml", "*.xml"] },
+                    FilePickerFileTypes.All,
+                ],
+            });
 
-        if (files.FirstOrDefault() is not { } file) return;
+            chosen = files.FirstOrDefault()?.TryGetLocalPath();
+        }
+
+        if (chosen is null) return;
+        var name = System.IO.Path.GetFileName(chosen);
 
         try
         {
-            var entries = Opml.Read(await File.ReadAllTextAsync(file.Path.LocalPath));
+            var entries = Opml.Read(await File.ReadAllTextAsync(chosen));
 
             var added = 0;
             using (App.Feeds.Batch())
@@ -1058,7 +1082,7 @@ public partial class MainWindow
                 ? $"All {entries.Count} of those feeds were already here."
                 : $"{added} feed{(added == 1 ? string.Empty : "s")} added of {entries.Count} in the file.";
 
-            Log.Info($"Feeds: imported {added} of {entries.Count} from {file.Name}.");
+            Log.Info($"Feeds: imported {added} of {entries.Count} from {name}.");
 
             _feedModule?.Reload();
             shell.Refresh();
@@ -1080,15 +1104,22 @@ public partial class MainWindow
             return;
         }
 
-        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        // The same bargain as the import: a harness names the file, a reader is always asked.
+        var path = HarnessSavePath("opml");
+        if (path is null)
         {
-            Title = "Export Feeds",
-            SuggestedFileName = "feeds.opml",
-            DefaultExtension = "opml",
-            FileTypeChoices = [new FilePickerFileType("Outline files") { Patterns = ["*.opml"] }],
-        });
+            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "Export Feeds",
+                SuggestedFileName = "feeds.opml",
+                DefaultExtension = "opml",
+                FileTypeChoices = [new FilePickerFileType("Outline files") { Patterns = ["*.opml"] }],
+            });
 
-        if (file is null) return;
+            path = file?.TryGetLocalPath();
+        }
+
+        if (path is null) return;
 
         try
         {
@@ -1096,10 +1127,11 @@ public partial class MainWindow
                 App.Feeds.All.Select(f => new OpmlEntry(f.Name, f.Url, f.Category, f.SiteUrl)),
                 DateTimeOffset.Now);
 
-            await File.WriteAllTextAsync(file.Path.LocalPath, text);
+            await File.WriteAllTextAsync(path, text);
 
-            shell.StatusRight = $"{App.Feeds.All.Count} feed{(App.Feeds.All.Count == 1 ? string.Empty : "s")} written to {file.Name}.";
-            Log.Info($"Feeds: exported {App.Feeds.All.Count} to {file.Path.LocalPath}.");
+            shell.StatusRight = $"{App.Feeds.All.Count} feed{(App.Feeds.All.Count == 1 ? string.Empty : "s")} "
+                + $"written to {System.IO.Path.GetFileName(path)}.";
+            Log.Info($"Feeds: exported {App.Feeds.All.Count} to {path}.");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

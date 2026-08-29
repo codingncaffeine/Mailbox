@@ -2,6 +2,7 @@ using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
+using Avalonia.VisualTree;
 using Mailbox.Core.Feeds;
 using static Mailbox.App.Views.SystemDialogKit;
 
@@ -221,6 +222,65 @@ public sealed class RssFeedOptionsDialog : Window
         note.Margin = new Thickness(17, 8, 0, 0);
 
         return new StackPanel { Children = { interval, keeping, _paused, note } };
+    }
+
+    /// <summary>
+    /// Fills the dialog in and presses one of its buttons, for a harness run.
+    /// </summary>
+    /// <remarks>
+    /// <c>MAILBOX_FEED_OPTIONS=name=X|heading=Y|keep=10|every=30|paused=on|fulltext=off|press=OK</c>.
+    /// Everything is set on the control a reader would set it on and the button is pressed as a
+    /// pointer would press it, so what a run proves is the dialog rather than a second path into
+    /// the subscription: the whole question here is whether OK carries what the boxes say into
+    /// the store, and into the folder the store keeps the articles in.
+    /// </remarks>
+    internal void Pose(string spec)
+    {
+        foreach (var part in spec.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var split = part.IndexOf('=');
+            var key = (split < 0 ? part : part[..split]).Trim().ToLowerInvariant();
+            var value = split < 0 ? string.Empty : part[(split + 1)..].Trim();
+            var on = value is "on" or "true" or "yes" or "1";
+
+            switch (key)
+            {
+                case "name": _name.Text = value; break;
+                case "keep": _keep.Text = value; break;
+                case "every": _every.Text = value; break;
+                case "paused": _paused.IsChecked = on; break;
+                case "fulltext": _fullText.IsChecked = on; break;
+                case "enclosures": _enclosures.IsChecked = on; break;
+                case "article": _article.IsChecked = on; break;
+                case "limit": _useLimit.IsChecked = on; break;
+
+                case "heading":
+                    var items = (_category.ItemsSource as IEnumerable<string>)?.ToList() ?? [];
+                    var at = items.FindIndex(i => string.Equals(i, value, StringComparison.OrdinalIgnoreCase));
+                    if (at >= 0) _category.SelectedIndex = at;
+                    else Mailbox.Core.Diagnostics.Log.Warn(
+                        $"Harness: RSS Feed Options has no heading “{value}”; it offers {string.Join(", ", items)}.");
+                    break;
+
+                case "press":
+                    var button = this.GetVisualDescendants().OfType<Button>()
+                        .FirstOrDefault(b => string.Equals(b.Content as string, value, StringComparison.OrdinalIgnoreCase));
+
+                    if (button is null)
+                    {
+                        Mailbox.Core.Diagnostics.Log.Warn($"Harness: RSS Feed Options has no “{value}” button.");
+                        break;
+                    }
+
+                    Mailbox.Core.Diagnostics.Log.Info($"Harness: RSS Feed Options — pressing “{value}”.");
+                    button.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+                    break;
+
+                default:
+                    Mailbox.Core.Diagnostics.Log.Warn($"Harness: RSS Feed Options has no field “{key}”.");
+                    break;
+            }
+        }
     }
 
     /// <summary>A sentence with a small box in the middle of it, which is how these read.</summary>
