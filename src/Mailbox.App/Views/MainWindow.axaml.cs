@@ -781,6 +781,25 @@ public partial class MainWindow : Window
                 DispatcherPriority.Background);
         }
 
+        // A file the desktop hands over on the command line — an invitation, a card, a saved
+        // message — routed through the real ComposeFromCommandLine, so the MimeType claims can be
+        // read back from the store rather than trusted. MAILBOX_OPEN_FILE=<path>.
+        if (Environment.GetEnvironmentVariable("MAILBOX_OPEN_FILE") is { Length: > 0 } handed)
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(
+                () =>
+                {
+                    ComposeFromCommandLine([handed]);
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        Log.Info($"Harness: opened {handed} — status “{(DataContext as ShellViewModel)?.StatusRight}”; "
+                                 + $"calendars {App.Pim.Collections(Mailbox.Store.Pim.CollectionKind.Events).Count}, "
+                                 + $"contacts {App.Contacts.AddressBooks().Sum(b => App.Pim.Items(b.Id).Count)}.");
+                    }, DispatcherPriority.ContextIdle);
+                },
+                DispatcherPriority.Background);
+        }
+
         // Runs the search box, so a capture can show the results. MAILBOX_SEARCH_SCOPE picks the
         // scope (this/current/all) — after the text, and only when posed: a scope set by hand is
         // the reader's own choice, and one set before the search begins would be put back by the
@@ -2623,12 +2642,12 @@ public partial class MainWindow : Window
                 return;
             }
 
-            // The desktop entry's other two actions. Their modules are Part IV, and a launcher
-            // entry that opened nothing at all would read as broken, so each brings the window
-            // forward and says what it waits on — as the rail buttons for the same modules do.
+            // The desktop entry's launcher actions. New Contact already ran its command; New
+            // Appointment does now too — the Calendar module and the command both exist, so this
+            // is the one line the contact case has always had.
             if (string.Equals(arg, "--new-appointment", StringComparison.Ordinal))
             {
-                if (DataContext is ShellViewModel s) s.StatusRight = "The New Appointment launcher action is not wired up yet.";
+                RunCommand(CalendarCommands.NewAppointment.Id);
                 return;
             }
 
@@ -2643,6 +2662,16 @@ public partial class MainWindow : Window
                 OpenMessageFile(arg);
                 return;
             }
+
+            // The other file types the desktop entry claims — an invitation, a contact card, a
+            // saved message. The desktop hands these over on the command line exactly as it hands
+            // over an .eml, and a MimeType claim the application does nothing with is worse than
+            // no claim: the file manager offers Mailbox and then Mailbox shrugs.
+            if (LooksLikeHandedFile(arg, out var handed))
+            {
+                OpenHandedFile(handed);
+                return;
+            }
         }
     }
 
@@ -2655,6 +2684,45 @@ public partial class MainWindow : Window
 
         return File.Exists(path)
             && Path.GetExtension(path).ToLowerInvariant() is ".eml" or ".mbox";
+    }
+
+    /// <summary>
+    /// A calendar, contact or message file the desktop entry's <c>MimeType</c> claims — the ones
+    /// that go through an importer rather than the message pane.
+    /// </summary>
+    private static bool LooksLikeHandedFile(string arg, out string path)
+    {
+        path = arg.StartsWith("file://", StringComparison.OrdinalIgnoreCase) && Uri.TryCreate(arg, UriKind.Absolute, out var uri)
+            ? uri.LocalPath
+            : arg;
+
+        return File.Exists(path)
+            && Path.GetExtension(path).ToLowerInvariant() is ".ics" or ".ical" or ".ifb" or ".vcf" or ".vcard" or ".msg";
+    }
+
+    /// <summary>
+    /// Opens a handed-over file by what it is: an invitation as a calendar, a card or a saved
+    /// message through the same importer File · Import uses, so nothing is a second code path.
+    /// </summary>
+    private void OpenHandedFile(string path)
+    {
+        if (DataContext is not ShellViewModel shell) return;
+
+        var extension = Path.GetExtension(path).ToLowerInvariant();
+
+        // An invitation opens as a calendar — the named-collection import the reader gets from
+        // File · Open Calendar, which is the right shape for a single .ics.
+        if (extension is ".ics" or ".ical" or ".ifb")
+        {
+            _ = OpenCalendarPathAsync(shell, path);
+            return;
+        }
+
+        // A card or a saved message: the shared importer routes by extension, mail to the open
+        // account's Inbox and everything else to its kind's collection.
+        var summary = ImportFiles.Run([path], App.Accounts.Default, App.Pim, App.PimSync.QueuePut);
+        shell.StatusRight = summary.Count > 0 ? summary[0] : $"{Path.GetFileName(path)} imported.";
+        AfterStoreChange(shell);
     }
 
     /// <summary>

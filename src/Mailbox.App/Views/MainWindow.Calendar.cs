@@ -406,6 +406,17 @@ public partial class MainWindow
 
         if (picked.FirstOrDefault()?.Path.LocalPath is not { Length: > 0 } path) return;
 
+        await OpenCalendarPathAsync(shell, path);
+    }
+
+    /// <summary>
+    /// Imports an <c>.ics</c> at a path, whether the reader picked it or the desktop handed it
+    /// over — a double-clicked invitation is the same import as File · Open Calendar.
+    /// </summary>
+    internal async Task OpenCalendarPathAsync(ShellViewModel shell, string path)
+    {
+        SwitchModule(shell, MailboxModule.Calendar);
+
         try
         {
             var name = Path.GetFileNameWithoutExtension(path);
