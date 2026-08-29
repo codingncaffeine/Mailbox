@@ -780,6 +780,14 @@ public partial class MainWindow
                 {
                     draft = result.Contact;
                     bookId = result.CollectionId;
+
+                    if (Mailbox.App.Theming.WindowCapture.IsRequested)
+                    {
+                        Log.Info($"Harness: the duplicate prompt was cancelled; the form comes back "
+                                 + $"holding “{draft.Named()}”, {draft.Emails.Count} address(es), "
+                                 + $"{draft.Phones.Count} number(s), company “{draft.Company}”.");
+                    }
+
                     continue;
                 }
 
@@ -787,8 +795,14 @@ public partial class MainWindow
                 {
                     // The existing card takes the new information and keeps its identity: the
                     // uid is what its server knows it by, and what every link to it names.
+                    //
+                    // A merge and not a replacement. The words on the prompt are "update the
+                    // selected contact with the new information", and writing the typed card over
+                    // the stored one instead threw away everything the stored one knew that the
+                    // typed one did not — an address, a birthday, a photograph, the other numbers.
                     var stored = App.Contacts.Repository.Item(existing.Id);
-                    var kept = result.Contact with { Uid = existing.Contact.Uid };
+                    var whole = App.Contacts.Full(existing.Id) ?? existing.Contact;
+                    var kept = ContactMerge.Update(whole, result.Contact) with { Uid = existing.Contact.Uid };
                     var updated = App.Contacts.Save(kept, existing.CollectionId, stored);
                     App.PimSync.QueuePut(updated);
 

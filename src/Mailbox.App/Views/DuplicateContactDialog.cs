@@ -144,7 +144,57 @@ public static class DuplicateContactDialog
 
         DialogChrome.Apply(window, body);
 
+        // What is on offer, before anything is chosen: a prompt that named the wrong person, or
+        // offered a match nothing explains, is a different fault from one whose OK is not wired,
+        // and only this line tells them apart in a run that answers it.
+        if (Mailbox.App.Theming.WindowCapture.IsRequested)
+        {
+            Mailbox.Core.Diagnostics.Log.Info(
+                $"Harness: the duplicate prompt is asking about “{candidate.Named()}” with "
+                + $"{matches.Count} match(es): "
+                + string.Join(" | ", matches.Select(m => $"{m.Row.Named()} ({m.Strength}, {m.Reason})")));
+
+            if (HarnessDuplicate.Next() is { Length: > 0 } posed)
+            {
+                window.Opened += (_, _) => Answer(posed);
+            }
+        }
+
         await window.ShowDialog(owner);
         return choice;
+
+        // The window's own controls, pressed: what is in doubt is whether the radio and the OK
+        // beneath it are wired to anything, and setting the answer directly could not tell that
+        // from a pair of controls that are drawn and inert.
+        void Answer(string posed)
+        {
+            var (verb, who) = posed.Split(':', 2) is [var head, var tail] ? (head.Trim(), tail.Trim()) : (posed.Trim(), string.Empty);
+
+            if (who.Length > 0)
+            {
+                var wanted = list.Items.OfType<ListBoxItem>()
+                    .FirstOrDefault(i => (i.Tag as ContactRow)?.Named()
+                        .Contains(who, StringComparison.CurrentCultureIgnoreCase) == true);
+
+                if (wanted is null) Mailbox.Core.Diagnostics.Log.Warn($"Harness: no match on the prompt is called “{who}”.");
+                else list.SelectedItem = wanted;
+            }
+
+            var press = verb.Equals("cancel", StringComparison.OrdinalIgnoreCase) ? cancel : ok;
+            if (verb.Equals("update", StringComparison.OrdinalIgnoreCase)) update.IsChecked = true;
+            else if (verb.Equals("add", StringComparison.OrdinalIgnoreCase)) add.IsChecked = true;
+            else if (!verb.Equals("cancel", StringComparison.OrdinalIgnoreCase))
+            {
+                Mailbox.Core.Diagnostics.Log.Warn($"Harness: “{verb}” is not add, update or cancel.");
+                return;
+            }
+
+            var chosen = (list.SelectedItem as ListBoxItem)?.Tag is ContactRow row ? row.Named() : "nothing";
+            Mailbox.Core.Diagnostics.Log.Info(
+                $"Harness: pressing the duplicate prompt's {(press == cancel ? "Cancel" : "OK")} "
+                + $"with “{chosen}” selected.");
+
+            press.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        }
     }
 }
