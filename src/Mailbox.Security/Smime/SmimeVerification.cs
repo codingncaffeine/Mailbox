@@ -128,7 +128,11 @@ public static class SmimeVerification
     {
         try
         {
-            if (!signature.Verify())
+            // The maths on their own: with the chain folded in, Verify throws the same exception
+            // for a message signed by a stranger as for one it cannot check at all, and the
+            // reader is told very different things about those two. The chain is read separately
+            // below.
+            if (!signature.Verify(verifySignatureOnly: true))
             {
                 why = "The signature does not match the message: it has been changed since it was signed.";
                 return false;

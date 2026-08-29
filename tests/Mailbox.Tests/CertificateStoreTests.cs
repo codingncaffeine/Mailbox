@@ -161,9 +161,14 @@ public class CertificateStoreTests
 
         if (rootIsTrusted) Chain.Trust(context, root);
 
+        // The sender signs through a context of their own: the message arrives from outside, and
+        // the overload that takes no context builds MimeKit's default one, whose SQLite check is
+        // the very thing CertificateStore exists to route around.
+        using var sender = new TemporarySecureMimeContext();
+
         var message = Chain.Message("a.person@example.com");
         message.Body = MultipartSigned.Create(
-            new CmsSigner(person.Certificate, person.Key), message.Body!,
+            sender, new CmsSigner(person.Certificate, person.Key), message.Body!,
             TestContext.Current.CancellationToken);
 
         return SmimeVerification.Verify(message, context);
