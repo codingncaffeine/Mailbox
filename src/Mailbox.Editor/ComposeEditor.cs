@@ -104,9 +104,15 @@ public class ComposeEditor : RichEditor
 
         // The character that ended the word has now been typed, so the caret is out of the word
         // and the emphasis can be closed without the editor reading it as "un-bold this word".
+        // It could not be closed any sooner — which means the terminator itself went in wearing
+        // the mark, "<b>bold </b>" on the wire — so the mark is taken back off the character.
         if (action?.Format is AutocorrectFormat.Bold or AutocorrectFormat.Italic)
         {
-            Emphasize(action.Format == AutocorrectFormat.Bold, on: false);
+            var bold = action.Format == AutocorrectFormat.Bold;
+            Press(Key.Left, KeyModifiers.Shift);
+            Emphasize(bold, on: false);
+            Press(Key.Right);
+            Emphasize(bold, on: false);
         }
     }
 
@@ -136,6 +142,18 @@ public class ComposeEditor : RichEditor
                     e.Handled = true;
                     return;
                 }
+
+                base.OnKeyDown(e);
+
+                // A break carries no character to wear the mark, but the caret would keep it:
+                // without this, a word emphasised by Return wrote the whole next paragraph in
+                // bold. On the new line the caret is out of the word, so closing is safe.
+                if (action.Format is AutocorrectFormat.Bold or AutocorrectFormat.Italic)
+                {
+                    Emphasize(action.Format == AutocorrectFormat.Bold, on: false);
+                }
+
+                return;
             }
         }
 
@@ -182,6 +200,11 @@ public class ComposeEditor : RichEditor
                 break;
 
             case AutocorrectFormat.Divider:
+                // Taking the hyphens away leaves their paragraph standing empty, and a divider
+                // put in beside it kept that blank line above every rule. One more Backspace
+                // folds the emptied paragraph into the paragraph before — but only when that
+                // is what stands there: beside another rule the same press deletes the rule.
+                if (TextBeforeCaret() is { Length: 0 } && BackspaceFoldsIntoAParagraph()) Backspace();
                 InsertDivider();
                 break;
 
@@ -195,6 +218,34 @@ public class ComposeEditor : RichEditor
 
     /// <summary>One Backspace, as the reader would have pressed it.</summary>
     private void Backspace() => Press(Key.Back);
+
+    /// <summary>
+    /// Whether one Backspace at the caret — sitting at the start of an empty paragraph — would
+    /// fold it into an ordinary paragraph above, rather than delete whatever else stands there.
+    /// </summary>
+    /// <remarks>
+    /// The caret's paragraph is found the way <see cref="TextBeforeCaret"/> reads the caret: the
+    /// status line is one-based over the document's paragraphs in order. A table's cells count
+    /// as lines of their own, so past a table the count and the top-level blocks no longer
+    /// agree — and false, folding nothing, is the safe answer wherever certainty runs out.
+    /// </remarks>
+    private bool BackspaceFoldsIntoAParagraph()
+    {
+        if (Document is not { } document) return false;
+
+        var (_, _, line, _) = GetStatus();
+        if (line < 1) return false;
+
+        var seen = 0;
+        for (var i = 0; i < document.Blocks.Count; i++)
+        {
+            if (document.Blocks[i] is TableBlock) return false;
+            if (document.Blocks[i] is not Paragraph) continue;
+            if (++seen == line) return i > 0 && document.Blocks[i - 1] is Paragraph;
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// Cut, Copy and Select All, which the editor answers as keys and exposes no method for.

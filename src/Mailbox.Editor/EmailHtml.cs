@@ -193,11 +193,20 @@ public static class EmailHtml
         if (style.Length > 0) html.Append(" style=\"").Append(style).Append('"');
         html.Append('>');
 
-        WriteInlines(html, paragraph, options);
-
         // An empty paragraph is a blank line the writer typed, and a client that collapses an
-        // empty <p> loses it. A non-breaking space is the ancient, universal fix.
-        if (paragraph.Inlines.Count == 0) html.Append("&nbsp;");
+        // empty <p> loses it. A non-breaking space is the ancient, universal fix — and it
+        // covers the paragraph that holds nothing but ordinary whitespace too, which is what a
+        // reloaded draft's blank line comes back as: the parser reads the stored &nbsp; in as
+        // a plain space, and "<p> </p>" collapses in the same clients "<p></p>" does.
+        if (paragraph.Inlines.OfType<Run>().All(r => string.IsNullOrWhiteSpace(r.Text))
+            && paragraph.Inlines.Count == paragraph.Inlines.OfType<Run>().Count())
+        {
+            html.Append("&nbsp;");
+        }
+        else
+        {
+            WriteInlines(html, paragraph, options);
+        }
 
         html.Append("</").Append(close).Append(">\n");
     }

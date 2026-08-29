@@ -38,6 +38,22 @@ public class EmailHtmlTests
         => Assert.Contains("<p>Hello</p>", Body(Para(Text("Hello"))), StringComparison.Ordinal);
 
     /// <summary>
+    /// A blank line survives however it is held: an empty paragraph, and equally one whose only
+    /// content is the plain space a reloaded draft's <c>&amp;nbsp;</c> comes back as — clients
+    /// collapse a whitespace-only paragraph exactly as they do an empty one.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("\u00A0")]
+    public void ABlankLineIsHeldOpenByANonBreakingSpace(string content)
+    {
+        var paragraph = content.Length == 0 ? Para() : Para(Text(content));
+
+        Assert.Contains("<p>&nbsp;</p>", Body(paragraph), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The editor's own serializer writes text-align:left on every block ever written. Emitting
     /// the default is what makes generated mail enormous and unreadable in a diff.
     /// </summary>
