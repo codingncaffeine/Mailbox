@@ -58,15 +58,46 @@ public partial class MainWindow
     }
 
     /// <summary>Delete on a flagged message: the message itself goes, as it would from the list.</summary>
+    /// <remarks>
+    /// <b>As it would from the list</b> is the whole of it: to Deleted Items, and undoable — the
+    /// same rule the message list's own Delete follows, and for the same reason, which is that the
+    /// store may hold the only copy. This used to call the repository's <c>DeleteMessages</c>,
+    /// which is the <em>permanent</em> delete Empty Folder uses; a reader looking at their tasks
+    /// pressed Delete on a row and the message left the folder tree with no prompt and nothing to
+    /// undo. A message already sitting in Deleted Items has nowhere left to move to, and that one
+    /// case is still the permanent delete — again as the list does it.
+    /// </remarks>
     private void DeleteFlaggedMessage(ShellViewModel shell, TaskRow row)
     {
         if (row.Message is not { } message || AccountOf(message) is not { } account) return;
 
-        account.Mail.DeleteMessages([message.MessageId]);
-        AfterFlaggedChange(shell);
+        var from = account.Mail.GetMessage(message.MessageId)?.FolderId;
+        var deleted = account.Mail.FolderWithRole(account.Account.Id, FolderRole.Deleted);
 
-        shell.StatusRight = $"“{row.Summary}” deleted.";
-        Log.Info($"Flagged mail: message {message.MessageId} in {message.Account} deleted.");
+        if (deleted is null || from is null || from == deleted.Id)
+        {
+            account.Mail.DeleteMessages([message.MessageId]);
+            shell.StatusRight = $"“{row.Summary}” permanently deleted.";
+            Log.Info($"Flagged mail: message {message.MessageId} in {message.Account} permanently deleted.");
+        }
+        else
+        {
+            account.Mail.MoveMessages([message.MessageId], deleted.Id);
+            shell.StatusRight = $"“{row.Summary}” moved to Deleted Items.";
+            Log.Info($"Flagged mail: message {message.MessageId} in {message.Account} moved to Deleted Items.");
+
+            var back = from.Value;
+            shell.Undo.Push(
+                "Delete",
+                () =>
+                {
+                    account.Mail.MoveMessages([message.MessageId], back);
+                    AfterFlaggedChange(shell);
+                },
+                () => DeleteFlaggedMessage(shell, row));
+        }
+
+        AfterFlaggedChange(shell);
     }
 
     /// <summary>Opening a flagged-mail row opens the message, as double-clicking it in the list does.</summary>
