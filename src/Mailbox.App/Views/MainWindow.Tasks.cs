@@ -22,6 +22,19 @@ public partial class MainWindow
 {
     private TasksWorkspace? _taskModule;
 
+    /// <summary>
+    /// The moment a change to a task is stamped with: the pinned one when a day has been pinned,
+    /// the real clock otherwise.
+    /// </summary>
+    /// <remarks>
+    /// Written through the posed clock rather than <c>DateTimeOffset.UtcNow</c> for the reason
+    /// that clock exists. A task ticked under a pinned day recorded the machine's own date as its
+    /// completion, so the row read back after a tick said something different every day it was
+    /// run while everything around it stood still — the same fault the reminders queue had. The
+    /// Tags group's flag presets already worked this way; the write paths did not.
+    /// </remarks>
+    private static DateTimeOffset TaskNowUtc => Mailbox.Core.PosedClock.UtcNow;
+
     /// <summary>The Tasks ribbon: the shipped layout with the reader's edits over it.</summary>
     private static RibbonLayout TasksRibbon() => App.RibbonEdits.Apply(App.Plugins.InjectRibbon(TasksRibbonLayout.Build()));
 
@@ -550,7 +563,7 @@ public partial class MainWindow
             Uid = TaskItem.NewUid(),
             Summary = subject,
             Due = EventTime.Date(CalendarToday),
-            LastModified = DateTimeOffset.UtcNow,
+            LastModified = TaskNowUtc,
         });
 
         shell.StatusRight = $"“{subject}” added.";
@@ -568,7 +581,7 @@ public partial class MainWindow
 
         var task = PimTodoCodec.FromItem(item);
         var done = complete ?? !task.IsComplete;
-        SaveTask(PimTodoCodec.Complete(task, done, DateTimeOffset.UtcNow), item, item.CollectionId);
+        SaveTask(PimTodoCodec.Complete(task, done, TaskNowUtc), item, item.CollectionId);
 
         shell.StatusRight = done ? $"“{task.Summary}” marked complete." : $"“{task.Summary}” put back.";
         Log.Info($"Task {item.Id} {(done ? "completed" : "reopened")}.");
@@ -596,9 +609,10 @@ public partial class MainWindow
         {
             Uid = TaskItem.NewUid(),
             Due = EventTime.Date(CalendarToday),
-            LastModified = DateTimeOffset.UtcNow,
+            LastModified = TaskNowUtc,
         });
 
+        WirePhase8AForm(window);
         await window.ShowDialog(this);
         if (window.Result is not { } made) return;
 
@@ -619,6 +633,7 @@ public partial class MainWindow
 
         SwitchModule(shell, MailboxModule.Tasks);
         var window = new TaskWindow(PimTodoCodec.FromItem(stored));
+        WirePhase8AForm(window);
         await window.ShowDialog(this);
 
         if (window.Deleted)
@@ -643,6 +658,7 @@ public partial class MainWindow
         if (App.Pim.Item(row.ItemId) is not { } item) return;
 
         var window = new TaskWindow(PimTodoCodec.FromItem(item));
+        WirePhase8AForm(window);
         await window.ShowDialog(this);
 
         if (window.Deleted)

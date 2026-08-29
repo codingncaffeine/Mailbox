@@ -1,3 +1,4 @@
+using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
@@ -40,6 +41,9 @@ public sealed class TaskWindow : Window
 
     private static readonly TaskUrgency[] Urgencies = [TaskUrgency.Low, TaskUrgency.Normal, TaskUrgency.High];
 
+    /// <summary>True while one of status and percentage is answering the other.</summary>
+    private bool _syncing;
+
     public TaskWindow(TaskItem task)
     {
         ArgumentNullException.ThrowIfNull(task);
@@ -63,19 +67,53 @@ public sealed class TaskWindow : Window
         _categories.Text = string.Join(", ", task.Categories);
         _notes.Text = task.Description;
 
-        // The two that say the same thing, kept saying it: status to percent and back.
+        // The two that say the same thing, kept saying it: status to percent and back. Each
+        // handler stands the other down while it is the one driving, because they answer each
+        // other — without that, choosing In Progress on a finished task zeroes the bar and the
+        // zeroed bar puts the status straight back to Not Started.
         _status.SelectionChanged += (_, _) =>
         {
-            if (Chosen(_status, Progresses) == TaskProgress.Completed) _percent.Value = 100;
-            else if (_percent.Value >= 100) _percent.Value = 0;
+            if (_syncing) return;
+            _syncing = true;
+            try
+            {
+                if (Chosen(_status, Progresses) == TaskProgress.Completed) _percent.Value = 100;
+                else if (_percent.Value >= 100) _percent.Value = 0;
+            }
+            finally
+            {
+                _syncing = false;
+            }
         };
 
+        // The three the number settles: nothing done is Not Started, all of it done is Completed,
+        // and anything between the two is In Progress. Waiting and Deferred say why the work has
+        // stopped rather than how far it got, so a percentage does not overrule either — and it
+        // need not, since both travel in a property of their own that outranks the numbers when
+        // the text is read back.
         _percent.ValueChanged += (_, _) =>
         {
-            var complete = _percent.Value >= 100;
-            var progress = Chosen(_status, Progresses);
-            if (complete && progress != TaskProgress.Completed) _status.SelectedIndex = Array.IndexOf(Progresses, TaskProgress.Completed);
-            else if (!complete && progress == TaskProgress.Completed) _status.SelectedIndex = Array.IndexOf(Progresses, TaskProgress.NotStarted);
+            if (_syncing) return;
+            _syncing = true;
+            try
+            {
+                var done = (int)Math.Clamp(_percent.Value ?? 0, 0, 100);
+                var progress = Chosen(_status, Progresses);
+
+                var wanted = done switch
+                {
+                    >= 100 => TaskProgress.Completed,
+                    > 0 when progress is TaskProgress.NotStarted or TaskProgress.Completed => TaskProgress.InProgress,
+                    0 when progress is TaskProgress.InProgress or TaskProgress.Completed => TaskProgress.NotStarted,
+                    _ => progress,
+                };
+
+                if (wanted != progress) _status.SelectedIndex = Array.IndexOf(Progresses, wanted);
+            }
+            finally
+            {
+                _syncing = false;
+            }
         };
 
         DialogChrome.Apply(this, BuildBody());
@@ -87,6 +125,76 @@ public sealed class TaskWindow : Window
 
     /// <summary>True when Delete was pressed rather than Save &amp; Close.</summary>
     public bool Deleted { get; private set; }
+
+    /// <summary>
+    /// Every field the form carries and what each of them says, in the order the form lists them.
+    /// </summary>
+    /// <remarks>
+    /// A photograph of this window shows what the fields look like and not what they hold — a
+    /// combo box drawn closed says nothing about the four values behind it — so the harness reads
+    /// them here instead. The list is the window's own controls rather than a second description
+    /// of them, so a field added to the form appears here without being added twice.
+    /// </remarks>
+    internal IReadOnlyList<(string Field, string Value)> FormFields =>
+    [
+        ("Subject", _subject.Text ?? string.Empty),
+        ("Start date", Date(_start)),
+        ("Due date", Date(_due)),
+        ("Status", _status.SelectedItem as string ?? string.Empty),
+        ("Status choices", string.Join(" / ", Progresses.Select(Label))),
+        ("Priority", _priority.SelectedItem as string ?? string.Empty),
+        ("Priority choices", string.Join(" / ", Urgencies.Select(u => u.ToString()))),
+        ("% Complete", (_percent.Value ?? 0).ToString(CultureInfo.InvariantCulture)),
+        ("Reminder", _reminder.IsChecked == true ? "on" : "off"),
+        ("Categories", _categories.Text ?? string.Empty),
+        ("Private", _private.IsChecked == true ? "on" : "off"),
+        ("Notes", _notes.Text ?? string.Empty),
+    ];
+
+    /// <summary>
+    /// Sets one field by the name <see cref="FormFields"/> reports it under, through the control's
+    /// own property — so the two that keep each other honest, status and percentage, still do.
+    /// </summary>
+    /// <returns>False for a name the form has no field for, which is itself an answer.</returns>
+    internal bool SetFormField(string field, string value)
+    {
+        switch (field.Trim().ToLowerInvariant())
+        {
+            case "subject": _subject.Text = value; return true;
+            case "notes": _notes.Text = value; return true;
+            case "categories": _categories.Text = value; return true;
+            case "start date" or "start": _start.SelectedDate = Parse(value); return true;
+            case "due date" or "due": _due.SelectedDate = Parse(value); return true;
+            case "status": return Choose(_status, value);
+            case "priority": return Choose(_priority, value);
+            case "% complete" or "percent":
+                if (!decimal.TryParse(value, CultureInfo.InvariantCulture, out var percent)) return false;
+                _percent.Value = percent;
+                return true;
+            case "reminder": _reminder.IsChecked = Yes(value); return true;
+            case "private": _private.IsChecked = Yes(value); return true;
+            default: return false;
+        }
+
+        static bool Yes(string value) => value.Trim() is "1" or "on" or "true" or "yes";
+
+        static DateTime? Parse(string value)
+            => DateTime.TryParseExact(value.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day)
+                ? day
+                : null;
+
+        static bool Choose(ComboBox box, string value)
+        {
+            var items = box.ItemsSource?.Cast<string>().ToList() ?? [];
+            var at = items.FindIndex(i => string.Equals(i, value.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (at < 0) return false;
+            box.SelectedIndex = at;
+            return true;
+        }
+    }
+
+    private static string Date(CalendarDatePicker picker)
+        => picker.SelectedDate is { } day ? day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) : "—";
 
     private Control BuildBody()
     {
@@ -164,13 +272,13 @@ public sealed class TaskWindow : Window
             Due = _due.SelectedDate is { } due ? EventTime.Date(DateOnly.FromDateTime(due.Date)) : null,
             Progress = progress,
             PercentComplete = complete ? 100 : percent,
-            CompletedUtc = complete ? _original.CompletedUtc ?? DateTimeOffset.UtcNow : null,
+            CompletedUtc = complete ? _original.CompletedUtc ?? Mailbox.Core.PosedClock.UtcNow : null,
             Urgency = Chosen(_priority, Urgencies),
             IsPrivate = _private.IsChecked == true,
             ReminderMinutes = _reminder.IsChecked == true ? _original.ReminderMinutes ?? 0 : null,
             Categories = (_categories.Text ?? string.Empty)
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
-            LastModified = DateTimeOffset.UtcNow,
+            LastModified = Mailbox.Core.PosedClock.UtcNow,
         };
     }
 

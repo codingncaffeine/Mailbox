@@ -232,7 +232,7 @@ public partial class MainWindow
             task with
             {
                 Due = due is { } date ? EventTime.Date(DateOnly.FromDateTime(date.LocalDateTime)) : null,
-                LastModified = DateTimeOffset.UtcNow,
+                LastModified = TaskNowUtc,
             },
             item,
             item.CollectionId);
@@ -304,7 +304,7 @@ public partial class MainWindow
                 Start = flag.Start is { } start ? EventTime.Date(DateOnly.FromDateTime(start.LocalDateTime)) : null,
                 Due = flag.Due is { } due ? EventTime.Date(DateOnly.FromDateTime(due.LocalDateTime)) : null,
                 ReminderMinutes = ReminderBefore(flag.Reminder, flag.Due),
-                LastModified = DateTimeOffset.UtcNow,
+                LastModified = TaskNowUtc,
             },
             item,
             item.CollectionId);
@@ -364,7 +364,7 @@ public partial class MainWindow
         var task = PimTodoCodec.FromItem(item);
         var now = !task.IsPrivate;
 
-        SaveTask(task with { IsPrivate = now, LastModified = DateTimeOffset.UtcNow }, item, item.CollectionId);
+        SaveTask(task with { IsPrivate = now, LastModified = TaskNowUtc }, item, item.CollectionId);
 
         shell.StatusRight = now ? $"“{task.Summary}” is private." : $"“{task.Summary}” is no longer private.";
         Log.Info($"Private: task {item.Id} is {(now ? "private" : "not private")}.");
@@ -418,7 +418,7 @@ public partial class MainWindow
         var task = PimTodoCodec.FromItem(item);
         var next = task.Urgency == urgency ? TaskUrgency.Normal : urgency;
 
-        SaveTask(task with { Urgency = next, LastModified = DateTimeOffset.UtcNow }, item, item.CollectionId);
+        SaveTask(task with { Urgency = next, LastModified = TaskNowUtc }, item, item.CollectionId);
 
         shell.StatusRight = $"“{task.Summary}” is {next.ToString().ToLowerInvariant()} importance.";
         Log.Info($"Importance: task {item.Id} is {next} (PRIORITY {(task with { Urgency = next }).PriorityNumber}).");
