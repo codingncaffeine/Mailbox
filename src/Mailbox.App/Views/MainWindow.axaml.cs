@@ -793,7 +793,14 @@ public partial class MainWindow : Window
                         _ => 1,
                     };
                     s.SearchText = query;
-                    Log.Info($"Harness: searched “{query}” — {s.SearchResultSummary}.");
+
+                    // Only the mail module fills SearchResultSummary; every other one narrows its
+                    // own list and says so in its own status line. Reading the mail summary in the
+                    // calendar answered "No results in Current Mailbox" over a grid that had found
+                    // one, which is a read-back that reports the opposite of what happened.
+                    Log.Info(s.Module == MailboxModule.Mail
+                        ? $"Harness: searched “{query}” — {s.SearchResultSummary}."
+                        : $"Harness: searched “{query}” in {s.Module} — {s.ModuleStatusLeft}.");
                 },
                 DispatcherPriority.Loaded);
         }
@@ -909,6 +916,10 @@ public partial class MainWindow : Window
         // The calendar's clocks, its subscriptions and where an export goes. After the above for
         // the same reason: what the calendar holds when the run ends is the claim.
         WirePhase6BDoors();
+
+        // Where the panes ended up, and whether the bar's tasks and the module's agree. Last,
+        // because both are measurements of the arrangement everything above has finished making.
+        WirePhase8BPoses();
     }
 
     /// <summary>
@@ -8157,10 +8168,12 @@ public partial class MainWindow : Window
             grid.ColumnDefinitions[3].Width = GridLength.Auto;
             grid.ColumnDefinitions[5].Width = new GridLength(1, GridUnitType.Star);
             pane[!WidthProperty] = new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("list.width.value");
+            pane.MaxWidth = RoomForList(grid);
         }
         else
         {
             pane.ClearValue(WidthProperty);
+            pane.ClearValue(MaxWidthProperty);
             grid.ColumnDefinitions[3].Width = new GridLength(1, GridUnitType.Star);
             grid.ColumnDefinitions[5].Width = GridLength.Auto;
         }
@@ -8178,6 +8191,52 @@ public partial class MainWindow : Window
         grid.RowDefinitions[2].Height = bottom ? new GridLength(ReadingPaneBottomHeight) : GridLength.Auto;
         if (beside is not null) beside.IsVisible = shell.ReadingPaneVisible && !bottom;
         if (under is not null) under.IsVisible = bottom;
+    }
+
+    /// <summary>
+    /// The narrowest the reading pane is left at before the list is the one that gives way.
+    /// </summary>
+    /// <remarks>
+    /// Authored, and the number is what its own header needs: three reply buttons, the sender
+    /// and a date on one line. Below it the pane is a stripe rather than a pane, and a stripe is
+    /// worth less than the width it costs the list beside it.
+    /// </remarks>
+    private const double MinReadingPaneWidth = 220;
+
+    /// <summary>
+    /// The widest the list may be beside a reading pane: its own width while there is room for
+    /// one, and a share of what is left when there is not.
+    /// </summary>
+    /// <remarks>
+    /// The list's width is a fixed number from a token and the reading pane's column is the only
+    /// star in the row, so as a window narrowed the reading pane took every pixel of the squeeze
+    /// and then the To-Do Bar was pushed out of the window entirely — at 900 wide the bar's
+    /// right-hand 86px, its close button among them, were past the edge, and at 760 (the
+    /// window's own minimum) 226px were. A Grid does not shrink an Auto column to make an
+    /// overflow fit, so the panes have to be told.
+    /// <para>
+    /// Everything except the two panes is measured rather than assumed — the folder pane can be
+    /// collapsed, the bar can be off — so this is the room those two actually have, whatever
+    /// else is on. Infinity before the first arrange, when there is nothing to measure yet; the
+    /// pane grid's own SizeChanged brings it back.
+    /// </para>
+    /// </remarks>
+    private static double RoomForList(Grid grid)
+    {
+        if (grid.Bounds.Width <= 0) return double.PositiveInfinity;
+
+        var taken = 0.0;
+        for (var column = 0; column < grid.ColumnDefinitions.Count; column++)
+        {
+            if (column is 3 or 5) continue;
+            taken += grid.ColumnDefinitions[column].ActualWidth;
+        }
+
+        var shared = grid.Bounds.Width - taken;
+        if (shared <= 0) return 0;
+
+        // Half at the narrowest, so the floor above cannot itself be what pushes the list out.
+        return Math.Max(0, shared - Math.Min(MinReadingPaneWidth, shared / 2));
     }
 
     /// <summary>
@@ -8234,6 +8293,25 @@ public partial class MainWindow : Window
         {
             if (e.PropertyName is nameof(ShellViewModel.ReadingPaneVisible) or nameof(ShellViewModel.ReadingPaneAtBottom)) FitListPane(shell);
         };
+
+        // And again whenever the panes have a different amount of room: how wide the list may be
+        // depends on how much is left for the reading pane beside it, and that is a fact about
+        // the window's width. Without this the fit is whatever it was when the window opened.
+        //
+        // The To-Do Bar is the second trigger and not an obvious one. It is built after the
+        // first layout, so the fit made at startup was made in a window that did not yet have a
+        // bar in it — it reserved room for a pane that was about to lose 255px to one, and the
+        // bar went out of the window anyway. Putting the bar in does not change the grid's own
+        // size, so only the bar's own can say it happened.
+        if (this.FindControl<Grid>("PaneGrid") is { } paneGrid)
+        {
+            paneGrid.SizeChanged += (_, _) => FitListPane(shell);
+        }
+
+        if (this.FindControl<ContentControl>("DockHost") is { } dock)
+        {
+            dock.SizeChanged += (_, _) => FitListPane(shell);
+        }
 
         // The action buttons. Found by walking up from what was clicked, because the button
         // itself lives inside a template the list owns.

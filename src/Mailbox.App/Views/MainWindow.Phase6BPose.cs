@@ -1,5 +1,7 @@
 using System.Globalization;
+using Avalonia;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Mailbox.App.Theming;
 using Mailbox.App.ViewModels;
 using Mailbox.Controls.Calendar;
@@ -45,6 +47,15 @@ public partial class MainWindow
                 DispatcherPriority.Background);
         }
 
+        // Ticking a calendar off the overlay, which is a press on a row in the navigation pane
+        // and so is not reachable by any other pose.
+        if (Environment.GetEnvironmentVariable("MAILBOX_CALENDAR_SHOW") is { Length: > 0 } shown)
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(
+                () => PressCalendarRows(shown),
+                DispatcherPriority.Background);
+        }
+
         // Last of all, at Background: a report taken before MAILBOX_RUN has pressed anything, or
         // before a sync has landed, describes the calendar as it was rather than as the pose left
         // it — which is the shape of evidence that proves the pose never ran.
@@ -84,6 +95,69 @@ public partial class MainWindow
         }
 
         return null;
+    }
+
+    // ---- The overlay's own control -----------------------------------------------------------
+
+    /// <summary>
+    /// Presses the navigation pane's row for each named calendar, which is what puts one into the
+    /// overlay or takes it out again: <c>MAILBOX_CALENDAR_SHOW=Team</c>, or several in order,
+    /// which is how the "the last one cannot be hidden" guard is reached at all.
+    /// </summary>
+    private void PressCalendarRows(string spec)
+    {
+        foreach (var name in spec.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            PressCalendarRow(name);
+        }
+    }
+
+    /// <remarks>
+    /// Through the row's own <c>PointerPressed</c>, because that is where the handler is — the
+    /// tick beside the name is drawn with hit-testing off and does nothing when it is clicked, so
+    /// a pose that set its <c>IsChecked</c> would prove a checkbox rather than the pane. The row
+    /// is found by the name it shows, since that is all a reader has to aim at either.
+    /// </remarks>
+    private void PressCalendarRow(string name)
+    {
+        if (DataContext is not ShellViewModel shell) return;
+        SwitchModule(shell, MailboxModule.Calendar);
+        var calendar = EnsureCalendar(shell);
+        calendar.UpdateLayout();
+
+        // Up from the name rather than down from the pane: the pane is itself a Border holding
+        // every row, so looking downwards for "a Border containing this name" finds the pane
+        // first — and the pane has no handler, so the press did nothing and the pose read like a
+        // row that ignores being clicked.
+        var wanted = name.Trim();
+        var row = calendar.GetVisualDescendants()
+            .OfType<Avalonia.Controls.TextBlock>()
+            .Where(t => string.Equals(t.Text, wanted, StringComparison.OrdinalIgnoreCase) && t.FontSize > 14)
+            .Select(t => t.GetVisualAncestors().OfType<Avalonia.Controls.Border>().FirstOrDefault())
+            .FirstOrDefault(b => b is not null);
+
+        if (row is null)
+        {
+            Log.Warn($"Harness: calendar show — no row named “{wanted}” in the pane. It lists: "
+                     + string.Join(", ", App.Pim.Collections(CollectionKind.Events).Select(c => c.DisplayName)) + ".");
+            return;
+        }
+
+        var pointer = new Avalonia.Input.Pointer(0, Avalonia.Input.PointerType.Mouse, isPrimary: true);
+        var properties = new Avalonia.Input.PointerPointProperties(
+            Avalonia.Input.RawInputModifiers.LeftMouseButton, Avalonia.Input.PointerUpdateKind.LeftButtonPressed);
+
+        row.RaiseEvent(new Avalonia.Input.PointerPressedEventArgs(
+            row, pointer, row, new Point(row.Bounds.Width / 2, row.Bounds.Height / 2), 0,
+            properties, Avalonia.Input.KeyModifiers.None));
+
+        var after = App.Pim.Collections(CollectionKind.Events)
+            .FirstOrDefault(c => string.Equals(c.DisplayName, wanted, StringComparison.OrdinalIgnoreCase));
+
+        Log.Info($"Harness: calendar show — pressed “{wanted}”; it is now "
+                 + $"{(after?.IsVisible == true ? "shown" : "hidden")}, and the grid holds "
+                 + $"{calendar.Entries.Count} item(s) from "
+                 + $"{string.Join(", ", calendar.Entries.Select(e => e.CollectionName).Distinct().Order())}.");
     }
 
     // ---- The calendar's clocks ---------------------------------------------------------------
@@ -174,7 +248,8 @@ public partial class MainWindow
                      + $"utc {entry.StartUtc:yyyy-MM-dd HH:mm}Z–{entry.EndUtc:HH:mm}Z, "
                      + $"drawn {entry.StartWall:yyyy-MM-dd HH:mm}–{entry.EndWall:HH:mm} in {entry.Zone.Id}, "
                      + $"{(entry.AllDay ? "all-day" : "timed")}, {entry.Busy.ToString().ToLowerInvariant()}, "
-                     + $"status {(e.Status.Length > 0 ? e.Status : "none")}.");
+                     + $"status {(e.Status.Length > 0 ? e.Status : "none")}, "
+                     + $"chip {(entry.Colour is { } colour ? colour.ToString() : "the theme's default")}.");
         }
     }
 
