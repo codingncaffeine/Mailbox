@@ -860,6 +860,19 @@ public partial class App : Application
                 desktop.MainWindow = window;
             }
 
+            // The dispatcher stall watchdog, when a run asks for it or is already in debug: a
+            // background thread that logs the UI thread the moment it blocks for longer than a
+            // frame allows. Off in an ordinary run, so it carries no cost there; kept alive for
+            // the process's lifetime and stopped when the window closes.
+            if (!WindowCapture.IsRequested && DispatcherStallWatchdog.Requested)
+            {
+                var watchdog = new DispatcherStallWatchdog(
+                    action => Dispatcher.UIThread.Post(action, DispatcherPriority.Background),
+                    DispatcherStallWatchdog.RequestedThreshold);
+                watchdog.Start();
+                window.Closed += (_, _) => watchdog.Dispose();
+            }
+
             // Read off the window rather than the request, so a run that asked for one backend
             // and got another is recorded as what it is.
             Log.Info(WindowingBackend.Describe(window));
