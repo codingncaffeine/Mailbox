@@ -7,8 +7,28 @@ public sealed record OpenAccount(Account Account, MailStore Store, MailRepositor
 {
     public string Path => Store.Path;
 
-    /// <summary>Size of this account's file on disk.</summary>
-    public long Bytes => File.Exists(Path) ? new FileInfo(Path).Length : 0;
+    /// <summary>How much room this account takes on disk.</summary>
+    /// <remarks>
+    /// The file <em>and</em> its write-ahead log. A store in WAL mode is two files, and until a
+    /// checkpoint folds one into the other the newest mail is in the log rather than in the
+    /// database — so the file on its own is not the size of the account and is not what a backup
+    /// of it would have to carry. Reading the file alone had the mailbox that held 602 messages
+    /// reported at 524 KB while it occupied 4.6 MB, and had Compact Now, which folds the log in as
+    /// its first act, report a store it had just shrunk by four megabytes as "already compact":
+    /// the size before was the file, the size after was the whole of it, and the difference came
+    /// out negative.
+    /// </remarks>
+    public long Bytes
+    {
+        get
+        {
+            long Of(string suffix) => File.Exists(Path + suffix) ? new FileInfo(Path + suffix).Length : 0;
+
+            // The shared-memory file is not counted: it is a fixed-size index into the log rather
+            // than data, and it does not survive the last connection closing.
+            return Of(string.Empty) + Of("-wal");
+        }
+    }
 
     public bool IsDefault { get; init; }
 }
