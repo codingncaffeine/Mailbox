@@ -1,6 +1,7 @@
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
 using Avalonia.Threading;
 using Mailbox.App.ViewModels;
@@ -58,13 +59,32 @@ public partial class MainWindow
             // left it rather than as it opened.
             if (probe is { Length: > 0 })
             {
-                Dispatcher.UIThread.Post(
-                    () => Dispatcher.UIThread.Post(
-                        () => Guarded(() => PoseCalendarProbe(probe)),
-                        DispatcherPriority.ApplicationIdle),
-                    DispatcherPriority.Background);
+                Dispatcher.UIThread.Post(() => WaitThenProbe(probe, 40), DispatcherPriority.Background);
             }
         };
+    }
+
+    /// <summary>
+    /// Holds the probe back while an appointment window is still open, then reads the grid.
+    /// </summary>
+    /// <remarks>
+    /// A modal window runs a dispatcher frame of its own, and a low-priority action posted from
+    /// outside it can be pumped inside it — so a probe that simply queued itself last sometimes
+    /// reported the store before the window that was about to write to it had closed, and
+    /// sometimes did not. An instrument that is right most of the time is worse than one that is
+    /// wrong every time, because nobody checks it. The count bounds the wait: a pose that leaves
+    /// a window open on purpose still gets its read-back rather than hanging.
+    /// </remarks>
+    private void WaitThenProbe(string probe, int left)
+    {
+        if (left > 0 && Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop
+            && desktop.Windows.Any(w => !ReferenceEquals(w, this)))
+        {
+            Dispatcher.UIThread.Post(() => WaitThenProbe(probe, left - 1), DispatcherPriority.ApplicationIdle);
+            return;
+        }
+
+        Dispatcher.UIThread.Post(() => Guarded(() => PoseCalendarProbe(probe)), DispatcherPriority.ApplicationIdle);
     }
 
     /// <summary>

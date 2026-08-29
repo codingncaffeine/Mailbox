@@ -53,8 +53,23 @@ public sealed class AppointmentSurface : UserControl
     private static void Bind(AvaloniaObject target, AvaloniaProperty property, string key)
         => target[!property] = new DynamicResourceExtension(key);
 
-    private static readonly string[] Times =
-        [.. Enumerable.Range(0, 48).Select(h => DateTime.Today.AddMinutes(30 * h).ToString("h:mm tt", CultureInfo.CurrentCulture))];
+    /// <summary>Every half hour of the day, which is what the two time lists offer.</summary>
+    private static readonly TimeOnly[] HalfHours =
+        [.. Enumerable.Range(0, 48).Select(h => new TimeOnly(0, 0).Add(TimeSpan.FromMinutes(30 * h)))];
+
+    /// <summary>
+    /// The times this appointment's two lists offer: every half hour, and its own start and end
+    /// where they fall between two.
+    /// </summary>
+    /// <remarks>
+    /// The lists used to be the forty-eight half hours and nothing else, and the form read a time
+    /// back as <c>index × 30</c>. So an appointment that did not start on a half hour could not be
+    /// stated by the form at all: a quarter-hour standup opened, was not touched, was saved, and
+    /// came back half an hour long — and the same on every appointment written by anything but
+    /// this window, which is most of them. Carrying its own times means opening and saving changes
+    /// nothing, which is the least a form can promise.
+    /// </remarks>
+    private readonly List<TimeOnly> _slots;
 
     /// <summary>What the Reminder picker offers, in the reference's own order.</summary>
     public static readonly (string Label, int? Minutes)[] Reminders =
@@ -145,8 +160,10 @@ public sealed class AppointmentSurface : UserControl
         _required.Text = string.Join("; ", appointment.Attendees.Where(a => a.Role != "OPT-PARTICIPANT").Select(a => a.Address));
         _optional.Text = string.Join("; ", appointment.Attendees.Where(a => a.Role == "OPT-PARTICIPANT").Select(a => a.Address));
 
-        _startTime.ItemsSource = Times;
-        _endTime.ItemsSource = Times;
+        _slots = Slots(appointment);
+        var labels = _slots.Select(t => t.ToString("h:mm tt", CultureInfo.CurrentCulture)).ToList();
+        _startTime.ItemsSource = labels;
+        _endTime.ItemsSource = labels;
         _startDate.SelectedDate = appointment.Start.Wall.Date;
         _endDate.SelectedDate = (appointment.AllDay ? appointment.End.Wall.AddDays(-1) : appointment.End.Wall).Date;
         _startTime.SelectedIndex = Slot(appointment.Start.Wall);
@@ -544,7 +561,28 @@ public sealed class AppointmentSurface : UserControl
         return box;
     }
 
-    private static int Slot(DateTime when) => Math.Clamp((int)(when.TimeOfDay.TotalMinutes / 30), 0, 47);
+    /// <summary>The half hours, with this appointment's own start and end folded in.</summary>
+    private static List<TimeOnly> Slots(CalendarEvent appointment)
+    {
+        var slots = new SortedSet<TimeOnly>(HalfHours);
+        if (!appointment.AllDay)
+        {
+            slots.Add(TimeOnly.FromDateTime(appointment.Start.Wall));
+            slots.Add(TimeOnly.FromDateTime(appointment.End.Wall));
+        }
+
+        return [.. slots];
+    }
+
+    /// <summary>Which row of the list a time is, or the latest row before it.</summary>
+    private int Slot(DateTime when)
+    {
+        var wanted = TimeOnly.FromDateTime(when);
+        var at = _slots.BinarySearch(wanted);
+        return at >= 0 ? at : Math.Clamp(~at - 1, 0, _slots.Count - 1);
+    }
+
+    private TimeOnly Chosen(ComboBox box) => _slots[Math.Clamp(box.SelectedIndex, 0, _slots.Count - 1)];
 
     /// <summary>A date box written the reference's way: "Sun 8/16/2026", weekday and all.</summary>
     private static CalendarDatePicker DatePicker() => new()
@@ -703,14 +741,14 @@ public sealed class AppointmentSurface : UserControl
     private DateTime StartWall()
     {
         var date = _startDate.SelectedDate?.Date ?? DateTime.Today;
-        return _allDay.IsChecked == true ? date : date.AddMinutes(Math.Max(0, _startTime.SelectedIndex) * 30);
+        return _allDay.IsChecked == true ? date : date + Chosen(_startTime).ToTimeSpan();
     }
 
     private DateTime EndWall()
     {
         var date = _endDate.SelectedDate?.Date ?? _startDate.SelectedDate?.Date ?? DateTime.Today;
         if (_allDay.IsChecked == true) return date.AddDays(1);
-        var end = date.AddMinutes(Math.Max(0, _endTime.SelectedIndex) * 30);
+        var end = date + Chosen(_endTime).ToTimeSpan();
         return end <= StartWall() ? StartWall().AddMinutes(30) : end;
     }
 
