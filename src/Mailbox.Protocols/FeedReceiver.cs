@@ -551,8 +551,12 @@ public sealed class FeedReceiver : IDisposable
 
         if (skipped > 0)
         {
+            // Not "on the next pass": by then they have been delivered and say what the feed said,
+            // so the very test at the top of this loop passes over them. Opening one is what
+            // reads it, which is what the reader does with the ones they care about anyway.
             Log.Info($"Feeds: “{feed.Name}” had {skipped} more article(s) to read than one pass will "
-                + $"fetch; they keep what the feed itself sent and are read on the next pass.");
+                + "fetch; they keep what the feed itself sent, and are read from the publisher's "
+                + "page when one is opened.");
         }
 
         var found = new Dictionary<string, byte[]>(StringComparer.Ordinal);
