@@ -35,6 +35,10 @@ public sealed class NewFolderDialog : Window
             var folder = item as Folder;
             var text = ViewDialogKit.SurfaceText(folder?.Name ?? account.Account.Address);
             text.Margin = new Thickness(folder is null ? 0 : (Depth(folder, folders) + 1) * 16, 0, 0, 0);
+
+            // The account's own row stands for its top level and is set apart from the folders
+            // under it, as the same row is in the picker beside this one.
+            if (folder is null) text.FontWeight = Avalonia.Media.FontWeight.SemiBold;
             return text;
         });
         tree.ItemsSource = ordered.Select(f => (object?)f ?? account.Account.Address).ToList();
@@ -250,8 +254,12 @@ public sealed class FolderPropertiesDialog : Window
 
         // General
         var name = new TextBox { Text = folder.Name, Width = 300, HorizontalAlignment = HorizontalAlignment.Left, IsEnabled = folder.Role == FolderRole.None };
-        var unread = account.Mail.Messages(folder.Id, int.MaxValue).Count(m => !m.IsRead);
-        var bytes = account.Mail.Messages(folder.Id, int.MaxValue).Sum(m => m.SizeBytes);
+
+        // One pass over the folder for both numbers. Asked twice, a folder of five thousand is
+        // read twice off the dispatcher before the dialog draws, for two lines of one label.
+        var mail = account.Mail.Messages(folder.Id, int.MaxValue);
+        var unread = mail.Count(m => !m.IsRead);
+        var bytes = mail.Sum(m => m.SizeBytes);
         var location = Location(account, folder);
 
         var general = new StackPanel
