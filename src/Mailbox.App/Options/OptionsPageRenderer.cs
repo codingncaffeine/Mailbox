@@ -240,8 +240,11 @@ public sealed class OptionsPageRenderer
         };
         if (key is not null)
         {
+            // Clamped to the row's own bounds on the way down: the control coerces what a reader
+            // types, but a value put in past it — a programmatic write, a stale binding — would
+            // otherwise land in the store beyond the range every reader of the key expects.
             spinner.ValueChanged += (_, _) =>
-                _settings.Set(key, (double)(spinner.Value ?? row.Value));
+                _settings.Set(key, Math.Clamp((double)(spinner.Value ?? row.Value), row.Minimum, row.Maximum));
             _keys[spinner] = key;
         }
 

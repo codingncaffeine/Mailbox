@@ -189,7 +189,9 @@ public static class OptionsPages
 
             new OptionSection("Save messages",
             [
-                new SpinnerRow("Automatically save items that have not been sent after this many minutes:", 3) { Key = MailOptions.AutosaveMinutesKey },
+                // 0–99, because that is the ceiling AutosaveMinutes itself enforces — a spinner
+                // that takes 120 while the feature silently saves at 99 is a bound that lies.
+                new SpinnerRow("Automatically save items that have not been sent after this many minutes:", 3, 0, 99) { Key = MailOptions.AutosaveMinutesKey },
                 new ComboRow("Save to this folder:", ["Drafts", "Inbox", "Sent Items"], 0, 150, 200),
                 new CheckRow("When replying to a message that is not in the Inbox, save the reply in the same folder"),
                 new CheckRow("Save forwarded messages", true),
