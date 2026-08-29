@@ -211,9 +211,26 @@ public sealed class FeedReceiver : IDisposable
         {
             cancellation.ThrowIfCancellationRequested();
 
+            // Whether the address it has moved to is one the reader is already subscribed to,
+            // asked before the move is followed because following it is what makes the two one.
+            var converged = result.Answer.MovedTo is { Length: > 0 } target
+                && !string.Equals(result.Feed.Url, target, StringComparison.OrdinalIgnoreCase)
+                && _feeds.Find(target) is not null;
+
             if (result.Answer.MovedTo is { Length: > 0 } moved && _feeds.Moved(result.Feed.Url, moved))
             {
                 Log.Info($"Feeds: “{result.Feed.Name}” has moved to {moved}.");
+            }
+
+            // Two subscriptions that have become one. The surviving one owns these entries and
+            // files them in its own folder; delivering them here as well would put a second copy
+            // of the whole feed in a folder whose subscription no longer exists, and announce
+            // twice as many new articles as arrived.
+            if (converged)
+            {
+                Log.Info($"Feeds: “{result.Feed.Name}” now points at a feed already subscribed to; "
+                    + "its articles are filed under that one.");
+                continue;
             }
 
             var url = result.Answer.MovedTo is { Length: > 0 } to ? to : result.Feed.Url;

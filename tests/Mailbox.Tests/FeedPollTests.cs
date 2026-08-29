@@ -408,6 +408,37 @@ public class FeedPollTests
     }
 
     [Fact]
+    public async Task AFeedThatMovesOntoOneAlreadySubscribedToDoesNotFileEverythingTwice()
+    {
+        // The publisher folded two feeds into one, or the reader subscribed to an old address as
+        // well as the new. Following the move makes the two subscriptions one — and the one that
+        // has just disappeared must not also deliver, or the reader gets a second copy of the
+        // whole feed in a folder nothing points at any more, and a bar announcing twice as many
+        // new articles as arrived.
+        const string old = "https://example.com/old/feed.xml";
+        var server = new FakeFeedServer()
+            .Serve(Url, Feed(Item("1", "First"), Item("2", "Second")))
+            .Redirect(old, Url);
+
+        var feeds = new FeedSubscriptions(SettingsStore.Transient());
+        feeds.Add(Url, "Example");
+        feeds.Add(old, "Example, the old way");
+
+        var (account, store, mail) = Account();
+        using var __ = store;
+        using var receiver = new FeedReceiver(feeds, server);
+
+        var report = await receiver.PollAsync(account, DateTimeOffset.UtcNow, TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, report.Delivered);
+        Assert.Equal(Url, Assert.Single(feeds.All).Url);
+
+        var folders = mail.Folders(account.Account.Id);
+        Assert.DoesNotContain(folders, f => f.Name == "Example, the old way");
+        Assert.Equal(2, mail.Messages(folders.Single(f => f.Name == "Example").Id, limit: 50).Count);
+    }
+
+    [Fact]
     public async Task ATemporaryRedirectIsFollowedButNotRecorded()
     {
         const string elsewhere = "https://cdn.example.com/feed.xml";
