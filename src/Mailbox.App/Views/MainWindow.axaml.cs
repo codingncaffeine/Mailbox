@@ -3118,6 +3118,11 @@ public partial class MainWindow : Window
         // An answered invitation is two things: a write into the calendar, which the bar has
         // already done, and a message to the organizer, which only the shell can queue.
         _reading.InvitationAnswered += (_, answer) => SendInvitationReply(shell, answer);
+        _reading.InvitationRemoved += (_, _) =>
+        {
+            shell.StatusRight = "The meeting was removed from the calendar.";
+            AfterStoreChange(shell);
+        };
 
         // The header bar's own button: mark this one and fetch it now, rather than making the
         // reader find Mark to Download and then Process Marked Headers for a single message.
@@ -3780,6 +3785,12 @@ public partial class MainWindow : Window
         {
             SendInvitationReply(shell, answer);
             window.Say(shell.StatusRight);
+        };
+
+        window.InvitationRemoved += (_, _) =>
+        {
+            AfterStoreChange(shell);
+            window.Say("The meeting was removed from the calendar.");
         };
 
         // The QAT's arrows: step the shell's selection, then hand the window what the pane

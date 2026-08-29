@@ -104,6 +104,9 @@ public sealed class MessageWindow : Window
     /// </remarks>
     public event EventHandler<InvitationBar.Answer>? InvitationAnswered;
 
+    /// <summary>The bar's Remove from Calendar, pressed in this window.</summary>
+    public event EventHandler? InvitationRemoved;
+
     public MessageWindow(
         ThemeService themes, Func<MailRepository?> mail, MimeMessage message, byte[]? raw,
         DkimResult? verified = null, OpenedMessageContext? context = null)
@@ -130,6 +133,7 @@ public sealed class MessageWindow : Window
         _body = new ReadingPaneBody(themes, mail);
 
         _body.InvitationAnswered += (_, answer) => InvitationAnswered?.Invoke(this, answer);
+        _body.InvitationRemoved += (_, _) => InvitationRemoved?.Invoke(this, EventArgs.Empty);
 
         // The engine goes when the window does. Reading mail by double-clicking is the ordinary
         // gesture, so without this a morning's reading is a morning's worth of web processes.

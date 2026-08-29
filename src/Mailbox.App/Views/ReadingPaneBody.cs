@@ -196,6 +196,9 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
     /// <summary>Raised when Accept, Tentative or Decline was pressed; the shell sends the reply.</summary>
     public event EventHandler<InvitationBar.Answer>? InvitationAnswered;
 
+    /// <summary>A cancelled meeting was removed from the calendar by the bar's own button.</summary>
+    public event EventHandler? InvitationRemoved;
+
     /// <summary>
     /// The message whose parts are on screen — the decrypted one when there was one to open.
     /// </summary>
@@ -330,6 +333,7 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
                 App.Pim,
                 _message.From.Mailboxes.FirstOrDefault()?.Name);
             bar.Answered += (_, answer) => InvitationAnswered?.Invoke(this, answer);
+            bar.Removed += (_, _) => InvitationRemoved?.Invoke(this, EventArgs.Empty);
             _bars.Children.Insert(0, bar);
             _invitation = bar;
         }

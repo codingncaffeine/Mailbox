@@ -54,6 +54,13 @@ public sealed class InvitationBar : Border
 
     public event EventHandler<Answer>? Answered;
 
+    /// <summary>A cancellation's Remove from Calendar was pressed and the rows are gone.</summary>
+    /// <remarks>
+    /// Raised so the shell can say so and reload the calendar: without it a workspace already
+    /// built kept drawing a meeting the store no longer held, and nothing said anything.
+    /// </remarks>
+    public event EventHandler? Removed;
+
     private readonly ItipMessage _invitation;
     private readonly string _address;
     private readonly PimRepository _repository;
@@ -126,6 +133,14 @@ public sealed class InvitationBar : Border
             remove.Click += (_, _) => Cancel();
             lines.Children.Add(remove);
         }
+        else if (invitation.Method == ItipMethod.Reply)
+        {
+            // An answer to a meeting this reader organises: applied to the meeting the moment
+            // the reply is read, which is what fills the Tracking tab in. Imip.Apply's Reply
+            // branch was correct, unit-tested, and called by nothing — an ACCEPTED reply left
+            // its attendee NEEDS-ACTION for ever.
+            ApplyReply();
+        }
 
         var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
         Grid.SetColumn(glyph, 0);
@@ -173,6 +188,24 @@ public sealed class InvitationBar : Border
         return row;
     }
 
+    /// <summary>Writes an arriving answer onto the meeting it answers, wherever it is filed.</summary>
+    private void ApplyReply()
+    {
+        foreach (var calendar in _repository.Collections(Mailbox.Store.Pim.CollectionKind.Events))
+        {
+            foreach (var item in _repository.ItemsByUid(calendar.Id, _invitation.Event.Uid))
+            {
+                var meeting = PimEventCodec.FromItem(item);
+                if (Imip.Apply(_invitation, meeting) is not { } updated || updated.Equals(meeting)) continue;
+
+                var row = item with { RawPayload = PimEventCodec.ToItem(updated, item.CollectionId).RawPayload };
+                _repository.UpdateItem(row);
+                App.PimSync.QueuePut(row);
+                Log.Info($"Invitation: an answer to “{meeting.Summary}” was written onto the meeting.");
+            }
+        }
+    }
+
     private void Cancel()
     {
         var calendar = _repository.DefaultCalendar();
@@ -183,5 +216,6 @@ public sealed class InvitationBar : Border
 
         Log.Info("Invitation: the event was removed after a cancellation.");
         IsVisible = false;
+        Removed?.Invoke(this, EventArgs.Empty);
     }
 }

@@ -64,6 +64,15 @@ public sealed class CalendarSource(PimRepository repository)
             foreach (var item in items)
             {
                 var calendarEvent = PimEventCodec.FromItem(item);
+
+                // A declined meeting is written CANCELLED and kept — the row survives so a
+                // re-invitation can find it — but the reference takes it off the calendar, and
+                // a chip here would count the reader busy for an hour they said no to.
+                if (string.Equals(calendarEvent.Status, "CANCELLED", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
                 events.Add(calendarEvent);
                 ids[(item.Uid, item.RecurrenceId ?? string.Empty)] = item.Id;
             }

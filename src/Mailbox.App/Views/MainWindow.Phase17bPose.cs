@@ -86,6 +86,20 @@ public partial class MainWindow
                             _ribbon ?? (Avalonia.Controls.Control)this, atPointer: true);
                         break;
 
+                    case "read":
+                        // The 15A recipe: both selection properties, so the reading pane loads
+                        // the row the way a click would.
+                        if (shell.Messages.FirstOrDefault(
+                                m => m.Subject.Contains(arg, StringComparison.OrdinalIgnoreCase)) is not { } row)
+                        {
+                            Log.Info($"Harness: menus — nothing in the list reads “{arg}”.");
+                            break;
+                        }
+
+                        shell.SelectedMessage = row;
+                        shell.SelectedRow = row;
+                        break;
+
                     case "openmsg":
                         RunCommand(MailCommands.OpenItem.Id);
                         break;

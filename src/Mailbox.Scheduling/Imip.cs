@@ -284,6 +284,17 @@ public static class Imip
     private static DateTime Reading(EventTime time, TimeZoneInfo zone)
         => TimeZoneInfo.ConvertTime(time.ToUtc(zone), zone).DateTime;
 
+    private static string Answerer(EventAttendee replier)
+        => replier.Name is { Length: > 0 } name ? name : ItipMessage.Strip(replier.Address);
+
+    private static string AnswerVerb(string? partStat) => partStat?.ToUpperInvariant() switch
+    {
+        "ACCEPTED" => "has accepted",
+        "DECLINED" => "has declined",
+        "TENTATIVE" => "is tentative about",
+        _ => "has answered",
+    };
+
     /// <summary>What the bar says above that line, per method.</summary>
     public static string Headline(ItipMessage message, string? organizerName = null)
     {
@@ -295,7 +306,9 @@ public static class Imip
         {
             ItipMethod.Request => who.Length > 0 ? $"{who} has invited you to {what}." : $"You have been invited to {what}.",
             ItipMethod.Cancel => $"{what} has been cancelled.",
-            ItipMethod.Reply => $"Somebody has answered {what}.",
+            ItipMethod.Reply => message.Event.Attendees.FirstOrDefault() is { } replier
+                ? $"{Answerer(replier)} {AnswerVerb(replier.PartStat)} {what}."
+                : $"Somebody has answered {what}.",
             ItipMethod.Counter => $"A different time has been proposed for {what}.",
             ItipMethod.DeclineCounter => $"The proposed new time for {what} was turned down.",
             ItipMethod.Add => $"More occurrences have been added to {what}.",

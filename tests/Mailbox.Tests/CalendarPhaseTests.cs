@@ -289,6 +289,30 @@ public class CalendarPhaseTests
         Assert.All(entries, e => Assert.NotEqual(0, e.ItemId));
     }
 
+    /// <summary>
+    /// A declined meeting is written CANCELLED and kept — a re-invitation has to find the row —
+    /// but the reference takes it off the calendar, and a chip would count the reader busy for
+    /// an hour they said no to. One filter, in the source, so the grids and the Scheduling
+    /// Assistant's free/busy all read the same answer.
+    /// </summary>
+    [Fact]
+    public void ADeclinedMeetingIsKeptInTheStoreAndDrawnNowhere()
+    {
+        using var store = PimStore.Transient();
+        var repository = new PimRepository(store);
+        var calendar = repository.AddCollection(CollectionKind.Events, "Work", "#107C10");
+        repository.AddItem(PimEventCodec.ToItem(
+            At("declined", new DateTime(2026, 8, 3, 10, 0, 0)) with { Status = "CANCELLED" },
+            calendar.Id));
+
+        var entries = new CalendarSource(repository).Between(
+            Instant(new DateTime(2026, 8, 1)), Instant(new DateTime(2026, 9, 1)));
+
+        Assert.Empty(entries);
+        Assert.Single(repository.ItemsBetween(
+            Instant(new DateTime(2026, 8, 1)), Instant(new DateTime(2026, 9, 1)), [calendar.Id]));
+    }
+
     [Fact]
     public void AHiddenCalendarIsNotDrawn()
     {
