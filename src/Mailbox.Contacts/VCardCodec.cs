@@ -119,10 +119,12 @@ public static class VCardCodec
 
     private static string Middle(Name? name)
     {
-        // vCard's ADDITIONAL NAMES is the middle name; the library calls the field Generations in
-        // 4.0's own vocabulary and keeps the 2.1/3.0 additional names there.
-        var additional = name?.Generations;
-        return additional is { Count: > 0 } ? string.Join(" ", additional) : string.Empty;
+        // vCard's ADDITIONAL NAMES is the middle name: N's third component in every version, and
+        // Given2 in the library's vocabulary. Generations — 4.0's seventh component, "Jr" — is
+        // read as a fallback, because cards this application wrote before that was straightened
+        // out put the middle name there and are still on servers and in files.
+        if (name?.Given2 is { Count: > 0 } additional) return string.Join(" ", additional);
+        return name?.Generations is { Count: > 0 } generations ? string.Join(" ", generations) : string.Empty;
     }
 
     private static string Uid(VCard card)
@@ -416,7 +418,14 @@ public static class VCardCodec
             var name = NameBuilder.Create()
                 .AddSurname(bare ? contact.Named() : contact.LastName)
                 .AddGiven(contact.FirstName)
-                .AddGeneration(contact.MiddleName)
+                // ADDITIONAL NAMES — N's third component, which is where a middle name lives in
+                // every version of the format. Given2, not Generation: RFC 9554's GENERATION is
+                // 4.0's seventh component and means "Jr", and a 3.0 writer has nowhere to put it,
+                // so a middle name written there was dropped from the card *and* glued onto the
+                // suffix on the way out — "Persson;Bö;;Dr;PhD Anders" for Bö Anders Persson, read
+                // back as no middle name and a surname of "PhD Anders". Every export and every
+                // card pushed to a CardDAV server went out that way.
+                .AddGiven2(contact.MiddleName)
                 .AddPrefix(contact.Prefix)
                 .AddSuffix(contact.Suffix)
                 .Build();
