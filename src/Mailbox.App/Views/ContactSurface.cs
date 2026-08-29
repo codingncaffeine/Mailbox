@@ -298,14 +298,21 @@ public sealed class ContactSurface : UserControl
         return EmailHtml.Serialize(_notes.Document ?? new FlowDocument());
     }
 
+    /// <summary>Measured: the card the reference previews, and how far the page stops short.</summary>
+    private const double PreviewWidth = 250;
+    private const double PreviewHeight = 149;
+    private const double PagePad = 13;
+
     private Control NotesPane()
     {
+        // Measured off the reference's own window: the card is 250×149, centred across the pane
+        // and 12 down from the top of it — not tucked against the left edge.
         var preview = new Border
         {
-            Width = 250,
-            Height = 130,
-            Margin = new Thickness(20, 16, 0, 0),
-            HorizontalAlignment = HorizontalAlignment.Left,
+            Width = PreviewWidth,
+            Height = PreviewHeight,
+            Margin = new Thickness(0, 12, 0, 0),
+            HorizontalAlignment = HorizontalAlignment.Center,
             BorderThickness = new Thickness(1),
         };
 
@@ -313,19 +320,25 @@ public sealed class ContactSurface : UserControl
         preview[!Border.BorderBrushProperty] = new DynamicResourceExtension("people.card.rule.brush");
         preview.Child = BusinessCard();
 
-        var label = new TextBlock { Text = "Notes", Margin = new Thickness(20, 10, 0, 4), FontSize = 12 };
+        var label = new TextBlock { Text = "Notes", Margin = new Thickness(0, 4, 0, 1), FontSize = 12 };
         label[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("compose.header.text.brush");
 
         _editorCommands = new EditorCommands(_notes, Host);
 
-        // The page and the marks on it, from tokens as the compose body's are.
-        _notes[!BackgroundProperty] = new DynamicResourceExtension("compose.body.background.brush");
+        // The marks on the page, from tokens as the compose body's are.
         _notes[!RichEditor.SelectionBrushProperty] = new DynamicResourceExtension("state.selected.brush");
         _notes[!RichEditor.CaretBrushProperty] = new DynamicResourceExtension("compose.body.text.brush");
 
-        var dock = new DockPanel();
+        // The page is a border behind the editor rather than the editor's own Background, which is
+        // how the compose window does it and why the compose window has a page. Set on the editor,
+        // the token never painted: the note sat on the window's own grey in every theme, where the
+        // reference draws white from the form's hairline to thirteen short of the frame.
+        var page = new Border { Child = _notes };
+        page[!BackgroundProperty] = new DynamicResourceExtension("compose.body.background.brush");
+
+        var dock = new DockPanel { Margin = new Thickness(0, 0, PagePad, 0) };
         dock.Children.Add(new StackPanel { [DockPanel.DockProperty] = Dock.Top, Children = { preview, label } });
-        dock.Children.Add(_notes);
+        dock.Children.Add(page);
         return dock;
     }
 
