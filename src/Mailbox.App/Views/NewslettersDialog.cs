@@ -4,6 +4,7 @@ using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Mailbox.Core.Diagnostics;
 using Mailbox.Core.Feeds;
 using Mailbox.Protocols;
 using Mailbox.Store;
@@ -73,6 +74,106 @@ public sealed class NewslettersDialog : Window
 
         DialogChrome.Apply(this, Layout(cancel));
         Opened += (_, _) => Dispatcher.UIThread.Post(Scan, DispatcherPriority.Background);
+
+        // The harness's way in. Registered after the scan's own post and at the same priority, so
+        // it runs on the pass after it — a pose that ticked before the inbox had been read would
+        // be ticking an empty list and reporting that nothing was found.
+        Opened += (_, _) => Dispatcher.UIThread.Post(
+            () =>
+            {
+                Report();
+                if (Environment.GetEnvironmentVariable("MAILBOX_NEWSLETTERS") is { Length: > 0 } posed) Harness(posed);
+            },
+            DispatcherPriority.Background);
+    }
+
+    /// <summary>
+    /// What the scan offered, before anything is ticked.
+    /// </summary>
+    /// <remarks>
+    /// The claim this file makes hardest is that detection is a <em>suggestion</em>: nothing is
+    /// moved because it looks like bulk mail. Only a listing taken before the ticks can say that —
+    /// what was found, what the ordinary correspondence beside it was, and the identity each would
+    /// be filed under, which is the List-ID where the publisher sent one and the sending address
+    /// where they did not.
+    /// </remarks>
+    private void Report()
+    {
+        Log.Info($"Harness: newsletters — {_offered.Count} offered, {_offered.Count(o => o.Tick.IsChecked == true)} ticked, "
+            + $"Read Here is {(_subscribe.IsEnabled ? "enabled" : "greyed")}.");
+
+        foreach (var (found, tick) in _offered)
+        {
+            Log.Info($"Harness: newsletters   · “{found.Name}” — {found.From}, {found.Issues} issue(s), "
+                + $"last {found.Latest:yyyy-MM-dd}, identity “{found.Identity}”, would be filed as {found.Address}"
+                + $"{(tick.IsEnabled ? string.Empty : ", already read here")}"
+                + $"{(tick.IsChecked == true ? ", ticked" : string.Empty)}");
+        }
+    }
+
+    /// <summary>
+    /// Ticks by name and presses Read Here:
+    /// <c>MAILBOX_NEWSLETTERS=Ledger,Briefing|heading:News|nogather</c>.
+    /// </summary>
+    /// <remarks>
+    /// The ticks are the decision, so a pose has to make them the way a reader does — on the tick
+    /// boxes themselves, and then on the button, which is greyed until at least one is on. Nothing
+    /// here writes a subscription: <see cref="Commit"/> does, and that is the point.
+    /// </remarks>
+    private void Harness(string spec)
+    {
+        var parts = spec.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var wanted = parts[0].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        foreach (var option in parts.Skip(1))
+        {
+            if (option.StartsWith("heading:", StringComparison.OrdinalIgnoreCase))
+            {
+                var heading = option["heading:".Length..].Trim();
+                var choices = (_category.ItemsSource as IReadOnlyList<string>) ?? [];
+                var at = choices.ToList().FindIndex(c => c.Contains(heading, StringComparison.OrdinalIgnoreCase));
+                _category.SelectedIndex = at < 0 ? 0 : at;
+                Log.Info($"Harness: newsletters — filing under “{_category.SelectedItem}”.");
+            }
+            else if (option.Equals("nogather", StringComparison.OrdinalIgnoreCase))
+            {
+                _gather.IsChecked = false;
+            }
+        }
+
+        foreach (var name in wanted)
+        {
+            var row = _offered.FirstOrDefault(o =>
+                o.Found.Name.Contains(name, StringComparison.OrdinalIgnoreCase)
+                || o.Found.Identity.Contains(name, StringComparison.OrdinalIgnoreCase));
+
+            if (row.Tick is null)
+            {
+                Log.Info($"Harness: newsletters — nothing offered reads “{name}”.");
+                continue;
+            }
+
+            if (!row.Tick.IsEnabled)
+            {
+                Log.Info($"Harness: newsletters — “{row.Found.Name}” cannot be ticked; it is already read here.");
+                continue;
+            }
+
+            row.Tick.IsChecked = true;
+        }
+
+        Log.Info($"Harness: newsletters — {_offered.Count(o => o.Tick.IsChecked == true)} ticked, "
+            + $"Read Here is {(_subscribe.IsEnabled ? "enabled" : "greyed")} and reads “{_subscribe.Content}”.");
+
+        if (!_subscribe.IsEnabled) return;
+
+        _subscribe.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Log.Info($"Harness: newsletters — {Added} taken up, {Gathered} back number(s) moved.");
+
+        foreach (var feed in _feeds.All.Where(f => f.IsNewsletter()))
+        {
+            Log.Info($"Harness: newsletters   → “{feed.Name}” at {feed.Url} under “{feed.Category}”.");
+        }
     }
 
     private Control Layout(Button cancel)

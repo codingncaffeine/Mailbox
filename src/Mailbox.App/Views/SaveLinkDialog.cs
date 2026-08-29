@@ -4,6 +4,8 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Avalonia.Threading;
+using Mailbox.Core.Diagnostics;
 using Mailbox.Store;
 
 namespace Mailbox.App.Views;
@@ -85,7 +87,77 @@ public sealed class SaveLinkDialog : Window
             }
 
             _url.Focus();
+
+            // The harness's way in, on the pass after this one so the clipboard's suggestion is
+            // already in the box and can be read back.
+            Dispatcher.UIThread.Post(
+                () =>
+                {
+                    Report("as opened");
+                    if (Environment.GetEnvironmentVariable("MAILBOX_SAVE_LINK_DIALOG") is { Length: > 0 } posed)
+                    {
+                        _ = HarnessAsync(posed);
+                    }
+                },
+                DispatcherPriority.Background);
         };
+    }
+
+    /// <summary>What the dialog is offering, for a run to read back.</summary>
+    private void Report(string when)
+        => Log.Info($"Harness: save a link {when} — address “{_url.Text}”, "
+            + $"to “{_board.SelectedItem}” of [{string.Join(", ", (_board.ItemsSource as IEnumerable<string>) ?? [])}], "
+            + $"Save is {(_ok.IsEnabled ? "enabled" : "greyed")} and reads “{_ok.Content}”"
+            + $"{(_note.Text is { Length: > 0 } note ? $", note “{note}”" : string.Empty)}.");
+
+    /// <summary>
+    /// Types an address, picks a board and presses Save:
+    /// <c>MAILBOX_SAVE_LINK_DIALOG=https://example.com/|board:Keep</c>.
+    /// </summary>
+    /// <remarks>
+    /// The other door, <c>MAILBOX_SAVE_LINK</c>, goes round this window entirely and proves the
+    /// two store calls behind it. This one proves the window: that a typed address is judged
+    /// before Save will light, that the board list carries the boards, and that a page which
+    /// cannot be read still leaves a saved link and says which happened. The capture is held while
+    /// the page is read, or the run would photograph the dialog and exit under the fetch.
+    /// </remarks>
+    private async Task HarnessAsync(string spec)
+    {
+        using var hold = Mailbox.App.Theming.WindowCapture.IsRequested
+            ? Mailbox.App.Theming.WindowCapture.Hold()
+            : null;
+
+        var parts = spec.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        _url.Text = parts[0];
+        Dispatcher.UIThread.RunJobs();
+
+        foreach (var option in parts.Skip(1).Where(o => o.StartsWith("board:", StringComparison.OrdinalIgnoreCase)))
+        {
+            var wanted = option["board:".Length..].Trim();
+            var at = _boards.FindIndex(b => b.Name.Contains(wanted, StringComparison.OrdinalIgnoreCase));
+            if (at < 0) Log.Info($"Harness: save a link — no board reads “{wanted}”.");
+            else _board.SelectedIndex = at + 1;
+        }
+
+        Report("as typed");
+
+        if (!_ok.IsEnabled)
+        {
+            Log.Info("Harness: save a link — Save is greyed, so nothing was saved.");
+            return;
+        }
+
+        _ok.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+
+        // The press starts a page fetch; wait for it to finish rather than guessing at a delay.
+        for (var waited = 0; waited < 200 && !Saved && _url.IsEnabled == false; waited++)
+        {
+            await Task.Delay(100);
+        }
+
+        Report("after Save");
+        Log.Info($"Harness: save a link — saved {Saved}, address “{Address}”, board “{Chosen?.Name ?? "none"}”.");
     }
 
     private Control Layout(Button cancel)

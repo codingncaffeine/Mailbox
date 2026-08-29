@@ -155,13 +155,19 @@ public partial class MainWindow
             var name = parts.Length > 1 && parts[1].Length > 0 ? parts[1] : channel.Title;
             var feed = App.Feeds.Add(path, name);
 
+            // The reader's mute filters go in with it. Without them a posed delivery files
+            // everything, which is not what a poll does — so the one claim about muting that
+            // matters, that a muted article is never filed at all, could not be posed.
             var delivered = Mailbox.Protocols.FeedReceiver.Deliver(
                 account, feed, channel, DateTimeOffset.UtcNow,
-                App.MailOptions.RulesOnFeeds ? App.Arrival : null);
+                App.MailOptions.RulesOnFeeds ? App.Arrival : null,
+                App.Mutes);
             shell.Refresh();
 
             Log.Info($"Harness: feed “{channel.Title}” delivered {delivered} of {channel.Items.Count} item(s) "
-                + $"into {Mailbox.Protocols.FeedReceiver.RootFolder}/{name}.");
+                + $"into {Mailbox.Protocols.FeedReceiver.RootFolder}/{name}; "
+                + $"{App.Mutes.Live(DateTimeOffset.UtcNow).Count} mute filter(s) in force, "
+                + $"kept out {string.Join(", ", App.Mutes.All.Select(f => $"“{f.Text}” {f.Muted}"))}.");
 
             foreach (var folder in account.Mail.Folders(account.Account.Id).Where(f => f.Name == name))
             {

@@ -4,6 +4,9 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
+using Mailbox.Core.Diagnostics;
 using Mailbox.Core.Feeds;
 using Mailbox.Theming.Icons;
 
@@ -78,7 +81,123 @@ public sealed class MuteFiltersDialog : Window
             }
 
             _text.Focus();
+
+            // The harness's way in, on the pass after this one so the suggestion above is already
+            // in the box: what "Mute This" hands over is a starting point a reader edits, and a
+            // pose has to be able to prove it arrives.
+            Dispatcher.UIThread.Post(
+                () =>
+                {
+                    Report("as opened");
+                    if (Environment.GetEnvironmentVariable("MAILBOX_MUTE") is { Length: > 0 } posed) Harness(posed);
+                },
+                DispatcherPriority.Background);
         };
+    }
+
+    /// <summary>What the box holds and what is in force, for a run to read back.</summary>
+    private void Report(string when)
+    {
+        Log.Info($"Harness: mutes {when} — box “{_text.Text}”, scope “{_scope.SelectedItem}”, "
+            + $"{_duration.SelectedItem}, headline only {_titleOnly.IsChecked == true}, "
+            + $"pattern {_regex.IsChecked == true}, Add is {(_add.IsEnabled ? "enabled" : "greyed")}"
+            + $"{(_note.Text is { Length: > 0 } note ? $", note “{note}”" : string.Empty)}.");
+
+        Log.Info($"Harness: mutes — {_filters.All.Count} filter(s), {_filters.Live(_now).Count} in force.");
+
+        foreach (var filter in _filters.All)
+        {
+            Log.Info($"Harness: mutes   · “{filter.Text}” {filter.Where} (scope {filter.Scope}, target “{filter.Target}”), "
+                + $"{filter.Until(_now)}, headline only {filter.TitleOnly}, pattern {filter.IsRegex}, "
+                + $"kept out {filter.Muted}.");
+        }
+    }
+
+    /// <summary>
+    /// Types a filter and presses Add:
+    /// <c>MAILBOX_MUTE=Mladić|scope:Guardian|days:7|headline|pattern</c>, or
+    /// <c>MAILBOX_MUTE=remove:Mladić</c>.
+    /// </summary>
+    /// <remarks>
+    /// Through the dialog's own boxes and its own Add button, not through
+    /// <see cref="MuteFilters.Add"/>: the store half is already covered by the engine's tests, and
+    /// what had no evidence at all was that this page reaches it — that the scope list names every
+    /// heading and every feed, that a duration becomes an expiry, and that a pattern which will
+    /// not compile greys the button instead of being saved.
+    /// </remarks>
+    private void Harness(string spec)
+    {
+        var parts = spec.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        if (parts[0].StartsWith("remove:", StringComparison.OrdinalIgnoreCase))
+        {
+            var wanted = parts[0]["remove:".Length..].Trim();
+            var at = _filters.All.ToList().FindIndex(f => f.Text.Contains(wanted, StringComparison.OrdinalIgnoreCase));
+
+            if (at < 0)
+            {
+                Log.Info($"Harness: mutes — nothing in the list reads “{wanted}”.");
+                return;
+            }
+
+            // The row's own delete button, found where the list drew it.
+            var row = _list.Children.ElementAtOrDefault(at);
+            if (row?.GetVisualDescendants().OfType<Button>().FirstOrDefault() is not { } remove)
+            {
+                Log.Info($"Harness: mutes — row {at} has no button to press.");
+                return;
+            }
+
+            remove.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Report("after removing");
+            return;
+        }
+
+        _text.Text = parts[0];
+
+        foreach (var option in parts.Skip(1))
+        {
+            if (option.StartsWith("scope:", StringComparison.OrdinalIgnoreCase))
+            {
+                var wanted = option["scope:".Length..].Trim();
+                var at = ScopeChoices().FindIndex(c => c.Label.Contains(wanted, StringComparison.OrdinalIgnoreCase));
+                _scope.SelectedIndex = at < 0 ? 0 : at;
+                if (at < 0) Log.Info($"Harness: mutes — no scope reads “{wanted}”; left on “{_scope.SelectedItem}”.");
+            }
+            else if (option.StartsWith("days:", StringComparison.OrdinalIgnoreCase))
+            {
+                _duration.SelectedIndex = option["days:".Length..].Trim() switch
+                {
+                    "1" => 1,
+                    "7" => 2,
+                    "30" => 3,
+                    _ => 0,
+                };
+            }
+            else if (option.Equals("headline", StringComparison.OrdinalIgnoreCase))
+            {
+                _titleOnly.IsChecked = true;
+            }
+            else if (option.Equals("pattern", StringComparison.OrdinalIgnoreCase))
+            {
+                _regex.IsChecked = true;
+            }
+        }
+
+        // Avalonia raises TextChanged on a later pass, and Add is lit by the handler on it: a pose
+        // that typed and pressed in the same pass found Add greyed and reported a perfectly good
+        // word as refused, which is a bug in the pose that reads exactly like one in the dialog.
+        Dispatcher.UIThread.RunJobs();
+        Report("as typed");
+
+        if (!_add.IsEnabled)
+        {
+            Log.Info("Harness: mutes — Add is greyed, so nothing was added.");
+            return;
+        }
+
+        _add.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Report("after Add");
     }
 
     private Control Layout(Button close)
@@ -223,6 +342,12 @@ public sealed class MuteFiltersDialog : Window
         Changed = true;
 
         _text.Text = string.Empty;
+
+        // The box is empty again, so Add has nothing to add and the note under it is about a word
+        // that is no longer there. Left as they were, the button stayed lit over an empty box and
+        // did nothing when it was pressed.
+        Validate();
+
         Fill();
         _text.Focus();
     }

@@ -2,9 +2,12 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Mailbox.Core.Diagnostics;
 using Mailbox.Store;
 using Mailbox.Theming.Icons;
@@ -81,7 +84,118 @@ public sealed class BoardsDialog : Window
             }
 
             _name.Focus();
+
+            // The harness's way in, on the pass after this one so the suggested name is already in
+            // the box. Its own verbs rather than the store's calls: what had no evidence was that
+            // this page reaches the store — that the box refuses a name another board has, that a
+            // rename which clashes puts the old name back, and that removing a board keeps what
+            // was on it, which is the sentence printed under the list.
+            Dispatcher.UIThread.Post(
+                () =>
+                {
+                    Report("as opened");
+                    if (Environment.GetEnvironmentVariable("MAILBOX_BOARD_DIALOG") is { Length: > 0 } posed) Harness(posed);
+                },
+                DispatcherPriority.Background);
         };
+    }
+
+    /// <summary>What the dialog is showing, for a run to read back.</summary>
+    private void Report(string when)
+    {
+        Log.Info($"Harness: boards dialog {when} — name “{_name.Text}”, purpose “{_purpose.Text}”, "
+            + $"Add is {(_add.IsEnabled ? "enabled" : "greyed")}"
+            + $"{(_note.Text is { Length: > 0 } note ? $", note “{note}”" : string.Empty)}.");
+
+        foreach (var board in _mail.Boards())
+        {
+            Log.Info($"Harness: boards dialog   · “{board.Name}” — {board.Count} article(s)"
+                + (board.Description.Length > 0 ? $", for {board.Description}" : string.Empty));
+        }
+    }
+
+    /// <summary>
+    /// Presses the dialog's own controls:
+    /// <c>MAILBOX_BOARD_DIALOG=add:Reading:Things to read;rename:Reading:Later;delete:Later</c>.
+    /// </summary>
+    /// <remarks>
+    /// A dispatcher turn between the steps, because Avalonia raises <c>TextChanged</c> on a later
+    /// pass: a pose that filled the box and pressed Add in the same pass found Add still greyed
+    /// and reported that a perfectly good name had been refused, which is a bug in the pose that
+    /// reads exactly like a bug in the dialog. Focus is moved for the same reason it is by a
+    /// reader — the purpose box saves what it holds when it loses the focus, and a hand-raised
+    /// <c>LostFocus</c> is not that event.
+    /// </remarks>
+    private void Harness(string spec)
+    {
+        foreach (var step in spec.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var parts = step.Split(':', StringSplitOptions.TrimEntries);
+            var verb = parts[0].ToLowerInvariant();
+            string Arg(int at) => parts.Length > at ? parts[at] : string.Empty;
+
+            switch (verb)
+            {
+                case "add":
+                    _name.Text = Arg(1);
+                    _purpose.Text = Arg(2);
+                    Dispatcher.UIThread.RunJobs();
+                    Report($"with “{Arg(1)}” typed");
+                    if (_add.IsEnabled) _add.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    else Log.Info($"Harness: boards dialog — Add is greyed for “{Arg(1)}”, so nothing was made.");
+                    break;
+
+                case "rename" when Box(Arg(1), first: true) is { } box:
+                    box.Text = Arg(2);
+                    Dispatcher.UIThread.RunJobs();
+                    box.RaiseEvent(new Avalonia.Input.KeyEventArgs
+                    {
+                        RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent,
+                        Source = box,
+                        Key = Key.Enter,
+                    });
+                    Log.Info($"Harness: boards dialog — “{Arg(1)}” renamed to “{Arg(2)}”; the box now reads “{box.Text}”.");
+                    break;
+
+                case "describe" when Box(Arg(1), first: false) is { } purpose:
+                    purpose.Focus();
+                    purpose.Text = Arg(2);
+                    Dispatcher.UIThread.RunJobs();
+
+                    // Away again, because what the box holds is saved when it loses the focus.
+                    _name.Focus();
+                    Dispatcher.UIThread.RunJobs();
+                    Log.Info($"Harness: boards dialog — “{Arg(1)}” described as “{Arg(2)}”.");
+                    break;
+
+                case "delete" when RowOf(Arg(1)) is { } row:
+                    if (row.GetVisualDescendants().OfType<Button>().LastOrDefault() is not { } remove) break;
+                    remove.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    Dispatcher.UIThread.RunJobs();
+                    Log.Info($"Harness: boards dialog — the delete button on “{Arg(1)}” was pressed.");
+                    break;
+
+                default:
+                    Log.Info($"Harness: boards dialog — “{step}” names nothing on this page.");
+                    break;
+            }
+        }
+
+        Report("after");
+    }
+
+    /// <summary>The row of the list standing for a board, by name.</summary>
+    private Control? RowOf(string name)
+    {
+        var at = _mail.Boards().ToList().FindIndex(b => b.Name.Contains(name, StringComparison.OrdinalIgnoreCase));
+        return at < 0 ? null : _list.Children.ElementAtOrDefault(at);
+    }
+
+    /// <summary>A row's name box, or its purpose box — the two are edited where they are read.</summary>
+    private TextBox? Box(string name, bool first)
+    {
+        var boxes = RowOf(name)?.GetVisualDescendants().OfType<TextBox>().ToList() ?? [];
+        return first ? boxes.FirstOrDefault() : boxes.ElementAtOrDefault(1);
     }
 
     private Control Layout(Button close)
@@ -275,7 +389,11 @@ public sealed class BoardsDialog : Window
             _mail.DeleteBoard(board.Id);
             Changed = true;
             Log.Info($"Boards: “{board.Name}” removed; its {board.Count} article(s) kept.");
+
+            // A name that clashed a moment ago may not clash any more, and the note saying so
+            // would otherwise sit under the box refusing a name nothing is using.
             Fill();
+            Validate();
         };
 
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto") };

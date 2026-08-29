@@ -471,6 +471,16 @@ public partial class MainWindow
                 $"Stop reading “{feed.Name}”?\n\nThe articles already filed stay where they are.",
                 "Unsubscribe")) return;
 
+        Unsubscribe(shell, feed);
+    }
+
+    /// <summary>Drops a subscription once the reader has agreed to it.</summary>
+    /// <remarks>
+    /// Split from the question so a run can reach it: a modal blocks a capture, and a pose that
+    /// wrote the removal itself would prove the store rather than this.
+    /// </remarks>
+    private void Unsubscribe(ShellViewModel shell, FeedSubscription feed)
+    {
         App.Feeds.Remove(feed.Url);
         _feedModule?.Reload();
         shell.Refresh();
@@ -635,6 +645,16 @@ public partial class MainWindow
                     Avalonia.Threading.DispatcherPriority.Background);
                 return;
 
+            // The two verbs that ask a question first. Both go in below the prompt rather than
+            // writing the change themselves, so what a run proves is the handler a reader reaches.
+            case "renamefeed" when Named(Arg(1)) is { } renaming:
+                RenameFeed(shell, renaming, Arg(2));
+                break;
+
+            case "unsubscribe" when Named(Arg(1)) is { } dropping:
+                Unsubscribe(shell, dropping);
+                break;
+
             case "drop":
                 Log.Info($"Harness: {feeds.PoseDrop(Arg(1), Arg(2))}.");
                 break;
@@ -747,6 +767,13 @@ public partial class MainWindow
         var typed = await NameDialog.AskAsync(this, "Rename Feed", "What should this feed be called?", feed.Name);
         if (typed is not { Length: > 0 } name || name == feed.Name) return;
 
+        RenameFeed(shell, feed, name);
+    }
+
+    /// <summary>Gives a feed the name the reader typed, and moves its folder with it.</summary>
+    /// <remarks>Split from the prompt for the reason <see cref="Unsubscribe"/> is.</remarks>
+    private void RenameFeed(ShellViewModel shell, FeedSubscription feed, string name)
+    {
         if (FeedAccount() is { } account
             && Mailbox.Protocols.FeedReceiver.Folder(account, feed) is { } folder)
         {
