@@ -31,8 +31,11 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
-      - name: Install a display
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb
+      - name: Install a display and the web engine
+        # The engine the reading pane renders with; without it every door that opens a message
+        # logs the missing-library exception and the batch reads as thrown. The doors verify
+        # the application as shipped, and shipped means rendering.
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb libwebkit2gtk-4.1-0
       - name: Open every door
         run: xvfb-run -a tools/audit-ci.sh
       - name: Upload the batch
