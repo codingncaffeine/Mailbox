@@ -143,9 +143,13 @@ public partial class MainWindow
         var parts = spec.Split('|', 2, StringSplitOptions.TrimEntries);
         var path = parts[0];
 
-        if (App.Accounts.All.FirstOrDefault() is not { } account)
+        // The feed store, not the first mail account. Feeds moved into a store of their own, and
+        // this door had stayed pointed at the mail one — so a posed delivery landed where the
+        // module cannot see it, and only the migration at the *next* launch brought it across. A
+        // pose whose result appears one run late is worse than one that does nothing.
+        if (FeedAccount() is not { } account)
         {
-            Log.Info("Harness: no account to deliver a feed into.");
+            Log.Info("Harness: no feed store to deliver a feed into.");
             return;
         }
 
@@ -159,14 +163,14 @@ public partial class MainWindow
             // everything, which is not what a poll does — so the one claim about muting that
             // matters, that a muted article is never filed at all, could not be posed.
             var delivered = Mailbox.Protocols.FeedReceiver.Deliver(
-                account, feed, channel, DateTimeOffset.UtcNow,
+                account, feed, channel, Mailbox.Core.PosedClock.UtcNow,
                 App.MailOptions.RulesOnFeeds ? App.Arrival : null,
                 App.Mutes);
             shell.Refresh();
 
             Log.Info($"Harness: feed “{channel.Title}” delivered {delivered} of {channel.Items.Count} item(s) "
                 + $"into {Mailbox.Protocols.FeedReceiver.RootFolder}/{name}; "
-                + $"{App.Mutes.Live(DateTimeOffset.UtcNow).Count} mute filter(s) in force, "
+                + $"{App.Mutes.Live(Mailbox.Core.PosedClock.UtcNow).Count} mute filter(s) in force, "
                 + $"kept out {string.Join(", ", App.Mutes.All.Select(f => $"“{f.Text}” {f.Muted}"))}.");
 
             foreach (var folder in account.Mail.Folders(account.Account.Id).Where(f => f.Name == name))
