@@ -49,8 +49,15 @@ public sealed class DispatcherStallWatchdogTests
         Thread.Sleep(150);
         ui.BlockFor(TimeSpan.FromMilliseconds(600));
 
-        // Long enough for the blocked ping to come back and be timed.
-        Thread.Sleep(900);
+        // Poll rather than sleep one fixed beat: on a loaded runner the ping that measures the
+        // block can itself be scheduled late, and a single wait raced it — the whole block fell
+        // between pings and the test saw nothing. The stall is still asserted; only the waiting
+        // is patient.
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (watchdog.Summary.Count < 1 && DateTime.UtcNow < deadline)
+        {
+            Thread.Sleep(50);
+        }
 
         var (count, worst) = watchdog.Summary;
         Assert.True(count >= 1, $"expected a stall to be caught, saw {count}");
