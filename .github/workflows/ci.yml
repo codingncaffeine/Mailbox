@@ -24,6 +24,25 @@ jobs:
       - name: Test
         run: dotnet test tests/Mailbox.Tests/Mailbox.Tests.csproj
 
+  doors:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Install a display
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb
+      - name: Open every door
+        run: xvfb-run -a tools/audit-ci.sh
+      - name: Upload the batch
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: doors
+          path: artifacts/audit/phaseci/
+          if-no-files-found: error
+
   fidelity:
     runs-on: ubuntu-24.04
     steps:

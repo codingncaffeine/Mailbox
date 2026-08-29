@@ -112,6 +112,10 @@
         <Setter Property="Background" Value="{DynamicResource ribbon.tab.hover.brush}" />
     </Style>
 
+    <!-- Deliberately after :pointerover, so the selected tab does not answer the pointer: a
+         tab already showing has nothing to offer a hover, and no reference capture shows a
+         hovered selected tab to copy. Swapping the two blocks is the whole fix if an owner
+         ever says otherwise. -->
     <Style Selector="Button.ribbontab.selected">
         <Setter Property="Background" Value="{DynamicResource ribbon.tab.selected.brush}" />
     </Style>
