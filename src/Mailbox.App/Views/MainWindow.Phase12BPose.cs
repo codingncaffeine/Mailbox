@@ -803,12 +803,13 @@ public partial class MainWindow
             case "category":
             {
                 if (lists.Count < 1) return;
-                var index = lists[0].ItemsSource?.OfType<string>().ToList()
-                    .FindIndex(c => c.Contains(arg, StringComparison.OrdinalIgnoreCase)) ?? -1;
+                var categories = lists[0].ItemsSource?.OfType<string>().ToList() ?? [];
+                var index = categories.FindIndex(c => c.Contains(arg, StringComparison.OrdinalIgnoreCase));
 
                 if (index < 0)
                 {
-                    Log.Warn($"Harness: keyboard — no category reads “{arg}”.");
+                    Log.Warn($"Harness: keyboard — no category reads “{arg}”. It offers: "
+                             + string.Join(" | ", categories) + ".");
                     return;
                 }
 
@@ -823,8 +824,13 @@ public partial class MainWindow
             {
                 if (lists.Count < 2) return;
                 var commands = lists[1].ItemsSource?.OfType<MailboxCommand>().ToList() ?? [];
-                var found = commands.FirstOrDefault(c => c.Label.Equals(arg, StringComparison.OrdinalIgnoreCase))
-                            ?? commands.FirstOrDefault(c => c.Label.Contains(arg, StringComparison.OrdinalIgnoreCase));
+
+                // By id when the argument carries a dot: eight commands read "Forward", and a
+                // pose that can only say a label cannot say which one it means.
+                var found = arg.Contains('.')
+                    ? commands.FirstOrDefault(c => c.Id.Value.Equals(arg, StringComparison.OrdinalIgnoreCase))
+                    : commands.FirstOrDefault(c => c.Label.Equals(arg, StringComparison.OrdinalIgnoreCase))
+                      ?? commands.FirstOrDefault(c => c.Label.Contains(arg, StringComparison.OrdinalIgnoreCase));
 
                 if (found is null)
                 {

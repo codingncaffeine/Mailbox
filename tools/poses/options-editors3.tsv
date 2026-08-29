@@ -1,0 +1,3 @@
+qat-add2	MAILBOX_RIBBON_EDIT=page:qat;gallery:Address Book;add;qat;file	MAILBOX_TODAY=2026-08-16
+keys-mail	MAILBOX_KEYS_EDIT=category:Mail;command:Reply All;chord:Ctrl+Shift+9;assigned;assign;dump:Reply All;holder:Ctrl+Shift+9;close;key:Ctrl+Shift+9	MAILBOX_TODAY=2026-08-16
+keys-conflict	MAILBOX_KEYS_EDIT=category:Mail;command:Forward;chord:Ctrl+R;assigned;close	MAILBOX_TODAY=2026-08-16

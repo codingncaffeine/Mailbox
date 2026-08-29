@@ -1,0 +1,2 @@
+keys-remove	MAILBOX_KEYS_EDIT=command:mail.reply.all;chord:Ctrl+Shift+9;assign;dump:mail.reply.all;remove;dump:mail.reply.all;stored;close	MAILBOX_TODAY=2026-08-16
+keys-resetall	MAILBOX_KEYS_EDIT=command:mail.reply.all;chord:Ctrl+Shift+9;assign;stored;resetall;confirm:Reset;stored;dump:mail.reply.all;close	MAILBOX_TODAY=2026-08-16

@@ -1,0 +1,5 @@
+# Phase 12A: values through the real controls — writes, bounds, and dependent greying.
+press-values	MAILBOX_PEEK=options	MAILBOX_OPTIONS_PAGE=mail	MAILBOX_OPTIONS_PRESS=Automatically save items=7,Default importance level:=High,When replying to a message:=Prefix each line,Preface each line=| 
+press-bounds	MAILBOX_PEEK=options	MAILBOX_OPTIONS_PAGE=mail	MAILBOX_OPTIONS_PRESS=seconds=45,Automatically save items=2000
+press-depend	MAILBOX_PEEK=options	MAILBOX_OPTIONS_PAGE=mail	MAILBOX_OPTIONS_PRESS=Let a sent message be taken back	MAILBOX_OPTIONS_DUMP=1
+press-recover	MAILBOX_PEEK=options	MAILBOX_OPTIONS_PAGE=advanced	MAILBOX_OPTIONS_PRESS=Keep permanently deleted items recoverable=90

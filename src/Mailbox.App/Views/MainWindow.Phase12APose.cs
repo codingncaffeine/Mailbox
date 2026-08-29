@@ -181,8 +181,11 @@ internal static class OptionsPageAudit
                 text.Text = value;
 
                 // The write is on LostFocus, as a reader's would be: assigning Text alone leaves
-                // the store holding the old value and the page looking as though it took.
-                text.RaiseEvent(new RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent));
+                // the store holding the old value and the page looking as though it took. The
+                // args type matters — the event is typed, and a plain RoutedEventArgs takes the
+                // run down inside whatever handler casts it.
+                text.RaiseEvent(new Avalonia.Input.FocusChangedEventArgs(
+                    Avalonia.Input.InputElement.LostFocusEvent) { Source = text });
                 return $"“{text.Text}”";
 
             default:
