@@ -177,7 +177,11 @@ public static class OptionsPages
             [
                 new CheckRow("Open replies and forwards in a new window") { Key = MailOptions.OpenRepliesInNewWindowKey },
                 new CheckRow("Close original message window when replying or forwarding") { Key = MailOptions.CloseOriginalOnReplyKey },
-                new TextRow("Preface comments with:", "you@example.com", 240, 200) { Key = MailOptions.PrefaceCommentsKey },
+                // The same setting the Stationery dialog's "Mark my comments with:" edits — one
+                // key, however many surfaces show it. Empty means the reader's own name, which a
+                // static page cannot know; the feature supplies it as the fallback.
+                new TextRow("Preface comments with:", "", 240, 200, "Your name")
+                    { Key = StationeryFonts.MarkCommentsWithKey },
                 new ComboRow("When replying to a message:", ReplyStyles, 0, 300, 200) { Key = MailOptions.ReplyStyleKey },
                 new ComboRow("When forwarding a message:", ReplyStyles, 0, 300, 200) { Key = MailOptions.ForwardStyleKey },
                 new TextRow("Preface each line in a plain-text message with:", ">", 60, 300) { Key = MailOptions.ReplyPrefixKey },
@@ -378,10 +382,10 @@ public static class OptionsPages
             new OptionSection("Sources",
             [
                 new SubHeadingRow("Include results only from:"),
-                new RadioRow("scope", "Current folder") { Indent = 1 },
-                new RadioRow("scope", "Current folder. Current mailbox when searching from the Inbox", true) { Indent = 1 },
-                new RadioRow("scope", "Current mailbox") { Indent = 1 },
-                new RadioRow("scope", "All mailboxes") { Indent = 1 },
+                new RadioRow("scope", "Current folder") { Indent = 1, Key = MailOptions.SearchScopeDefaultKey },
+                new RadioRow("scope", "Current folder. Current mailbox when searching from the Inbox", true) { Indent = 1, Key = MailOptions.SearchScopeDefaultKey },
+                new RadioRow("scope", "Current mailbox") { Indent = 1, Key = MailOptions.SearchScopeDefaultKey },
+                new RadioRow("scope", "All mailboxes") { Indent = 1, Key = MailOptions.SearchScopeDefaultKey },
                 new CheckRow("Include messages from the Deleted Items folder in each data file when searching in All Items"),
             ]),
 

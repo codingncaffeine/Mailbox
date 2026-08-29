@@ -92,7 +92,7 @@ public sealed class MailOptions(SettingsStore settings)
     public const string ReplyStyleKey = "mail.reply.style";
     public const string ForwardStyleKey = "mail.forward.style";
     public const string ReplyPrefixKey = "mail.reply.prefix";
-    public const string PrefaceCommentsKey = "mail.reply.preface";
+    public const string SearchScopeDefaultKey = "search.scope.default";
     public const string IgnoreOriginalSpellingKey = "mail.compose.spellcheck.ignoreoriginal";
 
     // ---- Composing ------------------------------------------------------------------------
@@ -112,6 +112,9 @@ public sealed class MailOptions(SettingsStore settings)
     };
 
     public bool CheckSpellingBeforeSend => _settings.GetBool(CheckSpellingBeforeSendKey, false);
+
+    /// <summary>Whether the spelling check skips the quoted original in a reply or forward.</summary>
+    public bool IgnoreOriginalSpelling => _settings.GetBool(IgnoreOriginalSpellingKey, true);
 
     // Editor Options › Proofing: the switches the checker applies. All on by default, as the
     // reference ships them and as the checker behaved before it could be told otherwise.

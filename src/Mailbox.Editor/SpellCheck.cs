@@ -409,4 +409,28 @@ public sealed class SpellCheck
 
         return end < text.Length && text[end] is '@' or '/' or '\\' or ':';
     }
+
+    /// <summary>
+    /// The text with its pristine tail cut off: whatever suffix still reads exactly as the
+    /// document was loaded — the signature, the quoted original — is not this writer's words.
+    /// </summary>
+    /// <remarks>
+    /// The comparison is from the ends and format-blind, on purpose: the HTML and the plain-text
+    /// quote share no marker a check could look for instead, and a line of the original the
+    /// writer edited falls out of the shared suffix by itself — editing it made it theirs.
+    /// </remarks>
+    public static string WithoutPristineTail(string text, string pristine)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentNullException.ThrowIfNull(pristine);
+
+        var shared = 0;
+        while (shared < text.Length && shared < pristine.Length
+               && text[^(shared + 1)] == pristine[^(shared + 1)])
+        {
+            shared++;
+        }
+
+        return text[..^shared];
+    }
 }

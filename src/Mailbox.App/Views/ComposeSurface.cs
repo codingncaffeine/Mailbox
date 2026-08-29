@@ -231,6 +231,9 @@ public sealed partial class ComposeSurface : UserControl
     /// <summary>Whether anything has changed since the last save, so autosave has a reason to.</summary>
     private bool _dirty;
 
+    /// <summary>The document as Prefill left it, for the spelling check to tell the quote from the typing.</summary>
+    private string _pristineQuoted = string.Empty;
+
     /// <summary>
     /// Loaded the first time spelling is asked for, not at startup.
     /// </summary>
@@ -605,6 +608,12 @@ public sealed partial class ComposeSurface : UserControl
 
         _body.LoadHtml(html.ToString());
         _dirty = false;
+
+        // What the document reads before a word has been typed — the signature and the quoted
+        // original — kept so the spelling check can leave the original alone (the Options row
+        // "Ignore original message text in reply or forward"). Taken as plain text so the same
+        // snapshot serves the HTML and the plain-text quote alike.
+        _pristineQuoted = _body.GetPlainText();
 
         UpdateTitle();
         UpdateStatus();
@@ -1947,6 +1956,15 @@ public sealed partial class ComposeSurface : UserControl
         }
 
         var text = _body.GetPlainText();
+
+        // The quoted original is not this writer's words: what is still exactly as Prefill loaded
+        // it goes unchecked, so the check covers what was typed, plus any line of the original the
+        // writer edited — which editing made theirs.
+        if (App.MailOptions.IgnoreOriginalSpelling && _pristineQuoted.Length > 0)
+        {
+            text = SpellCheck.WithoutPristineTail(text, _pristineQuoted);
+        }
+
         var found = _spelling.Check(text);
 
         if (found.Count == 0)

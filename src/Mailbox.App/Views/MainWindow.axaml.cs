@@ -782,7 +782,10 @@ public partial class MainWindow : Window
         }
 
         // Runs the search box, so a capture can show the results. MAILBOX_SEARCH_SCOPE picks the
-        // scope (this/current/all) first, since a search re-runs when the scope changes.
+        // scope (this/current/all) — after the text, and only when posed: a scope set by hand is
+        // the reader's own choice, and one set before the search begins would be put back by the
+        // Options page's default the moment the first keystroke lands. Left unposed, the search
+        // runs at whatever the Search radios say, which is the default under test.
         if (Environment.GetEnvironmentVariable("MAILBOX_SEARCH") is { Length: > 0 } query)
         {
             Opened += (_, _) => Dispatcher.UIThread.Post(
@@ -790,13 +793,17 @@ public partial class MainWindow : Window
                 {
                     if (DataContext is not ShellViewModel s) return;
 
-                    s.ScopeIndex = Environment.GetEnvironmentVariable("MAILBOX_SEARCH_SCOPE") switch
-                    {
-                        "this" => 0,
-                        "all" => 2,
-                        _ => 1,
-                    };
                     s.SearchText = query;
+
+                    if (Environment.GetEnvironmentVariable("MAILBOX_SEARCH_SCOPE") is { Length: > 0 } posed)
+                    {
+                        s.ScopeIndex = posed switch
+                        {
+                            "this" => 0,
+                            "all" => 2,
+                            _ => 1,
+                        };
+                    }
 
                     // Only the mail module fills SearchResultSummary; every other one narrows its
                     // own list and says so in its own status line. Reading the mail summary in the

@@ -311,4 +311,32 @@ public class SpellCheckTests : IDisposable
         var back = await LoadAsync(personal: personal);
         Assert.Equal(["Mailbox"], back.PersonalWords);
     }
+
+    /// <summary>
+    /// The cut behind "Ignore original message text in reply or forward": the reply's own words
+    /// are checked and the untouched quote below them is not.
+    /// </summary>
+    [Fact]
+    public void ThePristineTailOfAReplyIsNotChecked()
+    {
+        var pristine = "\n\nA. Person\n-----Original Message-----\nThe figures are misspeled here.";
+
+        // Typed above the quote: only the typing survives the cut.
+        Assert.Equal(
+            "Thanks, looks good.",
+            SpellCheck.WithoutPristineTail("Thanks, looks good." + pristine, pristine));
+
+        // Nothing typed at all: nothing left to check.
+        Assert.Equal(string.Empty, SpellCheck.WithoutPristineTail(pristine, pristine));
+
+        // A line of the original the writer edited fell out of the shared suffix by itself —
+        // editing it made it theirs — while the untouched tail below the edit still goes.
+        var edited = "Reply.\n\nA. Person\n-----Original Message-----\nThe figures are corrected here.";
+        Assert.Equal(
+            "Reply.\n\nA. Person\n-----Original Message-----\nThe figures are correct",
+            SpellCheck.WithoutPristineTail(edited, pristine));
+
+        // A new message has no pristine tail, and the whole of it is checked.
+        Assert.Equal("All of it.", SpellCheck.WithoutPristineTail("All of it.", string.Empty));
+    }
 }

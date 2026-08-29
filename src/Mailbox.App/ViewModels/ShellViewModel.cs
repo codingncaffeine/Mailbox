@@ -10,6 +10,7 @@ using Mailbox.Core.Accounts;
 using Mailbox.Core.Commands;
 using Mailbox.Core.Diagnostics;
 using Mailbox.Core.Ribbon;
+using Mailbox.Core.Settings;
 using Mailbox.Store;
 using Mailbox.Store.Lists;
 using Mailbox.Theming;
@@ -1490,6 +1491,9 @@ public sealed partial class ShellViewModel : ObservableObject
 
     private SearchScope _scope = SearchScope.CurrentMailbox;
 
+    /// <summary>True once the reader has picked a scope by hand during this search.</summary>
+    private bool _scopeTouched;
+
     /// <summary>The scope the search box runs against, re-run when it changes.</summary>
     public SearchScope Scope
     {
@@ -1497,10 +1501,38 @@ public sealed partial class ShellViewModel : ObservableObject
         set
         {
             if (!Set(ref _scope, value)) return;
+            _scopeTouched = true;
             Raise(nameof(ScopeLabel));
             Raise(nameof(ScopeIndex));
             if (IsSearching) RunSearch();
         }
+    }
+
+    /// <summary>
+    /// Puts the scope where the Options page's Search radios say a search begins, at the moment
+    /// one begins.
+    /// </summary>
+    /// <remarks>
+    /// Resolved per search rather than once, because the shipped default — "Current folder.
+    /// Current mailbox when searching from the Inbox" — is conditional on where the reader is
+    /// standing, and because the radios can be changed while the application runs. A scope the
+    /// reader picked by hand outlives the keystrokes of its own search and nothing else: the
+    /// next search starts from the radios again.
+    /// </remarks>
+    private void BeginSearchScope()
+    {
+        if (_scopeTouched) return;
+
+        _scope = App.Settings.GetString(MailOptions.SearchScopeDefaultKey) switch
+        {
+            "Current folder" => SearchScope.ThisFolder,
+            "Current mailbox" => SearchScope.CurrentMailbox,
+            "All mailboxes" => SearchScope.AllMailboxes,
+            _ => CurrentFolderRole == FolderRole.Inbox ? SearchScope.CurrentMailbox : SearchScope.ThisFolder,
+        };
+
+        Raise(nameof(ScopeLabel));
+        Raise(nameof(ScopeIndex));
     }
 
     /// <summary>The scope selector's options, in the reference's order.</summary>
@@ -1583,10 +1615,14 @@ public sealed partial class ShellViewModel : ObservableObject
         {
             if (!IsSearching) return;
             IsSearching = false;
+            _scopeTouched = false;
             _searchResultCount = 0;
             LoadMessages(_selectedFolder);
             return;
         }
+
+        // The first keystroke of a search is where the Options page's default scope lands.
+        if (!IsSearching) BeginSearchScope();
 
         Messages.Clear();
 
