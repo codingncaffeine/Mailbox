@@ -299,6 +299,26 @@ public partial class MainWindow
         // invisible in any picture of the shell.
         var ticked = flyout.Items.OfType<MenuItem>().Where(i => i.Icon is not null).Select(i => i.Header?.ToString());
         Log.Info($"Harness: {named} ticks: {(ticked.Any() ? string.Join(", ", ticked) : "none")}.");
+
+        // MAILBOX_PANEMENU=<entry> presses one of them. Reading what a menu holds and reading the
+        // tick beside an entry are both statements about a menu that has never been used: these
+        // four entries are the only way the To-Do Bar's sections go on and off, and until this
+        // nothing had pressed one. Named by its header, so "Calendar", "Tasks", "People", "Off".
+        if (Environment.GetEnvironmentVariable("MAILBOX_PANEMENU") is not { Length: > 0 } wanted) return;
+
+        var entry = flyout.Items.OfType<MenuItem>().FirstOrDefault(
+            i => string.Equals(i.Header?.ToString(), wanted.Trim(), StringComparison.OrdinalIgnoreCase));
+
+        if (entry is null)
+        {
+            Log.Info($"Harness: {named} has no entry called “{wanted}”.");
+            return;
+        }
+
+        entry.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
+        Log.Info($"Harness: {named} · {wanted} pressed — calendar {(shell.IsCalendarDocked ? "on" : "off")}, "
+                 + $"tasks {(shell.AreTasksDocked ? "on" : "off")}, people {(shell.ArePeopleDocked ? "on" : "off")}, "
+                 + $"bar {(shell.IsToDoBarVisible ? "showing" : "away")}.");
     }
 
     /// <summary>Reminders Window: what is due now, and the window even when nothing is.</summary>
