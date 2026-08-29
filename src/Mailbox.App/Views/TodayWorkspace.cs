@@ -2,6 +2,7 @@ using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
@@ -34,6 +35,18 @@ public sealed class TodayWorkspace : Border
 {
     private readonly StackPanel _columns = new() { Orientation = Orientation.Horizontal, Spacing = 40 };
     private readonly TextBlock _heading = new() { FontSize = 22 };
+
+    /// <summary>
+    /// Every line the page drew, in the order it drew them, with the button behind it.
+    /// </summary>
+    /// <remarks>
+    /// Kept because a picture of this page cannot be pressed and cannot be queried. Every line on
+    /// it is a link and none of them had ever been followed by anything: a run could photograph
+    /// the three columns and could not say whether a folder line opens that folder, whether an
+    /// appointment line opens that appointment, or whether a line does nothing at all — and one
+    /// kind of line does exactly that.
+    /// </remarks>
+    private readonly List<(string Column, string Text, Button? Link)> _lines = [];
 
     private readonly PimRepository _pim;
     private readonly Func<IReadOnlyList<OpenAccount>> _accounts;
@@ -76,11 +89,38 @@ public sealed class TodayWorkspace : Border
     /// <summary>What the status bar says while this page is up.</summary>
     public string Status { get; private set; } = string.Empty;
 
+    /// <summary>The dated heading, as drawn.</summary>
+    public string Heading => _heading.Text ?? string.Empty;
+
+    /// <summary>
+    /// What the page is showing: the column each line is in, its words, and whether pressing it
+    /// is wired to anything.
+    /// </summary>
+    public IReadOnlyList<(string Column, string Text, bool Acts)> Lines
+        => [.. _lines.Select(l => (l.Column, l.Text, l.Link is not null))];
+
+    /// <summary>
+    /// Presses one line of one column, through the button a reader would click.
+    /// </summary>
+    /// <returns>False when that column has no such line, or the line is not a link at all.</returns>
+    public bool Press(string column, int index)
+    {
+        var rows = _lines
+            .Where(l => string.Equals(l.Column, column, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (index < 0 || index >= rows.Count || rows[index].Link is not { } button) return false;
+
+        button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        return true;
+    }
+
     /// <summary>Reads the three stores again — after a write, or when the page is opened.</summary>
     public void Reload()
     {
-        _heading.Text = _today.ToDateTime(TimeOnly.MinValue).ToString("dddd, d MMMM yyyy", CultureInfo.CurrentCulture);
+        _heading.Text = _today.ToDateTime(TimeOnly.MinValue).ToString("D", CultureInfo.CurrentCulture);
 
+        _lines.Clear();
         _columns.Children.Clear();
         var appointments = Appointments();
         var tasks = Tasks();
@@ -110,10 +150,10 @@ public sealed class TodayWorkspace : Border
                 : entry.Occurrence.StartUtc.ToOffset(zone.GetUtcOffset(entry.Occurrence.StartUtc)).ToString("h:mm tt", CultureInfo.CurrentCulture);
 
             var id = entry.ItemId;
-            rows.Add(Line($"{when}   {entry.Summary}", () => AppointmentRequested?.Invoke(this, id)));
+            rows.Add(Line("Calendar", $"{when}   {entry.Summary}", () => AppointmentRequested?.Invoke(this, id)));
         }
 
-        if (rows.Count == 0) rows.Add(Quiet("Nothing today."));
+        if (rows.Count == 0) rows.Add(Quiet("Calendar", "Nothing today."));
         return (rows, entries.Count);
     }
 
@@ -132,6 +172,7 @@ public sealed class TodayWorkspace : Border
             // share the number.
             var borrowed = row.IsBorrowed;
             rows.Add(Line(
+                "Tasks",
                 row.Task.Due is { } due ? $"{row.Summary}   ({due.Wall:d})" : row.Summary,
                 () =>
                 {
@@ -139,7 +180,7 @@ public sealed class TodayWorkspace : Border
                 }));
         }
 
-        if (rows.Count == 0) rows.Add(Quiet("Nothing outstanding."));
+        if (rows.Count == 0) rows.Add(Quiet("Tasks", "Nothing outstanding."));
         return (rows, outstanding.Count);
     }
 
@@ -165,11 +206,11 @@ public sealed class TodayWorkspace : Border
                 total += count;
                 var name = folder.Name;
                 var whose = address;
-                rows.Add(Line($"{name}   {count}", () => FolderRequested?.Invoke(this, (whose, name))));
+                rows.Add(Line("Messages", $"{name}   {count}", () => FolderRequested?.Invoke(this, (whose, name))));
             }
         }
 
-        if (rows.Count == 0) rows.Add(Quiet("No accounts yet."));
+        if (rows.Count == 0) rows.Add(Quiet("Messages", "No accounts yet."));
         return (rows, total);
     }
 
@@ -192,7 +233,7 @@ public sealed class TodayWorkspace : Border
     }
 
     /// <summary>One line of a column, which is a link: everything on this page opens something.</summary>
-    private static Control Line(string text, Action run)
+    private Control Line(string column, string text, Action run)
     {
         var button = new Button
         {
@@ -205,13 +246,16 @@ public sealed class TodayWorkspace : Border
 
         button[!TemplatedControl.ForegroundProperty] = new DynamicResourceExtension("people.card.text.brush");
         button.Click += (_, _) => run();
+        _lines.Add((column, text, button));
         return button;
     }
 
-    private static Control Quiet(string text)
+    /// <summary>The line a column with nothing in it draws instead, which is not a link.</summary>
+    private Control Quiet(string column, string text)
     {
         var block = new TextBlock { Text = text, FontSize = 12, Margin = new Thickness(0, 2, 0, 2) };
         block[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("people.card.subtle.brush");
+        _lines.Add((column, text, null));
         return block;
     }
 }

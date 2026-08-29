@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
@@ -36,8 +37,11 @@ namespace Mailbox.App.Views;
 /// </remarks>
 internal sealed class PeoplePeek : Border
 {
-    /// <summary>Measured: 249 across, inside the hairline.</summary>
-    public const double PeekWidth = 249;
+    /// <summary>
+    /// Measured: 248 across, inside the hairline — the reference's own box runs 49–296 between
+    /// two black columns at 48 and 297, so the whole popup is 250 and its page is 248.
+    /// </summary>
+    public const double PeekWidth = 248;
 
     /// <summary>
     /// Authored: the capture cuts the top off, so the height is the calendar peek's, the two
@@ -45,14 +49,22 @@ internal sealed class PeoplePeek : Border
     /// </summary>
     public const double PeekHeight = 330;
 
+    /// <summary>The hairline round it, which the width above is measured inside.</summary>
+    public const double Hairline = 1;
+
     private readonly ContactListView _list = new() { ShowIndex = false, OnPopup = true };
     private readonly StackPanel _body = new();
+    private Button? _corner;
+    private Button? _search;
 
     public PeoplePeek(IReadOnlyList<ContactRow> favourites, FileAsOrder order)
     {
-        Width = PeekWidth;
+        // A Border's Width is the outside of its own border, and the measurement above is the
+        // page inside it: set as the page's width the popup came out a pixel narrower than the
+        // reference in every theme.
+        Width = PeekWidth + (2 * Hairline);
         Height = PeekHeight;
-        BorderThickness = new Thickness(1);
+        BorderThickness = new Thickness(Hairline);
         this[!BorderBrushProperty] = new DynamicResourceExtension("peek.pop.outline.brush");
         this[!BackgroundProperty] = new DynamicResourceExtension("peek.pop.frame.brush");
 
@@ -83,6 +95,30 @@ internal sealed class PeoplePeek : Border
     /// <summary>What the peek is holding, for a harness pose that cannot photograph a popup.</summary>
     public IReadOnlyList<ContactRow> Rows => _list.Rows;
 
+    /// <summary>
+    /// Presses one of the peek's own two buttons — <c>corner</c> or <c>search</c> — through the
+    /// button itself.
+    /// </summary>
+    /// <remarks>
+    /// Neither had ever been pressed by anything: both are buttons inside a control the shell
+    /// adds to a canvas, so no command reaches them and no capture can click one. What they do —
+    /// dock the section, or hand over to the module's own Search People — is only provable from
+    /// here.
+    /// </remarks>
+    public bool Press(string what)
+    {
+        var button = what.Trim().ToLowerInvariant() switch
+        {
+            "corner" or "dock" => _corner,
+            "search" => _search,
+            _ => null,
+        };
+
+        if (button is null) return false;
+        button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        return true;
+    }
+
     private Control Corner()
     {
         var corner = new Button
@@ -95,6 +131,7 @@ internal sealed class PeoplePeek : Border
 
         ToolTip.SetTip(corner, "Show the People section in the To-Do Bar");
         corner.Click += (_, _) => DockRequested?.Invoke(this, EventArgs.Empty);
+        _corner = corner;
         return corner;
     }
 
@@ -138,6 +175,7 @@ internal sealed class PeoplePeek : Border
         };
 
         button.Click += (_, _) => SearchRequested?.Invoke(this, EventArgs.Empty);
+        _search = button;
         return button;
     }
 

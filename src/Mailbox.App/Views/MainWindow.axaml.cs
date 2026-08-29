@@ -518,6 +518,10 @@ public partial class MainWindow : Window
         // registers its own Opened handler for the read-back.
         WirePhase8ADoors();
 
+        // Opening the folder pane's own menu over a row of the tree and pressing an entry of it.
+        // Its own file; it registers its own Opened handler.
+        WirePhase10ADoors();
+
         // The peek's own buttons, pressed the same way. After the peek pose has opened one, and
         // after it has drawn, since what a press aims at is where the view really put it.
         if (Environment.GetEnvironmentVariable("MAILBOX_PEEK_PRESS") is { Length: > 0 } press)
@@ -924,6 +928,14 @@ public partial class MainWindow : Window
         // A scripted sequence of feed presses in one run, which is the only way at what a second
         // poll of a feed does.
         WirePhase11APoses();
+
+        // The board steps, a row's own buttons, and what the article list ended up holding. Last
+        // of all, for the reason above: an order is only an order once every save has been made.
+        WirePhase11BDoors();
+
+        // The summary page's links, the People peek's two buttons, and what the calendar peek's
+        // agenda is hiding — all of which want the arrangement above to have settled first.
+        WirePhase10BDoors();
     }
 
     /// <summary>
@@ -3558,7 +3570,7 @@ public partial class MainWindow : Window
         {
             if (e.Handled) return;
 
-            var menu = new MenuFlyout();
+            var menu = _folderMenu = new MenuFlyout();
             FillFolderContextMenu(menu);
             menu.ShowAt(folders, showAtPointer: true);
             e.Handled = true;
