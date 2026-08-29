@@ -324,8 +324,10 @@ public sealed class NotesView : DrawnSurface
         }
 
         // A double click on the wall itself makes a note, which is the reference's own gesture
-        // and the only way a module with nothing in it gets its first one.
-        if (e.ClickCount >= 2)
+        // and the only way a module with nothing in it gets its first one. The column headings
+        // are not the wall: they are drawn like the message list's, where a press sorts, and
+        // opening a new note there is not a thing any reader asked for.
+        if (e.ClickCount >= 2 && (IsWall || point.Y >= HeaderHeight))
         {
             NewNoteRequested?.Invoke(this, EventArgs.Empty);
             e.Handled = true;

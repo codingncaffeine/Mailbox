@@ -352,6 +352,27 @@ public partial class MainWindow
         }
 
         var wanted = spec.Contains(':', StringComparison.Ordinal) ? spec[(spec.IndexOf(':', StringComparison.Ordinal) + 1)..].Trim() : spec;
+
+        // dblat:x,y — two clicks at a point in the view's own coordinates rather than at a note.
+        // The wall answers a second click on anything that is not a note, and "anything" includes
+        // parts of the view that are not the wall, so where the gesture lands has to be sayable.
+        if (spec.StartsWith("dblat:", StringComparison.OrdinalIgnoreCase))
+        {
+            var pair = wanted.Split(',', StringSplitOptions.TrimEntries);
+            if (pair.Length != 2
+                || !double.TryParse(pair[0], CultureInfo.InvariantCulture, out var x)
+                || !double.TryParse(pair[1], CultureInfo.InvariantCulture, out var y))
+            {
+                Log.Info($"Harness: “{wanted}” is not a point — say dblat:x,y.");
+                return;
+            }
+
+            CaptureNextWindow();
+            DoubleClick(notes.View, new Avalonia.Point(x, y));
+            Log.Info($"Harness: the view was double-clicked at {x:0},{y:0}.");
+            return;
+        }
+
         var row = notes.Rows.FirstOrDefault(r => r.Title.Contains(wanted, StringComparison.OrdinalIgnoreCase));
         if (row is null)
         {
