@@ -12,7 +12,7 @@ namespace Mailbox.Controls.Calendar;
 /// The blocks they are not free in. Empty with <paramref name="Known"/> false means nothing is
 /// known, which is a different thing from being free all day and is drawn differently.
 /// </param>
-public sealed record FreeBusyRow(string Name, string Address, bool IsOrganizer, bool Known, IReadOnlyList<(DateTime Start, DateTime End)> Busy);
+public sealed record FreeBusyRow(string Name, string Address, bool IsOrganizer, bool Known, IReadOnlyList<(DateTime Start, DateTime End, BusyStatus Kind)> Busy);
 
 /// <summary>
 /// The Scheduling Assistant's grid: everybody asked down the left, the day across the top, and
@@ -139,6 +139,46 @@ public sealed class FreeBusyView : CalendarSurface
         }
 
         DrawMeeting(context, grid);
+        DrawLegend(context, width, height, y);
+    }
+
+    /// <summary>
+    /// The legend under the grid, as the reference draws it — a filled state is only readable
+    /// once something says which fill is which.
+    /// </summary>
+    private void DrawLegend(DrawingContext context, double width, double height, double rowsEnd)
+    {
+        const double swatch = 12;
+        var y = height - 24;
+        if (y < rowsEnd + 8) return;
+
+        var x = NamesWidth + 8;
+
+        foreach (var (label, kind) in new[]
+                 {
+                     ("Busy", BusyStatus.Busy),
+                     ("Tentative", BusyStatus.Tentative),
+                     ("Out of Office", BusyStatus.OutOfOffice),
+                 })
+        {
+            var paint = Palette.Chip(null, kind);
+            var box = new Rect(x, y, swatch, swatch);
+
+            if (paint.Hatched)
+            {
+                Fill(context, box, Palette.Colour(TokenKeys.Calendar.ChipHatch));
+                DrawHatch(context, box, paint.Bar);
+            }
+            else
+            {
+                Fill(context, box, paint.Bar);
+            }
+
+            var text = Ink(label, AddressTextSize, Palette.Colour(TokenKeys.Calendar.HourText));
+            context.DrawText(text, new Point(x + swatch + 5, y + (swatch - text.Height) / 2));
+            x += swatch + 5 + text.Width + 18;
+            if (x > width - 40) break;
+        }
     }
 
     /// <summary>The hour marks across the top, one per hour the grid covers.</summary>
@@ -184,12 +224,26 @@ public sealed class FreeBusyView : CalendarSurface
             return;
         }
 
-        foreach (var (start, end) in row.Busy)
+        foreach (var (start, end, kind) in row.Busy)
         {
             var box = Slot(grid, start, end);
             if (box is not { } rect) continue;
-            var paint = Palette.Chip(null, BusyStatus.Busy);
-            Fill(context, new Rect(rect.X, band.Y + 6, rect.Width, RowHeight - 14), paint.Bar);
+
+            // By kind, as the reference fills them: Busy solid, Tentative hatched in the same
+            // ink, Out of Office in its own colour — the difference is the whole point at the
+            // moment somebody is choosing between a tentative hour and a committed one.
+            var paint = Palette.Chip(null, kind);
+            var bar = new Rect(rect.X, band.Y + 6, rect.Width, RowHeight - 14);
+
+            if (paint.Hatched)
+            {
+                Fill(context, bar, Palette.Colour(TokenKeys.Calendar.ChipHatch));
+                DrawHatch(context, bar, paint.Bar);
+            }
+            else
+            {
+                Fill(context, bar, paint.Bar);
+            }
         }
     }
 

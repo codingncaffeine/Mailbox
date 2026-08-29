@@ -42,6 +42,13 @@ public sealed class CalendarSource(PimRepository repository)
     /// The clock the view reads: what a floating or all-day time is placed by, and what an
     /// appointment written in another zone is drawn at. The machine's own if null.
     /// </param>
+    /// <summary>
+    /// Resolves a colour category's name to the colour the theme draws it, handed in by the
+    /// application — the views cannot see the category list, and the category is the one thing
+    /// that outranks the calendar's own colour on a chip, as the reference draws it.
+    /// </summary>
+    public Func<string, Color?>? CategoryColour { get; set; }
+
     public IReadOnlyList<CalendarEntry> Between(
         DateTimeOffset fromUtc,
         DateTimeOffset toUtc,
@@ -83,13 +90,21 @@ public sealed class CalendarSource(PimRepository repository)
                     ? ICalendarCodec.RecurrenceIdText(rid)
                     : string.Empty);
 
+                // The last category assigned wins, which is the reference's own rule for a
+                // block carrying several.
+                var categorised = CategoryColour is { } lookup
+                    ? occurrence.Event.Categories
+                        .Select(lookup)
+                        .LastOrDefault(c => c is not null)
+                    : null;
+
                 entries.Add(new CalendarEntry
                 {
                     Occurrence = occurrence,
                     ItemId = ids.TryGetValue(key, out var id) ? id : 0,
                     CollectionId = calendar.Id,
                     CollectionName = calendar.DisplayName,
-                    Colour = colour,
+                    Colour = categorised ?? colour,
                     IsReadOnly = calendar.IsReadOnly,
                     Zone = zone ?? TimeZoneInfo.Local,
                 });

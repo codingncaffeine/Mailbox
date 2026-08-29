@@ -606,6 +606,15 @@ public sealed class CalendarWorkspace : Border
         // change on the page shows on the next draw: whether every calendar takes the default
         // colour, and whether a reminder draws a bell.
         _source.ForcedColour = _options.ColourEveryCalendar ? _options.DefaultColour : null;
+
+        // A colour category outranks the calendar's colour on the block, as the reference
+        // draws it; the token resolves through the live theme, so a theme change re-reads it
+        // on the next reload.
+        _source.CategoryColour = name =>
+            App.Categories.Named(name)?.ColourToken is { Length: > 0 } token
+            && Avalonia.Application.Current?.FindResource(token + ".brush") is Avalonia.Media.ISolidColorBrush brush
+                ? brush.Color
+                : null;
         _month.ShowBell = _options.ShowBell;
         _timeGrid.ShowBell = _options.ShowBell;
         _schedule.ShowBell = _options.ShowBell;

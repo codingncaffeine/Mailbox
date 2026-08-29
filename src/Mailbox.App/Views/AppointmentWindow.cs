@@ -342,7 +342,7 @@ public sealed class AppointmentWindow : Window
         var meeting = _surface.Current();
         var day = DateOnly.FromDateTime(meeting.Start.Wall);
 
-        var mine = new List<(DateTime Start, DateTime End)>();
+        var mine = new List<(DateTime Start, DateTime End, BusyStatus Kind)>();
         try
         {
             var source = new CalendarSource(App.Pim);
@@ -351,7 +351,7 @@ public sealed class AppointmentWindow : Window
             mine.AddRange(source
                 .Between(from, to)
                 .Where(e => e.Busy != BusyStatus.Free && e.Occurrence.Event.Uid != meeting.Uid)
-                .Select(e => (e.StartWall, e.EndWall)));
+                .Select(e => (e.StartWall, e.EndWall, e.Busy)));
         }
         catch (Microsoft.Data.Sqlite.SqliteException ex)
         {
