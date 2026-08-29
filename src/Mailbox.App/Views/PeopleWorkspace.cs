@@ -625,6 +625,52 @@ public sealed class PeopleWorkspace : Border
 
     private static Control Gap() => new Border { Height = 8 };
 
+    // ---- What a harness run can read -------------------------------------------------------------
+
+    /// <summary>
+    /// The card as it is drawn: one line per row, the label and the value it carries.
+    /// </summary>
+    /// <remarks>
+    /// Read off the built controls rather than off the contact, so what comes back is what a
+    /// reader is looking at — a field the card silently drops does not appear here either.
+    /// </remarks>
+    internal IReadOnlyList<string> CardLines()
+    {
+        var lines = new List<string>();
+        foreach (var child in _card.Children) lines.Add(Describe(child));
+        return lines;
+
+        static string Describe(Control control) => control switch
+        {
+            TextBlock text => text.Text ?? string.Empty,
+            Grid grid => string.Join(
+                "\t",
+                grid.Children.Select(c => c switch
+                {
+                    SelectableTextBlock s => s.Text ?? string.Empty,
+                    TextBlock t => t.Text ?? string.Empty,
+                    _ => c.GetType().Name,
+                })),
+            Button button => $"[button] {Flatten(button.Content)}",
+            Border { Height: 1 } => "————",
+            StackPanel stack => string.Join(" · ", stack.Children.Select(Describe)),
+            _ => control.GetType().Name,
+        };
+
+        static string Flatten(object? content) => content switch
+        {
+            string text => text,
+            TextBlock text => text.Text ?? string.Empty,
+            StackPanel stack => string.Join(
+                " ", stack.Children.Select(c => c is TextBlock t ? t.Text ?? string.Empty : string.Empty))
+                .Trim(),
+            _ => content?.ToString() ?? string.Empty,
+        };
+    }
+
+    /// <summary>The card's own panel, so a run can press what is drawn on it.</summary>
+    internal Control CardHost => _card;
+
     private static T? Resource<T>(string key) where T : struct
         => Application.Current is { } app && app.TryFindResource(key, out var value) && value is T typed ? typed : null;
 }

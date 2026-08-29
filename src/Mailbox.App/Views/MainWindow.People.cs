@@ -178,6 +178,8 @@ public partial class MainWindow
     /// </remarks>
     private void WireContactWindow(ShellViewModel shell, ContactWindow window)
     {
+        WirePhase7ADoors(window);
+
         window.ShellCommandRequested += (_, id) =>
         {
             if (id == ContactCommands.Email.Id)
@@ -411,6 +413,14 @@ public partial class MainWindow
     /// </remarks>
     private void ShowContactMenu(ShellViewModel shell, ContactRow row)
     {
+        var flyout = ContactMenu(shell, row);
+        Log.Info($"People: the menu for “{row.Named()}” is open.");
+        flyout.ShowAt(EnsurePeople(shell), showAtPointer: true);
+    }
+
+    /// <summary>The entries themselves, built once so a harness run can press one of them.</summary>
+    private MenuFlyout ContactMenu(ShellViewModel shell, ContactRow row)
+    {
         var flyout = new MenuFlyout();
 
         void Entry(string header, Action run, bool enabled = true)
@@ -440,8 +450,7 @@ public partial class MainWindow
         flyout.Items.Add(new Separator());
         Entry("Delete", () => _ = DeleteSelectedContactAsync(shell));
 
-        Log.Info($"People: the menu for “{row.Named()}” is open.");
-        flyout.ShowAt(EnsurePeople(shell), showAtPointer: true);
+        return flyout;
     }
 
     /// <summary>
