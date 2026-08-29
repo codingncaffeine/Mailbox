@@ -87,9 +87,11 @@ public static class OptionsPages
 
             new OptionSection("User Interface options",
             [
-                new ComboRow("When using multiple displays:",
-                    ["Optimize for best appearance", "Optimize for compatibility (restart required)"],
-                    LabelWidth: 200) { HasInfo = true },
+                // A label over two radios, as the reference draws it — a combo here read as
+                // drift in the Phase 12 capture comparison.
+                new SubHeadingRow("When using multiple displays:"),
+                new RadioRow("displays", "Optimize for best appearance", true) { Indent = 1 },
+                new RadioRow("displays", "Optimize for compatibility (restart required)") { Indent = 1 },
                 new CheckRow("Show Mini Toolbar on selection", true) { HasInfo = true },
                 new CheckRow("Enable Live Preview", true) { HasInfo = true },
                 new ComboRow("ScreenTip style:",
@@ -165,6 +167,7 @@ public static class OptionsPages
             new OptionSection("Conversation Clean Up",
             [
                 new SlotRow("cleanupfolder"),
+                new NoteRow("Messages moved by Clean Up will go to their account's Deleted Items."),
                 new CheckRow("When cleaning sub-folders, recreate the folder hierarchy in the destination folder"),
                 new CheckRow("Don't move unread messages") { Key = MailOptions.CleanUpKeepUnreadKey },
                 new CheckRow("Don't move categorized messages", true) { Key = MailOptions.CleanUpKeepCategorizedKey },
@@ -175,6 +178,9 @@ public static class OptionsPages
 
             new OptionSection("Replies and forwards",
             [
+                // Greyed rather than removed, like every AI row — the standing convention for
+                // the exclusion, and the capture draws it.
+                new CheckRow("Show suggested replies") { HasInfo = true, IsDisabled = true },
                 new CheckRow("Open replies and forwards in a new window") { Key = MailOptions.OpenRepliesInNewWindowKey },
                 new CheckRow("Close original message window when replying or forwarding") { Key = MailOptions.CloseOriginalOnReplyKey },
                 // The same setting the Stationery dialog's "Mark my comments with:" edits — one
@@ -275,14 +281,18 @@ public static class OptionsPages
             [
                 new ComboRow("Start time:", Times, 16, 130, 200) { Key = CalendarOptions.WorkDayStartKey },
                 new ComboRow("End time:", Times, 34, 130, 200) { Key = CalendarOptions.WorkDayEndKey },
-                new SubHeadingRow("Work week:"),
-                new CheckRow("Sun") { Indent = 1, Key = CalendarOptions.WorkDayKey(DayOfWeek.Sunday) },
-                new CheckRow("Mon", true) { Indent = 1, Key = CalendarOptions.WorkDayKey(DayOfWeek.Monday) },
-                new CheckRow("Tue", true) { Indent = 1, Key = CalendarOptions.WorkDayKey(DayOfWeek.Tuesday) },
-                new CheckRow("Wed", true) { Indent = 1, Key = CalendarOptions.WorkDayKey(DayOfWeek.Wednesday) },
-                new CheckRow("Thu", true) { Indent = 1, Key = CalendarOptions.WorkDayKey(DayOfWeek.Thursday) },
-                new CheckRow("Fri", true) { Indent = 1, Key = CalendarOptions.WorkDayKey(DayOfWeek.Friday) },
-                new CheckRow("Sat") { Indent = 1, Key = CalendarOptions.WorkDayKey(DayOfWeek.Saturday) },
+                // One line of seven, as the capture draws it — a column of seven read as drift
+                // in the Phase 12 comparison.
+                new InlineChecksRow("Work week:",
+                [
+                    new InlineCheck("Sun", CalendarOptions.WorkDayKey(DayOfWeek.Sunday)),
+                    new InlineCheck("Mon", CalendarOptions.WorkDayKey(DayOfWeek.Monday), true),
+                    new InlineCheck("Tue", CalendarOptions.WorkDayKey(DayOfWeek.Tuesday), true),
+                    new InlineCheck("Wed", CalendarOptions.WorkDayKey(DayOfWeek.Wednesday), true),
+                    new InlineCheck("Thu", CalendarOptions.WorkDayKey(DayOfWeek.Thursday), true),
+                    new InlineCheck("Fri", CalendarOptions.WorkDayKey(DayOfWeek.Friday), true),
+                    new InlineCheck("Sat", CalendarOptions.WorkDayKey(DayOfWeek.Saturday)),
+                ], 130),
                 new ComboRow("First day of week:", Weekdays, 0, 150, 200) { Key = Keys.FirstDayOfWeek },
                 new ComboRow("First week of year:",
                     ["Starts on Jan 1", "First 4-day week", "First full week"], 0, 180, 200),

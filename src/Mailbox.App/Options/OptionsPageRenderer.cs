@@ -99,6 +99,7 @@ public sealed class OptionsPageRenderer
         var control = row switch
         {
             CheckRow r => Check(r),
+            InlineChecksRow r => InlineChecks(r),
             RadioRow r => Radio(r),
             ComboRow r => Combo(r),
             TextRow r => Text(r),
@@ -143,6 +144,28 @@ public sealed class OptionsPageRenderer
         Bind(box, Avalonia.Controls.Primitives.TemplatedControl.ForegroundProperty,
             row.IsDisabled ? "text.disabled.brush" : "dialog.foreground.brush");
         return row.HasInfo ? WithInfo(box) : box;
+    }
+
+    /// <summary>Several ticks on one line — the reference's work-week row. Each keeps its own key.</summary>
+    private Control InlineChecks(InlineChecksRow row)
+    {
+        var line = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
+
+        foreach (var check in row.Checks)
+        {
+            var box = new CheckBox
+            {
+                IsChecked = _settings.GetBool(check.Key, check.IsChecked),
+                Content = check.Label,
+            };
+            box.IsCheckedChanged += (_, _) => _settings.Set(check.Key, box.IsChecked == true);
+            _keys[box] = check.Key;
+            Bind(box, Avalonia.Controls.Primitives.TemplatedControl.ForegroundProperty,
+                "dialog.foreground.brush");
+            line.Children.Add(box);
+        }
+
+        return Labelled(row.Label, line, row.LabelWidth, info: false);
     }
 
     private Control Radio(RadioRow row)

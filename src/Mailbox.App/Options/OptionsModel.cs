@@ -71,6 +71,18 @@ public sealed record SpinnerRow(
     int Maximum = 999,
     double LabelWidth = 380) : OptionRow;
 
+/// <summary>One tick of an <see cref="InlineChecksRow"/>: its caption, key and shipped state.</summary>
+public sealed record InlineCheck(string Label, string Key, bool IsChecked = false);
+
+/// <summary>
+/// A label with several tick boxes on one line — the reference's work-week row, seven ticks
+/// beside "Work week:". Each tick keeps its own key; the row is layout, not state.
+/// </summary>
+public sealed record InlineChecksRow(
+    string Label,
+    IReadOnlyList<InlineCheck> Checks,
+    double LabelWidth = 200) : OptionRow;
+
 /// <summary>Plain explanatory text, no control attached.</summary>
 public sealed record NoteRow(string Text) : OptionRow;
 
