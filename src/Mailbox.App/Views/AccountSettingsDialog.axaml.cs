@@ -642,11 +642,10 @@ public sealed class AccountSettingsDialog : Window
     {
         try
         {
-            var folder = App.Accounts.Directory_;
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(folder)
-            {
-                UseShellExecute = true,
-            });
+            // Phase 13's rule is that every button on every tab acts, so this one will be pressed
+            // by a pose — and it hands a path to the desktop, which under a capture would open a
+            // file manager on the owner's screen. The guard is the shared helper's.
+            Mailbox.Core.Platform.DesktopOpen.Open(App.Accounts.Directory_);
         }
         catch (Exception ex)
         {

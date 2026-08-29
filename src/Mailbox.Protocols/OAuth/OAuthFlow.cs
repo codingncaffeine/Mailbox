@@ -303,22 +303,13 @@ public sealed class OAuthFlow : IDisposable
     /// goes through the same tool anyway and swallows the failure when it is missing.
     /// </remarks>
     private static void OpenInDefaultBrowser(Uri url)
-    {
-        try
-        {
-            // AbsoluteUri, not ToString(): the display form unescapes, and the scopes are
-            // separated by spaces — which would reach the browser as spaces in a query string.
-            using var process = Process.Start(new ProcessStartInfo("xdg-open", url.AbsoluteUri)
-            {
-                UseShellExecute = false,
-            });
-        }
-        catch (Exception ex)
-        {
-            // Not fatal: the listener is up, and the URL can be pasted into a browser by hand.
-            Log.Warn($"Could not open a browser for the sign-in: {ex.Message}");
-        }
-    }
+        // AbsoluteUri, not ToString(): the display form unescapes, and the scopes are separated by
+        // spaces — which would reach the browser as spaces in a query string.
+        //
+        // This is the fallback used when nothing injected an opener; the account wizard supplies
+        // its own. A failure here is not fatal, and the shared helper logs it: the listener is up
+        // either way, and the URL can be pasted into a browser by hand.
+        => Mailbox.Core.Platform.DesktopOpen.Open(url.AbsoluteUri);
 
     public void Dispose() => _http.Dispose();
 }

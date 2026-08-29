@@ -602,24 +602,10 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
             return;
         }
 
-        try
-        {
-            using var process = new System.Diagnostics.Process
-            {
-                StartInfo = new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "xdg-open",
-                    ArgumentList = { uri.ToString() },
-                    UseShellExecute = false,
-                },
-            };
-
-            process.Start();
-        }
-        catch (Exception ex)
-        {
-            Log.Warn($"Could not open {uri.Host}.", ex);
-        }
+        // The address here comes out of the message, which is what makes this the one that had to
+        // be guarded: a link in a seeded corpus, pressed under a pose, would hand an arbitrary URL
+        // to the browser of whoever was running the sweep.
+        Mailbox.Core.Platform.DesktopOpen.Open(uri.ToString());
     }
 
     /// <summary>

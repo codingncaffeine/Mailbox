@@ -983,11 +983,7 @@ public sealed class OptionsWindow : Window
             try
             {
                 Directory.CreateDirectory(App.Plugins.Root);
-                System.Diagnostics.Process.Start(
-                    new System.Diagnostics.ProcessStartInfo("xdg-open", App.Plugins.Root)
-                    {
-                        UseShellExecute = false,
-                    });
+                Mailbox.Core.Platform.DesktopOpen.Open(App.Plugins.Root);
             }
             catch (Exception ex)
             {

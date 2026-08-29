@@ -561,33 +561,12 @@ public partial class MainWindow
     /// </remarks>
     private static void OpenProjectPage(ShellViewModel shell, string url, string what)
     {
-        if (Mailbox.App.Theming.WindowCapture.IsRequested)
+        shell.StatusRight = Mailbox.Core.Platform.DesktopOpen.Open(url) switch
         {
-            shell.StatusRight = $"Would open {what}: {url}";
-            Log.Info($"Harness: would open {url}");
-            return;
-        }
-
-        try
-        {
-            using var process = new System.Diagnostics.Process
-            {
-                StartInfo = new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "xdg-open",
-                    ArgumentList = { url },
-                    UseShellExecute = false,
-                },
-            };
-
-            process.Start();
-            shell.StatusRight = $"Opened {what} in your browser.";
-        }
-        catch (Exception ex)
-        {
-            Log.Warn($"Could not open {url}.", ex);
-            shell.StatusRight = $"Nothing on this desktop opened {url}.";
-        }
+            Mailbox.Core.Platform.DesktopOpenResult.Opened => $"Opened {what} in your browser.",
+            Mailbox.Core.Platform.DesktopOpenResult.Posed => $"Would open {what}: {url}",
+            _ => $"Nothing on this desktop opened {url}.",
+        };
     }
 
     // ---- What is on ---------------------------------------------------------------------

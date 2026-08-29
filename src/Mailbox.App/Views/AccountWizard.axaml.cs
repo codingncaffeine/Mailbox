@@ -374,26 +374,15 @@ public sealed class AccountWizard : Window
     /// </remarks>
     private void OpenBrowser(Uri url)
     {
-        if (!WindowCapture.IsRequested)
+        // The helper carries the posed-run guard and logs the address it would have opened; what
+        // is left here is this surface's own half of it, which is that a posed sign-in must also
+        // stop waiting on a loopback socket nobody is going to answer.
+        if (Mailbox.Core.Platform.DesktopOpen.Open(url.AbsoluteUri)
+            == Mailbox.Core.Platform.DesktopOpenResult.Posed)
         {
-            try
-            {
-                using var process = System.Diagnostics.Process.Start(
-                    new System.Diagnostics.ProcessStartInfo("xdg-open", url.AbsoluteUri)
-                    {
-                        UseShellExecute = false,
-                    });
-            }
-            catch (Exception ex)
-            {
-                Log.Warn($"Could not open a browser for the sign-in: {ex.Message}");
-            }
-
-            return;
+            Log.Info($"Harness: sign-in — would open {url.AbsoluteUri}");
+            _signingIn?.Cancel();
         }
-
-        Log.Info($"Harness: sign-in — would open {url.AbsoluteUri}");
-        _signingIn?.Cancel();
     }
 
     private async Task AddAsync()

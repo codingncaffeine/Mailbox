@@ -2801,20 +2801,21 @@ internal sealed class FeedsWorkspace : Border
             return;
         }
 
-        try
+        // Every article carries a link and this is the button that follows it, so a sweep of this
+        // module is precisely the run that must not reach the desktop: auditing the feeds a person
+        // actually reads would otherwise open one tab per article in their browser.
+        switch (Mailbox.Core.Platform.DesktopOpen.Open(address.AbsoluteUri))
         {
-            using var process = new System.Diagnostics.Process
-            {
-                StartInfo = new System.Diagnostics.ProcessStartInfo(address.AbsoluteUri) { UseShellExecute = true },
-            };
-            process.Start();
-            Status = $"Opened {address.Host}.";
-            Log.Info($"Feeds: opened {address.AbsoluteUri} in the desktop's browser.");
-        }
-        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
-        {
-            Status = "The desktop could not open that address.";
-            Log.Warn($"Feeds: {address.AbsoluteUri} could not be opened.", ex);
+            case Mailbox.Core.Platform.DesktopOpenResult.Opened:
+                Status = $"Opened {address.Host}.";
+                Log.Info($"Feeds: opened {address.AbsoluteUri} in the desktop's browser.");
+                break;
+            case Mailbox.Core.Platform.DesktopOpenResult.Posed:
+                Status = $"Opened {address.Host}.";
+                break;
+            default:
+                Status = "The desktop could not open that address.";
+                break;
         }
     }
 
