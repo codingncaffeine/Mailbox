@@ -14,7 +14,12 @@ namespace Mailbox.Core.Ribbon;
 /// customizations rather than one surface's. The stored document omits the toolbar, which lives
 /// in the settings file with the rest of the small persistent choices.
 /// </remarks>
-public sealed record RibbonCustomizationFile(RibbonTree Tree, IReadOnlyList<CommandId>? QuickAccess);
+/// <param name="Module">
+/// Which module's ribbon the tree describes. Null for a document written before the field
+/// existed, every one of which came out of the Mail editor.
+/// </param>
+public sealed record RibbonCustomizationFile(
+    RibbonTree Tree, IReadOnlyList<CommandId>? QuickAccess, MailboxModule? Module = null);
 
 /// <summary>
 /// Where a user's ribbon edits are kept: one JSON document beside the settings file.
@@ -82,9 +87,51 @@ public sealed class RibbonCustomization
         }
     }
 
-    /// <summary>The layout to render: the shipped one with the saved edits applied.</summary>
+    /// <summary>
+    /// The layout to render: the shipped one with the saved edits applied, when the edits were
+    /// made against this module's ribbon.
+    /// </summary>
+    /// <remarks>
+    /// The module check is the whole of this method's difficulty. Every module asks this of the
+    /// same document, and tab ids repeat across the layouts — Mail, Calendar, People, Tasks,
+    /// Notes, Journal and Feeds all have a tab called <c>home</c>, and most of them a
+    /// <c>sendreceive</c>, a <c>view</c> and a <c>help</c>. Applied blind, a document describing
+    /// the Mail ribbon rewrote the Calendar's Home row with Mail's clusters, gave every module a
+    /// Folder tab with nothing in it, and did the same to the other five. One press of Add on the
+    /// Options page was enough. A document names the ribbon it describes and is applied to that
+    /// one only.
+    /// </remarks>
     public RibbonLayout Apply(RibbonLayout shipped)
-        => IsCustomized ? Load(shipped).ApplyTo(shipped) : shipped;
+    {
+        ArgumentNullException.ThrowIfNull(shipped);
+
+        if (!IsCustomized) return shipped;
+        if (Describes(shipped.Module) is false) return shipped;
+
+        return Load(shipped).ApplyTo(shipped);
+    }
+
+    /// <summary>
+    /// Whether the saved document describes this module's ribbon. Null when there is no readable
+    /// document, in which case there is nothing to apply either way.
+    /// </summary>
+    private bool? Describes(MailboxModule module)
+    {
+        if (!IsCustomized) return null;
+
+        try
+        {
+            // A document written before the module was recorded came out of the Mail editor,
+            // which was the only editor there has ever been.
+            return (Read(File.ReadAllText(_path!)).Module ?? MailboxModule.Mail) == module;
+        }
+        catch (Exception)
+        {
+            // Load says the same thing to the log a moment later; saying it twice per module
+            // switch would fill the file with it.
+            return null;
+        }
+    }
 
     /// <summary>
     /// Saves the tree, or deletes the document when the tree says nothing the shipped layout
@@ -105,7 +152,7 @@ public sealed class RibbonCustomization
             return;
         }
 
-        Write(_path, tree, quickAccess: null);
+        Write(_path, tree, quickAccess: null, shipped.Module);
     }
 
     /// <summary>Discards every edit, so the shipped ribbon comes back.</summary>
@@ -124,8 +171,9 @@ public sealed class RibbonCustomization
     }
 
     /// <summary>Writes the tree, and the toolbar with it, to a file the user chose.</summary>
-    public static void Export(string path, RibbonTree tree, IReadOnlyList<CommandId>? quickAccess)
-        => Write(path, tree, quickAccess);
+    public static void Export(
+        string path, RibbonTree tree, IReadOnlyList<CommandId>? quickAccess, MailboxModule module)
+        => Write(path, tree, quickAccess, module);
 
     /// <summary>Reads a file the user chose. Throws only if it is not this document at all.</summary>
     public static RibbonCustomizationFile Import(string path)
@@ -133,7 +181,8 @@ public sealed class RibbonCustomization
 
     // ---- The document ----------------------------------------------------------------------
 
-    private static void Write(string? path, RibbonTree tree, IReadOnlyList<CommandId>? quickAccess)
+    private static void Write(
+        string? path, RibbonTree tree, IReadOnlyList<CommandId>? quickAccess, MailboxModule module)
     {
         if (path is not { Length: > 0 }) return;
 
@@ -168,6 +217,7 @@ public sealed class RibbonCustomization
         var document = new JsonObject
         {
             ["version"] = CurrentVersion,
+            ["module"] = module.ToString(),
             ["tabs"] = tabs,
         };
 
@@ -238,7 +288,11 @@ public sealed class RibbonCustomization
             ? Commands(toolbar).ToList()
             : null;
 
-        return new RibbonCustomizationFile(tree, quickAccess);
+        var module = Enum.TryParse<MailboxModule>(Text(document, "module"), out var named)
+            ? named
+            : (MailboxModule?)null;
+
+        return new RibbonCustomizationFile(tree, quickAccess, module);
     }
 
     private static IEnumerable<CommandId> Commands(JsonArray? array)

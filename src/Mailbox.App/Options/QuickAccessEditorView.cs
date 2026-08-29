@@ -159,7 +159,7 @@ public sealed class QuickAccessEditorView : CustomizationEditor
     }
 
     protected override void OnExport(string path)
-        => RibbonCustomization.Export(path, _ribbon.Load(_shipped), _toolbar.Commands);
+        => RibbonCustomization.Export(path, _ribbon.Load(_shipped), _toolbar.Commands, _shipped.Module);
 
     /// <summary>
     /// Modify… under the placed list, as the reference puts it: the symbol a command is drawn

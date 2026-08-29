@@ -408,7 +408,7 @@ public sealed class RibbonEditorView : CustomizationEditor
     }
 
     protected override void OnExport(string path)
-        => RibbonCustomization.Export(path, _model, App.QuickAccess.Commands);
+        => RibbonCustomization.Export(path, _model, App.QuickAccess.Commands, _shipped.Module);
 
     private void Save()
     {

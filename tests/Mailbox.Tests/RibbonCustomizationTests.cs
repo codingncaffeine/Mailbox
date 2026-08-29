@@ -271,7 +271,7 @@ public class RibbonCustomizationStoreTests : IDisposable
         var tree = RibbonTree.From(Shipped);
         tree.Tabs[0].Label = "Mail";
 
-        RibbonCustomization.Export(path, tree, [new CommandId("mail.reply")]);
+        RibbonCustomization.Export(path, tree, [new CommandId("mail.reply")], MailboxModule.Mail);
 
         var imported = RibbonCustomization.Import(path);
 
@@ -321,6 +321,88 @@ public class RibbonCustomizationStoreTests : IDisposable
         Assert.Equal(
             ["mail.new"],
             applied.Simplified["home"].Groups[0].Items.Select(i => i.Command.Value).ToArray());
+    }
+
+    /// <summary>
+    /// A customization is a statement about one module's ribbon, and is applied to that one only.
+    /// </summary>
+    /// <remarks>
+    /// Tab ids repeat across the layouts — every module has a <c>home</c>, most of them a
+    /// <c>sendreceive</c>, a <c>view</c> and a <c>help</c> — so a document applied blind rewrote
+    /// the Calendar's Home row with Mail's clusters and gave every module a Folder tab holding
+    /// nothing. One press of Add on the Options page was enough to do it to all six other modules.
+    /// </remarks>
+    [Fact]
+    public void ACustomizationOfOneModuleLeavesTheOtherModulesAlone()
+    {
+        var path = At("ribbon.json");
+        var store = new RibbonCustomization(path);
+
+        var tree = RibbonTree.From(Shipped);
+        tree.Tabs.Single(t => t.Id == "home").Groups[0].Commands.Add(new CommandId("mail.workoffline"));
+        store.Save(tree, Shipped);
+
+        Assert.True(store.IsCustomized);
+        Assert.Contains(
+            "mail.workoffline",
+            store.Apply(Shipped).Simplified["home"].Groups[0].Items.Select(i => i.Command.Value));
+
+        foreach (var other in new[]
+                 {
+                     DefaultRibbonLayouts.Calendar,
+                     DefaultRibbonLayouts.People,
+                     TasksRibbonLayout.Build(),
+                     NotesRibbonLayout.Build(),
+                     JournalRibbonLayout.Build(),
+                     FeedsRibbonLayout.Build(),
+                 })
+        {
+            Assert.Same(other, store.Apply(other));
+        }
+    }
+
+    /// <summary>The document names the ribbon it describes, so it can be applied to that one.</summary>
+    [Fact]
+    public void TheStoredDocumentNamesItsModule()
+    {
+        var path = At("ribbon.json");
+        var tree = RibbonTree.From(Shipped);
+        tree.Tabs[0].Label = "Mail";
+
+        new RibbonCustomization(path).Save(tree, Shipped);
+
+        Assert.Equal(MailboxModule.Mail, RibbonCustomization.Import(path).Module);
+    }
+
+    /// <summary>
+    /// A document written before the module was recorded came out of the only editor there was.
+    /// </summary>
+    [Fact]
+    public void ADocumentWithNoModuleIsTakenAsTheMailRibbon()
+    {
+        var path = At("ribbon.json");
+        File.WriteAllText(
+            path,
+            """
+            {
+              "version": 1,
+              "tabs": [
+                {
+                  "id": "home",
+                  "label": "Renamed",
+                  "visible": true,
+                  "groups": [
+                    { "id": "new", "label": "New", "commands": ["mail.new"] }
+                  ]
+                }
+              ]
+            }
+            """);
+
+        var store = new RibbonCustomization(path);
+
+        Assert.Equal("Renamed", store.Apply(Shipped).Tabs.Single(t => t.Id == "home").Label);
+        Assert.Same(DefaultRibbonLayouts.Calendar, store.Apply(DefaultRibbonLayouts.Calendar));
     }
 
     [Fact]
