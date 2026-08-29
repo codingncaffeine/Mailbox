@@ -132,6 +132,10 @@ public sealed class ContactSurface : UserControl
     public string Title => (_name.Text is { Length: > 0 } text ? text : "Untitled")
                            + (_group ? " - Contact Group" : " - Contact");
 
+    /// <summary>What a card is called on the form, which is nothing at all when it has no name.</summary>
+    private static string Named(Contact contact)
+        => contact.Named() is var name && name == Contact.NoName ? string.Empty : name;
+
     public event EventHandler? TitleChanged;
 
     /// <summary>Save &amp; Close, Delete or Save &amp; New: the window should go.</summary>
@@ -152,7 +156,13 @@ public sealed class ContactSurface : UserControl
 
     private void Fill(Contact contact)
     {
-        _name.Text = contact.Named();
+        // Named() falls back to the words a list row is drawn with when a card says nothing, and a
+        // new contact says nothing: the form opened with "(no name)" typed into Full Name and into
+        // Display as, and the caption read "(no name) - Contact" where the reference's reads
+        // "Untitled - Contact". Empty is what an empty card has to say.
+        var named = Named(contact);
+
+        _name.Text = named;
         _company.Text = contact.Company;
         _jobTitle.Text = contact.JobTitle;
 
@@ -161,7 +171,7 @@ public sealed class ContactSurface : UserControl
         _email.Text = contact.PrimaryEmail;
         _displayAs.Text = contact.Emails.Count > 0 && contact.Emails[0].Name is { Length: > 0 } shown
             ? shown
-            : contact.Named();
+            : named;
         _webPage.Text = contact.Urls.FirstOrDefault() ?? string.Empty;
         _im.Text = contact.InstantMessaging.FirstOrDefault() ?? string.Empty;
 
