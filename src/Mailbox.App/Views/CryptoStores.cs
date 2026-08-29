@@ -1,4 +1,5 @@
 using Mailbox.Security.OpenPgp;
+using Mailbox.Security.Smime;
 using MimeKit.Cryptography;
 
 namespace Mailbox.App.Views;
@@ -30,13 +31,14 @@ public static class CryptoStores
     public static PassphraseVault Passphrases { get; } = new();
 
     /// <summary>The machine's certificate store — or a throwaway one under the harness.</summary>
+    /// <remarks>
+    /// Through <see cref="CertificateStore"/> rather than MimeKit's file-name constructor, which
+    /// looks for a SQLite provider this tree does not carry and threw before it opened anything —
+    /// and which, having no single-argument file-name overload, would have taken the path as the
+    /// database password and put the file in the library's own home. See that class.
+    /// </remarks>
     public static SecureMimeContext Certificates()
-    {
-        if (Throwaway) return new TemporarySecureMimeContext();
-
-        Directory.CreateDirectory(App.StoreDirectory);
-        return new DefaultSecureMimeContext(Path.Combine(App.StoreDirectory, "certificates.db"));
-    }
+        => Throwaway ? new TemporarySecureMimeContext() : CertificateStore.Open(App.StoreDirectory);
 
     /// <summary>The machine's OpenPGP keys — or an empty throwaway ring under the harness.</summary>
     public static PgpContext KeyRing()

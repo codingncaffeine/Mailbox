@@ -9,6 +9,10 @@
     <PackageReference Include="MimeKit" Version="$(MailKitVersion)" />
     <!-- Named here because this project compiles against it, not because MimeKit brings it. -->
     <PackageReference Include="BouncyCastle.Cryptography" Version="$(BouncyCastleVersion)" />
+    <!-- The certificate store is a SQLite file, and MimeKit's own file-name constructor can only
+         find System.Data.SQLite. The same provider the mail store already uses is handed to
+         MimeKit as a connection instead, so nothing new is shipped — see CertificateStore. -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="$(SqliteVersion)" />
   </ItemGroup>
 
   <ItemGroup>
