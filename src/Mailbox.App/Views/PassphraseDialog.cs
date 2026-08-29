@@ -120,6 +120,12 @@ public static class PassphraseDialog
             CanResize = false,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             ShowInTaskbar = false,
+
+            // The window's own font, so every control inherits it — the way MessageWindow and
+            // AppointmentWindow do. Without it the CheckBox's content presenter fell to the
+            // toolkit default (Inter), a shade off the token font every sibling drew, which the
+            // typography read-back caught: the exact class the doors programme was built for.
+            FontFamily = (FontFamily)(Application.Current!.FindResource("ui.fontfamily") ?? FontFamily.Default),
         };
 
         var cancel = new Button { Content = "Cancel", IsCancel = true };
