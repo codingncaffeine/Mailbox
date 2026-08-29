@@ -414,4 +414,104 @@ public class VCardTests
         Assert.Equal(string.Empty, contact.NotesHtml);
     }
 
+    /// <summary>
+    /// A 4.0 group as a real file states one: members named by a proper UUID.
+    /// </summary>
+    /// <remarks>
+    /// The round-trip test above writes its own members and reads them back, and its UIDs are
+    /// addresses rather than UUIDs — so it never went down the path a real 4.0 file takes, where
+    /// <c>urn:uuid:</c> holds something the library can parse as a GUID.
+    /// </remarks>
+    [Fact]
+    public void AFourOhGroupKeepsMembersNamedByARealUuid()
+    {
+        var file = """
+            BEGIN:VCARD
+            VERSION:4.0
+            UID:urn:uuid:11111111-2222-4333-8444-555555555555
+            KIND:group
+            FN:Suppliers list
+            MEMBER:urn:uuid:66666666-7777-4888-8999-000000000000
+            MEMBER:mailto:b.other@example.org
+            END:VCARD
+            """.ReplaceLineEndings("\r\n");
+
+        var group = VCardCodec.ParseOne(file);
+
+        Assert.True(group.IsGroup);
+        Assert.Contains(group.Members, m => m.Address == "b.other@example.org");
+        Assert.Contains(group.Members, m => m.Uid == "66666666-7777-4888-8999-000000000000");
+        Assert.Equal(2, group.Members.Count);
+
+        // And through the version the store keeps, which is the trip an imported group really
+        // takes: a 4.0 file is parsed once and written back as the stored version before anything
+        // reads it again.
+        var stored = VCardCodec.ParseOne(VCardCodec.Serialize(group, VCardVersion.V3));
+        Assert.Contains(stored.Members, m => m.Address == "b.other@example.org");
+        Assert.Contains(stored.Members, m => m.Uid == "66666666-7777-4888-8999-000000000000");
+        Assert.Equal(2, stored.Members.Count);
+    }
+
+    /// <summary>
+    /// A group and the people in it, in one file, which is what an exported address book is.
+    /// </summary>
+    /// <remarks>
+    /// The reader resolves a <c>MEMBER:urn:uuid:</c> against the other cards in the same file and
+    /// hands the member over as the card itself rather than as an identifier — so a group read
+    /// one card at a time keeps its members and the same group read as part of a file lost every
+    /// member whose card travelled with it, which is all of them.
+    /// </remarks>
+    [Fact]
+    public void AGroupKeepsItsMembersWhenTheirCardsAreInTheSameFile()
+    {
+        var file = """
+            BEGIN:VCARD
+            VERSION:4.0
+            UID:urn:uuid:66666666-7777-4888-8999-000000000000
+            FN:C. Reader
+            EMAIL:c.reader@example.org
+            END:VCARD
+            BEGIN:VCARD
+            VERSION:4.0
+            UID:urn:uuid:11111111-2222-4333-8444-555555555555
+            KIND:group
+            FN:Suppliers list
+            MEMBER:urn:uuid:66666666-7777-4888-8999-000000000000
+            MEMBER:mailto:b.other@example.org
+            END:VCARD
+            """.ReplaceLineEndings("\r\n");
+
+        var group = Assert.Single(VCardCodec.Parse(file), c => c.IsGroup);
+
+        Assert.Equal(2, group.Members.Count);
+        Assert.Contains(group.Members, m => m.Address == "b.other@example.org");
+        Assert.Contains(
+            group.Members,
+            m => m.Uid == "66666666-7777-4888-8999-000000000000" && m.Address == "c.reader@example.org");
+    }
+
+    /// <summary>
+    /// 4.0 states a telephone as a <c>tel:</c> URI, which is what the number is not.
+    /// </summary>
+    [Fact]
+    public void AFourOhTelephoneComesBackAsANumberRatherThanAUri()
+    {
+        var file = """
+            BEGIN:VCARD
+            VERSION:4.0
+            UID:urn:uuid:11111111-2222-4333-8444-555555555556
+            FN:B. Other
+            TEL;VALUE=uri;TYPE="work,voice":tel:+44-20-7946-0000
+            TEL;VALUE=uri;TYPE="cell":tel:+44-7700-900000;ext=21
+            END:VCARD
+            """.ReplaceLineEndings("\r\n");
+
+        var contact = VCardCodec.ParseOne(file);
+
+        Assert.Equal(2, contact.Phones.Count);
+        Assert.Equal("+44-20-7946-0000", contact.Phones[0].Number);
+        Assert.Equal("+44-7700-900000;ext=21", contact.Phones[1].Number);
+        Assert.DoesNotContain(
+            "tel:", VCardCodec.Serialize(contact, VCardVersion.V3), StringComparison.OrdinalIgnoreCase);
+    }
 }

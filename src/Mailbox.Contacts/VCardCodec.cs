@@ -168,9 +168,27 @@ public static class VCardCodec
         => card.Phones?
             .Where(p => p is { IsEmpty: false })
             .OrderBy(p => p!.Parameters.Preference)
-            .Select(p => new ContactPhone(p!.Value!.Trim(), PhoneKindOf(p.Parameters.PhoneType, p.Parameters.PropertyClass)))
+            .Select(p => new ContactPhone(Dialled(p!.Value!), PhoneKindOf(p.Parameters.PhoneType, p.Parameters.PropertyClass)))
             .Where(p => p.Number.Length > 0)
             .ToList() ?? [];
+
+    /// <summary>
+    /// The number out of what the card states, which in 4.0 is a URI.
+    /// </summary>
+    /// <remarks>
+    /// RFC 6350 writes a telephone as <c>TEL;VALUE=uri:tel:+44-20-7946-0000</c>, and taken
+    /// verbatim the scheme becomes part of the number: every card from a 4.0 address book came in
+    /// with "tel:" in front of every number, which is what the card then shows, what a search
+    /// indexes, and what goes back to the server the next time anything is saved. The rest of the
+    /// URI is kept — an extension is part of how somebody is reached.
+    /// </remarks>
+    private static string Dialled(string value)
+    {
+        var text = value.Trim();
+        return text.StartsWith("tel:", StringComparison.OrdinalIgnoreCase)
+            ? Uri.UnescapeDataString(text[4..]).Trim()
+            : text;
+    }
 
     /// <summary>
     /// The label the reference's card would put on a number, out of the TYPE parameters a vCard
@@ -291,6 +309,13 @@ public static class VCardCodec
             if (id?.Guid is { } guid) Merge(members, new GroupMember(Uid: guid.ToString("D")));
             else if (id?.Uri is { } uri) Merge(members, FromUri(uri.ToString()));
             else if (id?.String is { Length: > 0 } text) Merge(members, FromUri(text));
+
+            // A member whose card is in the same file arrives as the card rather than as an
+            // identifier: the reader resolves `urn:uuid:` against everything it has just parsed,
+            // and a .vcf holding a group beside the people in it is the ordinary shape of an
+            // exported address book. Read as an identifier and nothing else, every one of those
+            // members was dropped — a list imported from anywhere else came in empty.
+            else if (relation.Value.VCard is { } referenced) Merge(members, FromCard(referenced));
         }
 
         foreach (var property in card.NonStandards?.Where(p => p is { IsEmpty: false }
@@ -328,6 +353,23 @@ public static class VCardCodec
             Address = known.Address.Length > 0 ? known.Address : member.Address,
             Uid = known.Uid.Length > 0 ? known.Uid : member.Uid,
         };
+    }
+
+    /// <summary>
+    /// A member the reader handed over as a whole card: everything that card says about how to
+    /// reach the person, so the list still works if the card it points at is never imported.
+    /// </summary>
+    private static GroupMember FromCard(VCard card)
+    {
+        // Uid() invents one for a card that carries none, which is right for a card being read
+        // into the book and wrong here: a member naming a uid nothing else carries is a member
+        // naming nobody. Such a member is known by its address instead.
+        var uid = card.ContactID?.Value is null ? string.Empty : Uid(card);
+
+        return new GroupMember(
+            card.EMails?.FirstOrDefault(e => e is { IsEmpty: false })?.Value?.Trim() ?? string.Empty,
+            Text(card.DisplayNames),
+            uid);
     }
 
     /// <summary>A member URI as a member: a UID, or an address, or an address with a name on it.</summary>
