@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace Mailbox.Protocols;
@@ -33,6 +34,27 @@ public static class LegacyCodePages
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
         return true;
     });
+
+    /// <summary>
+    /// Registers before anything in this assembly runs, because registering late is the same as
+    /// not registering at all.
+    /// </summary>
+    /// <remarks>
+    /// MimeKit resolves a charset name through a static cache of its own, and a name it failed to
+    /// resolve stays failed for the life of the process — so a single MIME parse that happens
+    /// before the provider is registered poisons every later one. Calling <see cref="Register"/>
+    /// from the composition root is enough for the application, whose first parse comes long
+    /// afterwards, and was not enough for the test assembly, where the order tests run in decides
+    /// it: the same four code pages passed here and failed on CI, on the same commit.
+    /// <para>
+    /// A module initializer runs before any code in the assembly does, which makes the ordering
+    /// question go away rather than answering it.
+    /// </para>
+    /// </remarks>
+#pragma warning disable CA2255 // Running before anything else in the assembly is the whole point.
+    [ModuleInitializer]
+    internal static void RegisterEarly() => Register();
+#pragma warning restore CA2255
 
     /// <summary>Makes the legacy code pages resolvable. Safe to call as often as you like.</summary>
     public static void Register() => _ = Registered.Value;
