@@ -120,21 +120,46 @@ internal sealed class HtmlSanitizer(ResourceMap resources, RenderOptions options
             }
         }
 
+        // A stylesheet whose end tag never arrives holds the rest of the message, which is what a
+        // browser does with one too. Without this the sheet — and every host it named — was
+        // dropped on the floor and the tracker report said the message asked for nothing.
+        if (_inStyle) CloseStyle();
+
         return _out.ToString();
     }
 
+    /// <summary>
+    /// Text between tags, written out escaped.
+    /// </summary>
+    /// <remarks>
+    /// <b>Escaped here rather than taken as the tokenizer wrote it.</b> The tokenizer hands back
+    /// two different things under one token kind: from the data state it hands back text with its
+    /// character references already re-encoded, and from the raw-text and plain-text states — the
+    /// insides of <c>xmp</c>, <c>noembed</c>, <c>noframes</c> and everything after
+    /// <c>&lt;plaintext&gt;</c> — it hands back the source verbatim, markup and all. Appending that
+    /// verbatim wrote a stranger's tags straight into the document: those four elements are not on
+    /// the allowlist, so the tag was dropped and its "text" kept, and
+    /// <c>&lt;xmp&gt;&lt;script&gt;…&lt;/script&gt;&lt;/xmp&gt;</c> reached the engine as a script
+    /// element the sanitizer had never seen. Encoding the <em>decoded</em> value closes the class
+    /// whatever the tokenizer decides is raw text next: what goes out is text, always, and it says
+    /// what the sender wrote.
+    /// </remarks>
     private void Text(HtmlToken token)
     {
-        var text = token.ToString() ?? string.Empty;
+        // HtmlDataToken.Data is the decoded value; ToString() is the re-encoded one. Encoding the
+        // decoded value round-trips ordinary text and neutralises raw text, which is the point.
+        var text = token is HtmlDataToken data ? data.Data : token.ToString() ?? string.Empty;
 
         if (_inStyle)
         {
+            // A stylesheet is raw text by definition: HTML does not decode references inside one,
+            // so this is the source as written and must stay that way for the scrubber to read.
             _style.Append(text);
             return;
         }
 
         if (_skipping is not null) return;
-        _out.Append(text);
+        _out.Append(Encode(text));
     }
 
     private void Tag(HtmlTagToken tag)
@@ -319,9 +344,17 @@ internal sealed class HtmlSanitizer(ResourceMap resources, RenderOptions options
 
         if (UrlSafety.IsDangerousScheme(trimmed)) return null;
 
+        // A part the message carries. Only a picture: every attribute that reaches here draws an
+        // image, and inlining a part by the type it declares would let a cid: reference to a
+        // text/html part become a data: document — which is the thing the rule below exists to
+        // refuse, reached by the other road. A cid: also resolves by file name, so without this
+        // `<img src="cid:agenda.pdf">` inlines the attachment.
         if (resources.Resolve(trimmed) is { } part)
         {
-            return ResourceMap.DataUri(part, options.MaxInlineBytes);
+            return part.ContentType?.MediaType is { } media
+                   && media.Equals("image", StringComparison.OrdinalIgnoreCase)
+                ? ResourceMap.DataUri(part, options.MaxInlineBytes)
+                : null;
         }
 
         // Already inline. Images only: a data: URI naming any other type is a document, and a

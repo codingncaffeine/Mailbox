@@ -67,6 +67,35 @@ internal static partial class CssScrubber
     private static partial Regex AtRule { get; }
 
     /// <summary>
+    /// A reference to somewhere on the network, written any way at all.
+    /// </summary>
+    /// <remarks>
+    /// <c>url()</c> is not the only way CSS fetches: <c>image-set("https://…" 1x)</c> takes bare
+    /// strings, an escaped identifier (<c>\75 rl(…)</c>) is the same token spelled differently, and
+    /// the next function to be invented will be neither. So anything remote left in a declaration
+    /// after the <c>url()</c> rewriter has had it is reported and its declaration dropped, which
+    /// makes the rule "no absolute remote URL survives in CSS, however it is written" rather than a
+    /// list of the ways it might be written.
+    /// <para>
+    /// The protocol-relative half insists on a dot in the authority so that the base64 of an inline
+    /// image — which may hold <c>//</c> but never <c>//a.b</c>, the alphabet having no dot — is not
+    /// mistaken for one.
+    /// </para>
+    /// </remarks>
+    [GeneratedRegex(@"https?://[^\s'""(),;{}]+|//[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)+[^\s'""(),;{}]*",
+        RegexOptions.IgnoreCase)]
+    private static partial Regex RemoteReference { get; }
+
+    /// <summary>
+    /// Marks a declaration that named somewhere on the network outside a <c>url()</c>.
+    /// </summary>
+    /// <remarks>
+    /// A character no stylesheet writes, so the declaration can be found again after the
+    /// <c>url()</c> pass has rewritten everything around it.
+    /// </remarks>
+    private const string BareRemoteMark = "\uFFFC";
+
+    /// <summary>
     /// Scrubs a stylesheet or the contents of one <c>style</c> attribute.
     /// </summary>
     /// <param name="css">The declarations as the message wrote them.</param>
@@ -85,26 +114,83 @@ internal static partial class CssScrubber
         var text = Comments.Replace(css, " ");
 
         // An at-rule that fetches takes its whole block with it, or its declarations would be
-        // left loose in the sheet and applied to everything.
-        foreach (var name in ForbiddenAtRules) text = RemoveAtRule(text, name);
+        // left loose in the sheet and applied to everything. What it named goes through the
+        // rewriter on the way out, so the tracker report still names the host: @import was the
+        // one way of asking for something that the report never mentioned.
+        foreach (var name in ForbiddenAtRules) text = RemoveAtRule(text, name, rewrite);
         if (isolated)
         {
-            foreach (var name in IsolatedAtRules) text = RemoveAtRule(text, name);
+            foreach (var name in IsolatedAtRules) text = RemoveAtRule(text, name, rewrite);
         }
+
+        // Before the url() pass, so that the base64 of an image this pass is about to inline
+        // cannot be read as an address.
+        text = MarkBareRemote(text, rewrite);
 
         text = UrlFunction.Replace(text, match =>
         {
-            var resolved = rewrite(match.Groups["url"].Value.Trim());
+            var resolved = rewrite(Unescape(match.Groups["url"].Value.Trim()));
             return resolved is null ? "none" : $"url('{resolved.Replace("'", "%27", StringComparison.Ordinal)}')";
         });
 
         return RemoveForbiddenDeclarations(text, isolated);
     }
 
+    [GeneratedRegex(@"\\([0-9A-Fa-f]{1,6})[ \t\r\n\f]?")]
+    private static partial Regex CssEscape { get; }
+
     /// <summary>
-    /// Drops an at-rule and, where it has one, the block after it.
+    /// A URL as the engine will read it, with CSS's numeric escapes spelled out.
     /// </summary>
-    private static string RemoveAtRule(string css, string name)
+    /// <remarks>
+    /// <c>url(https\3a //host/x)</c> and <c>url(https://host/x)</c> are the same address to a
+    /// rendering engine, and were two different things to the resolver: the first read as neither
+    /// remote nor local, so it was dropped — safe — with the host left out of the tracker report,
+    /// which is the half a reader is looking at when they ask who wrote to them. Decoded only for
+    /// the resolver's benefit; what goes into the document is still whatever the resolver returns.
+    /// </remarks>
+    private static string Unescape(string url)
+        => url.Contains('\\', StringComparison.Ordinal)
+            ? CssEscape.Replace(url, match =>
+            {
+                var code = Convert.ToInt32(match.Groups[1].Value, 16);
+                return code is > 0 and <= 0x10FFFF && (code < 0xD800 || code > 0xDFFF)
+                    ? char.ConvertFromUtf32(code)
+                    : string.Empty;
+            })
+            : url;
+
+    /// <summary>
+    /// Reports every address named outside a <c>url()</c> and marks the declaration it was in.
+    /// </summary>
+    /// <remarks>
+    /// See <see cref="RemoteReference"/>: <c>url()</c> is one spelling of "fetch this", not the
+    /// only one, and a rewriter that knows only that spelling leaves the document with a live
+    /// address in it and the tracker report saying the message asked for nothing.
+    /// </remarks>
+    private static string MarkBareRemote(string css, Func<string, string?> rewrite)
+    {
+        var inside = UrlFunction.Matches(css);
+        if (!RemoteReference.IsMatch(css)) return css;
+
+        return RemoteReference.Replace(css, match =>
+        {
+            foreach (var url in (IEnumerable<Match>)inside)
+            {
+                if (match.Index >= url.Index && match.Index < url.Index + url.Length) return match.Value;
+            }
+
+            // Through the same resolver an img src goes through, purely so the host is counted.
+            // What it hands back is a placeholder for a picture that is not going to be drawn.
+            rewrite(match.Value);
+            return BareRemoteMark;
+        });
+    }
+
+    /// <summary>
+    /// Drops an at-rule and, where it has one, the block after it — reporting what it asked for.
+    /// </summary>
+    private static string RemoveAtRule(string css, string name, Func<string, string?> rewrite)
     {
         var result = new StringBuilder(css.Length);
         var index = 0;
@@ -128,7 +214,18 @@ internal static partial class CssScrubber
             }
 
             result.Append(css, index, at - index);
-            index = SkipRule(css, at);
+
+            var end = SkipRule(css, at);
+
+            // What the rule was going to fetch, counted before it goes — once per address,
+            // whether it was written as a bare string or through url(), because a count that
+            // reported one @import as two resources would be a tracker report that invents.
+            foreach (var reference in (IEnumerable<Match>)RemoteReference.Matches(css[at..end]))
+            {
+                rewrite(reference.Value);
+            }
+
+            index = end;
         }
 
         return result.ToString();
@@ -187,6 +284,10 @@ internal static partial class CssScrubber
 
             // A value naming a script scheme is dropped whatever property it is on.
             if (UrlSafety.IsDangerousScheme(declaration)) continue;
+
+            // And one that named an address outside a url(): the rewriter could not reach it, so
+            // the declaration goes rather than the address staying. See MarkBareRemote.
+            if (declaration.Contains(BareRemoteMark, StringComparison.Ordinal)) continue;
 
             if (result.Length > 0) result.Append(';');
             result.Append(declaration);
