@@ -1,3 +1,6 @@
+using Avalonia.Controls;
+using Avalonia.LogicalTree;
+using Avalonia.VisualTree;
 using Mailbox.App.ViewModels;
 using Mailbox.Core.Diagnostics;
 using Mailbox.Store.Lists;
@@ -54,6 +57,36 @@ public partial class MainWindow
                      + $"{shell.VisibleRows.OfType<GroupHeaderRow>().Count()} group(s) over "
                      + $"{shell.VisibleRows.OfType<MessageRow>().Count()} row(s).");
         }
+    }
+
+    /// <summary>
+    /// What the attachment strip drew, once it has been shown.
+    /// </summary>
+    /// <remarks>
+    /// Here rather than in the pane's own dump because the strip is the shell's control, filled
+    /// from what the pane decided it was showing — an encrypted message's attachments are inside
+    /// it, so the strip is handed <c>Carried</c> after the pane has opened anything it had to.
+    /// Reading it from inside the pane found no strip at all and reported a message with four
+    /// attachments as having a hidden one.
+    /// </remarks>
+    private void LogAttachmentStrip()
+    {
+        if (!ReadingPaneBody.DumpRequested || !Mailbox.App.Theming.WindowCapture.IsRequested) return;
+
+        // The logical tree, not the visual one: the chips are built and added the moment the strip
+        // is shown, and the visual tree under them does not exist until they have been measured —
+        // which under a capture is after this runs. Read visually, a strip holding four chips
+        // reported none.
+        var chips = _attachments.GetSelfAndLogicalDescendants()
+            .OfType<TextBlock>()
+            .Select(t => t.Text)
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Select(t => t!.Trim())
+            .ToList();
+
+        Log.Info($"Harness: attachment strip — {(_attachments.IsVisible ? "shown" : "hidden")}, "
+                 + $"{chips.Count} drawn item(s)"
+                 + (chips.Count > 0 ? $": {string.Join(" · ", chips)}" : string.Empty));
     }
 
     /// <summary>

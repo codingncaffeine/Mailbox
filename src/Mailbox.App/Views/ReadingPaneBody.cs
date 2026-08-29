@@ -54,7 +54,7 @@ public enum PdfSaveResult
 /// text, which is what the pane did before this phase and is better than a crash.
 /// </para>
 /// </remarks>
-public sealed class ReadingPaneBody : UserControl, IDisposable
+public sealed partial class ReadingPaneBody : UserControl, IDisposable
 {
     private readonly ThemeService _themes;
     private readonly Func<MailRepository?> _mail;
@@ -356,6 +356,10 @@ public sealed class ReadingPaneBody : UserControl, IDisposable
         }
 
         Load(_rendered.Html);
+
+        // Last, so what it reports is the pane as it finally stands rather than part-way through
+        // being built. MAILBOX_READING=dump gates it.
+        LogForHarness();
     }
 
     /// <summary>

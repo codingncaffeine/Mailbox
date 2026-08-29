@@ -19,6 +19,11 @@ public static class MessageMapper
     public static MessageSummary ToSummary(MimeMessage message, string? serverUid,
         long sizeBytes, DateTimeOffset receivedUtc, bool isRead = false, bool isFlagged = false)
     {
+        // Before any part is asked for its text: a charset the platform cannot resolve is read as
+        // Latin-1, which turns a Japanese or Cyrillic body into well-formed nonsense without
+        // anything reporting a fault. See LegacyCodePages.
+        LegacyCodePages.Register();
+
         var from = message.From.Mailboxes.FirstOrDefault();
 
         return new MessageSummary(

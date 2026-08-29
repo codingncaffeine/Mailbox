@@ -3052,6 +3052,7 @@ public partial class MainWindow : Window
         _reading.Show(message, shell.SelectedMessage?.Body ?? string.Empty, Verified(shell),
             suspectedJunk: shell.CurrentFolderRole == FolderRole.Junk);
         _attachments.Show(_reading.Carried);
+        LogAttachmentStrip();
         _ = _reading.ApplySenderPolicyAsync();
     }
 

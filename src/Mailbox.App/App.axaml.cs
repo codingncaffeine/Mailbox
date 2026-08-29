@@ -535,6 +535,12 @@ public partial class App : Application
         // rewritten to families this machine can actually draw.
         BundledFonts.Register();
 
+        // The code pages mail still arrives in. Registered at the root as well as in the mapper,
+        // because the reading pane decodes a body straight off the stored MIME and never goes
+        // through the mapper to do it — which is how a Shift_JIS message came to have a correct
+        // subject over a body of accented Latin.
+        Mailbox.Protocols.LegacyCodePages.Register();
+
         // A capture run works on a throwaway copy of the settings. The harness poses states —
         // hide the reading pane, collapse the nav, zoom — and several of those persist, which is
         // right for a person and wrong for a photograph: a smoke test once turned the reading
