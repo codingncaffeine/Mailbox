@@ -5943,13 +5943,46 @@ public partial class MainWindow : Window
 
         if (App.MailOptions.DisplayDesktopAlert)
         {
-            foreach (var item in fresh)
-            {
-                _notifier.Notify(ToastFor(new NewMailToast(
-                    "Reminder: " + item.Subject, item.DueIn(Mailbox.Core.PosedClock.Now),
-                    item.Account?.Account.Address ?? string.Empty, item.Message?.Id ?? 0)));
-            }
+            foreach (var item in fresh) _notifier.Notify(ReminderToast(shell, item));
         }
+    }
+
+    /// <summary>The desktop notification one due reminder raises.</summary>
+    /// <remarks>
+    /// A meeting and a task went out through the new-mail toast, with a message id of zero
+    /// standing in for the message they do not have — so every reminder carried Reply, Delete
+    /// and Mark Read, and all three landed on message zero of the account named by the empty
+    /// string. Three buttons that could not act, on the two thirds of the queue that are not
+    /// mail. A flagged message keeps them, because there they are the point; the other two get
+    /// the one button that means anything for them, and it opens the item the reminder is about
+    /// rather than the mail list.
+    /// </remarks>
+    private Notifications.Notification ReminderToast(ShellViewModel shell, DueReminder item)
+    {
+        var summary = "Reminder: " + item.Subject;
+        var body = item.DueIn(Mailbox.Core.PosedClock.Now);
+
+        if (item is { IsMessage: true, Account: { } account, Message: { } message })
+        {
+            return ToastFor(new NewMailToast(summary, body, account.Account.Address, message.Id));
+        }
+
+        return new Notifications.Notification(summary, body)
+        {
+            Actions = [new(Notifications.NotificationAction.Default, "Open")],
+
+            // Kept in the server's history like the single-message toast, and for the same
+            // reason: a button that outlives the popup is only useful while the toast is there
+            // to press.
+            Transient = false,
+            Activated = action => Dispatcher.UIThread.Post(() =>
+            {
+                Log.Info($"Notification action: {action} for {(item.IsAppointment ? "an appointment" : "a task")}.");
+                BringForward();
+                if (item.Appointment is { } appointment) _ = OpenAppointmentByIdAsync(shell, appointment.ItemId);
+                else if (item.Task is { } task) _ = OpenTaskByIdAsync(shell, task.ItemId);
+            }),
+        };
     }
 
     /// <summary>
@@ -5973,6 +6006,17 @@ public partial class MainWindow : Window
             case "snooze":
                 window.PressSnooze(held, TimeSpan.FromHours(1));
                 break;
+
+            // The reference has no Open button — a row is opened by double-clicking it — so this
+            // is the row's only route to its item, and the item is of whichever of the three
+            // kinds happens to be first in the queue.
+            case "open":
+                window.PressOpen(held);
+                Dispatcher.UIThread.Post(
+                    () => Log.Info($"Harness: opened “{held[0].Subject}”; windows: {OtherWindows()}"),
+                    DispatcherPriority.ApplicationIdle);
+                return;
+
             default:
                 return;
         }

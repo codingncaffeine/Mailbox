@@ -106,6 +106,15 @@ public sealed class DesktopNotifier : INotifier, IDisposable
                 return;
             }
 
+            // Said, the way a sound says which file it played through which player. A toast is
+            // handed to another process and vanishes; without this line "the reminder raised a
+            // notification" and "the reminder raised nothing" read identically afterwards, in a
+            // harness run and in a reader's log alike.
+            Log.Info($"Notification: “{notification.Summary}”"
+                     + (notification.Actions.Count > 0
+                         ? $", with {string.Join(", ", notification.Actions.Select(a => a.Label))}."
+                         : "."));
+
             if (notification.Actions.Count == 0)
             {
                 // Nothing to wait for: the process exits as soon as the server has the toast.

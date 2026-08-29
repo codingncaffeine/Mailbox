@@ -386,6 +386,16 @@ public sealed class RemindersWindow : Window
 
     internal void PressSnooze(IEnumerable<DueReminder> items, TimeSpan span) => Snooze([.. items], span);
 
+    /// <summary>
+    /// Opens the first of these, which is what double-clicking a row does.
+    /// </summary>
+    /// <remarks>
+    /// The reference has no Open button — a row is opened by being double-clicked — so this is
+    /// the only route to the item, and it is the only route a pose can take: a double-click on a
+    /// list row is not something a capture can perform.
+    /// </remarks>
+    internal void PressOpen(IEnumerable<DueReminder> items) => Open(items.FirstOrDefault());
+
     private List<DueReminder> Selected()
         => (_list.SelectedItems ?? new List<object>()).OfType<DueReminder>().ToList();
 

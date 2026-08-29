@@ -52,6 +52,63 @@ public partial class MainWindow
                 },
                 DispatcherPriority.ApplicationIdle);
         }
+
+        // MAILBOX_MAIL_REMINDER=<yyyy-MM-ddTHH:mm> — a reminder on the selected message, at the
+        // moment given. Ahead of the reminder check, which runs at Background.
+        if (Environment.GetEnvironmentVariable("MAILBOX_MAIL_REMINDER") is { Length: > 0 } when)
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(
+                () =>
+                {
+                    if (DataContext is ShellViewModel shell) PoseMailReminder(shell, when.Trim());
+                },
+                DispatcherPriority.Input);
+        }
+    }
+
+    /// <summary>
+    /// Puts a reminder on the selected message at a stated moment, and says what the store then
+    /// holds.
+    /// </summary>
+    /// <remarks>
+    /// The queue takes flagged mail, appointments and tasks, and only two of those three could
+    /// ever be posed: the seed carries no message with a reminder time on it, and the one route
+    /// to setting one is the Custom flag dialog's date and time pickers, which a capture cannot
+    /// type into. So the mail third of the window had never been in a picture of it.
+    /// <para>
+    /// It writes through the shell's own <c>SetCustomFlag</c> — the method the dialog's OK
+    /// calls, with the record the dialog builds — rather than into the store, so a pose proves
+    /// the path a reader uses and the undo, the counts and the status line all happen too.
+    /// </para>
+    /// </remarks>
+    private void PoseMailReminder(ShellViewModel shell, string when)
+    {
+        var rows = SelectedRows();
+        if (rows.Count == 0)
+        {
+            Log.Info("Harness: no message is selected — pose MAILBOX_SELECT as well.");
+            return;
+        }
+
+        if (!DateTimeOffset.TryParse(
+                when, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var moment))
+        {
+            Log.Info($"Harness: “{when}” is not a moment — say yyyy-MM-ddTHH:mm.");
+            return;
+        }
+
+        shell.SetCustomFlag(rows, new CustomFlag("Follow up", null, moment, moment));
+
+        foreach (var row in rows)
+        {
+            var summary = shell.SummaryOf(row);
+            Log.Info($"Harness: reminder on “{row.Subject}” — the store says "
+                     + $"{(summary?.Reminder is { } stamp ? stamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) : "none")}"
+                     + $", flagged {summary?.IsFlagged}.");
+        }
+
+        Log.Info($"Harness: the mail queue now holds "
+                 + $"{App.Accounts.All.Sum(a => a.Mail.DueReminders(Mailbox.Core.PosedClock.UtcNow).Count)} due message(s).");
     }
 
     /// <summary>
