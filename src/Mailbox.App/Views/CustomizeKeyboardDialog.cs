@@ -52,12 +52,23 @@ public sealed class CustomizeKeyboardDialog : Window
         _categories.ItemsSource = new[] { AllCommands }.Concat(_commands.Select(c => c.Category).Where(c => c.Length > 0).Distinct()).ToList();
         _categories.SelectionChanged += (_, _) => FillCommands();
 
+        // Labels repeat across the modules — nine commands read "Delete", eight read "Forward" —
+        // and two identical rows in one list are a bind the reader cannot aim. A duplicate
+        // carries its module, dimmed, the way the description below only manages after the wrong
+        // one has already been chosen.
+        var duplicated = _commands.GroupBy(c => c.Label, StringComparer.Ordinal)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToHashSet(StringComparer.Ordinal);
+
         _commandList.ItemTemplate = new FuncDataTemplate<MailboxCommand>((c, _) =>
         {
             if (c is null) return new Control();
 
             var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
-            var name = ViewDialogKit.SurfaceText(c.Label);
+            var name = ViewDialogKit.SurfaceText(duplicated.Contains(c.Label)
+                ? $"{c.Label}  ({ModuleOf(c.Id)})"
+                : c.Label);
             var key = ViewDialogKit.SurfaceText(_keys.GestureFor(c.Id)?.Display ?? string.Empty);
             key.Opacity = 0.7;
             key.Margin = new Thickness(8, 0, 4, 0);
@@ -157,6 +168,20 @@ public sealed class CustomizeKeyboardDialog : Window
             },
         };
     }
+
+    /// <summary>Where a command lives, from its id — what tells one "Forward" from another.</summary>
+    private static string ModuleOf(CommandId id) => id.Value.Split('.')[0] switch
+    {
+        "mail" or "compose" => "Mail",
+        "app" or "view" or "file" => "Mailbox",
+        "calendar" or "appointment" => "Calendar",
+        "people" or "contact" => "People",
+        "tasks" => "Tasks",
+        "notes" => "Notes",
+        "journal" => "Journal",
+        "feeds" => "Feeds",
+        var other => char.ToUpperInvariant(other[0]) + other[1..],
+    };
 
     private void FillCommands()
     {
