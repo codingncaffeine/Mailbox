@@ -153,6 +153,14 @@ public partial class MainWindow
                 _ = UpdateFeedsAsync(shell, force: false);
                 return true;
 
+            // With no feed chosen this used to fall through to a forced pass over every
+            // subscription — ignoring each one's own interval and every publisher's update limit,
+            // which is the one thing the polling layer exists to avoid. It says what the module's
+            // other three per-feed commands say instead.
+            case "feeds.update.one" when feeds.SelectedFeed is null:
+                shell.StatusRight = "Choose a feed in the list first.";
+                return true;
+
             case "feeds.update.one":
                 _ = UpdateFeedsAsync(shell, force: true, only: feeds.SelectedFeed);
                 return true;

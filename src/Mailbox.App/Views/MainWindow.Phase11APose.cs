@@ -105,6 +105,7 @@ public partial class MainWindow
     /// <item><c>hit:&lt;url&gt;</c> — one plain request through the reader's own fetcher, which
     /// is how a posed publisher is told to change what it serves between two polls;</item>
     /// <item><c>settle:&lt;ms&gt;</c> — a beat for work that is not on the dispatcher;</item>
+    /// <item><c>shot</c> — photograph the window the next step opens, not the shell;</item>
     /// <item><c>dump</c> — every subscription and every article filed, with the numbers a
     /// screenshot cannot carry.</item>
     /// </list>
@@ -168,6 +169,13 @@ public partial class MainWindow
             case "settle":
                 await Task.Delay(int.TryParse(arg, CultureInfo.InvariantCulture, out var ms) ? ms : 500)
                     .ConfigureAwait(true);
+                break;
+
+            case "shot":
+                // Photograph whatever the next step opens rather than the shell behind it: a
+                // dialog is a window of its own and never appears in the shell's picture.
+                Log.Info("Harness: feed script — the next window is the one photographed.");
+                CaptureNextWindow();
                 break;
 
             case "dump":
@@ -241,6 +249,8 @@ public partial class MainWindow
                 + $" every={feed.RefreshMinutes}"
                 + $" keep={feed.KeepMost}"
                 + $" fulltext={feed.ReadFullArticle}"
+                + $" enclosures={feed.DownloadEnclosures}"
+                + $" article={feed.DownloadFullArticle}"
                 + $" failures={feed.Failures}"
                 + $" error={(feed.LastError.Length > 0 ? feed.LastError : "-")}");
         }
@@ -275,6 +285,7 @@ public partial class MainWindow
                     + $" image={(article.FeedImage.Length > 0 ? article.FeedImage : "-")}"
                     + $" link={(article.FeedLink.Length > 0 ? article.FeedLink : "-")}"
                     + $" uid={article.ServerUid ?? "-"}"
+                    + $" attached={Attachments(account, article.Id)}"
                     + $" msgid={article.MessageId ?? "-"}");
             }
         }
@@ -293,6 +304,27 @@ public partial class MainWindow
             var filled = message.Headers[ArticleFill.FilledHeader] is { Length: > 0 };
 
             return text.Trim().Length.ToString(CultureInfo.InvariantCulture) + (filled ? "+page" : string.Empty);
+        }
+        catch (Exception ex) when (ex is FormatException or IOException)
+        {
+            return "unreadable";
+        }
+    }
+
+    /// <summary>What an article carries, which is what the two download boxes claim to add.</summary>
+    private static string Attachments(OpenAccount account, long id)
+    {
+        if (account.Mail.LoadRaw(id) is not { } raw) return "?";
+
+        try
+        {
+            using var stream = new MemoryStream(raw);
+            var message = MimeKit.MimeMessage.Load(stream);
+            var names = message.Attachments
+                .Select(a => a.ContentDisposition?.FileName ?? a.ContentType.Name ?? "(unnamed)")
+                .ToList();
+
+            return names.Count == 0 ? "-" : string.Join('+', names);
         }
         catch (Exception ex) when (ex is FormatException or IOException)
         {
