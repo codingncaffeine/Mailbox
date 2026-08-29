@@ -706,6 +706,14 @@ public sealed class FeedReceiver : IDisposable
         return Folder(account, feed, create: false);
     }
 
+    /// <summary>The feed's folder, made if it is not there — for a delivery that must land.</summary>
+    public static Folder EnsureFolder(OpenAccount account, FeedSubscription feed)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+        ArgumentNullException.ThrowIfNull(feed);
+        return Folder(account, feed, create: true)!;
+    }
+
     private static Folder? Folder(OpenAccount account, FeedSubscription feed, bool create)
     {
         var folders = account.Mail.Folders(account.Account.Id);

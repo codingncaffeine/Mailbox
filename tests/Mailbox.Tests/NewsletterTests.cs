@@ -230,28 +230,40 @@ public class NewsletterTests
     }
 
     [Fact]
-    public void TakingUpANewsletterBringsItsBackNumbersWithIt()
+    public void TakingUpANewsletterBringsItsBackNumbersIntoTheFeedsStore()
     {
-        // A subscription that starts empty and fills up over weeks looks broken.
+        // A subscription that starts empty and fills up over weeks looks broken — and the
+        // issues must land in the store the Feeds module reads, which is not the mailbox's.
         var feeds = new FeedSubscriptions(SettingsStore.Transient());
 
         var (account, store, mail, inbox) = Mailbox();
         using var _s = store;
+
+        var feedStore = MailStore.Transient();
+        using var _f = feedStore;
+        var feedMail = new MailRepository(feedStore);
+        var feedAccount = new OpenAccount(
+            feedMail.AddAccount("feeds@local", "Feeds", MailProtocol.Pop3), feedStore, feedMail);
 
         File(mail, inbox, Issue(subject: "Issue 41"));
         File(mail, inbox, Issue(subject: "Issue 42"));
         File(mail, inbox, Issue(from: "A. Person <alice@example.com>", subject: "Lunch?", unsubscribe: null));
 
         var feed = feeds.Add(Newsletters.AddressFor("news@example.com"), "The Weekly");
-        var moved = NewsletterScan.Gather(mail, account.Account.Id, inbox.Id, feed, "news@example.com");
+        var moved = NewsletterScan.Gather(feedAccount, account, inbox.Id, feed, "news@example.com");
 
         Assert.Equal(2, moved);
 
-        var folders = mail.Folders(account.Account.Id);
-        var own = Assert.Single(folders, f => f.Name == "The Weekly");
-        Assert.Equal(2, mail.Messages(own.Id).Count);
+        // The issues stand in the feeds store's folder for the feed…
+        var own = Assert.Single(
+            feedMail.Folders(feedAccount.Account.Id), f => f.Name == "The Weekly");
+        Assert.Equal(2, feedMail.Messages(own.Id).Count);
 
-        // And the letter from a person is still where it was.
+        // …the originals went to the mailbox's Deleted Items rather than vanishing…
+        var deleted = mail.FolderWithRole(account.Account.Id, FolderRole.Deleted)!;
+        Assert.Equal(2, mail.Messages(deleted.Id).Count);
+
+        // …and the letter from a person is still where it was.
         Assert.Single(mail.Messages(inbox.Id));
     }
 }

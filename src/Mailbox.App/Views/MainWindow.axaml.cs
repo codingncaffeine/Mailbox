@@ -1640,7 +1640,7 @@ public partial class MainWindow : Window
                 Opened += async (_, _) =>
                 {
                     CaptureNextWindow();
-                    await new NewslettersDialog(App.Feeds, FeedAccount).ShowDialog(this);
+                    await new NewslettersDialog(App.Feeds, FeedAccount, () => App.Accounts.All).ShowDialog(this);
                 };
                 break;
 
@@ -7683,6 +7683,8 @@ public partial class MainWindow : Window
 
         try
         {
+            var filedBefore = App.Newsletters.Filed;
+
             var result = await Task.Run(() =>
                 App.Transfer.RunAsync(accounts, DateTimeOffset.UtcNow, _cancellation.Token, mode, folder));
 
@@ -7690,6 +7692,22 @@ public partial class MainWindow : Window
             shell.StatusRight = result.Summary();
             shell.Refresh();
             ReportStuckOperations(shell);
+
+            // A newsletter the arrival pipeline filed lands in its account's own RSS tree, and
+            // the Feeds module reads a store of its own — so what this run filed is carried
+            // across now, by the same copy-count-then-delete move that brought the tree over
+            // originally, rather than waiting for the next launch.
+            if (App.Newsletters.Filed > filedBefore && App.FeedStore?.Account is { } feedStore)
+            {
+                var carried = Mailbox.Store.FeedStoreMove.MoveAll(
+                    feedStore, App.Accounts.All, Mailbox.Protocols.FeedReceiver.RootFolder);
+
+                if (carried.DidAnything)
+                {
+                    Log.Info($"Feeds: {carried.Articles} filed newsletter issue(s) carried into the feeds store.");
+                    _feedModule?.Reload();
+                }
+            }
 
             // The Options page's "Display a Desktop Alert": a toast when a run brought new mail.
             // One per message while there are few, naming the sender and subject with Reply,

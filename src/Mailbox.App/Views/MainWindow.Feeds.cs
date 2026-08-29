@@ -518,13 +518,13 @@ public partial class MainWindow
     /// </remarks>
     private async Task NewslettersAsync(ShellViewModel shell)
     {
-        if (FeedAccount() is null)
+        if (App.Accounts is null || App.Accounts.All.Count == 0)
         {
             shell.StatusRight = "There is no mail account to read newsletters from.";
             return;
         }
 
-        var dialog = new NewslettersDialog(App.Feeds, FeedAccount);
+        var dialog = new NewslettersDialog(App.Feeds, FeedAccount, () => App.Accounts.All);
         await dialog.ShowDialog(this);
 
         if (dialog.Added == 0) return;

@@ -911,11 +911,33 @@ public sealed class ContactSurface : UserControl
             }
         }
 
+        // The typed address is kept whole in the street part rather than parsed: a one-line
+        // address is not invertible, and inventing city and postcode boundaries the reader
+        // never typed is how another client's card gets quietly rewritten. The parts arrive
+        // with the Check Address dialog the queue carries; until then the text round-trips
+        // exactly, because OneLine() of a street-only address is the street.
+        var addresses = _original.Addresses.ToList();
+        var shownAt = addresses.FindIndex(a => !a.IsEmpty);
+        var shown = shownAt >= 0 ? addresses[shownAt] : null;
+        var typed = (_address.Text ?? string.Empty).Trim();
+
+        if (typed.Length == 0)
+        {
+            if (shownAt >= 0) addresses.RemoveAt(shownAt);
+        }
+        else if (typed != shown?.OneLine())
+        {
+            var edited = new ContactAddress { Kind = shown?.Kind ?? AddressKind.Business, Street = typed };
+            if (shownAt >= 0) addresses[shownAt] = edited;
+            else addresses.Add(edited);
+        }
+
         return NameBasis() with
         {
             FileAs = _fileAs.SelectedItem as string ?? _original.FileAs,
             Emails = emails,
             Phones = phones,
+            Addresses = addresses,
             Urls = (_webPage.Text ?? string.Empty).Trim() is { Length: > 0 } url ? [url] : [],
             InstantMessaging = (_im.Text ?? string.Empty).Trim() is { Length: > 0 } im ? [im] : [],
             Notes = _notes.GetPlainText().TrimEnd(),

@@ -630,13 +630,20 @@ public sealed class MailRepository(MailStore store)
     /// A folder's messages, newest first — the ones on show. A snoozed message is not among
     /// them until its time comes; <see cref="Snoozed"/> lists those.
     /// </summary>
-    public IReadOnlyList<MessageSummary> Messages(long folderId, int limit = 500) => Messages(folderId, null, limit);
+    /// <summary>
+    /// How many rows a folder view loads at a time. The whole-folder materialise is the one
+    /// call the store's measurements say never to make; the list's honesty about the rest is
+    /// the view's job.
+    /// </summary>
+    public const int ListPage = 500;
+
+    public IReadOnlyList<MessageSummary> Messages(long folderId, int limit = ListPage) => Messages(folderId, null, limit);
 
     /// <summary>
     /// A folder's messages, or — with <paramref name="focused"/> set — only its Focused or its
     /// Other half, which is what the Inbox lists when Focused Inbox is on.
     /// </summary>
-    public IReadOnlyList<MessageSummary> Messages(long folderId, bool? focused, int limit = 500)
+    public IReadOnlyList<MessageSummary> Messages(long folderId, bool? focused, int limit = ListPage)
     {
         var half = focused switch { true => " AND is_focused = 1", false => " AND is_focused = 0", null => string.Empty };
         return _store.Query(

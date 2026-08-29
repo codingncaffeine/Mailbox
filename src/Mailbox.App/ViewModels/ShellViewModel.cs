@@ -1180,7 +1180,7 @@ public sealed partial class ShellViewModel : ObservableObject
         // The account's heading: the summary page rather than a list of nothing.
         if (_accountHeadings.TryGetValue(folder, out var whose))
         {
-            Messages.Clear();
+            ClearList();
             Rebuild();
             SelectedMessage = null;
             TodayAccount = whose;
@@ -1207,7 +1207,7 @@ public sealed partial class ShellViewModel : ObservableObject
         // The Search Folders heading itself holds nothing; the list empties.
         if (_searchFolderRoots.ContainsKey(folder))
         {
-            Messages.Clear();
+            ClearList();
             Rebuild();
             SelectedMessage = null;
             return;
@@ -1221,7 +1221,7 @@ public sealed partial class ShellViewModel : ObservableObject
 
         if (!_folderIds.TryGetValue(folder, out var where)) return;
 
-        Messages.Clear();
+        ClearList();
         LoadFolderView(where.Account, where.FolderId);
 
         // The Outbox is not a folder of filed mail. What is in it is queued, and the row that
@@ -1282,6 +1282,18 @@ public sealed partial class ShellViewModel : ObservableObject
             });
         }
 
+        // The page is full, so the folder may hold more than the list: count the store the
+        // way the pane beside it does, or the bar reports the cap as the folder's size. The
+        // reachability half — an "older messages" affordance — is the queue's, built once for
+        // the offline window and this page together.
+        if (!ShowSnoozed && Messages.Count >= MailRepository.ListPage
+            && where.Account.Mail.Folders(where.Account.Account.Id)
+                .FirstOrDefault(f => f.Id == where.FolderId) is { } stored
+            && stored.Total > Messages.Count)
+        {
+            _folderBeyondList = (stored.Total, stored.Unread);
+        }
+
         // One query for the page's categories rather than one per row.
         var categories = where.Account.Mail.CategoriesFor([.. Messages.Select(m => m.Id)]);
         foreach (var row in Messages)
@@ -1312,7 +1324,7 @@ public sealed partial class ShellViewModel : ObservableObject
     /// </remarks>
     private void LoadUnified(FolderRole role)
     {
-        Messages.Clear();
+        ClearList();
         if (_accounts is null) return;
 
         foreach (var account in _accounts.All)
@@ -1385,7 +1397,7 @@ public sealed partial class ShellViewModel : ObservableObject
         // Interleaved once at the end rather than merged as they arrive: the arrangement engine
         // sorts what it is given, and this is only about the order the rows reach it in.
         var ordered = Messages.OrderByDescending(m => m.Received).ToList();
-        Messages.Clear();
+        ClearList();
         foreach (var row in ordered) Messages.Add(row);
 
         Rebuild();
@@ -1624,7 +1636,7 @@ public sealed partial class ShellViewModel : ObservableObject
         // The first keystroke of a search is where the Options page's default scope lands.
         if (!IsSearching) BeginSearchScope();
 
-        Messages.Clear();
+        ClearList();
 
         var current = _selectedFolder is { } n && _folderIds.TryGetValue(n, out var where) ? where : default;
 
@@ -1690,7 +1702,7 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>The results of a saved query, as the list draws a search: with folder labels.</summary>
     private void LoadSearchFolder(OpenAccount account, SearchFolder search)
     {
-        Messages.Clear();
+        ClearList();
         var names = FolderNamesFor(account);
         var own = _accounts?.All.Select(a => a.Account.Address).ToList() ?? [];
 
@@ -3932,6 +3944,19 @@ public sealed partial class ShellViewModel : ObservableObject
     public int VisibleCount => VisibleRows.Count(
         r => r is MessageRow { Depth: 0 } or ConversationRow);
 
+    /// <summary>
+    /// The folder's own store counts, kept while the list holds only the newest page of it —
+    /// null whenever the list holds the whole folder, or holds something else entirely.
+    /// </summary>
+    private (int Total, int Unread)? _folderBeyondList;
+
+    /// <summary>Empties the list, and with it the beyond-the-page note that belonged to it.</summary>
+    private void ClearList()
+    {
+        Messages.Clear();
+        _folderBeyondList = null;
+    }
+
     // ---- Pane layout ----------------------------------------------------------------------
 
     /// <summary>The folder pane collapses to nothing, leaving the rail.</summary>
@@ -4122,8 +4147,16 @@ public sealed partial class ShellViewModel : ObservableObject
     /// could never reach here. <see cref="IsTodayShowing"/> is the one bit of state that tells
     /// the two apart.
     /// </remarks>
+    /// <remarks>
+    /// A folder larger than the page the list loads is counted from the store, as the folder
+    /// pane beside it counts — the bar reporting the page's size as the folder's was how 4,500
+    /// messages went missing without a word. A filtered or conversation-arranged list still
+    /// counts what it shows, which is what the reference's bar does.
+    /// </remarks>
     public string StatusLeft => Module == MailboxModule.Mail && !IsTodayShowing
-        ? $"Items: {VisibleCount}   Unread: {Messages.Count(m => m.IsUnread)}"
+        ? _folderBeyondList is { } beyond && Filter == ListFilter.None
+            ? $"Items: {beyond.Total}   Unread: {beyond.Unread}"
+            : $"Items: {VisibleCount}   Unread: {Messages.Count(m => m.IsUnread)}"
         : ModuleStatusLeft;
 
     /// <summary>

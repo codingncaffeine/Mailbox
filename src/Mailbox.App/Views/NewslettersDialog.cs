@@ -35,6 +35,11 @@ public sealed class NewslettersDialog : Window
 {
     private readonly FeedSubscriptions _feeds;
     private readonly Func<OpenAccount?> _account;
+    private readonly Func<IReadOnlyList<OpenAccount>> _mailAccounts;
+
+    /// <summary>Which mail account's inbox each offered newsletter was found in, by identity.</summary>
+    private readonly Dictionary<string, List<(OpenAccount Account, long InboxId)>> _sources =
+        new(StringComparer.OrdinalIgnoreCase);
 
     private readonly StackPanel _list = new() { Spacing = 6 };
     private readonly TextBlock _message = new();
@@ -50,10 +55,12 @@ public sealed class NewslettersDialog : Window
     /// <summary>How many back numbers were moved into their folders.</summary>
     public int Gathered { get; private set; }
 
-    public NewslettersDialog(FeedSubscriptions feeds, Func<OpenAccount?> account)
+    public NewslettersDialog(
+        FeedSubscriptions feeds, Func<OpenAccount?> account, Func<IReadOnlyList<OpenAccount>> mailAccounts)
     {
         _feeds = feeds ?? throw new ArgumentNullException(nameof(feeds));
         _account = account ?? throw new ArgumentNullException(nameof(account));
+        _mailAccounts = mailAccounts ?? throw new ArgumentNullException(nameof(mailAccounts));
 
         Title = "Read Newsletters Here";
         Width = 660;
@@ -234,24 +241,57 @@ public sealed class NewslettersDialog : Window
         return new DockPanel { Margin = new Thickness(18), Children = { top, buttons, scroll } };
     }
 
-    /// <summary>Reads the inbox and offers what it found.</summary>
+    /// <summary>Reads every mail account's inbox and offers what they hold.</summary>
+    /// <remarks>
+    /// The mail accounts, not the feeds store — the feeds store deliberately has no inbox, and
+    /// the newsletters this dialog exists to find are the ones still arriving as mail.
+    /// </remarks>
     private void Scan()
     {
-        if (_account() is not { } account)
+        var inboxes = new List<(OpenAccount Account, long InboxId)>();
+        foreach (var account in _mailAccounts())
         {
-            _message.Text = "There is no mail account to read.";
-            return;
+            if (account.Mail.FolderWithRole(account.Account.Id, FolderRole.Inbox) is { } inbox)
+            {
+                inboxes.Add((account, inbox.Id));
+            }
         }
 
-        var inbox = account.Mail.FolderWithRole(account.Account.Id, FolderRole.Inbox);
-        if (inbox is null)
+        if (inboxes.Count == 0)
         {
             _message.Text = "There is no inbox to read.";
             return;
         }
 
         _message.Text = "Reading the inbox…";
-        var found = NewsletterScan.In(account.Mail, inbox.Id);
+
+        // One row per newsletter however many accounts it arrives at, its counts summed and
+        // each source remembered so the back numbers can be gathered from all of them.
+        var merged = new Dictionary<string, FoundNewsletter>(StringComparer.OrdinalIgnoreCase);
+        _sources.Clear();
+
+        foreach (var (account, inboxId) in inboxes)
+        {
+            foreach (var one in NewsletterScan.In(account.Mail, inboxId))
+            {
+                merged[one.Identity] = merged.TryGetValue(one.Identity, out var already)
+                    ? already with
+                    {
+                        Issues = already.Issues + one.Issues,
+                        Latest = one.Latest > already.Latest ? one.Latest : already.Latest,
+                    }
+                    : one;
+
+                if (!_sources.TryGetValue(one.Identity, out var sources))
+                {
+                    _sources[one.Identity] = sources = [];
+                }
+
+                sources.Add((account, inboxId));
+            }
+        }
+
+        var found = merged.Values.OrderByDescending(n => n.Issues).ThenByDescending(n => n.Latest).ToList();
 
         _list.Children.Clear();
         _offered.Clear();
@@ -313,10 +353,8 @@ public sealed class NewslettersDialog : Window
 
     private void Commit()
     {
-        if (_account() is not { } account) return;
-
         var category = _category.SelectedIndex > 0 ? _category.SelectedItem as string ?? string.Empty : string.Empty;
-        var inbox = account.Mail.FolderWithRole(account.Account.Id, FolderRole.Inbox);
+        var feeds = _account();
 
         using (_feeds.Batch())
         {
@@ -328,10 +366,13 @@ public sealed class NewslettersDialog : Window
                 Added++;
 
                 // The back numbers come too, unless the reader would rather leave them: a
-                // subscription that starts empty and fills up over weeks looks broken.
-                if (_gather.IsChecked == true && inbox is not null)
+                // subscription that starts empty and fills up over weeks looks broken. They go
+                // into the feeds store, which is the one the module reads.
+                if (_gather.IsChecked != true || feeds is null) continue;
+
+                foreach (var (from, inboxId) in _sources.GetValueOrDefault(found.Identity) ?? [])
                 {
-                    Gathered += NewsletterScan.Gather(account.Mail, account.Account.Id, inbox.Id, feed, found.Identity);
+                    Gathered += NewsletterScan.Gather(feeds, from, inboxId, feed, found.Identity);
                 }
             }
         }

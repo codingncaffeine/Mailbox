@@ -155,47 +155,71 @@ public static class NewsletterScan
     }
 
     /// <summary>
-    /// Moves the issues already in a folder into the newsletter's own, so subscribing to one
-    /// brings its back numbers with it.
+    /// Moves a newsletter's issues out of a mail account's folder and into the feeds store, so
+    /// subscribing to one brings its back numbers to where the module actually reads.
     /// </summary>
-    /// <returns>How many were moved.</returns>
-    public static int Gather(MailRepository mail, long accountId, long fromFolderId, FeedSubscription feed, string identity)
+    /// <remarks>
+    /// Cross-store, so its shape is the one <c>FeedStoreMove</c> set for exactly this: copy
+    /// every issue with its raw message, count what landed, and only then delete the originals.
+    /// A move that cannot account for every issue leaves both copies and says so — a duplicate
+    /// is an annoyance and a deletion is not.
+    /// </remarks>
+    /// <returns>How many issues now stand in the feeds store's folder.</returns>
+    public static int Gather(OpenAccount feeds, OpenAccount from, long fromFolderId, FeedSubscription feed, string identity)
     {
-        ArgumentNullException.ThrowIfNull(mail);
+        ArgumentNullException.ThrowIfNull(feeds);
+        ArgumentNullException.ThrowIfNull(from);
         ArgumentNullException.ThrowIfNull(feed);
 
-        var moving = new List<long>();
+        var moving = new List<(MessageSummary Summary, byte[] Raw)>();
 
-        foreach (var message in mail.Messages(fromFolderId, MostMessages))
+        foreach (var message in from.Mail.Messages(fromFolderId, MostMessages))
         {
-            var raw = mail.LoadRaw(message.Id);
+            var raw = from.Mail.LoadRaw(message.Id);
             if (raw is null) continue;
 
             var marks = Newsletters.Marks(raw);
             if (marks.IsNewsletter && string.Equals(marks.Identity, identity, StringComparison.OrdinalIgnoreCase))
             {
-                moving.Add(message.Id);
+                moving.Add((message, raw));
             }
         }
 
         if (moving.Count == 0) return 0;
 
-        var folders = mail.Folders(accountId);
-        var root = folders.FirstOrDefault(f => f.ParentId is null && f.Name == FeedReceiver.RootFolder)
-                   ?? mail.AddFolder(accountId, FeedReceiver.RootFolder);
+        var destination = FeedReceiver.EnsureFolder(feeds, feed);
+        var copied = 0;
 
-        var parent = root;
-        if (feed.Category is { Length: > 0 } category)
+        foreach (var (summary, raw) in moving)
         {
-            folders = mail.Folders(accountId);
-            parent = folders.FirstOrDefault(f => f.ParentId == root.Id && f.Name == category)
-                     ?? mail.AddFolder(accountId, category, parentId: root.Id);
+            if (feeds.Mail.AddMessage(
+                    destination.Id, summary with { Id = 0, FolderId = destination.Id }, raw) is not null)
+            {
+                copied++;
+            }
         }
 
-        folders = mail.Folders(accountId);
-        var destination = folders.FirstOrDefault(f => f.ParentId == parent.Id && f.Name == feed.Name)
-                          ?? mail.AddFolder(accountId, feed.Name, parentId: parent.Id);
+        if (copied < moving.Count)
+        {
+            Log.Warn($"Newsletters: only {copied} of {moving.Count} issue(s) reached the feeds "
+                + "store, so the originals have been left in the inbox. Nothing has been lost; "
+                + "some are in both places.");
+            return copied;
+        }
 
-        return mail.MoveMessages(moving, destination.Id);
+        // To Deleted Items rather than gone: the copy in the feeds store is the reading copy,
+        // and the originals stay recoverable the way any deletion is.
+        var ids = moving.Select(m => m.Summary.Id).ToList();
+        if (from.Mail.FolderWithRole(from.Account.Id, FolderRole.Deleted) is { } deleted)
+        {
+            from.Mail.MoveMessages(ids, deleted.Id);
+        }
+        else
+        {
+            from.Mail.DeleteMessages(ids);
+        }
+
+        Log.Info($"Newsletters: {copied} issue(s) of “{feed.Name}” moved into the feeds store.");
+        return copied;
     }
 }
