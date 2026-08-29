@@ -201,6 +201,9 @@ public sealed record MessageSummary(
     /// <summary>The To addresses, lower-cased, for the searches that ask who a message went to.</summary>
     public IReadOnlyList<string> To { get; init; } = [];
 
+    /// <summary>What By To groups on, for the views that arrange summaries directly.</summary>
+    public IReadOnlyList<string> ToNames => To;
+
     /// <summary>The Cc addresses, lower-cased.</summary>
     public IReadOnlyList<string> Cc { get; init; } = [];
 

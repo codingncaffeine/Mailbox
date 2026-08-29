@@ -276,6 +276,12 @@ public sealed class MessageRow(
 
     public string FromAddress { get; init; } = string.Empty;
     public IReadOnlyList<string> To { get; init; } = [];
+
+    /// <summary>What By To groups on: the people this row is addressed to.</summary>
+    public IReadOnlyList<string> ToNames => To;
+
+    /// <summary>What By Account groups on: the account the row carries, in any view.</summary>
+    public string AccountName => Address;
     public IReadOnlyList<string> Cc { get; init; } = [];
     public DateTimeOffset? Sent { get; init; }
 
@@ -1263,6 +1269,9 @@ public sealed partial class ShellViewModel : ObservableObject
                 $"To: {where.Account.Account.Address}",
                 summary.Preview)
             {
+                // Carried in every view, not only the unified ones: By Account has to know it
+                // wherever the row is drawn.
+                Address = where.Account.Account.Address,
                 SizeBytes = summary.SizeBytes,
                 HasAttachment = summary.HasAttachment,
                 IsFlagged = summary.IsFlagged,

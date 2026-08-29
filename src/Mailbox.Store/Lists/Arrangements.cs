@@ -50,6 +50,23 @@ public interface IArrangeable
 
     /// <summary>When the follow-up on this row is due, or null for no flag or no date.</summary>
     DateTimeOffset? FollowUpDue => null;
+
+    // Five facts the first cut of this interface did not carry, defaulted so the two row types
+    // opt in one property at a time — an arrangement given no fact groups honestly under its
+    // default rather than borrowing another column's, which is what By To and By Account did
+    // when both were wired to DisplayFrom.
+
+    /// <summary>Who the row is addressed to, first name first, for the By To arrangement.</summary>
+    IReadOnlyList<string> ToNames => [];
+
+    /// <summary>The colour categories on the row, for By Categories.</summary>
+    IReadOnlyList<string> CategoryNames => [];
+
+    /// <summary>0 low, 1 normal, 2 high — the row's own importance.</summary>
+    int Importance => 1;
+
+    /// <summary>The account the row belongs to; empty in a view that is one account's.</summary>
+    string AccountName => string.Empty;
 }
 
 /// <summary>One group of rows, with the header the list draws above them.</summary>
@@ -135,8 +152,12 @@ public static class Arrangements
         // same subject should still read in the order they arrived.
         IOrderedEnumerable<T> ordered = arrangement switch
         {
-            Arrangement.From or Arrangement.To or Arrangement.Account => Direction(
+            Arrangement.From => Direction(
                 rows, r => r.DisplayFrom, descending, StringComparer.CurrentCultureIgnoreCase),
+            Arrangement.To => Direction(
+                rows, r => r.ToNames.FirstOrDefault() ?? string.Empty, descending, StringComparer.CurrentCultureIgnoreCase),
+            Arrangement.Account => Direction(
+                rows, r => r.AccountName, descending, StringComparer.CurrentCultureIgnoreCase),
             Arrangement.Subject => Direction(
                 rows, r => NormalisedSubject(r.Subject), descending,
                 StringComparer.CurrentCultureIgnoreCase),
@@ -148,6 +169,9 @@ public static class Arrangements
             Arrangement.FlagStart => Direction(rows, r => r.FollowUpStart ?? Undated(descending), descending),
             Arrangement.FlagDue => Direction(rows, r => r.FollowUpDue ?? Undated(descending), descending),
             Arrangement.Attachments => Direction(rows, r => r.HasAttachment, descending),
+            Arrangement.Categories => Direction(
+                rows, r => r.CategoryNames.FirstOrDefault() ?? "\uFFFF", descending, StringComparer.CurrentCultureIgnoreCase),
+            Arrangement.Importance => Direction(rows, r => r.Importance, descending),
             _ => Direction(rows, r => r.Received, descending),
         };
 
@@ -165,15 +189,22 @@ public static class Arrangements
         where T : IArrangeable
         => arrangement switch
         {
-            Arrangement.From or Arrangement.To or Arrangement.Account => row.DisplayFrom,
+            Arrangement.From => row.DisplayFrom,
+            Arrangement.To => row.ToNames.FirstOrDefault() is { Length: > 0 } to ? to : "Nobody",
+            Arrangement.Account => row.AccountName is { Length: > 0 } account ? account : "This account",
             Arrangement.Subject => FirstLetter(NormalisedSubject(row.Subject)),
             Arrangement.Size => SizeBand(row.SizeBytes),
             Arrangement.Flag => row.IsFlagged ? "Flagged" : "Unflagged",
             Arrangement.FlagStart => row.FollowUpStart is { } start ? DateBand(start, now) : "None",
             Arrangement.FlagDue => row.FollowUpDue is { } due ? DateBand(due, now) : "None",
             Arrangement.Attachments => row.HasAttachment ? "With attachments" : "No attachments",
-            Arrangement.Categories => "No category",
-            Arrangement.Importance => "Normal",
+            Arrangement.Categories => row.CategoryNames.FirstOrDefault() is { Length: > 0 } category
+                ? category
+                : "No category",
+            Arrangement.Importance => row.Importance switch { 2 => "High", 0 => "Low", _ => "Normal" },
+
+            // The one arrangement still waiting for its fact: nothing on a row yet says it is
+            // a meeting request or a receipt rather than a message, so every row is one.
             Arrangement.Type => "Message",
             _ => DateBand(row.Received, now),
         };
