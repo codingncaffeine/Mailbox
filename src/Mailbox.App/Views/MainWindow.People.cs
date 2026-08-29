@@ -228,6 +228,20 @@ public partial class MainWindow
             // The desktop's own map, which on Linux is whatever answers a geo: URI — the same
             // xdg-open the reading pane hands a link to.
             var uri = "geo:0,0?q=" + Uri.EscapeDataString(address.Replace('\n', ' ').Trim());
+
+            // Not under a posed run. Everything else MAILBOX_CAPTURE gates — the scratch settings,
+            // the tray, IDLE, the single instance — exists so a pose cannot reach the machine it
+            // runs on, and this call ignored all of it: pressing Map It opened a map in the
+            // reader's own browser, on their own screen, from a headless capture. Saying which
+            // address was asked for is also the better read-back, since the claim is the URI and
+            // not that something launched.
+            if (Mailbox.App.Theming.WindowCapture.IsRequested)
+            {
+                shell.StatusRight = "Asked the desktop to map that address.";
+                Log.Info($"Harness: Map It would have asked the desktop for {uri}.");
+                return;
+            }
+
             try
             {
                 using var process = new System.Diagnostics.Process
