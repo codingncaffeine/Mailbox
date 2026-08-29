@@ -65,9 +65,11 @@ public sealed class RibbonEditorView : CustomizationEditor
         _shipped = shipped;
         _model = store.Load(shipped);
 
-        // Groups start folded, as the capture shows them — a tab with eight groups each holding
-        // three commands is thirty lines before anything has been chosen.
-        foreach (var group in _model.Tabs.SelectMany(t => t.Groups)) _collapsed.Add(Key(group.Id));
+        // Groups start folded, and every tab but the first, as the capture shows them — a tab with
+        // eight groups each holding three commands is thirty lines before anything has been
+        // chosen, and thirteen such tabs is the whole pane.
+        foreach (var group in _model.Tabs.SelectMany(t => t.Groups)) _collapsed.Add(GroupKey(group.Id));
+        foreach (var tab in _model.Tabs.Skip(1)) _collapsed.Add(TabKey(tab.Id));
 
         Build();
     }
@@ -157,12 +159,12 @@ public sealed class RibbonEditorView : CustomizationEditor
         foreach (var tab in _model.Tabs.Where(InScope))
         {
             rows.Add(new RibbonTreeRow { Tab = tab });
-            if (_collapsed.Contains(Key(tab.Id))) continue;
+            if (_collapsed.Contains(TabKey(tab.Id))) continue;
 
             foreach (var group in tab.Groups)
             {
                 rows.Add(new RibbonTreeRow { Tab = tab, Group = group });
-                if (_collapsed.Contains(Key(group.Id))) continue;
+                if (_collapsed.Contains(GroupKey(group.Id))) continue;
 
                 rows.AddRange(group.Commands.Select(command => new RibbonTreeRow
                 {
@@ -191,7 +193,20 @@ public sealed class RibbonEditorView : CustomizationEditor
            && ReferenceEquals(row.Group, other.Group)
            && Nullable.Equals(row.Command, other.Command);
 
-    private static string Key(string id) => id;
+    /// <summary>
+    /// What the folded set holds for a tab and for a group.
+    /// </summary>
+    /// <remarks>
+    /// Two namespaces rather than one. Tab ids and group ids repeat across the layout — the
+    /// Send / Receive tab and the Send &amp; Receive group under it are both <c>sendreceive</c>,
+    /// the Help tab and its group are both <c>help</c> — so a single set folded the tab whenever
+    /// its namesake group was folded. The shipped ribbon opened with two of its five tabs folded
+    /// for no reason a reader could see, and pressing a tab's chevron unfolded a group in another
+    /// tab at the same time.
+    /// </remarks>
+    private static string TabKey(string id) => "tab:" + id;
+
+    private static string GroupKey(string id) => "group:" + id;
 
     private Control TreeRow(RibbonTreeRow row)
     {
@@ -244,8 +259,8 @@ public sealed class RibbonEditorView : CustomizationEditor
             return new Panel { Width = 14 };
         }
 
-        var id = row.IsTab ? row.Tab.Id : row.Group!.Id;
-        var folded = _collapsed.Contains(Key(id));
+        var id = row.IsTab ? TabKey(row.Tab.Id) : GroupKey(row.Group!.Id);
+        var folded = _collapsed.Contains(id);
 
         var glyph = Glyph(folded ? "chevron-right" : "chevron-down", 9);
         Bind(glyph, TextBlock.ForegroundProperty, "dialog.surface.text.brush");
@@ -264,7 +279,7 @@ public sealed class RibbonEditorView : CustomizationEditor
 
         button.Click += (_, _) =>
         {
-            if (!_collapsed.Remove(Key(id))) _collapsed.Add(Key(id));
+            if (!_collapsed.Remove(id)) _collapsed.Add(id);
             RebuildTree();
         };
 
@@ -329,7 +344,7 @@ public sealed class RibbonEditorView : CustomizationEditor
         var at = row.IsCommand ? group.Commands.IndexOf(row.Command!.Value) + 1 : group.Commands.Count;
         group.Commands.Insert(at, command);
 
-        _collapsed.Remove(Key(group.Id));
+        _collapsed.Remove(GroupKey(group.Id));
         Save();
     }
 
