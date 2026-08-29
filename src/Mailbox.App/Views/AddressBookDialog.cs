@@ -54,6 +54,11 @@ public sealed class AddressBookDialog : Window
     private readonly RadioButton _nameOnly = new() { Content = "Name only", GroupName = "abscope" };
     private readonly Dictionary<AddressLine, TextBox> _lines = [];
 
+    /// <summary>The picking half's own buttons, kept so a posed run can press the real ones.</summary>
+    private readonly Dictionary<AddressLine, Button> _lineButtons = [];
+    private Button? _ok;
+    private Button? _cancel;
+
     private readonly MenuItem _addToContacts = Entry("Add to Contacts");
     private readonly MenuItem _delete = Entry("Delete", "Ctrl+D");
     private readonly MenuItem _properties = Entry("Properties");
@@ -484,9 +489,11 @@ public sealed class AddressBookDialog : Window
             Close();
         });
         ok.IsDefault = true;
+        _ok = ok;
 
         var cancel = SystemDialogKit.PushButton("Cancel", Close);
         cancel.IsCancel = true;
+        _cancel = cancel;
 
         panel.Children.Add(new StackPanel
         {
@@ -505,6 +512,7 @@ public sealed class AddressBookDialog : Window
         var row = new Grid { ColumnDefinitions = new ColumnDefinitions("94,*") };
 
         var button = SystemDialogKit.PushButton($"{line} ->", () => Add(line), 88);
+        _lineButtons[line] = button;
         row.Children.Add(button);
 
         var box = SystemDialogKit.Field();
@@ -588,6 +596,15 @@ public sealed class AddressBookDialog : Window
                 case "copy": await CopyAddressAsync(); break;
                 case "options": OptionsRequested?.Invoke(this, EventArgs.Empty); break;
                 case "close": Close(); break;
+
+                // The picking half. Pressed rather than called: what is in doubt is whether the
+                // three "To ->" buttons and the OK beneath them are wired to anything, and calling
+                // the handler they are supposed to be wired to cannot answer that.
+                case "to": Push(_lineButtons.GetValueOrDefault(AddressLine.To)); break;
+                case "cc": Push(_lineButtons.GetValueOrDefault(AddressLine.Cc)); break;
+                case "bcc": Push(_lineButtons.GetValueOrDefault(AddressLine.Bcc)); break;
+                case "ok": Push(_ok); break;
+                case "cancel": Push(_cancel); break;
                 default: Log.Warn($"Harness: the Address Book has no action '{action}'."); continue;
             }
 
@@ -595,7 +612,29 @@ public sealed class AddressBookDialog : Window
                      + $"selected \u201c{Selected()?.Named() ?? "nothing"}\u201d, "
                      + $"book \u201c{Book()?.DisplayName ?? "none"}\u201d, "
                      + $"menus delete={_delete.IsEnabled} properties={_properties.IsEnabled} write={_newMessage.IsEnabled}.");
+
+            // What the three lines now hold, which is the whole claim of the picking half: a name
+            // chosen here has to arrive on the message this window was opened from, and only the
+            // lines themselves tell "it put nothing there" from "it put the wrong thing there".
+            if (_picking)
+            {
+                Log.Info($"Harness: address book lines — To “{_lines[AddressLine.To].Text}”, "
+                         + $"Cc “{_lines[AddressLine.Cc].Text}”, "
+                         + $"Bcc “{_lines[AddressLine.Bcc].Text}”.");
+            }
         }
+    }
+
+    /// <summary>Presses one of this window's own buttons, as a pointer would.</summary>
+    private static void Push(Button? button)
+    {
+        if (button is null)
+        {
+            Log.Warn("Harness: the Address Book is not picking names, so that button is not drawn.");
+            return;
+        }
+
+        button.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
     }
 
     /// <summary>
@@ -632,9 +671,21 @@ public sealed class AddressBookDialog : Window
     }
 
     /// <summary>Opens it to pick names, and hands back what was chosen.</summary>
+    /// <remarks>
+    /// The same door the ribbon's own Address Book has. Without it this window could be opened by
+    /// a pose and photographed but never answered: a compose window's To… put a modal on screen
+    /// that nothing could pick a name in, so the message it was opened from stayed empty and
+    /// "picking names addresses the message" was a claim no run had ever tested.
+    /// </remarks>
     public static async Task<AddressBookResult?> PickAsync(Window owner, ContactBook book)
     {
         var dialog = new AddressBookDialog(book);
+
+        if (Environment.GetEnvironmentVariable("MAILBOX_ADDRESSBOOK") is { Length: > 0 } actions)
+        {
+            dialog.Opened += (_, _) => _ = dialog.HarnessAsync(actions);
+        }
+
         await dialog.ShowDialog(owner);
         return dialog.Result;
     }

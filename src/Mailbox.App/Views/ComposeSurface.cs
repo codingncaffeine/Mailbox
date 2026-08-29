@@ -1650,6 +1650,16 @@ public sealed partial class ComposeSurface : UserControl
         Append(_bcc, picked.Bcc);
         UpdateStatus();
 
+        // The far end of the hand-off, and the only place it can be seen: the window that did the
+        // picking has closed by now, so a run that reads the message afterwards is reading it long
+        // after this returned. Capture runs only.
+        if (WindowCapture.IsRequested)
+        {
+            Log.Info($"Harness: Select Names put {picked.To.Count} on To, {picked.Cc.Count} on Cc, "
+                     + $"{picked.Bcc.Count} on Bcc; the message now reads "
+                     + $"To “{_to.Text}”, Cc “{_cc.Text}”, Bcc “{_bcc.Text}”.");
+        }
+
         static void Append(TextBox box, IReadOnlyList<string> addresses)
         {
             if (addresses.Count == 0) return;
