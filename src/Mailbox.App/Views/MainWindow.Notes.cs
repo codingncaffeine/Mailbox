@@ -236,9 +236,10 @@ public partial class MainWindow
         {
             Uid = JournalEntry.NewUid(),
             When = EventTime.At(Now(), TimeZoneInfo.Local.Id),
-            LastModified = DateTimeOffset.UtcNow,
+            LastModified = Mailbox.Core.PosedClock.UtcNow,
         });
 
+        WirePhase9AForm(window);
         await window.ShowDialog(this);
         if (window.Result is not { } made) return;
 
@@ -254,17 +255,38 @@ public partial class MainWindow
     }
 
     /// <summary>Opens a note that is already on the wall.</summary>
+    /// <remarks>
+    /// A note read and closed is not a note edited. Closing is the only save this window has, so
+    /// it collects what it holds whatever happened and stamps a new modified time on it — and
+    /// without the comparison below, opening a note to read it rewrote the row, moved its modified
+    /// time and queued a PUT, which on a folder shared with another client is this application
+    /// offering to overwrite somebody else's change with the text it had just read.
+    /// </remarks>
     private async Task OpenNoteAsync(ShellViewModel shell, NoteRow row)
     {
         if (App.Pim.Item(row.ItemId) is not { } item) return;
 
-        var window = new NoteWindow(PimJournalCodec.FromItem(item));
+        var before = PimJournalCodec.FromItem(item);
+        var window = new NoteWindow(before);
+        WirePhase9AForm(window);
         await window.ShowDialog(this);
 
         if (window.Result is not { } edited) return;
+        if (Unchanged(before, edited)) return;
+
         SaveNote(edited, item, item.CollectionId);
         shell.StatusRight = $"“{edited.Titled()}” saved.";
     }
+
+    /// <summary>
+    /// Whether the window gave back the note it was given. The title is compared as well as the
+    /// writing, so a note whose stored title has drifted from its own first line is still put
+    /// right by being opened.
+    /// </summary>
+    private static bool Unchanged(JournalEntry before, JournalEntry after)
+        => string.Equals(before.Description, after.Description, StringComparison.Ordinal)
+           && string.Equals(before.Summary, after.Summary, StringComparison.Ordinal)
+           && before.Categories.SequenceEqual(after.Categories, StringComparer.Ordinal);
 
     /// <summary>The clock the module writes with, which a pinned day moves so a capture repeats.</summary>
     private static DateTime Now()
@@ -299,13 +321,22 @@ public partial class MainWindow
         {
             PressNote(shell, notes, press.Trim());
         }
+
+        WirePhase9ADoors(shell);
     }
 
     /// <summary>
-    /// Presses one thing on the wall: <c>open:part of a title</c> opens that note,
-    /// <c>select:…</c> picks it, and <c>new</c> double-clicks the wall itself, which is the
+    /// Presses one thing on the wall: <c>select:part of a title</c> picks that note,
+    /// <c>activate:…</c> double-clicks it, <c>hover:…</c> puts the pointer over it, <c>open:…</c>
+    /// opens it without the gesture, and <c>new</c> double-clicks the empty wall, which is the
     /// reference's own way of making one. The store is read back afterwards, which is the claim.
     /// </summary>
+    /// <remarks>
+    /// <c>new</c> used to call the method the gesture calls, and said in this comment that it
+    /// double-clicked the wall. It does now: the branch in <see cref="NotesView"/> that answers a
+    /// second click on empty space — the only way a module with nothing in it gets its first note
+    /// — had never been reached by anything.
+    /// </remarks>
     private void PressNote(ShellViewModel shell, NotesWorkspace notes, string spec)
     {
         // The window's own layout, not the view's: a control lays out inside its parent, and the
@@ -315,7 +346,8 @@ public partial class MainWindow
         if (spec.Equals("new", StringComparison.OrdinalIgnoreCase))
         {
             CaptureNextWindow();
-            _ = NewNoteAsync(shell);
+            DoubleClick(notes.View, notes.View.EmptySpot());
+            Log.Info("Harness: the empty wall was double-clicked.");
             return;
         }
 
@@ -338,6 +370,22 @@ public partial class MainWindow
         if (notes.View.BoxOf(row.ItemId) is not { } box)
         {
             Log.Info($"Harness: “{row.Title}” was not drawn — the wall may not have laid out.");
+            return;
+        }
+
+        if (spec.StartsWith("hover:", StringComparison.OrdinalIgnoreCase))
+        {
+            Hover(notes.View, box.Center);
+            Log.Info($"Harness: the pointer is over “{row.Title}” at {box.Center.X:0},{box.Center.Y:0}.");
+            return;
+        }
+
+        if (spec.StartsWith("activate:", StringComparison.OrdinalIgnoreCase))
+        {
+            CaptureNextWindow();
+            DoubleClick(notes.View, box.Center);
+            Log.Info($"Harness: “{row.Title}” was double-clicked; the wall's selection is now "
+                + $"“{notes.Selected?.Title ?? "—"}”.");
             return;
         }
 

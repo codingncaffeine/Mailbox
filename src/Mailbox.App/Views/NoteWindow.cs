@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using Mailbox.Scheduling;
 using Mailbox.Theming.Tokens;
 
@@ -79,6 +80,49 @@ public sealed class NoteWindow : Window
     /// <summary>The note as it was left, which the shell writes when the window closes.</summary>
     public JournalEntry? Result { get; private set; }
 
+    /// <summary>
+    /// Everything this window holds and everything it is drawn as, for a harness to read back.
+    /// </summary>
+    /// <remarks>
+    /// A photograph of a note says what it looks like and not what it holds, and the two questions
+    /// this window raises are both invisible to one: what the body says after an edit, and what
+    /// chrome is round it — a note has no Save button, so the only proof that closing saved is the
+    /// text before, the text after and the store afterwards.
+    /// </remarks>
+    internal IReadOnlyList<(string Field, string Value)> FormFields =>
+    [
+        ("Body", (_body.Text ?? string.Empty).Replace("\r", string.Empty, StringComparison.Ordinal).Replace('\n', '⏎')),
+        ("Categories", _categories.Text ?? string.Empty),
+        ("Title", Title ?? string.Empty),
+        ("Made", _made.Text ?? string.Empty),
+        ("Face", _face.Background?.ToString() ?? "none"),
+        ("Size", $"{Width}×{Height}"),
+        ("Resizable", CanResize ? "yes" : "no"),
+        ("Decorations", WindowDecorations.ToString()),
+        ("Caption buttons", string.Join(
+            ", ",
+            this.GetVisualDescendants().OfType<CaptionButtons>()
+                .SelectMany(c => c.GetVisualDescendants().OfType<Button>())
+                .Select(b => ToolTip.GetTip(b) as string ?? "?"))),
+    ];
+
+    /// <summary>Sets one field by the name <see cref="FormFields"/> reports it under.</summary>
+    /// <returns>False for a name this window has no field for, which is itself an answer.</returns>
+    internal bool SetFormField(string field, string value)
+    {
+        switch (field.Trim().ToLowerInvariant())
+        {
+            case "body": _body.Text = value; return true;
+            case "categories": _categories.Text = value; return true;
+            default: return false;
+        }
+    }
+
+    /// <summary>Presses the close the caption draws, which is the only way a note is saved.</summary>
+    internal bool PressClose()
+        => this.GetVisualDescendants().OfType<CaptionButtons>().FirstOrDefault() is { } caption
+           && caption.Press("close");
+
     private Control BuildBody()
     {
         _made.Text = (_original.When?.Wall ?? _original.LastModified.LocalDateTime).ToString("g", CultureInfo.CurrentCulture);
@@ -136,11 +180,16 @@ public sealed class NoteWindow : Window
         => (text ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     /// <summary>What the window now says the note is: the body, and the title taken from it.</summary>
+    /// <remarks>
+    /// Stamped from the application's own clock rather than the machine's, so a pinned day writes
+    /// the same moment every run — a note saved by a capture used to carry the afternoon it was
+    /// taken, which is the one field that made two runs of the same pose disagree.
+    /// </remarks>
     private JournalEntry Collect()
         => (_original with
         {
             Categories = Split(_categories.Text),
-            LastModified = DateTimeOffset.UtcNow,
+            LastModified = Mailbox.Core.PosedClock.UtcNow,
         })
         .WithBody(_body.Text ?? string.Empty);
 }
