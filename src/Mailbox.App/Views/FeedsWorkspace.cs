@@ -2102,8 +2102,9 @@ internal sealed class FeedsWorkspace : Border
     }
 
     /// <summary>
-    /// The four buttons the reference puts on a row under the pointer: keep it for later, open
-    /// the original, mark it read, and take it out of the way.
+    /// The buttons the reference puts on a row under the pointer: keep it for later, save it to a
+    /// board — or take it off the one being read — open the original, mark it read, and take it
+    /// out of the way.
     /// </summary>
     private Control RowActions(MessageSummary message)
     {
@@ -2160,18 +2161,15 @@ internal sealed class FeedsWorkspace : Border
             message.IsRead ? "Mark as unread" : "Mark as read",
             () => SetRead(message, !message.IsRead)));
 
+        // Through the same delete the bar and the menu press, not a delete of its own. Its own
+        // was a plain DeleteMessage, so the one keep-pile rule the module has — an article on a
+        // board is kept rather than deleted — did not apply to the button a reader actually uses
+        // to clear out a feed, and the join cascades: a row taken off every board it was on,
+        // silently, in the middle of the gesture the rule exists for.
         strip.Children.Add(RowButton("delete", "Delete", () =>
         {
-            if (_account() is not { } account) return;
-            account.Mail.DeleteMessage(message.Id);
-            if (_selectedMessage == message.Id)
-            {
-                _selectedMessage = 0;
-                ShowReading(false);
-            }
-
-            Reload();
-            Changed?.Invoke(this, EventArgs.Empty);
+            Choose(message);
+            DeleteSelected();
         }));
 
         return strip;
@@ -2845,7 +2843,13 @@ internal sealed class FeedsWorkspace : Border
         // it off the board first, which is what the button on a board row does.
         if (account.Mail.IsOnAnyBoard(article.Id) && _selected is not { Kind: FeedNavKind.Board })
         {
-            if (SavedFolder(account) is { } keep && article.FolderId != keep.Id)
+            // Made if it is not there. Found rather than made, the fallback did nothing at all on
+            // any profile where nobody had ever saved a link — which is every profile until
+            // somebody does — so the commonest press in the module answered a boarded article by
+            // leaving it exactly where it was and saying nothing.
+            var keep = Mailbox.Protocols.SavedLinks.Folder(account);
+
+            if (article.FolderId != keep.Id)
             {
                 account.Mail.MoveMessage(article.Id, keep.Id);
                 Status = $"“{article.Subject}” is on a board, so it was kept rather than deleted.";
@@ -2861,22 +2865,17 @@ internal sealed class FeedsWorkspace : Border
             Status = $"“{article.Subject}” deleted.";
         }
 
+        // Said after the reload, not before it: Reload rebuilds the list and writes the row's own
+        // "Today: 193 articles" over whatever was here, so the sentence explaining that an article
+        // was kept rather than deleted never reached the bar at all — and a press that keeps
+        // something and says nothing is indistinguishable from one that did not work.
+        var said = Status;
         _selectedMessage = 0;
         ShowReading(false);
         Reload();
+        Status = said;
 
         Changed?.Invoke(this, EventArgs.Empty);
-    }
-
-    /// <summary>Where a saved thing lives, or null when nothing has been saved yet.</summary>
-    private static Folder? SavedFolder(OpenAccount account)
-    {
-        var folders = account.Mail.Folders(account.Account.Id);
-        var root = folders.FirstOrDefault(f => f.ParentId is null && f.Name == Mailbox.Protocols.FeedReceiver.RootFolder);
-
-        return root is null
-            ? null
-            : folders.FirstOrDefault(f => f.ParentId == root.Id && f.Name == Mailbox.Protocols.SavedLinks.SavedFolder);
     }
 
     /// <summary>Marks one article read or unread, from a row's own button.</summary>

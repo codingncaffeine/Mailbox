@@ -161,8 +161,16 @@ public static class SavedLinks
         _ => $"the site answered {(int)answer.Status}",
     };
 
-    /// <summary>The Saved folder under the feeds root, made if it is not there.</summary>
-    private static Folder Folder(OpenAccount account)
+    /// <summary>
+    /// The Saved folder under the feeds root, made if it is not there.
+    /// </summary>
+    /// <remarks>
+    /// Public because it is where two things land, not one: a saved link, and an article on a
+    /// board that the reader has asked to delete. The second used to look the folder up rather
+    /// than make it, so on a profile where nobody had ever saved a link there was nowhere to keep
+    /// the article and it was quietly left where it was.
+    /// </remarks>
+    public static Folder Folder(OpenAccount account)
     {
         var folders = account.Mail.Folders(account.Account.Id);
 
