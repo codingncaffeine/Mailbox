@@ -88,6 +88,91 @@ public class ImportFormatsTests : IDisposable
         Assert.Equal(raw, back.Raw);
     }
 
+    /// <summary>
+    /// The same claim about the line endings every real message actually has. Everything that
+    /// arrived over SMTP, IMAP or POP3 ends its lines with CRLF, and it is those bytes a DKIM
+    /// body hash and an S/MIME or OpenPGP signature are taken over — so a reader that rewrites
+    /// them to LF hands back a message that no longer verifies, in a format whose whole purpose
+    /// is moving a mailbox between machines.
+    /// </summary>
+    [Fact]
+    public void AnMboxRoundTripsAMessageWithTheLineEndingsRealMailHas()
+    {
+        var raw = System.Text.Encoding.ASCII.GetBytes(
+            Message("crlf", "Round trip").Replace("\n", "\r\n"));
+        Assert.Contains("\r\n"u8.ToArray(), raw);
+
+        var path = Path.Combine(_root, "crlf.mbox");
+        using (var stream = File.Create(path))
+        {
+            Mbox.Append(stream, raw, DateTimeOffset.UnixEpoch, "b@example.org");
+        }
+
+        using var read = File.OpenRead(path);
+        var back = Assert.Single(Mbox.Read(read));
+        Assert.Equal(raw, back.Raw);
+
+        // And the escaping is still armour: the body's own "From " line came back unquoted.
+        Assert.Contains("\r\nFrom here the text goes on.\r\n",
+            System.Text.Encoding.ASCII.GetString(back.Raw), StringComparison.Ordinal);
+    }
+
+    /// <summary>A file that mixes the two — which is what an mbox concatenated from two machines is.</summary>
+    [Fact]
+    public void AnMboxKeepsEachMessagesOwnLineEndings()
+    {
+        var crlf = System.Text.Encoding.ASCII.GetBytes(Message("a", "CRLF").Replace("\n", "\r\n"));
+        var lf = System.Text.Encoding.ASCII.GetBytes(Message("b", "LF"));
+
+        var path = Path.Combine(_root, "mixed.mbox");
+        using (var stream = File.Create(path))
+        {
+            Mbox.Append(stream, crlf, DateTimeOffset.UnixEpoch, "b@example.org");
+            Mbox.Append(stream, lf, DateTimeOffset.UnixEpoch, "b@example.org");
+        }
+
+        using var read = File.OpenRead(path);
+        var back = Mbox.Read(read);
+
+        Assert.Equal(2, back.Count);
+        Assert.Equal(crlf, back[0].Raw);
+        Assert.Equal(lf, back[1].Raw);
+    }
+
+    /// <summary>
+    /// Through the importer and back out again, which is the path a migration actually takes:
+    /// the blob the store keeps must be the bytes the file held, and the file written from it
+    /// must be the bytes the store keeps.
+    /// </summary>
+    [Fact]
+    public void AnMboxImportKeepsTheFilesOwnBytesAndTheExportGivesThemBack()
+    {
+        var (store, mail, account) = Fresh();
+        using var _ = store;
+        var inbox = mail.FolderWithRole(account, FolderRole.Inbox)!;
+
+        var raw = System.Text.Encoding.ASCII.GetBytes(
+            Message("wire", "Off the wire").Replace("\n", "\r\n"));
+
+        var path = Path.Combine(_root, "wire.mbox");
+        using (var stream = File.Create(path))
+        {
+            Mbox.Append(stream, raw, DateTimeOffset.UnixEpoch, "b@example.org");
+        }
+
+        Assert.Equal(1, MailFileImport.Mbox(mail, inbox.Id, path,
+            cancellation: TestContext.Current.CancellationToken).Imported);
+
+        var stored = mail.Messages(inbox.Id).Single();
+        Assert.Equal(raw, mail.LoadRaw(stored.Id));
+
+        var exported = Path.Combine(_root, "wire-out.mbox");
+        Assert.Equal(1, MailFileImport.ExportMbox(mail, inbox.Id, exported, TestContext.Current.CancellationToken));
+
+        using var reread = File.OpenRead(exported);
+        Assert.Equal(raw, Assert.Single(Mbox.Read(reread)).Raw);
+    }
+
     [Fact]
     public void AnMboxImportsIntoAFolderAndAFolderExportsAsMbox()
     {

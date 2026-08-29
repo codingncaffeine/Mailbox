@@ -14,7 +14,17 @@ public sealed record MboxMessage(byte[] Raw, bool IsRead, bool IsFlagged);
 /// matching <c>&gt;+From </c> loses one <c>&gt;</c>, which also reads mboxo files correctly for
 /// every line mboxo can represent. The bytes handed back are the message's own — the escaping
 /// is transport armour, not content — and writing puts it back, so a message round-trips
-/// byte-exact. Read state comes from the headers the writers actually use: <c>Status: R/O</c>,
+/// byte-exact.
+/// <para>
+/// <b>Byte-exact includes the line endings.</b> Every message that ever arrived over SMTP, IMAP
+/// or POP3 ends its lines with CRLF, and that is what the store keeps; mbox files written by
+/// the readers people migrate from carry it too. Rewriting them to LF is not cosmetic: it is the
+/// bytes a DKIM body hash, an S/MIME signature and an OpenPGP signature are all computed over,
+/// so a signed message that verified in the file it came from stops verifying the moment it is
+/// read here. So each line keeps the ending it arrived with, and a file of mixed endings keeps
+/// both.
+/// </para>
+/// Read state comes from the headers the writers actually use: <c>Status: R/O</c>,
 /// <c>X-Status: F</c>, and Thunderbird's <c>X-Mozilla-Status</c> hex word (0x0001 read,
 /// 0x0004 flagged, 0x0008 expunged — an expunged message is Thunderbird's deleted-not-yet-
 /// compacted, and is not imported).
@@ -27,12 +37,12 @@ public static class Mbox
         ArgumentNullException.ThrowIfNull(mbox);
 
         var messages = new List<MboxMessage>();
-        var current = new List<byte[]>();
+        var current = new List<(byte[] Content, byte[] End)>();
         var inMessage = false;
 
         foreach (var line in Lines(mbox))
         {
-            if (IsSeparator(line))
+            if (IsSeparator(line.Content))
             {
                 Take(messages, current, ref inMessage);
                 inMessage = true;
@@ -40,7 +50,7 @@ public static class Mbox
             }
 
             if (!inMessage) continue;
-            current.Add(Unescape(line));
+            current.Add((Unescape(line.Content), line.End));
         }
 
         Take(messages, current, ref inMessage);
@@ -75,11 +85,14 @@ public static class Mbox
             $"From {fromAddress ?? "MAILER-DAEMON"} {date.UtcDateTime:ddd MMM d HH:mm:ss yyyy}\n");
         mbox.Write(separator);
 
-        foreach (var line in Lines(new MemoryStream(raw)))
+        foreach (var (content, end) in Lines(new MemoryStream(raw)))
         {
-            if (NeedsEscape(line)) mbox.WriteByte((byte)'>');
-            mbox.Write(line);
-            mbox.WriteByte((byte)'\n');
+            if (NeedsEscape(content)) mbox.WriteByte((byte)'>');
+            mbox.Write(content);
+
+            // The line's own ending, so a CRLF message stays a CRLF message. A last line that
+            // had none still needs one, or the blank line below joins onto it.
+            mbox.Write(end.Length > 0 ? end : "\n"u8);
         }
 
         mbox.WriteByte((byte)'\n');
@@ -92,11 +105,11 @@ public static class Mbox
         var flagged = false;
         var expunged = false;
 
-        foreach (var line in Lines(new MemoryStream(raw)))
+        foreach (var (content, _) in Lines(new MemoryStream(raw)))
         {
-            if (line.Length == 0) break; // the headers ended
+            if (content.Length == 0) break; // the headers ended
 
-            var text = Encoding.ASCII.GetString(line);
+            var text = Encoding.ASCII.GetString(content);
             if (text.StartsWith("Status:", StringComparison.OrdinalIgnoreCase))
             {
                 read |= text.Contains('R', StringComparison.Ordinal) || text.Contains('O', StringComparison.Ordinal);
@@ -122,8 +135,16 @@ public static class Mbox
 
     // ---- Lines and separators ------------------------------------------------------------------
 
-    /// <summary>The file as raw lines without their endings, whichever ending it uses.</summary>
-    private static IEnumerable<byte[]> Lines(Stream stream)
+    /// <summary>
+    /// The file as raw lines, each with the ending it actually carried — <c>\r\n</c>, <c>\n</c>,
+    /// or nothing at all for a last line that ends the file.
+    /// </summary>
+    /// <remarks>
+    /// The ending is handed back rather than dropped because it is part of the message: reading
+    /// and rejoining on <c>\n</c> alone rewrites every CRLF message on the way in and on the way
+    /// out, which is what a body hash and a signature are taken over.
+    /// </remarks>
+    private static IEnumerable<(byte[] Content, byte[] End)> Lines(Stream stream)
     {
         var buffer = new List<byte>(256);
         int b;
@@ -134,8 +155,9 @@ public static class Mbox
             any = true;
             if (b == '\n')
             {
-                if (buffer.Count > 0 && buffer[^1] == '\r') buffer.RemoveAt(buffer.Count - 1);
-                yield return buffer.ToArray();
+                var crlf = buffer.Count > 0 && buffer[^1] == '\r';
+                if (crlf) buffer.RemoveAt(buffer.Count - 1);
+                yield return (buffer.ToArray(), crlf ? "\r\n"u8.ToArray() : "\n"u8.ToArray());
                 buffer.Clear();
                 continue;
             }
@@ -143,7 +165,7 @@ public static class Mbox
             buffer.Add((byte)b);
         }
 
-        if (any && buffer.Count > 0) yield return buffer.ToArray();
+        if (any && buffer.Count > 0) yield return (buffer.ToArray(), []);
     }
 
     private static bool IsSeparator(byte[] line)
@@ -167,7 +189,8 @@ public static class Mbox
         return line.Length >= quotes + 5 && line.AsSpan(quotes, 5).SequenceEqual("From "u8);
     }
 
-    private static void Take(List<MboxMessage> messages, List<byte[]> lines, ref bool inMessage)
+    private static void Take(
+        List<MboxMessage> messages, List<(byte[] Content, byte[] End)> lines, ref bool inMessage)
     {
         if (!inMessage || lines.Count == 0)
         {
@@ -178,18 +201,19 @@ public static class Mbox
         // Trailing blank lines are the format's, not the message's: one blank line precedes
         // every separator, and some writers pad with more.
         var end = lines.Count;
-        while (end > 0 && lines[end - 1].Length == 0) end--;
+        while (end > 0 && lines[end - 1].Content.Length == 0) end--;
 
         var size = 0;
-        for (var i = 0; i < end; i++) size += lines[i].Length + 1;
+        for (var i = 0; i < end; i++) size += lines[i].Content.Length + lines[i].End.Length;
 
         var raw = new byte[size];
         var at = 0;
         for (var i = 0; i < end; i++)
         {
-            lines[i].CopyTo(raw, at);
-            at += lines[i].Length;
-            raw[at++] = (byte)'\n';
+            lines[i].Content.CopyTo(raw, at);
+            at += lines[i].Content.Length;
+            lines[i].End.CopyTo(raw, at);
+            at += lines[i].End.Length;
         }
 
         var (read, flagged, expunged) = Flags(raw);
