@@ -533,6 +533,7 @@
                  the rest of the window when the pane is off — see FitListPane. -->
             <Border Grid.Column="3"
                     Name="ListPane"
+                    ClipToBounds="True"
                     Width="{DynamicResource list.width.value}"
                     Background="{DynamicResource list.background.brush}">
                 <DockPanel>
@@ -1014,11 +1015,17 @@
                  does, and holds whichever of its sections are switched on. -->
             <ContentControl Grid.Column="6" Grid.RowSpan="3"
                             Name="DockHost"
+                            ClipToBounds="True"
                             IsVisible="{Binding IsToDoBarVisible}" />
 
-            <!-- Reading pane -->
+            <!-- Reading pane. Clipped, because a pane squeezed narrower than its own content
+                 otherwise draws that content straight over whatever is beside it: at 1000 wide
+                 the header's buttons and the message's subject were painted across the To-Do
+                 Bar's month grid, which reads as the bar being broken rather than as the pane
+                 being too narrow to hold what is in it. -->
             <Border Grid.Column="5"
                     Name="ReadingPane"
+                    ClipToBounds="True"
                     IsVisible="{Binding ReadingPaneVisible}"
                     Background="{DynamicResource reading.background.brush}">
               <Grid>
