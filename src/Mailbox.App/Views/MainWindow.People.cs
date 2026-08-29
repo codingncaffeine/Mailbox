@@ -176,6 +176,11 @@ public partial class MainWindow
         };
 
         view.ContactActivated += (_, row) => _ = OpenContactAsync(shell, row);
+
+        // The same menu the module offers, anchored here: the bar's own sentence says a
+        // favourite is managed by right-click, and this was one of the two surfaces where
+        // the click reached the row and found nothing wired to it.
+        view.ContactMenuRequested += (_, row) => ShowContactMenu(shell, row, view);
         return view;
     }
 
@@ -392,6 +397,7 @@ public partial class MainWindow
 
         var peek = new PeoplePeek(rows, FileAsOrders.FromIndex(App.PeopleOptions.FileAsIndex));
         peek.ContactOpened += (_, row) => { ClosePeek(); _ = OpenContactAsync(shell, row); };
+        peek.ContactMenuRequested += (_, row) => ShowContactMenu(shell, row, peek.List);
         peek.SearchRequested += (_, _) => { ClosePeek(); _ = SearchPeopleAsync(shell); };
         peek.DockRequested += (_, _) =>
         {
@@ -411,11 +417,11 @@ public partial class MainWindow
     /// many words — "right-click a person anywhere to add them to your favourites" — which is why
     /// the button is not on its bar and is not on ours.
     /// </remarks>
-    private void ShowContactMenu(ShellViewModel shell, ContactRow row)
+    private void ShowContactMenu(ShellViewModel shell, ContactRow row, Control? anchor = null)
     {
         var flyout = ContactMenu(shell, row);
         Log.Info($"People: the menu for “{row.Named()}” is open.");
-        MenuProbe.Show("the contact menu", flyout, EnsurePeople(shell), atPointer: true);
+        MenuProbe.Show("the contact menu", flyout, anchor ?? EnsurePeople(shell), atPointer: true);
     }
 
     /// <summary>The entries themselves, built once so a harness run can press one of them.</summary>

@@ -3352,7 +3352,7 @@ public partial class MainWindow : Window
     /// Folder, Empty Folder, Properties. A role folder — Inbox, Sent Items, Deleted Items and
     /// the rest — cannot be renamed or deleted; Deleted Items and Junk Email offer Empty Folder.
     /// </summary>
-    private void FillFolderMenu(MenuFlyout flyout, ShellViewModel shell, OpenAccount account, Folder folder)
+    private void FillFolderMenu(MenuFlyout flyout, ShellViewModel shell, OpenAccount account, Folder folder, bool asFavourite = false)
     {
         void Entry(string header, Func<Task> run, bool enabled = true)
         {
@@ -3402,15 +3402,42 @@ public partial class MainWindow : Window
         var at = siblings.FindIndex(f => f.Id == folder.Id);
 
         flyout.Items.Add(new Separator());
-        Entry("Sort Subfolders A to Z", () =>
+
+        if (asFavourite)
         {
-            account.Mail.OrderFolders([.. children.OrderBy(f => f.Name, StringComparer.CurrentCultureIgnoreCase).Select(f => f.Id)]);
-            shell.Refresh();
-            shell.StatusRight = $"The {children.Count} folders under “{folder.Name}” sorted.";
-            return Task.CompletedTask;
-        }, children.Count > 1);
-        Entry("Move Up", () => ReorderSibling(shell, account, siblings, at, -1), at > 0);
-        Entry("Move Down", () => ReorderSibling(shell, account, siblings, at, 1), at >= 0 && at < siblings.Count - 1);
+            // The menu was opened over the row under Favourites, so the moves act on the
+            // favourites list — pressing Move Up here used to leave Favourites unchanged and
+            // rewrite the account's tree below it, reporting the move as done.
+            var address = account.Account.Address;
+            var path = ShellViewModel.FolderPath(tree, folder);
+            var place = App.Favourites.IndexOf(address, path);
+
+            Entry("Move Up", () =>
+            {
+                if (App.Favourites.Move(address, path, -1)) shell.Refresh();
+                shell.StatusRight = $"“{folder.Name}” moved up in Favourites.";
+                return Task.CompletedTask;
+            }, place > 0);
+
+            Entry("Move Down", () =>
+            {
+                if (App.Favourites.Move(address, path, 1)) shell.Refresh();
+                shell.StatusRight = $"“{folder.Name}” moved down in Favourites.";
+                return Task.CompletedTask;
+            }, place >= 0 && place < App.Favourites.All.Count - 1);
+        }
+        else
+        {
+            Entry("Sort Subfolders A to Z", () =>
+            {
+                account.Mail.OrderFolders([.. children.OrderBy(f => f.Name, StringComparer.CurrentCultureIgnoreCase).Select(f => f.Id)]);
+                shell.Refresh();
+                shell.StatusRight = $"The {children.Count} folders under “{folder.Name}” sorted.";
+                return Task.CompletedTask;
+            }, children.Count > 1);
+            Entry("Move Up", () => ReorderSibling(shell, account, siblings, at, -1), at > 0);
+            Entry("Move Down", () => ReorderSibling(shell, account, siblings, at, 1), at >= 0 && at < siblings.Count - 1);
+        }
 
         flyout.Items.Add(new Separator());
         Entry("Properties…", () => FolderPropertiesAsync(shell, account, folder));
@@ -3651,10 +3678,13 @@ public partial class MainWindow : Window
         {
             flyout.Items.Clear();
 
-            // An ordinary folder: the reference's menu over it.
+            // An ordinary folder: the reference's menu over it. The node travels too, because
+            // the same folder is drawn twice — in its account's tree and under Favourites —
+            // and Move Up over a favourite must move the favourite, not rewrite the tree.
             if (pressed is not null && shell.FolderOf(pressed) is { } where)
             {
-                FillFolderMenu(flyout, shell, where.Account, where.Folder);
+                FillFolderMenu(flyout, shell, where.Account, where.Folder,
+                    pressed.Kind == ViewModels.FolderNodeKind.Favourite);
                 return;
             }
 

@@ -71,6 +71,7 @@ internal sealed class PeoplePeek : Border
         _list.Order = order;
         _list.Rows = favourites;
         _list.ContactActivated += (_, row) => ContactOpened?.Invoke(this, row);
+        _list.ContactMenuRequested += (_, row) => ContactMenuRequested?.Invoke(this, row);
 
         // The corner button on its own line above the box, which is where the reference draws it.
         _body.Margin = new Thickness(9, 6, 9, 8);
@@ -85,6 +86,9 @@ internal sealed class PeoplePeek : Border
 
     /// <summary>Somebody in the list was opened.</summary>
     public event EventHandler<ContactRow>? ContactOpened;
+
+    /// <summary>A right-click on somebody — the way a favourite is taken off from here.</summary>
+    public event EventHandler<ContactRow>? ContactMenuRequested;
 
     /// <summary>The corner button: the section goes into the To-Do Bar, as the calendar's does.</summary>
     public event EventHandler? DockRequested;

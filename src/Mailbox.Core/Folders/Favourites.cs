@@ -77,6 +77,9 @@ public sealed class Favourites
     }
 
     /// <summary>Remove from Favorites.</summary>
+    /// <summary>Where a favourite stands in the list, or -1: what greys the move entries.</summary>
+    public int IndexOf(string address, string path) => _entries.FindIndex(e => e.Is(address, path));
+
     public bool Remove(string address, string path)
     {
         var removed = _entries.RemoveAll(e => e.Is(address, path)) > 0;

@@ -156,15 +156,28 @@ public sealed class RulesAndAlertsDialog : Window
         _description.UseSystemPalette();
         _description.ValueClicked += async (_, index) => await EditClauseAsync(index);
 
-        var toolbar = SystemDialogKit.Toolbar(
-            SystemDialogKit.ToolButton("new", "New Rule...", NewRuleAsync),
+        // The six the reference greys without a selection are remembered so Refresh can grey
+        // them — each already guarded on the selection, which made them safe but silent: a
+        // live-looking button that did nothing.
+        _needSelection =
+        [
             ChangeRuleButton(),
             SystemDialogKit.ToolButton("change", "Copy...", Copy),
             SystemDialogKit.ToolButton("remove", "Delete", DeleteAsync),
             SystemDialogKit.ToolButton("up", string.Empty, () => Move(-1)),
             SystemDialogKit.ToolButton("down", string.Empty, () => Move(1)),
+        ];
+        _runNow = SystemDialogKit.ToolButton(string.Empty, "Run Rules Now...", RunNowAsync);
+
+        var toolbar = SystemDialogKit.Toolbar(
+            SystemDialogKit.ToolButton("new", "New Rule...", NewRuleAsync),
+            _needSelection[0],
+            _needSelection[1],
+            _needSelection[2],
+            _needSelection[3],
+            _needSelection[4],
             SystemDialogKit.ToolSeparator(),
-            SystemDialogKit.ToolButton(string.Empty, "Run Rules Now...", RunNowAsync),
+            _runNow,
             SystemDialogKit.ToolButton(string.Empty, "Options", OptionsAsync));
 
         _empty.HorizontalAlignment = HorizontalAlignment.Center;
@@ -280,6 +293,15 @@ public sealed class RulesAndAlertsDialog : Window
     private void Refresh()
     {
         if (_apply is not null) _apply.IsEnabled = Dirty;
+
+        // The reference greys the five that act on a selection when there is none, and Run
+        // Rules Now when there is nothing to run.
+        foreach (var button in _needSelection ?? [])
+        {
+            button.IsEnabled = SelectedRow is not null;
+        }
+
+        if (_runNow is not null) _runNow.IsEnabled = _rows.Count > 0;
     }
 
     /// <summary>
@@ -376,7 +398,9 @@ public sealed class RulesAndAlertsDialog : Window
 
     private Button ChangeRuleButton()
     {
-        var button = SystemDialogKit.ToolButton("change", "Change Rule", () => { });
+        // The chevron, so the menu is visible before it is opened — the reference draws
+        // "Change Rule ▾" and ours drew the word alone over an invisible flyout.
+        var button = SystemDialogKit.ToolButton("change", "Change Rule ▾", () => { });
         var flyout = new MenuFlyout();
 
         var edit = new MenuItem { Header = "Edit Rule Settings…" };
@@ -589,6 +613,9 @@ public sealed class RulesAndAlertsDialog : Window
         }
     }
 
+    private Button[]? _needSelection;
+    private Button? _runNow;
+
     private RuleRow? SelectedRow => _list.SelectedRow?.Tag as RuleRow;
 
     private MailRule? Selected => SelectedRow?.Rule;
@@ -778,7 +805,11 @@ public sealed class RunRulesNowDialog : Window
         var rows = new StackPanel { Spacing = 2, Margin = new Thickness(6, 4) };
         foreach (var rule in rules)
         {
-            var box = new CheckBox { Content = rule.Name };
+            // A rule the reader switched off says so on its row: running it stays allowed —
+            // the reference's own Run Rules Now runs disabled rules on purpose, that being how
+            // a kept-off rule is applied by hand — but Select All silently sweeping one in was
+            // how three messages were permanently deleted by a rule nobody thought was live.
+            var box = new CheckBox { Content = rule.Enabled ? rule.Name : $"{rule.Name} (switched off)" };
             Bind(box, TemplatedControl.ForegroundProperty, "dialog.surface.text.brush");
             var id = rule.Id;
             box.IsCheckedChanged += (_, _) => { if (box.IsChecked == true) chosen.Add(id); else chosen.Remove(id); };
