@@ -48,8 +48,10 @@ public sealed class AppointmentWindow : Window
         _meeting = meeting;
 
         Title = _surface.Title;
-        Width = 1000;
-        Height = 700;
+        // Measured off the reference's own capture of this window, which the surface's layout
+        // was authored to; opening narrower squeezed a 1595-wide design into 1000.
+        Width = 1595;
+        Height = 929;
         MinWidth = 640;
         MinHeight = 420;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;

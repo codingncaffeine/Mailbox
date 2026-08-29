@@ -641,7 +641,7 @@ public partial class MainWindow
 
         SwitchModule(shell, MailboxModule.Calendar);
         var calendar = EnsureCalendar(shell);
-        _ = NewAppointmentAsync(shell, calendar.Anchor.ToDateTime(NextHalfHour()), allDay: false, meeting: true, asked);
+        _ = NewAppointmentAsync(shell, calendar.Anchor.ToDateTime(StartFor(calendar.Anchor)), allDay: false, meeting: true, asked);
         Log.Info($"People: meeting with {string.Join(", ", asked)}.");
     }
 

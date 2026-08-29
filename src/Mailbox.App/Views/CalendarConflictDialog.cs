@@ -207,19 +207,24 @@ public sealed class CalendarConflictDialog : Window
 
     private static string When(CalendarEvent appointment)
     {
+        // The culture's own patterns throughout, because the recurrence sentence under this
+        // line uses them — one convention per surface, not a day-first 24-hour line over a
+        // locale-shaped one.
+        var culture = CultureInfo.CurrentCulture;
+
         if (appointment.AllDay)
         {
             var last = appointment.End.Wall.AddDays(-1);
             var first = appointment.Start.Wall;
             return last.Date <= first.Date
-                ? first.ToString("dddd, d MMMM yyyy", CultureInfo.CurrentCulture)
-                : $"{first:ddd d MMM} – {last.ToString("ddd d MMM yyyy", CultureInfo.CurrentCulture)}";
+                ? first.ToString("D", culture)
+                : $"{first.ToString("d", culture)} – {last.ToString("d", culture)}";
         }
 
-        return appointment.Start.Wall.ToString("dddd, d MMMM yyyy HH:mm", CultureInfo.CurrentCulture)
+        return appointment.Start.Wall.ToString("f", culture)
                + " – " + appointment.End.Wall.ToString(
-                   appointment.End.Wall.Date == appointment.Start.Wall.Date ? "HH:mm" : "ddd d MMM HH:mm",
-                   CultureInfo.CurrentCulture);
+                   appointment.End.Wall.Date == appointment.Start.Wall.Date ? "t" : "f",
+                   culture);
     }
 
     /// <summary>The master out of a server payload — the copy the two-column view compares.</summary>

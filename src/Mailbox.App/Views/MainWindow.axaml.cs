@@ -5285,7 +5285,7 @@ public partial class MainWindow : Window
         var calendar = EnsureCalendar(shell);
         _ = NewAppointmentAsync(
             shell,
-            calendar.Anchor.ToDateTime(NextHalfHour()),
+            calendar.Anchor.ToDateTime(StartFor(calendar.Anchor)),
             allDay: false,
             meeting: true,
             asked: asked,

@@ -187,7 +187,7 @@ public partial class MainWindow
         {
             SwitchModule(shell, MailboxModule.Calendar);
             var calendar = EnsureCalendar(shell);
-            _ = NewAppointmentAsync(shell, calendar.Anchor.ToDateTime(NextHalfHour()), allDay: false);
+            _ = NewAppointmentAsync(shell, calendar.Anchor.ToDateTime(StartFor(calendar.Anchor)), allDay: false);
             return true;
         }
 
@@ -195,7 +195,7 @@ public partial class MainWindow
         {
             SwitchModule(shell, MailboxModule.Calendar);
             var calendar = EnsureCalendar(shell);
-            _ = NewAppointmentAsync(shell, calendar.Anchor.ToDateTime(NextHalfHour()), allDay: false, meeting: true);
+            _ = NewAppointmentAsync(shell, calendar.Anchor.ToDateTime(StartFor(calendar.Anchor)), allDay: false, meeting: true);
             return true;
         }
 
@@ -855,14 +855,31 @@ public partial class MainWindow
         shell.ModuleStatusLeft = calendar.Status;
     }
 
-    /// <summary>The next half hour on the clock, which is where a new appointment starts.</summary>
+    /// <summary>
+    /// Where a new appointment starts: the working day's start, or the next half hour once
+    /// today is past it.
+    /// </summary>
+    /// <remarks>
+    /// The reference's own capture: made on the pinned day it opens 8:00–8:30, the working-day
+    /// start Options names. On the application's clock rather than the machine's, so a posed
+    /// window is the same picture every run — the wall clock made it a different capture every
+    /// half hour, which was the reproducibility half of this.
+    /// </remarks>
     private static TimeOnly NextHalfHour()
     {
-        var now = CalendarNow ?? DateTime.Now;
+        var now = Mailbox.Core.PosedClock.Now.LocalDateTime;
+        var workStart = App.CalendarOptions.WorkDayStart;
+        if (TimeOnly.FromDateTime(now) < workStart) return workStart;
+
         var minutes = now.Minute < 30 ? 30 : 60;
-        var start = now.Date.AddHours(now.Hour).AddMinutes(minutes);
-        return TimeOnly.FromDateTime(start);
+        return TimeOnly.FromDateTime(now.Date.AddHours(now.Hour).AddMinutes(minutes));
     }
+
+    /// <summary>An appointment made for another day starts at that day's working start.</summary>
+    private static TimeOnly StartFor(DateOnly anchor)
+        => anchor == DateOnly.FromDateTime(Mailbox.Core.PosedClock.Now.LocalDateTime)
+            ? NextHalfHour()
+            : App.CalendarOptions.WorkDayStart;
 
     /// <summary>
     /// Add Focus Time: the next free block of the working day, booked as Busy.
