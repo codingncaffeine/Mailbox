@@ -230,6 +230,19 @@ public sealed class ContactListView : DrawnSurface
     /// <summary>What the status bar counts.</summary>
     public int Count => _rows.Count;
 
+    /// <summary>
+    /// Where a row was drawn, in this control's own coordinates, or null when it is not on the
+    /// list — the box a pointer has to land in to reach it.
+    /// </summary>
+    /// <remarks>
+    /// The audit's own note that no pose could deliver a pointer into a drawn list, answered the
+    /// way the calendar peek answers it. Without this, everything a right-click reaches here is
+    /// unreachable by anything but a person: the row menu, and the two surfaces that draw this
+    /// list without one.
+    /// </remarks>
+    public Rect? BoxOf(int index)
+        => index >= 0 && index < _rowHits.Count ? _rowHits[index].Box : null;
+
     // ---- Render --------------------------------------------------------------------------------
 
     public override void Render(DrawingContext context)

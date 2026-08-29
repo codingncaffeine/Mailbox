@@ -1,5 +1,7 @@
 using System.Globalization;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Threading;
 using Mailbox.App.ViewModels;
 using Mailbox.Contacts;
@@ -160,6 +162,14 @@ public partial class MainWindow
     /// </summary>
     private void PressPeoplePeek(string spec)
     {
+        // The same list in the other place it is drawn: the To-Do Bar's People section, which is
+        // where the corner button puts it and so where a reader keeps their favourites.
+        if (spec.StartsWith("barmenu:", StringComparison.OrdinalIgnoreCase))
+        {
+            PressBarPeopleMenu(spec["barmenu:".Length..].Trim());
+            return;
+        }
+
         if (_peekPopup is not PeoplePeek peek)
         {
             Log.Info("Harness: the People peek is not open — pose MAILBOX_PEEK=peoplepeek as well.");
@@ -174,6 +184,12 @@ public partial class MainWindow
                      : $": {string.Join(" | ", peek.Rows.Select(r => r.Named()))}."));
 
         if (string.Equals(spec, "dump", StringComparison.OrdinalIgnoreCase)) return;
+
+        if (spec.StartsWith("menu:", StringComparison.OrdinalIgnoreCase))
+        {
+            PressPeoplePeekMenu(shell, peek, spec["menu:".Length..].Trim());
+            return;
+        }
 
         if (spec.StartsWith("contact:", StringComparison.OrdinalIgnoreCase))
         {
@@ -205,6 +221,90 @@ public partial class MainWindow
                 + $"the bar's People section is {(shell.ArePeopleDocked ? "on" : "off")}, "
                 + $"the module is {shell.Module}, search “{shell.SearchText}”; windows: {OtherWindows()}."),
             DispatcherPriority.ApplicationIdle);
+    }
+
+    /// <summary>
+    /// Right-clicks a favourite in the People peek, which is where the peek's own empty-list
+    /// sentence sends a reader.
+    /// </summary>
+    /// <remarks>
+    /// The press has to be a real right button at a point the list really drew at, and the
+    /// read-back has to separate two different negatives: a click that missed the row, and a
+    /// click that landed and found nothing wired to it. The list's own selection is what tells
+    /// them apart — it moves inside the control before the menu is asked for, whether or not
+    /// anybody is listening — so a run that reports the row selected and no menu is reporting on
+    /// the wiring rather than on its own aim.
+    /// </remarks>
+    private void PressPeoplePeekMenu(ShellViewModel shell, PeoplePeek peek, string which)
+    {
+        var index = int.TryParse(which, CultureInfo.InvariantCulture, out var n) ? n : 0;
+        if (peek.List.BoxOf(index) is not { } box)
+        {
+            peek.UpdateLayout();
+            if (peek.List.BoxOf(index) is null)
+            {
+                Log.Info($"Harness: the People peek drew no row {index} to right-click.");
+                return;
+            }
+
+            box = peek.List.BoxOf(index)!.Value;
+        }
+
+        var before = _people is null ? "not built" : "built";
+        RightPress(peek.List, box.Center);
+
+        Dispatcher.UIThread.Post(
+            () => Log.Info(
+                $"Harness: right-clicked row {index} in the People peek — "
+                + $"the list selected “{peek.List.Selected?.Named() ?? "nobody"}”, "
+                + $"the People module was {before} and is {(_people is null ? "not built" : "built")}, "
+                + $"module {shell.Module}; windows: {OtherWindows()}."),
+            DispatcherPriority.ApplicationIdle);
+    }
+
+    /// <summary>Right-clicks a favourite in the To-Do Bar's People section.</summary>
+    private void PressBarPeopleMenu(string which)
+    {
+        if (DataContext is not ShellViewModel shell) return;
+
+        if ((this.FindControl<ContentControl>("DockHost")?.Content as ToDoBar)?.People is not { } list)
+        {
+            Log.Info("Harness: the To-Do Bar has no People section — pose MAILBOX_PEEK=todopeople as well.");
+            return;
+        }
+
+        list.UpdateLayout();
+        var index = int.TryParse(which, CultureInfo.InvariantCulture, out var n) ? n : 0;
+        if (list.BoxOf(index) is not { } box)
+        {
+            Log.Info($"Harness: the To-Do Bar's People section drew no row {index} — it holds {list.Count}.");
+            return;
+        }
+
+        var before = _people is null ? "not built" : "built";
+        RightPress(list, box.Center);
+
+        Dispatcher.UIThread.Post(
+            () => Log.Info(
+                $"Harness: right-clicked row {index} in the To-Do Bar's People section — "
+                + $"the list selected “{list.Selected?.Named() ?? "nobody"}”, "
+                + $"the People module was {before} and is {(_people is null ? "not built" : "built")}, "
+                + $"module {shell.Module}; windows: {OtherWindows()}."),
+            DispatcherPriority.ApplicationIdle);
+    }
+
+    /// <summary>One right-button click at a point a drawn view drew at.</summary>
+    private static void RightPress(Control view, Point point)
+    {
+        var root = TopLevel.GetTopLevel(view) as Visual ?? view;
+        var at = view.TranslatePoint(point, root) ?? point;
+
+        var pointer = new Pointer(4, PointerType.Mouse, isPrimary: true);
+        var down = new PointerPointProperties(RawInputModifiers.RightMouseButton, PointerUpdateKind.RightButtonPressed);
+        var up = new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.RightButtonReleased);
+
+        view.RaiseEvent(new PointerPressedEventArgs(view, pointer, root, at, 0, down, KeyModifiers.None));
+        view.RaiseEvent(new PointerReleasedEventArgs(view, pointer, root, at, 1, up, KeyModifiers.None, MouseButton.Right));
     }
 
     /// <summary>

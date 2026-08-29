@@ -95,6 +95,9 @@ internal sealed class PeoplePeek : Border
     /// <summary>What the peek is holding, for a harness pose that cannot photograph a popup.</summary>
     public IReadOnlyList<ContactRow> Rows => _list.Rows;
 
+    /// <summary>The favourites list itself, which is where a pointer has to land to reach a row.</summary>
+    public ContactListView List => _list;
+
     /// <summary>
     /// Presses one of the peek's own two buttons — <c>corner</c> or <c>search</c> — through the
     /// button itself.
