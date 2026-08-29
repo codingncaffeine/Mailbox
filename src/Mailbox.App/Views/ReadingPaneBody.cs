@@ -245,8 +245,26 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
             return;
         }
 
-        var trust = SenderTrust.Evaluate(_message, FamiliarDomains(), _verified);
+        var trust = SenderTrust.Evaluate(
+            _message, FamiliarDomains(), _verified,
+            reportAuthentication: App.Security.ShowAuthenticationResults,
+            warnDisplayNameMismatch: App.Security.WarnDisplayNameMismatch);
+
         if (trust.Warnings.Count > 0) _bars.Children.Add(TrustBar(trust));
+
+        // Every warning, not just the headline the bar draws. The bar shows the loudest one, so
+        // two switches that each silence a different warning look identical from a capture — and
+        // "the display-name warning went and the authentication warning stayed" is exactly the
+        // claim the Trust Center's rows make.
+        if (Mailbox.App.Theming.WindowCapture.IsRequested)
+        {
+            Log.Info($"Harness: reading trust — {trust.Level}, {trust.Warnings.Count} warning(s)"
+                     + (trust.Warnings.Count == 0
+                         ? string.Empty
+                         : ": " + string.Join(" | ", trust.Warnings.Select(w => $"{w.Level} “{w.Headline}”")))
+                     + $"; authentication results {(App.Security.ShowAuthenticationResults ? "shown" : "not shown")}"
+                     + $", display-name mismatch {(App.Security.WarnDisplayNameMismatch ? "warned" : "not warned")}.");
+        }
 
         // An encrypted message is opened before anything else is decided, because what gets checked
         // and what gets rendered both depend on what was inside. See §19: the channel CVE-2026-0818
@@ -1173,12 +1191,19 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
         var count = rendered.BlockedImages;
         var hosts = rendered.Hosts.Count;
 
+        // "Report the hosts a message tried to contact." Off leaves the blocking exactly where it
+        // was and stops naming what was blocked — so the bar still says content was held back,
+        // without the host count, and offers no list to open.
+        var naming = App.Security.ReportTrackerHosts;
+
         var text = new TextBlock
         {
             Text = count > 0
-                ? $"{Images(count)} in this message {(count == 1 ? "was" : "were")} blocked, "
-                  + $"from {Hosts(hosts)}."
-                : $"This message asked for content from {Hosts(hosts)}, which was blocked.",
+                ? $"{Images(count)} in this message {(count == 1 ? "was" : "were")} blocked"
+                  + (naming ? $", from {Hosts(hosts)}." : ".")
+                : naming
+                    ? $"This message asked for content from {Hosts(hosts)}, which was blocked."
+                    : "This message asked for content from the network, which was blocked.",
             TextWrapping = TextWrapping.Wrap,
             VerticalAlignment = VerticalAlignment.Center,
         };
@@ -1201,14 +1226,17 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
             actions.Children.Add(always);
         }
 
-        var report = BarButton("Details");
-        report.Click += async (_, _) => await ExplainAsync(
-            "Blocked content",
-            "This message tried to load content from:\n\n"
-            + string.Join("\n", rendered.Hosts.Select(h => "  • " + h))
-            + "\n\nA remote image is how a sender finds out that a message was opened, when, "
-            + "and roughly from where.");
-        actions.Children.Add(report);
+        if (naming)
+        {
+            var report = BarButton("Details");
+            report.Click += async (_, _) => await ExplainAsync(
+                "Blocked content",
+                "This message tried to load content from:\n\n"
+                + string.Join("\n", rendered.Hosts.Select(h => "  • " + h))
+                + "\n\nA remote image is how a sender finds out that a message was opened, when, "
+                + "and roughly from where.");
+            actions.Children.Add(report);
+        }
 
         Grid.SetColumn(actions, 2);
 
@@ -1242,14 +1270,30 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
         await AllowOnceAsync();
     }
 
-    /// <summary>Loads images without asking, for a sender already on the list.</summary>
+    /// <summary>
+    /// Loads images without asking: for a sender already on the safe list, and for everyone when
+    /// the Trust Center's "Don't download pictures automatically in messages" is off.
+    /// </summary>
+    /// <remarks>
+    /// Here rather than on the render path, because §19 forbids the network anywhere a message is
+    /// drawn — the render blocks everything, and this is the pass afterwards that asks for what
+    /// the reader has agreed to. The fetch is Mailbox's own client either way; what the switch
+    /// decides is whether it runs unprompted.
+    /// </remarks>
     public async Task ApplySenderPolicyAsync()
     {
-        if (_rendered is { HasRemoteContent: true } && _policy == RemoteImagePolicy.Block
-            && IsSafeSender())
+        if (_rendered is not { HasRemoteContent: true } || _policy != RemoteImagePolicy.Block) return;
+
+        var automatic = !App.Security.BlockRemotePictures;
+        if (!automatic && !IsSafeSender()) return;
+
+        if (Mailbox.App.Theming.WindowCapture.IsRequested)
         {
-            await AllowOnceAsync();
+            Log.Info("Harness: reading images — loading without asking "
+                     + $"({(automatic ? "pictures are not held back" : "the sender is on the safe list")}).");
         }
+
+        await AllowOnceAsync();
     }
 
     /// <summary>
@@ -1262,6 +1306,19 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
     /// </remarks>
     public async Task ShowTrackerReportAsync()
     {
+        // The switch this command is the whole point of. Said rather than shown empty: a report
+        // that has been turned off and a message that reached for nothing are different answers.
+        if (!App.Security.ReportTrackerHosts)
+        {
+            await ExplainAsync(
+                "Blocked content",
+                "Reporting the hosts a message tried to contact is switched off.\n\n"
+                + "Turn “Report the hosts a message tried to contact” back on under "
+                + "File › Options › Trust Center to see them. Blocking is unaffected "
+                + "either way.");
+            return;
+        }
+
         if (_rendered is not { HasRemoteContent: true } rendered)
         {
             await ExplainAsync("Blocked content", "This message asked for nothing from the network.");
@@ -1279,6 +1336,8 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
     {
         if (_message is null) return;
 
+        // Everything reported, whatever the Trust Center's reading-pane switch says: that one
+        // governs what the pane volunteers, and this was asked for by the press.
         var trust = SenderTrust.Evaluate(_message, _mail()?.FamiliarDomains() ?? [], _verified);
         var results = trust.Authentication;
 
@@ -1384,6 +1443,16 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
 
     private async Task ExplainAsync(string title, string detail)
     {
+        // What the explanation says, before it is shown. Every Details button on every bar ends
+        // here, and a modal a capture cannot answer meant the only read-back was a photograph of
+        // a dialog — so "the tracker report named three hosts" and "it said the report is switched
+        // off" were the same evidence.
+        if (Mailbox.App.Theming.WindowCapture.IsRequested)
+        {
+            Log.Info($"Harness: reading explains — “{title}”: "
+                     + detail.ReplaceLineEndings(" ").Replace("  ", " ", StringComparison.Ordinal).Trim());
+        }
+
         if (TopLevel.GetTopLevel(this) is Window window)
         {
             await Confirm.AskAsync(window, title, detail, "Close", destructive: false);

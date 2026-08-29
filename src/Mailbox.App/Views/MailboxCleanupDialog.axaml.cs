@@ -109,8 +109,8 @@ public sealed class MailboxCleanupDialog : Window
         {
             var deleted = App.Accounts.All.Select(a => a.Mail.FolderWithRole(a.Account.Id, FolderRole.Deleted)).Sum(f => f?.Total ?? 0);
             if (deleted == 0) { Report = "Deleted Items is already empty."; return; }
-            var go = await Confirm.AskAsync(this, "Empty Deleted Items",
-                $"Permanently delete {deleted:N0} item{(deleted == 1 ? "" : "s")} from Deleted Items?", "Delete");
+            var go = await Confirm.AskBeforePermanentDeleteAsync(this, "Empty Deleted Items",
+                $"Permanently delete {deleted:N0} item{(deleted == 1 ? "" : "s")} from Deleted Items?");
             if (!go) return;
             var count = 0;
             foreach (var account in App.Accounts.All)

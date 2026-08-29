@@ -34,8 +34,15 @@ public class OptionsRowWiringTests
         ["search"] = 4,
         ["language"] = 2,
         ["accessibility"] = 7,
-        ["advanced"] = 6,
-        ["trust"] = 6,
+
+        // Down one: "Prompt for confirmation before permanently deleting items" now gates the
+        // four places that ask before a permanent delete.
+        ["advanced"] = 5,
+
+        // Down four: the automatic-download pair and the two message-authentication rows now
+        // reach the reading pane. Each of the four was the behaviour unconditionally, which is
+        // the actively deceptive shape the lookalike-domain row was fixed out of.
+        ["trust"] = 2,
     };
 
     [Fact]

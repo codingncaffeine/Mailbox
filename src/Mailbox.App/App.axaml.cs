@@ -286,6 +286,17 @@ public partial class App : Application
     public static ICredentialStore Secrets { get; private set; } = null!;
 
     /// <summary>
+    /// True when a capture run has asked for the desktop keyring rather than the in-memory store.
+    /// </summary>
+    /// <remarks>
+    /// The one claim a posed run cannot otherwise make: that a password typed into a form reaches
+    /// the desktop keyring. Read back inside this process the two stores are indistinguishable, so
+    /// the verdict has to come from outside it, and that means the write has to go there.
+    /// </remarks>
+    public static bool RealKeyringRequested => string.Equals(
+        Environment.GetEnvironmentVariable("MAILBOX_KEYRING"), "real", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Which server certificates the reader has agreed to.
     /// </summary>
     /// <remarks>
@@ -546,7 +557,13 @@ public partial class App : Application
         // right for a person and wrong for a photograph: a smoke test once turned the reading
         // pane off in the owner's real settings and every capture for the next hour had no
         // pane. The copy carries the theme and the account order in, and nothing back out.
-        Settings = WindowCapture.IsRequested ? SettingsStore.ScratchCopy() : new SettingsStore();
+        // MAILBOX_SETTINGS=<path> points the scratch copy at a file the caller keeps, which is the
+        // only way a harness run can say anything about a setting *surviving* — the unnamed copy
+        // is per-process, so two runs of the same pose are two first runs. Capture runs only: a
+        // real run's settings are the person's, wherever this variable happens to be set.
+        Settings = WindowCapture.IsRequested
+            ? SettingsStore.ScratchCopy(Environment.GetEnvironmentVariable("MAILBOX_SETTINGS"))
+            : new SettingsStore();
 
         // The harness poses settings on the scratch copy: MAILBOX_SETTING="key=value|key=value",
         // with true/false and numbers typed as what they look like. Capture runs only — a real
@@ -603,7 +620,17 @@ public partial class App : Application
 
         // A capture run keeps its passwords in memory: it poses accounts that do not exist, and
         // the keyring may be locked on a headless desktop, where asking it would wait forever.
-        Secrets = WindowCapture.IsRequested ? new InMemoryCredentialStore() : Credentials.Best();
+        //
+        // MAILBOX_KEYRING=real opts back in, because the in-memory store makes one claim
+        // unprovable: that what a form writes actually reaches the desktop keyring. Read back
+        // from the process that wrote it, an in-memory store and a real one are the same
+        // evidence — the only verdict worth having is `secret-tool` at a command line, outside
+        // this process, and that needs the write to have gone there. A run that asks for it is
+        // asking to leave an entry behind, so it names its own account and clears up after
+        // itself.
+        Secrets = WindowCapture.IsRequested && !RealKeyringRequested
+            ? new InMemoryCredentialStore()
+            : Credentials.Best();
         OAuth = new OAuthAccounts(Secrets);
         Trust = new CertificateTrust(Settings);
 

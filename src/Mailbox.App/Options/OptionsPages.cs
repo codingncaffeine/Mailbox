@@ -512,7 +512,10 @@ public static class OptionsPages
             new OptionSection("Other",
             [
                 new SpinnerRow("Keep permanently deleted items recoverable for this many days:", 30, 0, 365, 380) { Key = MailOptions.RecoverDaysKey },
-                new CheckRow("Prompt for confirmation before permanently deleting items", true),
+                new CheckRow("Prompt for confirmation before permanently deleting items", true)
+                {
+                    Key = MailOptions.ConfirmPermanentDeleteKey,
+                },
                 new CheckRow("Show paste options when content is pasted", true),
                 new CheckRow("Use animations when expanding conversations and groups", true),
             ]),
@@ -586,14 +589,25 @@ public static class OptionsPages
 
             new OptionSection("Automatic download",
             [
-                new CheckRow("Don't download pictures automatically in messages", true),
+                // Keyed, because the reading pane reads both: each of these was the behaviour
+                // unconditionally, so the row beside it was a switch that could never move.
+                new CheckRow("Don't download pictures automatically in messages", true)
+                {
+                    Key = SecurityOptions.BlockRemotePicturesKey,
+                },
                 new CheckRow("Warn me before downloading content when editing, forwarding or replying", true),
-                new CheckRow("Report the hosts a message tried to contact", true),
+                new CheckRow("Report the hosts a message tried to contact", true)
+                {
+                    Key = SecurityOptions.ReportTrackerHostsKey,
+                },
             ]),
 
             new OptionSection("Message authentication",
             [
-                new CheckRow("Show DKIM, SPF and DMARC results in the reading pane", true),
+                new CheckRow("Show DKIM, SPF and DMARC results in the reading pane", true)
+                {
+                    Key = SecurityOptions.ShowAuthenticationResultsKey,
+                },
                 // The same switch Junk Email Options draws as "warn me about suspicious domain
                 // names", and so the same key: keyed by its own label it was a second, silent
                 // copy, and turning it off here left the warnings coming.
@@ -601,7 +615,10 @@ public static class OptionsPages
                 {
                     Key = MailOptions.JunkWarnDomainsKey,
                 },
-                new CheckRow("Warn me when a display name disagrees with the sending address", true),
+                new CheckRow("Warn me when a display name disagrees with the sending address", true)
+                {
+                    Key = SecurityOptions.WarnDisplayNameMismatchKey,
+                },
             ]),
         ]);
 

@@ -29,6 +29,31 @@ public static class Confirm
         => (await AskAsync(owner, title, message, confirmLabel, destructive, dontShowAgain: null)).Confirmed;
 
     /// <summary>
+    /// The same question, asked only while the Advanced page's "Prompt for confirmation before
+    /// permanently deleting items" is on. Returns true — go ahead — when it is off.
+    /// </summary>
+    /// <remarks>
+    /// One gate over the four places that ask it: Delete Permanently on a selection, Empty Folder,
+    /// Empty Deleted Items from the Backstage, and Mailbox Clean-up's own Empty. They ask the same
+    /// question about the same operation, and four copies of the check are four chances for one of
+    /// them to keep asking after the reader said not to. What the switch removes is the asking —
+    /// the delete itself is unchanged, and is still recoverable for as long as the Advanced page's
+    /// retention says.
+    /// </remarks>
+    public static async Task<bool> AskBeforePermanentDeleteAsync(
+        Window owner, string title, string message, string confirmLabel = "Delete")
+    {
+        if (!App.MailOptions.ConfirmPermanentDelete)
+        {
+            Mailbox.Core.Diagnostics.Log.Info(
+                $"“{title}” went ahead without asking: confirmation before a permanent delete is switched off.");
+            return true;
+        }
+
+        return await AskAsync(owner, title, message, confirmLabel);
+    }
+
+    /// <summary>
     /// A statement made of controls rather than of a sentence: one OK button, and whatever the
     /// caller wants shown above it. For the keyboard-shortcut list, which is a table.
     /// </summary>

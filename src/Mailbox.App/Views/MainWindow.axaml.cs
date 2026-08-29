@@ -936,6 +936,24 @@ public partial class MainWindow : Window
         // The summary page's links, the People peek's two buttons, and what the calendar peek's
         // agenda is hiding — all of which want the arrangement above to have settled first.
         WirePhase10BDoors();
+
+        // The customization editors, which live inside a modal dialog and one of them behind a
+        // button on the other, so nothing could reach either. Last, because both open a window
+        // over this one and the claims they make are about what the shell holds afterwards.
+        WirePhase12BDoors();
+
+        // A message whose remote picture can really be fetched, and what the Trust Center's own
+        // switches hold in this run. The delivery goes in before the folder pose picks a row.
+        WirePhase12ADoors();
+
+        // The store engines: what a file actually holds, what a dialog actually drew, the backup
+        // engine, and a corpus whose ages can be posed. Last, because every one of them is a
+        // measurement of what everything above has finished doing.
+        WirePhase14BDoors();
+
+        // Typing into a system dialog's own fields, and reading back where a credential went.
+        // Last, so a form is driven over whatever the poses above have already opened.
+        WirePhase13ADoors();
     }
 
     /// <summary>
@@ -3470,8 +3488,8 @@ public partial class MainWindow : Window
     {
         var total = account.Mail.Messages(folder.Id, int.MaxValue).Count;
         if (total == 0) { shell.StatusRight = $"{folder.Name} is already empty."; return; }
-        var go = await Confirm.AskAsync(this, "Empty Folder",
-            $"Permanently delete {total:N0} item{(total == 1 ? "" : "s")} from {folder.Name}?", "Delete");
+        var go = await Confirm.AskBeforePermanentDeleteAsync(this, "Empty Folder",
+            $"Permanently delete {total:N0} item{(total == 1 ? "" : "s")} from {folder.Name}?");
         if (!go) return;
         var count = shell.EmptyFolder(account, folder.Id);
         shell.StatusRight = $"{folder.Name} emptied: {count:N0} item{(count == 1 ? "" : "s")}.";
@@ -8641,7 +8659,7 @@ public partial class MainWindow : Window
     {
         if (rows.Count == 0) return;
 
-        var confirmed = await Confirm.AskAsync(
+        var confirmed = await Confirm.AskBeforePermanentDeleteAsync(
             this,
             "Delete permanently",
             rows.Count == 1

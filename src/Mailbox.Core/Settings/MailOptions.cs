@@ -82,6 +82,7 @@ public sealed class MailOptions(SettingsStore settings)
     public const string RequestDeliveryReceiptKey = "mail.tracking.delivery";
     public const string RequestReadReceiptKey = "mail.tracking.read";
     public const string EmptyDeletedOnExitKey = "mail.exit.emptydeleted";
+    public const string ConfirmPermanentDeleteKey = "mail.delete.confirmpermanent";
     public const string SendImmediatelyKey = "mail.send.immediately";
 
     // No key for the send/receive schedule. The Advanced page's row edits the All Accounts
@@ -399,6 +400,22 @@ public sealed class MailOptions(SettingsStore settings)
     /// the reference's servers keep them; 0 keeps nothing.
     /// </summary>
     public int RecoverDays => Math.Clamp((int)_settings.GetNumber(RecoverDaysKey, 30), 0, 365);
+
+    /// <summary>
+    /// Whether deleting for good asks first. On, and the Advanced page's row is what turns it off.
+    /// </summary>
+    /// <remarks>
+    /// Every prompt that says "Permanently delete … ? This cannot be undone" — Delete Permanently
+    /// on a selection, Empty Folder, Empty Deleted Items from the Backstage and from Mailbox
+    /// Clean-up. One switch over the four, because they ask the same question about the same
+    /// operation and a reader who has turned it off has said what they meant about all of them.
+    /// The <em>delete</em> is unchanged either way; what goes is the asking.
+    /// </remarks>
+    public bool ConfirmPermanentDelete
+    {
+        get => _settings.GetBool(ConfirmPermanentDeleteKey, true);
+        set => _settings.Set(ConfirmPermanentDeleteKey, value);
+    }
 
     /// <summary>Focused Inbox (§12): whether the Inbox is split into Focused and Other. Off until asked.</summary>
     public bool ShowFocusedInbox

@@ -52,15 +52,39 @@ public sealed class SettingsStore
     /// nav's, the zoom — and a photograph must not change what the person sees when they next
     /// open the application. The copy carries everything in and nothing out.
     /// </remarks>
-    public static SettingsStore ScratchCopy()
+    /// <param name="at">
+    /// Where the copy lives, for a caller that wants to look at it afterwards or hand it to the
+    /// next run. Null puts it under the process id, which is what a photograph wants: nobody
+    /// reads it and it never collides.
+    /// </param>
+    /// <remarks>
+    /// <b>A named file is opened, not overwritten.</b> The scratch copy is per-process, so no
+    /// claim about a setting <em>surviving a run</em> could be made through the harness at all —
+    /// only about the settings layer inside one process, which is a different and much weaker
+    /// statement. Naming the file makes the second run read what the first one wrote: press a row
+    /// in Options, close the dialog, run again pointed at the same file, and the tick is where it
+    /// was left or it is not.
+    /// </remarks>
+    public static SettingsStore ScratchCopy(string? at = null)
     {
-        var scratch = Path.Combine(
-            Path.GetTempPath(), $"mailbox-settings-{Environment.ProcessId}.json");
+        var scratch = string.IsNullOrWhiteSpace(at)
+            ? Path.Combine(Path.GetTempPath(), $"mailbox-settings-{Environment.ProcessId}.json")
+            : at;
 
         try
         {
+            // A named file that already holds settings is the input: copying the real one over it
+            // would throw away exactly what the caller kept it for. An unnamed scratch is always
+            // rebuilt, since a stale one from a recycled process id would be somebody else's.
+            var carryIn = string.IsNullOrWhiteSpace(at) || !File.Exists(scratch);
+
             var real = DefaultPath();
-            if (File.Exists(real)) File.Copy(real, scratch, overwrite: true);
+            if (carryIn && File.Exists(real)) File.Copy(real, scratch, overwrite: true);
+
+            if (Path.GetDirectoryName(scratch) is { Length: > 0 } directory)
+            {
+                Directory.CreateDirectory(directory);
+            }
         }
         catch (Exception)
         {

@@ -61,10 +61,27 @@ public sealed record SenderTrust(
     /// checked. Never resolved from inside this method: the lookup happens when mail is
     /// received, and this is called to draw a message. See §19.
     /// </param>
+    /// <param name="reportAuthentication">
+    /// Whether what DKIM, SPF and DMARC came to is worth a warning — the Trust Center's "Show
+    /// DKIM, SPF and DMARC results in the reading pane". <see cref="Authentication"/> is filled
+    /// either way: this decides whether the pane says anything unasked, not whether the results
+    /// are read.
+    /// </param>
+    /// <param name="warnDisplayNameMismatch">
+    /// Whether a display name disagreeing with the address it was sent from is worth a warning —
+    /// the Trust Center's row of that name.
+    /// </param>
+    /// <remarks>
+    /// The two switches are passed in rather than read here, for the same reason the familiar
+    /// domains are: this assembly knows about mail, not about where a reader's preferences live,
+    /// and a check that reads its own setting cannot be tested with the setting the other way.
+    /// </remarks>
     public static SenderTrust Evaluate(
         MimeMessage message,
         IEnumerable<string>? familiarDomains = null,
-        DkimResult? verified = null)
+        DkimResult? verified = null,
+        bool reportAuthentication = true,
+        bool warnDisplayNameMismatch = true)
     {
         ArgumentNullException.ThrowIfNull(message);
 
@@ -78,7 +95,13 @@ public sealed record SenderTrust(
         // header was written by a server and this was checked against the bytes in the store.
         var signedHere = verified?.Verdict == AuthVerdict.Pass;
 
-        if (results.Failed)
+        if (!reportAuthentication)
+        {
+            // Nothing said about DKIM, SPF or DMARC. The results are still read and still
+            // returned — the Authentication command reports them on request — and the checks
+            // below, which are about the address rather than about the transport, still run.
+        }
+        else if (results.Failed)
         {
             warnings.Add(new TrustWarning(
                 TrustLevel.Alarm,
@@ -100,7 +123,7 @@ public sealed record SenderTrust(
         // list that appends a footer breaks the signature of every message it passes on, and
         // that is the commonest cause by a wide margin. It is still worth saying, because the
         // other cause is that the message is not what it says it is.
-        if (verified?.Verdict == AuthVerdict.Fail)
+        if (reportAuthentication && verified?.Verdict == AuthVerdict.Fail)
         {
             warnings.Add(new TrustWarning(
                 TrustLevel.Caution,
@@ -111,7 +134,7 @@ public sealed record SenderTrust(
                 + "that has been altered."));
         }
 
-        if (SpoofedDisplayName(from) is { } spoofed)
+        if (warnDisplayNameMismatch && SpoofedDisplayName(from) is { } spoofed)
         {
             warnings.Add(new TrustWarning(
                 TrustLevel.Alarm,

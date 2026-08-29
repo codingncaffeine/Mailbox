@@ -227,13 +227,12 @@ internal static class BackstageActions
             return;
         }
 
-        var confirmed = await Confirm.AskAsync(
+        var confirmed = await Confirm.AskBeforePermanentDeleteAsync(
             host.Owner,
             "Empty Deleted Items",
             $"Permanently delete {total:N0} item{(total == 1 ? "" : "s")} from Deleted Items?\n\n"
             + "This cannot be undone, and where mail was removed from the server this is the "
-            + "only copy.",
-            "Delete");
+            + "only copy.");
 
         if (!confirmed) return;
 
