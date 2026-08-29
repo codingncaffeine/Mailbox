@@ -51,6 +51,9 @@ public sealed class AccountSettingsDialog : Window
     private const double DialogHeight = 501;
 
     private readonly ClassicTabControl _tabs = new();
+
+    /// <summary>How a tab whose list is filled locally re-reads its store when it is shown.</summary>
+    private readonly Dictionary<int, Action> _refreshOnSelect = [];
     private readonly TextBlock _bannerHeading = Label(string.Empty, bold: true);
     private readonly TextBlock _bannerText = Label(string.Empty);
 
@@ -142,7 +145,17 @@ public sealed class AccountSettingsDialog : Window
         _tabs.AddTab(TabNames[3], InternetCalendarsTab());
         _tabs.AddTab(TabNames[4], PublishedCalendarsTab());
         _tabs.AddTab(TabNames[5], AddressBooksTab());
-        _tabs.SelectionChanged += (_, _) => ShowBanner();
+        // A tab re-reads its store the moment it is shown. The lists were filled once at
+        // construction, so anything that changed while the dialog sat open — a feed subscribed
+        // from the ribbon, a calendar published, a harness precondition seeded — was invisible
+        // until the dialog was closed and opened again.
+        _refreshOnSelect[3] = FillSubscriptions;
+        _refreshOnSelect[4] = FillPublished;
+        _tabs.SelectionChanged += (_, _) =>
+        {
+            ShowBanner();
+            if (_refreshOnSelect.TryGetValue(_tabs.SelectedIndex, out var refresh)) refresh();
+        };
 
         SystemDialogChrome.Apply(this, Layout());
         Reload();
@@ -704,6 +717,8 @@ public sealed class AccountSettingsDialog : Window
         var location = Label(string.Empty, bold: true);
         var changeFolder = PushButton("Change Folder", ChangeFeedFolderAsync, width: 92);
 
+        _refreshOnSelect[2] = Fill;
+
         void Fill()
         {
             var chosen = list.SelectedRow?.Tag as string;
@@ -1099,6 +1114,8 @@ public sealed class AccountSettingsDialog : Window
             Columns = [new ClassicColumn("Name", 282), new ClassicColumn("Type", 281)],
         };
 
+        _refreshOnSelect[5] = Fill;
+
         // What the People module has: the local address books, and the ones a CardDAV account
         // brought. The type column says which, as the reference's does for its own kinds.
         void Fill()
@@ -1131,6 +1148,17 @@ public sealed class AccountSettingsDialog : Window
             {
                 var name = await Prompt.AskAsync(this, "New Address Book", "Name:", "Contacts");
                 if (string.IsNullOrWhiteSpace(name)) return;
+
+                // A second book under an existing name would be indistinguishable from the
+                // first in every picker that lists them — and the prompt's own prefill invites
+                // exactly that with one press of Enter.
+                if (App.Contacts.AddressBooks().Any(
+                        b => string.Equals(b.DisplayName, name.Trim(), StringComparison.OrdinalIgnoreCase)))
+                {
+                    await Later("New Address Book",
+                        $"There is already an address book called “{name.Trim()}”. Choose another name.");
+                    return;
+                }
 
                 App.Contacts.Repository.AddCollection(Mailbox.Store.Pim.CollectionKind.Contacts, name.Trim());
                 Changed = true;
