@@ -94,7 +94,10 @@ public static class ContactMerge
             JobTitle = Pick(existing.JobTitle, incoming.JobTitle),
 
             Emails = Union(incoming.Emails, existing.Emails, e => e.Address.Trim().ToLowerInvariant()),
-            Phones = Union(incoming.Phones, existing.Phones, p => Digits(p.Number)),
+            // By the last nine digits, as the duplicate finder compares them: "+44 20 7946 0000"
+            // and "020 7946 0000" are one telephone written two ways, and a merge that kept both
+            // would put the same number on the card twice — which is the noise a merge is for.
+            Phones = Union(incoming.Phones, existing.Phones, p => Tail(Digits(p.Number))),
             Addresses = Union(
                 incoming.Addresses.Where(a => !a.IsEmpty),
                 existing.Addresses.Where(a => !a.IsEmpty),
@@ -158,4 +161,7 @@ public static class ContactMerge
     }
 
     private static string Digits(string text) => new([.. text.Where(char.IsAsciiDigit)]);
+
+    /// <summary>Enough of a number to be the subscriber's, without the country code agreeing.</summary>
+    private static string Tail(string digits) => digits.Length <= 9 ? digits : digits[^9..];
 }

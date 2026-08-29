@@ -191,4 +191,94 @@ public class ContactLinkTests
         var group = Person("group-1", "Project Alpha", "list@example.com") with { IsGroup = true };
         Assert.Empty(book.Duplicates(group));
     }
+
+    // ---- Updating one card with another's information ------------------------------------------
+
+    /// <summary>
+    /// The duplicate prompt's second answer: the stored card takes what the typed one says and
+    /// keeps everything the typed one is silent about.
+    /// </summary>
+    /// <remarks>
+    /// This was a replacement, so a card typed to correct a company destroyed the address, the
+    /// birthday, the photograph, the note and every number the stored card had. What the reference
+    /// does is compare the fields that hold something in both and copy the newer card's over, which
+    /// is what these assertions are.
+    /// </remarks>
+    [Fact]
+    public void UpdatingFromADuplicateKeepsWhatTheNewCardDoesNotSay()
+    {
+        var stored = new Contact
+        {
+            Uid = "card-1",
+            DisplayName = "A. Person",
+            FirstName = "A.",
+            LastName = "Person",
+            FileAs = "Person, A.",
+            Company = "Example Ltd.",
+            JobTitle = "Principal Engineer",
+            Emails = [new ContactEmail("a.person@example.com"), new ContactEmail("a.person@example.net")],
+            Phones = [new ContactPhone("+44 20 7946 0000"), new ContactPhone("+44 7700 900000", PhoneKind.Mobile)],
+            Addresses = [new ContactAddress { Street = "1 Example Street", City = "London" }],
+            Urls = ["https://example.com/a.person"],
+            Categories = ["Colleagues"],
+            Notes = "Prefers e-mail.",
+            Birthday = new DateOnly(1980, 4, 1),
+            Photo = new ContactPhoto([0x89, 0x50, 0x4E, 0x47], "image/png"),
+            IsPrivate = true,
+            Links = ["card-2"],
+            FollowUpDue = DateTimeOffset.UnixEpoch.AddDays(1000),
+        };
+
+        var typed = new Contact
+        {
+            Uid = "card-3",
+            DisplayName = "A. Person",
+            FirstName = "A.",
+            LastName = "Person",
+            Company = "New Company Ltd.",
+            Emails = [new ContactEmail("a.person@example.com")],
+            Phones = [new ContactPhone("+44 161 496 0009", PhoneKind.Home)],
+        };
+
+        var merged = ContactMerge.Update(stored, typed);
+
+        // Said by both: the newer card wins.
+        Assert.Equal("New Company Ltd.", merged.Company);
+
+        // Said only by the stored card: kept.
+        Assert.Equal("Principal Engineer", merged.JobTitle);
+        Assert.Equal("Person, A.", merged.FileAs);
+        Assert.Equal("Prefers e-mail.", merged.Notes);
+        Assert.Equal(new DateOnly(1980, 4, 1), merged.Birthday);
+        Assert.Equal(stored.Photo, merged.Photo);
+        Assert.Single(merged.Addresses);
+        Assert.Equal(["https://example.com/a.person"], merged.Urls);
+        Assert.Equal(["Colleagues"], merged.Categories);
+        Assert.True(merged.IsPrivate);
+        Assert.Equal(["card-2"], merged.Links);
+        Assert.Equal(stored.FollowUpDue, merged.FollowUpDue);
+
+        // Lists: the new entries first, then what the stored card was already reachable at, with
+        // the address they share said once.
+        Assert.Equal(
+            ["a.person@example.com", "a.person@example.net"],
+            merged.Emails.Select(e => e.Address));
+        Assert.Equal(
+            ["+44 161 496 0009", "+44 20 7946 0000", "+44 7700 900000"],
+            merged.Phones.Select(p => p.Number));
+    }
+
+    /// <summary>One telephone written two ways is one telephone, here as everywhere else.</summary>
+    [Fact]
+    public void UpdatingDoesNotSayTheSameNumberTwice()
+    {
+        var stored = Person("card-1", "A. Person", "a.person@example.com", phone: "+44 20 7946 0000");
+        var typed = Person("card-2", "A. Person", "A.Person@Example.com", phone: "020 7946 0000");
+
+        var merged = ContactMerge.Update(stored, typed);
+
+        Assert.Single(merged.Emails);
+        Assert.Single(merged.Phones);
+        Assert.Equal("020 7946 0000", merged.Phones[0].Number);
+    }
 }
