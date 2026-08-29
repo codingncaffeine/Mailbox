@@ -90,6 +90,18 @@ public sealed class MessageWindow : Window
     /// <summary>The shell's way to say something in this window's own notice strip.</summary>
     public void Say(string text) => Notice(text);
 
+    /// <summary>
+    /// Accept, Tentative or Decline pressed on this window's invitation bar.
+    /// </summary>
+    /// <remarks>
+    /// Forwarded rather than handled, for the reason Reply is: the reply to an invitation is a
+    /// message and a window does not own an outbox. Only the shell's own pane used to be
+    /// listened to, so answering a meeting request in a window wrote the appointment and queued
+    /// nothing — and with the reading pane off, a window is the only place the bar appears at
+    /// all, which made it the ordinary way to answer rather than an unusual one.
+    /// </remarks>
+    public event EventHandler<InvitationBar.Answer>? InvitationAnswered;
+
     public MessageWindow(
         ThemeService themes, Func<MailRepository?> mail, MimeMessage message, byte[]? raw,
         DkimResult? verified = null, OpenedMessageContext? context = null)
@@ -114,6 +126,8 @@ public sealed class MessageWindow : Window
         TextRendering.Apply(this);
 
         _body = new ReadingPaneBody(themes, mail);
+
+        _body.InvitationAnswered += (_, answer) => InvitationAnswered?.Invoke(this, answer);
 
         // The engine goes when the window does. Reading mail by double-clicking is the ordinary
         // gesture, so without this a morning's reading is a morning's worth of web processes.

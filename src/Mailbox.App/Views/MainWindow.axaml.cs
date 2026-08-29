@@ -3622,6 +3622,16 @@ public partial class MainWindow : Window
 
         window.Changed += (_, _) => shell.Refresh();
 
+        // An invitation answered in this window, which is the only place the bar appears when the
+        // reading pane is off. The reply goes out on the shell's path — the same one the pane's
+        // own bar uses — and the window says what happened, since the shell's status bar is
+        // behind it.
+        window.InvitationAnswered += (_, answer) =>
+        {
+            SendInvitationReply(shell, answer);
+            window.Say(shell.StatusRight);
+        };
+
         // The QAT's arrows: step the shell's selection, then hand the window what the pane
         // loaded for it — the pane's own load path, so the window shows exactly what the shell
         // would. Posted at Background because the list re-asserts its selection as it lays out.

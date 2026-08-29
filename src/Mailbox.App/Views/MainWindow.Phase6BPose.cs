@@ -1,5 +1,6 @@
 using System.Globalization;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Mailbox.App.Theming;
@@ -44,6 +45,18 @@ public partial class MainWindow
         {
             Opened += (_, _) => Dispatcher.UIThread.Post(
                 () => _ = PoseCalendarSyncAsync(sync),
+                DispatcherPriority.Background);
+        }
+
+        // Pressing a button on the invitation bar, rather than calling the method behind it.
+        if (Environment.GetEnvironmentVariable("MAILBOX_INVITE_PRESS") is { Length: > 0 } invitePress)
+        {
+            // The hold is taken on the dispatcher in the same pass the window is built, before
+            // the capture's own timer starts counting — taken later, the picture and the process
+            // are already gone, which is what the settle below would otherwise run into.
+            var hold = WindowCapture.IsRequested ? WindowCapture.Hold() : null;
+            Opened += (_, _) => Dispatcher.UIThread.Post(
+                () => _ = PressInvitationBarAsync(invitePress, hold),
                 DispatcherPriority.Background);
         }
 
@@ -95,6 +108,90 @@ public partial class MainWindow
         }
 
         return null;
+    }
+
+    // ---- The invitation bar's own buttons ------------------------------------------------------
+
+    /// <summary>
+    /// Presses a button on the reading pane's invitation bar by its caption:
+    /// <c>MAILBOX_INVITE_PRESS=Decline</c>, or <c>Remove from Calendar</c> on a cancellation.
+    /// </summary>
+    /// <remarks>
+    /// <c>MAILBOX_INVITE</c> calls <c>Respond</c> straight, which answers whether the method
+    /// works and nothing about whether the button that should call it does. It also cannot reach
+    /// Remove from Calendar at all — the branch a cancellation puts on the bar — and pressing it
+    /// with an answer would send a reply to a message that asked for none. This raises the
+    /// button's own Click, so a button that is greyed, missing or wired to nothing reads as a
+    /// miss. The store is read back afterwards, because the write is the claim.
+    /// </remarks>
+    private async Task PressInvitationBarAsync(string caption, IDisposable? hold)
+    {
+        using (hold)
+        {
+            await PressInvitationBarAsync(caption).ConfigureAwait(true);
+        }
+    }
+
+    private async Task PressInvitationBarAsync(string caption)
+    {
+        if (DataContext is not ShellViewModel shell) return;
+
+        // A settle, for the reason Phase 4's dialog press takes one: a window that has just
+        // appeared is not yet answering the pointer, and a press in the pass it opened in raises
+        // nothing at all — which reads exactly like a button wired to nothing. With the reading
+        // pane off the bar is in a window that opened on this very pass.
+        await Task.Delay(400).ConfigureAwait(true);
+
+        // Every bar on screen, in any window: with the reading pane off the only one the reader
+        // ever sees is in the window they opened the message in. The shell's own comes last and
+        // only when it is drawn — under MAILBOX_STATE=no-reading the pane is out of the tree and
+        // its bar measures 0x0 with no top-level, so taking it first pressed a button that was
+        // nowhere and reported a bar that ignores being clicked.
+        var windows = (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)
+            ?.Windows ?? [];
+
+        var bar = windows
+            .SelectMany(w => w.GetVisualDescendants().OfType<InvitationBar>())
+            .Concat(_reading?.Invitation is { } own ? [own] : Array.Empty<InvitationBar>())
+            .FirstOrDefault(b => b.IsVisible && b.Bounds.Width > 0);
+
+        if (bar is null)
+        {
+            Log.Warn("Harness: invitation press — no invitation bar is drawn, in this window or any other.");
+            return;
+        }
+
+        bar.UpdateLayout();
+        var buttons = bar.GetVisualDescendants().OfType<Avalonia.Controls.Button>().ToList();
+        var wanted = caption.Trim();
+
+        if (buttons.FirstOrDefault(b => Reads(b, wanted)) is not { } button)
+        {
+            Log.Warn($"Harness: invitation press — the bar has no “{wanted}”. It offers: "
+                     + string.Join(", ", buttons.Select(Caption).Where(t => t.Length > 0)) + ".");
+            return;
+        }
+
+        Log.Info($"Harness: invitation press — “{Caption(button)}” at {button.Bounds.Width:0}x{button.Bounds.Height:0}"
+                 + $"{(button.IsEffectivelyEnabled ? string.Empty : ", which is greyed")}"
+                 + $", in {(TopLevel.GetTopLevel(button)?.GetType().Name ?? "nothing")}.");
+
+        Press(button, new Point(button.Bounds.Width / 2, button.Bounds.Height / 2));
+        await Task.Delay(400).ConfigureAwait(true);
+
+        Log.Info($"Harness: invitation press — status “{shell.StatusRight}”; "
+                 + $"the bar is {(bar.IsVisible ? "still showing" : "gone")}.");
+
+        foreach (var collection in App.Pim.Collections(CollectionKind.Events))
+        {
+            foreach (var item in App.Pim.Items(collection.Id))
+            {
+                Log.Info($"Harness: invitation press — “{collection.DisplayName}” holds "
+                         + $"“{item.Summary}” uid {item.Uid}, {item.Busy}, "
+                         + $"{(item.Status.Length > 0 ? item.Status : "no status")}.");
+            }
+        }
     }
 
     // ---- The overlay's own control -----------------------------------------------------------
