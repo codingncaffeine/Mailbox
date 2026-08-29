@@ -328,6 +328,7 @@
     "titlebar.search.offset": "294",
     "titlebar.search.text": "#ADADAD",
     "titlebar.search.width": "511",
+    "window.border": "#7A7A7A",
     "workspace.inset": "9"
   }
 }

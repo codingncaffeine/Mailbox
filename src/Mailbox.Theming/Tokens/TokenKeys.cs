@@ -133,6 +133,17 @@ public static class TokenKeys
         public static readonly IReadOnlyList<string> All = [Ribbon, CommandBar];
     }
 
+    /// <summary>The window's own shape — what stands between it and whatever is behind it.</summary>
+    public static class WindowShape
+    {
+        /// <summary>
+        /// The hairline round every window's edge, measured off the reference's four themes.
+        /// It is what tells a light window from the light window under it: without it a compose
+        /// window over the White shell simply vanished into it.
+        /// </summary>
+        public const string Border = "window.border";
+    }
+
     public static class TitleBar
     {
         public const string Background = "titlebar.background";
@@ -899,6 +910,7 @@ public static class TokenKeys
         Status.Success, Status.Warning, Status.Danger, Status.Info,
         .. Tags.All,
         .. People.All,
+        WindowShape.Border,
         TitleBar.Background, TitleBar.Foreground, TitleBar.Search,
         TitleBar.SearchBorder, TitleBar.SearchText, TitleBar.Height,
         TitleBar.SearchWidth, TitleBar.SearchHeight, TitleBar.SearchOffset,

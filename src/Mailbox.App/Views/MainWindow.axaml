@@ -26,6 +26,7 @@
     -->
     <Border CornerRadius="8"
             ClipToBounds="True"
+            Classes="windowshape"
             Background="{DynamicResource ribbon.tabstrip.background.brush}">
     <Grid RowDefinitions="Auto,Auto,*,Auto" ColumnDefinitions="Auto,*">
         <Grid.Resources>

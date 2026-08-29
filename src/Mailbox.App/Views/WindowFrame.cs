@@ -100,6 +100,10 @@ internal static class WindowFrame
             CornerRadius = new CornerRadius(RibbonMetrics.BodyCornerRadius),
             ClipToBounds = true,
             Child = content,
+
+            // The hairline round the window, by class so one stylesheet rule owns it — and
+            // drops it when the window is maximized, where there is no edge to tell apart.
+            Classes = { "windowshape" },
         };
         border[!Border.BackgroundProperty] = new DynamicResourceExtension(background);
 

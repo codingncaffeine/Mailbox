@@ -155,6 +155,7 @@ public static class OfficeThemes
 
         // The title bar alone carries the hue. The tab strip below it is light, which is what
         // an earlier guess got wrong — it had the blue running down through the tab strip.
+        t.Set(TokenKeys.WindowShape.Border, "#808080");
         t.Set(TokenKeys.TitleBar.Background, "{palette.brand.titlebar}");
         t.Set(TokenKeys.TitleBar.Foreground, "{palette.neutral.white}");
         t.Set(TokenKeys.TitleBar.Search, "{palette.brand.search}");
@@ -233,6 +234,7 @@ public static class OfficeThemes
 
         // Not actually white: the title bar is the same pale blue-grey as the tab strip, and
         // only the ribbon and the content behind it are truly white.
+        t.Set(TokenKeys.WindowShape.Border, "#808080");
         t.Set(TokenKeys.TitleBar.Background, "#E9EEF2");
         t.Set(TokenKeys.TitleBar.Foreground, "#242424");
         t.Set(TokenKeys.TitleBar.Search, "#FAFAFA");
@@ -442,6 +444,7 @@ public static class OfficeThemes
         t.Set(TokenKeys.Journal.EntryText, "#000000");
         t.Set(TokenKeys.Journal.EntryBorder, "#A19F9D");
 
+        t.Set(TokenKeys.WindowShape.Border, "#808080");
         t.Set(TokenKeys.TitleBar.Background, "{palette.chrome.titlebar}");
         t.Set(TokenKeys.TitleBar.Foreground, "{palette.neutral.white}");
         t.Set(TokenKeys.TitleBar.Search, "#BDBDBD");
@@ -636,6 +639,7 @@ public static class OfficeThemes
 
         // Measured. The chrome is not neutral black — it carries a blue cast, while the rail
         // goes the other way and is warm.
+        t.Set(TokenKeys.WindowShape.Border, "#7A7A7A");
         t.Set(TokenKeys.TitleBar.Background, "#1B2127");
         t.Set(TokenKeys.TitleBar.Foreground, "#FFFFFF");
         t.Set(TokenKeys.TitleBar.Search, "#1F1F1F");

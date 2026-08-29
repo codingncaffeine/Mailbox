@@ -16,6 +16,19 @@
         TextRendering.Apply() sets it on the window in code, which also lets the mode be
         switched at runtime for the investigation in docs/text-rendering.md.
     -->
+    <!-- The hairline round every window, measured off the reference's four themes: what
+         tells a light window from the light one under it — a compose window over the White
+         shell was invisible without it. Maximized, there is no edge to tell apart and the
+         line goes, as the reference's does. -->
+    <Style Selector="Border.windowshape">
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="{DynamicResource window.border.brush}" />
+    </Style>
+
+    <Style Selector="Window[WindowState=Maximized] Border.windowshape">
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+
     <Style Selector="TextBlock">
         <Setter Property="FontFamily" Value="{DynamicResource ui.fontfamily}" />
         <Setter Property="FontSize" Value="{DynamicResource type.ui.size.value}" />
