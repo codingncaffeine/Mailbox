@@ -164,7 +164,11 @@ public partial class MainWindow
         {
             "start" => new Point(box.X + 2, box.Center.Y),
             "end" => new Point(box.Right - 2, box.Center.Y),
-            _ => box.Center,
+
+            // A bar spanning several days is held over its first one, for the reason the band's
+            // own move says: the view keeps the grab's offset, so a grab in the middle and a drop
+            // one day back moves it by however far into the bar the grab was.
+            _ => new Point(box.X + PastTheGrip, box.Center.Y),
         };
 
         // The target cell's own point, both ways: a day three on from Thursday is in the next
@@ -177,6 +181,34 @@ public partial class MainWindow
     private static (Control Control, Point View, Point To)? TimeGridDrag(TimeGridView grid, CalendarEntry entry, string grip, int count, char unit)
     {
         if (grid.BoxOf(entry) is not { } box) return null;
+
+        // A bar in the all-day band runs sideways, so its edges are its left and right — and the
+        // view reads a grip on one the same way. Grabbing the bottom of a horizontal bar, which is
+        // what the timed grips below do, lands in its middle and turns every resize into a move:
+        // a pose that asked to lengthen a three-day event by a day slid the whole thing forward
+        // instead, and said it had resized it.
+        if (entry.IsMultiDay)
+        {
+            if (unit != 'd') return null;
+
+            var (opens, closes) = entry.Days();
+            var edge = grip switch
+            {
+                "start" => new Point(box.X + 2, box.Center.Y),
+                "end" => new Point(box.Right - 2, box.Center.Y),
+
+                // Held over its first day rather than its middle, and past the edge zone so it is
+                // a move and not a resize. The view keeps whatever offset the grab had inside the
+                // bar, so grabbing the middle of three days and dropping on the day before puts
+                // the bar two days back — which is right for a pointer and wrong for a pose that
+                // says "one day earlier".
+                _ => new Point(box.X + PastTheGrip, box.Center.Y),
+            };
+
+            var anchor = (grip == "end" ? closes : opens).AddDays(count);
+            if (grid.PointAt(anchor, TimeSpan.Zero, allDay: true) is not { } landing) return null;
+            return (grid, edge, landing);
+        }
 
         var from = grip switch
         {
@@ -243,4 +275,7 @@ public partial class MainWindow
 
     /// <summary>The drag threshold, as far as a pose needs to know it: enough to pass it.</summary>
     private const double ChipNudge = 5;
+
+    /// <summary>Far enough inside a bar's first day to be a move rather than a grab at its edge.</summary>
+    private const double PastTheGrip = 10;
 }

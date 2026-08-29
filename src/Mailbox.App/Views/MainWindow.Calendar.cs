@@ -1216,6 +1216,11 @@ public partial class MainWindow
         {
             Start = start,
             End = end,
+            // The all-day band is the other door onto the All day box, and the two have to agree:
+            // dragging an appointment up into the band shows the day as free, dragging one back
+            // down shows it as busy. Only when the drag crossed that line — a move within the band
+            // leaves an all-day event's Show As exactly where its author put it.
+            Busy = move.AllDay == master.AllDay ? master.Busy : move.AllDay ? BusyStatus.Free : BusyStatus.Busy,
             Sequence = master.Sequence + 1,
             LastModified = DateTimeOffset.UtcNow,
         };
