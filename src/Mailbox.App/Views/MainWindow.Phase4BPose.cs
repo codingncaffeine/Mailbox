@@ -74,8 +74,16 @@ public partial class MainWindow
     internal static bool PressLabelled(Visual root, string label, string where)
     {
         var buttons = Descendants<Button>(root).ToList();
+
+        // An exact label first, and only then a prefix. Two buttons whose words begin alike sit
+        // on the same surface more often than not — Dismiss beside Dismiss All, Save beside Save
+        // As — and prefix order alone hands back whichever the tree happens to reach first: a
+        // pose that asked for Dismiss pressed Dismiss All and reported success, which is the one
+        // answer a read-back may never give.
         var match = buttons.FirstOrDefault(
-            b => LabelOf(b).StartsWith(label, StringComparison.OrdinalIgnoreCase));
+                        b => string.Equals(LabelOf(b), label, StringComparison.OrdinalIgnoreCase))
+                    ?? buttons.FirstOrDefault(
+                        b => LabelOf(b).StartsWith(label, StringComparison.OrdinalIgnoreCase));
 
         if (match is null)
         {

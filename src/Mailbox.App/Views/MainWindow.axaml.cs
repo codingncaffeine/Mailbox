@@ -6018,7 +6018,13 @@ public partial class MainWindow : Window
                 return;
 
             default:
-                return;
+                // press:<label> goes through the button itself rather than through the method
+                // behind it, which is the only way to tell Dismiss from Dismiss All: the two
+                // call the same method and differ in what they hand it — the selection, or
+                // everything. A method call proves neither.
+                if (!spec.StartsWith("press:", StringComparison.OrdinalIgnoreCase)) return;
+                if (!PressLabelled(window, spec["press:".Length..].Trim(), "the Reminders window")) return;
+                break;
         }
 
         var now = Mailbox.Core.PosedClock.UtcNow;
