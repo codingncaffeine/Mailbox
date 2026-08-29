@@ -66,6 +66,14 @@ public partial class MainWindow
             Opened += (_, _) => Dispatcher.UIThread.Post(
                 () => ProbePeek(probe.Trim()), DispatcherPriority.ApplicationIdle);
         }
+
+        // MAILBOX_PEEK_HOVER=day:<yyyy-MM-dd>|corner — the pointer inside the peek, which is the
+        // one state its own two hover tokens are for and which no capture had ever held.
+        if (Environment.GetEnvironmentVariable("MAILBOX_PEEK_HOVER") is { Length: > 0 } hover)
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(
+                () => HoverPeek(hover.Trim()), DispatcherPriority.ApplicationIdle);
+        }
     }
 
     // ---- The summary page --------------------------------------------------------------------
@@ -322,6 +330,57 @@ public partial class MainWindow
     }
 
     // ---- The calendar peek's agenda ----------------------------------------------------------
+
+    /// <summary>
+    /// Puts the pointer inside the peek — over a day of its grid, or over its corner button.
+    /// </summary>
+    /// <remarks>
+    /// Both states are drawn from tokens every theme states and neither had ever been in a
+    /// picture: the peek repaints for its own hover and no pose could put a pointer in one. The
+    /// move is raised at the view, so the control's own hit testing decides what is under it,
+    /// which is the difference between photographing the hover and photographing a flag.
+    /// </remarks>
+    private void HoverPeek(string spec)
+    {
+        var peek = _floatingPeek ?? DockedPeek;
+        if (peek is null)
+        {
+            Log.Info("Harness: no peek is open — pose MAILBOX_PEEK=calendar or =docked as well.");
+            return;
+        }
+
+        peek.UpdateLayout();
+
+        Point at;
+        if (spec.StartsWith("day:", StringComparison.OrdinalIgnoreCase))
+        {
+            var when = spec["day:".Length..].Trim();
+            if (!DateOnly.TryParseExact(when, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day)
+                || peek.BoxOf(day) is not { } cell)
+            {
+                Log.Info($"Harness: {when} is not a date on the peek's grid.");
+                return;
+            }
+
+            at = cell.Center;
+        }
+        else if (string.Equals(spec, "corner", StringComparison.OrdinalIgnoreCase))
+        {
+            at = peek.CornerBox.Center;
+        }
+        else
+        {
+            Log.Info($"Harness: “{spec}” is not a peek hover — say day:yyyy-MM-dd or corner.");
+            return;
+        }
+
+        var root = TopLevel.GetTopLevel(peek) as Visual ?? peek;
+        peek.RaiseEvent(new PointerEventArgs(
+            InputElement.PointerMovedEvent, peek, new Pointer(5, PointerType.Mouse, isPrimary: true),
+            root, peek.TranslatePoint(at, root) ?? at, 0, new PointerPointProperties(), KeyModifiers.None));
+
+        Log.Info($"Harness: the pointer is over the peek at {at.X:0},{at.Y:0} ({spec}).");
+    }
 
     /// <summary>
     /// What the peek's agenda is drawing, how much room it has, and what it is hiding.
