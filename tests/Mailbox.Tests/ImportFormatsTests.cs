@@ -186,6 +186,61 @@ public class ImportFormatsTests : IDisposable
         Assert.Equal(1, importer.Vcf(vcf).AlreadyHere);
     }
 
+    /// <summary>
+    /// A series and its exceptions share a UID, so an importer that recognises "already here" by
+    /// the UID alone drops every exception in the file and keeps only the master. It is the moved
+    /// occurrence a reader notices missing, and nothing said a word about it.
+    /// </summary>
+    [Fact]
+    public void AMovedOccurrenceSurvivesAnIcsImportAndIsNotTakenForItsSeries()
+    {
+        using var store = PimStore.Transient();
+        var pim = new PimRepository(store);
+        var importer = new PimFileImporter(pim);
+
+        var ics = """
+            BEGIN:VCALENDAR
+            VERSION:2.0
+            PRODID:-//Tests//EN
+            BEGIN:VEVENT
+            UID:series-1
+            DTSTART:20260907T090000Z
+            DTEND:20260907T093000Z
+            RRULE:FREQ=WEEKLY;BYDAY=MO
+            SUMMARY:Weekly sync
+            END:VEVENT
+            BEGIN:VEVENT
+            UID:series-1
+            RECURRENCE-ID:20260921T090000Z
+            DTSTART:20260921T130000Z
+            DTEND:20260921T140000Z
+            SUMMARY:Weekly sync (moved)
+            END:VEVENT
+            END:VCALENDAR
+            """;
+
+        var report = importer.Ics(ics);
+        Assert.Equal(2, report.Events);
+        Assert.Equal(0, report.AlreadyHere);
+
+        var calendar = pim.DefaultCalendar();
+        var rows = pim.ItemsByUid(calendar.Id, "series-1");
+        Assert.Equal(2, rows.Count);
+
+        var master = Assert.Single(rows, r => !r.IsOverride);
+        Assert.Equal("Weekly sync", master.Summary);
+
+        var moved = Assert.Single(rows, r => r.IsOverride);
+        Assert.Equal("Weekly sync (moved)", moved.Summary);
+
+        // And a second pass still recognises both, so the fix cannot have turned every import
+        // into a duplicate.
+        var again = importer.Ics(ics);
+        Assert.Equal(0, again.Imported);
+        Assert.Equal(2, again.AlreadyHere);
+        Assert.Equal(2, pim.ItemsByUid(calendar.Id, "series-1").Count);
+    }
+
     // ---- Thunderbird ---------------------------------------------------------------------------
 
     [Fact]

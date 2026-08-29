@@ -139,7 +139,7 @@ public sealed class PimFileImporter(PimRepository pim, Action<PimItem>? queuePut
         foreach (var calendarEvent in Safe(() => ICalendarCodec.Parse(text), notes, "events"))
         {
             var collection = intoEvents ?? Default(CollectionKind.Events, "Calendar");
-            if (Save(PimEventCodec.ToItem(calendarEvent, collection.Id, Existing(collection.Id, calendarEvent.Uid)), out var wrote) && wrote) events++;
+            if (Save(PimEventCodec.ToItem(calendarEvent, collection.Id, Existing(collection.Id, calendarEvent)), out var wrote) && wrote) events++;
             else already++;
         }
 
@@ -203,6 +203,32 @@ public sealed class PimFileImporter(PimRepository pim, Action<PimItem>? queuePut
 
     private PimItem? Existing(long collectionId, string uid)
         => uid.Length == 0 ? null : _pim.ItemsByUid(collectionId, uid).FirstOrDefault(i => !i.IsOverride);
+
+    /// <summary>
+    /// The row this event would replace, if the collection already holds one.
+    /// </summary>
+    /// <remarks>
+    /// A series and every exception to it share one UID, so matching on the UID alone answered a
+    /// moved occurrence with the series' own master. The importer then saw a row that was already
+    /// here and skipped it, and every exception in the file was dropped without a word — a
+    /// calendar exported here and read back lost the occurrence that had been moved, which is
+    /// precisely the item a reader would notice missing. Worse, had it saved, it would have
+    /// written the exception over the master.
+    /// </remarks>
+    private PimItem? Existing(long collectionId, CalendarEvent calendarEvent)
+    {
+        if (calendarEvent.Uid.Length == 0) return null;
+        var rows = _pim.ItemsByUid(collectionId, calendarEvent.Uid);
+
+        if (calendarEvent.RecurrenceId is not { } recurrence)
+        {
+            return rows.FirstOrDefault(i => !i.IsOverride);
+        }
+
+        var text = ICalendarCodec.RecurrenceIdText(recurrence);
+        return rows.FirstOrDefault(i =>
+            i.IsOverride && string.Equals(i.RecurrenceId, text, StringComparison.Ordinal));
+    }
 
     private Collection Default(CollectionKind kind, string name)
     {
