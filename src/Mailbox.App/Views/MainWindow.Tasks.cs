@@ -117,8 +117,12 @@ public partial class MainWindow
                 CalendarToday);
 
             _today.FolderRequested += (_, ask) => RevealFolder(shell, ask.Address, ask.Folder);
-            _today.AppointmentRequested += (_, id) => _ = OpenAppointmentByIdAsync(shell, id);
-            _today.TaskRequested += (_, id) => _ = OpenTaskByIdAsync(shell, id);
+
+            // Without the module, which is what the page is: a folder line takes the reader to
+            // that folder because that is what it names, and an appointment or a task line opens
+            // the item over the page it was pressed on and leaves the page where it was.
+            _today.AppointmentRequested += (_, id) => _ = OpenAppointmentByIdAsync(shell, id, andShowTheModule: false);
+            _today.TaskRequested += (_, id) => _ = OpenTaskByIdAsync(shell, id, andShowTheModule: false);
         }
 
         _today.Reload();
@@ -624,14 +628,20 @@ public partial class MainWindow
     /// Opens a task by its row in the store, which is what the Reminders window has to hand.
     /// </summary>
     /// <remarks>
-    /// It switches to the module first, as the calendar's own by-id opener does: a reminder that
-    /// opened a window over the mail would leave the reader nowhere when it was closed.
+    /// It switches to the module first when it is asked to, as the calendar's own by-id opener
+    /// does: a reminder that opened a window over the mail would leave the reader nowhere when it
+    /// was closed.
     /// </remarks>
-    internal async Task OpenTaskByIdAsync(ShellViewModel shell, long itemId)
+    /// <param name="andShowTheModule">
+    /// Whether to take the window to Tasks on the way. A reminder wants that; the summary page
+    /// does not — see <see cref="OpenAppointmentByIdAsync"/>, which the same argument is written
+    /// out on.
+    /// </param>
+    internal async Task OpenTaskByIdAsync(ShellViewModel shell, long itemId, bool andShowTheModule = true)
     {
         if (App.Pim.Item(itemId) is not { } stored) return;
 
-        SwitchModule(shell, MailboxModule.Tasks);
+        if (andShowTheModule) SwitchModule(shell, MailboxModule.Tasks);
         var window = new TaskWindow(PimTodoCodec.FromItem(stored));
         WirePhase8AForm(window);
         await window.ShowDialog(this);

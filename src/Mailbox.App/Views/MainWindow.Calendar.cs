@@ -1797,14 +1797,24 @@ public partial class MainWindow
     /// Opens an appointment by the row it is on — what the Reminders window asks for, and what an
     /// invitation's "open in the calendar" will.
     /// </summary>
-    internal async Task OpenAppointmentByIdAsync(ShellViewModel shell, long itemId)
+    /// <param name="andShowTheModule">
+    /// Whether to take the window to the Calendar on the way, standing on the appointment's own
+    /// day. A reminder wants that; the summary page does not — it is a page inside Mail, and its
+    /// lines are links to items rather than to the module. Switching underneath it left the rail's
+    /// mark, the ribbon and the status bar on the Calendar while the summary page was still the
+    /// thing drawn, which is a window disagreeing with itself.
+    /// </param>
+    internal async Task OpenAppointmentByIdAsync(ShellViewModel shell, long itemId, bool andShowTheModule = true)
     {
         if (App.Pim.Item(itemId) is not { } stored) return;
 
-        SwitchModule(shell, MailboxModule.Calendar);
-        var calendar = EnsureCalendar(shell);
         var master = PimEventCodec.FromItem(stored);
-        calendar.GoTo(DateOnly.FromDateTime(master.Start.Wall));
+
+        if (andShowTheModule)
+        {
+            SwitchModule(shell, MailboxModule.Calendar);
+            EnsureCalendar(shell).GoTo(DateOnly.FromDateTime(master.Start.Wall));
+        }
 
         var calendars = App.Pim.Collections(CollectionKind.Events);
         var window = new AppointmentWindow(App.Commands, master, calendars, stored.CollectionId, master.Attendees.Count > 0);
@@ -1841,16 +1851,30 @@ public partial class MainWindow
         Opened += (_, _) => Dispatcher.UIThread.Post(
             () =>
             {
-                SwitchModule(shell, module switch
+                // A name this does not know used to fall through to Mail without a word, so a
+                // pose naming a module that is not one — MAILBOX_MODULE=shortcuts, say — read
+                // exactly like a pose that had asked for Mail, and the run reported on the wrong
+                // surface. Said out loud, because a door that opens onto something else is worse
+                // than a door that does not open.
+                var wanted = module switch
                 {
+                    "mail" => MailboxModule.Mail,
                     "calendar" => MailboxModule.Calendar,
                     "people" => MailboxModule.People,
                     "tasks" => MailboxModule.Tasks,
                     "notes" => MailboxModule.Notes,
                     "journal" => MailboxModule.Journal,
                     "feeds" or "rss" => MailboxModule.Feeds,
-                    _ => MailboxModule.Mail,
-                });
+                    _ => (MailboxModule?)null,
+                };
+
+                if (wanted is null)
+                {
+                    Log.Info($"Harness: “{module}” is not a module this window has — showing Mail. "
+                             + "Say mail, calendar, people, tasks, notes, journal or feeds.");
+                }
+
+                SwitchModule(shell, wanted ?? MailboxModule.Mail);
 
                 if (shell.Module == MailboxModule.Tasks) PoseTasks(shell);
                 if (shell.Module == MailboxModule.Notes) PoseNotes(shell);
