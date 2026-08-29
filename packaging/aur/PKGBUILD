@@ -40,9 +40,9 @@ package() {
     done
     install -Dm644 "$srcdir/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 
-    cat > "$pkgdir/usr/bin/mailbox" <<'WRAP'
-#!/bin/sh
-exec /usr/lib/mailbox/mailbox "$@"
-WRAP
+    # The launcher confines the application in a hardened transient systemd user unit; it
+    # execs the binary directly where there is no user manager to ask.
+    sed 's|@LIB@|/usr/lib/mailbox|' "$srcdir/packaging/mailbox-launcher.sh" \
+        > "$pkgdir/usr/bin/mailbox"
     chmod 755 "$pkgdir/usr/bin/mailbox"
 }

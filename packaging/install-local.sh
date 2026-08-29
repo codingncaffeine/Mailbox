@@ -47,10 +47,8 @@ cp assets/icons/mailbox-*.png "$LIB/assets/icons/" 2>/dev/null || true
 
 echo "── launcher"
 mkdir -p "$BIN"
-cat > "$BIN/mailbox" <<EOF
-#!/usr/bin/env bash
-exec "$LIB/mailbox" "\$@"
-EOF
+# The same hardened launcher the packages install, pointed at this prefix.
+sed "s|@LIB@|$LIB|" packaging/mailbox-launcher.sh > "$BIN/mailbox"
 chmod +x "$BIN/mailbox"
 
 # The diagnostics launcher. Same binary, two switches: every wire conversation written down, and

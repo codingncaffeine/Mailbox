@@ -137,13 +137,26 @@ public sealed class SingleInstance : IDisposable
     }
 
     /// <summary>The session's socket path — one per display, so two sessions do not collide.</summary>
+    /// <remarks>
+    /// In a <c>mailbox/</c> directory of its own rather than loose in the runtime directory,
+    /// because the hardened launcher mounts the runtime directory read-only and carves out
+    /// exactly this subdirectory — a socket bound at the top level cannot be created there,
+    /// and the second instance's handoff would silently die.
+    /// </remarks>
     private static string SocketPath()
     {
         var runtime = Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
-        if (string.IsNullOrWhiteSpace(runtime))
+        if (string.IsNullOrWhiteSpace(runtime)) runtime = Path.GetTempPath();
+
+        var directory = Path.Combine(runtime, "mailbox");
+        try
         {
-            runtime = Path.Combine(Path.GetTempPath(), "mailbox");
-            Directory.CreateDirectory(runtime);
+            if (!Directory.Exists(directory)) Directory.CreateDirectory(directory);
+        }
+        catch (Exception)
+        {
+            // A read-only runtime directory (an over-tight sandbox, an odd session). The bind
+            // below will fail on the missing directory and say handoff is off — the app runs.
         }
 
         var session = Environment.GetEnvironmentVariable("WAYLAND_DISPLAY")
@@ -151,7 +164,7 @@ public sealed class SingleInstance : IDisposable
                       ?? "session";
 
         var safe = new string([.. session.Select(c => char.IsLetterOrDigit(c) ? c : '-')]);
-        return Path.Combine(runtime, $"mailbox-{safe}.sock");
+        return Path.Combine(directory, $"mailbox-{safe}.sock");
     }
 
     private void TryDeleteSocketFile()

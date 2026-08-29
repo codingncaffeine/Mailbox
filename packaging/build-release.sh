@@ -48,10 +48,9 @@ cp LICENSE "$DEB/usr/share/doc/mailbox/copyright"
 cp packaging/NOTICES.txt "$DEB/usr/share/doc/mailbox/NOTICES.txt"
 cp assets/fonts/Selawik-LICENSE.txt "$DEB/usr/share/doc/mailbox/Selawik-LICENSE.txt"
 DESTDIR="$DEB" PREFIX=/usr bash packaging/install-desktop-files.sh > /dev/null
-cat > "$DEB/usr/bin/mailbox" <<'WRAP'
-#!/bin/sh
-exec /usr/lib/mailbox/mailbox "$@"
-WRAP
+# The launcher confines the application in a hardened transient systemd user unit; it execs
+# the binary directly where there is no user manager to ask.
+sed 's|@LIB@|/usr/lib/mailbox|' packaging/mailbox-launcher.sh > "$DEB/usr/bin/mailbox"
 chmod 755 "$DEB/usr/bin/mailbox"
 
 INSTALLED_KB=$(du -sk "$DEB/usr" | cut -f1)
