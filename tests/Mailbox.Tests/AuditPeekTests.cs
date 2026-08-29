@@ -151,6 +151,42 @@ public class AuditPeekTests
         Assert.NotEqual(dark.GetColor(TokenKeys.Peek.Background), dark.GetColor(TokenKeys.List.RowBackground));
     }
 
+    /// <summary>
+    /// Every theme states the agenda's scrollbar, and states it so the thumb can be seen on the
+    /// track it runs down.
+    /// </summary>
+    /// <remarks>
+    /// The gutter it goes in was reserved from the first drawing of the peek and nothing was ever
+    /// drawn in it, so a day with more appointments than fit was clipped without a mark: five on
+    /// 11 August hid 98 pixels of themselves in the floating popup and 105 in the docked pane,
+    /// measured by the run that found it. The thumb is the reference's own #C7C7C7, read off the
+    /// scrollbar in <c>calendar.png</c>; what is held here is the pair, because a thumb the same
+    /// colour as its track is a scrollbar nobody can see and the token test above would not
+    /// notice.
+    /// </remarks>
+    [Fact]
+    public void EveryThemeDrawsTheAgendasScrollbarWithAThumbThatShowsOnItsTrack()
+    {
+        foreach (var id in OfficeThemes.All)
+        {
+            var t = OfficeThemes.Build(id).Resolve();
+
+            foreach (var (track, thumb) in new[]
+                     {
+                         (TokenKeys.Peek.Scroll, TokenKeys.Peek.ScrollThumb),
+                         (TokenKeys.Peek.PopScroll, TokenKeys.Peek.PopScrollThumb),
+                     })
+            {
+                Assert.True(t.Contains(track), $"{id} does not state {track}.");
+                Assert.True(t.Contains(thumb), $"{id} does not state {thumb}.");
+                Assert.True(
+                    t.GetColor(track) != t.GetColor(thumb),
+                    $"{id} draws {thumb} in the same colour as {track}, so the scrollbar is "
+                    + "invisible and a clipped day still says nothing.");
+            }
+        }
+    }
+
     // ---- The pane the dock host reserves ------------------------------------------------------
 
     /// <summary>

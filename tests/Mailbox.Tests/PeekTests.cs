@@ -55,6 +55,41 @@ public class PeekTests
         Assert.Equal(219, layout.Grid.Right);
     }
 
+    // ---- The gutter, and what goes in it -----------------------------------------------------
+
+    /// <summary>
+    /// The popup's gutter is a scrollbar's width, and the scrollbar drawn in it is the width the
+    /// reference draws.
+    /// </summary>
+    /// <remarks>
+    /// Measured off <c>calendar.png</c>, down the right of the month grid in the same picture the
+    /// peek is in: the bar runs x=1423–1439, which is 17 columns, and its thumb x=1427–1435,
+    /// which is 9 with four columns of track either side. That is the whole argument for keeping
+    /// the gutter rather than reclaiming it — it is not a margin, it is the space the bar needs —
+    /// and it is why the grid is centred inside what is left of the content rather than inside
+    /// all of it.
+    /// </remarks>
+    [Fact]
+    public void ThePopupsGutterIsAScrollbarWideAndItsThumbIsNine()
+    {
+        var popup = new PeekLayout(docked: false, PeekLayout.PopupWidth);
+        var pane = new PeekLayout(docked: true, PeekLayout.DockedWidth);
+
+        Assert.Equal(17, popup.Gutter);
+        Assert.Equal(12, pane.Gutter);
+        Assert.Equal(9, PeekLayout.ScrollThumbWidth);
+
+        // Four columns of track either side of the thumb, which is the reference's own reading.
+        Assert.Equal(4, (popup.Gutter - PeekLayout.ScrollThumbWidth) / 2);
+
+        // And the bar stands in the gutter rather than over the agenda: its left edge is the
+        // agenda's right edge, so no entry can be drawn under it.
+        var bar = popup.Scrollbar(100, 300);
+        Assert.Equal(PeekLayout.PopupWidth - 17, bar.X);
+        Assert.Equal(PeekLayout.PopupWidth, bar.Right);
+        Assert.Equal(popup.AgendaLeft + popup.AgendaWidth, bar.X);
+    }
+
     [Fact]
     public void TheBaselinesLandWhereTheReferencesInkDoes()
     {

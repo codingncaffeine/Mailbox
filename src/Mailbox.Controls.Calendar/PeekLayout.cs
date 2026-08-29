@@ -57,8 +57,25 @@ public sealed class PeekLayout
     /// centred inside. The two states measure differently and both are reproduced: the popup's
     /// block sits 31px in from a 274-wide content, the pane's 23px in from a 254-wide one.
     /// </summary>
+    /// <remarks>
+    /// The popup's 17 is the scrollbar itself: the reference's own vertical scrollbar, measured
+    /// off <c>calendar.png</c> down the right of the month grid, is exactly 17 columns wide with
+    /// a 9-wide thumb in the middle of it. So this is not a margin that happens to be 17 — it is
+    /// the width of the thing that goes in it, which is why the grid is centred inside what is
+    /// left rather than inside the whole content.
+    /// </remarks>
     public const double PopupGutter = 17;
     public const double DockedGutter = 12;
+
+    /// <summary>
+    /// The thumb inside that gutter: 9 wide, measured off the same scrollbar — four columns of
+    /// track either side of it in the popup, and the same 9 in the pane's narrower gutter so the
+    /// two states draw one mark rather than two.
+    /// </summary>
+    public const double ScrollThumbWidth = 9;
+
+    /// <summary>The shortest the thumb is drawn, so a very long day still leaves something to see.</summary>
+    public const double ScrollThumbMinimum = 24;
 
     /// <summary>
     /// Where the arrows sit against the grid: the left one's point five pixels before its first
@@ -144,7 +161,8 @@ public sealed class PeekLayout
         Width = width;
         _weekNumberColumn = weekNumbers ? CellWidth : 0;
 
-        var gutter = docked ? DockedGutter : PopupGutter;
+        Gutter = docked ? DockedGutter : PopupGutter;
+        var gutter = Gutter;
         var columns = (7 * CellWidth) + _weekNumberColumn;
         // Away from zero, not to even: the popup's own half-pixel lands on 31 in the reference
         // and banker's rounding would put the whole grid a pixel left of it.
@@ -181,6 +199,16 @@ public sealed class PeekLayout
     public bool Docked { get; }
 
     public double Width { get; }
+
+    /// <summary>
+    /// The strip down the right of the content the agenda is held clear of, and where its
+    /// scrollbar is drawn when the day has more on it than fits.
+    /// </summary>
+    public double Gutter { get; }
+
+    /// <summary>The scrollbar's own box, between an agenda's top and the floor it is clipped at.</summary>
+    public Rect Scrollbar(double top, double floor)
+        => new(Math.Max(0, Width - Gutter), top, Gutter, Math.Max(0, floor - top));
 
     /// <summary>The dock glyph when floating, the close cross when docked.</summary>
     public Rect Corner { get; }

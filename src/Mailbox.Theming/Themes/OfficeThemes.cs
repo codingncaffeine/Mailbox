@@ -414,6 +414,13 @@ public static class OfficeThemes
         t.Set(TokenKeys.Peek.TextDim, "#F0F0F0");
         t.Set(TokenKeys.Peek.Hatch, "#C7C6C4");
 
+        // The agenda's scrollbar. The thumb is the reference's own, measured off the scrollbar
+        // down the right of its month grid — #C7C7C7 in a track a step under the ground it sits
+        // on, which there is #3D3D3D against dark chrome and here is the pane's own divider
+        // taken one shade lighter so the bar reads as a channel rather than as a second edge.
+        t.Set(TokenKeys.Peek.Scroll, "#4E4E4E");
+        t.Set(TokenKeys.Peek.ScrollThumb, "#C7C7C7");
+
         // The notes and the timeline are content, so they stay light inside this theme's dark
         // chrome exactly as the month grid does — and against the same #F4F4F4 the chips are
         // tinted toward, which is where this theme's nine points of difference live.
@@ -823,6 +830,11 @@ public static class OfficeThemes
         t.Set(TokenKeys.Peek.TextDim, "#E1DFDD");
         t.Set(TokenKeys.Peek.Hatch, "#2D3236");
 
+        // The agenda's scrollbar, on this theme's darker pane: the same track-under-the-ground
+        // reading as Dark Gray's, and a thumb dimmed to sit on it rather than glare off it.
+        t.Set(TokenKeys.Peek.Scroll, "#1B1B1B");
+        t.Set(TokenKeys.Peek.ScrollThumb, "#8A8886");
+
         // A note here is a dark square holding its colour, on the same terms the chips are: the
         // face is the colour taken half the way to near-black rather than most of the way to
         // white, and the fold lifts toward the light instead of dropping toward the dark, which
@@ -978,6 +990,13 @@ public static class OfficeThemes
         // The one the capture cannot show, a still picture having no pointer in it: the
         // desktop's own hover, which is what the dialogs of the same palette use.
         t.Set(TokenKeys.Peek.PopHover, "#E5F1FB");
+
+        // The agenda's scrollbar. The capture holds a day with one appointment on it and so no
+        // scrollbar; the thumb is measured off the reference's own bar elsewhere in the same
+        // picture (#C7C7C7, nine columns wide), and the track is the desktop's light one, which
+        // runs flush with the page it is drawn on.
+        t.Set(TokenKeys.Peek.PopScroll, "#F0F0F0");
+        t.Set(TokenKeys.Peek.PopScrollThumb, "#C7C7C7");
     }
 
     // ------------------------------------------------------------------------------------
@@ -1221,6 +1240,11 @@ public static class OfficeThemes
         t.Set(TokenKeys.Peek.Text, "#444444");
         t.Set(TokenKeys.Peek.TextDim, "#666666");
         t.Set(TokenKeys.Peek.Hatch, "#D5D4D2");
+
+        // The agenda's scrollbar on a light pane, which is the desktop's own light one: a track
+        // barely off the page it runs down, and the same #C7C7C7 thumb the reference draws.
+        t.Set(TokenKeys.Peek.Scroll, "#F0F0F0");
+        t.Set(TokenKeys.Peek.ScrollThumb, "#C7C7C7");
 
         // The Notes wall. A note's face is its category's colour taken most of the way to white,
         // which is what makes the reference's yellow square pale rather than saturated; the fold

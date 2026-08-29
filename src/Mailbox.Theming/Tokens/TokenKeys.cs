@@ -752,6 +752,10 @@ public static class TokenKeys
         /// <summary>The ground a Tentative entry's diagonals are drawn over.</summary>
         public const string Hatch = "peek.hatch";
 
+        /// <summary>The agenda's scrollbar, on the days that have more than fits: track and thumb.</summary>
+        public const string Scroll = "peek.scroll";
+        public const string ScrollThumb = "peek.scroll.thumb";
+
         /// <summary>The floating popup's ground.</summary>
         public const string PopBackground = "peek.pop.background";
         /// <summary>The broad light frame round the popup, and the hairline round that.</summary>
@@ -766,12 +770,14 @@ public static class TokenKeys
         public const string PopText = "peek.pop.text";
         public const string PopTextDim = "peek.pop.text.dim";
         public const string PopHatch = "peek.pop.hatch";
+        public const string PopScroll = "peek.pop.scroll";
+        public const string PopScrollThumb = "peek.pop.scroll.thumb";
 
         /// <summary>The docked half, which every theme states for itself.</summary>
         public static readonly IReadOnlyList<string> Docked =
         [
             Background, Divider, Title, Day, DayOther, Today, TodayText, Hover,
-            Rule, RuleSoft, Text, TextDim, Hatch,
+            Rule, RuleSoft, Text, TextDim, Hatch, Scroll, ScrollThumb,
         ];
 
         /// <summary>The floating half, which the desktop states and every theme repeats.</summary>
@@ -779,6 +785,7 @@ public static class TokenKeys
         [
             PopBackground, PopFrame, PopOutline, PopTitle, PopDay, PopDayOther,
             PopToday, PopTodayText, PopHover, PopText, PopTextDim, PopHatch,
+            PopScroll, PopScrollThumb,
         ];
 
         public static readonly IReadOnlyList<string> All = [.. Docked, .. Floating];

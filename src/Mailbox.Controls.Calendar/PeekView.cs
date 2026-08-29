@@ -105,6 +105,12 @@ public sealed class PeekView : CalendarSurface
     /// <summary>How far the agenda has been wheeled down, in pixels.</summary>
     public double Scroll => _scroll;
 
+    /// <summary>
+    /// How much taller the day's agenda is than the room it has, or zero when all of it fits —
+    /// which is also whether the scrollbar is drawn.
+    /// </summary>
+    public double Overflow { get; private set; }
+
     /// <summary>The arrows: -1 a month back, +1 on.</summary>
     public event EventHandler<int>? Stepped;
 
@@ -366,30 +372,80 @@ public sealed class PeekView : CalendarSurface
     {
         var floor = AgendaFloor;
         var top = layout.HeadingBaseline - PeekLayout.EntryLineHeight;
-        if (floor <= top) return;
-
-        using var clip = context.PushClip(new Rect(0, top, layout.Width, floor - top));
-        using var scroll = context.PushTransform(Matrix.CreateTranslation(0, -Math.Round(_scroll)));
-
-        var heading = Ink(_selected.ToString("dddd", Culture), PeekLayout.AgendaSize, TextInk, SemiBoldFace);
-        DrawAt(context, heading, layout.AgendaLeft, layout.HeadingBaseline);
-
-        // One time column for the whole day, so the bars line up whatever the times are.
-        var column = PeekLayout.EntryBarInset;
-        foreach (var row in _agenda)
+        if (floor <= top)
         {
-            var width = Measure(row.Time, PeekLayout.AgendaSize) + PeekLayout.EntryTimeInset + PeekLayout.EntryTimeGap;
-            if (width > column) column = Math.Ceiling(width);
+            Overflow = 0;
+            return;
         }
 
-        var y = layout.AgendaTop;
-        foreach (var row in _agenda)
         {
-            DrawEntry(context, layout, row, y, column);
-            y += PeekLayout.EntryHeight(row.Lines) + PeekLayout.EntryGap;
+            using var clip = context.PushClip(new Rect(0, top, layout.Width, floor - top));
+            using var scroll = context.PushTransform(Matrix.CreateTranslation(0, -Math.Round(_scroll)));
+
+            var heading = Ink(_selected.ToString("dddd", Culture), PeekLayout.AgendaSize, TextInk, SemiBoldFace);
+            DrawAt(context, heading, layout.AgendaLeft, layout.HeadingBaseline);
+
+            // One time column for the whole day, so the bars line up whatever the times are.
+            var column = PeekLayout.EntryBarInset;
+            foreach (var row in _agenda)
+            {
+                var width = Measure(row.Time, PeekLayout.AgendaSize) + PeekLayout.EntryTimeInset + PeekLayout.EntryTimeGap;
+                if (width > column) column = Math.Ceiling(width);
+            }
+
+            var y = layout.AgendaTop;
+            foreach (var row in _agenda)
+            {
+                DrawEntry(context, layout, row, y, column);
+                y += PeekLayout.EntryHeight(row.Lines) + PeekLayout.EntryGap;
+            }
+
+            _content = Math.Max(0, y - PeekLayout.EntryGap - top);
         }
 
-        _content = Math.Max(0, y - PeekLayout.EntryGap - top);
+        // Outside the clip's scroll transform: a scrollbar that scrolled with what it scrolls
+        // would leave the box the moment it was used.
+        DrawScrollbar(context, layout, top, floor);
+    }
+
+    /// <summary>
+    /// The agenda's scrollbar, in the gutter the layout reserves for it, on the days that have
+    /// more on them than fits.
+    /// </summary>
+    /// <remarks>
+    /// The gutter was reserved and nothing was ever drawn in it, so a busy day was clipped in
+    /// silence: the peek is a fixed height, five appointments do not fit in it, and the only way
+    /// to find out there were more was to wheel over it and see the list move. The reference's
+    /// own bar is the model — 17 columns wide with a 9-wide thumb, which is exactly the popup's
+    /// gutter — and its arrow buttons are deliberately left off, the docked pane's gutter being
+    /// 12 and too narrow to hold them without the two states drawing different marks.
+    /// </remarks>
+    private void DrawScrollbar(DrawingContext context, PeekLayout layout, double top, double floor)
+    {
+        var room = floor - top;
+        Overflow = Math.Max(0, _content - room);
+        if (Overflow <= 0 || layout.Gutter <= 0) return;
+
+        var box = layout.Scrollbar(top, floor);
+        Fill(context, box, Colour(TokenKeys.Peek.Scroll, TokenKeys.Peek.PopScroll));
+
+        // As tall as the visible share of the day, and never so short it cannot be seen.
+        var height = Math.Max(PeekLayout.ScrollThumbMinimum, Math.Round(room * room / _content));
+        var travel = Math.Max(0, room - height);
+        var offset = Overflow > 0 ? Math.Round(travel * Math.Clamp(_scroll / Overflow, 0, 1)) : 0;
+
+        var thumb = new Rect(
+            box.X + Math.Round((box.Width - PeekLayout.ScrollThumbWidth) / 2),
+            box.Y + offset,
+            PeekLayout.ScrollThumbWidth,
+            height);
+
+        context.DrawRectangle(
+            Palette.Brush(Colour(TokenKeys.Peek.ScrollThumb, TokenKeys.Peek.PopScrollThumb)),
+            null,
+            thumb,
+            PeekLayout.ScrollThumbWidth / 2,
+            PeekLayout.ScrollThumbWidth / 2);
     }
 
     /// <summary>The content's own bottom edge: inside the popup's frame, or the pane's whole height.</summary>
