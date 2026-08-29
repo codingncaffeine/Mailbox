@@ -19,8 +19,12 @@ namespace Mailbox.Controls.Tasks;
 /// are — and a row is 21. What the peek covers is the left of each row, so the tick box's size
 /// and where the subject starts are authored; a capture of an uncovered list would settle them.
 /// <para>
-/// A task that is late or due today is drawn in <c>list.overdue.text</c>, which is the red the
-/// capture's own row and its flag are drawn in.
+/// A task that is <em>late</em> is drawn in <c>list.overdue.text</c>, which is the red the
+/// capture's own row and its flag are drawn in. Only a late one: the reference draws what is
+/// overdue in red and everything with a due date still ahead of it in the ordinary ink, and the
+/// Today band holds both — late work is filed there because it is what wants doing now, not
+/// because it has stopped being late. Colouring the whole band red made the two
+/// indistinguishable, which threw away the only thing the red says.
 /// </para>
 /// </remarks>
 public sealed class TaskListView : DrawnSurface
@@ -284,7 +288,7 @@ public sealed class TaskListView : DrawnSurface
             ? TokenKeys.List.RowSelected
             : _hover is { } h && h.Key == row.Key ? TokenKeys.List.RowHover : TokenKeys.List.RowBackground));
 
-        var ink = Colour(row.IsOverdue || row.Band == TaskBand.Today ? TokenKeys.List.OverdueText : TokenKeys.List.ReadText);
+        var ink = Colour(row.IsOverdue ? TokenKeys.List.OverdueText : TokenKeys.List.ReadText);
         var quiet = Colour(TokenKeys.List.PreviewText);
         var baseline = box.Y + 15;
 
@@ -427,7 +431,7 @@ public sealed class TaskListView : DrawnSurface
             ? TokenKeys.List.RowSelected
             : _hover is { } h && h.Key == row.Key ? TokenKeys.List.RowHover : TokenKeys.List.RowBackground));
 
-        var ink = Colour(row.IsOverdue || row.Band == TaskBand.Today ? TokenKeys.List.OverdueText : TokenKeys.List.ReadText);
+        var ink = Colour(row.IsOverdue ? TokenKeys.List.OverdueText : TokenKeys.List.ReadText);
 
         DrawTick(context, TickBox(box), row.IsComplete);
 
