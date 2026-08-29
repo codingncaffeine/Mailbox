@@ -983,12 +983,27 @@ public partial class MainWindow
         if (write)
         {
             NewMessage();
+
+            // The window this opens is not the one a capture was armed for — the Address Book
+            // closed first, and the shot has been taken by the time this runs — so a run that
+            // pressed New Message and a run that pressed nothing photographed identically.
+            if (Mailbox.App.Theming.WindowCapture.IsRequested)
+            {
+                Log.Info($"Harness: the Address Book asked for a message; windows: {OtherWindows()}");
+            }
+
             return;
         }
 
         if (options)
         {
             var accounts = new AccountSettingsDialog("Address Books");
+
+            if (Mailbox.App.Theming.WindowCapture.IsRequested)
+            {
+                Log.Info("Harness: the Address Book asked for Account Settings on its Address Books tab.");
+            }
+
             await accounts.ShowDialog(this);
             EnsurePeople(shell).Reload();
         }

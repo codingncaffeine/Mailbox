@@ -63,6 +63,7 @@ public sealed class AddressBookDialog : Window
     private readonly MenuItem _delete = Entry("Delete", "Ctrl+D");
     private readonly MenuItem _properties = Entry("Properties");
     private readonly MenuItem _newMessage = Entry("New Message", "Ctrl+N");
+    private readonly MenuItem _options = Entry("Options...");
 
     private IReadOnlyList<Collection> _collections = [];
     private IReadOnlyList<ContactRow> _rows = [];
@@ -156,12 +157,11 @@ public sealed class AddressBookDialog : Window
         find.Click += (_, _) => _search.Focus();
         var advanced = Entry("Advanced Find...");
         advanced.Click += async (_, _) => await AdvancedFindAsync();
-        var options = Entry("Options...");
-        options.Click += (_, _) => { OptionsRequested?.Invoke(this, EventArgs.Empty); Close(); };
+        _options.Click += (_, _) => { OptionsRequested?.Invoke(this, EventArgs.Empty); Close(); };
         tools.Items.Add(find);
         tools.Items.Add(advanced);
         tools.Items.Add(new Separator());
-        tools.Items.Add(options);
+        tools.Items.Add(_options);
 
         var menu = new Menu
         {
@@ -592,9 +592,12 @@ public sealed class AddressBookDialog : Window
                 case "properties": await OpensAsync(OpenAsync); break;
                 case "delete": await OpensAsync(DeleteAsync); break;
                 case "advanced": await OpensAsync(AdvancedFindAsync); break;
-                case "newmessage": WriteTo(); break;
+                // Through the entries themselves: each does two things — raise the event the shell
+                // is listening for, and close this window so the shell can act on it — and calling
+                // only the first left the window up, so the shell's own half never ran at all.
+                case "newmessage": _newMessage.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent)); break;
                 case "copy": await CopyAddressAsync(); break;
-                case "options": OptionsRequested?.Invoke(this, EventArgs.Empty); break;
+                case "options": _options.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent)); break;
                 case "close": Close(); break;
 
                 // The picking half. Pressed rather than called: what is in doubt is whether the

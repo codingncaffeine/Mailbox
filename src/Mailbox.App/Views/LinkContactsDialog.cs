@@ -199,7 +199,73 @@ public static class LinkContactsDialog
 
         window.Opened += (_, _) => search.Focus();
 
+        // This window writes through its own two buttons and nothing else, and neither could be
+        // pressed: the find box has to hold something before a Link button exists at all, and a
+        // pose that photographs the window proves only that it draws. So the store could be shown
+        // to hold a link — that is what the shell's own link pose does — without anything ever
+        // showing that the buttons here are what put it there.
+        //
+        // MAILBOX_LINK_PRESS=find:Other,link:B. Other,unlink:B. Other. Capture runs only.
+        if (Mailbox.App.Theming.WindowCapture.IsRequested
+            && Environment.GetEnvironmentVariable("MAILBOX_LINK_PRESS") is { Length: > 0 } steps)
+        {
+            window.Opened += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(
+                () => _ = PressAsync(steps), Avalonia.Threading.DispatcherPriority.Background);
+        }
+
         await window.ShowDialog(owner);
         return changed;
+
+        async Task PressAsync(string spec)
+        {
+            foreach (var step in spec.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                var (verb, argument) = step.Split(':', 2) is [var head, var tail]
+                    ? (head.Trim().ToLowerInvariant(), tail.Trim())
+                    : (step.Trim().ToLowerInvariant(), string.Empty);
+
+                if (verb == "find")
+                {
+                    // Through the box, so the search runs the way typing runs it — and then a beat,
+                    // because the box's own TextChanged is what rebuilds the results and a step
+                    // that read them in the same pass read the list as it was before.
+                    search.Text = argument;
+                    await Task.Delay(150);
+                }
+                else if (verb is "link" or "unlink")
+                {
+                    var from = verb == "link" ? results : linked;
+                    if (FindButton(from, argument) is not { } button)
+                    {
+                        Log.Warn($"Harness: no “{argument}” to {verb} — the list holds "
+                                 + $"[{string.Join(" | ", Rows(from))}].");
+                        continue;
+                    }
+
+                    button.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+                    await Task.Delay(150);
+                }
+                else
+                {
+                    Log.Warn($"Harness: the Linked Contacts window has no step '{verb}'.");
+                    continue;
+                }
+
+                Log.Info($"Harness: linked contacts {step} → linked [{string.Join(" | ", Rows(linked))}], "
+                         + $"found [{string.Join(" | ", Rows(results))}], "
+                         + $"“{who.Named()}” carries [{string.Join(" | ", book.Full(who.Id)?.Links ?? [])}].");
+            }
+        }
+
+        static IEnumerable<string> Rows(StackPanel panel)
+            => panel.Children.OfType<StackPanel>()
+                .Select(row => row.Children.OfType<TextBlock>().FirstOrDefault()?.Text ?? string.Empty);
+
+        static Button? FindButton(StackPanel panel, string wanted)
+            => panel.Children.OfType<StackPanel>()
+                .Where(row => row.Children.OfType<TextBlock>()
+                    .Any(t => t.Text?.Contains(wanted, StringComparison.CurrentCultureIgnoreCase) == true))
+                .Select(row => row.Children.OfType<Button>().FirstOrDefault())
+                .FirstOrDefault(b => b is not null);
     }
 }
