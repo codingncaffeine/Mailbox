@@ -468,7 +468,20 @@ public sealed class AccountSettingsDialog : Window
 
         if (!confirmed) return;
 
-        App.Accounts.Remove(row.Account.Address);
+        var address = row.Account.Address;
+        App.Accounts.Remove(address);
+
+        // The file is the only part of an account that lived in the accounts directory. Its
+        // password lives in the desktop keyring and its servers live in the settings file, and
+        // neither used to go with it — so an account somebody removed left a credential behind
+        // that this application no longer listed anywhere and offered no way to revoke, and the
+        // same address added again picked up servers nobody had typed. Both are cleared here,
+        // where the reader has just confirmed that the account is going.
+        await App.OAuth.ForgetAsync(address);
+        await App.Secrets.DeleteAsync(address, Credentials.Incoming);
+        await App.Secrets.DeleteAsync(address, Credentials.Outgoing);
+        AccountSettings.Forget(App.Settings, address);
+
         Changed = true;
         Reload();
     }

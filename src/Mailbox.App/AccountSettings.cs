@@ -82,6 +82,32 @@ public sealed record AccountSettings(
     /// </summary>
     private static string Key(string address, string field) => $"account.{address}.{field}";
 
+    /// <summary>Every settings key this record and its neighbours write for one address.</summary>
+    private static readonly string[] Fields =
+    [
+        "incoming.host", "incoming.port", "incoming.security", "incoming.user",
+        "outgoing.host", "outgoing.port", "outgoing.security", "outgoing.user",
+        "leaveonserver", "deleteafterdays", "offlinemonths",
+        "sieve.host", "sieve.port", "delivery.folder",
+        "auth", "oauth.provider", "oauth.client", "archive.folder",
+    ];
+
+    /// <summary>
+    /// Takes an address's settings out of the file, for an account that has been removed.
+    /// </summary>
+    /// <remarks>
+    /// An account removed used to leave every one of these behind, so an address added again
+    /// later — after a mistake, or on a machine whose accounts had been rearranged — silently
+    /// inherited servers, ports and an authentication kind nobody had typed, over a store that
+    /// was created empty. The keys are named rather than swept by prefix: a prefix match on an
+    /// address would also take a longer address that happens to start with it.
+    /// </remarks>
+    public static void Forget(SettingsStore settings, string address)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        foreach (var field in Fields) settings.Remove(Key(address, field));
+    }
+
     /// <summary>
     /// The folder the Archive button files into, by name, or empty for the account's own Archive.
     /// </summary>
