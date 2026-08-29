@@ -298,6 +298,8 @@
     "systemdialog.icon.green": "#4CB050",
     "systemdialog.icon.ink": "#000000",
     "systemdialog.icon.paper": "#FFFFFF",
+    "systemdialog.icon.red": "#DC2C1E",
+    "systemdialog.icon.red.light": "#F09490",
     "systemdialog.icon.steel": "#90A1B7",
     "systemdialog.icon.steel.dark": "#445975",
     "systemdialog.icon.wood": "#8C7E6E",

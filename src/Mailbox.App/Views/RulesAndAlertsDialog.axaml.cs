@@ -736,9 +736,8 @@ public sealed class RulesAndAlertsDialog : Window
         if (_current.Mail.FolderWithRole(_current.Account.Id, FolderRole.Inbox) is not { } inbox) return;
 
         var count = App.Rules.RunNow(_current.Mail, inbox, [rule]);
-        await Confirm.AskAsync(this, "Rules and Alerts",
-            count == 0 ? "The rule matched no messages in the Inbox." : $"The rule was applied to {count} message{(count == 1 ? "" : "s")} in the Inbox.",
-            "OK", destructive: false);
+        await Confirm.SayAsync(this, "Rules and Alerts",
+            count == 0 ? "The rule matched no messages in the Inbox." : $"The rule was applied to {count} message{(count == 1 ? "" : "s")} in the Inbox.");
     }
 
     /// <summary>A click on an underlined value in the description edits it in place and saves the rule.</summary>
@@ -810,15 +809,15 @@ public sealed class RunRulesNowDialog : Window
             // a kept-off rule is applied by hand — but Select All silently sweeping one in was
             // how three messages were permanently deleted by a rule nobody thought was live.
             var box = new CheckBox { Content = rule.Enabled ? rule.Name : $"{rule.Name} (switched off)" };
-            Bind(box, TemplatedControl.ForegroundProperty, "dialog.surface.text.brush");
+            Bind(box, TemplatedControl.ForegroundProperty, "systemdialog.foreground.brush");
             var id = rule.Id;
             box.IsCheckedChanged += (_, _) => { if (box.IsChecked == true) chosen.Add(id); else chosen.Remove(id); };
             rows.Children.Add(box);
         }
 
         var list = new Border { Height = 160, BorderThickness = new Thickness(1), Child = new ScrollViewer { Content = rows } };
-        Bind(list, Border.BackgroundProperty, "dialog.surface.brush");
-        Bind(list, Border.BorderBrushProperty, "dialog.border.brush");
+        Bind(list, Border.BackgroundProperty, "systemdialog.list.background.brush");
+        Bind(list, Border.BorderBrushProperty, "systemdialog.list.border.brush");
 
         var selectAll = new Button { Content = "Select All" };
         selectAll.Click += (_, _) => { foreach (var box in rows.Children.OfType<CheckBox>()) box.IsChecked = true; };
@@ -832,7 +831,7 @@ public sealed class RunRulesNowDialog : Window
         var which = new ComboBox { ItemsSource = new List<string> { "All Messages", "Unread Messages", "Read Messages" }, SelectedIndex = 0, MinWidth = 180 };
 
         var status = new TextBlock { TextWrapping = TextWrapping.Wrap };
-        Bind(status, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
+        Bind(status, TextBlock.ForegroundProperty, "systemdialog.foreground.subtle.brush");
 
         var run = new Button { Content = "Run Now", Width = 90, IsDefault = true };
         run.Click += (_, _) =>
@@ -888,14 +887,13 @@ public sealed class RunRulesNowDialog : Window
         };
 
         list.Width = 340;
-        DialogChrome.Apply(this, body);
-        Bind(this, BackgroundProperty, "dialog.background.brush");
+        SystemDialogChrome.Apply(this, body);
     }
 
     private static TextBlock Label(string text)
     {
         var block = new TextBlock { Text = text, VerticalAlignment = VerticalAlignment.Center };
-        Bind(block, TextBlock.ForegroundProperty, "dialog.foreground.brush");
+        Bind(block, TextBlock.ForegroundProperty, "systemdialog.foreground.brush");
         return block;
     }
 }

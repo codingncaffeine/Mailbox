@@ -250,14 +250,17 @@ internal static class RuleValues
         return answer;
     }
 
-    /// <summary>A folder of the account, by name, the Outbox left out.</summary>
-    public static async Task<Folder?> FolderAsync(Window owner, MailRepository mail, long accountId, long? current)
+    /// <summary>
+    /// A folder of the account, by name, the Outbox left out. The window is titled for the job
+    /// the reader is doing — a Quick Step's first-time setup is not "Rules and Alerts".
+    /// </summary>
+    public static async Task<Folder?> FolderAsync(Window owner, MailRepository mail, long accountId, long? current, string title = "Rules and Alerts")
     {
         var folders = mail.Folders(accountId).Where(f => f.Role != FolderRole.Outbox).ToList();
         var choices = folders.Select(f => new Choice(f.Name, f.Id.ToString(CultureInfo.InvariantCulture))).ToList();
         if (choices.Count == 0) return null;
 
-        var chosen = await Chooser.AskAsync(owner, "Rules and Alerts", "Choose a folder:", choices,
+        var chosen = await Chooser.AskAsync(owner, title, "Choose a folder:", choices,
             current?.ToString(CultureInfo.InvariantCulture));
         return chosen is null ? null : folders.FirstOrDefault(f => f.Id.ToString(CultureInfo.InvariantCulture) == chosen);
     }

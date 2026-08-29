@@ -167,39 +167,39 @@ public sealed class RuleWizard : Window
     }
 
     /// <summary>The templates the first page offers, in the reference's groups.</summary>
-    private static readonly (string Group, string Label, Func<MailRule> Make)[] Templates =
+    private static readonly (string Group, string Icon, string Label, Func<MailRule> Make)[] Templates =
     [
-        ("Stay Organized", "Move messages from someone to a folder", () => new MailRule
+        ("Stay Organized", "move-to-folder", "Move messages from someone to a folder", () => new MailRule
         {
             Conditions = [new RuleCondition(RuleConditionKind.From)],
             Actions = [new RuleAction(RuleActionKind.MoveToFolder), new RuleAction(RuleActionKind.StopProcessing)],
         }),
-        ("Stay Organized", "Move messages with specific words in the subject to a folder", () => new MailRule
+        ("Stay Organized", "move-to-folder", "Move messages with specific words in the subject to a folder", () => new MailRule
         {
             Conditions = [new RuleCondition(RuleConditionKind.SubjectContains)],
             Actions = [new RuleAction(RuleActionKind.MoveToFolder), new RuleAction(RuleActionKind.StopProcessing)],
         }),
-        ("Stay Organized", "Move messages sent to a public group to a folder", () => new MailRule
+        ("Stay Organized", "move-to-folder", "Move messages sent to a public group to a folder", () => new MailRule
         {
             Conditions = [new RuleCondition(RuleConditionKind.SentTo)],
             Actions = [new RuleAction(RuleActionKind.MoveToFolder), new RuleAction(RuleActionKind.StopProcessing)],
         }),
-        ("Stay Organized", "Flag messages from someone for follow-up", () => new MailRule
+        ("Stay Organized", "flag", "Flag messages from someone for follow-up", () => new MailRule
         {
             Conditions = [new RuleCondition(RuleConditionKind.From)],
             Actions = [new RuleAction(RuleActionKind.FlagForFollowUp) { Level = 0 }],
         }),
-        ("Stay Organized", "Move RSS items from a specific RSS Feed to a folder", () => new MailRule
+        ("Stay Organized", "move-to-folder", "Move RSS items from a specific RSS Feed to a folder", () => new MailRule
         {
             Conditions = [new RuleCondition(RuleConditionKind.FromFeed)],
             Actions = [new RuleAction(RuleActionKind.MoveToFolder), new RuleAction(RuleActionKind.StopProcessing)],
         }),
-        ("Stay Up to Date", "Display mail from someone in the New Item Alert Window", () => new MailRule
+        ("Stay Up to Date", "alert-star", "Display mail from someone in the New Item Alert Window", () => new MailRule
         {
             Conditions = [new RuleCondition(RuleConditionKind.From)],
             Actions = [new RuleAction(RuleActionKind.DisplayAlert)],
         }),
-        ("Stay Up to Date", "Play a sound when I get messages from someone", () => new MailRule
+        ("Stay Up to Date", "sound", "Play a sound when I get messages from someone", () => new MailRule
         {
             Conditions = [new RuleCondition(RuleConditionKind.From)],
             Actions = [new RuleAction(RuleActionKind.PlaySound)],
@@ -207,8 +207,8 @@ public sealed class RuleWizard : Window
         // The reference's third entry here — an alert to a mobile device — is absent rather than
         // greyed. It reaches a paging service §3 puts out of scope, and a button that cannot do
         // what it says is worse than one that is not there. Same reasoning as Send to OneNote.
-        ("Start from a blank rule", "Apply rule on messages I receive", () => new MailRule()),
-        ("Start from a blank rule", "Apply rule on messages I send", () => new MailRule { AppliesToSent = true }),
+        ("Start from a blank rule", "envelope", "Apply rule on messages I receive", () => new MailRule()),
+        ("Start from a blank rule", "send", "Apply rule on messages I send", () => new MailRule { AppliesToSent = true }),
     ];
 
     private Control TemplatePage()
@@ -226,22 +226,42 @@ public sealed class RuleWizard : Window
             if (template.Group != group)
             {
                 group = template.Group;
-                var header = new TextBlock { Text = group, FontWeight = FontWeight.SemiBold, Margin = new Thickness(2, 6, 0, 2) };
+                var header = new TextBlock { Text = group, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center };
                 Bind(header, TextBlock.ForegroundProperty, "systemdialog.foreground.brush");
-                items.Add(new ListBoxItem { Content = header, IsEnabled = false });
+
+                // The reference runs a hairline from the header's last word to the edge.
+                var rule = new Border { Height = 1, Margin = new Thickness(6, 1, 2, 0), VerticalAlignment = VerticalAlignment.Center };
+                Bind(rule, Border.BackgroundProperty, "systemdialog.border.brush");
+
+                var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), Margin = new Thickness(2, 6, 0, 2) };
+                Grid.SetColumn(header, 0);
+                row.Children.Add(header);
+                Grid.SetColumn(rule, 1);
+                row.Children.Add(rule);
+                items.Add(new ListBoxItem { Content = row, IsEnabled = false });
             }
 
-            var label = new TextBlock { Text = template.Label, Margin = new Thickness(16, 1, 0, 1) };
+            var label = new TextBlock { Text = template.Label, VerticalAlignment = VerticalAlignment.Center };
             Bind(label, TextBlock.ForegroundProperty, "systemdialog.foreground.brush");
-            items.Add(new ListBoxItem { Content = label, Tag = template });
+            items.Add(new ListBoxItem
+            {
+                Content = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 5,
+                    Margin = new Thickness(10, 0, 0, 0),
+                    Children = { new ClassicIcon(template.Icon) { VerticalAlignment = VerticalAlignment.Center }, label },
+                },
+                Tag = template,
+            });
         }
 
         list.ItemsSource = items;
         list.SelectionChanged += (_, _) =>
         {
-            if ((list.SelectedItem as ListBoxItem)?.Tag is ValueTuple<string, string, Func<MailRule>> chosen)
+            if ((list.SelectedItem as ListBoxItem)?.Tag is ValueTuple<string, string, string, Func<MailRule>> chosen)
             {
-                _rule = chosen.Item3() with { Name = _rule.Name };
+                _rule = chosen.Item4() with { Name = _rule.Name };
                 _description.Show(_rule);
             }
         };
@@ -508,14 +528,14 @@ public sealed class RuleWizard : Window
 
         if (incomplete.Count > 0)
         {
-            _ = Confirm.AskAsync(this, "Rules Wizard",
-                "Please specify a value for: " + string.Join("; ", incomplete) + ".", "OK", destructive: false);
+            _ = Confirm.SayAsync(this, "Rules Wizard",
+                "Please specify a value for: " + string.Join("; ", incomplete) + ".");
             return;
         }
 
         if (_rule.Actions.Count == 0)
         {
-            _ = Confirm.AskAsync(this, "Rules Wizard", "Please choose at least one action for this rule.", "OK", destructive: false);
+            _ = Confirm.SayAsync(this, "Rules Wizard", "Please choose at least one action for this rule.");
             return;
         }
 

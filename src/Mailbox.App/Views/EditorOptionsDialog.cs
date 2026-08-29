@@ -36,13 +36,13 @@ public sealed class EditorOptionsDialog : Window
         Height = 660;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
-        var railBox = EditorDialogKit.Boxed(_rail, 120);
+        var railBox = SystemInkKit.Boxed(_rail, 120);
         railBox.Padding = new Thickness(4);
         railBox.VerticalAlignment = VerticalAlignment.Top;
         BuildRail();
         ShowPage();
 
-        var ok = EditorDialogKit.Ok(Close);
+        var ok = SystemInkKit.Ok(Close);
         var body = new DockPanel
         {
             Margin = new Thickness(18),
@@ -55,7 +55,7 @@ public sealed class EditorOptionsDialog : Window
                     HorizontalAlignment = HorizontalAlignment.Right,
                     Spacing = 8,
                     Margin = new Thickness(0, 14, 0, 0),
-                    Children = { ok, EditorDialogKit.Cancel(this) },
+                    Children = { ok, SystemInkKit.Cancel(this) },
                 },
                 new StackPanel
                 {
@@ -75,7 +75,7 @@ public sealed class EditorOptionsDialog : Window
         foreach (var (id, title) in new[] { ("proofing", "Proofing"), ("accessibility", "Accessibility"), ("advanced", "Advanced") })
         {
             var selected = id == _selected;
-            var text = EditorDialogKit.SurfaceText(title);
+            var text = SystemInkKit.SurfaceText(title);
             text.Margin = new Thickness(8, 0);
             var button = new Button
             {
@@ -89,8 +89,8 @@ public sealed class EditorOptionsDialog : Window
             };
             if (selected)
             {
-                EditorDialogKit.Bind(button, BorderBrushProperty, "systemdialog.border.brush");
-                EditorDialogKit.Bind(button, BackgroundProperty, "systemdialog.selection.focused.brush");
+                SystemInkKit.Bind(button, BorderBrushProperty, "systemdialog.border.brush");
+                SystemInkKit.Bind(button, BackgroundProperty, "systemdialog.selection.focused.brush");
             }
 
             var target = id;
@@ -117,8 +117,8 @@ public sealed class EditorOptionsDialog : Window
     private static Control Note(string title, string heading, string note)
     {
         var stack = new StackPanel { Spacing = 10, Width = 620 };
-        stack.Children.Add(EditorDialogKit.Label(heading, bold: true));
-        stack.Children.Add(EditorDialogKit.Label(note, subtle: true));
+        stack.Children.Add(SystemInkKit.Label(heading, bold: true));
+        stack.Children.Add(SystemInkKit.Label(note, subtle: true));
         return stack;
     }
 
@@ -126,7 +126,7 @@ public sealed class EditorOptionsDialog : Window
     {
         var stack = new StackPanel { Spacing = 8, Width = 620 };
 
-        stack.Children.Add(EditorDialogKit.Label("Specify how Mailbox corrects and formats the contents of your e-mails.", bold: true));
+        stack.Children.Add(SystemInkKit.Label("Specify how Mailbox corrects and formats the contents of your e-mails.", bold: true));
 
         stack.Children.Add(Section("AutoCorrect options"));
 
@@ -137,7 +137,7 @@ public sealed class EditorOptionsDialog : Window
             Orientation = Orientation.Horizontal,
             Spacing = 12,
             Margin = new Thickness(14, 0, 0, 0),
-            Children = { EditorDialogKit.Label("Specify how Mailbox corrects and formats text as you type."), autocorrect },
+            Children = { SystemInkKit.Label("Specify how Mailbox corrects and formats text as you type."), autocorrect },
         });
 
         stack.Children.Add(Section("When correcting spelling in Mailbox"));
@@ -152,37 +152,37 @@ public sealed class EditorOptionsDialog : Window
         stack.Children.Add(Row("Dictionary language:", DictionaryCombo()));
 
         stack.Children.Add(Section("When correcting spelling in messages"));
-        var asYouType = EditorDialogKit.Ink(new CheckBox { Content = "Check spelling as you type", IsChecked = false, IsEnabled = false, Margin = new Thickness(14, 0, 0, 0) });
+        var asYouType = SystemInkKit.Ink(new CheckBox { Content = "Check spelling as you type", IsChecked = false, IsEnabled = false, Margin = new Thickness(14, 0, 0, 0) });
         ToolTip.SetTip(asYouType, "The editor cannot underline a word as it is typed; F7 checks the whole message, and Send can check before it goes.");
         stack.Children.Add(asYouType);
-        var grammar = EditorDialogKit.Ink(new CheckBox { Content = "Mark grammar errors as you type", IsChecked = false, IsEnabled = false, Margin = new Thickness(14, 0, 0, 0) });
+        var grammar = SystemInkKit.Ink(new CheckBox { Content = "Mark grammar errors as you type", IsChecked = false, IsEnabled = false, Margin = new Thickness(14, 0, 0, 0) });
         ToolTip.SetTip(grammar, "There is no grammar checker.");
         stack.Children.Add(grammar);
         stack.Children.Add(Switch("Always check spelling before sending", MailOptions.CheckSpellingBeforeSendKey, false));
         stack.Children.Add(Switch("Ignore original message text in reply or forward", MailOptions.IgnoreOriginalSpellingKey, true));
-        stack.Children.Add(EditorDialogKit.Label("Spelling runs against the desktop's own Hunspell dictionaries; F7 checks a message, and the words you add are kept beside your mail.", subtle: true));
+        stack.Children.Add(SystemInkKit.Label("Spelling runs against the desktop's own Hunspell dictionaries; F7 checks a message, and the words you add are kept beside your mail.", subtle: true));
 
         return stack;
     }
 
     private static Control Section(string title)
     {
-        var label = EditorDialogKit.Label(title, bold: true);
+        var label = SystemInkKit.Label(title, bold: true);
         var rule = new Border { Height = 1, Margin = new Thickness(0, 2, 0, 4) };
-        EditorDialogKit.Bind(rule, Border.BackgroundProperty, "systemdialog.border.brush");
+        SystemInkKit.Bind(rule, Border.BackgroundProperty, "systemdialog.border.brush");
         return new StackPanel { Margin = new Thickness(0, 10, 0, 0), Children = { label, rule } };
     }
 
     private Control Switch(string label, string key, bool fallback)
     {
-        var box = EditorDialogKit.Ink(new CheckBox { Content = label, IsChecked = _settings.GetBool(key, fallback), Margin = new Thickness(14, 0, 0, 0) });
+        var box = SystemInkKit.Ink(new CheckBox { Content = label, IsChecked = _settings.GetBool(key, fallback), Margin = new Thickness(14, 0, 0, 0) });
         box.IsCheckedChanged += (_, _) => _settings.Set(key, box.IsChecked == true);
         return box;
     }
 
     private static Control Row(string label, Control control)
     {
-        var caption = EditorDialogKit.Label(label);
+        var caption = SystemInkKit.Label(label);
         caption.Width = 130;
         return new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(14, 0, 0, 0), Children = { caption, control } };
     }
@@ -214,10 +214,10 @@ public sealed class CustomDictionariesDialog : Window
         CanResize = false;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
-        var list = EditorDialogKit.SurfaceList(272, 260);
-        list.ItemTemplate = new FuncDataTemplate<object>((item, _) => EditorDialogKit.SurfaceText(item?.ToString() ?? string.Empty));
+        var list = SystemInkKit.SurfaceList(272, 260);
+        list.ItemTemplate = new FuncDataTemplate<object>((item, _) => SystemInkKit.SurfaceText(item?.ToString() ?? string.Empty));
         var remove = new Button { Content = "Delete", Width = 74, IsEnabled = false };
-        var count = EditorDialogKit.Label(string.Empty, subtle: true);
+        var count = SystemInkKit.Label(string.Empty, subtle: true);
 
         SpellCheck? spelling = null;
 
@@ -246,7 +246,7 @@ public sealed class CustomDictionariesDialog : Window
             Spacing = 8,
             Children =
             {
-                EditorDialogKit.Label("Words you have added to the dictionary:"),
+                SystemInkKit.Label("Words you have added to the dictionary:"),
                 new StackPanel
                 {
                     Orientation = Orientation.Horizontal,
@@ -254,7 +254,7 @@ public sealed class CustomDictionariesDialog : Window
                     Children = { list, new StackPanel { Spacing = 6, Children = { remove } } },
                 },
                 count,
-                EditorDialogKit.Buttons(EditorDialogKit.Ok(Close), EditorDialogKit.Cancel(this)),
+                SystemInkKit.Buttons(SystemInkKit.Ok(Close), SystemInkKit.Cancel(this)),
             },
         };
 

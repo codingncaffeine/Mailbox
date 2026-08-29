@@ -2905,7 +2905,10 @@ public sealed partial class ShellViewModel : ObservableObject
         }
 
         // Read by looking happens in the middle of a selection change; the pane's counts can
-        // wait a moment rather than being rebuilt under it.
+        // wait a moment rather than being rebuilt under it. Deliberately only the counts: a
+        // search folder whose query this read falls out of — Unread Mail, most of every day —
+        // keeps the row on screen until the reader leaves, exactly as the reference does. A row
+        // that vanished as it was read would take the reader's place in the list with it.
         if (quiet) RequestCountsRefresh();
         else RefreshCounts();
         if (!quiet) StatusRight = $"{Describe(rows.Count)} marked {(read ? "read" : "unread")}.";

@@ -48,7 +48,7 @@ public sealed class CreateRuleDialog : Window
         // Conditions.
         var fromBox = Check($"From {fromText}", from is not null);
         var subjectBox = Check("Subject contains", subject.Length > 0);
-        var subjectText = new TextBox { Text = subject, Width = 260, VerticalAlignment = VerticalAlignment.Center };
+        var subjectText = new TextBox { Text = subject, Width = 260, VerticalAlignment = VerticalAlignment.Center, Classes = { "sysfield" } };
         var sentToBox = Check("Sent to", recipients.Count > 0);
         var sentTo = new ComboBox
         {
@@ -60,10 +60,10 @@ public sealed class CreateRuleDialog : Window
 
         // Actions.
         var alertBox = Check("Display in the New Item Alert window", false);
-        var alertText = new TextBox { Text = subject, Width = 260, VerticalAlignment = VerticalAlignment.Center };
+        var alertText = new TextBox { Text = subject, Width = 260, VerticalAlignment = VerticalAlignment.Center, Classes = { "sysfield" } };
         var soundBox = Check("Play a selected sound", false);
         var soundText = new TextBlock { Text = "the desktop's new-mail sound", VerticalAlignment = VerticalAlignment.Center };
-        Bind(soundText, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
+        Bind(soundText, TextBlock.ForegroundProperty, "systemdialog.foreground.subtle.brush");
         string? soundFile = null;
         var browse = new Button { Content = "Browse…" };
         browse.Click += async (_, _) =>
@@ -138,7 +138,7 @@ public sealed class CreateRuleDialog : Window
             var rule = Build();
             if (rule.Actions.Count == 0)
             {
-                await Confirm.AskAsync(this, "Create Rule", "Choose at least one thing to do when the rule matches.", "OK", destructive: false);
+                await Confirm.SayAsync(this, "Create Rule", "Choose at least one thing to do when the rule matches.");
                 return;
             }
 
@@ -184,8 +184,7 @@ public sealed class CreateRuleDialog : Window
         };
 
         ok.Margin = new Thickness(0, 0, 8, 0);
-        DialogChrome.Apply(this, body);
-        Bind(this, BackgroundProperty, "dialog.background.brush");
+        SystemDialogChrome.Apply(this, body);
     }
 
     private static Control Placed(Control control, int column)
@@ -197,7 +196,7 @@ public sealed class CreateRuleDialog : Window
     private static CheckBox Check(string label, bool value)
     {
         var box = new CheckBox { Content = label, IsChecked = value, VerticalAlignment = VerticalAlignment.Center };
-        Bind(box, TemplatedControl.ForegroundProperty, "dialog.foreground.brush");
+        Bind(box, TemplatedControl.ForegroundProperty, "systemdialog.foreground.brush");
         return box;
     }
 
@@ -211,7 +210,7 @@ public sealed class CreateRuleDialog : Window
     private static TextBlock Heading(string text)
     {
         var block = new TextBlock { Text = text, FontWeight = FontWeight.SemiBold };
-        Bind(block, TextBlock.ForegroundProperty, "dialog.foreground.brush");
+        Bind(block, TextBlock.ForegroundProperty, "systemdialog.foreground.brush");
         return block;
     }
 }

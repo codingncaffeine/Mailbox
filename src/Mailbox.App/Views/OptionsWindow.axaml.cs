@@ -1308,8 +1308,8 @@ public sealed class OptionsWindow : Window
             var count = App.Accounts.All.Sum(a => a.Mail.RecipientCount());
             if (count == 0)
             {
-                await Confirm.AskAsync(this, "Empty Auto-Complete List",
-                    "The Auto-Complete List is already empty.", "OK", destructive: false);
+                await Confirm.SayAsync(this, "Empty Auto-Complete List",
+                    "The Auto-Complete List is already empty.");
                 return;
             }
 

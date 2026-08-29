@@ -135,6 +135,53 @@ public static class Confirm
     /// The same question, with the reference's "Don't show this message again" beneath it when a
     /// label is given. The caller remembers the answer; this only reports the tick.
     /// </summary>
+    /// <summary>
+    /// A statement, not a question: one OK button. A message that only informs used to be asked
+    /// through <see cref="AskAsync(Window, string, string, string, bool)"/> and drew a Cancel
+    /// beside its OK — two buttons whose answers could not differ.
+    /// </summary>
+    public static async Task SayAsync(Window owner, string title, string message)
+    {
+        var text = new TextBlock
+        {
+            Text = message,
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 420,
+        };
+        Bind(text, TextBlock.ForegroundProperty, "dialog.foreground.brush");
+
+        var window = new Window
+        {
+            Title = title,
+            SizeToContent = SizeToContent.WidthAndHeight,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ShowInTaskbar = false,
+        };
+
+        var ok = new Button { Content = "OK", IsDefault = true, IsCancel = true, MinWidth = 74 };
+        ok.Click += (_, _) => window.Close();
+
+        var body = new StackPanel
+        {
+            Margin = new Thickness(22),
+            Spacing = 18,
+            Children =
+            {
+                text,
+                new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Children = { ok },
+                },
+            },
+        };
+
+        DialogChrome.Apply(window, body);
+        await window.ShowDialog(owner);
+    }
+
     public static async Task<(bool Confirmed, bool DontShowAgain)> AskAsync(Window owner, string title, string message,
         string confirmLabel, bool destructive, string? dontShowAgain)
     {

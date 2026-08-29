@@ -629,6 +629,8 @@ public static class TokenKeys
         public const string IconGreen = "systemdialog.icon.green";
         public const string IconBlue = "systemdialog.icon.blue";
         public const string IconBlueDark = "systemdialog.icon.blue.dark";
+        public const string IconRed = "systemdialog.icon.red";
+        public const string IconRedLight = "systemdialog.icon.red.light";
 
         public static readonly IReadOnlyList<string> All =
         [
@@ -639,7 +641,7 @@ public static class TokenKeys
             Button, ButtonBorder, ButtonBorderBottom, ButtonDisabled, ButtonDisabledBorder,
             TooltipBorder,
             IconInk, IconPaper, IconGold, IconGoldDark, IconSteel, IconSteelDark,
-            IconWood, IconGreen, IconBlue, IconBlueDark,
+            IconWood, IconGreen, IconBlue, IconBlueDark, IconRed, IconRedLight,
         ];
     }
 

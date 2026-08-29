@@ -58,6 +58,12 @@ public sealed class ClassicIcon : Control
     public static readonly StyledProperty<IBrush?> BlueDarkProperty =
         AvaloniaProperty.Register<ClassicIcon, IBrush?>(nameof(BlueDark));
 
+    public static readonly StyledProperty<IBrush?> RedProperty =
+        AvaloniaProperty.Register<ClassicIcon, IBrush?>(nameof(Red));
+
+    public static readonly StyledProperty<IBrush?> RedLightProperty =
+        AvaloniaProperty.Register<ClassicIcon, IBrush?>(nameof(RedLight));
+
     public static readonly StyledProperty<IBrush?> DisabledInkProperty =
         AvaloniaProperty.Register<ClassicIcon, IBrush?>(nameof(DisabledInk));
 
@@ -85,6 +91,8 @@ public sealed class ClassicIcon : Control
         Bind(GreenProperty, "systemdialog.icon.green.brush");
         Bind(BlueProperty, "systemdialog.icon.blue.brush");
         Bind(BlueDarkProperty, "systemdialog.icon.blue.dark.brush");
+        Bind(RedProperty, "systemdialog.icon.red.brush");
+        Bind(RedLightProperty, "systemdialog.icon.red.light.brush");
         Bind(DisabledInkProperty, "systemdialog.foreground.disabled.brush");
     }
 
@@ -110,6 +118,8 @@ public sealed class ClassicIcon : Control
     public IBrush? Green { get => GetValue(GreenProperty); set => SetValue(GreenProperty, value); }
     public IBrush? Blue { get => GetValue(BlueProperty); set => SetValue(BlueProperty, value); }
     public IBrush? BlueDark { get => GetValue(BlueDarkProperty); set => SetValue(BlueDarkProperty, value); }
+    public IBrush? Red { get => GetValue(RedProperty); set => SetValue(RedProperty, value); }
+    public IBrush? RedLight { get => GetValue(RedLightProperty); set => SetValue(RedLightProperty, value); }
     public IBrush? DisabledInk { get => GetValue(DisabledInkProperty); set => SetValue(DisabledInkProperty, value); }
 
     private void Bind(AvaloniaProperty property, string key)
@@ -137,7 +147,9 @@ public sealed class ClassicIcon : Control
             grey ?? Wood ?? missing,
             grey ?? Green ?? missing,
             grey ?? Blue ?? missing,
-            grey ?? BlueDark ?? missing);
+            grey ?? BlueDark ?? missing,
+            grey ?? Red ?? missing,
+            grey ?? RedLight ?? missing);
 
         Draw(context, Glyph, p);
     }
@@ -149,10 +161,10 @@ public sealed class ClassicIcon : Control
     /// </summary>
     public readonly record struct Palette(
         IBrush Ink, IBrush Paper, IBrush Hole, IBrush Gold, IBrush GoldDark, IBrush Steel, IBrush SteelDark,
-        IBrush Wood, IBrush Green, IBrush Blue, IBrush BlueDark)
+        IBrush Wood, IBrush Green, IBrush Blue, IBrush BlueDark, IBrush Red, IBrush RedLight)
     {
         /// <summary>A two-colour palette, for the marker a list draws itself: a disc in ink with a tick cut from it.</summary>
-        public static Palette Mono(IBrush ink, IBrush ground) => new(ink, ink, ground, ink, ink, ink, ink, ink, ink, ink, ink);
+        public static Palette Mono(IBrush ink, IBrush ground) => new(ink, ink, ground, ink, ink, ink, ink, ink, ink, ink, ink, ink, ink);
     }
 
     /// <summary>Draws a glyph at the origin of <paramref name="context"/>, 16px square.</summary>
@@ -170,6 +182,12 @@ public sealed class ClassicIcon : Control
             case "down": DrawArrow(context, p, up: false); break;
             case "folder": DrawFolder(context, p); break;
             case "book": DrawBook(context, p); break;
+            case "move-to-folder": DrawMoveToFolder(context, p); break;
+            case "flag": DrawFlag(context, p); break;
+            case "alert-star": DrawAlertStar(context, p); break;
+            case "sound": DrawSound(context, p); break;
+            case "envelope": DrawEnvelope(context, p); break;
+            case "send": DrawSend(context, p); break;
             case "tick": DrawTickBox(context, p, ticked: true); break;
             case "untick": DrawTickBox(context, p, ticked: false); break;
         }
@@ -320,6 +338,58 @@ public sealed class ClassicIcon : Control
         c.DrawRectangle(p.Gold, null, new Rect(14, 5, 2, 2));
         c.DrawRectangle(p.Green, null, new Rect(14, 8, 2, 2));
         c.DrawRectangle(p.Ink, null, new Rect(14, 11, 2, 2));
+    }
+
+    /// <summary>A page with a folded corner and a blue arrow moving it down into a folder:
+    /// the wizard's move-messages templates.</summary>
+    private static void DrawMoveToFolder(DrawingContext c, Palette p)
+    {
+        c.DrawGeometry(p.Paper, new Pen(p.Steel, 1),
+            Poly((3.5, 1.5), (10.5, 1.5), (12.5, 3.5), (12.5, 14.5), (3.5, 14.5)));
+        c.DrawGeometry(p.Hole, new Pen(p.Steel, 1), Poly((10.5, 1.5), (10.5, 3.5), (12.5, 3.5)));
+        c.DrawRectangle(p.Blue, null, new Rect(7, 5, 2, 5));
+        c.DrawGeometry(p.Blue, null, Poly((5, 10), (11, 10), (8, 13.5)));
+    }
+
+    /// <summary>The follow-up flag: a two-tone red pennant on a steel pole.</summary>
+    private static void DrawFlag(DrawingContext c, Palette p)
+    {
+        c.DrawRectangle(p.SteelDark, null, new Rect(4, 2, 1, 12));
+        c.DrawRectangle(p.RedLight, new Pen(p.Red, 1), new Rect(4.5, 2.5, 4, 5));
+        c.DrawRectangle(p.Red, new Pen(p.Red, 1), new Rect(8.5, 1.5, 4, 5));
+    }
+
+    /// <summary>An envelope with a gold star on its corner: the New Item Alert Window.</summary>
+    private static void DrawAlertStar(DrawingContext c, Palette p)
+    {
+        c.DrawGeometry(p.Paper, new Pen(p.Steel, 1), Poly((1.5, 3.5), (12.5, 3.5), (12.5, 11.5), (1.5, 11.5)));
+        c.DrawGeometry(null, new Pen(p.Steel, 1), Build([(1.5, 3.5), (7, 8), (12.5, 3.5)], closed: false));
+        c.DrawGeometry(p.Gold, new Pen(p.GoldDark, 1),
+            Poly((11.5, 8), (12.6, 10.4), (15, 10.7), (13.2, 12.4), (13.7, 14.8), (11.5, 13.5),
+                (9.3, 14.8), (9.8, 12.4), (8, 10.7), (10.4, 10.4)));
+    }
+
+    /// <summary>A speaker with its sound on the air: Play a sound.</summary>
+    private static void DrawSound(DrawingContext c, Palette p)
+    {
+        c.DrawGeometry(p.Steel, new Pen(p.SteelDark, 1),
+            Poly((1.5, 5.5), (4.5, 5.5), (8.5, 2), (8.5, 14), (4.5, 10.5), (1.5, 10.5)));
+        c.DrawGeometry(null, new Pen(p.SteelDark, 1), Build([(10.5, 6), (11.3, 8), (10.5, 10)], closed: false));
+        c.DrawGeometry(null, new Pen(p.SteelDark, 1), Build([(12.5, 4.5), (13.8, 8), (12.5, 11.5)], closed: false));
+    }
+
+    /// <summary>A plain envelope: Apply rule on messages I receive.</summary>
+    private static void DrawEnvelope(DrawingContext c, Palette p)
+    {
+        c.DrawGeometry(p.Paper, new Pen(p.SteelDark, 1), Poly((1.5, 3.5), (14.5, 3.5), (14.5, 12.5), (1.5, 12.5)));
+        c.DrawGeometry(null, new Pen(p.SteelDark, 1), Build([(1.5, 3.5), (8, 9), (14.5, 3.5)], closed: false));
+    }
+
+    /// <summary>A paper dart on its way: Apply rule on messages I send.</summary>
+    private static void DrawSend(DrawingContext c, Palette p)
+    {
+        c.DrawGeometry(p.Paper, new Pen(p.SteelDark, 1), Poly((1.5, 8.5), (14.5, 2.5), (9.5, 13.5), (7.5, 9.5)));
+        c.DrawGeometry(null, new Pen(p.SteelDark, 1), Build([(14.5, 2.5), (7.5, 9.5)], closed: false));
     }
 
     /// <summary>A closed, filled polygon.</summary>

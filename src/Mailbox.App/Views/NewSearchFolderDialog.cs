@@ -27,7 +27,7 @@ public sealed class NewSearchFolderDialog : Window
     private SearchFolderQuery _query;
     private readonly TextBlock _parameter = new() { TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
     private readonly Button _choose = new() { Content = "Choose…" };
-    private readonly TextBox _name = new() { Width = 300 };
+    private readonly TextBox _name = new() { Width = 300, Classes = { "sysfield" } };
     private OpenAccount? _account;
 
     /// <param name="preselected">The account to search, when opened from its Search Folders node.</param>
@@ -46,10 +46,9 @@ public sealed class NewSearchFolderDialog : Window
         _name.Text = existing?.Name ?? _query.DefaultName();
 
         _choose.Click += async (_, _) => await ChooseAsync();
-        Bind(_parameter, TextBlock.ForegroundProperty, "dialog.foreground.brush");
+        Bind(_parameter, TextBlock.ForegroundProperty, "systemdialog.foreground.brush");
 
-        DialogChrome.Apply(this, editing ? CustomizeLayout(accounts) : NewLayout(accounts));
-        Bind(this, BackgroundProperty, "dialog.background.brush");
+        SystemDialogChrome.Apply(this, editing ? CustomizeLayout(accounts) : NewLayout(accounts));
         RefreshParameter();
     }
 
@@ -60,8 +59,8 @@ public sealed class NewSearchFolderDialog : Window
     private Control NewLayout(IReadOnlyList<OpenAccount> accounts)
     {
         var list = new ListBox { Height = 300 };
-        Bind(list, TemplatedControl.BackgroundProperty, "dialog.surface.brush");
-        Bind(list, TemplatedControl.BorderBrushProperty, "dialog.border.brush");
+        Bind(list, TemplatedControl.BackgroundProperty, "systemdialog.list.background.brush");
+        Bind(list, TemplatedControl.BorderBrushProperty, "systemdialog.list.border.brush");
 
         var items = new List<object>();
         string? group = null;
@@ -71,12 +70,12 @@ public sealed class NewSearchFolderDialog : Window
             {
                 group = SearchFolderQuery.Group(kind);
                 var header = new TextBlock { Text = group, FontWeight = FontWeight.SemiBold, Margin = new Thickness(2, 6, 0, 2) };
-                Bind(header, TextBlock.ForegroundProperty, "dialog.surface.text.brush");
+                Bind(header, TextBlock.ForegroundProperty, "systemdialog.foreground.brush");
                 items.Add(new ListBoxItem { Content = header, IsEnabled = false });
             }
 
             var label = new TextBlock { Text = SearchFolderQuery.Label(kind), Margin = new Thickness(16, 1, 0, 1) };
-            Bind(label, TextBlock.ForegroundProperty, "dialog.surface.text.brush");
+            Bind(label, TextBlock.ForegroundProperty, "systemdialog.foreground.brush");
             items.Add(new ListBoxItem { Content = label, Tag = kind });
         }
 
@@ -171,7 +170,7 @@ public sealed class NewSearchFolderDialog : Window
             Content = "Search Deleted Items and Junk Email too",
             IsChecked = _query.IncludeDeleted,
         };
-        Bind(includeDeleted, TemplatedControl.ForegroundProperty, "dialog.foreground.brush");
+        Bind(includeDeleted, TemplatedControl.ForegroundProperty, "systemdialog.foreground.brush");
         includeDeleted.IsCheckedChanged += (_, _) => _query = _query with { IncludeDeleted = includeDeleted.IsChecked == true };
 
         return new DockPanel
@@ -299,7 +298,7 @@ public sealed class NewSearchFolderDialog : Window
 
         if (incomplete)
         {
-            await Confirm.AskAsync(this, Title ?? "Search Folder", "Choose what the search folder should look for first.", "OK", destructive: false);
+            await Confirm.SayAsync(this, Title ?? "Search Folder", "Choose what the search folder should look for first.");
             return;
         }
 
@@ -313,14 +312,14 @@ public sealed class NewSearchFolderDialog : Window
     private static Border Boxed(Control content)
     {
         var box = new Border { BorderThickness = new Thickness(1), Padding = new Thickness(10), Child = content };
-        Bind(box, Border.BorderBrushProperty, "dialog.border.brush");
+        Bind(box, Border.BorderBrushProperty, "systemdialog.border.brush");
         return box;
     }
 
     private static TextBlock Label(string text)
     {
         var block = new TextBlock { Text = text, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap };
-        Bind(block, TextBlock.ForegroundProperty, "dialog.foreground.brush");
+        Bind(block, TextBlock.ForegroundProperty, "systemdialog.foreground.brush");
         return block;
     }
 }

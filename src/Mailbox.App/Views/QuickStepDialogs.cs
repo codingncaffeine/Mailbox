@@ -51,7 +51,7 @@ internal static class QuickStepUi
             case QuickStepKind.CopyToFolder:
             {
                 if (account is null) return action;
-                var folder = await RuleValues.FolderAsync(owner, account.Mail, account.Account.Id, action.FolderId);
+                var folder = await RuleValues.FolderAsync(owner, account.Mail, account.Account.Id, action.FolderId, "Select Folder");
                 return folder is null ? null : action with { FolderId = folder.Id, FolderName = folder.Name };
             }
 
@@ -191,7 +191,7 @@ public sealed class QuickStepSetupDialog : Window
         {
             if (working.NeedsSetup)
             {
-                _ = Confirm.AskAsync(this, "First Time Setup", "Choose the folder or the addresses the step needs first.", "OK", destructive: false);
+                _ = Confirm.SayAsync(this, "First Time Setup", "Choose the folder or the addresses the step needs first.");
                 return;
             }
 
@@ -286,7 +286,7 @@ public sealed class EditQuickStepDialog : Window
         {
             if (_step.Actions.Count == 0)
             {
-                _ = Confirm.AskAsync(this, Title ?? "Quick Step", "A Quick Step needs at least one action.", "OK", destructive: false);
+                _ = Confirm.SayAsync(this, Title ?? "Quick Step", "A Quick Step needs at least one action.");
                 return;
             }
 

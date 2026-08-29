@@ -3490,7 +3490,7 @@ public partial class MainWindow : Window
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             Log.Warn($"New Folder failed: {ex.Message}");
-            await Confirm.AskAsync(this, "Create New Folder", $"The folder could not be created: {ex.Message}", "OK", destructive: false);
+            await Confirm.SayAsync(this, "Create New Folder", $"The folder could not be created: {ex.Message}");
         }
     }
 
@@ -3513,7 +3513,7 @@ public partial class MainWindow : Window
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             Log.Warn($"Rename Folder failed: {ex.Message}");
-            await Confirm.AskAsync(this, "Rename Folder", $"The folder could not be renamed: {ex.Message}", "OK", destructive: false);
+            await Confirm.SayAsync(this, "Rename Folder", $"The folder could not be renamed: {ex.Message}");
         }
     }
 
@@ -3559,7 +3559,7 @@ public partial class MainWindow : Window
 
         if (!string.Equals(chosen.Account.Account.Address, account.Account.Address, StringComparison.OrdinalIgnoreCase))
         {
-            await Confirm.AskAsync(this, "Move Folder", "A folder can be moved within its own account. To put its mail in another account, move the messages.", "OK", destructive: false);
+            await Confirm.SayAsync(this, "Move Folder", "A folder can be moved within its own account. To put its mail in another account, move the messages.");
             return;
         }
 
@@ -3581,7 +3581,7 @@ public partial class MainWindow : Window
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             Log.Warn($"Move Folder failed: {ex.Message}");
-            await Confirm.AskAsync(this, "Move Folder", $"The folder could not be moved: {ex.Message}", "OK", destructive: false);
+            await Confirm.SayAsync(this, "Move Folder", $"The folder could not be moved: {ex.Message}");
         }
     }
 
@@ -3595,7 +3595,7 @@ public partial class MainWindow : Window
 
         if (!string.Equals(chosen.Account.Account.Address, account.Account.Address, StringComparison.OrdinalIgnoreCase))
         {
-            await Confirm.AskAsync(this, "Copy Folder", "A folder can be copied within its own account. To put its mail in another account, copy the messages.", "OK", destructive: false);
+            await Confirm.SayAsync(this, "Copy Folder", "A folder can be copied within its own account. To put its mail in another account, copy the messages.");
             return;
         }
 
@@ -3609,7 +3609,7 @@ public partial class MainWindow : Window
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             Log.Warn($"Copy Folder failed: {ex.Message}");
-            await Confirm.AskAsync(this, "Copy Folder", $"The folder could not be copied: {ex.Message}", "OK", destructive: false);
+            await Confirm.SayAsync(this, "Copy Folder", $"The folder could not be copied: {ex.Message}");
         }
     }
 
@@ -3628,7 +3628,7 @@ public partial class MainWindow : Window
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             Log.Warn($"Delete Folder failed: {ex.Message}");
-            await Confirm.AskAsync(this, "Delete Folder", $"The folder could not be deleted: {ex.Message}", "OK", destructive: false);
+            await Confirm.SayAsync(this, "Delete Folder", $"The folder could not be deleted: {ex.Message}");
         }
     }
 
@@ -4585,7 +4585,7 @@ public partial class MainWindow : Window
         if (string.IsNullOrWhiteSpace(name)) return;
         if (!shell.SaveViewAs(name))
         {
-            await Confirm.AskAsync(this, "Save Current View", "That name is one of the views that ship; choose another.", "OK", destructive: false);
+            await Confirm.SayAsync(this, "Save Current View", "That name is one of the views that ship; choose another.");
         }
     }
 

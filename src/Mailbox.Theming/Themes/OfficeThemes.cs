@@ -967,6 +967,8 @@ public static class OfficeThemes
         t.Set(TokenKeys.SystemDialog.IconGreen, "#4CB050");
         t.Set(TokenKeys.SystemDialog.IconBlue, "#6088D0");
         t.Set(TokenKeys.SystemDialog.IconBlueDark, "#3058B0");
+        t.Set(TokenKeys.SystemDialog.IconRed, "#DC2C1E");
+        t.Set(TokenKeys.SystemDialog.IconRedLight, "#F09490");
     }
 
     // ------------------------------------------------------------------------------------

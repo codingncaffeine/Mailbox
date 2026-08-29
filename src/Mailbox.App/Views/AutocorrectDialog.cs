@@ -29,7 +29,7 @@ public sealed class AutocorrectDialog : Window
     private readonly AutocorrectTable _table;
     private readonly AutocorrectExceptions _exceptions;
 
-    private readonly ListBox _rows = EditorDialogKit.SurfaceList(430, 190);
+    private readonly ListBox _rows = SystemInkKit.SurfaceList(430, 190);
     private readonly TextBox _replace = new() { Width = 190, Classes = { "sysfield" } };
     private readonly TextBox _with = new() { Width = 230, Classes = { "sysfield" } };
     private readonly Button _add = new() { Content = "Add", Width = 74, IsEnabled = false };
@@ -63,7 +63,7 @@ public sealed class AutocorrectDialog : Window
             Margin = new Thickness(18),
             Children =
             {
-                EditorDialogKit.Buttons(EditorDialogKit.Ok(Close), EditorDialogKit.Cancel(this)),
+                SystemInkKit.Buttons(SystemInkKit.Ok(Close), SystemInkKit.Cancel(this)),
                 tabs,
             },
         };
@@ -82,7 +82,7 @@ public sealed class AutocorrectDialog : Window
         // The reference's first switch is the little button that appears beside a correction.
         // There is none here, and what replaces it is the undo the correction already collapses
         // into: one Ctrl+Z puts back exactly what was typed.
-        var buttons = EditorDialogKit.Ink(new CheckBox
+        var buttons = SystemInkKit.Ink(new CheckBox
         {
             Content = "Show AutoCorrect Options buttons",
             IsChecked = false,
@@ -107,8 +107,8 @@ public sealed class AutocorrectDialog : Window
         stack.Children.Add(new Separator { Margin = new Thickness(0, 8, 0, 4) });
         stack.Children.Add(Switch("Replace text as you type", MailOptions.AutocorrectReplaceKey));
 
-        var replaceLabel = EditorDialogKit.Label("Replace:");
-        var withLabel = EditorDialogKit.Label("With:");
+        var replaceLabel = SystemInkKit.Label("Replace:");
+        var withLabel = SystemInkKit.Label("With:");
         replaceLabel.Width = 60;
         withLabel.Width = 44;
 
@@ -125,8 +125,8 @@ public sealed class AutocorrectDialog : Window
             ColumnDefinitions = new ColumnDefinitions("190,*"),
             Children =
             {
-                EditorDialogKit.SurfaceText(entry?.Replace ?? string.Empty),
-                Cell(EditorDialogKit.SurfaceText(entry?.With ?? string.Empty), 1),
+                SystemInkKit.SurfaceText(entry?.Replace ?? string.Empty),
+                Cell(SystemInkKit.SurfaceText(entry?.With ?? string.Empty), 1),
             },
         });
 
@@ -175,7 +175,7 @@ public sealed class AutocorrectDialog : Window
         stack.Children.Add(Switch(
             "Automatically use suggestions from the spelling checker", MailOptions.AutocorrectSuggestionsKey));
 
-        stack.Children.Add(EditorDialogKit.Label(
+        stack.Children.Add(SystemInkKit.Label(
             "Your own rows sit on top of this build's, so a later version's corrections still "
             + "reach you. The checker covers what a list cannot.",
             subtle: true));
@@ -190,10 +190,10 @@ public sealed class AutocorrectDialog : Window
     {
         var stack = new StackPanel { Spacing = 6, Margin = new Thickness(14) };
 
-        stack.Children.Add(EditorDialogKit.Label("Replace as you type", bold: true));
+        stack.Children.Add(SystemInkKit.Label("Replace as you type", bold: true));
         stack.Children.Add(Switch("\"Straight quotes\" with \"smart quotes\"", MailOptions.AutoformatQuotesKey));
 
-        var ordinals = EditorDialogKit.Ink(new CheckBox
+        var ordinals = SystemInkKit.Ink(new CheckBox
         {
             Content = "Ordinals (1st) with superscript",
             IsChecked = false,
@@ -208,14 +208,14 @@ public sealed class AutocorrectDialog : Window
         stack.Children.Add(Switch("*Bold* and _italic_ with real formatting", MailOptions.AutoformatEmphasisKey));
         stack.Children.Add(Switch("Internet and network paths with hyperlinks", MailOptions.AutoformatHyperlinksKey));
 
-        var apply = EditorDialogKit.Label("Apply as you type", bold: true);
+        var apply = SystemInkKit.Label("Apply as you type", bold: true);
         apply.Margin = new Thickness(0, 8, 0, 0);
         stack.Children.Add(apply);
         stack.Children.Add(Switch("Automatic bulleted lists", MailOptions.AutoformatBulletsKey));
         stack.Children.Add(Switch("Automatic numbered lists", MailOptions.AutoformatNumberingKey));
         stack.Children.Add(Switch("Border lines", MailOptions.AutoformatBordersKey));
 
-        var headings = EditorDialogKit.Ink(new CheckBox
+        var headings = SystemInkKit.Ink(new CheckBox
         {
             Content = "Built-in heading styles",
             IsChecked = false,
@@ -227,7 +227,7 @@ public sealed class AutocorrectDialog : Window
 
         stack.Children.Add(headings);
 
-        var note = EditorDialogKit.Label(
+        var note = SystemInkKit.Label(
             "Border lines: three or more hyphens on a line of their own, then Return, draws a "
             + "rule across the page — a divider, which is this editor's version of the border "
             + "the reference draws.",
@@ -248,20 +248,20 @@ public sealed class AutocorrectDialog : Window
         stack.Children.Add(Switch(
             "Use Math AutoCorrect rules outside of math regions", MailOptions.AutocorrectMathKey));
 
-        stack.Children.Add(EditorDialogKit.Label(
+        stack.Children.Add(SystemInkKit.Label(
             "There are no equations here — the editor has no equation model — so this switch is "
             + "the whole of the tab: with it on, the names below become their characters as you "
             + "type, anywhere in a message.",
             subtle: true));
 
-        var list = EditorDialogKit.SurfaceList(560, 330);
+        var list = SystemInkKit.SurfaceList(560, 330);
         list.ItemTemplate = new FuncDataTemplate<AutocorrectEntry>((entry, _) => new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("190,*"),
             Children =
             {
-                EditorDialogKit.SurfaceText(entry?.Replace ?? string.Empty),
-                Cell(EditorDialogKit.SurfaceText(entry?.With ?? string.Empty), 1),
+                SystemInkKit.SurfaceText(entry?.Replace ?? string.Empty),
+                Cell(SystemInkKit.SurfaceText(entry?.With ?? string.Empty), 1),
             },
         });
 
@@ -295,7 +295,7 @@ public sealed class AutocorrectDialog : Window
 
     private CheckBox Switch(string label, string key)
     {
-        var box = EditorDialogKit.Ink(new CheckBox
+        var box = SystemInkKit.Ink(new CheckBox
         {
             Content = label,
             IsChecked = _settings.GetBool(key, key != MailOptions.AutocorrectMathKey),
@@ -388,7 +388,7 @@ public sealed class AutocorrectExceptionsDialog : Window
             Children = { tabs },
         };
 
-        var buttons = EditorDialogKit.Buttons(EditorDialogKit.Ok(Close), EditorDialogKit.Cancel(this));
+        var buttons = SystemInkKit.Buttons(SystemInkKit.Ok(Close), SystemInkKit.Cancel(this));
         buttons[DockPanel.DockProperty] = Dock.Bottom;
         body.Children.Insert(0, buttons);
 
@@ -403,9 +403,9 @@ public sealed class AutocorrectExceptionsDialog : Window
         Action save,
         string note)
     {
-        var list = EditorDialogKit.SurfaceList(280, 230);
+        var list = SystemInkKit.SurfaceList(280, 230);
         list.ItemTemplate = new FuncDataTemplate<object>(
-            (item, _) => EditorDialogKit.SurfaceText(item?.ToString() ?? string.Empty));
+            (item, _) => SystemInkKit.SurfaceText(item?.ToString() ?? string.Empty));
 
         var entry = new TextBox { Width = 280, Classes = { "sysfield" } };
         var addButton = new Button { Content = "Add", Width = 74, IsEnabled = false };
@@ -444,7 +444,7 @@ public sealed class AutocorrectExceptionsDialog : Window
             Margin = new Thickness(12),
             Children =
             {
-                EditorDialogKit.Label(caption),
+                SystemInkKit.Label(caption),
                 entry,
                 new StackPanel
                 {
@@ -452,7 +452,7 @@ public sealed class AutocorrectExceptionsDialog : Window
                     Spacing = 10,
                     Children = { list, new StackPanel { Spacing = 6, Children = { addButton, removeButton } } },
                 },
-                EditorDialogKit.Label(note, subtle: true),
+                SystemInkKit.Label(note, subtle: true),
             },
         };
     }

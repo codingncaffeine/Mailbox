@@ -55,19 +55,19 @@ public sealed class FontDialog : Window
             .OrderBy(f => f, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
 
-        var family = EditorDialogKit.SurfaceList(200, 200);
-        family.ItemTemplate = new FuncDataTemplate<object>((item, _) => EditorDialogKit.SurfaceText(item?.ToString() ?? string.Empty));
+        var family = SystemInkKit.SurfaceList(200, 200);
+        family.ItemTemplate = new FuncDataTemplate<object>((item, _) => SystemInkKit.SurfaceText(item?.ToString() ?? string.Empty));
         family.ItemsSource = families;
         family.SelectedIndex = Math.Max(0, families.FindIndex(f => string.Equals(f, current.Family, StringComparison.OrdinalIgnoreCase)));
 
         var styles = new[] { "Regular", "Italic", "Bold", "Bold Italic" };
-        var style = EditorDialogKit.SurfaceList(110, 200);
-        style.ItemTemplate = new FuncDataTemplate<object>((item, _) => EditorDialogKit.SurfaceText(item?.ToString() ?? string.Empty));
+        var style = SystemInkKit.SurfaceList(110, 200);
+        style.ItemTemplate = new FuncDataTemplate<object>((item, _) => SystemInkKit.SurfaceText(item?.ToString() ?? string.Empty));
         style.ItemsSource = styles;
         style.SelectedIndex = Math.Max(0, Array.IndexOf(styles, current.Style));
 
-        var size = EditorDialogKit.SurfaceList(70, 200);
-        size.ItemTemplate = new FuncDataTemplate<object>((item, _) => EditorDialogKit.SurfaceText(item is double d ? d.ToString("0.#") : string.Empty));
+        var size = SystemInkKit.SurfaceList(70, 200);
+        size.ItemTemplate = new FuncDataTemplate<object>((item, _) => SystemInkKit.SurfaceText(item is double d ? d.ToString("0.#") : string.Empty));
         size.ItemsSource = Sizes.Cast<object>().ToList();
         size.SelectedIndex = Math.Max(0, Sizes.ToList().IndexOf(current.Points));
 
@@ -88,9 +88,9 @@ public sealed class FontDialog : Window
             TextAlignment = TextAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        var sampleBox = EditorDialogKit.Boxed(sample, height: 76);
+        var sampleBox = SystemInkKit.Boxed(sample, height: 76);
         sampleBox.Padding = new Thickness(8);
-        var drawnBy = EditorDialogKit.Label(string.Empty, subtle: true);
+        var drawnBy = SystemInkKit.Label(string.Empty, subtle: true);
 
         MessageFont Chosen()
         {
@@ -110,7 +110,7 @@ public sealed class FontDialog : Window
             sample.FontWeight = chosen.Bold ? FontWeight.Bold : FontWeight.Normal;
             sample.FontStyle = chosen.Italic ? FontStyle.Italic : FontStyle.Normal;
             if (chosen.Colour is { } hex && Color.TryParse(hex, out var c)) sample.Foreground = new SolidColorBrush(c);
-            else EditorDialogKit.Bind(sample, TextBlock.ForegroundProperty, "systemdialog.foreground.brush");
+            else SystemInkKit.Bind(sample, TextBlock.ForegroundProperty, "systemdialog.foreground.brush");
             drawnBy.Text = string.Equals(resolved.Rendered, chosen.Family, StringComparison.OrdinalIgnoreCase)
                 ? $"{chosen.Family} is installed."
                 : $"{chosen.Family} is not installed here; drawn by {resolved.Rendered} at the same metrics. Mail is sent naming {chosen.Family}.";
@@ -123,7 +123,7 @@ public sealed class FontDialog : Window
         Preview();
 
         Control Column(string label, Control list)
-            => new StackPanel { Spacing = 4, Children = { EditorDialogKit.Label(label), list } };
+            => new StackPanel { Spacing = 4, Children = { SystemInkKit.Label(label), list } };
 
         var lists = new StackPanel
         {
@@ -136,10 +136,10 @@ public sealed class FontDialog : Window
         {
             Orientation = Orientation.Horizontal,
             Spacing = 8,
-            Children = { EditorDialogKit.Label("Font color:"), colour },
+            Children = { SystemInkKit.Label("Font color:"), colour },
         };
 
-        var ok = EditorDialogKit.Ok(() => { Result = Chosen(); Close(); });
+        var ok = SystemInkKit.Ok(() => { Result = Chosen(); Close(); });
 
         var body = new StackPanel
         {
@@ -149,10 +149,10 @@ public sealed class FontDialog : Window
             {
                 lists,
                 colourRow,
-                EditorDialogKit.Label("Preview", bold: true),
+                SystemInkKit.Label("Preview", bold: true),
                 sampleBox,
                 drawnBy,
-                EditorDialogKit.Buttons(ok, EditorDialogKit.Cancel(this)),
+                SystemInkKit.Buttons(ok, SystemInkKit.Cancel(this)),
             },
         };
 

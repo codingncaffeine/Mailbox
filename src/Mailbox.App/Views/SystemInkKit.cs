@@ -5,13 +5,12 @@ using Avalonia.Controls.Primitives;
 namespace Mailbox.App.Views;
 
 /// <summary>
-/// The editor's dialogs — Signatures and Stationery, Editor Options, AutoCorrect and the Font
-/// picker — in the system dialog's palette. The reference draws these with the operating
-/// system's own controls, so like Account Settings they stay the desktop's light grey in every
-/// theme; their shapes and measures were right already, so each helper here is the Office
-/// kit's shape re-inked with the <c>systemdialog.*</c> family.
+/// The Office dialog kit's shapes, re-inked with the <c>systemdialog.*</c> family. For dialogs
+/// the reference draws with the operating system's own controls — the editor's family and the
+/// rules family alike — which stay the desktop's light grey in every theme, the way Account
+/// Settings does. Their shapes and measures were right already; only the palette changes.
 /// </summary>
-internal static class EditorDialogKit
+internal static class SystemInkKit
 {
     internal static void Bind(AvaloniaObject target, AvaloniaProperty property, string key)
         => ViewDialogKit.Bind(target, property, key);
