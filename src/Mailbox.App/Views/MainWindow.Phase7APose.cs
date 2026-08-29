@@ -69,6 +69,16 @@ public partial class MainWindow
                     foreach (var what in (probe ?? string.Empty)
                                  .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                     {
+                        // The labels on this form are buttons — the reference draws them as
+                        // buttons, and half of them open something. Whether one is wired is only
+                        // answerable by pressing it: an unwired button and a working one are the
+                        // same picture.
+                        if (what.StartsWith("press:", StringComparison.OrdinalIgnoreCase))
+                        {
+                            PressOnForm(window, what["press:".Length..]);
+                            continue;
+                        }
+
                         switch (what.ToLowerInvariant())
                         {
                             case "form": Log.Info($"Harness: contact form — {window.Surface.DescribeForm()}"); break;
@@ -257,6 +267,39 @@ public partial class MainWindow
                 }
             },
             DispatcherPriority.Background);
+    }
+
+    /// <summary>Presses a label on the contact form and reports what, if anything, answered.</summary>
+    private static void PressOnForm(ContactWindow window, string words)
+    {
+        var before = window.Surface.DescribeForm();
+
+        if (window.Surface.GetVisualDescendants()
+                .OfType<Button>()
+                .FirstOrDefault(b => Content(b).Contains(words, StringComparison.OrdinalIgnoreCase)) is not { } button)
+        {
+            Log.Info($"Harness: nothing on the contact form says “{words}”.");
+            return;
+        }
+
+        Log.Info($"Harness: pressing “{Content(button)}” on the contact form "
+                 + $"({(button.IsEnabled ? "enabled" : "greyed")}).");
+        button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        var showing = (Avalonia.Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)
+            ?.Windows.Select(w => $"“{w.Title}”").ToList() ?? [];
+
+        Log.Info($"Harness: after the press — the form is {(window.Surface.DescribeForm() == before ? "unchanged" : "changed")}, "
+                 + $"windows: {string.Join(" | ", showing)}");
+
+        static string Content(Button button) => button.Content switch
+        {
+            string text => text,
+            TextBlock text => text.Text ?? string.Empty,
+            StackPanel stack => string.Join(
+                " ", stack.Children.OfType<TextBlock>().Select(t => t.Text ?? string.Empty)),
+            _ => button.Content?.ToString() ?? string.Empty,
+        };
     }
 
     /// <summary>Presses whatever on the card carries the given words, and says what came of it.</summary>
