@@ -164,8 +164,11 @@ public class MailStoreTests : IDisposable
     public void EveryMigrationStepIsAppendOnly()
     {
         // Not a behavioural test: a reminder in executable form. Editing a shipped step leaves
-        // stores already migrated past it differing from a fresh one, undetectably.
-        Assert.Equal(29, Migrations.Steps.Count);
+        // stores already migrated past it differing from a fresh one — and since the schema
+        // fixtures landed, detectably: AuditStoreMigrationTests takes each step from the commit
+        // that introduced it and fails on the exact step that moved. This count is the cheap
+        // tripwire in front of that; 30 is the FTS index redeclared over body_text.
+        Assert.Equal(30, Migrations.Steps.Count);
         Assert.Equal(Migrations.Steps.Count, Migrations.Latest);
     }
 }
