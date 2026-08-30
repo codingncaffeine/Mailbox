@@ -24,7 +24,7 @@
     <Authors>codingncaffeine</Authors>
     <Copyright>Copyright (C) 2026 Mailbox contributors</Copyright>
     <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
-    <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionPrefix>0.0.4</VersionPrefix>
   </PropertyGroup>
 
   <!--
