@@ -12,6 +12,16 @@ public sealed record FeedSearch(IReadOnlyList<DiscoveredFeed> Feeds, string Erro
 
     /// <summary>How many addresses were tried, for the log.</summary>
     public int Tried { get; init; }
+
+    /// <summary>
+    /// The documents already fetched and parsed to confirm each feed, by address — so whatever
+    /// draws a card for one has no reason to fetch the same document again seconds later.
+    /// </summary>
+    public IReadOnlyDictionary<string, FeedChannel>? Channels { get; init; }
+
+    /// <summary>The parsed feed behind an offered address, when the search still holds it.</summary>
+    public FeedChannel? ChannelFor(string url)
+        => Channels is { } held && held.TryGetValue(url.TrimEnd('/'), out var channel) ? channel : null;
 }
 
 /// <summary>
@@ -70,7 +80,7 @@ public sealed class FeedFinder(FeedFetch fetch)
         {
             var standing = await ConfirmAsync(FeedPlatforms.ForTopic(address), cancellation).ConfigureAwait(false);
             return standing.Count > 0
-                ? new FeedSearch(standing)
+                ? Assembled(standing, 0)
                 : new FeedSearch([], $"“{address.Trim()}” is not an address, and no news search could be reached.");
         }
 
@@ -94,7 +104,7 @@ public sealed class FeedFinder(FeedFetch fetch)
             // The address may be the feed, in which case there is nothing to look for.
             if (FeedLinks.LooksLikeFeed(page.Text) && TryParse(page.Text, final) is { } itself)
             {
-                return new FeedSearch([new DiscoveredFeed(final, itself.Title)]) { Tried = tried };
+                return Assembled([new Confirmed(new DiscoveredFeed(final, itself.Title), itself)], tried);
             }
         }
 
@@ -140,7 +150,7 @@ public sealed class FeedFinder(FeedFetch fetch)
         if (confirmed.Count > 0)
         {
             Log.Info($"Feeds: {final} — {confirmed.Count} feed(s) confirmed of {tried} tried.");
-            return new FeedSearch(confirmed) { Tried = tried };
+            return Assembled(confirmed, tried);
         }
 
         return new FeedSearch(
@@ -236,7 +246,7 @@ public sealed class FeedFinder(FeedFetch fetch)
     /// routinely all the same document.
     /// </para>
     /// </remarks>
-    private async Task<IReadOnlyList<DiscoveredFeed>> ConfirmAsync(
+    private async Task<IReadOnlyList<Confirmed>> ConfirmAsync(
         IEnumerable<DiscoveredFeed> candidates, CancellationToken cancellation)
     {
         var ordered = candidates.ToList();
@@ -289,10 +299,18 @@ public sealed class FeedFinder(FeedFetch fetch)
             kept.Add(one);
         }
 
-        return [.. kept.Select(k => k.Feed)];
+        return kept;
     }
 
     private sealed record Confirmed(DiscoveredFeed Feed, FeedChannel Channel);
+
+    /// <summary>The search result, carrying the documents already parsed so nothing fetches twice.</summary>
+    private static FeedSearch Assembled(IReadOnlyList<Confirmed> confirmed, int tried)
+    {
+        var channels = new Dictionary<string, FeedChannel>(StringComparer.OrdinalIgnoreCase);
+        foreach (var one in confirmed) channels[one.Feed.Url.TrimEnd('/')] = one.Channel;
+        return new FeedSearch([.. confirmed.Select(c => c.Feed)]) { Tried = tried, Channels = channels };
+    }
 
     /// <summary>
     /// Which of a site's feeds to offer first: the one with the most in it, and never the

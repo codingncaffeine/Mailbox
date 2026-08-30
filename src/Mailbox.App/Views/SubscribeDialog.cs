@@ -117,8 +117,9 @@ public sealed class SubscribeDialog : Window
         _message.Margin = new Thickness(0, 12, 0, 0);
         Bind(_message, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
 
-        // The heading a feed is filed under. Editable, so a reader can type a new one rather than
-        // having to make it somewhere else first.
+        // The heading a feed is filed under: the ones already in use, plus none. A closed list —
+        // typing a new heading here is queued work, and a comment claiming it worked shipped
+        // twice before anything could type into the box.
         _category.ItemsSource = new[] { "(no heading)" }.Concat(_feeds.Categories).ToList();
         _category.SelectedIndex = 0;
         _category.Width = 200;
@@ -251,7 +252,10 @@ public sealed class SubscribeDialog : Window
                 ? "One feed found."
                 : $"{search.Feeds.Count} feeds found — tick the ones you want.";
 
-            foreach (var found in search.Feeds) _results.Children.Add(await CardAsync(found, token));
+            foreach (var found in search.Feeds)
+            {
+                _results.Children.Add(await CardAsync(found, search.ChannelFor(found.Url), token));
+            }
             Recount();
         }
         catch (OperationCanceledException)
@@ -273,9 +277,11 @@ public sealed class SubscribeDialog : Window
     /// One found feed, as a tickable card: what it is called, where it is, what it says it is,
     /// and the headlines it is carrying right now.
     /// </summary>
-    private async Task<Control> CardAsync(DiscoveredFeed found, CancellationToken cancellation)
+    private async Task<Control> CardAsync(DiscoveredFeed found, FeedChannel? confirmed, CancellationToken cancellation)
     {
-        var channel = await PreviewAsync(found, cancellation);
+        // The search already fetched and parsed this document to confirm it; fetching it again
+        // milliseconds later cost every publisher a second request per feed offered.
+        var channel = confirmed ?? await PreviewAsync(found, cancellation);
         var already = _feeds.Contains(found.Url);
 
         var named = channel?.Title is { Length: > 0 } title ? title : found.Label;

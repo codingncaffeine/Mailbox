@@ -134,8 +134,8 @@ public sealed class RssFeedOptionsDialog : Window
 
     private Control Delivery()
     {
-        // Every heading already in use, plus none — and the box takes a new one typed into it,
-        // so a reader can file a feed somewhere new without going and making it first.
+        // Every heading already in use, plus none. A closed list — a new heading is made by
+        // organising, not typed here; the claim that it could be shipped ahead of the ability.
         _category.ItemsSource = new[] { "(no heading)" }.Concat(_feeds.Categories).ToList();
         _category.SelectedIndex = _feed.Category.Length == 0
             ? 0

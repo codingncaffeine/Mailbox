@@ -225,6 +225,8 @@ public static partial class FeedPlatforms
         return string.Empty;
     }
 
-    [GeneratedRegex(@"^[a-z0-9-]+(\.[a-z0-9-]+)+(/.*)?$", RegexOptions.IgnoreCase)]
+    // A port is part of a host — self-hosted feeds live on one — so "127.0.0.1:8801" is an
+    // address, not a news subject.
+    [GeneratedRegex(@"^[a-z0-9-]+(\.[a-z0-9-]+)+(:\d+)?(/.*)?$", RegexOptions.IgnoreCase)]
     private static partial Regex HostShaped();
 }

@@ -67,7 +67,7 @@
     "status.danger": "#A4262C",
     "status.info": "{palette.brand.primary}",
     "status.success": "#107C10",
-    "status.warning": "#797673",
+    "status.warning": "#D9A441",
     "surface.ground": "{palette.content.row}",
     "surface.overlay": "{palette.chrome.ribbon}",
     "surface.raised": "{palette.content.row}",

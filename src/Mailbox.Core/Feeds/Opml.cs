@@ -105,15 +105,33 @@ public static class Opml
 
         foreach (var entry in all.Where(e => e.Category.Length == 0)) body.Add(Outline(entry));
 
+        // Nested headings go out as nested outlines, undoing the slash the reader joined them
+        // with: another reader importing "Technology/Linux" flat would get a heading with a
+        // slash in its name, where this file's own Read treats the depth as depth.
+        var headings = new Dictionary<string, XElement>(StringComparer.OrdinalIgnoreCase);
+
+        XElement HeadingFor(string path)
+        {
+            if (headings.TryGetValue(path, out var made)) return made;
+
+            var split = path.LastIndexOf('/');
+            var name = split >= 0 ? path[(split + 1)..] : path;
+            var heading = new XElement("outline",
+                new XAttribute("text", name),
+                new XAttribute("title", name));
+
+            if (split > 0) HeadingFor(path[..split]).Add(heading);
+            else body.Add(heading);
+
+            headings[path] = heading;
+            return heading;
+        }
+
         foreach (var group in all.Where(e => e.Category.Length > 0)
                      .GroupBy(e => e.Category, StringComparer.OrdinalIgnoreCase))
         {
-            var heading = new XElement("outline",
-                new XAttribute("text", group.Key),
-                new XAttribute("title", group.Key));
-
+            var heading = HeadingFor(group.Key);
             foreach (var entry in group) heading.Add(Outline(entry));
-            body.Add(heading);
         }
 
         var document = new XDocument(

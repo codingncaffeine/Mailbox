@@ -1039,7 +1039,9 @@ public static class OfficeThemes
         t.Set(TokenKeys.State.SelectedInactive, "{palette.neutral.light}");
         t.Set(TokenKeys.State.Pressed, "{palette.neutral.quaternary}");
         t.Set(TokenKeys.Status.Success, "#107C10");
-        t.Set(TokenKeys.Status.Warning, "#797673");
+        // An amber, as the Black theme already had: the one thing drawn in this token is the
+        // failing-feed mark on the nav, and a neutral grey there was 2.4:1 on Dark Gray's pane.
+        t.Set(TokenKeys.Status.Warning, "#D9A441");
         t.Set(TokenKeys.Status.Danger, "#A4262C");
         t.Set(TokenKeys.Status.Info, "{palette.brand.primary}");
     }

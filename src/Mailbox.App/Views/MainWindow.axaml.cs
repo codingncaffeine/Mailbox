@@ -7654,6 +7654,14 @@ public partial class MainWindow : Window
             if (id == MailCommands.Undo.Id) return _inlineCompose is not null || shell.Undo.CanUndo;
             if (id == ViewCommands.Redo.Id) return shell.Undo.CanRedo;
 
+            // Take Off Board acts on the board being read: with an article selected anywhere
+            // else it used to light up and answer a press with an explanation, which is a black
+            // button that does not do what it says.
+            if (id.Value == "feeds.board.remove")
+            {
+                return _feedModule?.SelectedBoard is not null && _feedModule.SelectedArticle is not null;
+            }
+
             // The Folder tab against the folder the pane has selected: the reference greys
             // Rename, Move and Delete on a folder the account cannot do without, and every
             // entry on the tab when nothing is selected at all.

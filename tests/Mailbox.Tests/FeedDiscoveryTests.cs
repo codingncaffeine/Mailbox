@@ -156,6 +156,26 @@ public class FeedDiscoveryTests
     }
 
     [Fact]
+    public void ANestedHeadingIsWrittenAsNestedOutlines()
+    {
+        var written = Opml.Write("Mailbox subscriptions",
+        [
+            new OpmlEntry("LWN", "https://lwn.net/headlines/rss", "Technology/Linux"),
+            new OpmlEntry("The Verge", "https://theverge.com/rss/index.xml", "Technology"),
+        ], new DateTimeOffset(2026, 8, 27, 9, 0, 0, TimeSpan.Zero));
+
+        // Depth goes out as depth: a reader that never learnt the slash convention still gets
+        // a Linux outline inside a Technology one, not a heading with a slash in its name.
+        Assert.DoesNotContain("Technology/Linux", written, StringComparison.Ordinal);
+        Assert.Contains("text=\"Linux\"", written, StringComparison.Ordinal);
+
+        // And our own reader joins it back, so the trip stays lossless.
+        var read = Opml.Read(written);
+        Assert.Equal("Technology/Linux", read.Single(e => e.Title == "LWN").Category);
+        Assert.Equal("Technology", read.Single(e => e.Title == "The Verge").Category);
+    }
+
+    [Fact]
     public void ADeeplyNestedOutlineKeepsItsFullHeading()
     {
         var opml = """
