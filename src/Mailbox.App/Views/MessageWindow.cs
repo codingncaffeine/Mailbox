@@ -265,6 +265,13 @@ public sealed class MessageWindow : Window
         _attachments.Show(_message);
         _body.Show(_message, _message.TextBody ?? string.Empty, verified);
         _ = _body.ApplySenderPolicyAsync();
+
+        // The ribbon asked CommandEnabled once, when its buttons were built — and this window
+        // is not always built around the message it shows: the warm one is built around a
+        // placeholder with no row behind it, which greys everything rowful. The message has
+        // changed, so the answers have; make the ribbon ask again.
+        _ribbon.RefreshEnablement();
+        _ribbon.RefreshChecked();
     }
 
     private static string TitleOf(string? subject)
