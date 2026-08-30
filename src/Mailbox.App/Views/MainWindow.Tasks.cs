@@ -735,6 +735,13 @@ public partial class MainWindow
                 : $"Harness: no folder matching “{folder}” is on the tasks pane.");
         }
 
+        // MAILBOX_SELECT names which task, as it does in every module: a command pressed
+        // afterwards acts on the selection, and a run cannot click a row.
+        if (Environment.GetEnvironmentVariable("MAILBOX_SELECT") is { Length: > 0 } wanted)
+        {
+            Log.Info($"Harness: tasks selection — {tasks.PoseSelect(wanted)}.");
+        }
+
         Log.Info($"Harness: tasks showing {tasks.Kind} in “{tasks.OpenFolderName}”, {tasks.Status}.");
         Log.Info($"Harness: tasks pane lists [{string.Join(" | ", tasks.PaneNames)}].");
         foreach (var row in tasks.Rows)

@@ -332,6 +332,13 @@ public partial class MainWindow
             });
         }
 
+        // MAILBOX_SELECT names which note, as it does in every module: a command pressed
+        // afterwards acts on the selection, and a run cannot click a square.
+        if (Environment.GetEnvironmentVariable("MAILBOX_SELECT") is { Length: > 0 } wanted)
+        {
+            Log.Info($"Harness: notes selection — {notes.PoseSelect(wanted)}.");
+        }
+
         Log.Info($"Harness: notes showing {notes.Arrangement}, {notes.Status}.");
         Log.Info($"Harness: notes pane lists [{string.Join(" | ", notes.PaneNames)}].");
         foreach (var row in notes.Rows)

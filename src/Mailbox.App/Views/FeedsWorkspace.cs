@@ -694,6 +694,16 @@ internal sealed class FeedsWorkspace : Border
             + (open ? $", opened; {Length(_showing[at])} characters of article" : string.Empty);
     }
 
+    /// <summary>Selects the article whose headline carries the words, for a harness run.</summary>
+    public string PoseSelect(string named)
+    {
+        var article = _showing.FirstOrDefault(m => m.Subject.Contains(named, StringComparison.OrdinalIgnoreCase));
+        if (article is null) return $"no article showing matches “{named}” ({_showing.Count} showing)";
+
+        Choose(article);
+        return $"“{article.Subject}” ({article.DisplayFrom})";
+    }
+
     /// <summary>
     /// How much article a row actually carries, for a harness run.
     /// </summary>
@@ -2837,6 +2847,7 @@ internal sealed class FeedsWorkspace : Border
         if (article.FeedLink is not { Length: > 0 } link)
         {
             Status = "That article carries no address of its own.";
+            Changed?.Invoke(this, EventArgs.Empty);
             return;
         }
 
@@ -2854,6 +2865,7 @@ internal sealed class FeedsWorkspace : Border
         if (!Uri.TryCreate(url, UriKind.Absolute, out var address) || address.Scheme is not ("http" or "https"))
         {
             Status = "That is not an address that can be opened.";
+            Changed?.Invoke(this, EventArgs.Empty);
             return;
         }
 
@@ -2873,6 +2885,10 @@ internal sealed class FeedsWorkspace : Border
                 Status = "The desktop could not open that address.";
                 break;
         }
+
+        // Said out loud, not merely written: Status reaches the status bar when Changed fires,
+        // and a hand-off that only set the property was invisible on screen.
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Deletes the selected article. It is a message, so this is the mail delete.</summary>

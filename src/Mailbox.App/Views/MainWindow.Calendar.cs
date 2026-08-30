@@ -1927,6 +1927,14 @@ public partial class MainWindow
                     var feeds = EnsureFeeds(shell);
                     feeds.Reload();
 
+                    // MAILBOX_SELECT names which article, as it does in every module: a command
+                    // pressed afterwards acts on the selection, and a run cannot click a row.
+                    // Before the search and pick doors, so either of those can still re-aim it.
+                    if (Environment.GetEnvironmentVariable("MAILBOX_SELECT") is { Length: > 0 } wantedArticle)
+                    {
+                        Log.Info($"Harness: feeds selection — {feeds.PoseSelect(wantedArticle)}.");
+                    }
+
                     // MAILBOX_FEED_SEARCH=<words>[|everywhere][|headline]
                     if (Environment.GetEnvironmentVariable("MAILBOX_FEED_SEARCH") is { Length: > 0 } searching)
                     {
@@ -2017,6 +2025,14 @@ public partial class MainWindow
                     && DateOnly.TryParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var on))
                 {
                     calendar.GoTo(on);
+                }
+
+                // MAILBOX_SELECT names which appointment, as it does in every module: a command
+                // pressed afterwards acts on the selection, and a run cannot click a chip. After
+                // the view and date poses, so it looks at what they put on show.
+                if (Environment.GetEnvironmentVariable("MAILBOX_SELECT") is { Length: > 0 } wantedEntry)
+                {
+                    Log.Info($"Harness: calendar selection — {calendar.PoseSelect(wantedEntry)}.");
                 }
 
                 shell.ModuleStatusLeft = calendar.Status;

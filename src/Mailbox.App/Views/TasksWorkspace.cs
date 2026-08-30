@@ -213,6 +213,17 @@ public sealed class TasksWorkspace : Border
         return $"“{Rows[at].Summary}”";
     }
 
+    /// <summary>Selects the row whose summary carries the words, for a harness run.</summary>
+    public string PoseSelect(string named)
+    {
+        for (var at = 0; at < Rows.Count; at++)
+        {
+            if (Rows[at].Summary.Contains(named, StringComparison.OrdinalIgnoreCase)) return PoseSelect(at);
+        }
+
+        return $"nothing on the list matches “{named}” ({Rows.Count} row(s))";
+    }
+
     /// <summary>The list a new task goes on: the default one, made if there is none.</summary>
     public Collection DefaultList()
     {

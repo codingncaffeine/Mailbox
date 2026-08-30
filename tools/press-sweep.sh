@@ -12,6 +12,12 @@
 #   ACTED      something observable happened: a window, a row-count change, a status change
 #   SILENT     none of the above — the class this sweep exists to find
 #
+# The list also carries one <id>~guard pose per module: the same command pressed with no
+# selection posed at all, expected GUARDED, so the refusals stay proven now that the ordinary
+# poses select something. The compose window's commands are swept too, through the window's
+# own door — their settled line carries the window's channels (info bar, fields, body, caret)
+# and is classified by the same rules.
+#
 # The verdict is the diff against tools/poses/press-expectations.tsv, which records the class
 # every command is *expected* to land in and why the deliberate ones are deliberate. A command
 # whose class drifts — or a new command with no expectation — is the finding.
@@ -71,11 +77,16 @@ for dir in "$out"/press-*/; do
     [[ -d $dir ]] || continue
     id=$(basename "$dir"); id=${id#press-}
 
+    # An <id>~guard row is the same command pressed through a pose with no selection at all —
+    # the settled line names the bare command, and the report keeps the ~guard key so the
+    # refusal has an expectation of its own.
+    pressed=${id%'~guard'}
+
     exceptions=0
     [[ -s "$dir/exceptions.txt" ]] && exceptions=$(grep -c . "$dir/exceptions.txt")
 
     settled=""
-    [[ -f "$dir/harness.txt" ]] && settled=$(grep -F "Harness: ran $id — " "$dir/harness.txt" | tail -1)
+    [[ -f "$dir/harness.txt" ]] && settled=$(grep -F "Harness: ran $pressed — " "$dir/harness.txt" | tail -1)
 
     class=""; evidence=""
     if [[ $exceptions -gt 0 ]]; then
@@ -84,6 +95,39 @@ for dir in "$out"/press-*/; do
         class="NOPRESS"; evidence="no settled read-back in harness.txt"
     elif [[ $settled == *"UNKNOWN to the catalogue"* ]]; then
         class="UNKNOWN"; evidence="the catalogue has no such id"
+    elif [[ $settled == *" bar “"* ]]; then
+        # The compose lane's settled line: the window's own channels — info bar, fields, body,
+        # markup, caret, state, attachments — instead of the shell's status/module/rows. The
+        # fallback token is the surface answering with its recorded status, which is the compose
+        # window's own "not wired yet", said properly.
+        bar=${settled#* bar “}
+        bar_before=${bar%%”→*}
+        bar_after=${bar#*”→“}; bar_after=${bar_after%%”*}
+        windows=${settled##*windows: }
+
+        if [[ $settled == *", fallback,"* ]]; then
+            class="NOTWIRED"; evidence="answers its recorded status: “$bar_after”"
+        elif [[ $settled == *" window closed,"* ]]; then
+            class="ACTED"; evidence="the window closed"
+        elif [[ $windows != "none" ]]; then
+            class="ACTED"; evidence="opened $windows"
+        elif [[ $settled == *" fields changed"* ]]; then
+            class="ACTED"; evidence="fields changed"
+        elif [[ $settled =~ body\ ([0-9]+)→([0-9]+) && ${BASH_REMATCH[1]} != "${BASH_REMATCH[2]}" ]]; then
+            class="ACTED"; evidence="body ${BASH_REMATCH[1]}→${BASH_REMATCH[2]}"
+        elif [[ $settled == *" markup changed"* ]]; then
+            class="ACTED"; evidence="markup changed"
+        elif [[ $settled == *" caret “"* ]]; then
+            class="ACTED"; evidence="caret format changed"
+        elif [[ $settled == *" state “"* ]]; then
+            class="ACTED"; evidence="state changed"
+        elif [[ $settled =~ attachments\ ([0-9]+)→([0-9]+) && ${BASH_REMATCH[1]} != "${BASH_REMATCH[2]}" ]]; then
+            class="ACTED"; evidence="attachments ${BASH_REMATCH[1]}→${BASH_REMATCH[2]}"
+        elif [[ $bar_after != "$bar_before" ]]; then
+            class="ACTED"; evidence="bar “$bar_after”"
+        else
+            class="SILENT"; evidence="bar, fields, body, caret and windows all unchanged"
+        fi
     else
         before=${settled#*status “}; before=${before%%”→*}
         after=${settled#*”→“};       after=${after%%”*}

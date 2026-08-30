@@ -1,4 +1,6 @@
 using Avalonia.Threading;
+using Avalonia.VisualTree;
+using Mailbox.App.Theming;
 using Mailbox.Core.Commands;
 using Mailbox.Core.Diagnostics;
 using Mailbox.Core.Ribbon;
@@ -66,6 +68,11 @@ public partial class MainWindow
             {
                 try
                 {
+                    // Held across every door: render-and-exit fires at the first idle moment,
+                    // and the settled press's awaits hand it several — the shell's run door
+                    // learnt this the hard way.
+                    using var hold = WindowCapture.Hold();
+
                     // The body goes in before the presses, so a Save or Send acts on it —
                     // which is the order a writer works in.
                     if (body is { Length: > 0 }) compose.Surface.PoseBodyText(body);
@@ -161,14 +168,16 @@ public partial class MainWindow
                     continue;
                 }
 
-                Log.Info($"Harness: compose running {id}.");
-                compose.PressCommand(id);
+                // wait-<ms> holds the next press, as the shell's run door does — for anything
+                // driven by idle-time machinery.
+                if (id.StartsWith("wait-", StringComparison.OrdinalIgnoreCase)
+                    && int.TryParse(id["wait-".Length..], out var pause))
+                {
+                    await Task.Delay(pause);
+                    continue;
+                }
 
-                var (visible, text) = compose.HarnessStatus;
-                var state = compose.HarnessState;
-                Log.Info($"Harness: compose after {id} — info bar {(visible ? "shows" : "hidden")} "
-                         + $"“{text}”; {Describe(compose)}; protection={state.Protection}, "
-                         + $"notBefore={state.NotBefore?.ToString("u") ?? "none"}, plainText={state.PlainText}");
+                await PressSettledAsync(compose, id);
             }
         }
 
@@ -177,6 +186,110 @@ public partial class MainWindow
         {
             await ProbeAsync(compose, what.ToLowerInvariant());
         }
+    }
+
+    /// <summary>
+    /// One compose press with the settled read-back the press sweep classifies from — the same
+    /// discipline as the shell's run door: whether the id is known and enabled, and what moved
+    /// across every channel the window has, read again after a settle.
+    /// </summary>
+    /// <remarks>
+    /// The immediate read the old door took reported "nothing happened" about a command that was
+    /// mid-happening — a dialog shown from an async continuation, a task queued. Same lesson as
+    /// the shell's run door, at the same 600ms. The <c>fallback</c> token is the surface's own
+    /// honesty recognised rather than guessed at: a command it does not carry answers with its
+    /// recorded status sentence, and that is a different class from a press that acted.
+    /// </remarks>
+    private static async Task PressSettledAsync(ComposeWindow compose, string id)
+    {
+        MailboxCommand? command = null;
+        var known = false;
+        try
+        {
+            known = App.Commands.TryGet(new CommandId(id), out command);
+        }
+        catch (ArgumentException)
+        {
+            // A malformed id is as unknown as an unregistered one.
+        }
+
+        var enabled = known && compose.HarnessEnabled(id);
+        var barBefore = compose.HarnessStatus.Text;
+        var fieldsBefore = Describe(compose);
+        var bodyBefore = compose.Surface.BodyText;
+        var markupBefore = compose.Surface.BodyHtml;
+        var caretBefore = CaretDigest(compose);
+        var stateBefore = StateDigest(compose);
+        var attachedBefore = compose.HarnessAttachments.Files.Count;
+
+        Log.Info($"Harness: compose running {id}.");
+        compose.PressCommand(id);
+
+        await Task.Delay(600);
+
+        var barAfter = compose.HarnessStatus.Text;
+        var fieldsAfter = Describe(compose);
+        var bodyAfter = compose.Surface.BodyText;
+        var markupAfter = compose.Surface.BodyHtml;
+        var caretAfter = CaretDigest(compose);
+        var stateAfter = StateDigest(compose);
+        var attachedAfter = compose.HarnessAttachments.Files.Count;
+
+        var fallback = known
+                       && ComposeAvailability.For(command!.Id) is { } status
+                       && barAfter == $"{command.Label} — {status.Note}";
+
+        Log.Info(
+            $"Harness: ran {id} — {(known ? "known" : "UNKNOWN to the catalogue")}, "
+            + $"{(enabled ? "enabled" : "disabled")}{(fallback ? ", fallback" : string.Empty)}, "
+            + $"bar “{barBefore}”→“{barAfter}”, "
+            + $"fields {(fieldsAfter == fieldsBefore ? "unchanged" : "changed")}, "
+            + $"body {bodyBefore.Length}→{bodyAfter.Length}, "
+            + $"markup {(markupAfter == markupBefore ? "unchanged" : "changed")}, "
+            + $"caret {(caretAfter == caretBefore ? "unchanged" : $"“{caretBefore}”→“{caretAfter}”")}, "
+            + $"state {(stateAfter == stateBefore ? "unchanged" : $"“{stateBefore}”→“{stateAfter}”")}, "
+            + $"attachments {attachedBefore}→{attachedAfter}, "
+            + $"window {(compose.IsVisible ? "open" : "closed")}, "
+            + $"windows: {WindowsBeside(compose)}");
+    }
+
+    /// <summary>The caret's format on one line, so a formatting press has a before and after.</summary>
+    private static string CaretDigest(ComposeWindow compose)
+    {
+        if (compose.GetVisualDescendants().OfType<Mailbox.Editor.ComposeEditor>().FirstOrDefault()
+            is not { } editor)
+        {
+            return "no editor";
+        }
+
+        var caret = editor.GetCaretFormat();
+        return $"{caret.FontFamily} {caret.FontSize}"
+               + (caret.Bold ? " bold" : string.Empty)
+               + (caret.Italic ? " italic" : string.Empty)
+               + (caret.Underline ? " underline" : string.Empty)
+               + (caret.Strike ? " strike" : string.Empty);
+    }
+
+    /// <summary>Protection, delay and format on one line, so the switches have a before and after.</summary>
+    private static string StateDigest(ComposeWindow compose)
+    {
+        var (protection, notBefore, plainText, _) = compose.HarnessState;
+        return protection
+               + (notBefore is { } t ? $" not before {t:u}" : string.Empty)
+               + (plainText ? " plain" : string.Empty);
+    }
+
+    /// <summary>Visible windows other than the shell and this compose window — what a press opened.</summary>
+    private static string WindowsBeside(ComposeWindow compose)
+    {
+        var others = (Avalonia.Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)
+            ?.Windows
+            .Where(w => !ReferenceEquals(w, compose) && w is not MainWindow && w.IsVisible)
+            .Select(w => string.IsNullOrWhiteSpace(w.Title) ? w.GetType().Name : w.Title)
+            .ToList() ?? [];
+
+        return others.Count == 0 ? "none" : string.Join(", ", others.Select(t => $"“{t}”"));
     }
 
     private static async Task ProbeAsync(ComposeWindow compose, string what)

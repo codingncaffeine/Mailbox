@@ -2482,6 +2482,11 @@ public partial class MainWindow : Window
                         int.TryParse(Environment.GetEnvironmentVariable("MAILBOX_COMPOSE_SETTLE"), out var wait)
                         && wait is > 0 and <= 60_000 ? wait : 700);
 
+                    // Holds honoured, as every other exit path honours them: the compose door's
+                    // settled presses await between press and read-back, and this timer used to
+                    // photograph the window and exit under the second press.
+                    await WindowCapture.WhileHeldAsync();
+
                     if (WindowCapture.RequestedPath is { } path)
                     {
                         WindowCapture.Capture(compose, path, WindowCapture.Scale);

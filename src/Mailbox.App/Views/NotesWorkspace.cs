@@ -145,6 +145,17 @@ public sealed class NotesWorkspace : Border
         return $"“{Rows[at].Title}”";
     }
 
+    /// <summary>Selects the note whose title carries the words, for a harness run.</summary>
+    public string PoseSelect(string named)
+    {
+        for (var at = 0; at < Rows.Count; at++)
+        {
+            if (Rows[at].Title.Contains(named, StringComparison.OrdinalIgnoreCase)) return PoseSelect(at);
+        }
+
+        return $"nothing on the wall matches “{named}” ({Rows.Count} note(s))";
+    }
+
     /// <summary>The folder a new note goes in: the one that holds notes, made if there is none.</summary>
     /// <remarks>
     /// Not the collection the store marks default. Notes and journal entries are one component in

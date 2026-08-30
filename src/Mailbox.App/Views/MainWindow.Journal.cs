@@ -298,6 +298,13 @@ public partial class MainWindow
             });
         }
 
+        // MAILBOX_SELECT names which entry, as it does in every module: a command pressed
+        // afterwards acts on the selection, and a run cannot click the timeline.
+        if (Environment.GetEnvironmentVariable("MAILBOX_SELECT") is { Length: > 0 } wanted)
+        {
+            Log.Info($"Harness: journal selection — {journal.PoseSelect(wanted)}.");
+        }
+
         Log.Info($"Harness: journal showing {journal.Arrangement} at {journal.Scale} — {journal.SpanText}, {journal.Status}.");
         Log.Info($"Harness: journal pane lists [{string.Join(" | ", journal.PaneNames)}].");
         foreach (var row in journal.Rows)

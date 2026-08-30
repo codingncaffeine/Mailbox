@@ -177,6 +177,18 @@ public sealed class JournalWorkspace : Border
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>Selects the entry whose subject carries the words, for a harness run.</summary>
+    public string PoseSelect(string named)
+    {
+        var row = Rows.FirstOrDefault(r => r.Subject.Contains(named, StringComparison.OrdinalIgnoreCase));
+        if (row is null) return $"nothing in the journal matches “{named}” ({Rows.Count} row(s))";
+
+        _view.Selected = row;
+        Selected = row;
+        Changed?.Invoke(this, EventArgs.Empty);
+        return $"“{row.Subject}”";
+    }
+
     /// <summary>
     /// The drop-down a month band carries: a date navigator that moves the span. Built full and
     /// then shown, because a flyout filled from its own Opening event is measured empty.

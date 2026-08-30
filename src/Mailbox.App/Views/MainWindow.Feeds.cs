@@ -169,6 +169,16 @@ public partial class MainWindow
                 MarkFeedsRead(shell, feeds);
                 return true;
 
+            // The per-article commands with nothing to act on: each used to return without a
+            // word, which reads exactly like a button that does not work. The refusal is the
+            // module's own family voice, and the sweep's guard poses hold it.
+            case "feeds.readlater" when feeds.SelectedArticle is null:
+            case "feeds.open.original" when feeds.SelectedArticle is null:
+            case "feeds.delete" when feeds.SelectedArticle is null:
+            case "feeds.categorize" when feeds.SelectedArticle is null:
+                shell.StatusRight = "Select an article first.";
+                return true;
+
             case "feeds.readlater":
                 feeds.ToggleReadLater();
                 return true;

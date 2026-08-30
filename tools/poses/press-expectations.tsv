@@ -3,6 +3,9 @@
 # by hand: flyout-openers against their menu read-backs, visual actors against capture
 # hashes, state no-ops against the pose that holds them still. tools/press-sweep.sh
 # classifies a fresh batch and diffs it against this file; drift is the finding.
+# Re-triaged the same day when every module's selection door landed: the guarded module
+# presses became real ones, the <id>~guard rows keep the refusals proven, and the compose
+# window's commands joined through its own door.
 # Columns: id, class, note (the note only where the class needs its reasons).
 app.addressbook	ACTED
 app.apps	SILENT	opens its flyout; the run log carries the menu read-back
@@ -36,10 +39,11 @@ calendar.focustime	ACTED
 calendar.forward	ACTED
 calendar.goto	ACTED
 calendar.groups	ACTED
-calendar.item.categorize	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
-calendar.item.delete	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
-calendar.item.open	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
-calendar.item.recurrence	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+calendar.item.categorize	SILENT	opens its flyout; the run log carries the menu read-back
+calendar.item.delete	ACTED
+calendar.item.open	ACTED
+calendar.item.open~guard	GUARDED	the guard, kept: no selection is posed
+calendar.item.recurrence	ACTED
 calendar.new.appointment	ACTED
 calendar.new.calendar	ACTED
 calendar.new.items	SILENT	acts on pixels; status, rows and windows cannot see it
@@ -61,23 +65,115 @@ calendar.view.schedule	ACTED
 calendar.view.tasklist	SILENT	opens its flyout; the run log carries the menu read-back
 calendar.view.week	ACTED
 calendar.view.workweek	ACTED
+# The compose window’s commands, pressed through the window’s own door — the
+# NOTWIRED rows answer with their recorded availability status, which is that
+# surface’s honest “not wired yet”.
+compose.attach.file	SILENT	opens a system file picker, which is no window of the app’s
+compose.attach.item	NOTWIRED	answers its recorded status; the run log carries the sentence
+compose.checknames	ACTED
+compose.copy	SILENT	writes the clipboard, which no channel here reads
+compose.cut	ACTED
+compose.dictate	NOTWIRED	answers its recorded status; the run log carries the sentence
+compose.discard	ACTED
+compose.formatpainter	ACTED
+compose.importance.high	ACTED
+compose.importance.low	ACTED
+compose.next	NOTWIRED	answers its recorded status; the run log carries the sentence
+compose.paste	SILENT	pastes the clipboard, and a posed run’s clipboard is empty
+compose.previous	NOTWIRED	answers its recorded status; the run log carries the sentence
+compose.properties	NOTWIRED	answers its recorded status; the run log carries the sentence
+compose.save	ACTED
+compose.send	ACTED
+compose.signature	ACTED
+format.align	ACTED
+format.bold	ACTED
+format.borders	NOTWIRED	answers its recorded status; the run log carries the sentence
+format.bullets	ACTED
+format.changestyles	NOTWIRED	answers its recorded status; the run log carries the sentence
+format.clear	NOTWIRED	answers its recorded status; the run log carries the sentence
+format.find	ACTED
+format.font	ACTED
+format.font.dialog	NOTWIRED	answers its recorded status; the run log carries the sentence
+format.fontcolor	ACTED
+format.fontsize	ACTED
+format.growfont	ACTED
+format.highlight	ACTED
+format.html	ACTED
+format.indent.decrease	SILENT	a no-op in the pose: nothing is indented to decrease
+format.indent.increase	ACTED
+format.italic	ACTED
+format.linespacing	ACTED
+format.multilevel	ACTED
+format.numbering	ACTED
+format.paragraph.dialog	NOTWIRED	answers its recorded status; the run log carries the sentence
+format.plaintext	ACTED
+format.replace	ACTED
+format.richtext	NOTWIRED	answers its recorded status; the run log carries the sentence
+format.selectall	SILENT	selects, which only the next press can see — every pose’s own first step proves it
+format.shading	NOTWIRED	answers its recorded status; the run log carries the sentence
+format.showmarks	NOTWIRED	answers its recorded status; the run log carries the sentence
+format.shrinkfont	ACTED
+format.sort	NOTWIRED	answers its recorded status; the run log carries the sentence
+format.strikethrough	ACTED
+format.styles	NOTWIRED	answers its recorded status; the run log carries the sentence
+format.styles.dialog	NOTWIRED	answers its recorded status; the run log carries the sentence
+format.subscript	NOTWIRED	answers its recorded status; the run log carries the sentence
+format.superscript	NOTWIRED	answers its recorded status; the run log carries the sentence
+format.underline	ACTED
+format.zoom	ACTED
+insert.chart	NOTWIRED	answers its recorded status; the run log carries the sentence
+insert.equation	NOTWIRED	answers its recorded status; the run log carries the sentence
+insert.icons	NOTWIRED	answers its recorded status; the run log carries the sentence
+insert.link	ACTED
+insert.models3d	NOTWIRED	answers its recorded status; the run log carries the sentence
+insert.onlinepictures	NOTWIRED	answers its recorded status; the run log carries the sentence
+insert.pictures	SILENT	opens a system file picker, which is no window of the app’s
+insert.shapes	NOTWIRED	answers its recorded status; the run log carries the sentence
+insert.smartart	NOTWIRED	answers its recorded status; the run log carries the sentence
+insert.stockimages	NOTWIRED	answers its recorded status; the run log carries the sentence
+insert.symbol	ACTED
+insert.table	ACTED
+options.bcc	ACTED
+options.colors	NOTWIRED	answers its recorded status; the run log carries the sentence
+options.delay	ACTED
+options.directreplies	ACTED
+options.effects	NOTWIRED	answers its recorded status; the run log carries the sentence
+options.encrypt	ACTED
+options.fonts	NOTWIRED	answers its recorded status; the run log carries the sentence
+options.from	ACTED
+options.pagecolor	NOTWIRED	answers its recorded status; the run log carries the sentence
+options.permission	NOTWIRED	answers its recorded status; the run log carries the sentence
+options.receipt.delivery	ACTED
+options.receipt.read	ACTED
+options.savesentto	NOTWIRED	answers its recorded status; the run log carries the sentence
+options.sign	ACTED
+options.themes	NOTWIRED	answers its recorded status; the run log carries the sentence
+options.voting	NOTWIRED	answers its recorded status; the run log carries the sentence
+review.accessibility	NOTWIRED	answers its recorded status; the run log carries the sentence
+review.editor	ACTED
+review.language	NOTWIRED	answers its recorded status; the run log carries the sentence
+review.smartlookup	NOTWIRED	answers its recorded status; the run log carries the sentence
+review.spelling	ACTED
+review.thesaurus	NOTWIRED	answers its recorded status; the run log carries the sentence
+review.wordcount	ACTED
 feeds.board.link	ACTED
 feeds.board.remove	ACTED
-feeds.board.save	ACTED
+feeds.board.save	SILENT	opens its flyout; the run log carries the menu read-back
 feeds.boards	ACTED
-feeds.categorize	SILENT	the article list has no posed selection yet — its door is the sweep's next work
-feeds.delete	SILENT	the article list has no posed selection yet — its door is the sweep's next work
+feeds.categorize	SILENT	opens its flyout; the run log carries the menu read-back
+feeds.delete	ACTED
 feeds.export.opml	SILENT	hands off to a system save dialog; with nothing to export it says so in a window instead
 feeds.import.opml	SILENT	opens a system file picker, which is no window of the app's
 feeds.markallread	ACTED
 feeds.mute	ACTED
 feeds.mute.this	ACTED
 feeds.newsletters	ACTED
-feeds.next.unread	SILENT	the article list has no posed selection yet — its door is the sweep's next work
-feeds.open.original	SILENT	the article list has no posed selection yet — its door is the sweep's next work
+feeds.next.unread	SILENT	opens the next unread in the reading pane, which no shell channel sees; the log carries the pane load
+feeds.open.original	ACTED	the hand-off is posed in a capture run; the status line carries the opened host
 feeds.pause	ACTED
 feeds.reading	ACTED
-feeds.readlater	SILENT	the article list has no posed selection yet — its door is the sweep's next work
+feeds.readlater	ACTED
+feeds.readlater~guard	GUARDED	the guard, kept: no selection is posed
 feeds.settings	ACTED
 feeds.subscribe	ACTED
 feeds.unsubscribe	ACTED
@@ -107,7 +203,8 @@ help.whatsnew	ACTED
 item.categorize	SILENT	opens its flyout; the run log carries the menu read-back
 item.followup	SILENT	opens its flyout; the run log carries the menu read-back
 journal.back	ACTED
-journal.categorize	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+journal.categorize	SILENT	opens its flyout; the run log carries the menu read-back
+journal.categorize~guard	GUARDED	the guard, kept: no selection is posed
 journal.delete	ACTED
 journal.forward	ACTED
 journal.new	ACTED
@@ -179,10 +276,11 @@ mail.viewsource	ACTED
 nav.folder	ACTED
 nav.inbox	SILENT	a no-op in the pose: the Inbox is already open
 nav.outbox	ACTED
-notes.categorize	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+notes.categorize	SILENT	opens its flyout; the run log carries the menu read-back
+notes.categorize~guard	GUARDED	the guard, kept: no selection is posed
 notes.delete	ACTED
 notes.forward	ACTED
-notes.moveto	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+notes.moveto	SILENT	opens its flyout; the run log carries the menu read-back
 notes.new	ACTED
 notes.new.items	SILENT	acts on pixels; status, rows and windows cannot see it
 notes.open	ACTED
@@ -213,19 +311,20 @@ people.view.card	ACTED
 people.view.list	ACTED
 people.view.people	ACTED
 people.view.phone	ACTED
-tasks.categorize	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+tasks.categorize	SILENT	opens its flyout; the run log carries the menu read-back
 tasks.complete	ACTED
 tasks.delete	ACTED
-tasks.followup	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+tasks.followup	SILENT	opens its flyout; the run log carries the menu read-back
 tasks.forward	ACTED
-tasks.importance.high	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
-tasks.importance.low	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
-tasks.moveto	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+tasks.importance.high	ACTED
+tasks.importance.low	ACTED
+tasks.moveto	ACTED	the seed holds one list, and the press says there is nowhere else on the status line
 tasks.new	ACTED
 tasks.new.email	ACTED
 tasks.new.items	SILENT	acts on pixels; status, rows and windows cannot see it
 tasks.open	ACTED
-tasks.private	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+tasks.private	ACTED
+tasks.private~guard	GUARDED	the guard, kept: no selection is posed
 tasks.remove	ACTED
 tasks.reply	ACTED
 tasks.replyall	ACTED

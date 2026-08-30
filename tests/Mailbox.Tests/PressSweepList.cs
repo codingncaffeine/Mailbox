@@ -16,9 +16,10 @@ namespace Mailbox.Tests;
 /// <para>
 /// The list is generated rather than written, so a command added to the catalogue is in the
 /// sweep the next time it runs, and a set added to the application fails the coverage assertion
-/// below rather than going quietly unswept. The three item-window sets — compose, contact,
-/// appointment — are skipped by name: their commands live in windows the shell's dispatcher
-/// does not reach, and sweeping those surfaces needs run doors of their own first.
+/// below rather than going quietly unswept. The compose set is swept through the compose
+/// window's own door; the two remaining item-window sets — contact, appointment — are skipped
+/// by name: their commands live in windows the shell's dispatcher does not reach, and sweeping
+/// those surfaces needs run doors of their own first.
 /// </para>
 /// </remarks>
 public class PressSweepList
@@ -38,7 +39,10 @@ public class PressSweepList
 
     /// <summary>The sets that live in item windows, skipped until those windows have a run door.</summary>
     private static readonly string[] SkippedByName =
-        [nameof(ComposeCommands), nameof(ContactCommands), nameof(AppointmentCommands)];
+        [nameof(ContactCommands), nameof(AppointmentCommands)];
+
+    /// <summary>The compose window's set, swept through the window's own door rather than the shell's.</summary>
+    private static readonly string[] ComposeSwept = [nameof(ComposeCommands)];
 
     /// <summary>
     /// The two subscriptions whose folders <c>SeedHarness.SeedFeedsStore</c> builds, as the
@@ -64,7 +68,7 @@ public class PressSweepList
             .OrderBy(n => n, StringComparer.Ordinal)
             .ToList();
 
-        var covered = Swept.Select(s => s.Name).Concat(SkippedByName)
+        var covered = Swept.Select(s => s.Name).Concat(ComposeSwept).Concat(SkippedByName)
             .OrderBy(n => n, StringComparer.Ordinal)
             .ToList();
 
@@ -89,9 +93,19 @@ public class PressSweepList
                 // space — the feeds subscriptions carry several. wait-1500 lets the posed
                 // module switch and selection land first; the press itself then reports the
                 // settled read-back the classifier reads.
-                // People's selection door names a person, and the seed has one; the other
-                // module lists keep their guards, which the expectations record as verified.
-                var select = module == "people" ? "A. Person" : "1";
+                // Every module's selection door names a seeded item of its own, so a command
+                // that acts on the selection has one to act on; the guard poses below are
+                // where the refusals stay proven.
+                var select = module switch
+                {
+                    "people" => "A. Person",
+                    "calendar" => "Dentist",
+                    "tasks" => "Book the meeting room",
+                    "notes" => "Shopping",
+                    "journal" => "Sent the agenda round",
+                    "feeds" => "fsync",
+                    _ => "1",
+                };
 
                 var pairs = new List<string>
                 {
@@ -108,6 +122,38 @@ public class PressSweepList
 
                 list.AppendLine($"press-{command.Id.Value}\t" + string.Join('\t', pairs));
             }
+        }
+
+        // The compose window's commands, each pressed in its own posed window through the same
+        // entry point the window's ribbon uses. The body is posed and then selected — through
+        // the door itself — so a formatting or editing press has something to act on; each
+        // press logs the settled line the classifier reads. The ten Contact-surface inserts
+        // wait with the contact window's own door, where those buttons actually live.
+        foreach (var command in ComposeCommands.All.Where(c => c.Surface == CommandSurface.Compose))
+        {
+            list.AppendLine(
+                $"press-{command.Id.Value}"
+                + "\tMAILBOX_COMPOSE=1"
+                + "\tMAILBOX_COMPOSE_BODY=The quick brown fox."
+                + "\tMAILBOX_TODAY=2026-08-16"
+                + $"\tMAILBOX_COMPOSE_RUN=format.selectall,{command.Id.Value}");
+        }
+
+        // The guards, kept: one press per module with no selection posed at all, named
+        // <id>~guard so the classifier reads the same command through a different door. A
+        // selection door that quietly began inventing a selection would show here as a class
+        // change on the guard row.
+        foreach (var (module, id) in new[]
+        {
+            ("calendar", "calendar.item.open"),
+            ("tasks", "tasks.private"),
+            ("notes", "notes.categorize"),
+            ("journal", "journal.categorize"),
+            ("feeds", "feeds.readlater"),
+        })
+        {
+            list.AppendLine(
+                $"press-{id}~guard\tMAILBOX_MODULE={module}\tMAILBOX_TODAY=2026-08-16\tMAILBOX_RUN=wait-1500,{id}");
         }
 
         File.WriteAllText(path, list.ToString());

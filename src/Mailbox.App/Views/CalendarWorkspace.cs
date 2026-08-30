@@ -544,6 +544,28 @@ public sealed class CalendarWorkspace : Border
         _ => CalendarViewKind.Month,
     };
 
+    /// <summary>
+    /// Selects the entry whose summary carries the words, as a click on its chip does, for a
+    /// harness run — a command that acts on the selection has to find one, and a run cannot click.
+    /// </summary>
+    public string PoseSelect(string named)
+    {
+        var entry = _entries.FirstOrDefault(e => e.Summary.Contains(named, StringComparison.OrdinalIgnoreCase));
+        if (entry is null) return $"nothing on show matches “{named}” ({_entries.Count} item(s))";
+
+        // What the click does, in the click's own order: the entry on every view — the object
+        // itself, since the chip's selected look is a reference comparison — and the entry's
+        // first day, which is where the grids put their day mark.
+        SelectedEntry = entry;
+        _month.SelectedEntry = entry;
+        _timeGrid.SelectedEntry = entry;
+        _schedule.SelectedEntry = entry;
+        _month.Selected = entry.Days().First;
+        _timeGrid.Selected = entry.Days().First;
+        Changed?.Invoke(this, EventArgs.Empty);
+        return $"“{entry.Summary}”";
+    }
+
     private void Select(DateOnly day)
     {
         _anchor = day;
