@@ -613,6 +613,8 @@ public partial class AuditPaintSweepTests
         ["src/Mailbox.App/Views/FontDialog.cs"] = "the document font-colour palette.",
         ["src/Mailbox.App/Views/EditorCommands.cs"] = "the highlight and font-colour palettes.",
         ["src/Mailbox.App/Views/JournalWorkspace.cs"] = "the colour a new journal is stored with.",
+        ["src/Mailbox.App/Views/PosedDavServer.cs"] =
+            "the calendar-color property a posed server answers discovery with — wire data, not paint.",
         ["src/Mailbox.App/Views/NotesWorkspace.cs"] = "the colour a new note book is stored with.",
         ["src/Mailbox.App/Views/TasksWorkspace.cs"] = "the colour a new task list is stored with.",
         ["src/Mailbox.App/Views/MainWindow.Tasks.cs"] = "the colour a new task list is stored with.",

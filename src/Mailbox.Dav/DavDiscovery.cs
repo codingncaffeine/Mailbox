@@ -93,6 +93,28 @@ public static class DavDiscovery
         => (await FindHomesAsync(client, server, cancellationToken).ConfigureAwait(false)).FirstOrDefault();
 
     /// <summary>
+    /// Whether the server refuses this sign-in outright, asked before discovery walks anywhere.
+    /// </summary>
+    /// <remarks>
+    /// Discovery is allowed to fail every step into the next, which is right for servers that
+    /// differ and wrong for passwords that are wrong: a 401 falls through every step and comes
+    /// out as "nothing found", and a wizard that says that about a mistyped password sends its
+    /// reader to check the address. One PROPFIND against the given start answers the question
+    /// the steps cannot.
+    /// </remarks>
+    public static async Task<bool> RefusesSignInAsync(DavClient client, Uri server, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+        ArgumentNullException.ThrowIfNull(server);
+
+        var response = await client
+            .PropFindAsync(server, DavXml.CurrentUserPrincipal(), depth: 0, cancellationToken)
+            .ConfigureAwait(false);
+
+        return response.Status is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden;
+    }
+
+    /// <summary>
     /// Where this account's collections live — the calendar home and the address-book home, which
     /// are two properties on the same principal and are often two different places.
     /// </summary>

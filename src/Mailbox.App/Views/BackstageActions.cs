@@ -145,6 +145,14 @@ internal static class BackstageActions
         var wizard = new AccountWizard();
         await wizard.ShowDialog(host.Owner);
 
+        if (wizard.DavCollectionsAdded > 0)
+        {
+            (host.Owner as MainWindow)?.PimCollectionsChanged();
+            host.Close();
+            host.Report("Calendars and address books added. They fill on the next send/receive — press F9.");
+            return;
+        }
+
         if (wizard.Created is null) return;
 
         host.Close();

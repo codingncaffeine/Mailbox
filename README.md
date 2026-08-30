@@ -8,10 +8,11 @@ Mail, Calendar, People, Tasks, Notes, Journal and Feeds in one desktop applicati
 Open protocols only — IMAP, POP3, SMTP, CalDAV, CardDAV — with no cloud service behind it, no
 account required, no AI features and no telemetry.
 
-**Status: early, but it moves mail.** Add an account and mail works end to end over IMAP, POP3
-and SMTP against a local SQLite store. The calendar, contacts, tasks, notes, journal and feed
-modules are built and run against that same store; adding a CalDAV or CardDAV account to sync
-them is not in the interface yet, so those five are single-machine for now.
+**Status: early, but it moves mail — and now your calendars.** Add an account and mail works
+end to end over IMAP, POP3 and SMTP against a local SQLite store. The calendar, contacts,
+tasks, notes, journal and feed modules run against that same store, and the Add Account window
+also takes a CalDAV or CardDAV server — it finds the calendars and address books the server
+offers and keeps the ones you pick in sync on every send/receive.
 
 ![The Mailbox shell: folder pane, message list and reading pane](docs/ribbon-simplified.png)
 

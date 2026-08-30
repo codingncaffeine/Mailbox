@@ -366,7 +366,8 @@ public sealed class AccountSettingsDialog : Window
         var wizard = new AccountWizard();
         await wizard.ShowDialog(this);
 
-        if (wizard.Created is null) return;
+        if (wizard.DavCollectionsAdded > 0) (Owner as MainWindow)?.PimCollectionsChanged();
+        if (wizard.Created is null && wizard.DavCollectionsAdded == 0) return;
         Changed = true;
         Reload();
     }

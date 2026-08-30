@@ -26,7 +26,7 @@ namespace Mailbox.App.Views;
 /// fails, and the wizard says so before the attempt rather than after.
 /// </para>
 /// </remarks>
-public sealed class AccountWizard : Window
+public sealed partial class AccountWizard : Window
 {
     private readonly TextBox _address = new() { Classes = { "sysfield" }, PlaceholderText = "you@example.com", Width = 320 };
     private readonly TextBox _password = new() { Classes = { "sysfield" }, PasswordChar = '•', Width = 320 };
@@ -161,10 +161,20 @@ public sealed class AccountWizard : Window
             },
         };
 
+        // Kept for the calendar-and-contacts lane, which swaps the whole page: same window,
+        // same heading block, a different account being added.
+        _heading = heading;
+        _subheading = subheading;
+        _mailFields = fields;
+        _mailButtons = buttons;
+
         return new Border
         {
             Padding = new Thickness(24),
-            Child = new StackPanel { Children = { heading, subheading, fields, buttons } },
+            Child = new StackPanel
+            {
+                Children = { heading, subheading, fields, DavSwapRow(), buttons, DavPane() },
+            },
         };
     }
 
@@ -559,6 +569,10 @@ public sealed class AccountWizard : Window
     /// </remarks>
     internal async Task HarnessAsync(string actions)
     {
+        // Held across the whole list: the capture's timer photographs at first idle, and an
+        // awaited action — sign-in's settle, the DAV lane's discovery — hands it several.
+        using var hold = WindowCapture.Hold();
+
         foreach (var raw in actions.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             // A pass of the dispatcher between actions, because typing is noticed on the next one:
@@ -645,6 +659,13 @@ public sealed class AccountWizard : Window
 
                     Log.Info($"Harness: sign-in settled — add {(_add.IsEnabled ? "on" : "off")}, "
                              + $"status “{_status.Text}”.");
+                    break;
+
+                // The calendar-and-contacts lane's own verbs, answered in the partial that
+                // builds the lane: swapping to it, filling its three fields, pressing Find and
+                // Add through the real handlers, and unticking a found collection by name.
+                case "dav" or "server" or "user" or "davpassword" or "find" or "untick" or "davadd":
+                    await HarnessDavAsync(action, argument);
                     break;
 
                 default:

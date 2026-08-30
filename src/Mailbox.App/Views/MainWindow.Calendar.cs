@@ -1580,6 +1580,25 @@ public partial class MainWindow
         if (_calendar is { } calendar) shell.ModuleStatusLeft = calendar.Status;
     }
 
+    /// <summary>
+    /// Collections arrived outside the modules' own flows — the account wizard's calendar-and-
+    /// contacts page — so every pane that lists them redraws rather than waiting for a restart.
+    /// </summary>
+    internal void PimCollectionsChanged()
+    {
+        _calendar?.Reload();
+        _people?.Reload();
+        _taskModule?.Reload();
+        _noteModule?.Reload();
+        _journalModule?.Reload();
+
+        if (DataContext is not ShellViewModel shell) return;
+        if (shell.Module == MailboxModule.Calendar && _calendar is { } calendar)
+        {
+            shell.ModuleStatusLeft = calendar.Status;
+        }
+    }
+
     private static string Named(CalendarEvent appointment)
         => appointment.Summary.Length > 0 ? appointment.Summary : "(no subject)";
 
