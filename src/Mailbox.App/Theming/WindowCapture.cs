@@ -193,6 +193,19 @@ public static class WindowCapture
                 await Task.Delay(SettleDelay);
                 await WhileHeldAsync();
 
+                // MAILBOX_LINGER=<seconds> keeps the run alive that long before the shot and
+                // the exit. For inspection from outside the process: the offscreen web engine's
+                // frame is composited to the screen but never replayed into RenderTargetBitmap,
+                // so the only photograph of it is one a desktop tool takes of the live window —
+                // and a run that exits two seconds after settling is gone before any tool finds
+                // it. The window is wherever the capture put it; an outside tool reads the
+                // window's own buffer, so off-screen does not matter.
+                if (int.TryParse(Environment.GetEnvironmentVariable("MAILBOX_LINGER"), out var linger)
+                    && linger > 0)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(linger));
+                }
+
                 // A harness pose that opens another window photographs that one instead, and
                 // says so before this timer is up. Two captures racing to one path and one exit
                 // is how a run photographs the wrong window and calls it done.

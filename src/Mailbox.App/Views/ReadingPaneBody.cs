@@ -523,7 +523,11 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
             // Which engine actually attached, and whether the document loaded. Both are worth
             // knowing from a log: the backend is chosen at runtime, and a blank pane looks the
             // same whether the engine is missing or the markup was rejected.
-            _web.AdapterCreated += (_, _) => Log.Info($"Reading pane engine: {Describe()}");
+            _web.AdapterCreated += (_, e) =>
+            {
+                Log.Info($"Reading pane engine: {Describe()}");
+                HookDrawRequested(e.TryGetPlatformHandle());
+            };
             _web.NavigationCompleted += (_, e) =>
             {
                 if (e.IsSuccess) Log.Debug("The reading pane loaded a message.");
@@ -591,6 +595,12 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
             case GtkWebViewEnvironmentRequestedEventArgs gtk:
                 gtk.EphemeralDataManager = true;
                 gtk.DisableCache = true;
+
+                // The offscreen embedding, same as the WPE default — without it the GTK
+                // fallback puts the message in a native child window, which the flyout-airspace
+                // rule rules out. Offscreen here is a snapshot into CPU memory per drawn frame,
+                // so it does not depend on the GPU buffer-export path at all.
+                gtk.ExperimentalOffscreen = true;
                 break;
         }
     }

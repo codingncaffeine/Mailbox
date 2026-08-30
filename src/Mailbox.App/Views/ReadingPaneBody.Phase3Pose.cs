@@ -109,6 +109,43 @@ public sealed partial class ReadingPaneBody
     /// <summary>Holds the capture while the engine is still drawing, so the answer below exists.</summary>
     private IDisposable? _engineHold;
 
+    /// <summary>How many times the engine's adapter asked the host to draw. Dump-gate only.</summary>
+    private int _drawRequests;
+
+    /// <summary>
+    /// Counts the adapter's own draw requests, under the dump gate.
+    /// </summary>
+    /// <remarks>
+    /// The frame pipeline has three legs — the engine exports a buffer, the adapter asks the
+    /// host to draw it, the host copies it into the visual — and a failure in any of them looks
+    /// identical from the outside: a healthy page and an empty pane. The words and paint-pulse
+    /// read-backs cover the first leg; this covers the second, by reflection because the
+    /// adapter's interface is the library's own. A pulse with no draw requests means the
+    /// adapter's event never fires; draw requests with no pixels put the fault in the copy or
+    /// the visual.
+    /// </remarks>
+    private void HookDrawRequested(object? adapter)
+    {
+        if (!DumpRequested || !Mailbox.App.Theming.WindowCapture.IsRequested || adapter is null) return;
+
+        try
+        {
+            var drawRequested = adapter.GetType().GetEvent("DrawRequested");
+            if (drawRequested is null)
+            {
+                Log.Info($"Harness: reading engine — {adapter.GetType().Name} has no DrawRequested to hook.");
+                return;
+            }
+
+            drawRequested.AddEventHandler(
+                adapter, new Action(() => Interlocked.Increment(ref _drawRequests)));
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Harness: reading engine — could not hook the adapter's draw requests.", ex);
+        }
+    }
+
     /// <summary>Takes a hold for the load that is about to start, releasing any earlier one.</summary>
     /// <remarks>
     /// The pane is refreshed more than once as a selection lands, and each load supersedes the
@@ -193,8 +230,47 @@ public sealed partial class ReadingPaneBody
             var words = System.Text.RegularExpressions.Regex
                 .Replace(answer?.ToString() ?? string.Empty, @"\s+", " ").Trim();
 
-            Log.Info($"Harness: reading engine — the engine draws {words.Length} character(s)"
+            Log.Info($"Harness: reading engine — the engine holds {words.Length} character(s)"
                      + (words.Length > 0 ? $": “{words[Math.Max(0, words.Length - 110)..]}”" : "."));
+
+            // The DOM holding the words is not the words being drawn: rasterisation happens in
+            // the engine's compositor, a leg the text read-back never touches — it answered
+            // perfectly over a compositor that was producing nothing. requestAnimationFrame is
+            // that compositor's own pulse, so a counter driven by it tells the difference
+            // between a page that is being painted and one that merely parsed: zero after half
+            // a second means no frame has been produced, and the reader's pane is blank however
+            // healthy everything else looks.
+            await Dispatcher.UIThread.InvokeAsync(
+                async () => await web.InvokeScript(
+                    "(function(){ window.__mbxFrames = 0;"
+                    + " var f = function(){ window.__mbxFrames++; requestAnimationFrame(f); };"
+                    + " requestAnimationFrame(f); return 'armed'; })()"));
+
+            await Task.Delay(600);
+
+            object? frames = null;
+            await Dispatcher.UIThread.InvokeAsync(
+                async () => frames = await web.InvokeScript("String(window.__mbxFrames)"));
+
+            var ticks = frames?.ToString()?.Trim('"') ?? "?";
+            Log.Info($"Harness: reading engine — {ticks} paint frame(s) in 600ms"
+                     + (ticks is "0" ? " — the compositor is producing NOTHING; the pane is blank." : "."));
+
+            Log.Info($"Harness: reading engine — the adapter asked the host to draw "
+                     + $"{Volatile.Read(ref _drawRequests)} time(s).");
+
+            // The surfaces the engine draws through, with their laid-out sizes. The engine's
+            // host is a child control the library adds by hand, and a host that measures to
+            // nothing consumes every frame without drawing one — no exception, no log, no
+            // pixels. The only way to see that from outside is to ask the tree.
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                foreach (var visual in ((Visual)web).GetSelfAndVisualDescendants())
+                {
+                    Log.Info($"Harness: reading surface — {visual.GetType().Name} bounds {visual.Bounds}"
+                             + (visual.IsVisible ? string.Empty : " (hidden)"));
+                }
+            });
         }
         catch (Exception ex)
         {
