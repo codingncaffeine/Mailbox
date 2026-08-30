@@ -79,6 +79,18 @@ done
 # is the worst failure shape this launcher can produce: nothing crashed, nothing logged, and
 # the reading pane's engine simply never finished a load. It is a read-only query about page
 # residency — it writes nothing and reaches nothing outside the process's own address space.
+#
+# RestrictSUIDSGID stays off, and openat2 is admitted by name. bubblewrap 0.12 opens every
+# bind source with openat2 — the symlink-safe open, with no fallback to the unprotected one,
+# which is the right choice for a sandbox helper — and RestrictSUIDSGID cannot see openat2's
+# mode bits (they travel in a struct, out of seccomp's sight), so systemd honours the option
+# by refusing the whole call with ENOSYS. The web library treats a child it cannot spawn as a
+# fatal error, so this one wall aborts the entire application at its first page load. What
+# the wall held — creating files with the set-id mode bits — is nearly all held anyway:
+# NoNewPrivileges means nothing in the unit gains from executing such a file, the empty
+# capability set means any file made is owned by the user and no other, and everything
+# outside the mail directories is read-only. The filter entry is for older systemd builds
+# whose @system-service predates openat2; on current ones it is admitted twice, harmlessly.
 # A terminal launch gets a pty so Ctrl+C reaches the application; a desktop launch has no
 # tty and takes the pipe.
 IO=--pipe
@@ -99,12 +111,11 @@ exec systemd-run --user --quiet --collect --wait "$IO" \
     --property=ReadWritePaths=-"$DOWNLOADS" \
     --property=PrivateTmp=yes \
     --property=CapabilityBoundingSet= \
-    --property=RestrictSUIDSGID=yes \
     --property=LockPersonality=yes \
     --property=ProtectKernelModules=yes \
     --property=ProtectControlGroups=yes \
     --property=ProtectClock=yes \
     --property=RestrictRealtime=yes \
     --property=RestrictAddressFamilies="AF_UNIX AF_INET AF_INET6 AF_NETLINK" \
-    --property=SystemCallFilter="@system-service @mount seccomp mincore" \
+    --property=SystemCallFilter="@system-service @mount seccomp mincore openat2" \
     "$@"
