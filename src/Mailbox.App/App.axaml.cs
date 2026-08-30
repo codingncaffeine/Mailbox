@@ -874,6 +874,15 @@ public partial class App : Application
             else
             {
                 desktop.MainWindow = window;
+
+                // Said explicitly rather than left at the lifetime's default, OnLastWindowClose.
+                // The two were the same until the shell grew hidden machinery windows: the warm
+                // message window is a real window, so under the default the shell's close no
+                // longer closed the *last* window, nothing shut down, and the process outlived
+                // its interface — a tray icon over no window, every activation of which failed
+                // re-showing a closed shell. The application's life is the shell window's,
+                // whatever machinery is pooled behind it.
+                desktop.ShutdownMode = ShutdownMode.OnMainWindowClose;
             }
 
             // The dispatcher stall watchdog, when a run asks for it or is already in debug: a

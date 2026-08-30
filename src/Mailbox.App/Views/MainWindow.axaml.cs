@@ -3856,6 +3856,14 @@ public partial class MainWindow : Window
             _warmMessageWindow = window;
             Log.Info("The message window is kept warm for the next open.");
         };
+
+        // A pooled window can still die for real — the application's shutdown takes it — and
+        // the pool must not go on pointing at the corpse: the next open would re-show a closed
+        // window, which the framework refuses.
+        window.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_warmMessageWindow, window)) _warmMessageWindow = null;
+        };
     }
 
     /// <summary>
@@ -5080,7 +5088,10 @@ public partial class MainWindow : Window
     /// <c>MAILBOX_CAPTION=press:&lt;button&gt;</c> clicks it. Both name minimize, maximize or
     /// close; a bare name is a press, and several separated by commas run in order — which is
     /// how restore is reached, <c>press:maximize,press:maximize</c> being the only way a window
-    /// gets back to where it started through the button rather than through a property.
+    /// gets back to where it started through the button rather than through a property. A
+    /// <c>wait:&lt;ms&gt;</c> step holds the next press that long, as <c>MAILBOX_RUN</c>'s
+    /// <c>wait-</c> entries do — how a close reaches a shell whose idle-time machinery, the
+    /// warm message window above all, has had time to exist.
     /// </summary>
     /// <remarks>
     /// Two doors the audit's inventory found missing on the same surface. Every built-in defines
@@ -5110,6 +5121,12 @@ public partial class MainWindow : Window
                     var colon = step.IndexOf(':');
                     var verb = (colon > 0 ? step[..colon] : "press").Trim().ToLowerInvariant();
                     var which = (colon > 0 ? step[(colon + 1)..] : step).Trim().ToLowerInvariant();
+
+                    if (verb is "wait")
+                    {
+                        await Task.Delay(int.TryParse(which, out var ms) ? ms : 1000);
+                        continue;
+                    }
 
                     if (verb is "hold" or "pressed")
                     {
