@@ -9029,10 +9029,8 @@ public partial class MainWindow : Window
             _dragging = true;
             try
             {
-                using var transfer = new DataTransfer();
-                transfer.Add(DataTransferItem.Create(MessageDragFormat, Pack(rows)));
-
-                await DragDrop.DoDragDropAsync(e, transfer, DragDropEffects.Move);
+                using var transfer = await TransferForAsync(shell, rows);
+                await DragDrop.DoDragDropAsync(e, transfer, DragDropEffects.Move | DragDropEffects.Copy);
             }
             finally
             {
@@ -9049,6 +9047,69 @@ public partial class MainWindow : Window
     /// </summary>
     private static readonly DataFormat<byte[]> MessageDragFormat =
         DataFormat.CreateBytesApplicationFormat("mailbox-message-ids");
+
+    /// <summary>The drag's whole payload: the internal ids, and each row as an .eml a drop can take.</summary>
+    /// <remarks>
+    /// The files are written here, at drag start, because the platform's file lane carries real
+    /// items — a provider that would write on consumption is offered but never consumed. This
+    /// handler also runs for every plain click, so the write is made cheap instead of lazy:
+    /// named by id on the runtime dir's tmpfs, written once per message and found by a stat
+    /// afterwards. Sixteen rows and sixteen megabytes at most, because a drag of a
+    /// five-hundred-row selection is a move, not an export.
+    /// </remarks>
+    private async Task<DataTransfer> TransferForAsync(ShellViewModel shell, IReadOnlyList<ViewModels.MessageRow> rows)
+    {
+        var transfer = new DataTransfer();
+        transfer.Add(DataTransferItem.Create(MessageDragFormat, Pack(rows)));
+
+        var budget = 16L * 1024 * 1024;
+        foreach (var row in rows.Take(16))
+        {
+            if (row.SizeBytes > budget) continue;
+            if (EmlForDrag(shell, row) is not { } path) continue;
+
+            budget -= new FileInfo(path).Length;
+            if (await StorageProvider.TryGetFileFromPathAsync(new Uri(path)) is not { } file) continue;
+            transfer.Add(DataTransferItem.CreateFile(file));
+        }
+
+        return transfer;
+    }
+
+    /// <summary>
+    /// One dragged row as an <c>.eml</c> on disk — the byte-exact stored message, exactly what
+    /// the export writes.
+    /// </summary>
+    /// <remarks>
+    /// Under the runtime directory, which is per-login tmpfs: the file exists so a drop can
+    /// read it, not to be kept — keeping is the drop target's own copy. Named by id and
+    /// subject, so a message is written once however often its row is pressed: stored mail is
+    /// immutable, and the id-named file is its cache for the login.
+    /// </remarks>
+    private static string? EmlForDrag(ShellViewModel shell, ViewModels.MessageRow row)
+    {
+        try
+        {
+            var runtime = Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
+            var root = string.IsNullOrEmpty(runtime)
+                ? Path.Combine(Path.GetTempPath(), "mailbox-drag")
+                : Path.Combine(runtime, "mailbox", "drag");
+            Directory.CreateDirectory(root);
+
+            var path = Path.Combine(root, $"{row.Id} {SafeName(row.Subject, "message")}.eml");
+            if (File.Exists(path)) return path;
+
+            if (shell.RawOf(row) is not { } raw) return null;
+            File.WriteAllBytes(path, raw);
+            Log.Info($"Drag: “{Path.GetFileName(path)}” written for a drop ({raw.Length} bytes).");
+            return path;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.Warn("Drag: a message could not be written for a drop.", ex);
+            return null;
+        }
+    }
 
     private bool _dragging;
 

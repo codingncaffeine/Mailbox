@@ -185,6 +185,15 @@ public static class Confirm
     public static async Task<(bool Confirmed, bool DontShowAgain)> AskAsync(Window owner, string title, string message,
         string confirmLabel, bool destructive, string? dontShowAgain)
     {
+        // A posed answer, for a harness that cannot press a modal — see HarnessAnswer. Capture
+        // runs only, and only while MAILBOX_ANSWER still has an entry for this dialog. Prompt
+        // and Chooser have answered this way all along; a question was the one modal that
+        // could not be.
+        if (HarnessAnswer.Next(title) is { } posed)
+        {
+            return (!HarnessAnswer.IsCancel(posed), DontShowAgain: false);
+        }
+
         var answer = false;
         CheckBox? again = null;
 

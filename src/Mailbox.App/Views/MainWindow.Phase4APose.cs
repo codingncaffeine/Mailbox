@@ -2,7 +2,9 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Controls.Primitives;
+using Avalonia.Input;
 using Avalonia.LogicalTree;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Mailbox.App.Theming;
@@ -95,6 +97,55 @@ public partial class MainWindow
             // already gone and the process with it.
             var hold = WindowCapture.IsRequested ? WindowCapture.Hold() : null;
             Opened += (_, _) => _ = PressInDialogAsync(steps, hold);
+        }
+
+        // MAILBOX_DRAG_OUT=<part of a subject> builds the list's own drag payload over the
+        // matching row and consumes its file half, which is what a drop target outside would
+        // do — the one half of a drag a run can hold in its hands. The written file is read
+        // back by size, which is the byte-exact claim; a click writes nothing, which the lazy
+        // provider is the point of.
+        if (Environment.GetEnvironmentVariable("MAILBOX_DRAG_OUT") is { Length: > 0 } dragOut)
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(async () => await PoseDragOutAsync(dragOut), DispatcherPriority.ApplicationIdle);
+        }
+    }
+
+    private async Task PoseDragOutAsync(string wanted)
+    {
+        try
+        {
+            if (DataContext is not ShellViewModel shell) return;
+
+            var row = shell.Messages.FirstOrDefault(
+                m => m.Subject.Contains(wanted, StringComparison.OrdinalIgnoreCase));
+            if (row is null)
+            {
+                Log.Info($"Harness: no row matches “{wanted}” to drag.");
+                return;
+            }
+
+            using var transfer = await TransferForAsync(shell, [row]);
+            IDataTransfer payload = transfer;
+            Log.Info($"Harness: the drag offers ids={payload.Contains(MessageDragFormat)}, "
+                     + $"files={payload.Contains(DataFormat.File)}.");
+
+            foreach (var item in payload.GetItems(DataFormat.File))
+            {
+                var raw = item.TryGetRaw(DataFormat.File);
+                if (raw is not IStorageFile file)
+                {
+                    Log.Info($"Harness: a file item answered {raw?.GetType().Name ?? "null"}.");
+                    continue;
+                }
+
+                var path = file.TryGetLocalPath();
+                Log.Info($"Harness: the drop would take “{file.Name}” "
+                         + $"({(path is null ? "no local path" : new FileInfo(path).Length + " bytes")}).");
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Harness: the drag-out pose failed.", ex);
         }
     }
 

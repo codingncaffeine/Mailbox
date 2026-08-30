@@ -384,6 +384,30 @@ public sealed partial class ComposeSurface : UserControl
         UpdateStatus();
         UpdateTitle();
 
+        // Files dropped anywhere on the surface attach, which is what dragging a file onto a
+        // message means everywhere else — the body included, since aiming for the one strip
+        // row is not a gesture anybody makes on purpose. Only files are taken: text dragged
+        // from another window is a paste, not an attachment.
+        DragDrop.SetAllowDrop(this, true);
+        AddHandler(DragDrop.DragOverEvent, (_, e) =>
+        {
+            e.DragEffects = e.DataTransfer.Contains(DataFormat.File)
+                ? DragDropEffects.Copy
+                : DragDropEffects.None;
+            e.Handled = true;
+        });
+        AddHandler(DragDrop.DropEvent, (_, e) =>
+        {
+            var files = (e.DataTransfer.TryGetFiles() ?? [])
+                .OfType<IStorageFile>()
+                .ToList();
+            if (files.Count == 0) return;
+
+            AddAttachments(files);
+            Log.Info($"Compose: {files.Count} file(s) attached by drop.");
+            e.Handled = true;
+        });
+
         // The Auto-Complete List under each recipient line. The list is per account file and
         // the window can send from any account, so what is offered is the union, weighted by
         // use across the lot; forgetting an entry forgets it everywhere.
@@ -1885,7 +1909,15 @@ public sealed partial class ComposeSurface : UserControl
 
         if (picked.Count == 0) return;
 
-        _attachments.AddRange(picked);
+        AddAttachments(picked);
+    }
+
+    /// <summary>Puts files on the message — the picker's, a drop's and a pose's shared tail.</summary>
+    private void AddAttachments(IReadOnlyList<IStorageFile> files)
+    {
+        if (files.Count == 0) return;
+
+        _attachments.AddRange(files);
         _attachmentStrip.Text = "Attached: " +
             string.Join(", ", _attachments.Select(f => f.Name));
         _attachmentRow.IsVisible = true;

@@ -111,7 +111,7 @@ public sealed partial class ComposeSurface
     {
         if (Owner is not { StorageProvider: { } storage }) return;
 
-        var added = 0;
+        var files = new List<IStorageFile>();
         foreach (var path in paths)
         {
             var file = await storage.TryGetFileFromPathAsync(new Uri(Path.GetFullPath(path)));
@@ -121,17 +121,11 @@ public sealed partial class ComposeSurface
                 continue;
             }
 
-            _attachments.Add(file);
-            added++;
+            files.Add(file);
         }
 
-        if (added == 0) return;
-
-        // The tail of AttachAsync, which the picker's path runs after it has its files.
-        _attachmentStrip.Text = "Attached: " + string.Join(", ", _attachments.Select(f => f.Name));
-        _attachmentRow.IsVisible = true;
-        _dirty = true;
-        UpdateStatus();
+        // The same tail the picker and a drop run, so a posed file lands the way a real one does.
+        AddAttachments(files);
     }
 
     /// <summary>
