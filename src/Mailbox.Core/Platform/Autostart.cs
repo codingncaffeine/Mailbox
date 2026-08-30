@@ -4,7 +4,7 @@ namespace Mailbox.Core.Platform;
 
 /// <summary>
 /// Starting Mailbox when the desktop session starts: an XDG autostart entry, the Linux answer to
-/// the reference's run-at-login (§10, rule 2).
+/// the reference's run-at-login, part of the desktop-integration contract.
 /// </summary>
 /// <remarks>
 /// The whole mechanism is one desktop-entry file under <c>$XDG_CONFIG_HOME/autostart</c>, which

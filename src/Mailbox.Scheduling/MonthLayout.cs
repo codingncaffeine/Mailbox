@@ -13,7 +13,7 @@ public sealed record MonthBar<T>(T Item, int StartColumn, int EndColumn, int Lan
 }
 
 /// <summary>
-/// The month view's own layout pass (§7.4): a week row is a set of lanes, and every item —
+/// The month view's own layout pass: a week row is a set of lanes, and every item —
 /// a bar spanning several days or a single day's appointment — takes the first lane free for
 /// every column it covers.
 /// </summary>

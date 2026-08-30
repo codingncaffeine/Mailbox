@@ -8,7 +8,7 @@ using MimeKit;
 namespace Mailbox.Tests;
 
 /// <summary>
-/// The IMAP sync, against a server in memory. What is checked is the behaviour §4 asks for: the
+/// The IMAP sync, against a server in memory. What is checked is the contract: the
 /// store is authoritative, so local changes are played to the server before the pull, a
 /// UIDVALIDITY change is handled rather than trusted, and a folder that is a view of mail held
 /// elsewhere is not pulled into a second copy.

@@ -48,7 +48,6 @@ public sealed class JunkOptionsDialog : Window
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
         DialogChrome.Apply(this, Layout());
-        Bind(this, BackgroundProperty, "dialog.background.brush");
     }
 
     private Control Layout()

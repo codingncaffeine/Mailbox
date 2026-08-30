@@ -22,7 +22,7 @@ public enum RemoteImagePolicy
 /// This is the whole of Mailbox's outbound HTTP for a message, and it exists so that the
 /// rendering engine never has any. A client we own means no cookies, no referer, no
 /// authentication, a timeout, a size cap, and one place to point at a proxy later — none of
-/// which is true of a request the engine makes on the sender's markup. See §11.
+/// which is true of a request the engine makes on the sender's markup — the sanitizer's whole point.
 /// <para>
 /// The bytes come back as <c>data:</c> URIs and go through the same inliner a <c>cid:</c> part
 /// does, so the document still reaches the engine with nothing left in it to request.

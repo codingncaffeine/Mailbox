@@ -34,7 +34,7 @@ public sealed record CalendarEntry
     /// The zone the view is drawing in, which is what a time on its grid means.
     /// </summary>
     /// <remarks>
-    /// An appointment states its own wall time in its own zone (§9), and a nine o'clock meeting
+    /// An appointment states its own wall time in its own zone, and a nine o'clock meeting
     /// in New York is not at nine o'clock on a calendar in London. The grid is one clock, so an
     /// entry is placed by what that clock reads at the appointment's instant.
     /// </remarks>

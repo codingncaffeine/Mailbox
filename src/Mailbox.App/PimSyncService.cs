@@ -49,7 +49,7 @@ public sealed class PimSyncService(
     /// <summary>The keyring purpose a DAV password is filed under.</summary>
     public const string Purpose = "caldav";
 
-    /// <summary>Where a Google Tasks account's own client registration is kept (§5).</summary>
+    /// <summary>Where a Google Tasks account's own client registration is kept.</summary>
     public static string ClientIdSetting(string account) => $"pim.google.{account}.client";
 
     /// <summary>
@@ -256,7 +256,7 @@ public sealed class PimSyncService(
             var clientId = settings?.GetString(ClientIdSetting(account)) ?? string.Empty;
             if (clientId.Length == 0)
             {
-                // Google ships no registration and never will (§5), so an account with no client
+                // Google ships no registration and never will, so an account with no client
                 // ID of its own cannot sign in at all. Said once, not once per list.
                 Log.Warn($"Google Tasks for {account} has no client ID; sign in again to set one.");
                 continue;

@@ -4,7 +4,7 @@ using Mailbox.Store;
 namespace Mailbox.Tests;
 
 /// <summary>
-/// The junk filter, against an in-memory corpus. What is tested is the behaviour §7.8 asks for:
+/// The junk filter, against an in-memory corpus. What is tested is the promised behaviour:
 /// it learns from what it is told, it leans toward keeping mail, lists always win, and the four
 /// levels mean what they say. Nothing here touches a store or a network — the classifier is pure.
 /// </summary>

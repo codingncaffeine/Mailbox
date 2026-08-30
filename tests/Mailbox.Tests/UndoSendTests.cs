@@ -6,7 +6,7 @@ using MimeKit;
 namespace Mailbox.Tests;
 
 /// <summary>
-/// Undo Send (§12): the hold, and taking a message back out of it.
+/// Undo Send: the hold, and taking a message back out of it.
 /// </summary>
 /// <remarks>
 /// The half worth testing is the race. Everything else is a number in a settings file, but

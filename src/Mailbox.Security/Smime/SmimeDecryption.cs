@@ -8,7 +8,7 @@ namespace Mailbox.Security.Smime;
 /// Opening an encrypted S/MIME message.
 /// </summary>
 /// <remarks>
-/// The decryption itself is MimeKit's. What is here is the part §19 says a client must not get
+/// The decryption itself is MimeKit's. What is here is the part a client must not get
 /// wrong: <b>what comes out is rendered in a document of its own</b>. CVE-2026-0818 exfiltrated
 /// decrypted content from a client that spliced it into the outer message — through the cascade,
 /// not through a fetch: <c>@font-face</c> and CSS animations in the outer part read the plaintext

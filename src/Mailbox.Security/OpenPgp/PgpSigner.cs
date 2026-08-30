@@ -19,7 +19,7 @@ public enum PgpSignerOutcome
 }
 
 /// <summary>
-/// One OpenPGP signature as the cryptography leaves it — before §19's questions are asked of it.
+/// One OpenPGP signature as the cryptography leaves it — before the verifier's questions are asked of it.
 /// </summary>
 /// <remarks>
 /// Deliberately not a verdict. A signature arrives two ways — detached, in a
@@ -30,7 +30,7 @@ public enum PgpSignerOutcome
 /// </remarks>
 /// <param name="Ring">The key ring the signer's key came from; the user IDs are on its master key.</param>
 /// <param name="Key">The key that signed, which is usually a subkey of that ring.</param>
-/// <param name="Created">When the signature says it was made. The signer's own claim (§19).</param>
+/// <param name="Created">When the signature says it was made. The signer's own claim, never trusted as a timestamp.</param>
 public sealed record PgpSigner(
     PgpSignerOutcome Outcome,
     PgpPublicKeyRing? Ring,

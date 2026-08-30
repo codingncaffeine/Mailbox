@@ -1139,7 +1139,7 @@
 
         <!-- ============================ Status bar =========================== -->
         <!--
-            Undo Send's toast (§12). Over the workspace rather than in a row of its own: it is
+            Undo Send's toast. Over the workspace rather than in a row of its own: it is
             there for a few seconds and must not make the panes shorter while it is.
         -->
         <ContentControl Name="UndoSendHost" Grid.Row="2" Grid.Column="1"

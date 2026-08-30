@@ -246,7 +246,7 @@ internal static class Chain
             X509Extensions.KeyUsage, true,
             new KeyUsage(KeyUsage.DigitalSignature | KeyUsage.KeyEncipherment | KeyUsage.NonRepudiation));
 
-        // §19 reads the address from the subject alternative name and from nowhere else.
+        // The verifier reads the address from the subject alternative name and from nowhere else.
         generator.AddExtension(
             X509Extensions.SubjectAlternativeName, false,
             new GeneralNames(new GeneralName(GeneralName.Rfc822Name, address)));

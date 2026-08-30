@@ -8,7 +8,7 @@ namespace Mailbox.Core;
 /// One running Mailbox per session, and a way to hand a new launch's command line to it.
 /// </summary>
 /// <remarks>
-/// The reference — and §10 — require that a <c>mailto:</c> click reach the mail client the reader
+/// The reference — and the desktop-integration contract — require that a <c>mailto:</c> click reach the mail client the reader
 /// already has open rather than start a second copy. A Unix domain socket under the session's
 /// runtime directory is the primary's address: a second launch connects, hands over its command
 /// line and exits, and the primary opens the compose window. Keyed to the session

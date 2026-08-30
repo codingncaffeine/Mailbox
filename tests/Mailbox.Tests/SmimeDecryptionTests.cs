@@ -14,7 +14,7 @@ using Org.BouncyCastle.X509;
 namespace Mailbox.Tests;
 
 /// <summary>
-/// Opening an encrypted message — and §19's second blocker, which is not about the cryptography
+/// Opening an encrypted message — and the design's second blocker, which is not about the cryptography
 /// at all: what comes out is rendered on its own, never spliced into the message it arrived in.
 /// </summary>
 public class SmimeDecryptionTests

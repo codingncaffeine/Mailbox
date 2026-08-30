@@ -15,7 +15,7 @@ namespace Mailbox.App.Views;
 /// <remarks>
 /// The families offered are the wire names mail is written in — Calibri, Arial, Times New Roman
 /// and the rest of the substitution table's requests — beside whatever this machine has
-/// installed. A face that is not here is drawn by its metric-compatible substitute (§6) and goes
+/// installed. A face that is not here is drawn by its metric-compatible substitute and goes
 /// on the wire under its own name, so a message set in Calibri on this machine reads as Calibri
 /// on the reader's; the sample says which face is drawing it when that is the case.
 /// </remarks>

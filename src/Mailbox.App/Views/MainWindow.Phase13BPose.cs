@@ -550,7 +550,7 @@ public partial class MainWindow
     /// the caption carries. Several separated by commas run in order.
     /// </summary>
     /// <remarks>
-    /// The door the plan's Doors-still-missing list named for this phase. Until it existed
+    /// The door the dialog-caption claims waited on. Until it existed
     /// <c>systemdialog.caption.hover</c> and <c>systemdialog.caption.pressed</c> — and their
     /// <c>dialog.caption.*</c> siblings — were defined by all four themes and reachable by
     /// nothing: <c>MAILBOX_CAPTION</c> takes the shell's <see cref="CaptionButtons"/>, which is a

@@ -6,12 +6,12 @@ namespace Mailbox.Store.Pim;
 /// reasons the mail store's is (<see cref="Schema.Migrations"/>).
 /// </summary>
 /// <remarks>
-/// One collection table serves every kind, as the schema sketch has it (§4): a
+/// One collection table serves every kind, as the schema sketch has it: a
 /// collection is a calendar, a task list, a note list or an address book, told apart by
 /// <c>kind</c>; an item is one VEVENT, VTODO, VJOURNAL or vCard, its raw payload kept verbatim
 /// beside the columns the views read — a parsing mistake is recoverable, and a server gets back
 /// exactly what it sent plus what changed. Times are stored as UTC instants for querying and
-/// as the local wall time with its zone for correctness across a DST change (§9): an 09:00
+/// as the local wall time with its zone for correctness across a DST change: an 09:00
 /// weekly meeting stays at 09:00.
 /// </remarks>
 public static class PimMigrations
@@ -148,7 +148,7 @@ public static class PimMigrations
         """,
 
         // ---- 4: the colour categories -------------------------------------------------------
-        // One set across every module, which is what the reference has and what §9 asks for: a
+        // One set across every module, which is what the reference has: a
         // message, an appointment, a task, a note and a contact all take their colour from the
         // same list. It lives here rather than in a mail store because this file is the one
         // every module shares — a per-account list would give the same reader two of them.

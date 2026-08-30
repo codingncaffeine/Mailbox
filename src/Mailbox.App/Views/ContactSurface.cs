@@ -349,7 +349,7 @@ public sealed class ContactSurface : UserControl
     /// An empty note writes an empty property rather than a document's worth of markup around
     /// nothing: a card is a thing other clients read, and every byte in it is one they have to
     /// skip. The same serializer the compose window uses, for the same reason — what comes out
-    /// is the narrow HTML §7.3 settled on rather than the editor's own.
+    /// is the narrow HTML outgoing mail is held to rather than the editor's own.
     /// </remarks>
     private string NoteHtml()
     {

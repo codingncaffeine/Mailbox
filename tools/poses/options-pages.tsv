@@ -1,4 +1,4 @@
-# Phase 12A: every Options page, dumped row by row — kind, label, key, stored value,
+# Every Options page, dumped row by row — kind, label, key, stored value,
 # dropdown length, spinner bounds. Regenerate by hand from OptionsPages.cs's factories.
 opt-general	MAILBOX_PEEK=options	MAILBOX_OPTIONS_PAGE=general	MAILBOX_OPTIONS_DUMP=1
 opt-mail	MAILBOX_PEEK=options	MAILBOX_OPTIONS_PAGE=mail	MAILBOX_OPTIONS_DUMP=1

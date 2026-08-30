@@ -14,7 +14,7 @@ namespace Mailbox.App;
 /// One place tokenizes a message and asks the filter, so a message judged on arrival is judged
 /// the same way as one the reader marks by hand, and the corpus a Mark as Junk trains is the one
 /// the filter reads. The level is read live, so changing it in the dialog applies to the next
-/// message rather than the next launch. Nothing here leaves the machine (§7.8).
+/// message rather than the next launch. Nothing here leaves the machine.
 /// <para>
 /// It is an <see cref="IArrivalHandler"/>: the receiver stores a message in the Inbox and hands
 /// it over, and this moves it to Junk — or deletes it, if the dialog says so — when the filter

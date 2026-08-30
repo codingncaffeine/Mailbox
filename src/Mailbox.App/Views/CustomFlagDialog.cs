@@ -137,7 +137,6 @@ public sealed class CustomFlagDialog : Window
         ok.Margin = new Thickness(0, 0, 8, 0);
 
         DialogChrome.Apply(this, body);
-        Bind(this, BackgroundProperty, "dialog.background.brush");
     }
 
     private static Control Placed(Control control, int column)

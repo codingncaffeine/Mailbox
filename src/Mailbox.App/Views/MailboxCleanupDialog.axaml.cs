@@ -68,8 +68,6 @@ public sealed class MailboxCleanupDialog : Window
         };
 
         DialogChrome.Apply(this, body);
-
-        Bind(this, BackgroundProperty, "surface.ground.brush");
         Populate();
     }
 

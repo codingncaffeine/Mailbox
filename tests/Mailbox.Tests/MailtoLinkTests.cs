@@ -4,7 +4,7 @@ namespace Mailbox.Tests;
 
 /// <summary>
 /// The mailto: parser (RFC 6068). What is tested is the ordinary shape of a link, the awkward
-/// encodings, and the two security rules §19 puts here — attach is dropped, and no header a
+/// encodings, and the two security rules that live here — attach is dropped, and no header a
 /// stranger writes is honoured beyond to/cc/bcc/subject/body.
 /// </summary>
 public class MailtoLinkTests

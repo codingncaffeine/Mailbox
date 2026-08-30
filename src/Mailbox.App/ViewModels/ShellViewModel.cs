@@ -53,7 +53,7 @@ public enum FolderNodeKind
     /// <summary>A folder listed under Favourites — the same folder as its row in the tree below.</summary>
     Favourite,
 
-    /// <summary>The "All Accounts" heading of the unified mailbox (§14), when it is switched on.</summary>
+    /// <summary>The "All Accounts" heading of the unified mailbox, when it is switched on.</summary>
     UnifiedRoot,
 
     /// <summary>One of the unified mailbox's folders — every account's Inbox at once, and so on.</summary>
@@ -96,7 +96,7 @@ public sealed class ModuleTab(MailboxModule module, string icon, bool isActive) 
     /// audit is meant to catch.
     /// </summary>
     /// <remarks>
-    /// Settable and observed since Phase 11 gave the rail a second module to switch to: the mark
+    /// Settable and observed since the rail got a second module to switch to: the mark
     /// against the rail's edge has to move when it does, and a value fixed at construction was
     /// only ever right while Mail was the only module there was.
     /// </remarks>
@@ -415,7 +415,7 @@ public sealed class MessageRow(
     /// </summary>
     public bool IsHeaderOnly { get; init; }
 
-    /// <summary>When a snoozed message comes back, or null for one that is awake (§12).</summary>
+    /// <summary>When a snoozed message comes back, or null for one that is awake.</summary>
     public DateTimeOffset? SnoozedUntil { get; init; }
 
     public bool IsSnoozed => SnoozedUntil is not null;
@@ -902,7 +902,7 @@ public sealed partial class ShellViewModel : ObservableObject
             favourites.SeedIfFresh(primary.Account.Address, seed);
         }
 
-        // The unified mailbox, above everything, when it is on (§14). It is a way of reading the
+        // The unified mailbox, above everything, when it is on. It is a way of reading the
         // accounts rather than a place of its own: nothing is stored under it, and switching it
         // off leaves every folder exactly where it was.
         if (App.MailOptions.UnifiedMailbox && accounts.Count > 1)
@@ -1345,7 +1345,7 @@ public sealed partial class ShellViewModel : ObservableObject
     /// </summary>
     /// <remarks>
     /// Merged here rather than in the store, because there is no "here" in the store to merge in:
-    /// each account is its own file (§4), and that is the property the whole design rests on. So
+    /// each account is its own file, and that is the property the whole design rests on. So
     /// the view reads each and interleaves, and every row carries the address it came from — an id
     /// alone says nothing when two stores both number their rows from one.
     /// <para>
@@ -2099,7 +2099,7 @@ public sealed partial class ShellViewModel : ObservableObject
     public FontFamily IconFamily { get; } = IconFont.Family;
     // ---- List shaping ---------------------------------------------------------------------
     // Filtering, sorting and grouping run over the in-memory sample for now. They are view
-    // state either way: Phase 2 swaps the source collection, not any of this.
+    // state either way: the store swap changed the source collection, not any of this.
 
     // ---- Ignore and Clean Up ---------------------------------------------------------------------
 
@@ -2230,7 +2230,7 @@ public sealed partial class ShellViewModel : ObservableObject
         return summary.Preview;
     }
 
-    // ---- Focused Inbox (§12) ------------------------------------------------------------------
+    // ---- Focused Inbox ------------------------------------------------------------------
     // When the view is on and the Inbox is open, the All / Unread pivot becomes Focused / Other:
     // the Inbox lists one half at a time. Elsewhere the pivot is what it always was.
 
@@ -2960,7 +2960,7 @@ public sealed partial class ShellViewModel : ObservableObject
     /// </summary>
     /// <remarks>
     /// Its own account only. Each account is its own store, and a move across stores is a copy
-    /// and a delete over two files rather than a move — real, and Phase 8's, and not something
+    /// and a delete over two files rather than a move — real, still to be built, and not something
     /// to offer as a menu entry that quietly does something else.
     /// </remarks>
     public IReadOnlyList<FolderNode> FoldersOfSelection(IReadOnlyList<MessageRow> rows)
@@ -2989,7 +2989,7 @@ public sealed partial class ShellViewModel : ObservableObject
     /// </summary>
     /// <remarks>
     /// The set rather than the open account's own rows: the categories are one list across the
-    /// modules and across the accounts (§9), and a reader with two accounts should not be shown
+    /// modules and across the accounts, and a reader with two accounts should not be shown
     /// two lists. The account's rows are the mirror this is assigned <em>through</em> — matched
     /// by name in <see cref="Mirrored"/> — and a name the mirror has not got is put there rather
     /// than refused, so a category made while an account was closed still works on it.
@@ -3573,7 +3573,7 @@ public sealed partial class ShellViewModel : ObservableObject
         MoveTo(rows, notJunk ? FolderRole.Inbox : FolderRole.Junk);
     }
 
-    // ---- Snooze (§12) -----------------------------------------------------------------------
+    // ---- Snooze -----------------------------------------------------------------------
 
     /// <summary>
     /// Show only the folder's snoozed messages — Filter Email › Snoozed. Off, the list shows

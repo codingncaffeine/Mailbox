@@ -7,7 +7,7 @@ namespace Mailbox.Core.Settings;
 /// The reading half of the page, exactly as <see cref="MailOptions"/> is for Mail: the rows
 /// already persist under their keys, and until something reads one the setting is a control that
 /// remembers itself and does nothing. Every accessor here has a feature behind it; a row with no
-/// accessor is one nothing reads yet, and §20 says so per row.
+/// accessor is one nothing reads yet, and the row records it.
 /// </remarks>
 public sealed class CalendarOptions(SettingsStore settings)
 {

@@ -28,7 +28,7 @@ public interface IAccessTokenSource
 /// </summary>
 /// <remarks>
 /// The split is the whole point. A refresh token is a long-lived credential and belongs where
-/// passwords go — the desktop keyring, never a file (§4). An access token lasts about an hour,
+/// passwords go — the desktop keyring, never a file. An access token lasts about an hour,
 /// is renewable from the other, and is therefore never written down at all: a copy on disk would
 /// be a credential the user cannot revoke and did not know they had.
 /// <para>

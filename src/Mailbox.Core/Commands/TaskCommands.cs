@@ -1,7 +1,7 @@
 namespace Mailbox.Core.Commands;
 
 /// <summary>
-/// The Tasks module's commands (§9): making a task, marking one done, and what the reference's
+/// The Tasks module's commands: making a task, marking one done, and what the reference's
 /// own bar offers beside those.
 /// </summary>
 /// <remarks>

@@ -19,7 +19,7 @@ public enum PluginState
     /// <summary>Present and not loaded — the reader's choice, or plugins are off altogether.</summary>
     Disabled,
 
-    /// <summary>Was running and threw; disabled with the report kept. §13's visible report.</summary>
+    /// <summary>Was running and threw; disabled with the report kept. The design's visible report.</summary>
     Crashed,
 
     /// <summary>Written against a newer API than this build carries. Never loaded.</summary>
@@ -77,7 +77,7 @@ public sealed class PluginHostServices
 /// trusting the plugin to have registered nothing else.
 /// <para>
 /// A plugin that throws — from <c>Initialize</c> or from any hook — is disabled with the report
-/// kept and shown, per §13. The application carries on; the other plugins carry on.
+/// kept and shown. The application carries on; the other plugins carry on.
 /// </para>
 /// </remarks>
 public sealed class PluginHost
@@ -355,7 +355,7 @@ public sealed class PluginHost
     // ---- Failure and teardown ------------------------------------------------------------------
 
     /// <summary>
-    /// §13's rule: a plugin that throws is disabled with a visible report rather than taking the
+    /// The design's rule: a plugin that throws is disabled with a visible report rather than taking the
     /// application down. Safe to call from inside one of the plugin's own hooks — the unload is
     /// cooperative and completes once the plugin's frames have returned.
     /// </summary>

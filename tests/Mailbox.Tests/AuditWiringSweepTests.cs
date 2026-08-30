@@ -374,25 +374,19 @@ public class AuditWiringSweepTests
     /// both — a command stamped <see cref="CommandSurface.Compose"/> is one the window owns whether
     /// or not the ribbon places it, since the window dispatches by id.
     /// <para>
-    /// The one subtraction is the ten Insert commands only the Contact window places — Screenshot,
-    /// Quick Parts, WordArt, Object, Business Card, Bookmark, Text Box, Drop Cap, Date &amp; Time
-    /// and Horizontal Line. They are declared in <see cref="ComposeCommands"/> and so carry its
-    /// surface stamp, but no compose ribbon places them and no compose window offers them, so a
-    /// status for each would be a claim about a button that is not there. They are named by
-    /// <em>where they are placed</em> rather than by a list of ids, so one of them arriving on the
-    /// compose ribbon fails this rather than sliding through.
+    /// The ten Insert commands only the Contact window places are stamped with the Contact
+    /// surface at declaration now, so no subtraction is needed here: a command whose stamp says
+    /// Compose is one a compose window really offers.
     /// </para>
     /// </remarks>
     [Fact]
     public void ComposeAvailabilityCoversExactlyWhatTheComposeWindowCanRun()
     {
         var onTheComposeRibbon = Placed(DefaultRibbonLayouts.Compose);
-        var onTheContactRibbon = Placed(ContactRibbonLayout.Contact);
 
         var owned = Registered().All
             .Where(c => c.Surface == CommandSurface.Compose)
             .Select(c => c.Id)
-            .Where(id => onTheComposeRibbon.Contains(id) || !onTheContactRibbon.Contains(id))
             .Concat(onTheComposeRibbon)
             .ToHashSet();
 

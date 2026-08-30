@@ -8,7 +8,7 @@ using Mailbox.Theming.Tokens;
 namespace Mailbox.App.Notifications;
 
 /// <summary>
-/// The tray icon with the unread count drawn on it — §10's "notification area icon with unread
+/// The tray icon with the unread count drawn on it — the design's "notification area icon with unread
 /// badge".
 /// </summary>
 /// <remarks>

@@ -57,6 +57,5 @@ public sealed class ReadingPaneOptionsDialog : Window
         };
 
         DialogChrome.Apply(this, body);
-        ViewDialogKit.Bind(this, BackgroundProperty, "dialog.background.brush");
     }
 }

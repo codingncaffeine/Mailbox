@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    The calendar views (§7.4). Avalonia has no calendar grid and the reference's is specific, so
+    The calendar views. Avalonia has no calendar grid and the reference's is specific, so
     the month grid, the day/week time grid, the schedule timeline and the date navigator are all
     drawn here — geometry measured off the reference captures, every colour from a calendar.*
     token. No dependency on the application, so a view can be exercised on its own.

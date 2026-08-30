@@ -72,7 +72,7 @@ public sealed class TaskListView : DrawnSurface
     /// subject, then what it says about itself — and the widths are what the words in each need at
     /// 12px, the subject taking whatever is left. The reference has an Attachment column here as
     /// well; a task in this application carries no attachments yet, and a column that could never
-    /// have anything in it is worse than one that is not drawn (§20 lists it).
+    /// have anything in it is worse than one that is not drawn; the absence is queued.
     /// </remarks>
     private static readonly (string Heading, double Width)[] Columns =
     [

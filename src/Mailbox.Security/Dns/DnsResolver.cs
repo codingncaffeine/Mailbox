@@ -8,7 +8,7 @@ namespace Mailbox.Security.Dns;
 /// <summary>Somewhere a TXT record can be asked for.</summary>
 /// <remarks>
 /// An interface so the thing that verifies a signature can be tested without a network, and so
-/// the reading pane can be handed something that resolves nothing at all. See §19: no key
+/// the reading pane can be handed something that resolves nothing at all. The rule stands: no key
 /// discovery on the path that draws a message.
 /// </remarks>
 public interface ITxtLookup
@@ -29,7 +29,7 @@ public sealed class NoLookup : ITxtLookup
 /// A resolver of our own, asking the system's nameservers for TXT records and nothing else.
 /// </summary>
 /// <remarks>
-/// §11 is the reason this exists rather than a library or the platform's own resolver. Verifying
+/// The no-network render design is the reason this exists rather than a library or the platform's own resolver. Verifying
 /// a signature means looking up a name the *sender* chose, so the lookup is an action a stranger
 /// caused; it therefore has to be ours, on our schedule, off the render path, and bounded in
 /// what it will do. What it will do is: one question, to the resolvers already configured on

@@ -26,7 +26,7 @@ public enum MonthlyMode
 /// A recurrence as the reference's dialog states it, which is not how RFC 5545 states it.
 /// </summary>
 /// <remarks>
-/// The dialog is a pattern editor rather than an RRULE builder (§9): it asks for "the second
+/// The dialog is a pattern editor rather than an RRULE builder: it asks for "the second
 /// Tuesday of every month" and for "end after 10 occurrences", and the grammar is this record's
 /// business. Keeping the two apart is what lets the dialog be the reference's without the rule
 /// text being anything other than RFC 5545 — and what lets a rule another client wrote be read

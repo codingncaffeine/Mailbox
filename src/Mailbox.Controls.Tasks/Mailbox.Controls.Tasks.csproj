@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    The Tasks module's view (§9). Drawn rather than composed for the reason the People list is:
+    The Tasks module's view. Drawn rather than composed for the reason the People list is:
     a to-do list is a long run of short rows under group headings, and a control per row is a
     control per row.
 

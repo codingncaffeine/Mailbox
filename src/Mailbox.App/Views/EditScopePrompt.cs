@@ -26,7 +26,7 @@ public enum EditScope
 /// it lets anyone touch a repeating appointment.
 /// </summary>
 /// <remarks>
-/// The two answers are very different data operations (§9): one occurrence becomes an override
+/// The two answers are very different data operations: one occurrence becomes an override
 /// stored beside its master, or an EXDATE taken out of it; the series is the master itself. Asking
 /// is not a courtesy — without it, editing one week's meeting would silently move every week's.
 /// </remarks>
@@ -92,7 +92,6 @@ public sealed class EditScopePrompt : Window
         };
 
         DialogChrome.Apply(this, body);
-        Bind(this, BackgroundProperty, "dialog.background.brush");
     }
 
     /// <summary>Asks, and returns what was chosen. A one-off appointment is never asked about.</summary>

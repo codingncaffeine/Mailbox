@@ -407,6 +407,17 @@
         <Setter Property="Background" Value="{DynamicResource state.selected.brush}" />
     </Style>
 
+    <!-- A list that does not hold the focus dims its selection, as the reference does: the
+         saturated band follows the keyboard, and the dimmed one says "this was yours" from the
+         list the reader has left. Every built-in defines the token; nothing read it before. -->
+    <Style Selector="ListBox:not(:focus-within) ListBoxItem:selected">
+        <Setter Property="Background" Value="{DynamicResource state.selectedinactive.brush}" />
+    </Style>
+
+    <Style Selector="ListBox:not(:focus-within) ListBoxItem:selected:pointerover">
+        <Setter Property="Background" Value="{DynamicResource state.selectedinactive.brush}" />
+    </Style>
+
     <!-- ================================= Tabs ================================== -->
     <!-- Dialog tabs. The control theme's palette follows our tokens now, but a tab strip is
          prominent enough to be worth saying explicitly rather than inheriting. -->

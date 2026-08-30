@@ -6,10 +6,11 @@ namespace Mailbox.Tests;
 /// The prose rules, held by a test rather than by anybody remembering them.
 /// </summary>
 /// <remarks>
-/// Three of these were found by hand and are the kind of thing that comes back the moment nobody
-/// is looking: the reference product's name written into a comment, a user-visible string that
-/// dates itself against an internal schedule, and a citation to a document only this repository's
-/// owner can read. Each is cheap to check over the whole tree, so each is checked here.
+/// Each of these was found by hand first and is the kind of thing that comes back the moment
+/// nobody is looking: the reference product's name written into a comment, a string or a comment
+/// that dates itself against an internal schedule, and a citation to a document only this
+/// repository's owner can read. Each is cheap to check over the whole tree, so each is checked
+/// here.
 /// </remarks>
 public class AuditProseSweepTests
 {
@@ -152,6 +153,110 @@ public class AuditProseSweepTests
         Assert.True(
             offences.Count == 0,
             "A string cites a section of an internal document:" + Environment.NewLine
+            + string.Join(Environment.NewLine, offences));
+    }
+
+    /// <summary>The extensions the two comment sweeps walk: everything the text sweep does, plus the pose lists.</summary>
+    private static readonly string[] SweptExtensions =
+    [
+        ".cs", ".axaml", ".xaml", ".md", ".json", ".sh", ".py", ".yml", ".yaml",
+        ".desktop", ".csproj", ".props", ".targets", ".txt", ".slnx", ".xml", ".editorconfig", ".tsv",
+    ];
+
+    /// <summary>
+    /// Files allowed bare <c>§N</c> without an anchor on the same line: the ones whose whole
+    /// business is transcribing one named specification, where the document is named once at the
+    /// top and every section number after it is that document's. Each must actually name its
+    /// document somewhere, or it loses the exemption.
+    /// </summary>
+    private static bool IsSpecTranscription(string relative)
+    {
+        if (relative.StartsWith(Path.Combine("src", "Mailbox.Pst"), StringComparison.Ordinal)) return true;
+        if (relative.StartsWith(Path.Combine("src", "Mailbox.Security"), StringComparison.Ordinal)) return true;
+
+        string[] fixtures =
+        [
+            "PstSpecExamples.cs", "PstSpecExampleTests.cs", "PstLtpTests.cs",
+            "HeaderProtectionTests.cs", "SmimeKeys.cs",
+        ];
+        return fixtures.Contains(Path.GetFileName(relative), StringComparer.Ordinal);
+    }
+
+    /// <summary>A section number that names its document on the same line.</summary>
+    private static readonly Regex AnchoredSection = new(@"(\[MS-[A-Z-]+\]|RFC ?\d+)[^\n]*§", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Every <c>§N</c> anywhere in the tree cites a document the reader has.
+    /// </summary>
+    /// <remarks>
+    /// The audit found five hundred of these pointing at a gitignored working document, and every
+    /// one was a dangling cross-reference for anybody reading the repository. A section number is
+    /// allowed exactly two homes now: on a line that names a published document — an
+    /// <c>[MS-*]</c> specification or an RFC — or in a file that transcribes one named spec from
+    /// end to end. Anything else must say the rule itself, not where the rule was written down.
+    /// </remarks>
+    [Fact]
+    public void EverySectionSignCitesADocumentTheReaderHas()
+    {
+        var offences = new List<string>();
+
+        foreach (var (path, text) in TextFiles(SweptExtensions))
+        {
+            var relative = Relative(path);
+
+            if (IsSpecTranscription(relative))
+            {
+                if (text.Contains('§') && !text.Contains("[MS-", StringComparison.Ordinal)
+                    && !Regex.IsMatch(text, @"RFC ?\d"))
+                {
+                    offences.Add($"{relative}: uses § but never names its document");
+                }
+
+                continue;
+            }
+
+            var lines = text.Split('\n');
+            for (var i = 0; i < lines.Length; i++)
+            {
+                if (!lines[i].Contains('§')) continue;
+                if (AnchoredSection.IsMatch(lines[i])) continue;
+                offences.Add($"{relative}:{i + 1}: {lines[i].Trim()}");
+            }
+        }
+
+        Assert.True(
+            offences.Count == 0,
+            "A § cites a section of a document the reader does not have:" + Environment.NewLine
+            + string.Join(Environment.NewLine, offences));
+    }
+
+    /// <summary>
+    /// No comment anywhere dates itself against the project's own schedule.
+    /// </summary>
+    /// <remarks>
+    /// The strings rule, widened to the comments once the last of them was rewritten: a phase
+    /// number is a citation into a gitignored plan, and it ages into a falsehood the moment the
+    /// phase lands — nine had, before the sweep. String literals are stripped first so a test
+    /// may still spell the forbidden shape in order to look for it.
+    /// </remarks>
+    [Fact]
+    public void NoCommentNamesAPhase()
+    {
+        var offences = new List<string>();
+
+        foreach (var (path, text) in TextFiles(SweptExtensions))
+        {
+            var withoutLiterals = StringLiteral.Replace(text, string.Empty);
+            var lines = withoutLiterals.Split('\n');
+            for (var i = 0; i < lines.Length; i++)
+            {
+                if (NamesAPhase.IsMatch(lines[i])) offences.Add($"{Relative(path)}:{i + 1}: {lines[i].Trim()}");
+            }
+        }
+
+        Assert.True(
+            offences.Count == 0,
+            "A comment names a phase rather than what it means:" + Environment.NewLine
             + string.Join(Environment.NewLine, offences));
     }
 

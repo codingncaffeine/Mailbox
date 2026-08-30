@@ -7,7 +7,7 @@ namespace Mailbox.Rendering;
 /// </summary>
 /// <remarks>
 /// A <c>cid:</c> reference points into the MIME tree, and we are holding the tree, so resolving
-/// one is a lookup rather than a fetch. This is the reason the design in §11 works: the markup
+/// one is a lookup rather than a fetch. This is the reason the render design works: the markup
 /// that reaches the engine has its inline images already in it.
 /// </remarks>
 public sealed class ResourceMap

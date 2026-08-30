@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    §16's importers, beginning with Maildir — the most likely migration source for this
+    the design's importers, beginning with Maildir — the most likely migration source for this
     audience: Dovecot and Courier trees, Evolution, KMail, mutt and offlineimap all keep one.
     An importer reads somebody else's store without ever writing to it, files messages through
     the same repository the receivers use, and answers with a report rather than a log — what

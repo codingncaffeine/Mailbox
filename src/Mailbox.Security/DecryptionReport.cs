@@ -21,7 +21,7 @@ public enum DecryptionState
     /// protection, or the protection it carries does not hold.
     /// </summary>
     /// <remarks>
-    /// OpenPGP's own state, and the reason §19 puts this feature behind a subclass. A packet with
+    /// OpenPGP's own state, and the reason the security design puts this feature behind a subclass. A packet with
     /// no modification detection code, or one whose code fails, is a packet an attacker may have
     /// rewritten a byte at a time — the EFAIL family, and rPGP shipped the same class of bug into
     /// 2026. <b>Nothing decrypted this way is released</b>, so there is content here and it is not

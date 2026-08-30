@@ -67,7 +67,7 @@ internal static class OptionsPageAudit
             // "drives something" look identical from a photograph and from a press. A control a
             // slot built without registering a key is different again: it drives live state —
             // the send/receive schedule, an autostart entry — and calling it unread would report
-            // §20's backlog about a wired row.
+            // The design's backlog about a wired row.
             var caption = Caption(control) is { Length: > 0 } own ? own : LabelBeside(control);
             var stored = key is not null
                 ? string.Equals(key, caption, StringComparison.Ordinal)
@@ -214,7 +214,7 @@ internal static class OptionsPageAudit
 }
 
 /// <summary>
-/// The doors Phase 12A needed: a message whose remote picture really can be fetched, and a report
+/// The doors the Trust Center audit needed: a message whose remote picture really can be fetched, and a report
 /// of what the Trust Center's and Advanced page's switches are actually set to.
 /// </summary>
 /// <remarks>
@@ -253,7 +253,7 @@ public partial class MainWindow
         }
 
         // The current view, read after everything else has driven it. This is the read-back the
-        // carried Phase 3 item wanted: columns, the formatting rules, and which rule each drawn
+        // view-settings work wanted: columns, the formatting rules, and which rule each drawn
         // row actually meets, which a photograph of the dialog cannot say. `=1` reads on the
         // next idle pass; a number is milliseconds to wait first, for a dialog chain whose
         // presses take seconds — the store report's `@ms` lesson, learned once already.

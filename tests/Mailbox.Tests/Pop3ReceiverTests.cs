@@ -106,7 +106,7 @@ public class Pop3ReceiverTests
 
     /// <summary>
     /// A poll is where a signature gets checked, because checking resolves a name the sender
-    /// chose and §19 does not allow a lookup on the path that draws a message. These fix that
+    /// chose and no lookup is allowed on the path that draws a message. These fix that
     /// arrangement in place: the receiver records a verdict, and a receiver given no verifier
     /// asks nothing of anyone.
     /// </summary>

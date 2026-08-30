@@ -416,7 +416,7 @@ public partial class MainWindow
         }
 
         // Whether a reader could have pressed it is the first half of the claim: PressMenuEntry's
-        // lesson from Phase 2 is that a harness pressing a greyed control proves nothing.
+        // standing lesson is that a harness pressing a greyed control proves nothing.
         Log.Info($"Harness: ribbon edit — pressing {verb}"
                  + $"{(button.IsEffectivelyEnabled ? string.Empty : " (which is greyed, so a reader could not)")}.");
 
@@ -460,9 +460,9 @@ public partial class MainWindow
 
     /// <summary>Opens a menu button's flyout and presses one of its entries.</summary>
     /// <remarks>
-    /// Reset and Import/Export are menus rather than buttons, and rule 6 of the audit's evidence
-    /// says a menu's size is part of the claim — so the presenter is measured before an entry is
-    /// pressed, which is how Phase 2 caught two flyouts that presented nothing at all.
+    /// Reset and Import/Export are menus rather than buttons, and the evidence rules here say a
+    /// menu's size is part of the claim — so the presenter is measured before an entry is
+    /// pressed, which is how two flyouts that presented nothing at all were once caught.
     /// </remarks>
     private static async Task PressMenuButtonAsync(OptionsWindow options, string arg)
     {

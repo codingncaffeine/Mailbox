@@ -53,7 +53,7 @@ public static class ComposeAvailability
         new(ComposeCommands.SaveDraft.Id, ComposeCommandState.Working, "Saves to Drafts."),
         new(ComposeCommands.Discard.Id, ComposeCommandState.Working,
             "Closes the window, asking first if anything was typed."),
-        // Not Phase 4, which is done and opens messages in their own windows. What these want
+        // Not the message window's own stepping, which exists and works. What these want
         // is for the window to know which list it came from, so there is a next item to go to.
         new(ComposeCommands.PreviousItem.Id, ComposeCommandState.Blocked,
             "A compose window does not know which list it was opened from, so there is no "

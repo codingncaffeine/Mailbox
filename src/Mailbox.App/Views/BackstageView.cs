@@ -294,7 +294,7 @@ public sealed class BackstageView : Border
     /// </summary>
     /// <remarks>
     /// The reference's page shows a signed-in identity, a theme picker and an About panel. There
-    /// is no identity to show — nothing here signs in to a vendor's service, which is §3 — so
+    /// is no identity to show — nothing here signs in to a vendor's service, by scope — so
     /// the accounts themselves stand in its place, which is what a reader would look for on a
     /// page called Mailbox Account anyway.
     /// </remarks>
@@ -354,7 +354,7 @@ public sealed class BackstageView : Border
     }
 
     // ------------------------------------------------------------------------------------
-    // Save As — what leaves the store leaves it verbatim (§7.6a)
+    // Save As — what leaves the store leaves it verbatim
     // ------------------------------------------------------------------------------------
 
     private Control BuildSaveAs()
@@ -400,7 +400,7 @@ public sealed class BackstageView : Border
     }
 
     // ------------------------------------------------------------------------------------
-    // Open & Export — the importers, §16 arriving one format at a time
+    // Open & Export — the importers, arriving one format at a time
     // ------------------------------------------------------------------------------------
 
     private Control BuildOpenExport()

@@ -203,8 +203,8 @@ public static class MessageMapper
 
     /// <summary>
     /// Strips markup for the preview line only. Deliberately crude: this feeds two hundred
-    /// characters of plain text into a list row, never the reading pane, which gets a real
-    /// sanitiser and a renderer in Phase 4. Style and script content is dropped rather than
+    /// characters of plain text into a list row, never the reading pane, which has a real
+    /// sanitiser and a renderer of its own. Style and script content is dropped rather than
     /// flattened, because CSS read as prose is worse than no preview.
     /// </summary>
     private static string ToPlain(string html)

@@ -6,7 +6,7 @@ using Mailbox.Core.Settings;
 namespace Mailbox.Tests;
 
 /// <summary>
-/// What Phase 2 proved about the Quick Access Toolbar, the Backstage, the status bar and the
+/// What the chrome audit proved about the Quick Access Toolbar, the Backstage, the status bar and the
 /// title search box, promoted so the classes of fault it caught stay caught.
 /// </summary>
 /// <remarks>
@@ -151,7 +151,7 @@ public class AuditBackstageTests
     /// No <c>MenuFlyout</c> is left to fill itself from its own <c>Opening</c> event alone.
     /// </summary>
     /// <remarks>
-    /// This is the fault Phase 2 found in the Quick Access Toolbar's customize menu, and it is
+    /// This is the fault the chrome audit found in the Quick Access Toolbar's customize menu, and it is
     /// invisible to everything else the audit does. The popup's presenter is built from the
     /// menu's entries when the popup is created, and that happens before <c>Opening</c> is
     /// raised: a menu that had nothing in it at that moment presents an empty popup however many
@@ -220,7 +220,7 @@ public class AuditBackstageTests
     /// <remarks>
     /// The Backstage's buttons raise strings. <c>BackstageActions.RunAsync</c> switches on them
     /// and its default is to do nothing at all — so a typo, or a button added without its case,
-    /// is a button that silently does nothing, which is precisely the standing rule this phase
+    /// is a button that silently does nothing, which is precisely the standing rule this file
     /// exists to hold. The shell handles a few of them first, because they act on what the shell
     /// is showing.
     /// </remarks>

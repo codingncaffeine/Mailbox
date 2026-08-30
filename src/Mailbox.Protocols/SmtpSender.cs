@@ -67,7 +67,7 @@ public sealed class SmtpSender(MailRepository repository)
     /// Puts a copy of what went into Sent Items, already read.
     /// </summary>
     /// <remarks>
-    /// The bytes as they went, verbatim, which is §4's rule for every message the store holds
+    /// The bytes as they went, verbatim, which is the design's rule for every message the store holds
     /// and the only version that matches what the recipient has. Marked read because the person
     /// wrote it. A failure here is logged and not raised: the message has been sent, and an
     /// exception now would report a delivery that succeeded as one that did not.

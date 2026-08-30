@@ -114,7 +114,7 @@ public sealed class AttachmentStrip : Border
     /// whatever a stranger sent without a step in between is doing the attacker's clicking.
     /// <para>
     /// The suggestion is the sanitized name, never the raw one: a file name arrives with the
-    /// message and is therefore text a stranger chose. See §19 on hostile input.
+    /// message and is therefore text a stranger chose — hostile input, and treated as such.
     /// </para>
     /// </remarks>
     private async Task SaveAsync(Attachment attachment)

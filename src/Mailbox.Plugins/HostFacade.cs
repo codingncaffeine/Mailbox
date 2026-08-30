@@ -13,7 +13,7 @@ namespace Mailbox.Plugins;
 /// One plugin's view of the application: the <see cref="IPluginHost"/> its
 /// <c>Initialize</c> receives. Every surface checks the manifest before it acts — a permission
 /// the plugin did not declare refuses the call, records the use, and the Add-ins page says so.
-/// Not a boundary (§19: the manifest is disclosure), but it keeps an honest plugin honest and
+/// Not a boundary — the manifest is disclosure, not enforcement — but it keeps an honest plugin honest and
 /// makes a greedy one visible.
 /// </summary>
 internal sealed class HostFacade : IPluginHost, IPluginSettings, IPluginCommands,
@@ -108,7 +108,7 @@ internal sealed class HostFacade : IPluginHost, IPluginSettings, IPluginCommands
             Category = Manifest.Name,
             DefaultGesture = command.Gesture,
 
-            // Additions never appear on the shipped ribbon (§13 rule 5); a plugin's own tab is
+            // Additions never appear on the shipped ribbon, by the plugin contract; a plugin's own tab is
             // where its commands show, and Customize Ribbon is how they go anywhere else.
             InDefaultLayout = false,
             OwningPluginId = PluginId,

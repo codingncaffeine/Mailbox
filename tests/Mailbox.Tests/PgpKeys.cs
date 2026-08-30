@@ -132,7 +132,7 @@ internal static class PgpKeys
     /// An RFC 3156 encrypted message built by hand, so the integrity packet is ours to leave out.
     /// </summary>
     /// <param name="integrity">
-    /// Whether the packet carries a modification detection code at all. False is the case §19 is
+    /// Whether the packet carries a modification detection code at all. False is the case the security rules are
     /// about: BouncyCastle will decrypt it and MimeKit will hand back the plaintext without a word.
     /// </param>
     /// <param name="corrupt">

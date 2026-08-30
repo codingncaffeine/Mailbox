@@ -4,7 +4,7 @@ using Mailbox.Core.Ribbon;
 namespace Mailbox.Tests;
 
 /// <summary>
-/// The audit's Phase 0 inventories, generated from the code rather than transcribed.
+/// The audit's opening inventories, generated from the code rather than transcribed.
 /// </summary>
 /// <remarks>
 /// A hand-kept inventory cannot notice what was added to the tree and not to it, and the

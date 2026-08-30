@@ -43,7 +43,7 @@ namespace Mailbox.App.Views;
 /// <see cref="Invoke"/>, enablement goes out through <see cref="EnablementChanged"/>, and
 /// closing is a request the host answers.
 /// <para>
-/// The body is a real document. §7.3's survey found a GPL-3-compatible editor that carries the
+/// The body is a real document. The design's survey found a GPL-3-compatible editor that carries the
 /// document model that section planned to build, so what is in-house is the serializer — and
 /// that is the half mail fidelity rests on. Send writes both an HTML body, through
 /// <see cref="EmailHtml"/>, and the plain text alternative, off the same document so the two
@@ -70,7 +70,7 @@ public sealed partial class ComposeSurface : UserControl
     /// <summary>
     /// What this message is written in: Personal Stationery's font for new mail, for a reply or
     /// forward, or for plain text — Calibri 11 unless the reader has chosen otherwise, which is
-    /// the reference's own default and the one name §6 cares most about getting onto the wire
+    /// the reference's own default and the one name font fidelity cares most about getting onto the wire
     /// correctly. The family here is the wire name; the editor draws its substitute.
     /// </summary>
     private MessageFont _font = MessageFont.Default;
@@ -518,7 +518,7 @@ public sealed partial class ComposeSurface : UserControl
     /// Fills the window from a message, for one that has been pulled back out of the outbox.
     /// </summary>
     /// <remarks>
-    /// Undo Send (§12). What comes back is the message as it was queued, so the reader gets
+    /// Undo Send. What comes back is the message as it was queued, so the reader gets
     /// their words rather than a blank window and an apology — which is the whole point of
     /// pressing Undo rather than letting it go and writing a correction.
     /// </remarks>
@@ -710,7 +710,7 @@ public sealed partial class ComposeSurface : UserControl
         _confidential = confidential;
         if (confidential.Count == 0) return;
 
-        // Nothing to encrypt with means nothing to promise (§14). The refusal on Send is what stops
+        // Nothing to encrypt with means nothing to promise. The refusal on Send is what stops
         // the leak in that case, and it says why.
         if (!App.Security.Smime && !App.Security.OpenPgp) return;
 
@@ -1939,7 +1939,7 @@ public sealed partial class ComposeSurface : UserControl
     }
 
     /// <summary>
-    /// The font picker, which §6 says lists the Microsoft names.
+    /// The font picker, which lists the Microsoft names: outgoing mail speaks the fonts the rest of the world names.
     /// </summary>
     /// <remarks>
     /// Because that is what people expect to choose, and because it is what goes on the wire:
@@ -2043,7 +2043,7 @@ public sealed partial class ComposeSurface : UserControl
     /// Spelling, over the whole message.
     /// </summary>
     /// <remarks>
-    /// A pass rather than squiggles as you type, which is what §7.3 asks for and what the editor
+    /// A pass rather than squiggles as you type, the editor design's own choice and what the editor
     /// cannot do: underlining a word as it is typed needs the editor to draw on its own text run,
     /// and it exposes nothing for that. This is the reference's F7 — walk what is not in the
     /// dictionary, offer what is, and let a word be kept.
@@ -2433,7 +2433,7 @@ public sealed partial class ComposeSurface : UserControl
             return;
         }
 
-        // A plugin may stop a send (§13), and it is asked before the cryptography for the same
+        // A plugin may stop a send, and it is asked before the cryptography for the same
         // reason the cryptography runs last: a message stopped after signing was signed for
         // nothing. The refusal names the plugin, so the writer knows what stood in the way.
         if (App.Plugins.BeforeSend(account.Account.Address, message) is { } stopped)
@@ -2443,7 +2443,7 @@ public sealed partial class ComposeSurface : UserControl
         }
 
         // Signed and sealed here and nowhere else: immediately before it goes, over the message as
-        // it will actually be sent, once the writer has decided to send it (§19). A refusal stops
+        // it will actually be sent, once the writer has decided to send it. A refusal stops
         // the send with the message intact rather than sending it in the clear.
         if (!await ProtectAsync(message)) return;
 
@@ -2495,14 +2495,14 @@ public sealed partial class ComposeSurface : UserControl
     }
 
     // ----------------------------------------------------------------------------------
-    // Signing and encrypting (Phase 15)
+    // Signing and encrypting
     // ----------------------------------------------------------------------------------
 
     /// <summary>Puts one of the two buttons down or up, and says what it now means.</summary>
     private void Want(Protection what, string word)
     {
         // Neither algorithm switched on means nothing to do it with, and a button that goes down
-        // over an empty Trust Center is a promise the send would have to break (§14).
+        // over an empty Trust Center is a promise the send would have to break.
         if (!App.Security.Smime && !App.Security.OpenPgp)
         {
             Report("Turn on S/MIME or OpenPGP under File · Options · Trust Center first.");
@@ -2529,7 +2529,7 @@ public sealed partial class ComposeSurface : UserControl
     private async Task<bool> ProtectAsync(MimeMessage message)
     {
         // Before the toggles are even looked at, because the message this answers gets a say: a
-        // field it kept back does not go out in the clear here (§6.1). See Answering.
+        // field it kept back does not go out in the clear here. See Answering.
         if (Exposed() is { Count: > 0 } exposed)
         {
             Report("This message answers one that kept its " + Names(exposed)
@@ -2652,7 +2652,7 @@ public sealed partial class ComposeSurface : UserControl
         {
             // Under the sender's own domain, as every client does. Left alone, MimeKit stamps
             // the machine's hostname into it — and into every cid: below — which is a name a
-            // recipient has no business learning from a message header. §19. Minted once per
+            // recipient has no business learning from a message header. Minted once per
             // composition: a fresh id per save made every autosave a different message by
             // identity, which on an IMAP Drafts folder is a new message per autosave.
             MessageId = _messageId ??= MimeUtils.GenerateMessageId(domain),
@@ -2717,7 +2717,7 @@ public sealed partial class ComposeSurface : UserControl
             TextBody = _body.GetPlainText().Replace("\uFFFC", string.Empty, StringComparison.Ordinal),
         };
 
-        // Ours, not the editor's: §6's wire/render split and the narrow set of elements mail
+        // Ours, not the editor's: the design's wire/render split and the narrow set of elements mail
         // clients actually render. See Mailbox.Editor.EmailHtml for why that is the half worth
         // keeping in-house. Unless this message is going as plain text, in which case the text
         // half is the message and there is no other.
@@ -2807,7 +2807,7 @@ public sealed partial class ComposeSurface : UserControl
 
             var message = await BuildMessageAsync(account);
 
-            // A draft is never signed and is encrypted to its author alone (§19) — the recipient
+            // A draft is never signed and is encrypted to its author alone — the recipient
             // fields are the part a mailto: link gets to choose, and a signature is a statement made
             // when somebody decides to send something, not every few minutes by an autosave. A draft
             // that cannot be encrypted is not saved in the clear instead: the writer is told, and

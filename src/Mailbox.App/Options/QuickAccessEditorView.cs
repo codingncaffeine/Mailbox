@@ -12,7 +12,7 @@ namespace Mailbox.App.Options;
 /// </summary>
 /// <remarks>
 /// The toolbar's state already had a home — it is stored with the rest of the preferences and
-/// the chevron flyout has been editing it since Phase 1. This page is the long way round to the
+/// the chevron flyout has been editing it since the toolbar was first drawn. This page is the long way round to the
 /// same object, so the two cannot disagree: place a command here and the flyout shows it
 /// ticked, hide the bar there and the checkbox here clears.
 /// </remarks>

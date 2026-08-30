@@ -763,7 +763,7 @@ public class SeedHarness
     }
 
     /// <summary>
-    /// Encrypted with no modification detection code at all, which is the one §19 exists for.
+    /// Encrypted with no modification detection code at all, which is the case the security rules exist for.
     /// </summary>
     /// <remarks>
     /// It decrypts. Nothing about it is malformed. What it has not got is anything showing it

@@ -414,7 +414,7 @@ public static class DefaultRibbonLayouts
             },
 
             // The Folder tab, transcribed from the reference: five groups, and every command in
-            // it has been reachable from the folder pane's own menu since Phase 3.
+            // it has long been reachable from the folder pane's own menu.
             new RibbonTab
             {
                 Id = "folder",

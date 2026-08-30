@@ -16,7 +16,7 @@ namespace Mailbox.App.Views;
 /// <remarks>
 /// The switches that act are the four the checker has and everything behind AutoCorrect
 /// Options…; the rest of the reference's page says what it waits on rather than pretending —
-/// there is no grammar checker, and the editor cannot underline as you type (§7.3).
+/// there is no grammar checker, and the editor cannot underline as you type.
 /// Accessibility and Advanced are the reference's other two pages, and both are notes here
 /// until their phases. Every switch writes as it goes; OK and Cancel both close.
 /// </remarks>

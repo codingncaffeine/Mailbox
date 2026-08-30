@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Google Tasks (§5, §9). The only vendor-specific code path in the project, and it has an
+    Google Tasks. The only vendor-specific code path in the project, and it has an
     assembly of its own so that it is one grep rather than a scatter: everything that knows a
     particular company's API is in here, and nothing else references it except the sync service
     that runs it.

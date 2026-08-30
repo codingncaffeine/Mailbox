@@ -10,7 +10,7 @@ public sealed record ContrastFinding(string Ink, string Ground, string InkColour
 }
 
 /// <summary>
-/// The contrast checker §8 asks for: every pair of a text token and the surface behind it,
+/// The contrast checker the theme system asks for: every pair of a text token and the surface behind it,
 /// against the WCAG ratio, over a resolved theme. The built-ins are held to it by a test; a
 /// theme file is checked when it is applied, and told in the log which of its words cannot be
 /// read — because a token that is present but unreadable is exactly what the coverage gate

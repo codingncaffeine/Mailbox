@@ -20,7 +20,7 @@ namespace Mailbox.Tests;
 /// <para>
 /// <b>Nothing is ever deleted.</b> POP3's sharpest edge is a client that deletes by default and
 /// empties a mailbox somebody was still reading elsewhere, which is why the policy leaves mail on
-/// the server (§4) — and why a test has no business doing otherwise on a real one. The store is a
+/// the server — and why a test has no business doing otherwise on a real one. The store is a
 /// throwaway; the mailbox is left exactly as it was found.
 /// </para>
 /// </remarks>
@@ -190,7 +190,7 @@ public class RealPop3Tests
     /// Leave on server is the default, and it holds against a real one.
     /// </summary>
     /// <remarks>
-    /// The rule §4 exists for: a client that deletes by default will, the first time somebody
+    /// The rule leave-on-server exists for: a client that deletes by default will, the first time somebody
     /// tries it beside an existing setup, silently empty a mailbox they were still using
     /// elsewhere. Asserted against the server rather than against the policy object, because what
     /// matters is what the server still has.

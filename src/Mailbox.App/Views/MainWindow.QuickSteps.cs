@@ -139,7 +139,7 @@ public partial class MainWindow
                     }
 
                     // Any catalogue command as an action — which is how a plugin's command
-                    // becomes part of a step (§13), and how an unplaced addition can. Through
+                    // becomes part of a step, and how an unplaced addition can. Through
                     // the shell's own dispatcher, so it means here what it means anywhere. A
                     // step's own command is refused: a step that runs a step is a loop wearing
                     // a gallery button.

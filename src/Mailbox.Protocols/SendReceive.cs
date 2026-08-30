@@ -187,7 +187,7 @@ public sealed class SendReceiveService(
 
         // IMAP has folders and flags on the server; POP3 has neither, so it is the receiver that
         // downloads the inbox and the store that keeps everything else. The store being
-        // authoritative (§4) is what lets these share one send path and one outbox.
+        // authoritative is what lets these share one send path and one outbox.
         if (account.Protocol == MailProtocol.Imap)
         {
             var sync = await _synchronizer(target.Mail).SyncAsync(

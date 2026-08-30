@@ -9,7 +9,7 @@ using Mailbox.Store.Pim;
 namespace Mailbox.App.Views;
 
 /// <summary>
-/// The Save As page's four exports. Mail leaves as its stored bytes, verbatim — §7.6a's
+/// The Save As page's four exports. Mail leaves as its stored bytes, verbatim — the design's
 /// promise, and the reason none of this re-serializes a message it received. The PIM exports
 /// serialize through the same codecs the sync writes with, so what leaves is what a server
 /// would have been sent.
@@ -26,7 +26,7 @@ public partial class MainWindow
 
         // The same bargain the calendar and contacts exports make: a picker is a desktop window
         // a headless run cannot answer, so "it wrote nothing" and "it did nothing" were the same
-        // evidence. §7.6a's promise — that what leaves is the stored bytes, verbatim — could
+        // evidence. The design's promise — that what leaves is the stored bytes, verbatim — could
         // therefore not be checked through the command at all, only through the method under it.
         var path = HarnessSavePath("eml");
         if (path is null)

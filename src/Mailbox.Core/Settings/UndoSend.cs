@@ -4,7 +4,7 @@ namespace Mailbox.Core.Settings;
 /// How long a sent message waits before it can actually go.
 /// </summary>
 /// <remarks>
-/// §12's addition, and one of the few that is on by default. The argument for that is the same
+/// The design's addition, and one of the few that is on by default. The argument for that is the same
 /// one every client that has it makes: the cost of the hold is a few seconds of latency nobody
 /// notices, because mail is not instant messaging and a message five seconds late is a message
 /// on time. The cost of not having it is the one everybody has paid at least once.

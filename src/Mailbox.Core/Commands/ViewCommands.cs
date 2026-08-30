@@ -406,7 +406,7 @@ public static class ViewCommands
     /// The rail's modules as commands, one per accelerator.
     /// </summary>
     /// <remarks>
-    /// The reference's own module switches are Ctrl+1 to Ctrl+8 (§6) and Ctrl+9 is Feeds; the
+    /// The reference's own module switches are Ctrl+1 to Ctrl+8 and Ctrl+9 is Feeds; the
     /// enum's values are those numbers, so the gesture falls out of the module. Folders and
     /// Shortcuts have no command here because neither is a module of its own. They are commands
     /// rather than a special case in the key handler so they can

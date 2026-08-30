@@ -6,7 +6,7 @@ using MimeKit;
 namespace Mailbox.Tests;
 
 /// <summary>
-/// Focused Inbox (§12): the classifier's rules, pure; the arrival handler over a store; and the
+/// Focused Inbox: the classifier's rules, pure; the arrival handler over a store; and the
 /// "always" override that remembers a sender and moves what they already sent.
 /// </summary>
 public class FocusedInboxTests

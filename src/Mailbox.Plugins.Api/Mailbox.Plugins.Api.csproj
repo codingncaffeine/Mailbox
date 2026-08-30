@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    §13's versioned interface package: the one assembly a plugin compiles against. Deliberately
+    the design's versioned interface package: the one assembly a plugin compiles against. Deliberately
     narrower than the internal model, and deliberately dependency-free — a plugin written against
     plain records and interfaces cannot couple itself to MailKit, Avalonia or the store, so those
     can move without breaking anybody. The host resolves this assembly for every plugin from its

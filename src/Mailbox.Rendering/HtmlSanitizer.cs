@@ -14,7 +14,7 @@ namespace Mailbox.Rendering;
 /// The same walk resolves resources. A <c>cid:</c> reference becomes the part's bytes as a
 /// <c>data:</c> URI; a remote reference becomes a placeholder and an entry in the tracker
 /// report, unless the caller has already fetched it. What comes out has no remote URL left in
-/// it, which is what makes the blocking in §11 something that cannot fail open — there is
+/// it, which is what makes the remote-image blocking something that cannot fail open — there is
 /// nothing left for the engine to request.
 /// </para>
 /// </remarks>

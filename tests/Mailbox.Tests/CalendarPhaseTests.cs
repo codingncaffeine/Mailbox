@@ -6,7 +6,7 @@ using Mailbox.Store.Pim;
 namespace Mailbox.Tests;
 
 /// <summary>
-/// Phase 11's own layer: the pattern editor's grammar, the three edit-scope operations, the
+/// The calendar's model layer: the pattern editor's grammar, the three edit-scope operations, the
 /// month view's lane packing, iMIP's state machine, and which reminder is due.
 /// </summary>
 public class CalendarPhaseTests

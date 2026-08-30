@@ -17,7 +17,7 @@ public sealed record OpmlEntry(string Title, string Url, string Category = "", s
 /// <remarks>
 /// This is how somebody arrives from Feedly, Inoreader, NetNewsWire or Thunderbird with two
 /// hundred subscriptions, and how they leave again — which matters as much: a reader that cannot
-/// be left is a reader that has to be trusted, and §7.6a's argument about mail applies exactly
+/// be left is a reader that has to be trusted, and the design's argument about mail applies exactly
 /// as well to a subscription list.
 /// <para>
 /// The format is loose in practice. The specification says <c>xmlUrl</c> and readers write

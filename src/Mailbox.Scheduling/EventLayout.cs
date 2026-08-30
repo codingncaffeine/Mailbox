@@ -7,7 +7,7 @@ namespace Mailbox.Scheduling;
 public sealed record LayoutBox<T>(T Item, DateTimeOffset Start, DateTimeOffset End, int Column, int Columns, int Span);
 
 /// <summary>
-/// The overlapping-appointment layout §7.4 describes: items in a day are grouped into clusters
+/// The overlapping-appointment layout: items in a day are grouped into clusters
 /// of mutual overlap, each cluster is packed into as few columns as its busiest moment needs,
 /// and an item widens to the right over columns nothing else uses during its time.
 /// </summary>

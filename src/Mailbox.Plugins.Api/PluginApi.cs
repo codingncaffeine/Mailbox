@@ -29,7 +29,7 @@ public static class PluginApi
 /// report rather than taking the application down. There is no sandbox to catch anything else:
 /// a plugin runs in-process with the application's own reach, and installing one is trusting it
 /// exactly as far as the application itself is trusted. The manifest's permission list is
-/// disclosure, not enforcement (§19).
+/// disclosure, not enforcement.
 /// </para>
 /// </remarks>
 public interface IPlugin

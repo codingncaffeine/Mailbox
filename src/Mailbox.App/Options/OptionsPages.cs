@@ -78,7 +78,7 @@ public static class OptionsPages
             new OptionSection("Updates",
             [
                 // Keyed and off, because a version check is a network request with this
-                // machine's address on it (§19); the Backstage's own button asks by the press.
+                // machine's address on it; the Backstage's own button asks by the press.
                 new CheckRow("Check for a newer version when Mailbox starts")
                 {
                     Key = UpdateCheck.AutomaticKey,
@@ -88,7 +88,7 @@ public static class OptionsPages
             new OptionSection("User Interface options",
             [
                 // A label over two radios, as the reference draws it — a combo here read as
-                // drift in the Phase 12 capture comparison.
+                // drift in the capture comparison.
                 new SubHeadingRow("When using multiple displays:"),
                 new RadioRow("displays", "Optimize for best appearance", true) { Indent = 1 },
                 new RadioRow("displays", "Optimize for compatibility (restart required)") { Indent = 1 },
@@ -209,7 +209,7 @@ public static class OptionsPages
 
             new OptionSection("Send messages",
             [
-                // §12's Undo Send, beside delayed delivery because it is the same mechanism
+                // The design's Undo Send, beside delayed delivery because it is the same mechanism
                 // with a smaller number in it — the outbox holding a message back.
                 new SlotRow("undosend"),
                 new ComboRow("Default importance level:", ["Normal", "Low", "High"], 0, 150, 240) { Key = MailOptions.DefaultImportanceKey },
@@ -243,8 +243,8 @@ public static class OptionsPages
                     0, 300, 380),
             ]),
 
-            // An addition, not a transcription (§12): the reference has no unified inbox. It ships
-            // off because it restructures the folder pane rather than adding a command (§14), and
+            // An addition, not a transcription: the reference has no unified inbox. It ships
+            // off because it restructures the folder pane rather than adding a command, and
             // it says what it does rather than being a word somebody has to try.
             new OptionSection("All Accounts",
             [
@@ -282,7 +282,7 @@ public static class OptionsPages
                 new ComboRow("Start time:", Times, 16, 130, 200) { Key = CalendarOptions.WorkDayStartKey },
                 new ComboRow("End time:", Times, 34, 130, 200) { Key = CalendarOptions.WorkDayEndKey },
                 // One line of seven, as the capture draws it — a column of seven read as drift
-                // in the Phase 12 comparison.
+                // in the capture comparison.
                 new InlineChecksRow("Work week:",
                 [
                     new InlineCheck("Sun", CalendarOptions.WorkDayKey(DayOfWeek.Sunday)),
@@ -322,7 +322,7 @@ public static class OptionsPages
 
             // The reference's Time zone dropdown sets the operating system's zone. That belongs
             // to the desktop here, so the row states what the machine says and the calendar
-            // follows it; the labels and the second zone are the settable half (§6).
+            // follows it; the labels and the second zone are the settable half.
             new OptionSection("Time zones",
             [
                 new TextRow("Label:", "", 180, 200) { Key = CalendarOptions.TimeZoneLabelKey },
@@ -472,7 +472,7 @@ public static class OptionsPages
             [
                 new ComboRow("Start Mailbox in this folder:", ["Inbox", "Calendar", "Tasks"], 0, 200, 240),
                 // Live: two rows over the XDG autostart entry, the Linux-native form of the
-                // reference's run-at-login (§10). Written as they go, like every other row.
+                // reference's run-at-login. Written as they go, like every other row.
                 new SlotRow("autostart"),
                 new CheckRow("Empty Deleted Items folders when exiting Mailbox") { Key = MailOptions.EmptyDeletedOnExitKey },
             ]),

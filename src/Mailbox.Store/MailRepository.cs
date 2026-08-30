@@ -724,7 +724,7 @@ public sealed class MailRepository(MailStore store)
             ReadMessage, ("$key", threadKey));
     }
 
-    // ---- Focused Inbox (§12) --------------------------------------------------------------------
+    // ---- Focused Inbox --------------------------------------------------------------------
 
     /// <summary>Puts messages in Focused or Other.</summary>
     public int SetFocused(IReadOnlyCollection<long> messageIds, bool focused)
@@ -788,7 +788,7 @@ public sealed class MailRepository(MailStore store)
     /// <summary>The clause that keeps a snoozed message out of a list, on the store's own clock.</summary>
     private const string Awake = " AND (snooze_until IS NULL OR snooze_until <= strftime('%s','now'))";
 
-    // ---- Snooze (§12) -----------------------------------------------------------------------
+    // ---- Snooze -----------------------------------------------------------------------
     //
     // A snoozed message leaves the list and comes back at the set time, unread and at the top —
     // its received time is moved to the moment it returned, which is what puts it there. Local
@@ -1213,7 +1213,7 @@ public sealed class MailRepository(MailStore store)
     /// <summary>
     /// Deletes many for good — as far as the folders are concerned. The rows go, and on IMAP the
     /// server is told; the raw bytes and the row's own columns are kept in the recoverable
-    /// holding area (§11) for the retention window, so Recover Deleted Items can put a message
+    /// holding area for the retention window, so Recover Deleted Items can put a message
     /// back where it was.
     /// </summary>
     public int DeleteMessages(IReadOnlyCollection<long> messageIds)
@@ -1263,7 +1263,7 @@ public sealed class MailRepository(MailStore store)
              """);
     }
 
-    // ---- Recover Deleted Items (§11) ------------------------------------------------------------
+    // ---- Recover Deleted Items ------------------------------------------------------------
 
     /// <summary>Copies what a row says about itself into the holding area, blob and all.</summary>
     private void KeepRecoverable(IReadOnlyCollection<long> messageIds, DateTimeOffset now) => _store.Execute(
@@ -1413,7 +1413,7 @@ public sealed class MailRepository(MailStore store)
 
     // ---- The sync journal ---------------------------------------------------------------------
     //
-    // The store is authoritative (§4), and IMAP is a two-way sync of the part of its state the
+    // The store is authoritative, and IMAP is a two-way sync of the part of its state the
     // server also keeps. So a change made here to a synced folder is written to the journal as
     // well as to the row, in the same transaction, and the next send/receive plays the journal to
     // the server before it pulls. Every entry names the server folder and UID it acts on, because
@@ -1829,7 +1829,7 @@ public sealed class MailRepository(MailStore store)
     //
     // Five lists, one table each, and one shape: an entry is an address, or a whole domain
     // written as "@example.com", both lower-cased. A sender matches a list when its address is
-    // on it or its domain is. Lists win over the classifier in both directions (§7.8), and the
+    // on it or its domain is. Lists win over the classifier in both directions, and the
     // safe-senders list doubles as the reading pane's "always allow images from this sender".
 
     /// <summary>
@@ -1962,7 +1962,7 @@ public sealed class MailRepository(MailStore store)
 
     // ---- The junk corpus ----------------------------------------------------------------------
     //
-    // The training the naive-Bayes filter (§7.8) weighs a message against. It is the whole corpus
+    // The training the naive-Bayes filter weighs a message against. It is the whole corpus
     // — local, never uploaded — and the classifier reaches it through Mailbox.Junk's IJunkCorpus,
     // which JunkCorpus below implements over these methods.
 
@@ -2059,7 +2059,7 @@ public sealed class MailRepository(MailStore store)
     /// </summary>
     /// <remarks>
     /// Written once, by whatever received the message, because verifying needs a key from DNS
-    /// and §19 does not allow that on the path that draws a message. Re-checking later would
+    /// and no lookup is allowed on the path that draws a message. Re-checking later would
     /// also be checking against a key that may since have rotated, and reporting a rotation as
     /// a forgery is worse than not checking twice.
     /// </remarks>
@@ -2924,7 +2924,7 @@ public sealed class MailRepository(MailStore store)
     /// </summary>
     /// <returns>The message as it was queued, or null if it is too late.</returns>
     /// <remarks>
-    /// Undo Send (§12). The whole thing turns on the word <em>if</em>: the row is only removed
+    /// Undo Send. The whole thing turns on the word <em>if</em>: the row is only removed
     /// when it is still queued and its hold has not expired, and the check and the delete happen
     /// in one transaction — so a send that started a moment ago wins, and the caller is told the
     /// message has gone rather than being handed bytes that are already on their way.

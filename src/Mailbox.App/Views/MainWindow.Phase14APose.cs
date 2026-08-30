@@ -10,7 +10,7 @@ namespace Mailbox.App.Views;
 /// store holds, inside the run that wrote it.
 /// </summary>
 /// <remarks>
-/// §7.6a's promise is that a message leaves as its stored bytes, verbatim — an export re-encoded
+/// The design's promise is that a message leaves as its stored bytes, verbatim — an export re-encoded
 /// on the way out breaks a signature that was valid a moment before, and nothing on screen would
 /// say so. Proving it wants both halves in one place: the file, and the blob it claims to be.
 /// A harness comparing them from outside can only reach the file.

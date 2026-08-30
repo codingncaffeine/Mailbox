@@ -126,7 +126,7 @@ public class SmtpSenderTests
         Assert.Equal("you@example.com", filed.FromAddress);
     }
 
-    /// <summary>The bytes filed are the bytes that went — §4's rule, and the only version that matches the recipient's.</summary>
+    /// <summary>The bytes filed are the bytes that went — the design's rule, and the only version that matches the recipient's.</summary>
     [Fact]
     public async Task WhatIsFiledIsWhatWent()
     {

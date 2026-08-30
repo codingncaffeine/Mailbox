@@ -178,7 +178,7 @@ public class RealImapTests
     }
 
     /// <summary>
-    /// Making, renaming, nesting and removing a folder, which is the half of §15's folder
+    /// Making, renaming, nesting and removing a folder, which is the half of the design's folder
     /// operations that had only ever met a fake.
     /// </summary>
     [Fact]

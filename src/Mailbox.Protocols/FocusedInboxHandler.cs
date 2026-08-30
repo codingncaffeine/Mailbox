@@ -5,7 +5,7 @@ using MimeKit;
 namespace Mailbox.Protocols;
 
 /// <summary>
-/// Sorts an arriving Inbox message into Focused or Other (§12), from what the message says
+/// Sorts an arriving Inbox message into Focused or Other, from what the message says
 /// about itself, whether the reader has written to its sender, and what the reader has said
 /// about that sender before.
 /// </summary>

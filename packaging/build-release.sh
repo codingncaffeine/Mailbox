@@ -54,7 +54,7 @@ sed 's|@LIB@|/usr/lib/mailbox|' packaging/mailbox-launcher.sh > "$DEB/usr/bin/ma
 chmod 755 "$DEB/usr/bin/mailbox"
 
 INSTALLED_KB=$(du -sk "$DEB/usr" | cut -f1)
-# Depends are Debian 13 (trixie) names, the primary .deb target (§16); the ICU alternates reach
+# Depends are Debian 13 (trixie) names, the primary .deb target; the ICU alternates reach
 # back to older releases. WPE WebKit is what renders mail; without it the reading pane falls
 # back to text. GTK is only for the file dialogs where no desktop portal answers.
 cat > "$DEB/DEBIAN/control" <<CTRL

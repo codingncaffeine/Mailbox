@@ -1,7 +1,7 @@
 namespace Mailbox.Core;
 
 /// <summary>
-/// The Snooze menu's presets (§12), from a moment: later today is four hours on; the rest are
+/// The Snooze menu's presets, from a moment: later today is four hours on; the rest are
 /// eight in the morning of the day named — tomorrow, this weekend (Saturday, or Sunday when it
 /// already is Saturday), next week (Monday). The reference's own times, in the shape of the
 /// follow-up flag menu.

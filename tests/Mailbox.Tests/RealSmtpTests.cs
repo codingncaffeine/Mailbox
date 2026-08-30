@@ -74,7 +74,7 @@ public class RealSmtpTests
     /// </summary>
     /// <remarks>
     /// The same greeting <see cref="ServerProbe"/> reads to tell an account whose SMTP AUTH is
-    /// switched off from one whose password is wrong — the consumer-mailbox gotcha §5 names. Reading
+    /// switched off from one whose password is wrong — the consumer-mailbox gotcha. Reading
     /// sends no mail, so it is not behind the second gate.
     /// </remarks>
     [Fact]
@@ -155,7 +155,7 @@ public class RealSmtpTests
     /// <remarks>
     /// Nothing is deleted. POP3's sharpest edge is that a client which deletes by default empties
     /// a mailbox somebody was still reading elsewhere, which is why the policy defaults to leaving
-    /// mail on the server (§4) — and why a test has no business doing otherwise on a real one.
+    /// mail on the server — and why a test has no business doing otherwise on a real one.
     /// </remarks>
     [Fact]
     public async Task Pop3SeesTheSameMailboxAndLeavesItAlone()

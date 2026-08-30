@@ -13,7 +13,7 @@ namespace Mailbox.App.Views;
 
 /// <summary>
 /// The invitation strip above the reading pane: what the meeting is, and Accept, Tentative and
-/// Decline (§9).
+/// Decline.
 /// </summary>
 /// <remarks>
 /// This is what makes the calendar useful with no scheduling server anywhere — iMIP carries the
@@ -159,7 +159,7 @@ public sealed class InvitationBar : Border
 
     /// <summary>
     /// Writes the meeting into the calendar and reports the reply. The store is the authority
-    /// (§4): accepting is a write here, and the mail that goes out is a consequence of it.
+    ///: accepting is a write here, and the mail that goes out is a consequence of it.
     /// </summary>
     public void Respond(ItipResponse response)
     {

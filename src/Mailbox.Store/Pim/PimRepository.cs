@@ -526,7 +526,7 @@ public sealed class PimRepository(PimStore store)
     /// </summary>
     /// <remarks>
     /// Here rather than in a mail store because every module shares this file and none shares
-    /// those: a per-account list would give one reader two of them (§9's "one colour category set
+    /// those: a per-account list would give one reader two of them (the "one colour category set
     /// applying to every item type in every module"). Items name a category rather than pointing
     /// at it, because that is what iCalendar and vCard carry.
     /// </remarks>

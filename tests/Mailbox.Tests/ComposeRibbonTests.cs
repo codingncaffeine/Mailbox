@@ -203,7 +203,7 @@ public class ComposeRibbonTests
     /// </summary>
     /// <remarks>
     /// A phase number used to count as an answer here, and that is exactly what rotted: by
-    /// 25 August 2026 nine of these named a phase §15 had already marked done, so the note told
+    /// 25 August 2026 nine of these named a phase already marked done, so the note told
     /// the reader to wait for something that had arrived. A phase is a date, and a date is not a
     /// reason — see <see cref="NoBlockedNoteNamesAPhase"/>, which now forbids it outright.
     /// </remarks>

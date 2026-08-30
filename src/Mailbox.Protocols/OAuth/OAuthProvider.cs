@@ -7,7 +7,7 @@ namespace Mailbox.Protocols.OAuth;
 /// A record rather than a class hierarchy because the providers differ only in strings. What
 /// they do not differ in is the flow: authorization code with PKCE, a loopback redirect, and no
 /// client secret anywhere — RFC 8252's shape for a native application, which is the only shape a
-/// desktop program can implement honestly. See §5.
+/// desktop program can implement honestly.
 /// </remarks>
 public sealed record OAuthProvider(
     string Id,
@@ -59,7 +59,7 @@ public static class OAuthProviders
     /// personal account and a work one with the same registration.
     /// <para>
     /// The registration is free, takes no security assessment and holds no secret, so Microsoft's
-    /// side of §5 is a public client and nothing more. It is a project action rather than a code
+    /// side of the stance is a public client and nothing more. It is a project action rather than a code
     /// one: until an application is registered and its ID put in <see cref="ClientIds"/>, this
     /// provider works through a client the user brings.
     /// </para>
@@ -91,7 +91,7 @@ public static class OAuthProviders
     /// <para>
     /// The client ID is deliberately empty and stays empty. Google's API Terms prohibit shipping
     /// one in an open-source application, and the mail scope is "restricted" — an annual paid
-    /// security assessment, which §5 rules out. A user's own free Cloud project sidesteps both,
+    /// security assessment, which the no-hosted-services stance rules out. A user's own free Cloud project sidesteps both,
     /// because the credential is then theirs.
     /// </para>
     /// </remarks>
@@ -136,7 +136,7 @@ public static class OAuthProviders
 /// </summary>
 /// <remarks>
 /// These are identifiers, not secrets, and the file is checked in on purpose: a build that
-/// carried a credential nobody could see would be exactly the arrangement §5 rejects. Empty
+/// carried a credential nobody could see would be exactly the arrangement the stance rejects. Empty
 /// means no registration exists yet, and the sign-in offers to take one from the user instead of
 /// failing.
 /// </remarks>

@@ -4,7 +4,7 @@ using System.Text.Json.Nodes;
 namespace Mailbox.Core.Localization;
 
 /// <summary>
-/// §16's internationalization scaffolding: the lookup every surface will eventually call, built
+/// The design's internationalization scaffolding: the lookup every surface will eventually call, built
 /// so adoption is incremental and absence is harmless.
 /// </summary>
 /// <remarks>

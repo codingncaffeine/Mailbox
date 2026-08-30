@@ -233,7 +233,7 @@ public sealed class AccountWizard : Window
         // A guess is worth looking at; a known provider is not.
         _advanced.IsExpanded = !_found.IsKnownProvider;
 
-        // A plugin's account provider answers over the guess — §13's "register account
+        // A plugin's account provider answers over the guess — the design's "register account
         // providers": what the built-in autoconfiguration is for the well-known services, a
         // plugin is for whatever it knows. The reader's boxes stay the reader's; the sign-in
         // stays the ordinary password path, which the API says in as many words.
@@ -265,7 +265,7 @@ public sealed class AccountWizard : Window
     /// Deciding this from the address is the point of the guidance in the first place: a
     /// Microsoft account rejecting a password with "authentication failed" sends the user off to
     /// check a password that was never wrong, and this is the wizard saying so before the attempt
-    /// rather than after (§5).
+    /// rather than after.
     /// </remarks>
     private void ShowTheRightCredential(string address)
     {

@@ -51,7 +51,7 @@ public static class CryptoStores
         return new PgpContext(directory, Passphrases.For);
     }
 
-    /// <summary>The certificate store, or null when the reader has not switched S/MIME on (§14).</summary>
+    /// <summary>The certificate store, or null when the reader has not switched S/MIME on.</summary>
     /// <remarks>
     /// Null rather than an empty context, because "off" and "has no keys" are different answers and
     /// the second one names people who could not be written to.
@@ -59,7 +59,7 @@ public static class CryptoStores
     public static SecureMimeContext? CertificatesIfEnabled()
         => App.Security.Smime ? Certificates() : null;
 
-    /// <summary>The keyring, or null when the reader has not switched OpenPGP on (§14).</summary>
+    /// <summary>The keyring, or null when the reader has not switched OpenPGP on.</summary>
     public static PgpContext? KeyRingIfEnabled()
         => App.Security.OpenPgp ? KeyRing() : null;
 

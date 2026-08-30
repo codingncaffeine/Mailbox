@@ -82,7 +82,6 @@ public sealed class GoToDateDialog : Window
         };
 
         DialogChrome.Apply(this, body);
-        Bind(this, BackgroundProperty, "dialog.background.brush");
 
         // MAILBOX_GOTODATE=<yyyy-MM-dd>[:<view>] types the date, picks the arrangement and presses
         // OK, on a capture run only. Ctrl+G and the group's corner arrow both stop here, so

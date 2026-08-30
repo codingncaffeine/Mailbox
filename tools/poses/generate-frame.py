@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerates the Phase 2 frame/rail/theme pose lists from the code they are about.
+"""Regenerates the frame/rail/theme pose lists from the code they are about.
 
 Three lists, each read out of the one file that decides what belongs on it:
 

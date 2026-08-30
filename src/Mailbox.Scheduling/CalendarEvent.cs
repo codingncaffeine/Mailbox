@@ -5,7 +5,7 @@ namespace Mailbox.Scheduling;
 /// <summary>
 /// A moment on a calendar as an appointment states it: the wall-clock time and the zone it
 /// was written in, or a date alone for an all-day item. Kept this way, not as a UTC instant,
-/// because a 09:00 weekly meeting stays at 09:00 across a DST change (§9); the instant is
+/// because a 09:00 weekly meeting stays at 09:00 across a DST change; the instant is
 /// derived when a view or a query needs one.
 /// </summary>
 /// <param name="Wall">The date and time as written, <see cref="DateTimeKind.Unspecified"/>; the date alone for all-day.</param>

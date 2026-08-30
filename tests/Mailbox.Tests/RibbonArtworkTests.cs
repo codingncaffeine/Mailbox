@@ -5,7 +5,7 @@ using Mailbox.Theming.Tokens;
 namespace Mailbox.Tests;
 
 /// <summary>
-/// The drawn ribbon icons (§20): the three two-tone ones carry the reference's own pixels as a
+/// The drawn ribbon icons: the three two-tone ones carry the reference's own pixels as a
 /// grid per size, so what is asserted here is the transcription — a row a character short draws
 /// a figure that is wrong everywhere it is used and reads as a rendering fault.
 /// </summary>
@@ -96,7 +96,7 @@ public class RibbonArtworkTests
     [Fact]
     public void EveryDrawingACommandAsksForIsOneThatExists()
     {
-        // People's Follow Up button spent a phase drawing Categorize because its command named a
+        // People's Follow Up button spent a stretch drawing Categorize because its command named a
         // drawing this class does not have, and an unknown name renders as nothing at all.
         string[] drawn = ["categorize", "followup"];
         Assert.All(CommandCatalogTests.Everything().All.Where(c => c.IconArtwork is { Length: > 0 }), command =>

@@ -715,7 +715,7 @@ public partial class MainWindow
 
         Entry("_E-mail Calendar…", "email-calendar", () => _ = EmailCalendarAsync(shell));
         // Not publishing, and not waiting on it: the reference's Share Calendar sends an
-        // invitation into a tenant's own free/busy service, which §3 puts out of scope. Publish
+        // invitation into a tenant's own free/busy service, which scope puts out of reach. Publish
         // Online below is what this application has instead, and it says so.
         Entry("_Share Calendar…", "share", () => shell.StatusRight =
             "Sharing invites somebody into a tenant's calendar service, which Mailbox does not have. Publish Online writes the calendar where anyone can subscribe to it.");
@@ -793,7 +793,7 @@ public partial class MainWindow
     /// </summary>
     /// <remarks>
     /// The reference publishes to its own service and to a WebDAV address. The service is a
-    /// tenant service and out of scope (§3); the address is the half that survives, and it is
+    /// tenant service and out of scope; the address is the half that survives, and it is
     /// also the half that is worth having — what goes up is the document a subscription reads,
     /// so publishing from here and subscribing from another machine needs nothing in between but
     /// a web server that takes a PUT.
@@ -899,7 +899,7 @@ public partial class MainWindow
     /// Add Focus Time: the next free block of the working day, booked as Busy.
     /// </summary>
     /// <remarks>
-    /// The reference's button reaches a service that is not in scope here (§ out of scope), so
+    /// The reference's button reaches a service that is not in scope here, so
     /// this does what the name says with what the machine already knows — the calendar it has
     /// and the working hours Options names. Rule 2: the feature is the reference's, the
     /// mechanism is ours.
@@ -978,7 +978,7 @@ public partial class MainWindow
         var written = Persisted("The appointment", () => existing is null ? App.Pim.AddItem(row) : Store(row));
 
         // A calendar with a server behind it gets the change queued rather than sent now: an
-        // edit made with the network down is a longer queue, not a lost edit (§7.5).
+        // edit made with the network down is a longer queue, not a lost edit.
         App.PimSync.QueuePut(written);
         _calendar?.Reload();
         RefreshPeeks();

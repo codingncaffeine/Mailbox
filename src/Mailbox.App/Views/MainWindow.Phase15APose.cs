@@ -8,7 +8,7 @@ using MimeKit;
 namespace Mailbox.App.Views;
 
 /// <summary>
-/// The door Phase 15 needed: an adversarial corpus put through the reading pane, one case at a
+/// The door the security audit needed: an adversarial corpus put through the reading pane, one case at a
 /// time, with the document that reached the engine written out for each.
 /// </summary>
 /// <remarks>

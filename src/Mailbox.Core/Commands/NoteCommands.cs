@@ -1,7 +1,7 @@
 namespace Mailbox.Core.Commands;
 
 /// <summary>
-/// The Notes module's commands (§9): making a note, and what the reference's own bar offers
+/// The Notes module's commands: making a note, and what the reference's own bar offers
 /// beside it.
 /// </summary>
 /// <remarks>

@@ -262,7 +262,7 @@ public class AuditFrameTests
     /// A hand-kept list cannot notice what was added to the tree and not to it, and a generated
     /// one is only generated the last time somebody ran the generator. This is the difference
     /// between the two: a caption button, a module or a built-in theme added without a pose is a
-    /// surface the phase's batch will not photograph, and nothing else says so.
+    /// surface the capture batch will not photograph, and nothing else says so.
     /// </remarks>
     [Fact]
     public void TheFramePoseListsStillCoverWhatTheyWereGeneratedFrom()

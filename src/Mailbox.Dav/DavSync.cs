@@ -45,7 +45,7 @@ public sealed record DavConflict(
 /// overwrite the other by accident.
 /// </summary>
 /// <remarks>
-/// Push before pull, for the same reason the mail journal plays before its fetch (§4): the
+/// Push before pull, for the same reason the mail journal plays before its fetch: the
 /// server's answer then already reflects what was done here, and the two never argue over one
 /// item. What is pushed comes off <c>dav_queue</c>, which is what makes an offline change a
 /// longer queue rather than a lost edit.
@@ -517,7 +517,7 @@ public sealed class DavSync(DavClient client, PimRepository repository, IDavPayl
                 Etag = etag,
                 // The server's copy of the whole resource, verbatim: it is what a later PUT has
                 // to send back, and re-serializing it would drop properties the server cares
-                // about (§4).
+                // about.
                 RawPayload = events.Count == 1 ? payload : ICalendarCodec.Serialize(calendarEvent),
             };
 

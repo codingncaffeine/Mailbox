@@ -20,6 +20,38 @@ namespace Mailbox.Tests;
 /// </remarks>
 public class AuditChromeSweepTests
 {
+    // ---- Sweep 0: the transparent window invariant -------------------------------------------
+
+    /// <summary>
+    /// No window that wears the application's chrome re-binds its own Background afterwards.
+    /// </summary>
+    /// <remarks>
+    /// <c>WindowFrame.Apply</c> sets the window transparent precisely so the rounded, clipping
+    /// border is the only thing that paints; a bind after the chrome paints a square behind the
+    /// curve — an 8×8 wedge in each corner where the tokens differ, and a silent defeat of the
+    /// rounding where they happen to match. Thirty dialogs had grown the copy-paste.
+    /// </remarks>
+    [Fact]
+    public void NoChromedWindowPaintsBehindItsOwnRoundedCorners()
+    {
+        var strays = new List<string>();
+        var bind = new Regex(@"[A-Za-z.]*Bind\(this, BackgroundProperty", RegexOptions.Compiled);
+
+        foreach (var (path, text) in Sources())
+        {
+            if (!text.Contains(": Window", StringComparison.Ordinal)) continue;
+            if (!text.Contains("Chrome.Apply(", StringComparison.Ordinal)) continue;
+
+            foreach (Match m in bind.Matches(Scrub(text)))
+            {
+                strays.Add($"{Relative(path)}:{Line(text, m.Index)}: binds the window's own Background after the chrome — "
+                           + "the rounded border paints the ground; this bind puts corners back.");
+            }
+        }
+
+        Assert.True(strays.Count == 0, string.Join("\n", strays));
+    }
+
     // ---- Sweep A: caption buttons ------------------------------------------------------------
 
     /// <summary>

@@ -578,7 +578,7 @@ public class IsolatedDocumentTests
     // ---- A document holding decrypted content -----------------------------------------------
 
     /// <remarks>
-    /// §19's second blocker and CVE-2026-0818: decrypted plaintext was read out of a client
+    /// The design's second blocker and CVE-2026-0818: decrypted plaintext was read out of a client
     /// through the cascade rather than through a fetch. A document that holds a secret refuses
     /// the constructs the attack is built out of.
     /// </remarks>

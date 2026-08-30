@@ -196,7 +196,7 @@ public static class Migrations
         // Remote images are blocked for everyone by default, and this is the exception list.
         // Kept per account, like everything else in this file: "always allow images from this
         // sender" is a decision about one mailbox, and the same address may be a newsletter in
-        // one and a stranger in another. §7.8's junk filter reads the same table.
+        // one and a stranger in another. The design's junk filter reads the same table.
         """
         CREATE TABLE safe_senders (
             address    TEXT    NOT NULL PRIMARY KEY,
@@ -208,7 +208,7 @@ public static class Migrations
         //
         // Its own table rather than columns on the message, because it is learned after the
         // message is stored and may never be learned at all: verifying reads a key from DNS, and
-        // §19 forbids doing that to draw a message. So it happens once, when the mail arrives
+        // the render path forbids it to draw a message. So it happens once, when the mail arrives
         // and the network is already in hand, and what the reading pane shows comes from here.
         //
         // A row's absence is meaningful — it says this message has never been checked, which is
@@ -243,7 +243,7 @@ public static class Migrations
         // ---- 10: IMAP -----------------------------------------------------------------------
         //
         // A folder learns which server folder it stands for and where its sync has got to. The
-        // store stays authoritative for state (§4): read, flagged, categories, where a message
+        // store stays authoritative for state: read, flagged, categories, where a message
         // is — and IMAP becomes a two-way sync of the subset the server also keeps. So a local
         // change to a synced folder is written to sync_ops as well as to the row, and the next
         // send/receive plays the journal to the server before it pulls; offline, the journal is
@@ -319,11 +319,11 @@ public static class Migrations
 
         // ---- 12: the junk filter's corpus and the blocked list -------------------------------
         //
-        // §7.8's naive-Bayes filter is trained on the user's own Mark as Junk and Not Junk, and
+        // The design's naive-Bayes filter is trained on the user's own Mark as Junk and Not Junk, and
         // this is where the training lives. `junk_tokens` holds each token's spam and ham counts;
         // `junk_corpus` holds the message totals those counts are normalised against — a single
         // row, because there is one corpus per account file. The corpus is local and this table
-        // is the whole of it: nothing is uploaded, there is no shared reputation (§7.8, §19).
+        // is the whole of it: nothing is uploaded, there is no shared reputation.
         //
         // `blocked_senders` is the other half of the lists that always win over the classifier,
         // the mirror of `safe_senders` from schema 7.
@@ -354,7 +354,7 @@ public static class Migrations
         // and a completed state, which is what makes it a follow-up rather than a bookmark. A
         // completed follow-up keeps its record — the reference shows a check where the flag was —
         // so the two are separate: is_flagged says there is a follow-up, follow_up_complete says
-        // it is done. Reminders (a popup at the due time) wait on Phase 9's notification surface.
+        // it is done. Reminders (a popup at the due time) waited on a notification surface that did not exist yet.
         """
         ALTER TABLE messages ADD COLUMN follow_up_due      INTEGER;
         ALTER TABLE messages ADD COLUMN follow_up_complete INTEGER NOT NULL DEFAULT 0;
@@ -411,7 +411,7 @@ public static class Migrations
 
         // ---- 16: snooze ---------------------------------------------------------------------
         //
-        // §12's Snooze: a snoozed message leaves the list until the time set here, then comes
+        // The design's Snooze: a snoozed message leaves the list until the time set here, then comes
         // back to the top of its folder as unread. Local only — the server never hears of it —
         // and a column rather than a folder, so the message stays where it is and its flags,
         // categories and threading go on meaning what they meant.
@@ -441,7 +441,7 @@ public static class Migrations
 
         // ---- 18: Recover Deleted Items -----------------------------------------------------
         //
-        // §11's holding area. A message deleted for good here — Deleted Items emptied,
+        // The design's holding area. A message deleted for good here — Deleted Items emptied,
         // Shift+Delete, a rule — keeps its raw bytes and enough of its row to be listed, for a
         // retention window, and can be put back where it was. The messages row itself goes, so
         // nothing else sees it; the blob stays, so restoring is a re-file rather than a hope.
@@ -473,8 +473,8 @@ public static class Migrations
 
         // ---- 19: search folders, and the columns their queries need -------------------------
         //
-        // A search folder is a saved query listed under Search Folders in the folder pane (§15
-        // Phase 8), kept per account as Core's JSON document. Three of the reference's templates
+        // A search folder is a saved query listed under Search Folders in the folder pane,
+        // kept per account as Core's JSON document. Three of the reference's templates
         // — mail sent directly to me, to a public group, marked important — ask things the row
         // could not answer: who a message was sent to, and its importance. Both are on the row
         // now, filled as mail arrives; existing rows read as sent to nobody at normal importance
@@ -510,7 +510,7 @@ public static class Migrations
 
         // ---- 21: Focused Inbox -----------------------------------------------------------------
         //
-        // §12's Focused Inbox: each message is Focused or Other, decided locally as it arrives
+        // The design's Focused Inbox: each message is Focused or Other, decided locally as it arrives
         // and changeable by hand; a sender the reader has said "always" about is remembered so
         // the next message from them goes where the reader put the last. Existing rows are
         // Focused, which is what an Inbox with the feature off already was.

@@ -7,7 +7,7 @@ namespace Mailbox.Junk;
 /// </summary>
 /// <remarks>
 /// An interface so the classifier is pure — it can be tested against an in-memory corpus, and
-/// the real one is a table in the mail store. Nothing here reaches the network: §7.8's whole
+/// the real one is a table in the mail store. Nothing here reaches the network: the design's whole
 /// point is that the corpus is the user's own and never leaves the machine.
 /// </remarks>
 public interface IJunkCorpus

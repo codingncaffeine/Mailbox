@@ -12,7 +12,7 @@ namespace Mailbox.Tests;
 /// <remarks>
 /// <b>Every round trip here goes back through this application's own reader</b> rather than through
 /// the library that wrote it, which is what makes these tests worth having. The reader refuses a
-/// packet with no integrity protection and refuses a signature whose signer is not the sender (§19),
+/// packet with no integrity protection and refuses a signature whose signer is not the sender,
 /// so a message that comes back <see cref="DecryptionState.Opened"/> and
 /// <see cref="SignatureState.Valid"/> is one this application would agree to open and believe. A
 /// client that will not read its own outgoing mail is a real failure mode and this is what would
@@ -49,7 +49,7 @@ public class MessageProtectionTests : IDisposable
     public void AnOpenPgpEncryptedMessageOpensWithTheIntegrityCheckThisApplicationInsistsOn()
     {
         // The one that would fail silently if MimeKit wrote a packet with no modification detection
-        // code: our own reader refuses that outright (§19), so "it opened" is the assertion that
+        // code: our own reader refuses that outright, so "it opened" is the assertion that
         // what went out was protected as well as encrypted.
         using var mine = Ring("mine", PgpKeys.Reader, PgpKeys.Other);
         using var theirs = Ring("theirs", PgpKeys.Other, PgpKeys.Reader);
@@ -264,7 +264,7 @@ public class MessageProtectionTests : IDisposable
         Assert.Same(before, message.Body);
     }
 
-    // ---- Drafts, which are not messages (§19) --------------------------------------------------
+    // ---- Drafts, which are not messages --------------------------------------------------
 
     [Fact]
     public void ADraftIsNeverSigned()

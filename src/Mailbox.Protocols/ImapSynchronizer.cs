@@ -25,7 +25,7 @@ public sealed record SyncResult(int Downloaded, int OpsPlayed, int Removed, stri
 /// Keeps an IMAP account's store in step with the server.
 /// </summary>
 /// <remarks>
-/// The store is authoritative (§4): it holds all of read state, categories, flags and where a
+/// The store is authoritative: it holds all of read state, categories, flags and where a
 /// message is, and IMAP is a two-way sync of the subset the server also keeps. So a sync plays
 /// the local journal to the server <em>first</em> — the flags flipped, the messages moved and
 /// deleted, the copies filed to Sent while offline — and only then pulls, so the server's answer

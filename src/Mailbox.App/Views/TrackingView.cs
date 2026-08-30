@@ -13,7 +13,7 @@ namespace Mailbox.App.Views;
 /// </summary>
 /// <remarks>
 /// The replies are already in the store — an iMIP REPLY writes the answering attendee's PARTSTAT
-/// onto the appointment (§9) — and until now nothing showed them. That is the whole feature: a
+/// onto the appointment — and until now nothing showed them. That is the whole feature: a
 /// table of what the invitations came back with, headed by the count the reference puts at the
 /// top of the tab.
 /// <para>

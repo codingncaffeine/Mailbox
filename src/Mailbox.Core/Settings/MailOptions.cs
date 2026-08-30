@@ -19,7 +19,7 @@ public enum ComposeFormat
 /// <para>
 /// The keys are named here and declared on the rows, so a page can be reworded without a
 /// choice silently resetting — the standing rule for any setting the code refers to. A setting
-/// with no accessor here is one nothing reads yet, and §20 says so per row.
+/// with no accessor here is one nothing reads yet, and the row records it.
 /// </para>
 /// </remarks>
 public sealed class MailOptions(SettingsStore settings)
@@ -41,11 +41,11 @@ public sealed class MailOptions(SettingsStore settings)
     public const string CtrlEnterSendsKey = "mail.send.ctrlenter";
 
     /// <summary>
-    /// The unified mailbox: an "All Accounts" root at the top of the folder pane (§12, §14).
+    /// The unified mailbox: an "All Accounts" root at the top of the folder pane — an addition beyond the reference.
     /// </summary>
     /// <remarks>
     /// Off by default and stays off until somebody says otherwise, because it restructures the
-    /// nav tree rather than adding a command — §14's rule that turning one of these on is a
+    /// nav tree rather than adding a command — the design's rule that turning one of these on is a
     /// decision rather than a discovery.
     /// </remarks>
     public const string UnifiedMailboxKey = "mail.unified.enabled";
@@ -399,7 +399,7 @@ public sealed class MailOptions(SettingsStore settings)
     public bool SendImmediately => _settings.GetBool(SendImmediatelyKey, true);
 
     /// <summary>
-    /// How long a permanently deleted message can still be recovered, in days (§11). Thirty, as
+    /// How long a permanently deleted message can still be recovered, in days. Thirty, as
     /// the reference's servers keep them; 0 keeps nothing.
     /// </summary>
     public int RecoverDays => Math.Clamp((int)_settings.GetNumber(RecoverDaysKey, 30), 0, 365);
@@ -420,7 +420,7 @@ public sealed class MailOptions(SettingsStore settings)
         set => _settings.Set(ConfirmPermanentDeleteKey, value);
     }
 
-    /// <summary>Focused Inbox (§12): whether the Inbox is split into Focused and Other. Off until asked.</summary>
+    /// <summary>Focused Inbox: whether the Inbox is split into Focused and Other. Off until asked.</summary>
     public bool ShowFocusedInbox
     {
         get => _settings.GetBool(FocusedInboxKey, false);

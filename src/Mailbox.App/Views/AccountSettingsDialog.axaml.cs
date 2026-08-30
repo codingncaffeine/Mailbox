@@ -668,7 +668,7 @@ public sealed class AccountSettingsDialog : Window
     {
         try
         {
-            // Phase 13's rule is that every button on every tab acts, so this one will be pressed
+            // The standing rule is that every button on every tab acts, so this one will be pressed
             // by a pose — and it hands a path to the desktop, which under a capture would open a
             // file manager on the owner's screen. The guard is the shared helper's.
             Mailbox.Core.Platform.DesktopOpen.Open(App.Accounts.Directory_);
@@ -1170,7 +1170,7 @@ public sealed class AccountSettingsDialog : Window
     }
 
     /// <summary>
-    /// What a button says when its feature belongs to a later phase: which part of the
+    /// What a button says when its feature is not built yet: which part of the
     /// application brings it, rather than a silent nothing.
     /// </summary>
     private Task Later(string title, string message) => Confirm.TellAsync(this, title, message);

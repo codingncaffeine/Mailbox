@@ -402,7 +402,7 @@ public partial class MainWindow
     /// <remarks>
     /// Headers are ordinary rows with nothing under them: they list, sort, flag and file like
     /// any other, and the reading pane says what is missing and offers to fetch it. Everything
-    /// here goes to a background thread — each one talks to the server, and §4's rule is that
+    /// here goes to a background thread — each one talks to the server, and the design's rule is that
     /// the interface never waits on the network.
     /// </remarks>
     private bool RunServerCommand(ShellViewModel shell, CommandId id)

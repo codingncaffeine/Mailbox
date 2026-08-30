@@ -4,7 +4,7 @@ namespace Mailbox.Core.Settings;
 /// The Trust Center's switches, as the code that acts on them reads them.
 /// </summary>
 /// <remarks>
-/// <b>The two crypto switches start off, and that is the design</b> (§14): S/MIME and OpenPGP need
+/// <b>The two crypto switches start off, and that is the design</b>: S/MIME and OpenPGP need
 /// key material before they can do anything, and a client that says "signed" over a check it has
 /// not made is worse than one that says nothing. Nothing about a message is checked, decrypted or
 /// reported until the reader has said they want it.

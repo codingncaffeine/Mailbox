@@ -104,7 +104,7 @@ public readonly record struct Oklch(double L, double C, double H)
 /// <summary>
 /// The rest of an accent from its one colour: the darker shades a hover and a press use, and
 /// the pale tint a selection sits on — so a theme that says <c>palette.brand.primary</c> and
-/// nothing more is a complete accent (§8), instead of a new colour with the base's blue still
+/// nothing more is a complete accent, instead of a new colour with the base's blue still
 /// under the pointer.
 /// </summary>
 public static class AccentDerivation

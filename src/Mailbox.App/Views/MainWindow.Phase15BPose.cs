@@ -731,7 +731,7 @@ public partial class MainWindow
     /// <remarks>
     /// Dated now, not on the posed clock: a signature carries the moment it was made, and
     /// <c>MultipartSigned.Create</c> stamps that at real wall-clock time. A message dated
-    /// 2026-08-16 but signed today disagrees with itself, and §19's signing-time check —
+    /// 2026-08-16 but signed today disagrees with itself, and the design's signing-time check —
     /// rightly — calls that invalid. The good chain has to be a message whose sent time and
     /// signing time are the same, which is any message actually created now.
     /// </remarks>
@@ -816,7 +816,7 @@ public partial class MainWindow
             X509Extensions.KeyUsage, true,
             new KeyUsage(KeyUsage.DigitalSignature | KeyUsage.KeyEncipherment | KeyUsage.NonRepudiation));
 
-        // §19 reads the address from the subject alternative name and from nowhere else.
+        // The verifier reads the address from the subject alternative name and from nowhere else.
         generator.AddExtension(
             X509Extensions.SubjectAlternativeName, false,
             new GeneralNames(new GeneralName(GeneralName.Rfc822Name, address)));

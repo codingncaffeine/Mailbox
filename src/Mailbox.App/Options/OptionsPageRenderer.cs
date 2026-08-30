@@ -47,7 +47,7 @@ public sealed class OptionsPageRenderer
     /// <remarks>
     /// A row's key is worked out here and nowhere else — its own, or its label when it has not
     /// declared one — so anything that wants to say what a press wrote has to ask rather than
-    /// guess. §20 turns on rows knowing which key each one is waiting for.
+    /// guess. Rows are turned on knowing which key each one is waiting for.
     /// </remarks>
     public IReadOnlyDictionary<Control, string> Keys => _keys;
 
@@ -58,7 +58,7 @@ public sealed class OptionsPageRenderer
     /// A slot that draws a real setting — the reminder sound's tick box, which the reference puts
     /// on one line with a field and a Browse… — is invisible to the harness otherwise, and
     /// <c>MAILBOX_OPTIONS_PRESS</c> would report "the row carries no key" for a row that carries
-    /// one. That is worse than no answer: it reads as §20's hundred-odd waiting rows rather than
+    /// one. That is worse than no answer: it reads as the design's hundred-odd waiting rows rather than
     /// as a wired one.
     /// </remarks>
     public void Remember(Control control, string key) => _keys[control] = key;
@@ -311,15 +311,7 @@ public sealed class OptionsPageRenderer
     {
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto") };
 
-        var glyph = new TextBlock
-        {
-            Text = IconGlyphs.GetOrEmpty(row.Icon, 24),
-            FontFamily = IconFont.Family,
-            FontSize = 19,
-            Margin = new Thickness(0, 0, 10, 0),
-            VerticalAlignment = VerticalAlignment.Top,
-        };
-        Bind(glyph, TextBlock.ForegroundProperty, "accent.rest.brush");
+        var glyph = GroupGlyph(row.Icon);
         Grid.SetColumn(glyph, 0);
         grid.Children.Add(glyph);
 
@@ -466,18 +458,8 @@ public sealed class OptionsPageRenderer
     /// </remarks>
     private Control WithSectionIcon(string icon, IReadOnlyList<Control> rows)
     {
-        var glyph = new TextBlock
-        {
-            Text = IconGlyphs.GetOrEmpty(icon, 24),
-            FontFamily = IconFont.Family,
-            FontSize = 19,
-            Margin = new Thickness(0, 2, 10, 0),
-            VerticalAlignment = VerticalAlignment.Top,
-        };
-
-        // The accent, as the ActionRow glyphs on the same pages take: the ribbon's own outline
-        // ink is a dark grey and all but disappears against the Options page behind it.
-        Bind(glyph, TextBlock.ForegroundProperty, "accent.rest.brush");
+        var glyph = GroupGlyph(icon);
+        glyph.Margin = new Thickness(0, 2, 10, 0);
 
         var lines = new StackPanel();
         foreach (var row in rows) lines.Children.Add(row);
@@ -487,6 +469,39 @@ public sealed class OptionsPageRenderer
         Grid.SetColumn(lines, 1);
         grid.Children.Add(lines);
         return grid;
+    }
+
+    /// <summary>
+    /// The pictogram standing left of a group: the reference's own coloured artwork where the
+    /// kit draws it, the accent-tinted font glyph for a name it does not know.
+    /// </summary>
+    private Control GroupGlyph(string icon)
+    {
+        if (OptionsPictogram.Draws(icon))
+        {
+            var drawn = new OptionsPictogram
+            {
+                Glyph = icon,
+                Margin = new Thickness(0, 0, 10, 0),
+                VerticalAlignment = VerticalAlignment.Top,
+            };
+            Bind(drawn, OptionsPictogram.InkProperty, "dialog.foreground.brush");
+            Bind(drawn, OptionsPictogram.BlueProperty, "pictogram.blue.brush");
+            Bind(drawn, OptionsPictogram.GreenProperty, "pictogram.green.brush");
+            Bind(drawn, OptionsPictogram.AmberProperty, "pictogram.amber.brush");
+            return drawn;
+        }
+
+        var glyph = new TextBlock
+        {
+            Text = IconGlyphs.GetOrEmpty(icon, 24),
+            FontFamily = IconFont.Family,
+            FontSize = 19,
+            Margin = new Thickness(0, 0, 10, 0),
+            VerticalAlignment = VerticalAlignment.Top,
+        };
+        Bind(glyph, TextBlock.ForegroundProperty, "accent.rest.brush");
+        return glyph;
     }
 
     private Control SectionHeading(string text)

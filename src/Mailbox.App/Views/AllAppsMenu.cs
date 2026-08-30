@@ -5,7 +5,7 @@ using Mailbox.Core.Diagnostics;
 namespace Mailbox.App.Views;
 
 /// <summary>
-/// What the All Apps button opens: the installed plugins' commands, grouped by plugin — §20's
+/// What the All Apps button opens: the installed plugins' commands, grouped by plugin — the design's
 /// answer for a button whose reference counterpart reaches a cloud catalogue this project
 /// deliberately has none of. Ours lists what is actually installed here, which is the honest
 /// reading of the name.

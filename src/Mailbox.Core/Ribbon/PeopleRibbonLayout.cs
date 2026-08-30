@@ -13,7 +13,7 @@ namespace Mailbox.Core.Ribbon;
 /// Delete, Communicate and Current View are authored from the reference's own Home tab in the
 /// order it lists them. Where a number here is a decision rather than a measurement it says so.
 /// <para>
-/// <b>Send to OneNote is not here.</b> It reaches a service that is out of scope (§ rule 3), and
+/// <b>Send to OneNote is not here.</b> It reaches a service that is out of scope, and
 /// a button that cannot do what it says is worse than one that is absent — the same call the
 /// mail bar made.
 /// </para>

@@ -5,7 +5,7 @@ using MimeKit;
 namespace Mailbox.Tests;
 
 /// <summary>
-/// Opening an OpenPGP message, and §19's first crypto blocker: <b>a packet nothing vouches for is
+/// Opening an OpenPGP message, and the design's first crypto blocker: <b>a packet nothing vouches for is
 /// not opened at all</b>.
 /// </summary>
 /// <remarks>
@@ -37,7 +37,7 @@ public class PgpDecryptionTests : IDisposable
     [Fact]
     public void APacketWithNoIntegrityProtectionIsRefused()
     {
-        // §19's first blocker, and the one MimeKit does not make: this packet decrypts perfectly
+        // The design's first blocker, and the one MimeKit does not make: this packet decrypts perfectly
         // well. Nothing about it is malformed and nothing throws. What it has not got is anything
         // saying it was not rewritten in transit, which is what EFAIL was built out of — so the
         // plaintext exists here and is not handed over.

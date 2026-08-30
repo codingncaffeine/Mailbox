@@ -3,10 +3,10 @@
   <!--
     The compose surface, and the serializer that decides what leaves the machine.
 
-    §7.3 planned this as the largest of the nine in-house components. The survey it opens
+    The plan named this the largest of the nine in-house components. The survey it opens
     with found a GPL-3-compatible editor that runs here and carries the document model that
     section describes building, so what is in-house is the half that actually decides mail
-    fidelity: the HTML that goes on the wire, and §6's rule that outgoing mail names the
+    fidelity: the HTML that goes on the wire, and the design's rule that outgoing mail names the
     Microsoft font first. The editor's own serializer is not shipped.
   -->
 
@@ -20,7 +20,7 @@
     <PackageReference Include="AvaloniaRichEditor" Version="$(RichEditorVersion)" />
 
     <!--
-      Spelling, in managed code so nothing in-house has a native part (§16). MPL 1.1 / GPL 2.0 /
+      Spelling, in managed code so nothing in-house has a native part. MPL 1.1 / GPL 2.0 /
       LGPL 2.1 tri-licensed, which reaches GPL-3 through the LGPL arm, and on .NET 10 it brings
       no dependencies of its own. It reads the dictionaries the desktop already has, so the words
       the user taught LibreOffice are the words this knows.

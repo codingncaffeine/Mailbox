@@ -6,7 +6,7 @@ using Mailbox.Store.Lists;
 namespace Mailbox.App.ViewModels;
 
 /// <summary>
-/// The message list's view (§ Change View / Advanced View Settings): which of the folder's
+/// The message list's view — Change View and Advanced View Settings: which of the folder's
 /// documents is in force, what it makes of the layout, the columns, the grouping and sort,
 /// the filter and the conditional formatting — and the operations the View tab offers over it.
 /// </summary>

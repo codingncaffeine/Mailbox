@@ -4,7 +4,7 @@ using Mailbox.Store.Pim;
 namespace Mailbox.Tests;
 
 /// <summary>
-/// Linked contacts and the duplicate check — the model half Phase 12 deferred. A link is written
+/// Linked contacts and the duplicate check — the deferred model half. A link is written
 /// into both cards and survives the vCard round trip; the duplicate finder answers with a reason
 /// a prompt can print, and knows the difference between "the same address" and "the same name".
 /// </summary>

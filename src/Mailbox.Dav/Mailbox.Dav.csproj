@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    The DAV engine (§7.5). One engine for calendars, task lists, note lists and address books,
+    The DAV engine. One engine for calendars, task lists, note lists and address books,
     because CalDAV (RFC 4791) and CardDAV (RFC 6352) are both WebDAV extensions: the core verbs,
     discovery, the REPORTs, incremental sync over sync-collection (RFC 6578) with a CTag fallback,
     ETag conflict handling, and the offline queue.

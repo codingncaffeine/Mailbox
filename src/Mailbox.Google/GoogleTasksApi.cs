@@ -39,7 +39,7 @@ public sealed class GoogleApiException(HttpStatusCode status, string reason, str
 /// Written against the REST interface rather than the official client library, which is a
 /// generated surface over the whole of Google's API estate carrying an authentication stack of its
 /// own — where what is wanted here is five calls and a bearer token this application already knows
-/// how to obtain and renew (§5).
+/// how to obtain and renew.
 /// <para>
 /// Takes an <see cref="HttpMessageHandler"/> so a fake Google is a handler, and an
 /// <see cref="IAccessTokenSource"/> rather than a token, because a token is good for about an hour

@@ -3,7 +3,7 @@
   <!--
     Contacts: the People module's domain — a person or a group as the application thinks of one,
     and the vCard text it is kept and exchanged as. FolkerKinzel.VCards (MIT) reads and writes
-    vCard 2.1, 3.0 and 4.0; what is ours is the shape above it (§9): one contact record whatever
+    vCard 2.1, 3.0 and 4.0; what is ours is the shape above it: one contact record whatever
     version it arrived in, the file-as and display-name rules the reference files people by, and
     a distribution list as a group of members that survives a round trip through any of them.
   -->

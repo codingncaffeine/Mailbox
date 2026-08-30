@@ -535,7 +535,7 @@ public sealed class PeopleWorkspace : Border
     /// <remarks>
     /// Measured: the open tab carries a 2px line in the accent and the strip is closed by a 1px
     /// rule the width of the card. One tab, because the reference draws one — the others it shows
-    /// for a linked contact are Phase 12's linked contacts, and unbuilt.
+    /// for a linked contact wait on linked-contact cards, which are unbuilt.
     /// </remarks>
     private Control TabStrip()
     {

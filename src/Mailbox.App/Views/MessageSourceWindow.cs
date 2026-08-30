@@ -13,7 +13,7 @@ namespace Mailbox.App.Views;
 /// </summary>
 /// <remarks>
 /// Not in the reference's default ribbon, which is why the command that opens it is one of the
-/// additions in §12. It is the thing that settles an argument about what a sender actually sent
+/// additions beyond the reference. It is the thing that settles an argument about what a sender actually sent
 /// — a header the reading pane summarises, an encoding that came out wrong, a signature that
 /// did not verify — and it costs nothing, because the bytes are already in the store.
 /// <para>

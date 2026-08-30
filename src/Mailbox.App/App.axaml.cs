@@ -70,7 +70,7 @@ public partial class App : Application
     /// <summary>The favourite contacts, which is what the To-Do Bar's People section holds.</summary>
     public static Mailbox.Core.People.ContactFavourites ContactFavourites { get; private set; } = null!;
 
-    /// <summary>The Trust Center's crypto switches. Both start off, per §14.</summary>
+    /// <summary>The Trust Center's crypto switches. Both ship off, by decision.</summary>
     public static SecurityOptions Security { get; private set; } = null!;
 
     /// <summary>The RSS subscriptions, and the reader that delivers them into mail folders.</summary>
@@ -96,7 +96,7 @@ public partial class App : Application
     /// <summary>The signatures, and which account uses which.</summary>
     public static Signatures Signatures { get; private set; } = null!;
 
-    /// <summary>How long a sent message waits before it can actually go (§12).</summary>
+    /// <summary>How long a sent message waits before it can actually go.</summary>
     public static UndoSend UndoSend { get; private set; } = null!;
 
     /// <summary>The Mail page's settings, typed, for the code that acts on them.</summary>
@@ -120,11 +120,11 @@ public partial class App : Application
     /// <summary>Which key runs which command — every command's default, with the reader's changes over it.</summary>
     public static Mailbox.Core.Keyboard.KeyMap Keys { get; private set; } = null!;
 
-    /// <summary>The junk filter (§7.8), reading its level live from the Options page.</summary>
+    /// <summary>The junk filter, reading its level live from the Options page.</summary>
     public static JunkService Junk { get; private set; } = null!;
 
     /// <summary>
-    /// The one PIM store: every calendar, task list, note list and address book (§4).
+    /// The one PIM store: every calendar, task list, note list and address book.
     /// </summary>
     /// <remarks>
     /// Beside the accounts directory rather than under it, so a harness run that poses a mail
@@ -146,7 +146,7 @@ public partial class App : Application
     /// <summary>What the modules ask of the PIM store.</summary>
     public static PimRepository Pim { get; private set; } = null!;
 
-    /// <summary>The DAV engine over those collections, run with Send/Receive (§7.5).</summary>
+    /// <summary>The DAV engine over those collections, run with Send/Receive.</summary>
     public static PimSyncService PimSync { get; private set; } = null!;
 
     /// <summary>The one set of colour categories, and what keeps every store in step with it.</summary>
@@ -176,7 +176,7 @@ public partial class App : Application
     public static RibbonCustomization RibbonEdits { get; private set; } = null!;
 
     /// <summary>
-    /// The plugin host (§13): what is installed, what is running, and every contribution a
+    /// The plugin host: what is installed, what is running, and every contribution a
     /// plugin has made — commands, tabs, hooks, bars — tracked so disabling reverses it.
     /// </summary>
     public static Mailbox.Plugins.PluginHost Plugins { get; private set; } = null!;
@@ -276,7 +276,7 @@ public partial class App : Application
     /// </summary>
     /// <remarks>
     /// Held here so it is plainly one object with one owner. It is handed to the receiver and to
-    /// nothing else — in particular not to anything the reading pane can reach, because §19's
+    /// nothing else — in particular not to anything the reading pane can reach, because the design's
     /// "no key discovery to display a message" is a property of the code rather than a rule
     /// somebody remembers.
     /// </remarks>
@@ -324,7 +324,7 @@ public partial class App : Application
     private TrayIcon? _tray;
 
     /// <summary>
-    /// The notification-area icon (§10): a menu to open the window, write a message, check mail
+    /// The notification-area icon: a menu to open the window, write a message, check mail
     /// or quit, the unread count drawn on the icon and carried in the tooltip. Left-click brings
     /// the window forward. Held in a field so it outlives this method and is not collected.
     /// </summary>
@@ -584,7 +584,7 @@ public partial class App : Application
         }
         Fonts = FontResolver.FromSystem();
         // The reader's theme files beside the built-ins, and a watch on their directory so an
-        // edit to the theme in use shows without a restart (§8's hot reload).
+        // edit to the theme in use shows without a restart (the hot reload).
         var themesDirectory = Mailbox.Theming.Files.ThemeLibrary.DefaultDirectory();
         Themes = new ThemeService(Fonts, Mailbox.Theming.Files.ThemeLibrary.Load(themesDirectory));
         RestoreAppearance();
@@ -645,7 +645,7 @@ public partial class App : Application
         PeopleOptions = new PeopleOptions(Settings);
         Contacts = new Mailbox.Contacts.ContactBook(Pim);
 
-        // One set of categories over every module (§9). The mail accounts keep a mirror of it so
+        // One set of categories over every module. The mail accounts keep a mirror of it so
         // their own join tables have rows to point at; adopting on first run is what keeps mail
         // that was already coloured coloured.
         Categories = new CategoryBook(Pim, () => [.. Accounts.All.Select(a => a.Mail)]);
@@ -660,7 +660,7 @@ public partial class App : Application
         var signatures = Resolver.CanResolve ? new DkimVerification(Resolver) : null;
 
         // The junk filter, at the level the Junk Options dialog currently holds. Read live so a
-        // change applies to the next message; §7.8's corpus is per account, so the classifier is
+        // change applies to the next message; the design's corpus is per account, so the classifier is
         // handed the arriving message's own store.
         Junk = new JunkService(MailOptions, Contacts);
 
@@ -735,7 +735,7 @@ public partial class App : Application
                 OnArrival = arrival,
             });
 
-        // The retention window on Recover Deleted Items (§11): what was deleted longer ago than
+        // The retention window on Recover Deleted Items: what was deleted longer ago than
         // the Options page keeps goes for good, once per launch, before anything shows.
         try
         {
@@ -792,7 +792,7 @@ public partial class App : Application
         Plugins.Start();
 
         // The startup update check, only when the Options page's own switch says so, and never
-        // in a capture run — §19's "nothing phones home" is the default, and this is the one
+        // in a capture run — the design's "nothing phones home" is the default, and this is the one
         // standing consent that overrides it. The answer goes to the log; the Backstage's
         // button is the interactive ask.
         if (!WindowCapture.IsRequested && Settings.GetBool(UpdateCheck.AutomaticKey))
@@ -819,7 +819,7 @@ public partial class App : Application
         {
             var window = new MainWindow();
 
-            // A tray icon with a menu, as §10 asks for. Not during a capture run — the harness
+            // A tray icon with a menu, part of the desktop-integration contract. Not during a capture run — the harness
             // starts many instances, and a tray icon per capture would clutter the session's
             // notification area and outlive the process that made it.
             var trayUp = !WindowCapture.IsRequested && InstallTrayIcon(window, desktop);

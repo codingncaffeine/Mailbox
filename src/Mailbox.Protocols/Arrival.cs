@@ -77,7 +77,7 @@ public sealed class ArrivalPipeline(params IArrivalHandler[] handlers) : IArriva
 /// <summary>What happens to a message the moment it arrives, whichever protocol brought it.</summary>
 /// <remarks>
 /// Signature verification lives here rather than in the reading pane because verifying resolves
-/// a name the sender chose, and §19 does not allow a lookup on the path that draws a message.
+/// a name the sender chose, and no lookup is allowed on the path that draws a message.
 /// Arrival is already network work on a background thread, and it is also the only moment the
 /// signing key is certain to still be published — a key checked months later may have rotated,
 /// and reporting a rotation as a forgery would be worse than not checking at all.

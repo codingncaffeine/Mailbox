@@ -13,7 +13,7 @@ namespace Mailbox.Tests;
 /// <summary>
 /// The plugin host, exercised through a real plugin assembly staged into scratch directories and
 /// loaded through the real discovery — never through the test runner's own context. What is
-/// tested is the §13 contract: a manifest is honoured, a newer API is refused at the door, a
+/// tested is the plugin contract: a manifest is honoured, a newer API is refused at the door, a
 /// throwing plugin is disabled with its report while the rest keep running, an undeclared
 /// permission is refused and recorded, and disabling really unloads the code.
 /// </summary>
@@ -486,7 +486,7 @@ public class PluginHostTests : IDisposable
             GC.WaitForPendingFinalizers();
         }
 
-        // The context going collectible is the claim §13 makes with "without a restart": were a
+        // The context going collectible is the claim "without a restart" makes: were a
         // delegate still held anywhere — the catalogue, a pipeline, the actions map — this would
         // stay alive and the assert would say so.
         Assert.False(reference.IsAlive);
@@ -527,7 +527,7 @@ public class PluginHostTests : IDisposable
         => new("a@example.net", 1, 1, subject, "Sender", DateTimeOffset.UtcNow, false);
 }
 
-/// <summary>§13's "add Quick Steps actions": any catalogue command as a step's action.</summary>
+/// <summary>the design's "add Quick Steps actions": any catalogue command as a step's action.</summary>
 public class QuickStepRunCommandTests
 {
     [Fact]

@@ -278,7 +278,7 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// Instant Search in whichever module is open — the fifth and sixth of the six §14 asks for.
+    /// Instant Search in whichever module is open — the fifth and sixth of the six searches the design asks for.
     /// </summary>
     /// <remarks>
     /// One index behind all of them: <c>pim_fts</c>, which every PIM item is written into as it is
@@ -287,7 +287,7 @@ public partial class MainWindow
     /// a seventh window to answer in.
     /// <para>
     /// The mail module is not here: its search is the message list's own, over its account's FTS5
-    /// index, and it has been since Phase 6.
+    /// index, and it has been all along.
     /// </para>
     /// </remarks>
     private void SearchModule(ShellViewModel shell, string words)

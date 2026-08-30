@@ -87,7 +87,7 @@ public static class MailFileImport
         return written;
     }
 
-    /// <summary>Writes one message as .eml — its stored bytes, verbatim, which is §7.6a's promise.</summary>
+    /// <summary>Writes one message as .eml — its stored bytes, verbatim, which is the design's promise.</summary>
     public static bool ExportEml(MailRepository mail, long messageId, string path)
     {
         if (mail.LoadRaw(messageId) is not { } raw) return false;

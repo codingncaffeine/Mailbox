@@ -3,7 +3,7 @@ namespace Mailbox.Theming.Icons;
 /// <summary>
 /// Which icon set is drawing — the theme's choice, carried by the <c>icons.set</c> token and
 /// applied when a theme is. Every glyph lookup and the icon font itself route through
-/// <see cref="Active"/>, which is what lets a five-line theme swap the whole set (§8) without a
+/// <see cref="Active"/>, which is what lets a five-line theme swap the whole set without a
 /// single command definition knowing.
 /// </summary>
 public static class IconSets

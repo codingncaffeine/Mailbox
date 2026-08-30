@@ -4,7 +4,7 @@
     Turning a received message into something safe to render: an allowlist sanitizer, the
     cid: resolver, resource inlining and the tracker accounting that falls out of the same
     walk. No UI and no network — what comes out of here is a document with nothing left in
-    it to fetch. See §11.
+    it to fetch.
   -->
 
   <ItemGroup>

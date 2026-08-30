@@ -2,7 +2,7 @@
 
   <!--
     What every drawn view shares. The calendar's grids, the People list and the module views to
-    come are drawn rather than composed (§7.4) — a month grid is a thousand rectangles and seven
+    come are drawn rather than composed — a month grid is a thousand rectangles and seven
     hundred pieces of text, and a control per cell would be a control per cell — so the text
     measuring, the wrapping, the hairlines on whole pixels and the brush cache that keeps a render
     pass allocation-free live here rather than once per module.

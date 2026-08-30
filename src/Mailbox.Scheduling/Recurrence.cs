@@ -7,7 +7,7 @@ namespace Mailbox.Scheduling;
 /// The occurrences a set of events puts on the calendar between two instants: single events as
 /// they are, series expanded by their RRULE with EXDATE taken out and RECURRENCE-ID overrides
 /// standing in for the occurrences they replace. Wall times are the series' own — a weekly
-/// 09:00 is 09:00 on both sides of a DST change (§9) — and instants follow from them.
+/// 09:00 is 09:00 on both sides of a DST change — and instants follow from them.
 /// </summary>
 public static class Recurrence
 {

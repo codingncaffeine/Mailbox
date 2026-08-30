@@ -15,7 +15,7 @@ namespace Mailbox.App.Views;
 /// the range the series runs over.
 /// </summary>
 /// <remarks>
-/// A pattern editor, not an RRULE builder (§9). It asks the questions the reference asks — "the
+/// A pattern editor, not an RRULE builder. It asks the questions the reference asks — "the
 /// second Tuesday of every 1 month(s)", "end after 10 occurrences" — and
 /// <see cref="RecurrencePattern"/> turns the answers into RFC 5545. A rule this editor cannot
 /// state is left exactly as it was found rather than flattened into one it can, so a series
@@ -253,7 +253,6 @@ public sealed class RecurrenceDialog : Window
         };
 
         DialogChrome.Apply(this, body);
-        Bind(this, BackgroundProperty, "dialog.background.brush");
         Refresh();
 
         // MAILBOX_RECURRENCE states a pattern in this dialog's own terms and presses one of its

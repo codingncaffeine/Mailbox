@@ -1209,9 +1209,26 @@ public static class ComposeCommands
     ];
 
     /// <summary>
-    /// Every command this class declares, for registration — each stamped as the compose
-    /// window's, which is what keeps Ctrl+U underlining here and marking unread in the shell.
+    /// The ten declared here for the document machinery's sake that only the Contact ribbon
+    /// places: no compose window offers them, so their chords must resolve in the window that
+    /// has the button.
+    /// </summary>
+    private static readonly HashSet<string> ContactOnly = new(StringComparer.Ordinal)
+    {
+        "insert.screenshot", "insert.quickparts", "insert.wordart", "insert.object",
+        "insert.businesscard", "insert.bookmark", "insert.textbox", "insert.dropcap",
+        "insert.datetime", "insert.horizontalline",
+    };
+
+    /// <summary>
+    /// Every command this class declares, for registration — each stamped as the window that
+    /// actually offers it, which is what keeps Ctrl+U underlining here and marking unread in
+    /// the shell, and what would let a chord on a Contact-only insert resolve in the Contact
+    /// window rather than a compose window that has no such button.
     /// </summary>
     public static IReadOnlyList<MailboxCommand> All { get; } =
-        [.. Declared.Select(c => c with { Surface = CommandSurface.Compose })];
+        [.. Declared.Select(c => c with
+        {
+            Surface = ContactOnly.Contains(c.Id.Value) ? CommandSurface.Contact : CommandSurface.Compose,
+        })];
 }

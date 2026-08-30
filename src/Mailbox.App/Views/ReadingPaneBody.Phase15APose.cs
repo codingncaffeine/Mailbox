@@ -6,7 +6,7 @@ namespace Mailbox.App.Views;
 /// The document the pane handed to the rendering engine, for a run that needs the markup itself.
 /// </summary>
 /// <remarks>
-/// The Phase 3 dump says what the sanitizer <em>came to</em> — how much was refused, which hosts,
+/// The sanitizer's report dump says what it <em>came to</em> — how much was refused, which hosts,
 /// and whether a short list of dangerous strings survived. That is the right read-back for a
 /// message a reader might receive, and it is not enough for an adversarial corpus: the question
 /// there is what the engine is handed, byte for byte, because the whole class of fault being

@@ -26,7 +26,7 @@ public sealed record FocusFacts
 }
 
 /// <summary>
-/// Decides whether a message belongs in Focused or Other (§12). Local, and explainable.
+/// Decides whether a message belongs in Focused or Other. Local, and explainable.
 /// </summary>
 /// <remarks>
 /// The reference does this with a model trained on a mailbox; this is the same decision made by

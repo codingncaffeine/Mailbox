@@ -1,7 +1,7 @@
 namespace Mailbox.Core.Commands;
 
 /// <summary>
-/// The Journal module's commands (§9): recording something that took time, and moving the
+/// The Journal module's commands: recording something that took time, and moving the
 /// timeline through it.
 /// </summary>
 /// <remarks>

@@ -109,8 +109,8 @@ public sealed class RibbonEditorView : CustomizationEditor
     /// Which tabs the tree shows, as the reference's own picker offers them.
     /// </summary>
     /// <remarks>
-    /// Tool Tabs is empty until something ships a contextual tab set — Search, in Phase 8, is
-    /// the first that will. It is here rather than left out because it filters for real: the
+    /// Tool Tabs is empty until something ships a contextual tab set — the Search tab will be
+    /// the first. It is here rather than left out because it filters for real: the
     /// distinction is already in the layout document, so the picker starts working the day
     /// there is something to show rather than needing to be built then.
     /// </remarks>

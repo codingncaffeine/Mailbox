@@ -127,7 +127,7 @@ public class MailRepositoryTests
 
     /// <summary>
     /// A deleted message's raw bytes outlive its row — in the Recover Deleted Items holding area
-    /// (§11) — and go for good when the holding area is purged. The blob is never orphaned:
+    /// — and go for good when the holding area is purged. The blob is never orphaned:
     /// exactly one thing points at it at any moment.
     /// </summary>
     [Fact]
@@ -468,7 +468,7 @@ public class MailRepositoryTests
         Assert.Empty(repo.Search("aardvark"));
     }
 
-    // ---- Snooze (§12) -----------------------------------------------------------------------
+    // ---- Snooze -----------------------------------------------------------------------
 
     /// <summary>
     /// A snoozed message leaves the list, is counted out of the folder, is listed among the

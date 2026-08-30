@@ -118,7 +118,7 @@ WANTED = {
     "schedule-view": "calendar_agenda",
     "add": "add",
 
-    # ---- Calendar module (Phase 11) -----------------------------------------------------
+    # ---- Calendar module ----------------------------------------------------------------
     "new-appointment": "calendar_add",
     "open-calendar": "calendar_arrow_right",
     "calendar-groups": "calendar_multiple",
@@ -138,7 +138,7 @@ WANTED = {
     "daily-task-list": "task_list_square_ltr",
     "room-list": "conference_room",
 
-    # ---- Tasks, Notes and Journal (Phase 13) --------------------------------------------
+    # ---- Tasks, Notes and Journal -------------------------------------------------------
     "remove-from-list": "dismiss",
     "task-detailed": "apps_list_detail",
     "task-simple-list": "text_bullet_list_ltr",
@@ -160,7 +160,7 @@ WANTED = {
     "task-request": "clipboard_task",
     "remote-session": "desktop_arrow_right",
 
-    # ---- People module (Phase 12) -------------------------------------------------------
+    # ---- People module ------------------------------------------------------------------
     "contact-group": "people_team",
     "open-item": "open",
     "new-email": "mail_add",

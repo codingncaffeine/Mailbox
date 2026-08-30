@@ -77,7 +77,6 @@ public sealed class CheckFullNameDialog : Window
         };
 
         DialogChrome.Apply(this, new StackPanel { Children = { grid, buttons } });
-        Bind(this, BackgroundProperty, "dialog.background.brush");
     }
 
     /// <summary>The parts as corrected, or null when the dialog was dismissed.</summary>

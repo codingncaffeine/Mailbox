@@ -36,7 +36,7 @@ file static class Catalogue
 /// </summary>
 /// <remarks>
 /// <see cref="AuditInventoryTests"/> dumps four layouts — mail, calendar, people and compose —
-/// because those are the four the Phase 0 inventory quoted. The application builds eleven: the
+/// because those are the four the opening inventory quoted. The application builds eleven: the
 /// seven modules that have a rail icon plus the three item windows and the meeting variant of the
 /// appointment one, and a tab that only exists in the four is a tab nobody photographs. So this
 /// file's dump covers every layout the tree can build, and the checks below hold for all of them.

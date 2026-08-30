@@ -62,7 +62,7 @@ public sealed class Pop3Receiver(MailRepository repository, Func<DateTimeOffset>
     /// </summary>
     /// <remarks>
     /// Here rather than in the reading pane because verifying resolves a name the sender chose,
-    /// and §19 does not allow a lookup on the path that draws a message. A poll is already
+    /// and no lookup is allowed on the path that draws a message. A poll is already
     /// network work on a background thread, and it is also the only moment the signing key is
     /// certain to still be published — a key checked months later may have rotated, and
     /// reporting a rotation as a forgery would be worse than not checking at all.

@@ -26,7 +26,7 @@ public sealed record PublishedCollection(
 /// <para>
 /// Publishing here is a document at a URL, which is the same thing a subscription reads — so what
 /// this writes, <see cref="CalendarSubscription"/> can subscribe to. The reference publishes to
-/// its own service as well; that is a tenant service and out of scope (§3), and a WebDAV address
+/// its own service as well; that is a tenant service and out of scope, and a WebDAV address
 /// is the part of its own dialog that survives the difference.
 /// </para>
 /// </remarks>

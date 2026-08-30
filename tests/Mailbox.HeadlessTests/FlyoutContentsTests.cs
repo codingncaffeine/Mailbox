@@ -7,7 +7,7 @@ namespace Mailbox.HeadlessTests;
 /// A menu holds what it should before anyone looks at it.
 /// </summary>
 /// <remarks>
-/// This is the class of fault Phase 2 found twice — the Quick Access Toolbar's customize flyout
+/// This is the class of fault the chrome audit found twice — the Quick Access Toolbar's customize flyout
 /// and the Simplified ribbon's overflow were each filled only from their own <c>Opening</c>
 /// event, so both were built after the moment they had to be ready and presented nothing at all.
 /// The audit could only catch it by measuring a running application's popup presenter, because a
@@ -46,7 +46,7 @@ public class FlyoutContentsTests
 
     /// <summary>
     /// A menu filled when it is built holds its entries immediately — which is what the two
-    /// flyouts Phase 2 fixed now do.
+    /// flyouts the audit fixed now do.
     /// </summary>
     [Fact]
     public void AMenuFilledWhenItIsBuiltHoldsItsEntriesImmediately()

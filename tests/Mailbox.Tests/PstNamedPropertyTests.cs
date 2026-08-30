@@ -24,7 +24,7 @@ public class PstNamedPropertyTests
     public void NumericAndStringNamesBothResolveBothWays()
     {
         // One numeric name in PSETID_Common (via the GUID stream at index 3), one string name
-        // with no set at all — the two shapes §2.4.7.6's own diagram draws.
+        // with no set at all — the two shapes [MS-PST] §2.4.7.6's own diagram draws.
         var name = "x-mailbox-test";
         var nameBytes = Encoding.Unicode.GetBytes(name);
         var stringStream = new byte[4 + nameBytes.Length + 2];

@@ -8,7 +8,7 @@ namespace Mailbox.Tests;
 /// What leaves the machine.
 /// </summary>
 /// <remarks>
-/// The half of §7.3 that stayed in-house, and the half mail fidelity rests on: everything here
+/// The half of the editor that stayed in-house, and the half mail fidelity rests on: everything here
 /// is about a message rendering correctly in a client we will never see. The rules are narrow
 /// and each one exists because breaking it is invisible from the sending end.
 /// </remarks>
@@ -177,7 +177,7 @@ public class EmailHtmlTests
             StringComparison.Ordinal);
     }
 
-    // ---- §6's wire/render split ----------------------------------------------------------------
+    // ---- the design's wire/render split ----------------------------------------------------------------
 
     /// <summary>
     /// The rule the whole font subsystem exists for. A message composed in Calibri must name

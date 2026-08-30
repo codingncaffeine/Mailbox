@@ -38,7 +38,7 @@ public sealed class ThemeFileException(string message, Exception? inner = null) 
 /// </code>
 /// Progressive disclosure is the point of <c>base</c>: a file that sets three palette entries
 /// and nothing else is a complete theme, because everything the base derives from those entries
-/// follows them (§8). A file with no base has to say everything the coverage gate requires, and
+/// follows them. A file with no base has to say everything the coverage gate requires, and
 /// exporting a built-in is how to get one of those to start from. Keys are the engine's own
 /// (<c>ribbon.background</c>, <c>text.primary</c>…); a key the engine does not know is kept and
 /// ignored rather than refused, so a file written for a later version still loads here.

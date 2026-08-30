@@ -205,7 +205,7 @@ public sealed class RuleWizard : Window
             Actions = [new RuleAction(RuleActionKind.PlaySound)],
         }),
         // The reference's third entry here — an alert to a mobile device — is absent rather than
-        // greyed. It reaches a paging service §3 puts out of scope, and a button that cannot do
+        // greyed. It reaches a paging service scope puts out of reach, and a button that cannot do
         // what it says is worse than one that is not there. Same reasoning as Send to OneNote.
         ("Start from a blank rule", "envelope", "Apply rule on messages I receive", () => new MailRule()),
         ("Start from a blank rule", "send", "Apply rule on messages I send", () => new MailRule { AppliesToSent = true }),
@@ -544,15 +544,24 @@ public sealed class RuleWizard : Window
 
     private async void FinishAsync()
     {
-        if (_rule.Conditions.Count == 0)
+        // A handler body in all but signature — and an async void observes its own faults, or
+        // they land on the dispatcher instead of in the log.
+        try
         {
-            var go = await Confirm.AskAsync(this, "Rules Wizard",
-                "This rule will be applied to every message you receive. Is this correct?", "Yes", destructive: false);
-            if (!go) return;
-        }
+            if (_rule.Conditions.Count == 0)
+            {
+                var go = await Confirm.AskAsync(this, "Rules Wizard",
+                    "This rule will be applied to every message you receive. Is this correct?", "Yes", destructive: false);
+                if (!go) return;
+            }
 
-        Result = _rule;
-        Close();
+            Result = _rule;
+            Close();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            Mailbox.Core.Diagnostics.Log.Warn("Finishing the rule failed.", ex);
+        }
     }
 
     // ---- Editing a clause --------------------------------------------------------------------

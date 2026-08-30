@@ -136,7 +136,7 @@ public partial class MainWindow
     {
         if (DataContext is not ShellViewModel shell) return;
 
-        // A settle, for the reason Phase 4's dialog press takes one: a window that has just
+        // A settle, for the reason every dialog press here takes one: a window that has just
         // appeared is not yet answering the pointer, and a press in the pass it opened in raises
         // nothing at all — which reads exactly like a button wired to nothing. With the reading
         // pane off the bar is in a window that opened on this very pass.

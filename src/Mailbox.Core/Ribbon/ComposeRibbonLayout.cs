@@ -39,7 +39,7 @@ internal static class ComposeRibbonLayout
     /// <summary>
     /// What the two boxes read. The reference shows whatever is under the caret — "12" on the
     /// Message capture, "Aptos (Body)" on Format Text — so ours shows the body's default until
-    /// the editor in Phase 5 can report a selection. Calibri rather than Aptos, because §6
+    /// the editor can report a selection. Calibri rather than Aptos, because font fidelity
     /// records that Aptos is the one common font with no metric-compatible substitute.
     /// </summary>
     private const string DefaultBodyFont = "Calibri";

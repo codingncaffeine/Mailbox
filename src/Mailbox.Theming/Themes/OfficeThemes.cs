@@ -635,6 +635,9 @@ public static class OfficeThemes
         t.Set(TokenKeys.Status.Success, "#5CC28C");
         t.Set(TokenKeys.Status.Warning, "#D9A441");
         t.Set(TokenKeys.Status.Danger, "#E8776F");
+        t.Set(TokenKeys.Pictogram.Blue, "#4B8DE0");
+        t.Set(TokenKeys.Pictogram.Green, "#2EA35A");
+        t.Set(TokenKeys.Pictogram.Amber, "#F2B84B");
         t.Set(TokenKeys.Status.Info, "{palette.brand.primary}");
 
         // Measured. The chrome is not neutral black — it carries a blue cast, while the rail
@@ -1044,6 +1047,9 @@ public static class OfficeThemes
         t.Set(TokenKeys.Status.Warning, "#D9A441");
         t.Set(TokenKeys.Status.Danger, "#A4262C");
         t.Set(TokenKeys.Status.Info, "{palette.brand.primary}");
+        t.Set(TokenKeys.Pictogram.Blue, "#185ABD");
+        t.Set(TokenKeys.Pictogram.Green, "#107C41");
+        t.Set(TokenKeys.Pictogram.Amber, "#F2A900");
     }
 
     /// <summary>

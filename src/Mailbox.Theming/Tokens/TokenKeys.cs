@@ -59,6 +59,19 @@ public static class TokenKeys
     }
 
     /// <summary>
+    /// The Options pages' drawn pictograms — the reference's coloured artwork, tokenised so a
+    /// dark theme can brighten the inks without the artwork changing identity.
+    /// </summary>
+    public static class Pictogram
+    {
+        public const string Blue = "pictogram.blue";
+        public const string Green = "pictogram.green";
+        public const string Amber = "pictogram.amber";
+
+        public static readonly IReadOnlyList<string> All = [Blue, Green, Amber];
+    }
+
+    /// <summary>
     /// The People module's own surfaces: the disc a person is drawn as, and the card beside the
     /// list.
     /// </summary>
@@ -646,7 +659,7 @@ public static class TokenKeys
     }
 
     /// <summary>
-    /// The calendar views (§7.4): the month grid's cells and chips, the day and week views'
+    /// The calendar views: the month grid's cells and chips, the day and week views'
     /// hours, and the date navigator. Measured off the reference's month view where a
     /// capture exists; the rest follows the theme's own semantics.
     /// </summary>
@@ -884,7 +897,7 @@ public static class TokenKeys
         ];
     }
 
-    /// <summary>The icon set the theme draws with — §8's "optional icon set reference" as a token.</summary>
+    /// <summary>The icon set the theme draws with — the design's "optional icon set reference" as a token.</summary>
     public static class Icons
     {
         public const string Set = "icons.set";
@@ -969,6 +982,7 @@ public static class TokenKeys
         .. Peek.All,
         .. Notes.All,
         .. Journal.All,
+        .. Pictogram.All,
         Typography.UiFamily, Typography.UiSize, Typography.UiSizeSmall, Typography.UiSizeLarge,
         Typography.ContentFamily, Typography.ContentSize, Typography.MonoFamily,
     ];

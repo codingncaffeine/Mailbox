@@ -13,7 +13,7 @@ namespace Mailbox.App.Views;
 /// reference's own View · To-Do Bar menu switches on and off.
 /// </summary>
 /// <remarks>
-/// The cross-module pane §9 asks for, and the reason it is three lines of composition rather than
+/// The cross-module pane the design asks for, and the reason it is three lines of composition rather than
 /// a view of its own: <b>both of its sections already exist</b>. The calendar section is the docked
 /// peek — the same <c>PeekView</c> the rail's hover opens, over the same month and the same
 /// agenda — and the tasks section is the to-do list's own <c>TaskListView</c>, banded by due date

@@ -678,7 +678,7 @@ public class OAuthTests
 
     /// <summary>
     /// Google's terms forbid an open-source application shipping a sign-in credential, and its
-    /// mail scope needs a paid annual assessment (§5). Both are settled by there being no client
+    /// mail scope needs a paid annual assessment. Both are settled by there being no client
     /// ID here to ship.
     /// </summary>
     [Fact]
@@ -721,7 +721,7 @@ public class OAuthTests
 
     /// <summary>
     /// Gmail's default path is an app password over IMAP and SMTP, which needs no sign-in at all
-    /// — the OAuth path exists for Tasks, which has no other door (§5).
+    /// — the OAuth path exists for Tasks, which has no other door.
     /// </summary>
     [Fact]
     public void GmailStillTakesAnAppPassword()

@@ -78,7 +78,7 @@ public sealed record JournalRow
 /// should be what any other client would have written.
 /// <para>
 /// <b>The reference has long since stopped developing this module</b> and hides it behind Ctrl+8;
-/// it is here for the completeness §9 asks for, and because a VJOURNAL that carries a duration and
+/// it is here for completeness, and because a VJOURNAL that carries a duration and
 /// a contact is exactly what it is for.
 /// </para>
 /// </remarks>

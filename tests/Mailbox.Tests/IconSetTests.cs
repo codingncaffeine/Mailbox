@@ -7,7 +7,7 @@ using Mailbox.Theming.Tokens;
 namespace Mailbox.Tests;
 
 /// <summary>
-/// The swappable icon sets (§8): every icon exists in both, the active set decides which glyph
+/// The swappable icon sets: every icon exists in both, the active set decides which glyph
 /// a name resolves to, and the choice rides the <c>icons.set</c> token so a five-line theme
 /// swaps the whole set. The active set is process state, so every test here puts it back.
 /// </summary>

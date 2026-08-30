@@ -14,7 +14,7 @@ namespace Mailbox.App.Views;
 /// answer to "where is your key?" is "what key?". Import covers everyone else.
 /// </summary>
 /// <remarks>
-/// The reference has no such dialog — OpenPGP is one of §14's deliberate additions — so this is
+/// The reference has no such dialog — OpenPGP is one of the design's deliberate additions — so this is
 /// an ordinary Mailbox dialog rather than a cloned surface. The work runs off the UI thread,
 /// because RSA 3072 takes seconds and the one standing rule about the UI thread is that nothing
 /// waits on it; the buttons disable, the caption says what is happening, and Cancel stays

@@ -114,7 +114,7 @@ public partial class MainWindow
 
 
         // The views, the tags and the rest are placed and say what they wait for, as the
-        // calendar's unfinished buttons do (§20).
+        // calendar's unfinished buttons do.
         if (WaitingPeopleCommand(id) is { } waiting)
         {
             SwitchModule(shell, MailboxModule.People);
@@ -484,7 +484,7 @@ public partial class MainWindow
     /// </summary>
     /// <remarks>
     /// <b>Divergence, stated:</b> the reference types into the box itself. Every field on this
-    /// ribbon is a button — the bar has no editable control yet (§20) — so pressing it asks for
+    /// ribbon is a button — the bar has no editable control yet — so pressing it asks for
     /// the words in a prompt and the list answers. What it does with them is the reference's:
     /// the module's own list narrows, and emptying the box brings everybody back.
     /// </remarks>
@@ -622,7 +622,7 @@ public partial class MainWindow
     /// Meeting: the meeting window with the contact already asked.
     /// </summary>
     /// <remarks>
-    /// What this waited for was the Scheduling Assistant, which Phase 12 built — a meeting with
+    /// What this waited for was the Scheduling Assistant, which now exists — a meeting with
     /// somebody in it is exactly what that tab draws.
     /// </remarks>
     private void MeetContact(ShellViewModel shell)
@@ -678,7 +678,7 @@ public partial class MainWindow
     /// </summary>
     /// <remarks>
     /// The reference's own Share Contacts sends a sharing invitation, and the thing it invites
-    /// somebody into is a tenant's directory — out of scope by §3, and there is nothing here to
+    /// somebody into is a tenant's directory — out of scope by decision, and there is nothing here to
     /// invite them to. Rule 2 translates it: publish the book to an address, the same way a
     /// calendar is published, and whoever wants it fetches it. What goes up is every card in the
     /// book as one vCard document.

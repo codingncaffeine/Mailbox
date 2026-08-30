@@ -1,4 +1,4 @@
-# Phase 12A: the Search radios actually choose where a search begins.
+# The Search radios actually choose where a search begins.
 scope-inbox	MAILBOX_SEARCH=agenda
 scope-folder	MAILBOX_FOLDER=you@example.com/Archive	MAILBOX_SEARCH=agenda
 scope-stored	MAILBOX_SETTING=search.scope.default=All mailboxes	MAILBOX_SEARCH=agenda

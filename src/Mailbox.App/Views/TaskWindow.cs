@@ -117,7 +117,6 @@ public sealed class TaskWindow : Window
         };
 
         DialogChrome.Apply(this, BuildBody());
-        Bind(this, BackgroundProperty, "dialog.background.brush");
     }
 
     /// <summary>The task as it was left, or null when the window was closed without saving.</summary>

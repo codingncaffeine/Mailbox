@@ -14,7 +14,7 @@ public enum FullNameOrder
 /// <remarks>
 /// The reading half of the page, exactly as <see cref="CalendarOptions"/> is for the calendar:
 /// every accessor here has a feature behind it, and a row with no accessor is one nothing reads
-/// yet (§20 says so per row).
+/// yet, recorded per row.
 /// </remarks>
 public sealed class PeopleOptions(SettingsStore settings)
 {

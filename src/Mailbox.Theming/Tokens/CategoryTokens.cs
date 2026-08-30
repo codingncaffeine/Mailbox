@@ -5,8 +5,8 @@ namespace Mailbox.Theming.Tokens;
 /// </summary>
 /// <remarks>
 /// A category is a name and a colour token in the store, but the things that draw <em>in</em> a
-/// category's colour — a note's square, an entry on the timeline — hold the name alone until
-/// Phase 14 makes the categories one set across the modules. Matching on the name is what the
+/// category's colour — a note's square, an entry on the timeline — hold the name alone rather
+/// than a reference into the category store. Matching on the name is what the
 /// reference's own defaults invite: its categories ship called "Blue Category" and "Red
 /// Category", so a note carrying one is blue or red without anything else being read.
 /// <para>

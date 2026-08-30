@@ -34,7 +34,7 @@ public sealed record Misspelling(string Word, int Offset, bool IsRepeated = fals
 /// LibreOffice — are the ones this reads. A checker with a word list of its own would disagree
 /// with the rest of the desktop about the same document.
 /// <para>
-/// The managed implementation, so nothing here has a native part (§16). It is MPL 1.1 / GPL 2.0
+/// The managed implementation, so nothing here has a native part. It is MPL 1.1 / GPL 2.0
 /// / LGPL 2.1 tri-licensed, which reaches GPL-3 through the LGPL arm, and on .NET 10 it has no
 /// dependencies at all.
 /// </para>

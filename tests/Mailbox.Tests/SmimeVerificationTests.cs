@@ -16,7 +16,7 @@ using Org.BouncyCastle.X509.Extension;
 namespace Mailbox.Tests;
 
 /// <summary>
-/// Checking an S/MIME signature — and the five things §19 says a client must not get wrong,
+/// Checking an S/MIME signature — and the five things a client must not get wrong,
 /// each of which is a bug that shipped somewhere real.
 /// </summary>
 /// <remarks>

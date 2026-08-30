@@ -10,8 +10,8 @@ namespace Mailbox.Tests;
 /// exports, read by the importers, and compared field by field rather than counted.
 /// </summary>
 /// <remarks>
-/// A count survives almost anything. Phase 6 found every exception to a series dropped on import
-/// while the count still read right, and Phase 7 found a contact's postal address discarded on
+/// A count survives almost anything. The audit found every exception to a series dropped on import
+/// while the count still read right, and later a contact's postal address discarded on
 /// save while the form read it back correctly first. So each of these builds the item, sends it
 /// out through the same codec the export uses, brings it back through the real importer into a
 /// store that has never seen it, and asks the store for every field — including the ones a
@@ -140,7 +140,7 @@ public class AuditInterchangeRoundTripTests : IDisposable
     }
 
     /// <summary>
-    /// The Phase 6 data loss, held shut: a series and its exception share one UID, so an importer
+    /// The series-exception data loss, held shut: a series and its exception share one UID, so an importer
     /// matching on the UID alone answers the exception with the master, calls it already here,
     /// and drops the one occurrence a reader would notice missing.
     /// </summary>
@@ -296,7 +296,7 @@ public class AuditInterchangeRoundTripTests : IDisposable
     }
 
     /// <summary>
-    /// The postal address, on its own: Phase 7 found one discarded on save with the form reading
+    /// The postal address, on its own: the audit found one discarded on save with the form reading
     /// it back correctly first, and a card is where the same shape of loss would hide next.
     /// </summary>
     [Fact]

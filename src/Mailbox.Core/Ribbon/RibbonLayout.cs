@@ -162,7 +162,7 @@ public sealed record RibbonItem
     public double? Width { get; init; }
 
     /// <summary>
-    /// What a field shows. Static until the editor in Phase 5 gives it a selection to report —
+    /// What a field shows. Static until the editor gives it a selection to report —
     /// the reference's boxes read the caret, and an empty box beside a body full of text reads
     /// as broken rather than as unfinished.
     /// </summary>
@@ -476,7 +476,7 @@ public sealed record RibbonTab
 /// commands are placed through the identical path as built-ins, with no second code path.
 /// <para>
 /// This constrains the design from day one and is much harder to retrofit, which is why it
-/// exists in Phase 0/1 rather than later.
+/// existed before the first pixel of ribbon was drawn.
 /// </para>
 /// </remarks>
 public sealed record RibbonLayout

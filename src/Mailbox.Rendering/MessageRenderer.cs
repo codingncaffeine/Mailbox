@@ -14,7 +14,7 @@ namespace Mailbox.Rendering;
 /// walks that can disagree, and the one that disagreed quietly would be the blocker.
 /// <para>
 /// Nothing here touches the network, by construction rather than by policy — the project has no
-/// HTTP dependency. See §11.
+/// HTTP dependency: the document that reaches the engine holds no remote URL.
 /// </para>
 /// </remarks>
 public static partial class MessageRenderer

@@ -17,7 +17,7 @@ public sealed record Signature
 {
     public required string Name { get; init; }
 
-    /// <summary>The signature as markup, in the conservative shape §7.3 requires of outgoing mail.</summary>
+    /// <summary>The signature as markup, in the conservative shape outgoing mail is held to.</summary>
     public string Html { get; init; } = string.Empty;
 
     /// <summary>The same words, for the plain text half of the message.</summary>
@@ -113,7 +113,7 @@ public sealed class Signatures
         {
             if (JsonNode.Parse(_settings.GetString(key)) is not JsonObject map) return null;
 
-            // Keyed by address rather than by a row id, for the reason §15 gives about account
+            // Keyed by address rather than by a row id, the same reasoning as account
             // settings: an id means nothing once a store has been restored or copied.
             var name = map[address.ToLowerInvariant()]?.GetValue<string>();
             return name is { Length: > 0 } ? Find(name) : null;

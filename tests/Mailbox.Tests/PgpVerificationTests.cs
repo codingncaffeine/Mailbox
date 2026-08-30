@@ -6,7 +6,7 @@ using MimeKit.Cryptography;
 namespace Mailbox.Tests;
 
 /// <summary>
-/// Checking an OpenPGP signature, and the four things §19 says a client must not get wrong —
+/// Checking an OpenPGP signature, and the four things a client must not get wrong —
 /// the same four the S/MIME verifier answers, in the same words.
 /// </summary>
 public class PgpVerificationTests : IDisposable
@@ -79,7 +79,7 @@ public class PgpVerificationTests : IDisposable
     [Fact]
     public void ASignatureMadeAtATimeThatDisagreesWithTheMessageIsRefused()
     {
-        // §19: the creation time is the signer's own claim and RFC 5652 §11.3 gives it no
+        // The creation time is the signer's own claim and RFC 5652 §11.3 gives it no
         // guarantee. Thunderbird believed it twice — CVE-2022-2226 and CVE-2023-50761.
         using var context = PgpKeys.Context(_root, PgpKeys.Sender);
 

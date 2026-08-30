@@ -12,7 +12,7 @@ namespace Mailbox.Core.Compose;
 /// <remarks>
 /// A link arrives from outside the application — a link on a web page, another program's command
 /// line — and is not to be trusted, so <see cref="Parse"/> handles it carefully. Two rules from
-/// §19 are enforced there rather than remembered later:
+/// the security rules are enforced there rather than remembered later:
 /// <list type="bullet">
 /// <item><c>attach=</c> is dropped entirely. A link that could make the mail client attach an
 /// arbitrary local file — <c>/etc/passwd</c>, an ssh key — is an exfiltration primitive, and no

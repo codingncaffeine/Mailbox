@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    The Journal module's views (§9): the timeline the module opens in, and the grouped rows its
+    The Journal module's views: the timeline the module opens in, and the grouped rows its
     other three arrangements draw. Drawn, as every module's views are.
 
     Its own project rather than the Notes one, even though the two modules read the same component

@@ -12,7 +12,7 @@ using Mailbox.Theming.Tokens;
 namespace Mailbox.App.Views;
 
 /// <summary>
-/// The live theme editor (§8): the token list on the left, the selected token's own editor on
+/// The live theme editor: the token list on the left, the selected token's own editor on
 /// the right, and the running application as the preview — every committed value is applied to
 /// the real theme service, so the shell behind this window is the split view's other half.
 /// </summary>
@@ -23,7 +23,7 @@ namespace Mailbox.App.Views;
 /// nothing, a cycle — is named in the status line and backed out, because the one thing a
 /// live editor must never do is take the application it is previewing down with it. Contrast
 /// findings are the audit's own words, refreshed on every apply: a theme can be saved anyway,
-/// it just cannot be saved silently (§8).
+/// it just cannot be saved silently.
 /// </remarks>
 public sealed class ThemeEditorWindow : Window
 {

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    §13's plugin host: discovery, the manifest, a collectible load context per plugin, and the
+    the design's plugin host: discovery, the manifest, a collectible load context per plugin, and the
     bridges that put a plugin's contributions into the same registries the built-ins use — the
     command catalogue, the ribbon layout, the arrival pipeline. The API a plugin sees is
     Mailbox.Plugins.Api and nothing here; this assembly is the application's side of the seam,

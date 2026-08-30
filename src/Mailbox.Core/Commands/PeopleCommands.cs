@@ -1,7 +1,7 @@
 namespace Mailbox.Core.Commands;
 
 /// <summary>
-/// The People module's commands (§9): making and opening contacts and groups, the five views
+/// The People module's commands: making and opening contacts and groups, the five views
 /// the reference offers, and what can be done with somebody once they are picked.
 /// </summary>
 /// <remarks>
@@ -10,7 +10,7 @@ namespace Mailbox.Core.Commands;
 /// the same name by which module is open, and Customize Ribbon groups by the same thing.
 /// <para>
 /// Categorize, Follow Up and Private appear here as well as on the mail bar. The categories are
-/// one set across the modules (§9) but the command is not: pressing Categorize with a contact
+/// one set across the modules but the command is not: pressing Categorize with a contact
 /// picked has to tag a contact, and a shared id would reach the mail module's handler.
 /// </para>
 /// </remarks>

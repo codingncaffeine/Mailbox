@@ -125,7 +125,7 @@ public sealed class RibbonArtwork : Control
     public override void Render(DrawingContext context)
     {
         // By name, and nothing for a name there is no drawing for — the icon map's own rule. A
-        // fall-through to the swatches is how People's Follow Up button spent a phase drawing
+        // fall-through to the swatches is how People's Follow Up button spent a stretch drawing
         // Categorize: its command asked for "follow-up", which is not what this one is called.
         if (Figures.TryGetValue(Drawing, out var sizes))
         {

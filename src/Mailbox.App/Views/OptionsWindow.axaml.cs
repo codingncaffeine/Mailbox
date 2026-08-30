@@ -366,7 +366,7 @@ public sealed class OptionsWindow : Window
     /// a text field.
     /// </param>
     /// <remarks>
-    /// §20 lists a hundred-odd rows waiting on the feature behind them, and each becomes a claim the
+    /// A hundred-odd rows wait on the feature behind them, and each becomes a claim the
     /// day it is wired up. This is how that claim gets read back: press the row the reader would
     /// press and print the key it wrote, rather than photographing a tick and calling it done. A
     /// capture cannot click, so the press is raised on the control the renderer really made, found
@@ -453,7 +453,7 @@ public sealed class OptionsWindow : Window
     /// reference captures are next.
     /// </summary>
     /// <summary>
-    /// The buttons that open a sub-dialog. Most still open nothing, and §20 says which and why;
+    /// The buttons that open a sub-dialog. Most still open nothing, recorded per button with the why;
     /// this is where each one is wired as its dialog arrives.
     /// </summary>
     private void OnAction(string buttonLabel)
@@ -779,7 +779,7 @@ public sealed class OptionsWindow : Window
 
     /// <summary>
     /// Start at sign-in, and whether to start into the tray: two checkboxes over one XDG
-    /// autostart entry (§10). Read from the entry rather than from a setting, so a desktop that
+    /// autostart entry. Read from the entry rather than from a setting, so a desktop that
     /// has switched the entry off in its own session settings is shown the truth.
     /// </summary>
     /// <summary>
@@ -945,7 +945,7 @@ public sealed class OptionsWindow : Window
 
     /// <summary>
     /// The plugins as the host knows them: each with its state, what it asked for, and a button
-    /// that enables or disables it now — §13's manager, on the page the reference keeps its own.
+    /// that enables or disables it now — the design's manager, on the page the reference keeps its own.
     /// </summary>
     private Control PluginRows()
     {

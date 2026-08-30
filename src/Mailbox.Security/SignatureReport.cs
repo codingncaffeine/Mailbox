@@ -4,7 +4,7 @@ namespace Mailbox.Security;
 /// <remarks>
 /// One vocabulary for both S/MIME and OpenPGP. The reader is being told what happened to their
 /// message, and which algorithm carried it is not that: a bar that reads differently for the two
-/// would teach them to compare wordings rather than states. §19's rules are rules about a message,
+/// would teach them to compare wordings rather than states. The security rules are rules about a message,
 /// so the two verifiers answer in the same words and differ only in how they arrive at them.
 /// </remarks>
 public enum SignatureState
@@ -21,7 +21,7 @@ public enum SignatureState
     /// <remarks>
     /// Its own state on purpose. A client that folds this into "valid" is telling a reader that a
     /// message from an impostor is signed by the person it names, which is the whole of the attack
-    /// (§19); one that folds it into "invalid" teaches them to ignore the word.
+    /// (a deliberate distinction); one that folds it into "invalid" teaches them to ignore the word.
     /// </remarks>
     Mismatched,
 

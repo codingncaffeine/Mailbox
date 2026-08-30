@@ -8,7 +8,7 @@ namespace Mailbox.HeadlessTests;
 /// not be tested before.
 /// </summary>
 /// <remarks>
-/// Phase 2 found that <c>ForceHover</c> resolved a button by a class two of them share and
+/// The chrome audit found that <c>ForceHover</c> resolved a button by a class two of them share and
 /// stopped at the first match, so posing a hover on maximize lit minimize instead. A door that
 /// lies is worse than no door: every hover claim built on it would have been wrong, and the only
 /// reason it was caught is that nothing had used it yet.

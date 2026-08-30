@@ -10,7 +10,7 @@ using Mailbox.Store;
 namespace Mailbox.App.Views;
 
 /// <summary>
-/// Recover Deleted Items (§11): what was permanently deleted within the retention window, with
+/// Recover Deleted Items: what was permanently deleted within the retention window, with
 /// Restore Selected Items and Purge Selected Items — the reference's dialog, over the holding
 /// area in the account's own store rather than a server's.
 /// </summary>
@@ -56,7 +56,6 @@ public sealed class RecoverDeletedItemsDialog : Window
         Bind(_status, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
 
         DialogChrome.Apply(this, Layout());
-        Bind(this, BackgroundProperty, "dialog.background.brush");
         Reload();
     }
 

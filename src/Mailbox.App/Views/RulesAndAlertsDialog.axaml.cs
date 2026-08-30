@@ -268,7 +268,7 @@ public sealed class RulesAndAlertsDialog : Window
     /// </summary>
     /// <remarks>
     /// <b>A stated divergence.</b> The reference's tab subscribes to alerts raised by a document
-    /// library on a corporate server — §3 puts that service out of scope and there is nothing
+    /// library on a corporate server — that service is out of scope by decision and there is nothing
     /// here to subscribe to. Drawn rather than dropped because the reference draws it, and a tab
     /// that quietly vanished would read as a fault in the one dialog people open when their
     /// filing has stopped working. What it must not do is look like it is waiting for something.

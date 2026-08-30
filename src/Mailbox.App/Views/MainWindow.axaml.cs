@@ -231,7 +231,7 @@ public partial class MainWindow : Window
         // Presses ribbon commands by id, after the window has opened and the posed folder and
         // selection are in place: MAILBOX_RUN=mail.delete,mail.archive. A menu cannot be
         // photographed but what it does can, and this is how the audit checks that a button
-        // does what §20 says rather than what its handler's name suggests.
+        // does what the inventory records rather than what its handler's name suggests.
         // Once per run, not once per window: Open in New Window makes a second shell, and a
         // second shell that ran the same command list again would open a third.
         // Selects every row in the list, so a command can be pressed over a selection rather than
@@ -2616,7 +2616,7 @@ public partial class MainWindow : Window
             if (DataContext is ShellViewModel shell) shell.Refresh();
         };
 
-        // §12's Undo Send. The window closes the moment it queues, so the offer to take it back
+        // The design's Undo Send. The window closes the moment it queues, so the offer to take it back
         // belongs here — and it is the shell that still exists to show it.
         compose.Queued += (_, e) => OnQueued(e);
 
@@ -2681,7 +2681,7 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>An <c>.eml</c> file, or a path the desktop handed us as one. The MIME-file side of §10.</summary>
+    /// <summary>An <c>.eml</c> file, or a path the desktop handed us as one. The MIME-file side of the desktop integration.</summary>
     private static bool LooksLikeMailFile(string arg)
     {
         var path = arg.StartsWith("file://", StringComparison.OrdinalIgnoreCase) && Uri.TryCreate(arg, UriKind.Absolute, out var uri)
@@ -2944,7 +2944,7 @@ public partial class MainWindow : Window
 
     /// <summary>
     /// The desktop notification for a toast: a click opens the message; a toast about one message
-    /// also carries Reply, Delete and Mark Read (§10). Answers arrive on a background thread and
+    /// also carries Reply, Delete and Mark Read. Answers arrive on a background thread and
     /// are posted to the UI thread here, so the notifier never touches a window.
     /// </summary>
     private Notifications.Notification ToastFor(NewMailToast toast)
@@ -3251,7 +3251,7 @@ public partial class MainWindow : Window
     /// What was recorded about the selected message's signature when it arrived.
     /// </summary>
     /// <remarks>
-    /// Read, never checked. Verifying resolves a name the sender chose, and §19 does not allow
+    /// Read, never checked. Verifying resolves a name the sender chose, and the render-path rule does not allow
     /// a lookup on the path that draws a message — so what the pane shows is what the poll
     /// found, and a message that was never checked says so rather than being checked now.
     /// </remarks>
@@ -3923,11 +3923,10 @@ public partial class MainWindow : Window
     private PeekView? _floatingPeek => _peekPopup as PeekView;
 
     /// <summary>
-    /// Gives each rail module a command. Mail and Calendar switch the window over; the rest say
-    /// which phase brings them, which is better than a button that does nothing.
+    /// Gives each rail module a command that switches the window over.
     /// </summary>
     /// <remarks>
-    /// Until Phase 11 the Calendar button toggled the peek, because there was no module to switch
+    /// The Calendar button once toggled the peek, because there was no module to switch
     /// to. Now it switches, and the peek is what a <em>hover</em> over the button opens — the
     /// reference's own arrangement, and the reason the peek was built as its own control.
     /// </remarks>
@@ -5527,7 +5526,7 @@ public partial class MainWindow : Window
         // fields is addressed from those and from nothing outside them. The attack is a replay with
         // an extra address added to the outer Cc — answer that and the conversation is encrypted to
         // whoever added it. The body stays the envelope's, because a reply must not carry decrypted
-        // content out in the clear (§19).
+        // content out in the clear.
         covered ??= ReferenceEquals(original, _openMessage) ? _reading?.Protected : null;
         if (covered is not null) original = HeaderProtection.Addressed(original, covered, original.Body);
 
@@ -6052,7 +6051,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// The Snooze menu (§12): presets in the flag menu's shape — Later Today, Tomorrow, This
+    /// The Snooze menu: presets in the flag menu's shape — Later Today, Tomorrow, This
     /// Weekend, Next Week, Custom — and Unsnooze for a message that is snoozed. The presets
     /// are the reference's own times: four hours from now, and eight in the morning otherwise.
     /// </summary>
@@ -6164,7 +6163,7 @@ public partial class MainWindow : Window
         shell.SetCustomFlag(rows, flag);
     }
 
-    // ---- Reminders (§9) ------------------------------------------------------------------------
+    // ---- Reminders ------------------------------------------------------------------------
 
     private RemindersWindow? _reminders;
     private readonly HashSet<(string, long)> _announced = [];
@@ -6188,7 +6187,7 @@ public partial class MainWindow : Window
             foreach (var message in account.Mail.DueReminders(now)) due.Add(DueReminder.ForMessage(account, message));
         }
 
-        // Appointments join the same queue, as §9 asks: one window over every module, with one
+        // Appointments join the same queue: one reminders window over every module, with one
         // Dismiss All, rather than a second window for the calendar.
         foreach (var appointment in Mailbox.Scheduling.AppointmentReminders.Due(App.Pim, now, dismissPast: App.MailOptions.DismissPastReminders))
         {
@@ -6441,6 +6440,20 @@ public partial class MainWindow : Window
     /// first click opens Set Quick Click… so the choice can be made where it was reached for.
     /// </remarks>
     private async void QuickClick(ShellViewModel shell, QuickClickEventArgs e)
+    {
+        try
+        {
+            await QuickClickAsync(shell, e);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // A handler body in all but signature — observed here, or the fault lands on the
+            // dispatcher instead of in the log.
+            Log.Warn("The quick-click column failed.", ex);
+        }
+    }
+
+    private async Task QuickClickAsync(ShellViewModel shell, QuickClickEventArgs e)
     {
         IReadOnlyList<ViewModels.MessageRow> rows = [e.Row];
 
@@ -6777,8 +6790,8 @@ public partial class MainWindow : Window
     /// </summary>
     /// <remarks>
     /// Built when it opens rather than once: the ticks and the folder list change with the
-    /// selection. Anything on it that has no command behind it yet is greyed with the phase in
-    /// its tooltip, which is what the ribbon does for the same commands.
+    /// selection. Anything on it that has no command behind it yet is greyed with what it waits
+    /// on in its tooltip, which is what the ribbon does for the same commands.
     /// </remarks>
     /// <summary>
     /// The menu over a message, transcribed from the reference's own.
@@ -6796,7 +6809,7 @@ public partial class MainWindow : Window
     /// <para>
     /// Each icon is the command's own, tint included, which is how the ribbon draws it. Every
     /// entry does what it says: the reference's Send to OneNote reaches a product this
-    /// application deliberately has no part of (§3) and is left out rather than drawn greyed,
+    /// application deliberately has no part of and is left out rather than drawn greyed,
     /// which is the reader's own instruction.
     /// </para>
     /// </remarks>
@@ -7892,7 +7905,7 @@ public partial class MainWindow : Window
             _ = SieveSync.RepublishStaleAsync();
 
             // Send/Receive is one button in the reference and it covers the calendars too, so the
-            // DAV engine runs on the same press (§7.5) rather than on a second one. Send All and
+            // DAV engine runs on the same press rather than on a second one. Send All and
             // Update Folder are narrower presses by definition and do not drag the whole world
             // along with them — a reader checking one folder did not ask for every calendar and
             // every feed as well.
@@ -8200,7 +8213,7 @@ public partial class MainWindow : Window
     /// F9 runs a send/receive, as every mail client since the nineties has.
     /// </summary>
     /// <remarks>
-    /// These belong in the command catalogue so the shortcut editor in Phase 8 can rebind them.
+    /// These belong in the command catalogue so a shortcut editor can one day rebind them.
     /// They are here for now because nothing yet reads a gesture table.
     /// </remarks>
     protected override void OnKeyDown(Avalonia.Input.KeyEventArgs e)

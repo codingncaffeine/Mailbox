@@ -29,7 +29,7 @@ public enum ConflictChoice
 /// </summary>
 /// <remarks>
 /// A refused write leaves two truths and no way to tell which was meant — the sync engine
-/// reports it rather than picking (§7.5), and this is where the picking happens. Both copies are
+/// reports it rather than picking, and this is where the picking happens. Both copies are
 /// shown in full because "your change was rejected" is not enough to choose on: the difference is
 /// usually one field, and which field it is decides the answer.
 /// <para>
@@ -115,7 +115,6 @@ public sealed class CalendarConflictDialog : Window
 
         body.Children.Add(stack);
         DialogChrome.Apply(this, body);
-        Bind(this, BackgroundProperty, "dialog.background.brush");
 
         _list.SelectedIndex = 0;
         ShowSelected();

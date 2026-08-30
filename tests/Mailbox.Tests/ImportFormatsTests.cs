@@ -218,7 +218,7 @@ public class ImportFormatsTests : IDisposable
         var back = Path.Combine(_root, "back.eml");
         Assert.True(MailFileImport.ExportEml(mail, row.Id, back));
 
-        // §7.6a's promise, checked in bytes: what came in is what goes out.
+        // The design's promise, checked in bytes: what came in is what goes out.
         Assert.Equal(raw, File.ReadAllBytes(back));
     }
 
@@ -500,7 +500,7 @@ public class ReleaseCheckTests
 }
 
 /// <summary>
-/// §16's localization scaffolding, and the import budget from its performance pass. Budgets,
+/// The design's localization scaffolding, and the import budget from its performance pass. Budgets,
 /// not benchmarks: generous enough not to fail on a slow machine, tight enough to catch a
 /// regression in kind.
 /// </summary>

@@ -12,7 +12,7 @@ namespace Mailbox.App.Views;
 /// <remarks>
 /// Every window in Mailbox draws its own caption, dialogs included — a themed application with
 /// one window wearing the desktop's title bar looks like two applications. The shell and the
-/// compose window have done this since Phase 0 through <see cref="WindowFrame"/>; this is the
+/// compose window have done this from the beginning through <see cref="WindowFrame"/>; this is the
 /// same recipe with a dialog's proportions, in one place so the seven of them cannot drift.
 /// <para>
 /// A dialog's caption carries a title and a close button. The reference puts a "?" beside it,

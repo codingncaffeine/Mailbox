@@ -149,7 +149,6 @@ public sealed class AdvancedViewSettingsDialog : Window
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
         DialogChrome.Apply(this, Layout());
-        ViewDialogKit.Bind(this, BackgroundProperty, "dialog.background.brush");
         Refresh();
     }
 
@@ -301,7 +300,6 @@ public sealed class ShowColumnsDialog : Window
         _chosen.ItemTemplate = new FuncDataTemplate<string>((id, _) => ViewDialogKit.SurfaceText(ViewFields.Label(id)));
 
         DialogChrome.Apply(this, Layout());
-        ViewDialogKit.Bind(this, BackgroundProperty, "dialog.background.brush");
         Refresh();
     }
 
@@ -423,7 +421,6 @@ public sealed class GroupByDialog : Window
         };
 
         DialogChrome.Apply(this, body);
-        ViewDialogKit.Bind(this, BackgroundProperty, "dialog.background.brush");
     }
 }
 
@@ -463,7 +460,6 @@ public sealed class SortDialog : Window
         };
 
         DialogChrome.Apply(this, body);
-        ViewDialogKit.Bind(this, BackgroundProperty, "dialog.background.brush");
     }
 }
 
@@ -513,7 +509,6 @@ public sealed class FilterDialog : Window
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
         DialogChrome.Apply(this, Layout());
-        ViewDialogKit.Bind(this, BackgroundProperty, "dialog.background.brush");
 
         Load(query);
         foreach (var control in new Control[] { _words, _from, _sentTo, _categories, _query }) ((TextBox)control).TextChanged += (_, _) => Sync(control);
@@ -744,7 +739,6 @@ public sealed class OtherSettingsDialog : Window
         };
 
         DialogChrome.Apply(this, body);
-        ViewDialogKit.Bind(this, BackgroundProperty, "dialog.background.brush");
     }
 }
 
@@ -798,7 +792,6 @@ public sealed class ConditionalFormattingDialog : Window
         };
 
         DialogChrome.Apply(this, Layout());
-        ViewDialogKit.Bind(this, BackgroundProperty, "dialog.background.brush");
         Refresh(0);
     }
 
@@ -970,7 +963,6 @@ public sealed class FormatColumnsDialog : Window
         _format.SelectionChanged += (_, _) => Save();
 
         DialogChrome.Apply(this, Layout());
-        ViewDialogKit.Bind(this, BackgroundProperty, "dialog.background.brush");
         _list.SelectedIndex = _columns.Count > 0 ? 0 : -1;
         ShowSelected();
     }
@@ -1095,7 +1087,6 @@ public sealed class ManageViewsDialog : Window
         };
 
         DialogChrome.Apply(this, Layout());
-        ViewDialogKit.Bind(this, BackgroundProperty, "dialog.background.brush");
         Reload();
     }
 
@@ -1267,6 +1258,5 @@ public sealed class ApplyViewToFoldersDialog : Window
         };
 
         DialogChrome.Apply(this, body);
-        ViewDialogKit.Bind(this, BackgroundProperty, "dialog.background.brush");
     }
 }

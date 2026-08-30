@@ -17,7 +17,7 @@ namespace Mailbox.App.Views;
 /// has come.
 /// </summary>
 /// <remarks>
-/// One queue across the modules is the point (§9) — the reference's window mixes mail, meetings
+/// One queue across the modules is the point — the reference's window mixes mail, meetings
 /// and tasks in one list with one Dismiss All — so this carries either rather than the window
 /// holding two lists that would have to be interleaved by hand at every use.
 /// </remarks>
@@ -102,7 +102,7 @@ public sealed record DueReminder
 }
 
 /// <summary>
-/// The Reminders window (§9): one queue of what is due — flagged mail, appointments and tasks
+/// The Reminders window: one queue of what is due — flagged mail, appointments and tasks
 /// together — with Dismiss, Dismiss All, Open Item and Snooze.
 /// </summary>
 /// <remarks>
@@ -251,7 +251,6 @@ public sealed class RemindersWindow : Window
         body.Children.Add(upper);
 
         DialogChrome.Apply(this, body);
-        Bind(this, BackgroundProperty, "dialog.background.brush");
 
         // Closing hides rather than destroys, so the next due reminder reopens the same window.
         Closing += (_, e) =>

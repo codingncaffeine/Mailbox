@@ -39,7 +39,7 @@ internal static partial class CssScrubber
     /// What a document holding decrypted content refuses on top of the rest.
     /// </summary>
     /// <remarks>
-    /// §19's second blocker, and CVE-2026-0818: decrypted plaintext was read out of a message
+    /// The design's second blocker, and CVE-2026-0818: decrypted plaintext was read out of a message
     /// through the cascade rather than through a fetch — CSS animations timed against the content,
     /// and style and container queries that branch on it. None of the three is worth anything in
     /// mail, and each is a side channel out of a document that holds a secret.

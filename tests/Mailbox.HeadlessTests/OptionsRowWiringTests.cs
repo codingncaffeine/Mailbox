@@ -28,7 +28,7 @@ public class OptionsRowWiringTests
     private static readonly Dictionary<string, int> KnownLabelKeyedRows = new(StringComparer.Ordinal)
     {
         // Down one: the multiple-displays combo became the reference's pair of radios in the
-        // Phase 12 capture comparison, and radios are counted by their group, not here.
+        // options capture comparison, and radios are counted by their group, not here.
         ["general"] = 4,
         // Up one, deliberately: "Show suggested replies" joined greyed — the AI exclusion's
         // greyed-rather-than-removed convention, drawn because the capture draws it.

@@ -9,7 +9,7 @@ namespace Mailbox.Protocols.OAuth;
 /// trip to the provider before every poll, and with a provider that rotates refresh tokens, a new
 /// long-lived credential written to the keyring each time.
 /// <para>
-/// Keyed by address for the same reason account settings are (§4): a row id belongs to one store
+/// Keyed by address for the same reason account settings are: a row id belongs to one store
 /// file, and the point of a file per account is that it can be restored somewhere the id differs.
 /// </para>
 /// </remarks>

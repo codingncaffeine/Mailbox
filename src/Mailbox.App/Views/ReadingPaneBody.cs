@@ -46,12 +46,12 @@ public enum PdfSaveResult
 /// <remarks>
 /// The engine is handed a document that has already had every remote reference taken out of it,
 /// so there is nothing here that decides what to allow at request time — by the time this runs,
-/// the decision has been made and baked into the markup. See §11 for why that is the design
+/// the decision has been made and baked into the markup. The sanitizer's remarks say why that is the design
 /// rather than a request veto.
 /// <para>
 /// The WebView is created defensively. The WPE backend is new, and a reading pane that throws on
 /// a machine without it would take the application with it; the fallback renders the message as
-/// text, which is what the pane did before this phase and is better than a crash.
+/// text, which is what the pane did before the renderer arrived and is better than a crash.
 /// </para>
 /// </remarks>
 public sealed partial class ReadingPaneBody : UserControl, IDisposable
@@ -141,7 +141,7 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
     /// <param name="verified">
     /// What checking this message's signature came to when it arrived, read from the store, or
     /// null for a message that was never checked. Passed in rather than looked up: verifying
-    /// resolves a name the sender chose, and §19 does not allow that on the path that draws a
+    /// resolves a name the sender chose, and no lookup is allowed on the path that draws a
     /// message. Nothing here ever asks the network anything.
     /// </param>
     public void Show(MimeMessage? message, string fallbackText, DkimResult? verified = null,
@@ -270,7 +270,7 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
         }
 
         // An encrypted message is opened before anything else is decided, because what gets checked
-        // and what gets rendered both depend on what was inside. See §19: the channel CVE-2026-0818
+        // and what gets rendered both depend on what was inside. The channel CVE-2026-0818
         // used was the cascade, so a decrypted part spliced into the outer document is readable by
         // the outer document's own stylesheet — what comes out is rendered *instead of* the message
         // it arrived in, never inside it.
@@ -281,7 +281,7 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
         // decide — and what is rendered too, the payload being where the body is as well.
         Protected = Covered(_message, opened);
 
-        // §4.5.3, a MUST: the copy of the hidden fields that an encrypted message writes into its
+        // RFC 9788 §4.5.3, a MUST: the copy of the hidden fields that an encrypted message writes into its
         // own body, for a client that could not read them anywhere else, is not drawn by a client
         // that can. The HTML half's is dropped by the sanitizer; this is the text half's.
         if (opened.Opened && Protected is not null) HeaderProtection.HideLegacyDisplay(Protected.Rendered);
@@ -293,7 +293,7 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
         Carried = carrier;
 
         // The signature, when the reader has asked for either kind of crypto at all. Crypto ships
-        // off (§14), and a bar that says "signed" over a check nobody made would be worse than no
+        // off, and a bar that says "signed" over a check nobody made would be worse than no
         // bar. A signature carried *inside* an encrypted packet is the packet's own — OpenPGP's
         // ordinary shape — and one carried as a MIME layer is read off whichever message the reader
         // is actually being shown.
@@ -305,7 +305,7 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
 
         // Which From the header draws, and whether the two of them disagree — a question that cannot
         // be answered until the signature has been, because a signature bound to the address inside
-        // is what makes it worth believing over the one the transport checked (§4.4).
+        // is what makes it worth believing over the one the transport checked.
         var spoofed = Protected is { } covered && covered.FromMismatch(_message) && !Bound(signature, covered);
         Settle(spoofed);
 
@@ -343,7 +343,7 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
         }
 
         // Above everything, invitation included: this is the one warning that says the message may
-        // not be from who it says it is, and §4.4.2 asks for it to read like a phishing warning.
+        // not be from who it says it is, and RFC 9788 §4.4.2 asks for it to read like a phishing warning.
         if (spoofed) _bars.Children.Insert(0, MismatchBar());
 
         var disableLinks = _suspectedJunk && App.MailOptions.DisableLinksInJunk;
@@ -369,7 +369,7 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
 
         // The plugins' bars come after the application's own, so what the application says about
         // a message always outranks an add-in. Providers answer from what they already know —
-        // this is the render path, where nothing may block or ask the network (§19) — and the
+        // this is the render path, where nothing may block or ask the network — and the
         // host charges a provider that throws to its plugin rather than to the pane.
         foreach (var (plugin, contributed) in App.Plugins.InfoBarsFor(PluginSummaryNow()))
         {
@@ -548,7 +548,7 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
     /// The embedding scenario is the part worth recording. A pane embedded as a native child
     /// window has the airspace problem — Avalonia's own menus and flyouts cannot draw over it,
     /// which is disqualifying in a mail client where popups overlap the reading pane constantly.
-    /// An offscreen renderer composites into the visual tree and does not. §2 chose this backend
+    /// An offscreen renderer composites into the visual tree and does not. This backend was chosen
     /// on that basis, and this is where the claim can be checked on a real machine.
     /// </remarks>
     private string Describe()
@@ -789,11 +789,19 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
     /// </summary>
     /// <remarks>
     /// The store is the machine's own, whichever kind: a key is trusted because this machine trusts
-    /// it, never because the message carried it (§19). Nothing is imported here at all.
+    /// it, never because the message carried it. Nothing is imported here at all.
     /// <para>
     /// The two are asked in turn rather than chosen between, because which one a message wants is
     /// the message's own business — and each answers only for the shape it recognises, so a
     /// <c>multipart/signed</c> naming the other's protocol falls straight through.
+    /// </para>
+    /// <para>
+    /// <b>On the dispatcher on purpose.</b> This is disk plus crypto per signed message, and it
+    /// stays synchronous because the verdict gates what the header says before anything is
+    /// drawn: a signature bound to the inner From is what decides whether the display-name
+    /// warning fires at all. Rendered first and settled later, a spoofed From would stand
+    /// unwarned for the length of the check — a worse trade than the stall, which is bounded,
+    /// local and paid only when a crypto switch is on and the message is actually signed.
     /// </para>
     /// </remarks>
     private static SignatureReport SignatureOf(MimeMessage message)
@@ -896,7 +904,7 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
     /// The header fields inside the cryptography, when the reader has asked for cryptography at all.
     /// </summary>
     /// <remarks>
-    /// Switched off means switched off (§14): nothing has checked a signature, so a copy of a subject
+    /// Switched off means switched off: nothing has checked a signature, so a copy of a subject
     /// taken out of a body nobody verified is worth less than the one the list already shows.
     /// </remarks>
     private static ProtectedHeaders? Covered(MimeMessage message, DecryptionReport opened)
@@ -921,7 +929,7 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
 
         HeaderSubject = covered.Value("Subject");
 
-        // §4.4.3: where the two disagree and nothing binds a signature to the address inside, what
+        // RFC 9788 §4.4.3: where the two disagree and nothing binds a signature to the address inside, what
         // gets drawn is the address the transport authenticated. The protected one is the attacker's
         // half in that case, and drawing it would make header protection a way to dress up a spoof.
         _fromLine = (spoofed ? null : covered.Value("From")) ?? _message.From.ToString();
@@ -941,7 +949,7 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
     /// Whether a signature vouches for the address inside the message.
     /// </summary>
     /// <remarks>
-    /// §4.4.1.2 defines the opposite — "no valid and correctly bound signature" — as no signature, a
+    /// RFC 9788 §4.4.1.2 defines the opposite — "no valid and correctly bound signature" — as no signature, a
     /// broken one, or a valid one the reader sees no binding between and the protected From. This
     /// application's verifiers only ever report <see cref="SignatureState.Valid"/> for a signature
     /// whose certificate or key names the address it claims, so the binding is a comparison of two
@@ -979,7 +987,7 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
     /// <b>Unprotected has no way past it</b>, which is the point of the state. The content exists —
     /// it decrypted — and it is not behind this bar, not behind a Details button and not behind a
     /// warning a reader can dismiss: a "show it anyway" is the bug the warning is about, and
-    /// Thunderbird's wording is the model for saying so plainly (§19).
+    /// Thunderbird's wording is the model for saying so plainly.
     /// </remarks>
     private Control EncryptionBar(DecryptionReport report)
     {
@@ -1019,7 +1027,7 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
 
         // The one action a bar over an encrypted message offers, and only for the one state where
         // there is anything to do. Nothing here ever offers to show content that did not open —
-        // Unprotected in particular has no way past it, that being the point of the state (§19).
+        // Unprotected in particular has no way past it, that being the point of the state.
         if (shut)
         {
             var unlock = BarButton("Unlock");
@@ -1063,7 +1071,7 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
     /// <remarks>
     /// RFC 9788 §4.4.2 asks for a warning comparable to the one a client gives about phishing, and
     /// for both addresses to be shown, which is why this names them rather than saying that
-    /// something is wrong. §10.1 is the attack it is about: a message whose protected From says one
+    /// something is wrong. RFC 9788 §10.1 is the attack it is about: a message whose protected From says one
     /// person and whose envelope — the part the transport authenticated with DKIM or SPF — says
     /// another. Without this, header protection would be a way to make a spoof look better than an
     /// ordinary one, and the address drawn above is deliberately the transport's for the same reason.
@@ -1099,7 +1107,7 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
     }
 
     /// <summary>
-    /// The line the reference draws over a signed message, in the four states §19 asks for.
+    /// The line the reference draws over a signed message, in the four states the security design asks for.
     /// </summary>
     /// <remarks>
     /// A mismatch is not folded into either of the other two: it is the attack, and it reads as
@@ -1279,7 +1287,7 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
     /// the Trust Center's "Don't download pictures automatically in messages" is off.
     /// </summary>
     /// <remarks>
-    /// Here rather than on the render path, because §19 forbids the network anywhere a message is
+    /// Here rather than on the render path, because the network is forbidden anywhere a message is
     /// drawn — the render blocks everything, and this is the pass afterwards that asks for what
     /// the reader has agreed to. The fetch is Mailbox's own client either way; what the switch
     /// decides is whether it runs unprompted.

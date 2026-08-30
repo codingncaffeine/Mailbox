@@ -72,7 +72,6 @@ public sealed class NewFolderDialog : Window
         };
 
         DialogChrome.Apply(this, body);
-        ViewDialogKit.Bind(this, BackgroundProperty, "dialog.background.brush");
         Opened += (_, _) => name.Focus();
     }
 
@@ -167,7 +166,6 @@ public sealed class FolderPickerDialog : Window
         body.Children.Add(columns);
 
         DialogChrome.Apply(this, body);
-        ViewDialogKit.Bind(this, BackgroundProperty, "dialog.background.brush");
         Opened += (_, _) => _list.Focus();
     }
 
@@ -312,7 +310,6 @@ public sealed class FolderPropertiesDialog : Window
         };
 
         DialogChrome.Apply(this, body);
-        ViewDialogKit.Bind(this, BackgroundProperty, "dialog.background.brush");
     }
 
     private static Control Row(string label, Control control)

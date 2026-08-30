@@ -1,7 +1,7 @@
 namespace Mailbox.Scheduling;
 
 /// <summary>
-/// The three operations the edit-scope prompt chooses between (§9), as changes to events rather
+/// The three operations the edit-scope prompt chooses between, as changes to events rather
 /// than as changes to rows.
 /// </summary>
 /// <remarks>

@@ -144,7 +144,7 @@ public sealed record FeedSubscription(string Url, string Name, DateTimeOffset? L
 /// Kept where the folder pane's Favourites and the favourite contacts are — the settings file,
 /// under one key, as readable JSON — because a subscription is a preference of this reader's and
 /// not something a mail server has an opinion about. What arrives from a feed <em>is</em> stored:
-/// the items are messages in a folder, which is what §15 asks for and what makes the list, the
+/// the items are messages in a folder, which is the feeds-as-mail decision and what makes the list, the
 /// reading pane, Delete, Categorize and search work on a feed without knowing it is one.
 /// </remarks>
 public sealed class FeedSubscriptions

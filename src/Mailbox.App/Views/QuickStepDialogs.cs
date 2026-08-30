@@ -92,7 +92,7 @@ internal static class QuickStepUi
 
             case QuickStepKind.RunCommand:
             {
-                // Every catalogue command, plugins' included — that is the point (§13) — except
+                // Every catalogue command, plugins' included — that is the point — except
                 // the steps themselves, which would be a loop offered in a dropdown. The value
                 // keeps the id and the label both: the id is what runs, whatever the command is
                 // later renamed to; the label is what the dialog's line reads back.
@@ -231,7 +231,6 @@ public sealed class QuickStepSetupDialog : Window
         };
 
         DialogChrome.Apply(this, body);
-        QuickStepUi.Bind(this, BackgroundProperty, "dialog.background.brush");
     }
 }
 
@@ -345,7 +344,6 @@ public sealed class EditQuickStepDialog : Window
         };
 
         DialogChrome.Apply(this, body);
-        QuickStepUi.Bind(this, BackgroundProperty, "dialog.background.brush");
         RedrawActions();
     }
 
@@ -504,7 +502,6 @@ public sealed class ManageQuickStepsDialog : Window
         };
 
         DialogChrome.Apply(this, body);
-        QuickStepUi.Bind(this, BackgroundProperty, "dialog.background.brush");
         Reload();
     }
 

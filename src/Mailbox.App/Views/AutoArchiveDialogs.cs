@@ -110,7 +110,6 @@ public sealed class AutoArchiveSettingsDialog : Window
         };
 
         DialogChrome.Apply(this, body);
-        ViewDialogKit.Bind(this, BackgroundProperty, "dialog.background.brush");
     }
 
     private static TextBlock Section(string text)
@@ -257,7 +256,6 @@ public sealed class ArchiveDialog : Window
         };
 
         DialogChrome.Apply(this, body);
-        ViewDialogKit.Bind(this, BackgroundProperty, "dialog.background.brush");
     }
 
     private static int Depth(Folder folder, IReadOnlyList<Folder> all)

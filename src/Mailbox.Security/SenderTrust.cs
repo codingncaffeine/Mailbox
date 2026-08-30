@@ -59,7 +59,7 @@ public sealed record SenderTrust(
     /// <param name="verified">
     /// What checking the signature here came to, or null for a message that has not been
     /// checked. Never resolved from inside this method: the lookup happens when mail is
-    /// received, and this is called to draw a message. See §19.
+    /// received, and this is called to draw a message, where the network is forbidden.
     /// </param>
     /// <param name="reportAuthentication">
     /// Whether what DKIM, SPF and DMARC came to is worth a warning — the Trust Center's "Show

@@ -1046,7 +1046,7 @@ public sealed class RibbonView : ContentControl
         ToolTip.SetTip(button, Screentip(command));
 
         // The name a screen reader speaks. A tooltip is not one — the two travel different
-        // channels — so every command button states its label here as well (§16's pass).
+        // channels — so every command button states its label here as well (the pass).
         Avalonia.Automation.AutomationProperties.SetName(button, command.Label);
         button.Click += (_, _) =>
             CommandInvoked?.Invoke(this, new RibbonCommandEventArgs(command.Id));
@@ -1517,7 +1517,7 @@ public sealed class RibbonView : ContentControl
     /// Drawn rather than templated from a <c>ComboBox</c>, for the same reason the zoom slider
     /// is: the reference's is a plain bordered box of an exact width with a small chevron, and a
     /// stock combo brings its own padding and minimum size that cannot be measured back down.
-    /// It becomes a real picker when the editor in Phase 5 gives it something to pick.
+    /// It becomes a real picker the day the editor gives it something to pick.
     /// </remarks>
     private Control BuildSimplifiedField(MailboxCommand command, RibbonItem item)
     {
@@ -1616,7 +1616,7 @@ public sealed class RibbonView : ContentControl
         ToolTip.SetTip(button, Screentip(command));
 
         // The name a screen reader speaks. A tooltip is not one — the two travel different
-        // channels — so every command button states its label here as well (§16's pass).
+        // channels — so every command button states its label here as well (the pass).
         Avalonia.Automation.AutomationProperties.SetName(button, command.Label);
         button.Click += (_, _) => CommandInvoked?.Invoke(this, new RibbonCommandEventArgs(command.Id));
 
@@ -2517,7 +2517,7 @@ public sealed class RibbonView : ContentControl
         ToolTip.SetTip(button, Screentip(command));
 
         // The name a screen reader speaks. A tooltip is not one — the two travel different
-        // channels — so every command button states its label here as well (§16's pass).
+        // channels — so every command button states its label here as well (the pass).
         Avalonia.Automation.AutomationProperties.SetName(button, command.Label);
 
         button.Click += (_, _) => CommandInvoked?.Invoke(this, new RibbonCommandEventArgs(command.Id));

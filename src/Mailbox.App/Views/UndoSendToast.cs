@@ -12,7 +12,7 @@ namespace Mailbox.App.Views;
 /// The way back from a message that has just gone.
 /// </summary>
 /// <remarks>
-/// §12's Undo Send, and the reason it is a toast rather than a ribbon button: a button that is
+/// The design's Undo Send, and the reason it is a toast rather than a ribbon button: a button that is
 /// only useful for five seconds after an action, and useless the rest of the time, is a button
 /// occupying permanent space to be wrong. The offer belongs beside the thing it undoes and
 /// leaves when it expires.

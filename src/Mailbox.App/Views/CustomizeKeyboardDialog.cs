@@ -101,7 +101,6 @@ public sealed class CustomizeKeyboardDialog : Window
         _remove.Click += (_, _) => Remove();
 
         DialogChrome.Apply(this, Layout());
-        ViewDialogKit.Bind(this, BackgroundProperty, "dialog.background.brush");
         _categories.SelectedIndex = 0;
     }
 

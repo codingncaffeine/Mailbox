@@ -28,7 +28,7 @@ public sealed record EmailHtmlOptions
     public bool Fragment { get; init; }
 
     /// <summary>
-    /// Whether a font name is expanded into the stack §6 describes. Off produces the name alone,
+    /// Whether a font name is expanded into its metric-compatible stack. Off produces the name alone,
     /// which is what a test asserting about one thing wants.
     /// </summary>
     public bool SubstituteFonts { get; init; } = true;
@@ -67,7 +67,7 @@ public sealed record EmailHtmlOptions
 /// Turns a composed document into the HTML that leaves the machine.
 /// </summary>
 /// <remarks>
-/// This is the half of §7.3 that stayed in-house, and the reason is that it is the half mail
+/// This is the half of the editor that stayed in-house, and the reason is that it is the half mail
 /// fidelity actually rests on. Email HTML is not web HTML: it is read by clients whose engines
 /// were current in 2007, and the rules that follow from that are narrow enough to be worth
 /// enforcing in one place.
@@ -78,7 +78,7 @@ public sealed record EmailHtmlOptions
 ///   <item>Sizes in points, because that is what the clients and the composers of mail use.</item>
 ///   <item>Nothing proprietary. The editor stamps a <c>data-are-fg</c> attribute of its own and
 ///   a redundant <c>text-align:left</c> on every block; neither goes out.</item>
-///   <item><b>§6's wire/render split.</b> A message composed in Calibri says
+///   <item><b>the design's wire/render split.</b> A message composed in Calibri says
 ///   <c>font-family: Calibri, Carlito, sans-serif</c>, so a Windows reader gets Calibri, a Linux
 ///   reader gets the metric-compatible substitute, and both see the same layout. Naming only
 ///   what was rendered here would reflow the message for everyone else.</item>
@@ -479,7 +479,7 @@ public static class EmailHtml
     }
 
     /// <summary>
-    /// §6's wire/render split, as a CSS font stack.
+    /// The design's wire/render split, as a CSS font stack.
     /// </summary>
     /// <remarks>
     /// The Microsoft name first, then the metric-compatible substitute, then the generic. A
@@ -521,7 +521,7 @@ public static class EmailHtml
         // for the bundled ones — Gelasio, Comic Relief — fontconfig knows no alias, so the run
         // holds "Gelasio" rather than "Georgia". Written the other way round on the wire, or a
         // Windows reader with Georgia installed would get Gelasio's fallback instead of Georgia.
-        // This is §6's split, done at the last possible moment.
+        // This is the design's split, done at the last possible moment.
         if (FontSubstitution.Table.FirstOrDefault(e =>
                 string.Equals(e.Substitute, trimmed, StringComparison.OrdinalIgnoreCase))
             is { } stoodInFor)

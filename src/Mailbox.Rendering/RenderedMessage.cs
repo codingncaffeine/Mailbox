@@ -5,7 +5,7 @@ namespace Mailbox.Rendering;
 /// </summary>
 /// <remarks>
 /// Counted during the sanitizing walk rather than by a separate detector, so the tracker report
-/// and the blocker cannot disagree about what was in the message. See §11.
+/// and the blocker cannot disagree about what was in the message.
 /// </remarks>
 public sealed record BlockedResource(string Url, string Host, BlockedResourceKind Kind);
 
@@ -61,7 +61,7 @@ public sealed record RenderOptions
     /// Whether this document holds decrypted content, and so gets a CSS context of its own.
     /// </summary>
     /// <remarks>
-    /// §19's second blocker, and CVE-2026-0818: decrypted plaintext was read out of a client
+    /// The design's second blocker, and CVE-2026-0818: decrypted plaintext was read out of a client
     /// through the cascade rather than through a fetch. Two things follow, and both are here
     /// rather than at the call site so that neither can be forgotten: the decrypted entity is
     /// rendered <em>alone</em> — never spliced into the message it arrived in — and its stylesheet
@@ -97,7 +97,7 @@ public sealed record RenderOptions
     /// This is how "allow once" and the per-sender allow list work, and why nothing here needs
     /// a network stack: the fetch belongs to the application, which owns an HttpClient with no
     /// cookies and no referer, and hands the bytes back to be inlined the same way a
-    /// <c>cid:</c> part is. See §11 — the document that reaches the engine has no remote URL
+    /// <c>cid:</c> part is. The document that reaches the engine has no remote URL
     /// left in it either way.
     /// </remarks>
     public IReadOnlyDictionary<string, string> Inlined { get; init; } =

@@ -49,7 +49,7 @@ public sealed record JunkDecision(bool IsJunk, JunkReason Reason, double Score);
 /// user has marked safe is never junked on a score, and one they have blocked is always junked.
 /// Only then does the level decide: Off does nothing, Low and High compare the classifier's score
 /// against a threshold, and Safe Lists Only junks anything not from a safe sender without asking
-/// the classifier at all. The corpus is local and the whole of it stays on the machine (§7.8).
+/// the classifier at all. The corpus is local and the whole of it stays on the machine.
 /// </remarks>
 public sealed class JunkFilter(BayesianClassifier classifier)
 {

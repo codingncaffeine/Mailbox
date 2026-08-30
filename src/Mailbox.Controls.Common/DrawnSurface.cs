@@ -13,7 +13,7 @@ namespace Mailbox.Controls.Common;
 /// brush cache so that a render pass allocates none.
 /// </summary>
 /// <remarks>
-/// Drawn rather than composed, for the reason §7.4 gives — a month grid is a thousand rectangles
+/// Drawn rather than composed — a month grid is a thousand rectangles
 /// and seven hundred pieces of text, and a control per cell would be a control per cell. Drawing
 /// also puts every hairline on a whole device pixel, which is the difference between a grid and
 /// a smear.

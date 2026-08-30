@@ -5,7 +5,7 @@ using Mailbox.Security.OpenPgp;
 namespace Mailbox.Tests;
 
 /// <summary>
-/// Making a key here (§15). What matters is not that BouncyCastle can make one — it can — but
+/// Making a key here. What matters is not that BouncyCastle can make one — it can — but
 /// that what comes out is a key this application's own writer and reader agree about: listed as
 /// ours, split into a signing primary and an encrypting subkey, locked with what the dialog
 /// took, and able to carry a message all the way around through the real protection path.

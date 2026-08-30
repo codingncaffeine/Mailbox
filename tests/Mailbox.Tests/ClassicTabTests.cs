@@ -183,7 +183,7 @@ public class ClassicTabTests
     /// The four Help buttons with nothing behind them say so in the application's own voice.
     /// </summary>
     /// <remarks>
-    /// A screentip is interface, and §5's rule that the reference is named nowhere in what a
+    /// A screentip is interface, and the design's rule that the reference is named nowhere in what a
     /// user sees applies to it as much as to a label.
     /// </remarks>
     [Fact]

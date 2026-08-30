@@ -150,7 +150,7 @@ public enum AutocorrectFormat
 /// </summary>
 /// <remarks>
 /// Both lists are short and both are English. They are not the reference's own lists — those
-/// are its data, not ours (§7, rule 4) — but the shape of the problem is the language's rather
+/// are its data, not ours — but the shape of the problem is the language's rather
 /// than anybody's: an abbreviation ends in a full stop without ending a sentence, and a plural
 /// of an acronym carries two capitals and a lower-case s on purpose.
 /// </remarks>
@@ -347,7 +347,7 @@ public sealed class AutocorrectTable
     /// </summary>
     /// <remarks>
     /// The reference applies these inside an equation, and outside one only when its switch is
-    /// on. There are no equations here — the editor has no equation model (§20) — so the switch
+    /// on. There are no equations here — the editor has no equation model — so the switch
     /// is the whole of it, and what it buys is a way to type Greek and the operators in a
     /// message about mathematics without a character map.
     /// </remarks>
@@ -640,7 +640,7 @@ public sealed class Autocorrect
     /// </summary>
     /// <remarks>
     /// The reference draws a paragraph border; the editor has a divider block and no paragraph
-    /// borders, so this is that — the same mark, made of what is here (§the rule, 2).
+    /// borders, so this is that — the same mark, made of what is here.
     /// </remarks>
     public AutocorrectAction? AtParagraphBreak(string before)
     {

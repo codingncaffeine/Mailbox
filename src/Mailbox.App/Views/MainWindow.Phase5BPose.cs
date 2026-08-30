@@ -160,7 +160,7 @@ public partial class MainWindow
             // writing to its status line, which no log reads — so a mistyped id in a pose list
             // read exactly like a formatting command that does nothing. CommandId throws on a
             // malformed one, and a posted action that throws leaves a plausible capture and
-            // nothing to grep, which is the trap Phase 0 recorded.
+            // nothing to grep, which is a trap this harness has fallen into before.
             MailboxCommand? command;
 
             try

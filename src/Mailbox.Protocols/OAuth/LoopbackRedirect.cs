@@ -11,7 +11,7 @@ namespace Mailbox.Protocols.OAuth;
 /// <remarks>
 /// RFC 8252 §7.3. A native application cannot receive a redirect any other way — a custom URI
 /// scheme is claimed by whichever program registered it last, and a server-hosted redirect means
-/// operating infrastructure, which §5 rules out. So the application listens on the loopback
+/// operating infrastructure, which the no-hosted-services stance rules out. So the application listens on the loopback
 /// interface for as long as the sign-in takes and stops.
 /// <para>
 /// Three things this is careful about. It binds the loopback address itself and never a wildcard,

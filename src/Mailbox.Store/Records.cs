@@ -163,7 +163,7 @@ public sealed record MessageSummary(
     /// <summary>When to be reminded, or null for no reminder or one already dismissed.</summary>
     public DateTimeOffset? Reminder { get; init; }
 
-    /// <summary>When a snoozed message comes back, or null for one that is not snoozed (§12).</summary>
+    /// <summary>When a snoozed message comes back, or null for one that is not snoozed.</summary>
     public DateTimeOffset? SnoozedUntil { get; init; }
 
     /// <summary>0 low, 1 normal, 2 high — the message's own Importance/X-Priority, for the list's column and the searches.</summary>
@@ -195,7 +195,7 @@ public sealed record MessageSummary(
     /// <summary>True for a message a feed delivered.</summary>
     public bool IsFeedItem => FeedLink.Length > 0 || FeedImage.Length > 0;
 
-    /// <summary>Focused Inbox (§12): true for Focused, false for Other. Meaningful in the Inbox only.</summary>
+    /// <summary>Focused Inbox: true for Focused, false for Other. Meaningful in the Inbox only.</summary>
     public bool IsFocused { get; init; } = true;
 
     /// <summary>The To addresses, lower-cased, for the searches that ask who a message went to.</summary>
@@ -245,7 +245,7 @@ public sealed record MessageSummary(
 public sealed record MessageAuthentication(string Dkim, string? SigningDomain, DateTimeOffset Checked);
 
 /// <summary>
-/// A message in the Recover Deleted Items holding area (§11): what is left of its row, enough to
+/// A message in the Recover Deleted Items holding area: what is left of its row, enough to
 /// list it and put it back.
 /// </summary>
 public sealed record RecoverableMessage(

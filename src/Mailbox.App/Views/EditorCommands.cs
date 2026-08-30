@@ -228,7 +228,7 @@ internal sealed class EditorCommands(
             return;
         }
 
-        // The wire name and the substitute both: §6's split, and what keeps a document the size
+        // The wire name and the substitute both: the design's split, and what keeps a document the size
         // it was written at on a machine that has neither font. The requested name is written
         // down beside the rendered one, because the runs will only ever carry the rendered one
         // and more than one requested family can share it.

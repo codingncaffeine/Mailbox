@@ -27,7 +27,7 @@ public delegate void CategoryRewrite(IReadOnlyList<PimItem> items, string from, 
 /// delete and shortcut them.
 /// </summary>
 /// <remarks>
-/// The categories are one set across every module (§9), so this manages that set rather than an
+/// The categories are one set across every module, so this manages that set rather than an
 /// account's own: the master list lives in the PIM store and every mail account keeps a mirror of
 /// it, which <see cref="CategoryBook"/> holds in step. The colour of a category is a theme token,
 /// not a value, which is what keeps it legible when the theme changes — so the palette a category
@@ -67,7 +67,6 @@ public sealed class ColorCategoriesDialog : Window
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
         DialogChrome.Apply(this, Layout());
-        Bind(this, BackgroundProperty, "dialog.background.brush");
         Reload();
     }
 

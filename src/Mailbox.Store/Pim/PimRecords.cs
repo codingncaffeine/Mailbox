@@ -51,7 +51,7 @@ public sealed record Collection(
 /// </summary>
 /// <remarks>
 /// Instants are UTC for range queries; the wall time and its zone are kept as written so a
-/// repeating 09:00 stays at 09:00 across a DST change (§9). Which of the two a view believes
+/// repeating 09:00 stays at 09:00 across a DST change. Which of the two a view believes
 /// is the scheduling layer's business, not the store's.
 /// </remarks>
 public sealed record PimItem

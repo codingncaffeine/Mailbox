@@ -737,7 +737,7 @@ public static class MailCommands
     };
 
     // ---- The Folder tab ----------------------------------------------------------------------
-    // Every one of these has been reachable from the folder pane's own menu since Phase 3; what
+    // Every one of these has long been reachable from the folder pane's own menu; what
     // the reference also gives them is a tab, so a reader who is looking at a folder rather than
     // at a message has somewhere to look. Same handlers, second placement.
 
@@ -878,7 +878,7 @@ public static class MailCommands
 
     /// <summary>
     /// Folder Permissions. Greyed, and it stays greyed: sharing a folder with somebody else is
-    /// the tenant service §3 puts out of scope, and a button that opened an empty dialog would
+    /// the tenant service scope puts out of reach, and a button that opened an empty dialog would
     /// be worse than one that says it cannot.
     /// </summary>
     public static readonly MailboxCommand FolderPermissions = new()

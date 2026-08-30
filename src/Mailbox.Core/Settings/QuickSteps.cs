@@ -36,7 +36,7 @@ public enum QuickStepKind
     AlwaysMoveFromSender,
 
     // Commands. Appended after everything the reference's own picker offers: any catalogue
-    // command as an action, which is how a plugin's command becomes part of a step (§13) —
+    // command as an action, which is how a plugin's command becomes part of a step —
     // and how Snooze or Message Source could, additions being ordinary commands too.
     RunCommand,
 }
@@ -178,7 +178,7 @@ public sealed record QuickStep
 
 /// <summary>
 /// The Quick Steps, persisted with the rest of the preferences as one JSON value — a plain,
-/// diffable file like the ribbon's, per §13.
+/// diffable file like the ribbon's, as every customization is kept.
 /// </summary>
 public sealed class QuickSteps
 {

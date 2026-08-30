@@ -17,7 +17,7 @@ public sealed record MaildirMessage(
 /// Reads maildir trees: the one-file-per-message store everything on this desktop writes.
 /// </summary>
 /// <remarks>
-/// Three layouts cover the sources §16 names, and a scan tells them apart by looking rather
+/// Three layouts cover the sources people actually migrate from, and a scan tells them apart by looking rather
 /// than by being told:
 /// <list type="bullet">
 /// <item><b>Plain</b> — <c>cur/new/tmp</c> at the root: one folder.</item>

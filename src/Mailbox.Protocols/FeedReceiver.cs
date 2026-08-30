@@ -47,13 +47,13 @@ public sealed record FeedReport(int Delivered, IReadOnlyList<(string Url, string
 }
 
 /// <summary>
-/// The RSS reader (§15): feeds delivered into mail folders as messages.
+/// The RSS reader: feeds delivered into mail folders as messages.
 /// </summary>
 /// <remarks>
 /// <b>A feed item is a message.</b> It is written into a folder as MIME, with the entry's own id
 /// as its server id, so everything the mail module already does works on it without being told it
 /// is a feed: the list draws it, the reading pane renders it through the same sanitizer, Delete
-/// deletes it, Categorize tags it, search finds it, AutoArchive files it. That is what §15 means
+/// deletes it, Categorize tags it, search finds it, AutoArchive files it. That is what feeds-as-mail means
 /// by reusing the list and the reading pane wholesale.
 /// <para>
 /// The entry's id is what stops a second download delivering it twice — the same job a POP3

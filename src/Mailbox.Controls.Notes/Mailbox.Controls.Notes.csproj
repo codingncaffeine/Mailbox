@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    The Notes module's view (§9). Drawn, as the other four modules' views are: a wall of notes is
+    The Notes module's view. Drawn, as the other four modules' views are: a wall of notes is
     a hundred squares of four rectangles each, and a control per square is a control per square.
 
     One control for both of the module's shapes — the wall and the rows — rather than two, for the

@@ -116,7 +116,6 @@ public sealed class JournalEntryWindow : Window
         _categoriesButton.Click += async (_, _) => await PickCategoriesAsync();
 
         DialogChrome.Apply(this, BuildBody(), "journal-entry");
-        Bind(this, BackgroundProperty, "dialog.background.brush");
 
         // A timer left running when the window closes is stopped, so its time is counted once.
         Closing += (_, _) => StopTimer();

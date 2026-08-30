@@ -10,7 +10,7 @@ namespace Mailbox.App;
 /// binary is a different trust conversation; the packaged installs have their managers.
 /// </summary>
 /// <remarks>
-/// §19's "nothing phones home" is why the automatic check ships <b>off</b>: a version check is
+/// The design's "nothing phones home" is why the automatic check ships <b>off</b>: a version check is
 /// a network request with this machine's address on it. Pressing Check for Updates is consent
 /// by the press; the Options switch (<see cref="AutomaticKey"/>) is consent standing. A capture
 /// run never checks, whatever the switch says.
