@@ -23,12 +23,14 @@ public class AuditChromeSweepTests
     // ---- Sweep A: caption buttons ------------------------------------------------------------
 
     /// <summary>
-    /// Windows that deliberately carry no caption of their own. Empty, and meant to stay that
-    /// way: the Backstage-style surfaces are not windows at all — they are content inside the
-    /// shell — and even an OK-only dialog gets a close button, because a modal with no way out
-    /// but the keyboard is not a dialog the reference draws.
+    /// Windows that deliberately carry no caption of their own. One entry, and the bar for a
+    /// second is the reference itself: the note window is drawn frameless there — the coloured
+    /// face runs to the top edge, with the note's icon menu at the left and a close drawn on
+    /// the colour — so a caption band on it was the divergence, not the fidelity. Everything
+    /// else gets a caption: even an OK-only dialog gets a close button, because a modal with no
+    /// way out but the keyboard is not a dialog the reference draws.
     /// </summary>
-    private static readonly string[] NoCaptionByDesign = [];
+    private static readonly string[] NoCaptionByDesign = ["NoteWindow"];
 
     /// <summary>
     /// Every <c>Window</c> subclass in the tree hosts the application's own caption buttons,

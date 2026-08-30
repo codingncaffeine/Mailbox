@@ -50,6 +50,8 @@ public sealed class NotesView : DrawnSurface
     private NoteRow? _selected;
     private NoteRow? _hover;
     private int _scroll;
+    private string _sortKey = "created";
+    private bool _sortDescending = true;
 
     public NotesView()
     {
@@ -133,12 +135,27 @@ public sealed class NotesView : DrawnSurface
         }
 
         var top = HeaderHeight;
-        for (var i = _scroll; i < _rows.Count; i++)
+        var ordered = Ordered();
+        for (var i = _scroll; i < ordered.Count; i++)
         {
             var y = top + ((i - _scroll) * RowHeight);
             if (y >= height) yield break;
-            yield return (_rows[i], new Rect(0, y, Bounds.Width, RowHeight));
+            yield return (ordered[i], new Rect(0, y, Bounds.Width, RowHeight));
         }
+    }
+
+    /// <summary>The rows in the list's own order, which is whichever heading was pressed.</summary>
+    private List<NoteRow> Ordered()
+    {
+        IEnumerable<NoteRow> ordered = _sortKey switch
+        {
+            "subject" => _rows.OrderBy(r => r.Title, StringComparer.CurrentCultureIgnoreCase),
+            "categories" => _rows.OrderBy(r => string.Join(",", r.Categories), StringComparer.CurrentCultureIgnoreCase),
+            // The rows arrive newest first, which is created-descending already.
+            _ => _rows.Reverse(),
+        };
+
+        return _sortDescending ? [.. ordered.Reverse()] : [.. ordered];
     }
 
     /// <summary>The square inside a wall cell — what the fold and the frame are drawn on.</summary>
@@ -179,12 +196,18 @@ public sealed class NotesView : DrawnSurface
         foreach (var (row, box) in Placed()) DrawRow(context, box, row);
     }
 
-    /// <summary>What the reference writes on an empty wall, in the words its own empty views use.</summary>
+    /// <summary>
+    /// What the reference writes on an empty wall — its own two lines, the second naming the
+    /// double click this view really answers (the People list draws the same first line).
+    /// </summary>
     private void DrawEmpty(DrawingContext context, double width)
     {
         var ink = Colour(TokenKeys.List.PreviewText);
-        var line = Ink("There are no notes to show.", TextSize, ink);
-        DrawAt(context, line, Math.Round((width - line.Width) / 2), IsWall ? 60 : HeaderHeight + 40);
+        var baseline = IsWall ? 60 : HeaderHeight + 40;
+        var first = Ink("We didn't find anything to show here.", TextSize, ink);
+        DrawAt(context, first, Math.Round((width - first.Width) / 2), baseline);
+        var second = Ink("Double-click here to create a new Note.", TextSize, ink);
+        DrawAt(context, second, Math.Round((width - second.Width) / 2), baseline + 20);
     }
 
     /// <summary>One note on the wall: the square, its fold, and its first line under it.</summary>
@@ -240,7 +263,11 @@ public sealed class NotesView : DrawnSurface
         }
     }
 
-    /// <summary>The row of column names the two list arrangements draw above their rows.</summary>
+    /// <summary>
+    /// The row of column names the two list arrangements draw above their rows — real headings,
+    /// as the message list's are: a divider between the columns, a press that sorts, and the
+    /// sorted one carrying the mark.
+    /// </summary>
     private void DrawColumnHeadings(DrawingContext context, double width)
     {
         var box = new Rect(0, 0, width, HeaderHeight);
@@ -248,9 +275,54 @@ public sealed class NotesView : DrawnSurface
         Fill(context, new Rect(0, HeaderHeight - 1, width, 1), Colour(TokenKeys.List.Separator));
 
         var ink = Colour(TokenKeys.List.HeaderText);
-        DrawAt(context, Ink("Subject", 11, ink), GlyphColumn, 17);
-        DrawAt(context, Ink("Created", 11, ink), width - MadeColumn - CategoryColumn, 17);
-        DrawAt(context, Ink("Categories", 11, ink), width - CategoryColumn, 17);
+        foreach (var (key, label, left, columnWidth) in Headings(width))
+        {
+            Fill(context, new Rect(Math.Round(left + columnWidth) - 1, 5, 1, HeaderHeight - 10), Colour(TokenKeys.List.Separator));
+            var text = Ink(label, 11, ink);
+            DrawAt(context, text, left + (key == "subject" ? GlyphColumn : 7), 17);
+
+            if (key == _sortKey)
+            {
+                DrawSortMark(context, left + (key == "subject" ? GlyphColumn : 7) + text.Width + 6, HeaderHeight / 2, ink, _sortDescending);
+            }
+        }
+    }
+
+    /// <summary>The three headings with the spans their columns really occupy.</summary>
+    private static List<(string Key, string Label, double Left, double Width)> Headings(double width)
+    {
+        var madeLeft = width - MadeColumn - CategoryColumn;
+        return
+        [
+            ("subject", "Subject", 0, madeLeft),
+            ("created", "Created", madeLeft, MadeColumn),
+            ("categories", "Categories", width - CategoryColumn, CategoryColumn),
+        ];
+    }
+
+    /// <summary>The solid little triangle the sorted column carries, up for ascending.</summary>
+    private void DrawSortMark(DrawingContext context, double left, double middle, Color ink, bool descending)
+    {
+        var geometry = new StreamGeometry();
+        using (var open = geometry.Open())
+        {
+            if (descending)
+            {
+                open.BeginFigure(new Point(left, middle - 2.5), true);
+                open.LineTo(new Point(left + 7, middle - 2.5));
+                open.LineTo(new Point(left + 3.5, middle + 2.5));
+            }
+            else
+            {
+                open.BeginFigure(new Point(left, middle + 2.5), true);
+                open.LineTo(new Point(left + 7, middle + 2.5));
+                open.LineTo(new Point(left + 3.5, middle - 2.5));
+            }
+
+            open.EndFigure(true);
+        }
+
+        context.DrawGeometry(Brush(ink), null, geometry);
     }
 
     /// <summary>One note as a row: its square in miniature, its first line, and what it says after.</summary>
@@ -311,6 +383,27 @@ public sealed class NotesView : DrawnSurface
         base.OnPointerPressed(e);
         var point = e.GetPosition(this);
         Focus();
+
+        // A press on a column heading sorts by it, the second press the other way round.
+        if (!IsWall && point.Y < HeaderHeight)
+        {
+            foreach (var (key, _, left, columnWidth) in Headings(Bounds.Width))
+            {
+                if (point.X < left || point.X >= left + columnWidth) continue;
+                if (_sortKey == key) _sortDescending = !_sortDescending;
+                else
+                {
+                    _sortKey = key;
+                    _sortDescending = key == "created";
+                }
+
+                InvalidateVisual();
+                e.Handled = true;
+                return;
+            }
+
+            return;
+        }
 
         foreach (var (row, box) in Placed())
         {
@@ -375,28 +468,30 @@ public sealed class NotesView : DrawnSurface
         base.OnKeyDown(e);
         if (_rows.Count == 0) return;
 
-        var index = _selected is { } chosen ? _rows.ToList().FindIndex(r => r.ItemId == chosen.ItemId) : -1;
+        // The list's own order, so the arrow keys walk what the reader sees, not the store's.
+        var ordered = IsWall ? [.. _rows] : Ordered();
+        var index = _selected is { } chosen ? ordered.FindIndex(r => r.ItemId == chosen.ItemId) : -1;
         var step = IsWall ? Columns() : 1;
 
         switch (e.Key)
         {
             case Key.Down:
-                Select(Math.Min(index + step, _rows.Count - 1));
+                Select(ordered, Math.Min(index + step, ordered.Count - 1));
                 break;
             case Key.Up:
-                Select(Math.Max(index - step, 0));
+                Select(ordered, Math.Max(index - step, 0));
                 break;
             case Key.Right when IsWall:
-                Select(Math.Min(index + 1, _rows.Count - 1));
+                Select(ordered, Math.Min(index + 1, ordered.Count - 1));
                 break;
             case Key.Left when IsWall:
-                Select(Math.Max(index - 1, 0));
+                Select(ordered, Math.Max(index - 1, 0));
                 break;
             case Key.Home:
-                Select(0);
+                Select(ordered, 0);
                 break;
             case Key.End:
-                Select(_rows.Count - 1);
+                Select(ordered, ordered.Count - 1);
                 break;
             case Key.Enter when _selected is { } open:
                 NoteActivated?.Invoke(this, open);
@@ -408,11 +503,24 @@ public sealed class NotesView : DrawnSurface
         e.Handled = true;
     }
 
-    private void Select(int index)
+    private void Select(List<NoteRow> among, int index)
     {
-        if (index < 0 || index >= _rows.Count) return;
-        Selected = _rows[index];
-        NoteSelected?.Invoke(this, _rows[index]);
+        if (index < 0 || index >= among.Count) return;
+        Selected = among[index];
+        NoteSelected?.Invoke(this, among[index]);
+    }
+
+    /// <summary>The headings as drawn, with the sort on each — the read-back for the header row.</summary>
+    public IReadOnlyList<(string Key, string Label, double Left, double Width, string Sort)> HeadingsLaid()
+        => IsWall ? [] : [.. Headings(Bounds.Width).Select(h => (h.Key, h.Label, h.Left, h.Width,
+            h.Key == _sortKey ? (_sortDescending ? "descending" : "ascending") : string.Empty))];
+
+    /// <summary>Sorts the list by a column, as pressing its heading does.</summary>
+    public void SortBy(string key, bool descending)
+    {
+        _sortKey = key;
+        _sortDescending = descending;
+        InvalidateVisual();
     }
 
     /// <summary>Where a note is drawn, which is what a harness pose presses.</summary>

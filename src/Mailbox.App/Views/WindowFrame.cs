@@ -133,6 +133,68 @@ internal static class WindowFrame
         };
     }
 
+    /// <summary>
+    /// The visible resize grip — the classic triangle of dots at a bottom-right corner. The
+    /// window's edges already resize; the grip is the promise a reader can see, and the note
+    /// window is the surface the reference draws one on.
+    /// </summary>
+    internal static Control Grip(Window window)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        return new ResizeGrip { Window = window };
+    }
+
+    private sealed class ResizeGrip : Control
+    {
+        public Window? Window { get; init; }
+
+        public static readonly StyledProperty<IBrush?> InkProperty =
+            AvaloniaProperty.Register<ResizeGrip, IBrush?>(nameof(Ink));
+
+        public IBrush? Ink
+        {
+            get => GetValue(InkProperty);
+            set => SetValue(InkProperty, value);
+        }
+
+        static ResizeGrip()
+        {
+            AffectsRender<ResizeGrip>(InkProperty);
+        }
+
+        public ResizeGrip()
+        {
+            Width = 14;
+            Height = 14;
+            Cursor = new Cursor(StandardCursorType.BottomRightCorner);
+        }
+
+        public override void Render(DrawingContext context)
+        {
+            // Its own ink when one was set, else the text colour inherited from the surface it
+            // sits on — which is how the note window tints it without reaching the private type.
+            if ((Ink ?? GetValue(TextBlock.ForegroundProperty)) is not { } ink) return;
+
+            // Every 4px cell on the corner's own diagonal or below it.
+            for (var i = 0; i < 3; i++)
+            {
+                for (var j = 0; j < 3; j++)
+                {
+                    if (i + j < 2) continue;
+                    context.FillRectangle(ink, new Rect(2 + (i * 4), 2 + (j * 4), 2, 2));
+                }
+            }
+        }
+
+        protected override void OnPointerPressed(PointerPressedEventArgs e)
+        {
+            base.OnPointerPressed(e);
+            if (Window is null || !e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
+            e.Handled = true;
+            Window.BeginResizeDrag(WindowEdge.SouthEast, e);
+        }
+    }
+
     /// <summary>Which edge the pointer is over, or null when it is not near one.</summary>
     internal static WindowEdge? EdgeAt(Window window, Point p)
     {

@@ -241,6 +241,7 @@ public partial class MainWindow
 
         WirePhase9AForm(window);
         await window.ShowDialog(this);
+        if (window.Deleted) return;
         if (window.Result is not { } made) return;
 
         // An empty note is not a note: the reference throws away one closed without a word in it.
@@ -252,6 +253,12 @@ public partial class MainWindow
 
         SaveNote(made, collectionId: notes.DefaultFolder().Id);
         shell.StatusRight = $"“{made.Titled()}” added.";
+
+        if (window.Forwarded)
+        {
+            NewMessage(new Mailbox.Core.Compose.MailtoLink([], [], [], made.Titled(), made.Description));
+            shell.StatusRight = $"“{made.Titled()}” ready to send.";
+        }
     }
 
     /// <summary>Opens a note that is already on the wall.</summary>
@@ -271,11 +278,26 @@ public partial class MainWindow
         WirePhase9AForm(window);
         await window.ShowDialog(this);
 
-        if (window.Result is not { } edited) return;
-        if (Unchanged(before, edited)) return;
+        // The icon menu's Delete is a close too, so it is answered before the save-on-close.
+        if (window.Deleted)
+        {
+            DeleteNote(shell, row);
+            return;
+        }
 
-        SaveNote(edited, item, item.CollectionId);
-        shell.StatusRight = $"“{edited.Titled()}” saved.";
+        if (window.Result is not { } edited) return;
+        if (!Unchanged(before, edited))
+        {
+            SaveNote(edited, item, item.CollectionId);
+            shell.StatusRight = $"“{edited.Titled()}” saved.";
+        }
+
+        // Forward composes from what the window held when it closed, saved or not.
+        if (window.Forwarded)
+        {
+            NewMessage(new Mailbox.Core.Compose.MailtoLink([], [], [], edited.Titled(), edited.Description));
+            shell.StatusRight = $"“{edited.Titled()}” ready to send.";
+        }
     }
 
     /// <summary>

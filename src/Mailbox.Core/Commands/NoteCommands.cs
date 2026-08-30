@@ -119,7 +119,7 @@ public static class NoteCommands
     public static readonly MailboxCommand IconsView = new()
     {
         Id = new("notes.view.icons"),
-        Label = "Icons",
+        Label = "Icon",
         Description = "The notes as squares, newest first.",
         Icon = "notes-icons",
         Category = "Current View",

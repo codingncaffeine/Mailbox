@@ -23,9 +23,45 @@ public sealed class PrintPreviewWindow : Window
     private readonly NativeWebView? _web;
 
     public PrintPreviewWindow(ThemeService themes, string folder, IReadOnlyList<TableRow> rows)
+        : this(themes, folder, RenderTable(themes, folder, rows))
+    {
+    }
+
+    /// <summary>The list style's document, built before the window so the one ctor renders both.</summary>
+    private static string RenderTable(ThemeService themes, string folder, IReadOnlyList<TableRow> rows)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+        return TablePrint.Render(folder, rows, Style(themes), DateTimeOffset.Now);
+    }
+
+    private static RenderStyle Style(ThemeService themes)
     {
         ArgumentNullException.ThrowIfNull(themes);
-        ArgumentNullException.ThrowIfNull(rows);
+        return new RenderStyle(
+            themes.Tokens.GetString(TokenKeys.Reading.Background),
+            themes.Tokens.GetString(TokenKeys.Text.Primary),
+            themes.Tokens.GetString(TokenKeys.Text.Link),
+            themes.Tokens.GetString(TokenKeys.Text.Secondary),
+            themes.Tokens.GetString(TokenKeys.Typography.ContentFamily),
+            13);
+    }
+
+    /// <summary>A note or any other small document: the same window over ready-made markup.</summary>
+    public static PrintPreviewWindow ForText(ThemeService themes, string title, string text)
+    {
+        var style = Style(themes);
+        var body = System.Net.WebUtility.HtmlEncode(text ?? string.Empty).Replace("\n", "<br>", StringComparison.Ordinal);
+        var html = $"<!doctype html><html><head><meta charset=\"utf-8\"></head>"
+                   + $"<body style=\"background:{style.Background};color:{style.Foreground};"
+                   + $"font-family:{style.FontFamily};font-size:13px;margin:24px\">"
+                   + $"<h3>{System.Net.WebUtility.HtmlEncode(title)}</h3><p>{body}</p></body></html>";
+        return new PrintPreviewWindow(themes, title, html);
+    }
+
+    private PrintPreviewWindow(ThemeService themes, string folder, string html)
+    {
+        ArgumentNullException.ThrowIfNull(themes);
+        ArgumentNullException.ThrowIfNull(html);
 
         Title = $"Print — {folder}";
         Width = 820;
@@ -47,7 +83,7 @@ public sealed class PrintPreviewWindow : Window
             // A preview that renders nothing looks the same in a capture as one that rendered
             // correctly, since the engine composites offscreen. The log is where it is checked.
             _web.NavigationCompleted += (_, e) => Log.Info(
-                e.IsSuccess ? $"Print preview: {rows.Count} rows." : "The print preview would not load.");
+                e.IsSuccess ? $"Print preview: {html.Length} characters." : "The print preview would not load.");
             root.Children.Add(_web);
 
             // The same reason the message window releases its own: a preview holds a whole
@@ -74,16 +110,7 @@ public sealed class PrintPreviewWindow : Window
 
         DialogChrome.Apply(this, root);
 
-        var style = new RenderStyle(
-            themes.Tokens.GetString(TokenKeys.Reading.Background),
-            themes.Tokens.GetString(TokenKeys.Text.Primary),
-            themes.Tokens.GetString(TokenKeys.Text.Link),
-            themes.Tokens.GetString(TokenKeys.Text.Secondary),
-            themes.Tokens.GetString(TokenKeys.Typography.ContentFamily),
-            13);
-
-        _web?.NavigateToString(
-            TablePrint.Render(folder, rows, style, DateTimeOffset.Now), new Uri("about:blank"));
+        _web?.NavigateToString(html, new Uri("about:blank"));
     }
 
     private Control Toolbar()

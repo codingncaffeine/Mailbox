@@ -129,11 +129,13 @@ public partial class MainWindow
                 Log.Info(press switch
                 {
                     "close" when window.PressClose() => "Harness: pressed close on the note.",
-                    "close" => "Harness: the note window draws no caption button to close.",
-                    _ => "Harness: closing the note window without its caption button.",
+                    "close" => "Harness: the note window draws no close to press.",
+                    _ when press.StartsWith("menu:", StringComparison.Ordinal) =>
+                        $"Harness: note menu — {window.PressMenu(press[5..])}.",
+                    _ => "Harness: closing the note window without its close.",
                 });
 
-                if (press != "close") window.Close();
+                if (press != "close" && !press.StartsWith("menu:", StringComparison.Ordinal)) window.Close();
             }),
             DispatcherPriority.Loaded);
     }
