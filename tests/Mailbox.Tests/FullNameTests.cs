@@ -64,6 +64,14 @@ public class FullNameTests
     }
 
     [Fact]
+    public void AnEmptyNameParsesToEmptiesNotNulls()
+    {
+        // A new card has no name at all, and every part must still be a string.
+        var parts = FullNames.Parse("", FullNameOrder.FirstMiddleLast);
+        Assert.Equal(0, parts.Prefix.Length + parts.First.Length + parts.Middle.Length + parts.Last.Length + parts.Suffix.Length);
+    }
+
+    [Fact]
     public void ATitleAloneStaysAName()
     {
         // "Miss" with nothing after it is somebody called Miss, not an empty card with a title.

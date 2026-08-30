@@ -36,7 +36,12 @@ public static class FullNames
     public static NameParts Parse(string typed, FullNameOrder order)
     {
         var text = (typed ?? string.Empty).Trim();
-        if (text.Length == 0) return default;
+        if (text.Length == 0)
+        {
+            // Explicit empties, never `default`: the struct's default is five nulls, and a
+            // caller asking an empty card's parsed.Last.Length would fall over the first one.
+            return new NameParts(string.Empty, string.Empty, string.Empty, string.Empty, string.Empty);
+        }
 
         // The title and the suffix come off the ends first — "Dr. Anne Smith Jr." is Anne Smith
         // with a Dr. in front and a Jr. behind, in every order the option can choose — so the
