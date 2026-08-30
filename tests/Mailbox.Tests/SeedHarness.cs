@@ -107,6 +107,59 @@ public class SeedHarness
         SeedContacts(Path.Combine(target, "pim.db"));
         SeedTasks(Path.Combine(target, "pim.db"));
         SeedNotesAndJournal(Path.Combine(target, "pim.db"));
+        SeedFeedsStore(Path.Combine(target, "feeds.db"));
+    }
+
+    /// <summary>
+    /// A handful of invented articles in <c>feeds.db</c>, so a posed Feeds module has a list to
+    /// act on. Articles only, deliberately: subscriptions live in the run's own settings and
+    /// need the network to poll, while the Today view lists what the store holds — which is what
+    /// a press of the feeds commands needs under it. The network-fetching
+    /// <see cref="SeedFeeds"/> stays the way a *photographable* profile is made.
+    /// </summary>
+    private static void SeedFeedsStore(string path)
+    {
+        using var feeds = new Mailbox.Store.FeedStores(path);
+        var account = feeds.Account;
+        var accountId = account.Account.Id;
+
+        // The tree the receiver itself would make: the root, a heading under it, the feed's
+        // folder under that. The workspace maps subscriptions to folders by exactly this shape
+        // and lists nothing that hangs anywhere else.
+        var root = account.Mail.AddFolder(accountId, Mailbox.Protocols.FeedReceiver.RootFolder);
+        var tech = account.Mail.AddFolder(accountId, "Technology", parentId: root.Id);
+        var ars = account.Mail.AddFolder(accountId, "Ars Technica", parentId: tech.Id);
+        var news = account.Mail.AddFolder(accountId, "News", parentId: root.Id);
+        var bbc = account.Mail.AddFolder(accountId, "BBC News", parentId: news.Id);
+
+        var when = SeedNow();
+
+        foreach (var (folder, fromName, subject, body) in new (Folder, string, string, string)[]
+        {
+            (ars, "Ars Technica", "A quiet generation of graphics cards arrives",
+                "The interesting part is not the frame rate, it is the idle draw.\n\n"
+                + "Read the publisher's page for the charts."),
+            (ars, "Ars Technica", "The filesystem that would not fsync",
+                "A four-year-old bug, a two-line fix, and a very long thread."),
+            (bbc, "BBC News", "Rail timetables change this weekend",
+                "Operators say the new pattern adds capacity on the busiest lines."),
+            (bbc, "BBC News", "Museum reopens after five-year restoration",
+                "The east wing is open to visitors for the first time since the fire."),
+        })
+        {
+            var message = Plain(fromName, "articles@feeds.invalid", subject, body);
+            message.Date = when;
+
+            using var buffer = new MemoryStream();
+            message.WriteTo(buffer);
+            var raw = buffer.ToArray();
+
+            var summary = Mailbox.Protocols.MessageMapper.ToSummary(
+                message, Guid.NewGuid().ToString("n"), raw.Length, when);
+
+            account.Mail.AddMessage(folder.Id, summary, raw);
+            when = when.AddMinutes(-51);
+        }
     }
 
     /// <summary>

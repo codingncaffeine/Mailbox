@@ -283,6 +283,7 @@ public partial class MainWindow : Window
 
                     var known = false;
                     string statusBefore = string.Empty;
+                    string moduleBefore = string.Empty;
                     var rowsBefore = 0;
 
                     await Dispatcher.UIThread.InvokeAsync(
@@ -292,6 +293,7 @@ public partial class MainWindow : Window
                             if (DataContext is ShellViewModel before)
                             {
                                 statusBefore = before.StatusRight;
+                                moduleBefore = before.ModuleStatusLeft;
                                 rowsBefore = before.Messages.Count;
                             }
 
@@ -339,9 +341,13 @@ public partial class MainWindow : Window
                         {
                             if (DataContext is not ShellViewModel s) return;
 
+                            // The module status is the channel the drawn modules speak on \u2014 the
+                            // feeds list's "Today: 4 articles" and its kin \u2014 which the mail
+                            // list's row count cannot see.
                             Log.Info(
                                 $"Harness: ran {one} \u2014 {(known ? "known" : "UNKNOWN to the catalogue")}, "
                                 + $"status \u201c{statusBefore}\u201d\u2192\u201c{s.StatusRight}\u201d, "
+                                + $"module \u201c{moduleBefore}\u201d\u2192\u201c{s.ModuleStatusLeft}\u201d, "
                                 + $"rows {rowsBefore}\u2192{s.Messages.Count}, windows: {OtherWindows()}");
                         },
                         DispatcherPriority.Background);

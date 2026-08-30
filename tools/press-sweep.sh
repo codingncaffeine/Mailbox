@@ -93,6 +93,15 @@ for dir in "$out"/press-*/; do
             rows_before=${BASH_REMATCH[1]}; rows_after=${BASH_REMATCH[2]}
         fi
 
+        # The module status pair — the channel the drawn modules speak on. Absent from batches
+        # taken before the run door grew it, so its checks only fire when the line carries it.
+        module_before=""; module_after=""
+        if [[ $settled == *"module “"* ]]; then
+            m=${settled#*module “}
+            module_before=${m%%”→*}
+            module_after=${m#*”→“}; module_after=${module_after%%”*}
+        fi
+
         if [[ $after == *"not wired yet"* ]]; then
             class="NOTWIRED"; evidence="status “$after”"
         elif [[ $after == Select\ * ]]; then
@@ -103,6 +112,8 @@ for dir in "$out"/press-*/; do
             class="ACTED"; evidence="rows $rows_before→$rows_after"
         elif [[ $after != "$before" ]]; then
             class="ACTED"; evidence="status “$after”"
+        elif [[ $module_before != "$module_after" ]]; then
+            class="ACTED"; evidence="module “$module_after”"
         else
             class="SILENT"; evidence="status unchanged, rows unchanged, no window"
         fi

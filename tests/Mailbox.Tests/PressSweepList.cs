@@ -41,6 +41,15 @@ public class PressSweepList
         [nameof(ComposeCommands), nameof(ContactCommands), nameof(AppointmentCommands)];
 
     /// <summary>
+    /// The two subscriptions whose folders <c>SeedHarness.SeedFeedsStore</c> builds, as the
+    /// settings JSON the pose injects — names and categories must match the seeded tree or the
+    /// workspace maps them to nothing.
+    /// </summary>
+    private const string SeededSubscriptions =
+        "[{\"url\":\"https://example.invalid/ars\",\"name\":\"Ars Technica\",\"category\":\"Technology\"},"
+        + "{\"url\":\"https://example.invalid/bbc\",\"name\":\"BBC News\",\"category\":\"News\"}]";
+
+    /// <summary>
     /// Every command set the assembly declares is either swept or skipped by name — a new set
     /// cannot go quietly unswept.
     /// </summary>
@@ -76,12 +85,28 @@ public class PressSweepList
         {
             foreach (var command in commands)
             {
-                // wait-1500 lets the posed module switch and selection land first; the press
-                // itself then reports the settled read-back the classifier reads.
-                list.AppendLine(
-                    $"press-{command.Id.Value}\t"
-                    + $"MAILBOX_MODULE={module} MAILBOX_SELECT=1 MAILBOX_TODAY=2026-08-16 "
-                    + $"MAILBOX_RUN=wait-1500,{command.Id.Value}");
+                // Tab-separated pairs, which is the runner's format for a value carrying a
+                // space — the feeds subscriptions carry several. wait-1500 lets the posed
+                // module switch and selection land first; the press itself then reports the
+                // settled read-back the classifier reads.
+                // People's selection door names a person, and the seed has one; the other
+                // module lists keep their guards, which the expectations record as verified.
+                var select = module == "people" ? "A. Person" : "1";
+
+                var pairs = new List<string>
+                {
+                    $"MAILBOX_MODULE={module}",
+                    $"MAILBOX_SELECT={select}",
+                    "MAILBOX_TODAY=2026-08-16",
+                };
+
+                // The feeds poses carry the two subscriptions whose folders the seed builds,
+                // so the module opens onto articles rather than an empty pane.
+                if (module == "feeds") pairs.Add($"MAILBOX_SETTING=rss.feeds={SeededSubscriptions}");
+
+                pairs.Add($"MAILBOX_RUN=wait-1500,{command.Id.Value}");
+
+                list.AppendLine($"press-{command.Id.Value}\t" + string.Join('\t', pairs));
             }
         }
 
