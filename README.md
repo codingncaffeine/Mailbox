@@ -35,6 +35,52 @@ application rather than a web page in a window.
 
 ---
 
+## Features
+
+**Mail.** IMAP, POP3 and SMTP with autoconfig and OAuth2; a rolling offline window per folder,
+or everything. Full-text search (FTS5) with a keyword grammar (`from:`, `subject:`, dates),
+search folders, and All Mailboxes. Conversations with eleven arrangements, Focused Inbox,
+an opt-in unified inbox. Rules run client-side, and compile to Sieve for servers that speak
+ManageSieve, so they keep working while your machine is off. A Bayesian junk filter trained
+on your own marks, with safe- and blocked-sender lists that always win. Snooze, Undo Send,
+schedule send, Archive, Ignore Conversation, Quick Steps, Conversation Clean Up. Signatures
+per account for new mail and replies, five quoting styles, and a rich text editor with
+autocorrect and spell checking built for this application.
+
+**Reading without being read.** Every message passes a sanitizer before the rendering engine
+ever sees it; remote images are blocked by default and a report names the hosts that wanted
+to be fetched. DKIM, SPF and DMARC results are shown on the message, with warnings for
+lookalike domains and display-name spoofing. S/MIME and OpenPGP are built in both directions
+— signing, encryption, protected headers, key generation, WKD lookup — and ship disabled, so
+nothing cryptographic happens until you ask.
+
+**Calendar.** Recurring events with real time-zone and DST handling, a second time-zone
+column, iMIP invitations (send, receive, answer), reminders, a scheduling assistant, and
+read-only `.ics` subscriptions. **People:** vCard address books, autocomplete, Select Names,
+business-card and list views, categories shared across every module. **Tasks:** the To-Do
+List, task folders, recurring chores that regenerate on completion, reminders, and Google
+Tasks sync. **Notes and Journal:** a notes wall and a six-view journal timeline. **Feeds:**
+a built-in RSS/Atom reader as a module of its own, with its own store.
+
+**Import and export.** Maildir in three layouts, mbox, `.eml`, `.msg`, read-only `.pst`
+archives, and whole Thunderbird profiles including translated filters. Export is byte-exact:
+every message is kept as the RFC 822 bytes it arrived as, so mbox and `.eml` leave with
+nothing lost, plus `.ics` and `.vcf` for the other modules.
+
+**A desktop citizen.** Desktop notifications with Reply, Delete and Mark Read actions; a tray
+icon with an unread badge; autostart and start-minimised; `mailto:` handling and
+single-instance activation; MIME associations; printing through the engine's own dialog,
+Print List, and Print to PDF. Passwords live in the desktop keyring (Secret Service) — never
+in a file. Everything stores under the XDG directories. AutoArchive, Mailbox Cleanup,
+Recover Deleted Items and store compaction keep the mailbox in hand.
+
+**Yours to shape.** Four complete themes with a live editor and hot reload; three toolbar
+modes with a rearrangeable layout and KeyTips; every action a named, rebindable command with
+conflict detection; adjustable density; HiDPI including fractional scaling; a plugin host
+with a versioned API, manifest permissions, and enable/disable without a restart.
+
+---
+
 ## Building
 
 Requires the .NET 10 SDK.
@@ -172,6 +218,21 @@ the substitute at identical metrics and the layout matches either way.
 
 **The toolbar is data, not markup.** It renders a layout document, which is what makes it
 rearrangeable and lets plugin commands be placed through the same path as built-in ones.
+
+---
+
+## Security and hardening
+
+Mail is untrusted input, and this application treats it that way: an unbypassable sanitizer
+in front of the rendering engine, remote content blocked by default, credentials in the
+desktop keyring only, no telemetry, and the packaged launcher confining the whole application
+in a hardened transient systemd user unit — read-only outside its own data directories, no
+new privileges, an empty capability set, and a syscall allow-list, with every deliberate
+exception documented beside the property it relaxes
+([`packaging/mailbox-launcher.sh`](packaging/mailbox-launcher.sh)).
+
+The wiki's [Hardening](../../wiki/Hardening) page walks through each layer with pointers into
+the code and checks you can run yourself.
 
 ---
 
