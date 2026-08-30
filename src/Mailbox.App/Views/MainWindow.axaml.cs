@@ -4743,8 +4743,8 @@ public partial class MainWindow : Window
         Log.Info($"Harness: the toolbar's chevron is {chevron.Bounds.Width:0}x{chevron.Bounds.Height:0}, "
             + $"visible={chevron.IsEffectivelyVisible}, enabled={chevron.IsEffectivelyEnabled}.");
 
-        // Really opened, so the presenter has a size: rule 6 of the audit's evidence says a
-        // popup's size is the claim and IsOpen alone proves nothing. Filled directly if the
+        // Really opened, so the presenter has a size: a popup's size is the claim, and IsOpen
+        // alone proves nothing. Filled directly if the
         // presenter refuses to come up — an offscreen window still has to answer what the menu
         // holds, and a run that measured nothing would read as a toolbar with no editor.
         // Through the button's own Click first, which is what a reader does and what opens an
@@ -4757,8 +4757,8 @@ public partial class MainWindow : Window
         Log.Info($"Harness: the toolbar holds {customization.Commands.Count}: "
             + string.Join(" | ", customization.Commands.Select(c => c.Value)));
 
-        // Measured twice on purpose. This menu fills itself from its own Opening event, and rule
-        // 6 of the audit's evidence says such a menu measures empty when it is read in the same
+        // Measured twice on purpose. This menu fills itself from its own Opening event, and
+        // such a menu measures empty when it is read in the same
         // pass that opened it — the entries exist but are not yet in the popup's visual tree, so
         // there is nothing to take a size from. The second reading, a dispatcher turn later, is
         // the one that says whether a presenter really came up.

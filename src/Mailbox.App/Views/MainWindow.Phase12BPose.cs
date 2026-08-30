@@ -35,8 +35,8 @@ namespace Mailbox.App.Views;
 /// <c>ToggleButton</c>s on a rendered options page.
 /// </para>
 /// <para>
-/// Both doors run the whole flow inside one process for the reason rule 2 of the audit's evidence
-/// gives: a capture run's settings are a scratch copy, so two runs are two first runs and no
+/// Both doors run the whole flow inside one process for the reason the harness's own rules
+/// give: a capture run's settings are a scratch copy, so two runs are two first runs and no
 /// cross-run persistence claim can be made through two of them.
 /// </para>
 /// </remarks>
@@ -460,8 +460,8 @@ public partial class MainWindow
 
     /// <summary>Opens a menu button's flyout and presses one of its entries.</summary>
     /// <remarks>
-    /// Reset and Import/Export are menus rather than buttons, and the evidence rules here say a
-    /// menu's size is part of the claim — so the presenter is measured before an entry is
+    /// Reset and Import/Export are menus rather than buttons, and a popup's size is part of the
+    /// claim — so the presenter is measured before an entry is
     /// pressed, which is how two flyouts that presented nothing at all were once caught.
     /// </remarks>
     private static async Task PressMenuButtonAsync(OptionsWindow options, string arg)

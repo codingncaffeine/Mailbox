@@ -228,7 +228,7 @@ internal static class OptionsPageAudit
 /// directions are readable: the publisher's own request log says whether the fetch happened, and
 /// the pane's inlined count says whether the picture arrived.
 /// <para>
-/// <b>And why the switches are logged.</b> Rule 2 of the audit's evidence: a capture run's
+/// <b>And why the switches are logged.</b> The harness's own rule: a capture run's
 /// settings are a scratch copy, so what a run was posed with cannot be read out of the settings
 /// file afterwards. The line below is that read-back — what this process believes, printed from
 /// the same properties the behaviour asks.

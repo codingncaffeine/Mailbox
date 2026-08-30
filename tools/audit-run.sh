@@ -25,9 +25,8 @@
 #   tools/audit-run.sh <phase> <pose-list> [--seed <dir>] [--theme <id>] [--out <name>] [--timeout <s>]
 #   tools/audit-run.sh 0 tools/poses/doors.tsv --theme darkgray
 #
-# Rule 2 of the plan's evidence: a capture without MAILBOX_CAPTURE is not a harness run.
-# Rule 3: a pose that writes runs with MAILBOX_STORE. Both are set here so a caller cannot
-# forget either.
+# A capture without MAILBOX_CAPTURE is not a harness run, and a pose that writes runs with
+# MAILBOX_STORE. Both are set here so a caller cannot forget either.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
