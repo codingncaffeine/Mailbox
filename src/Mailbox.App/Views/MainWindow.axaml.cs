@@ -4128,22 +4128,9 @@ public partial class MainWindow : Window
     /// the shell drew its own figure as a label, so the one place a reader would press to choose
     /// a zoom level did nothing. The slider and the ± buttons beside it were the only way.
     /// </remarks>
-    private async void ShowZoomDialog(object? sender, RoutedEventArgs e)
+    private void ShowZoomDialog(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is not ShellViewModel shell) return;
-
-        try
-        {
-            if (await ZoomDialog.AskAsync(this, shell.ZoomPercent) is not { } percent) return;
-
-            shell.ZoomPercent = percent;
-            Log.Info($"Harness: zoom {percent:0}%.");
-        }
-        catch (Exception ex)
-        {
-            // An async void handler: an exception here would land on the dispatcher unobserved.
-            Log.Warn("The zoom dialog failed.", ex);
-        }
+        if (DataContext is ShellViewModel shell) ShowZoomDialog(shell);
     }
 
     /// <summary>
@@ -5445,6 +5432,7 @@ public partial class MainWindow : Window
         if (id == MailCommands.MarkAsUnread.Id) { shell.SetRead(SelectedRows(), read: false); return; }
         if (id == MailCommands.NewEmail.Id) { NewMessage(); return; }
         if (id == ViewCommands.ShowProgress.Id) { ShowProgressDialog(shell); return; }
+        if (id == ViewCommands.Zoom.Id) { ShowZoomDialog(shell); return; }
         if (id == MailCommands.ViewSource.Id) { ShowMessageSource(shell); return; }
         if (id == MailCommands.TrackerReport.Id) { _ = _reading?.ShowTrackerReportAsync(); return; }
         if (id == MailCommands.AuthenticationDetails.Id) { _ = _reading?.ShowAuthenticationAsync(); return; }
@@ -7936,6 +7924,28 @@ public partial class MainWindow : Window
     /// Show Progress, from the Send/Receive tab. Reopens the dialog for the run in flight, or
     /// says there is nothing to show rather than opening an empty one.
     /// </summary>
+    /// <summary>
+    /// The ribbon's Zoom button and the status bar's percentage share this one flow: the same
+    /// dialog over the same <c>ZoomPercent</c>, so the two can never disagree about what the
+    /// reading pane is doing. The button used to answer "not wired yet" while the figure below
+    /// it worked, which the press sweep caught.
+    /// </summary>
+    private async void ShowZoomDialog(ShellViewModel shell)
+    {
+        try
+        {
+            if (await ZoomDialog.AskAsync(this, shell.ZoomPercent) is not { } percent) return;
+
+            shell.ZoomPercent = percent;
+            Log.Info($"Harness: zoom {percent:0}%.");
+        }
+        catch (Exception ex)
+        {
+            // An async void handler: an exception here would land on the dispatcher unobserved.
+            Log.Warn("The zoom dialog failed.", ex);
+        }
+    }
+
     private void ShowProgressDialog(ShellViewModel shell)
     {
         if (_tasks is null)

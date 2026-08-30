@@ -268,4 +268,4 @@ view.tighterspacing	SILENT	a state toggle; its pixels belong to the single-line 
 view.todobar	SILENT	opens its flyout; the run log carries the menu read-back
 view.translate	NOTWIRED	deliberate: the translate family stays unwired until a service is ever chosen
 view.viewsettings	ACTED
-view.zoom	NOTWIRED	a real gap: the status bar zooms and this button answers "not wired yet"
+view.zoom	ACTED	opens the Zoom dialog the status bar's percentage shares
