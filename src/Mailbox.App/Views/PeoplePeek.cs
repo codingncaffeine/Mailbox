@@ -161,15 +161,17 @@ internal sealed class PeoplePeek : Border
         magnifier.HorizontalAlignment = HorizontalAlignment.Right;
         magnifier.Margin = new Thickness(0, 0, 6, 0);
 
+        // The field's own two tokens, measured off the capture: flat #BDBDBD inside #666666,
+        // 24 tall — not the popup's ground and not its black hairline, which are the popup's.
         var box = new Border
         {
-            Height = 22,
+            Height = 24,
             BorderThickness = new Thickness(1),
             Child = new Panel { Children = { words, magnifier } },
         };
 
-        box[!BorderBrushProperty] = new DynamicResourceExtension("peek.pop.outline.brush");
-        box[!BackgroundProperty] = new DynamicResourceExtension("peek.pop.background.brush");
+        box[!BorderBrushProperty] = new DynamicResourceExtension("peek.pop.field.outline.brush");
+        box[!BackgroundProperty] = new DynamicResourceExtension("peek.pop.field.brush");
 
         var button = new Button
         {

@@ -88,7 +88,7 @@ public static class DuplicateContactDialog
         var add = new RadioButton
         {
             GroupName = "duplicate",
-            Content = "Add it as a new contact anyway",
+            Content = "Add new contact",
             IsChecked = true,
         };
         Bind(add, RadioButton.ForegroundProperty, "dialog.foreground.brush");
@@ -96,7 +96,7 @@ public static class DuplicateContactDialog
         var update = new RadioButton
         {
             GroupName = "duplicate",
-            Content = "Update the selected contact with the new information",
+            Content = "Update information of selected contact",
         };
         Bind(update, RadioButton.ForegroundProperty, "dialog.foreground.brush");
 

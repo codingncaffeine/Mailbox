@@ -32,20 +32,23 @@ public static class ContactRibbonLayout
         Simplified = new Dictionary<string, SimplifiedBar>
         {
             ["contact"] = Bar(
+                // The capture at 1227 labels every one of the first nine and holds the rest in
+                // the overflow: this bar sheds whole clusters from the right, never the nine's
+                // words — which is what Small against Sheddable spells here.
                 Cluster("actions", "Actions",
                     RibbonItem.Small(ContactCommands.SaveAndClose.Id),
                     RibbonItem.Small(ContactCommands.Delete.Id),
-                    RibbonItem.Sheddable(ContactCommands.SaveAndNew.Id, RibbonItemKind.DropDown),
-                    RibbonItem.Sheddable(ContactCommands.Forward.Id, RibbonItemKind.DropDown)),
+                    RibbonItem.Small(ContactCommands.SaveAndNew.Id, RibbonItemKind.DropDown),
+                    RibbonItem.Small(ContactCommands.Forward.Id, RibbonItemKind.DropDown)),
 
                 Cluster("show", "Show",
-                    RibbonItem.Sheddable(ContactCommands.General.Id),
-                    RibbonItem.Sheddable(ContactCommands.Details.Id),
-                    RibbonItem.Sheddable(ContactCommands.Certificates.Id),
-                    RibbonItem.Sheddable(ContactCommands.AllFields.Id)),
+                    RibbonItem.Small(ContactCommands.General.Id),
+                    RibbonItem.Small(ContactCommands.Details.Id),
+                    RibbonItem.Small(ContactCommands.Certificates.Id),
+                    RibbonItem.Small(ContactCommands.AllFields.Id)),
 
                 Cluster("communicate", "Communicate",
-                    RibbonItem.Sheddable(ContactCommands.Email.Id, RibbonItemKind.DropDown)),
+                    RibbonItem.Small(ContactCommands.Email.Id, RibbonItemKind.DropDown)),
 
                 Cluster("names", "Names",
                     RibbonItem.Sheddable(ContactCommands.AddressBook.Id),

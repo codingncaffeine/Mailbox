@@ -95,14 +95,52 @@ public sealed class ContactSurface : UserControl
 
     private ContactPhoto? _picture;
 
-    /// <summary>The four numbers the reference's own form offers, in its order.</summary>
-    private static readonly (string Label, PhoneKind Kind)[] PhoneRows =
-    [
-        ("Business…", PhoneKind.Business),
-        ("Home…", PhoneKind.Home),
-        ("Business Fax…", PhoneKind.BusinessFax),
-        ("Mobile…", PhoneKind.Mobile),
-    ];
+    /// <summary>The four kinds the reference's form opens on; each row's label swaps its own.</summary>
+    private static readonly PhoneKind[] DefaultPhoneKinds =
+        [PhoneKind.Business, PhoneKind.Home, PhoneKind.BusinessFax, PhoneKind.Mobile];
+
+    /// <summary>Which kind each of the four rows is editing now — its label's own menu moves it.</summary>
+    private readonly PhoneKind[] _phoneKinds = [.. DefaultPhoneKinds];
+
+    /// <summary>
+    /// Every number the card carries, by kind — the rows are four windows onto this, so a kind
+    /// swapped away and back still holds what was typed, and a Pager another client stored
+    /// survives a save that never showed it.
+    /// </summary>
+    private readonly Dictionary<PhoneKind, string> _numbers = [];
+
+    private readonly Button[] _phoneButtons = new Button[4];
+    private Button _addressButton = null!;
+    private Button _emailButton = null!;
+    private AddressKind _addressKind = AddressKind.Business;
+    private List<ContactAddress> _addresses = [];
+    private int _emailIndex;
+    private List<ContactEmail> _emailSlots = [];
+
+    /// <summary>The parts Check Full Name settled, which the typed line no longer overrules.</summary>
+    private Mailbox.Core.People.FullNames.NameParts? _checked;
+
+    /// <summary>True while the dialog itself writes the name box, so its write keeps the parts.</summary>
+    private bool _writingName;
+
+    /// <summary>What a phone kind's label button says.</summary>
+    private static string KindLabel(PhoneKind kind) => kind switch
+    {
+        PhoneKind.Business => "Business…",
+        PhoneKind.Home => "Home…",
+        PhoneKind.Mobile => "Mobile…",
+        PhoneKind.BusinessFax => "Business Fax…",
+        PhoneKind.HomeFax => "Home Fax…",
+        PhoneKind.Pager => "Pager…",
+        _ => "Other…",
+    };
+
+    private static string KindLabel(AddressKind kind) => kind switch
+    {
+        AddressKind.Business => "Business…",
+        AddressKind.Home => "Home…",
+        _ => "Other…",
+    };
 
     public ContactSurface(Contact contact, IReadOnlyList<Collection> books, long collectionId)
     {
@@ -168,6 +206,7 @@ public sealed class ContactSurface : UserControl
 
         RefreshFileAs();
 
+        _emailSlots = [.. contact.Emails];
         _email.Text = contact.PrimaryEmail;
         _displayAs.Text = contact.Emails.Count > 0 && contact.Emails[0].Name is { Length: > 0 } shown
             ? shown
@@ -175,13 +214,21 @@ public sealed class ContactSurface : UserControl
         _webPage.Text = contact.Urls.FirstOrDefault() ?? string.Empty;
         _im.Text = contact.InstantMessaging.FirstOrDefault() ?? string.Empty;
 
-        for (var i = 0; i < PhoneRows.Length; i++)
+        foreach (var phone in contact.Phones)
         {
-            _phones[i].Text = contact.Phones.FirstOrDefault(p => p.Kind == PhoneRows[i].Kind)?.Number ?? string.Empty;
+            if (!_numbers.ContainsKey(phone.Kind)) _numbers[phone.Kind] = phone.Number;
         }
 
-        if (contact.Addresses.FirstOrDefault(a => !a.IsEmpty) is { } address)
+        for (var i = 0; i < _phoneKinds.Length; i++)
         {
+            _phones[i].Text = _numbers.GetValueOrDefault(_phoneKinds[i], string.Empty);
+        }
+
+        // The kind whose address the block opens on: the one that has one, Business first.
+        _addresses = [.. contact.Addresses];
+        if (_addresses.FirstOrDefault(a => !a.IsEmpty) is { } address)
+        {
+            _addressKind = address.Kind;
             _address.Text = address.OneLine();
         }
 
@@ -195,6 +242,9 @@ public sealed class ContactSurface : UserControl
 
         _name.TextChanged += (_, _) =>
         {
+            // Retyping the line takes back what Check Full Name settled: the newest statement
+            // of the name wins, whichever box it was made in.
+            if (!_writingName) _checked = null;
             TitleChanged?.Invoke(this, EventArgs.Empty);
             RefreshFileAs();
         };
@@ -381,7 +431,7 @@ public sealed class ContactSurface : UserControl
         // beside them, as the reference puts it.
         var head = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
         var headRows = new StackPanel { Spacing = 3 };
-        headRows.Children.Add(Row(ButtonLabel("Full Name…", ContactCommands.CheckNames.Id), _name));
+        headRows.Children.Add(Row(ButtonLabel("Full Name…", () => _ = CheckFullNameAsync()), _name));
         headRows.Children.Add(Row(WordLabel("Company"), _company));
         headRows.Children.Add(Row(WordLabel("Job title"), _jobTitle));
         headRows.Children.Add(Row(WordLabel("File as"), _fileAs));
@@ -392,21 +442,163 @@ public sealed class ContactSurface : UserControl
         stack.Children.Add(head);
 
         stack.Children.Add(Section("Internet"));
-        stack.Children.Add(Row(ButtonLabel("Email…", ContactCommands.AddressBook.Id), _email));
+        _emailButton = ButtonLabel("Email…", () => ShellCommandRequested?.Invoke(this, ContactCommands.AddressBook.Id), EmailMenu);
+        stack.Children.Add(Row(_emailButton, _email));
         stack.Children.Add(Row(WordLabel("Display as"), _displayAs));
         stack.Children.Add(Row(WordLabel("Web page address"), _webPage));
         stack.Children.Add(Row(WordLabel("IM address"), _im));
 
         stack.Children.Add(Section("Phone numbers"));
-        for (var i = 0; i < PhoneRows.Length; i++)
+        for (var i = 0; i < _phoneKinds.Length; i++)
         {
-            stack.Children.Add(Row(ButtonLabel(PhoneRows[i].Label, null), _phones[i]));
+            var row = i;
+            _phoneButtons[i] = ButtonLabel(KindLabel(_phoneKinds[i]), null, () => PhoneKindMenu(row));
+            stack.Children.Add(Row(_phoneButtons[i], _phones[i]));
         }
 
         stack.Children.Add(Section("Addresses"));
         stack.Children.Add(AddressRow());
         return stack;
     }
+
+    // ---- The split buttons' menus --------------------------------------------------------------
+
+    /// <summary>The chevron on a phone label: the other kinds, the current one ticked by its words.</summary>
+    private MenuFlyout PhoneKindMenu(int row)
+    {
+        var menu = new MenuFlyout();
+        foreach (var kind in Enum.GetValues<PhoneKind>())
+        {
+            var chosen = kind;
+            var item = new MenuItem
+            {
+                Header = KindLabel(kind).TrimEnd('…'),
+                IsEnabled = kind == _phoneKinds[row] || !_phoneKinds.Contains(kind),
+            };
+            item.Click += (_, _) => SwapPhoneKind(row, chosen);
+            menu.Items.Add(item);
+        }
+
+        return menu;
+    }
+
+    /// <summary>Points a row at another kind: what was typed stays with the kind it was typed for.</summary>
+    private void SwapPhoneKind(int row, PhoneKind kind)
+    {
+        if (_phoneKinds[row] == kind) return;
+        _numbers[_phoneKinds[row]] = (_phones[row].Text ?? string.Empty).Trim();
+        _phoneKinds[row] = kind;
+        _phones[row].Text = _numbers.GetValueOrDefault(kind, string.Empty);
+        SetButtonText(_phoneButtons[row], KindLabel(kind));
+    }
+
+    /// <summary>The chevron on Email…: which of the card's three addresses the row edits.</summary>
+    private MenuFlyout EmailMenu()
+    {
+        var menu = new MenuFlyout();
+        for (var slot = 0; slot < 3; slot++)
+        {
+            var chosen = slot;
+            var item = new MenuItem { Header = slot == 0 ? "E-mail" : $"E-mail {slot + 1}" };
+            item.Click += (_, _) => SwapEmailSlot(chosen);
+            menu.Items.Add(item);
+        }
+
+        return menu;
+    }
+
+    private void SwapEmailSlot(int slot)
+    {
+        if (_emailIndex == slot) return;
+        CommitEmailSlot();
+        _emailIndex = slot;
+        var held = slot < _emailSlots.Count ? _emailSlots[slot] : null;
+        _email.Text = held?.Address ?? string.Empty;
+        _displayAs.Text = held?.Name ?? string.Empty;
+        SetButtonText(_emailButton, slot == 0 ? "Email…" : $"E-mail {slot + 1}…");
+    }
+
+    /// <summary>What the two boxes say, written into the slot they were saying it for.</summary>
+    private void CommitEmailSlot()
+    {
+        var address = (_email.Text ?? string.Empty).Trim();
+        var name = (_displayAs.Text ?? string.Empty).Trim();
+        while (_emailSlots.Count <= _emailIndex) _emailSlots.Add(new ContactEmail(string.Empty));
+        _emailSlots[_emailIndex] = new ContactEmail(address, name);
+    }
+
+    /// <summary>The chevron on the address kind: Business, Home and Other, one address each.</summary>
+    private MenuFlyout AddressKindMenu()
+    {
+        var menu = new MenuFlyout();
+        foreach (var kind in Enum.GetValues<AddressKind>())
+        {
+            var chosen = kind;
+            var item = new MenuItem { Header = KindLabel(kind).TrimEnd('…') };
+            item.Click += (_, _) => SwapAddressKind(chosen);
+            menu.Items.Add(item);
+        }
+
+        return menu;
+    }
+
+    private void SwapAddressKind(AddressKind kind)
+    {
+        if (_addressKind == kind) return;
+        CommitAddress();
+        _addressKind = kind;
+        _address.Text = _addresses.FirstOrDefault(a => a.Kind == kind && !a.IsEmpty)?.OneLine() ?? string.Empty;
+        SetButtonText(_addressButton, KindLabel(kind));
+    }
+
+    /// <summary>
+    /// The typed address written into the list under the kind on show. Kept whole in the street
+    /// part rather than parsed: a one-line address is not invertible, and inventing city and
+    /// postcode boundaries the reader never typed is how another client's card gets quietly
+    /// rewritten. The parts arrive with the Check Address dialog the queue carries; until then
+    /// the text round-trips exactly, because OneLine() of a street-only address is the street.
+    /// </summary>
+    private void CommitAddress()
+    {
+        var typed = (_address.Text ?? string.Empty).Trim();
+        var at = _addresses.FindIndex(a => a.Kind == _addressKind && !a.IsEmpty);
+        var shown = at >= 0 ? _addresses[at] : null;
+
+        if (typed.Length == 0)
+        {
+            if (at >= 0) _addresses.RemoveAt(at);
+            return;
+        }
+
+        if (typed == shown?.OneLine()) return;
+        var edited = new ContactAddress { Kind = _addressKind, Street = typed };
+        if (at >= 0) _addresses[at] = edited;
+        else _addresses.Add(edited);
+    }
+
+    /// <summary>Check Full Name: the typed line split into its five parts, corrected, kept.</summary>
+    private async Task CheckFullNameAsync()
+    {
+        if (TopLevel.GetTopLevel(this) is not Window owner) return;
+
+        var parts = _checked ?? Mailbox.Core.People.FullNames.Parse(
+            (_name.Text ?? string.Empty).Trim(), App.PeopleOptions.FullName);
+
+        var dialog = new CheckFullNameDialog(parts);
+        WireCheckFullNameDoor(dialog);
+        await dialog.ShowDialog(owner);
+        if (dialog.Result is not { } settled) return;
+
+        _checked = settled;
+        _writingName = true;
+        _name.Text = settled.Joined();
+        _writingName = false;
+    }
+
+    /// <summary>The harness door onto the dialog, wired by the shell when a pose asks.</summary>
+    internal static Action<CheckFullNameDialog>? CheckFullNameDoor { get; set; }
+
+    private static void WireCheckFullNameDoor(CheckFullNameDialog dialog) => CheckFullNameDoor?.Invoke(dialog);
 
     private Control GroupColumn()
     {
@@ -430,7 +622,8 @@ public sealed class ContactSurface : UserControl
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto") };
 
         var kind = new StackPanel { Width = 110, Spacing = 4 };
-        kind.Children.Add(ButtonLabel("Business…", null));
+        _addressButton = ButtonLabel(KindLabel(_addressKind), null, AddressKindMenu);
+        kind.Children.Add(_addressButton);
         _mailing[!TemplatedControl.ForegroundProperty] = new DynamicResourceExtension("compose.header.text.brush");
         _mailing.FontSize = 11;
         kind.Children.Add(_mailing);
@@ -532,20 +725,85 @@ public sealed class ContactSurface : UserControl
     }
 
     /// <summary>A label that opens something: the reference draws it as a button.</summary>
-    private Control ButtonLabel(string text, CommandId? command)
+    /// <summary>
+    /// A form label the reference draws as a button: the field boxes' own fill inside a 1px
+    /// outline, measured 84×23 — and a chevron on the right when it carries a menu of kinds.
+    /// A press runs its action; with none, it opens its own menu, which is what the four number
+    /// labels and the address kind are for.
+    /// </summary>
+    private Button ButtonLabel(string text, Action? pressed, Func<MenuFlyout>? menu = null)
     {
+        // A grid rather than a stack, so the chevron stays pinned to the right edge and a long
+        // label gives way instead of pushing it out of the box.
+        var caption = new TextBlock
+        {
+            Text = text,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis,
+        };
+        var content = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+        content.Children.Add(caption);
+
         var button = new Button
         {
-            Content = text,
+            Content = content,
+            // 96 rather than the measured 84: this face needs the extra dozen pixels before
+            // "Business Fax…" keeps its words beside the chevron, and a label that ellipsizes
+            // into its neighbour's name is worse than one a size off.
             Width = 96,
-            Height = FieldHeight + 4,
+            Height = 23,
+            Margin = new Thickness(10, 0, 0, 0),
             Padding = new Thickness(4, 0),
+            BorderThickness = new Thickness(1),
             HorizontalContentAlignment = HorizontalAlignment.Left,
             FontSize = 11,
         };
 
-        if (command is { } id) button.Click += (_, _) => ShellCommandRequested?.Invoke(this, id);
+        button[!TemplatedControl.BackgroundProperty] = new DynamicResourceExtension("list.row.background.brush");
+        button[!TemplatedControl.ForegroundProperty] = new DynamicResourceExtension("list.row.read.text.brush");
+        button[!TemplatedControl.BorderBrushProperty] = new DynamicResourceExtension("border.strong.brush");
+
+        if (menu is not null)
+        {
+            var chevron = new TextBlock
+            {
+                Text = Mailbox.Theming.Icons.IconGlyphs.GetOrEmpty("chevron-down", 16),
+                FontFamily = Mailbox.Theming.Icons.IconFont.Family,
+                FontSize = 9,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(4, 0, 0, 0),
+            };
+            Grid.SetColumn(chevron, 1);
+            content.Children.Add(chevron);
+
+            // With an action of its own the button is a split: the words act, the chevron opens
+            // the kinds. With none, the whole button opens them.
+            if (pressed is not null)
+            {
+                chevron.PointerPressed += (_, e) =>
+                {
+                    e.Handled = true;
+                    MenuProbe.Show($"the {text} kinds", menu(), button);
+                };
+            }
+        }
+
+        button.Click += (_, _) =>
+        {
+            if (pressed is not null) pressed();
+            else if (menu is not null) MenuProbe.Show($"the {text} kinds", menu(), button);
+        };
+
         return button;
+    }
+
+    /// <summary>Renames a label button in place, which is what choosing a kind does.</summary>
+    private static void SetButtonText(Button button, string text)
+    {
+        if (button.Content is Grid grid && grid.Children.OfType<TextBlock>().FirstOrDefault() is { } caption)
+        {
+            caption.Text = text;
+        }
     }
 
     private static Control WordLabel(string text)
@@ -808,6 +1066,26 @@ public sealed class ContactSurface : UserControl
                 RefreshPhoto();
                 return true;
 
+            // The split labels' own moves, by the words their menus offer, so a pose can prove
+            // that a swapped kind keeps what was typed for the old one.
+            case "phonekind0" or "phonekind1" or "phonekind2" or "phonekind3":
+            {
+                var row = field[^1] - '0';
+                if (!Enum.TryParse<PhoneKind>(value.Replace(" ", string.Empty, StringComparison.Ordinal), true, out var kind)) return false;
+                SwapPhoneKind(row, kind);
+                return true;
+            }
+
+            case "addresskind":
+                if (!Enum.TryParse<AddressKind>(value, true, out var addressKind)) return false;
+                SwapAddressKind(addressKind);
+                return true;
+
+            case "emailslot":
+                if (!int.TryParse(value, out var slot) || slot is < 0 or > 2) return false;
+                SwapEmailSlot(slot);
+                return true;
+
             default: return false;
         }
     }
@@ -825,8 +1103,9 @@ public sealed class ContactSurface : UserControl
         => $"name=\u201c{_name.Text}\u201d company=\u201c{_company.Text}\u201d jobTitle=\u201c{_jobTitle.Text}\u201d "
            + $"fileAs=\u201c{_fileAs.SelectedItem}\u201d of [{string.Join(" | ", _fileAs.ItemsSource?.OfType<string>() ?? [])}] "
            + $"email=\u201c{_email.Text}\u201d displayAs=\u201c{_displayAs.Text}\u201d webPage=\u201c{_webPage.Text}\u201d im=\u201c{_im.Text}\u201d "
-           + $"business=\u201c{_phones[0].Text}\u201d home=\u201c{_phones[1].Text}\u201d businessFax=\u201c{_phones[2].Text}\u201d "
-           + $"mobile=\u201c{_phones[3].Text}\u201d address=\u201c{(_address.Text ?? string.Empty).Replace("\n", "\u23ce", StringComparison.Ordinal)}\u201d "
+           + $"phones=[{string.Join(" | ", _phoneKinds.Select((k, i) => $"{k}=\u201c{_phones[i].Text}\u201d"))}] "
+           + $"emailSlot={_emailIndex + 1} addressKind={_addressKind} "
+           + $"address=\u201c{(_address.Text ?? string.Empty).Replace("\n", "\u23ce", StringComparison.Ordinal)}\u201d "
            + $"mailing={_mailing.IsChecked} photo={(_picture is { Bytes.Length: > 0 } p ? $"{p.Bytes!.Length}B {p.MediaType}" : "none")} "
            + $"note=\u201c{NoteText}\u201d";
 
@@ -876,14 +1155,34 @@ public sealed class ContactSurface : UserControl
     private Contact NameBasis()
     {
         var typed = (_name.Text ?? string.Empty).Trim();
+
+        // Check Full Name settled the parts, so they are stored exactly as corrected.
+        if (_checked is { } settled)
+        {
+            return _original with
+            {
+                DisplayName = typed,
+                Prefix = settled.Prefix,
+                FirstName = settled.First,
+                MiddleName = settled.Middle,
+                LastName = settled.Last,
+                Suffix = settled.Suffix,
+                Company = (_company.Text ?? string.Empty).Trim(),
+                JobTitle = (_jobTitle.Text ?? string.Empty).Trim(),
+            };
+        }
+
         var parsed = Mailbox.Core.People.FullNames.Parse(typed, App.PeopleOptions.FullName);
+        var keep = _original.FirstName.Length > 0 || parsed.Last.Length == 0;
 
         return _original with
         {
             DisplayName = typed,
-            FirstName = _original.FirstName.Length > 0 || parsed.Last.Length == 0 ? _original.FirstName : parsed.First,
-            MiddleName = _original.FirstName.Length > 0 || parsed.Last.Length == 0 ? _original.MiddleName : parsed.Middle,
+            Prefix = keep ? _original.Prefix : parsed.Prefix,
+            FirstName = keep ? _original.FirstName : parsed.First,
+            MiddleName = keep ? _original.MiddleName : parsed.Middle,
             LastName = _original.LastName.Length > 0 || parsed.Last.Length == 0 ? _original.LastName : parsed.Last,
+            Suffix = keep ? _original.Suffix : parsed.Suffix,
             Company = (_company.Text ?? string.Empty).Trim(),
             JobTitle = (_jobTitle.Text ?? string.Empty).Trim(),
         };
@@ -892,45 +1191,23 @@ public sealed class ContactSurface : UserControl
     /// <summary>The contact as the form now states it.</summary>
     public Contact Current()
     {
-        var emails = new List<ContactEmail>();
-        if ((_email.Text ?? string.Empty).Trim() is { Length: > 0 } address)
+        // What the boxes say goes back into the slot, the kind and the address each is a window
+        // onto — so a kind swapped away and back, or an e-mail slot never shown, is kept whole.
+        CommitEmailSlot();
+        var emails = _emailSlots.Where(e => e.Address.Length > 0).ToList();
+
+        for (var i = 0; i < _phoneKinds.Length; i++)
         {
-            emails.Add(new ContactEmail(address, (_displayAs.Text ?? string.Empty).Trim()));
+            _numbers[_phoneKinds[i]] = (_phones[i].Text ?? string.Empty).Trim();
         }
 
-        // The rest of the addresses the card came with are kept: the form shows one and throwing
-        // the others away would lose what another client wrote.
-        emails.AddRange(_original.Emails.Skip(1));
+        var phones = Enum.GetValues<PhoneKind>()
+            .Where(kind => _numbers.GetValueOrDefault(kind, string.Empty).Length > 0)
+            .Select(kind => new ContactPhone(_numbers[kind], kind))
+            .ToList();
 
-        var phones = new List<ContactPhone>();
-        for (var i = 0; i < PhoneRows.Length; i++)
-        {
-            if ((_phones[i].Text ?? string.Empty).Trim() is { Length: > 0 } number)
-            {
-                phones.Add(new ContactPhone(number, PhoneRows[i].Kind));
-            }
-        }
-
-        // The typed address is kept whole in the street part rather than parsed: a one-line
-        // address is not invertible, and inventing city and postcode boundaries the reader
-        // never typed is how another client's card gets quietly rewritten. The parts arrive
-        // with the Check Address dialog the queue carries; until then the text round-trips
-        // exactly, because OneLine() of a street-only address is the street.
-        var addresses = _original.Addresses.ToList();
-        var shownAt = addresses.FindIndex(a => !a.IsEmpty);
-        var shown = shownAt >= 0 ? addresses[shownAt] : null;
-        var typed = (_address.Text ?? string.Empty).Trim();
-
-        if (typed.Length == 0)
-        {
-            if (shownAt >= 0) addresses.RemoveAt(shownAt);
-        }
-        else if (typed != shown?.OneLine())
-        {
-            var edited = new ContactAddress { Kind = shown?.Kind ?? AddressKind.Business, Street = typed };
-            if (shownAt >= 0) addresses[shownAt] = edited;
-            else addresses.Add(edited);
-        }
+        CommitAddress();
+        var addresses = _addresses.ToList();
 
         return NameBasis() with
         {

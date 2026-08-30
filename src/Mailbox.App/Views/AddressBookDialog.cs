@@ -88,7 +88,7 @@ public sealed class AddressBookDialog : Window
         body.Children.Add(ListBox());
 
         // A window rather than a dialog: the capture shows minimise, maximise and close on it.
-        SystemDialogChrome.Apply(this, body, minimizable: true);
+        SystemDialogChrome.Apply(this, body, minimizable: true, iconName: "address-book");
 
         FillBooks();
         Refresh();
@@ -186,9 +186,10 @@ public sealed class AddressBookDialog : Window
     {
         // New Message is not one of them: it opens a blank message from the default account,
         // so it means the same thing with nothing selected — which is how the capture draws it.
+        // Properties is not either: the reference draws it black over an empty list, and
+        // pressing it with nothing chosen simply answers nothing, which greying also said.
         var chosen = Selected() is not null;
         _delete.IsEnabled = chosen;
-        _properties.IsEnabled = chosen;
     }
 
     // ---- The search row ------------------------------------------------------------------

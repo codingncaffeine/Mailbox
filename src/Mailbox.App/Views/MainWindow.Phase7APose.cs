@@ -43,6 +43,38 @@ public partial class MainWindow
     {
         var set = Environment.GetEnvironmentVariable("MAILBOX_CONTACT_SET");
         var probe = Environment.GetEnvironmentVariable("MAILBOX_CONTACT_PROBE");
+
+        // The Check Full Name dialog is modal, so a pose that presses Full Name… has to have
+        // said beforehand what the dialog should do: fields to correct, then ok or cancel.
+        if (Environment.GetEnvironmentVariable("MAILBOX_CONTACT_NAMECHECK") is { Length: > 0 } check)
+        {
+            ContactSurface.CheckFullNameDoor = dialog => dialog.Opened += (_, _) => Dispatcher.UIThread.Post(() =>
+            {
+                var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                var verb = "ok";
+                foreach (var part in check.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    var equals = part.IndexOf('=');
+                    if (equals > 0) fields[part[..equals]] = part[(equals + 1)..];
+                    else verb = part.ToLowerInvariant();
+                }
+
+                if (fields.Count > 0)
+                {
+                    dialog.Pose(
+                        fields.GetValueOrDefault("title", string.Empty),
+                        fields.GetValueOrDefault("first", string.Empty),
+                        fields.GetValueOrDefault("middle", string.Empty),
+                        fields.GetValueOrDefault("last", string.Empty),
+                        fields.GetValueOrDefault("suffix", string.Empty));
+                }
+
+                Log.Info($"Harness: Check Full Name posed ({check}); pressing {verb}.");
+                if (verb == "ok") dialog.PressOk();
+                else dialog.Close();
+            }, DispatcherPriority.Background);
+        }
+
         if (set is null && probe is null) return;
 
         window.Opened += (_, _) => Dispatcher.UIThread.Post(
@@ -298,6 +330,8 @@ public partial class MainWindow
             TextBlock text => text.Text ?? string.Empty,
             StackPanel stack => string.Join(
                 " ", stack.Children.OfType<TextBlock>().Select(t => t.Text ?? string.Empty)),
+            Grid grid => string.Join(
+                " ", grid.Children.OfType<TextBlock>().Select(t => t.Text ?? string.Empty)),
             _ => button.Content?.ToString() ?? string.Empty,
         };
     }

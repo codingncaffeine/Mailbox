@@ -186,6 +186,8 @@
     "peek.pop.background": "#F0F0F0",
     "peek.pop.day": "#444444",
     "peek.pop.day.other": "#666666",
+    "peek.pop.field": "#BDBDBD",
+    "peek.pop.field.outline": "#666666",
     "peek.pop.frame": "#BDBDBD",
     "peek.pop.hatch": "#D5D4D2",
     "peek.pop.hover": "#E5F1FB",

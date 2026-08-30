@@ -993,6 +993,12 @@ public static class OfficeThemes
         t.Set(TokenKeys.Peek.PopTextDim, "#666666");
         t.Set(TokenKeys.Peek.PopHatch, "#D5D4D2");
 
+        // The Search People box, measured off the People peek's own capture: the interior is
+        // the frame's flat grey, its outline the dim ink — a field of its own, because one mark
+        // takes one token family and the popup's black hairline is the popup's, not a field's.
+        t.Set(TokenKeys.Peek.PopField, "#BDBDBD");
+        t.Set(TokenKeys.Peek.PopFieldOutline, "#666666");
+
         // The one the capture cannot show, a still picture having no pointer in it: the
         // desktop's own hover, which is what the dialogs of the same palette use.
         t.Set(TokenKeys.Peek.PopHover, "#E5F1FB");

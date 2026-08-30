@@ -782,6 +782,10 @@ public static class TokenKeys
         public const string PopHover = "peek.pop.hover";
         public const string PopText = "peek.pop.text";
         public const string PopTextDim = "peek.pop.text.dim";
+
+        /// <summary>The Search People box: its flat interior, and the outline that is its own.</summary>
+        public const string PopField = "peek.pop.field";
+        public const string PopFieldOutline = "peek.pop.field.outline";
         public const string PopHatch = "peek.pop.hatch";
         public const string PopScroll = "peek.pop.scroll";
         public const string PopScrollThumb = "peek.pop.scroll.thumb";
@@ -798,7 +802,7 @@ public static class TokenKeys
         [
             PopBackground, PopFrame, PopOutline, PopTitle, PopDay, PopDayOther,
             PopToday, PopTodayText, PopHover, PopText, PopTextDim, PopHatch,
-            PopScroll, PopScrollThumb,
+            PopScroll, PopScrollThumb, PopField, PopFieldOutline,
         ];
 
         public static readonly IReadOnlyList<string> All = [.. Docked, .. Floating];

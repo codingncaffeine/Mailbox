@@ -51,4 +51,30 @@ public class FullNameTests
         var parts = FullNames.Parse("Cher", FullNameOrder.LastFirst);
         Assert.Equal(("Cher", "", ""), (parts.First, parts.Middle, parts.Last));
     }
+
+    [Fact]
+    public void ATitleAndASuffixComeOffTheEnds()
+    {
+        var parts = FullNames.Parse("Dr. Anne Marie Smith Jr.", FullNameOrder.FirstMiddleLast);
+        Assert.Equal(("Dr.", "Anne", "Marie", "Smith", "Jr."),
+            (parts.Prefix, parts.First, parts.Middle, parts.Last, parts.Suffix));
+
+        // And back to one line in speaking order.
+        Assert.Equal("Dr. Anne Marie Smith Jr.", parts.Joined());
+    }
+
+    [Fact]
+    public void ATitleAloneStaysAName()
+    {
+        // "Miss" with nothing after it is somebody called Miss, not an empty card with a title.
+        var parts = FullNames.Parse("Miss", FullNameOrder.FirstMiddleLast);
+        Assert.Equal(("", "Miss", "", ""), (parts.Prefix, parts.First, parts.Last, parts.Suffix));
+    }
+
+    [Fact]
+    public void ASuffixAfterACommaStillReads()
+    {
+        var parts = FullNames.Parse("Mr. John Smith, Sr.", FullNameOrder.FirstMiddleLast);
+        Assert.Equal(("Mr.", "John", "Smith", "Sr."), (parts.Prefix, parts.First, parts.Last, parts.Suffix));
+    }
 }

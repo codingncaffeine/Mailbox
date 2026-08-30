@@ -37,14 +37,14 @@ internal static class SystemDialogChrome
     /// buttons. False, and the default, for the dialogs: Account Settings and its children carry
     /// a close button and nothing else.
     /// </param>
-    internal static void Apply(Window window, Control content, bool minimizable = false)
+    internal static void Apply(Window window, Control content, bool minimizable = false, string? iconName = null)
     {
         ArgumentNullException.ThrowIfNull(window);
         ArgumentNullException.ThrowIfNull(content);
 
         WindowFrame.Apply(window);
 
-        var bar = TitleBar(window, minimizable);
+        var bar = TitleBar(window, minimizable, iconName);
 
         var root = new Grid { RowDefinitions = new RowDefinitions($"{TitleBarHeight},*") };
         Grid.SetRow(bar, 0);
@@ -62,7 +62,7 @@ internal static class SystemDialogChrome
         WindowFrame.Drags(window, bar);
     }
 
-    private static Control TitleBar(Window window, bool minimizable)
+    private static Control TitleBar(Window window, bool minimizable, string? iconName)
     {
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
 
@@ -74,8 +74,33 @@ internal static class SystemDialogChrome
             Margin = new Thickness(9, 0, 0, 1),
         };
         Bind(title, TextBlock.ForegroundProperty, "systemdialog.foreground.brush");
-        Grid.SetColumn(title, 0);
-        grid.Children.Add(title);
+
+        // A dialog has no icon; a *window* — the Address Book, with minimise and maximise —
+        // carries one, measured on the reference at columns 9–23 with the title from 31.
+        if (iconName is { Length: > 0 })
+        {
+            var icon = new TextBlock
+            {
+                Text = Mailbox.Theming.Icons.IconGlyphs.GetOrEmpty(iconName, 16),
+                FontFamily = Mailbox.Theming.Icons.IconFont.Family,
+                FontSize = 14,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(9, 0, 0, 0),
+            };
+            Bind(icon, TextBlock.ForegroundProperty, "systemdialog.foreground.brush");
+
+            var pair = new StackPanel { Orientation = Orientation.Horizontal };
+            pair.Children.Add(icon);
+            title.Margin = new Thickness(8, 0, 0, 1);
+            pair.Children.Add(title);
+            Grid.SetColumn(pair, 0);
+            grid.Children.Add(pair);
+        }
+        else
+        {
+            Grid.SetColumn(title, 0);
+            grid.Children.Add(title);
+        }
 
         var buttons = new CaptionButtons(window, dialog: !minimizable, system: true);
         Grid.SetColumn(buttons, 1);
