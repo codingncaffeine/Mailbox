@@ -103,9 +103,19 @@ public partial class MainWindow
     /// <summary>Opening a flagged-mail row opens the message, as double-clicking it in the list does.</summary>
     private void OpenFlaggedMessage(ShellViewModel shell, TaskRow row)
     {
-        if (row.Message is not { } message || AccountOf(message) is not { } account) return;
+        if (row.Message is not { } message) return;
+        OpenMessageWindowById(shell, message.Account, message.MessageId);
+    }
 
-        if (account.Mail.LoadRaw(message.MessageId) is not { } raw)
+    /// <summary>
+    /// The message window for a row named by account and id — what a to-do row and a reminder
+    /// both have in hand, neither of which has been through the reading pane's load.
+    /// </summary>
+    private void OpenMessageWindowById(ShellViewModel shell, string address, long messageId)
+    {
+        if (AccountOf(new FlaggedMessage(address, messageId, string.Empty)) is not { } account) return;
+
+        if (account.Mail.LoadRaw(messageId) is not { } raw)
         {
             shell.StatusRight = "That message is no longer in the store.";
             return;
@@ -113,7 +123,7 @@ public partial class MainWindow
 
         using var stream = new MemoryStream(raw);
         new MessageWindow(App.Themes, () => account.Mail, MimeKit.MimeMessage.Load(stream), raw).Show(this);
-        Log.Info($"Flagged mail: opened message {message.MessageId} in {message.Account}.");
+        Log.Info($"Flagged mail: opened message {messageId} in {address}.");
     }
 
     /// <summary>

@@ -137,10 +137,15 @@ public sealed class TaskBook(PimRepository repository, Func<IReadOnlyList<(strin
     /// band out altogether rather than drawing an empty one.
     /// </param>
     /// <param name="collectionIds">Only these lists; null for every visible one.</param>
+    /// <param name="includeFlagged">
+    /// Whether the flagged mail and contacts ride along. True is the To-Do List, which is the
+    /// join; false is the reference's Tasks folder, the one list that shows tasks alone.
+    /// </param>
     public IReadOnlyList<TaskRow> Rows(
         DateOnly today,
         bool includeCompleted = false,
-        IReadOnlyCollection<long>? collectionIds = null)
+        IReadOnlyCollection<long>? collectionIds = null,
+        bool includeFlagged = true)
     {
         var rows = new List<TaskRow>();
 
@@ -172,8 +177,12 @@ public sealed class TaskBook(PimRepository repository, Func<IReadOnlyList<(strin
             }
         }
 
-        rows.AddRange(FlaggedMail(today, includeCompleted));
-        rows.AddRange(FlaggedContacts(today, includeCompleted));
+        if (includeFlagged)
+        {
+            rows.AddRange(FlaggedMail(today, includeCompleted));
+            rows.AddRange(FlaggedContacts(today, includeCompleted));
+        }
+
         rows.Sort(Compare);
         return rows;
     }

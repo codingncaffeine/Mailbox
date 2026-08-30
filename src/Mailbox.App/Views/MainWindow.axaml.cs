@@ -5539,7 +5539,11 @@ public partial class MainWindow : Window
         // Reply open a window on their machine — the wrong reading of the capture). The Options
         // page's "Open replies and forwards in a new window" is the one switch that means a
         // window; Pop Out is the button for one reply at a time.
-        if (App.MailOptions.OpenRepliesInNewWindow)
+        //
+        // Only in the mail module, though: the inline surface grows in the mail pane grid, and
+        // any other module is covering that grid — a reply embedded from the to-do list swapped
+        // the ribbon and gave the reader nowhere to type.
+        if (App.MailOptions.OpenRepliesInNewWindow || shell.Module != MailboxModule.Mail)
         {
             OpenReplyWindow(shell, draft, kind, address, covered?.ConfidentialFields ?? []);
         }
@@ -6309,7 +6313,12 @@ public partial class MainWindow : Window
         window.OpenRequested += (_, item) =>
         {
             BringForward();
+
+            // The reference opens the item a reminder stands for — a message window here, the
+            // way a task's reminder opens its task. Revealing the row alone showed nothing at
+            // all with the reading pane off, which is how the owner reads.
             RevealMessage(shell, item.Address, item.MessageId);
+            OpenMessageWindowById(shell, item.Address, item.MessageId);
         };
         window.OpenAppointmentRequested += (_, itemId) =>
         {

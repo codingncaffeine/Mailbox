@@ -487,12 +487,17 @@ public sealed class ContactListView : DrawnSurface
         var ink = Ink(TokenKeys.List.HeaderText, TokenKeys.Peek.PopText);
         string[] lines = ["We didn't find anything to show here.", EmptyHint];
 
+        // Wrapped to the pane, not centred off it: the sentence is an instruction, and in the
+        // docked bar's 254px an unwrapped line ran off the edge mid-word.
         var baseline = area.Y + EmptyFirstBaseline;
         foreach (var line in lines)
         {
-            var run = Ink(line, EmptyTextSize, ink);
-            DrawAt(context, run, area.X + Math.Max(0, (area.Width - run.Width) / 2), baseline);
-            baseline += EmptyLineHeight;
+            foreach (var wrapped in Wrap(line, Math.Max(60, area.Width - 12), 3, EmptyTextSize))
+            {
+                var run = Ink(wrapped, EmptyTextSize, ink);
+                DrawAt(context, run, area.X + Math.Max(0, (area.Width - run.Width) / 2), baseline);
+                baseline += EmptyLineHeight;
+            }
         }
     }
 

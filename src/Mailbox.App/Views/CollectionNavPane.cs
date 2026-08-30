@@ -24,18 +24,33 @@ internal sealed class CollectionNavPane : Border
     private readonly PimRepository _repository;
     private readonly CollectionKind _kind;
     private readonly Func<Collection, bool>? _belongs;
+    private readonly string? _selectFirst;
     private readonly StackPanel _names = new();
+
+    /// <summary>In the select shape: the chosen collection, or null for the synthetic first row.</summary>
+    public long? SelectedCollectionId { get; private set; }
+
+    /// <summary>The select shape's own event: which folder is now open.</summary>
+    public event EventHandler? SelectionChanged;
 
     /// <param name="belongs">
     /// Which of the kind's collections are this module's to list — Notes and Journal share a
     /// kind, and each pane should offer only the folders that can put a row in its own view.
     /// Null lists them all.
     /// </param>
-    public CollectionNavPane(PimRepository repository, CollectionKind kind, string heading, Func<Collection, bool>? belongs = null)
+    /// <param name="selectFirst">
+    /// Puts the pane in the reference's folder-select shape instead of the calendar's tick
+    /// shape: a synthetic first row with this label — the Tasks module's To-Do List — then one
+    /// row per collection, a click choosing which folder is open rather than toggling ticks.
+    /// </param>
+    public CollectionNavPane(
+        PimRepository repository, CollectionKind kind, string heading,
+        Func<Collection, bool>? belongs = null, string? selectFirst = null)
     {
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _kind = kind;
         _belongs = belongs;
+        _selectFirst = selectFirst;
 
         Width = this.TryFindResource("nav.width.value", out var width) && width is double w and > 0 ? w : 235;
         this[!BackgroundProperty] = new DynamicResourceExtension("nav.background.brush");
@@ -88,6 +103,48 @@ internal sealed class CollectionNavPane : Border
     /// <summary>A collection was shown or hidden, so whatever is drawing them should read again.</summary>
     public event EventHandler? VisibilityChanged;
 
+    /// <summary>Opens a folder of the select shape, as a click on its row does.</summary>
+    public void Select(long? id)
+    {
+        if (SelectedCollectionId == id) return;
+        SelectedCollectionId = id;
+        Refresh();
+        SelectionChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>One row of the select shape: its name, highlighted while it is the open folder.</summary>
+    private void AddSelectRow(string label, long? id)
+    {
+        var row = new Border { Height = 24, Cursor = new Cursor(StandardCursorType.Hand) };
+        if (SelectedCollectionId == id) row[!BackgroundProperty] = new DynamicResourceExtension("nav.item.selected.brush");
+
+        var name = new TextBlock
+        {
+            Text = label,
+            FontSize = 15,
+            FontWeight = FontWeight.SemiBold,
+            Margin = new Thickness(43, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        name[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("nav.item.text.brush");
+        row.Child = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center,
+            Children = { name },
+        };
+
+        row.PointerPressed += (_, _) =>
+        {
+            if (SelectedCollectionId == id) return;
+            SelectedCollectionId = id;
+            Refresh();
+            SelectionChanged?.Invoke(this, EventArgs.Empty);
+        };
+
+        _names.Children.Add(row);
+    }
+
     /// <summary>What the pane is listing, top to bottom — the read-back for a drawn set of rows.</summary>
     public IReadOnlyList<string> Listed()
         => [.. _names.Children.OfType<Border>()
@@ -100,6 +157,15 @@ internal sealed class CollectionNavPane : Border
         _names.Children.Clear();
         IReadOnlyList<Collection> collections = _repository.Collections(_kind);
         if (_belongs is { } belongs) collections = [.. collections.Where(belongs)];
+
+        // The select shape: the synthetic folder first, then the collections, a click opening
+        // one rather than ticking it — the reference's My Tasks pair.
+        if (_selectFirst is { } first)
+        {
+            AddSelectRow(first, null);
+            foreach (var collection in collections) AddSelectRow(collection.DisplayName, collection.Id);
+            return;
+        }
 
         foreach (var collection in collections)
         {

@@ -57,8 +57,12 @@ public sealed class TasksWorkspace : Border
         ClipToBounds = true;
         this[!BackgroundProperty] = new DynamicResourceExtension("list.background.brush");
 
-        _navPane = new CollectionNavPane(repository, CollectionKind.Tasks, "My Tasks");
+        // The reference's My Tasks pair rather than a list of ticked collections: To-Do List
+        // first — tasks and flagged mail together — then the task folders themselves, each the
+        // one place that shows a reader their tasks alone.
+        _navPane = new CollectionNavPane(repository, CollectionKind.Tasks, "My Tasks", selectFirst: "To-Do List");
         _navPane.VisibilityChanged += (_, _) => Reload();
+        _navPane.SelectionChanged += (_, _) => Reload();
 
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
         grid.Children.Add(_navPane);
@@ -103,6 +107,23 @@ public sealed class TasksWorkspace : Border
     /// <summary>The drawn list, which the harness presses.</summary>
     internal TaskListView List => _list;
 
+    /// <summary>The folders the pane offers, top to bottom, which a pose reads back.</summary>
+    public IReadOnlyList<string> PaneNames => _navPane.Listed();
+
+    /// <summary>Opens a folder by name — the To-Do List, or a task list — as a click on the pane does.</summary>
+    public bool OpenFolderByName(string name)
+    {
+        if (string.Equals(name, "To-Do List", StringComparison.OrdinalIgnoreCase))
+        {
+            _navPane.Select(null);
+            return true;
+        }
+
+        if (_book.Lists().FirstOrDefault(l => l.DisplayName.Contains(name, StringComparison.OrdinalIgnoreCase)) is not { } list) return false;
+        _navPane.Select(list.Id);
+        return true;
+    }
+
     public event EventHandler? Changed;
 
     public event EventHandler<TaskRow>? TaskOpened;
@@ -141,9 +162,24 @@ public sealed class TasksWorkspace : Border
         }
     } = string.Empty;
 
+    /// <summary>The folder the pane has open: null is the To-Do List, otherwise a task list's id.</summary>
+    public long? OpenFolder => _navPane.SelectedCollectionId;
+
+    /// <summary>What the open folder is called, which the status line and a pose read back.</summary>
+    public string OpenFolderName => _navPane.SelectedCollectionId is { } id
+        ? _book.Lists().FirstOrDefault(l => l.Id == id)?.DisplayName ?? "Tasks"
+        : "To-Do List";
+
     public void Reload()
     {
-        var rows = _book.Rows(Today, includeCompleted: _kind != TaskViewKind.Todo);
+        // The flagged mail and contacts belong to the To-Do List alone: a Tasks folder is the
+        // reference's own tasks-only view, and borrowed rows on it were the defect.
+        var todoList = _navPane.SelectedCollectionId is null;
+        var rows = _book.Rows(
+            Today,
+            includeCompleted: _kind != TaskViewKind.Todo,
+            collectionIds: todoList ? null : [_navPane.SelectedCollectionId!.Value],
+            includeFlagged: todoList);
         if (Search.Length > 0)
         {
             var found = _repository.Search(Search).Select(i => i.Id).ToHashSet();

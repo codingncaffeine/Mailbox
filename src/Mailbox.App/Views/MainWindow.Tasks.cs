@@ -595,6 +595,19 @@ public partial class MainWindow
 
         var task = PimTodoCodec.FromItem(item);
         var done = complete ?? !task.IsComplete;
+
+        // Finishing a repeating task finishes this occurrence and moves the master to the next,
+        // so the chore comes round again instead of the whole series dying under one tick.
+        if (done && PimTodoCodec.CompleteOccurrence(task, TaskNowUtc, TimeZoneInfo.Local) is
+            { Advanced: { } advanced } stepped)
+        {
+            SaveTask(stepped.Done, collectionId: item.CollectionId);
+            SaveTask(advanced, item, item.CollectionId);
+            shell.StatusRight = $"“{task.Summary}” marked complete; the next is due {stepped.Advanced!.Due?.Wall:d}.";
+            Log.Info($"Task {item.Id} completed for this occurrence; the series moves on.");
+            return;
+        }
+
         SaveTask(PimTodoCodec.Complete(task, done, TaskNowUtc), item, item.CollectionId);
 
         shell.StatusRight = done ? $"“{task.Summary}” marked complete." : $"“{task.Summary}” put back.";
@@ -710,7 +723,15 @@ public partial class MainWindow
             });
         }
 
-        Log.Info($"Harness: tasks showing {tasks.Kind}, {tasks.Status}.");
+        if (Environment.GetEnvironmentVariable("MAILBOX_TASK_FOLDER") is { Length: > 0 } folder)
+        {
+            Log.Info(tasks.OpenFolderByName(folder.Trim())
+                ? $"Harness: the tasks pane opened “{tasks.OpenFolderName}”."
+                : $"Harness: no folder matching “{folder}” is on the tasks pane.");
+        }
+
+        Log.Info($"Harness: tasks showing {tasks.Kind} in “{tasks.OpenFolderName}”, {tasks.Status}.");
+        Log.Info($"Harness: tasks pane lists [{string.Join(" | ", tasks.PaneNames)}].");
         foreach (var row in tasks.Rows)
         {
             Log.Info($"Harness: task “{row.Summary}” — {TaskBook.Heading(row.Band)}"
@@ -794,6 +815,22 @@ public partial class MainWindow
                 Log.Info($"Harness: “{after.Subject}” is now "
                     + $"{(after.FollowUpComplete ? "complete" : after.IsFlagged ? "flagged" : "unflagged")}, "
                     + $"due {after.FollowUpDue?.LocalDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "—"}.");
+            }
+
+            return;
+        }
+
+        // A flagged contact is a vCard, not a VTODO: read its follow-up columns rather than
+        // parsing the card as a task — which is how a tick on one used to read back as a task
+        // that was never started while the store said complete.
+        if (row.Contact is not null)
+        {
+            if (App.Pim.Item(row.ItemId) is { } card)
+            {
+                Log.Info($"Harness: “{(card.FileAs.Length > 0 ? card.FileAs : card.Summary)}” is now "
+                    + $"{(card.FollowUpComplete ? "complete" : card.FollowUpDue is not null ? "flagged" : "unflagged")}, "
+                    + $"due {card.FollowUpDue?.LocalDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "—"}, "
+                    + $"sync {card.SyncState}.");
             }
 
             return;

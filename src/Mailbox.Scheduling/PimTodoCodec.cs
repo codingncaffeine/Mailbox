@@ -126,6 +126,69 @@ public static class PimTodoCodec
     }
 
     /// <summary>
+    /// Ticking a repeating task: the finished copy of this occurrence, and the master moved to
+    /// the next one — which is what the reference does, and what keeps a weekly chore from
+    /// reading as permanently overdue on its first due date for ever.
+    /// </summary>
+    /// <returns>
+    /// The completed task to add, and the advanced master to write over the row — or the task
+    /// simply completed and no master, when it does not repeat or its series has run out.
+    /// </returns>
+    public static (TaskItem Done, TaskItem? Advanced) CompleteOccurrence(
+        TaskItem task, DateTimeOffset when, TimeZoneInfo? zone = null)
+    {
+        ArgumentNullException.ThrowIfNull(task);
+
+        if (task.Rrule is not { Length: > 0 } || task.Due is null)
+        {
+            return (Complete(task, true, when), null);
+        }
+
+        // The next occurrence strictly after the one being finished. The engine wants a window;
+        // five years holds any rule a person sets on a chore, and a series that runs out inside
+        // it is simply finished.
+        var dueUtc = task.Due.ToUtc(zone);
+        var next = Recurrence
+            .Expand([AsEvent(task)], dueUtc.AddMinutes(1), dueUtc.AddYears(5), zone)
+            .OrderBy(o => o.StartUtc)
+            .FirstOrDefault(o => o.StartUtc > dueUtc);
+
+        if (next is null) return (Complete(task, true, when), null);
+
+        // The finished instance stands alone — no rule, its own identity — and the master keeps
+        // the rule with its due date moved on, not started, so the series reads as the reference's.
+        var done = Complete(task, true, when) with
+        {
+            Uid = TaskItem.NewUid(),
+            Rrule = null,
+            ExceptionDates = [],
+            RecurrenceId = null,
+        };
+
+        var advanced = task with
+        {
+            Due = task.Due.AllDay ? EventTime.Date(DateOnly.FromDateTime(next.Start.Wall)) : next.Start,
+            Progress = TaskProgress.NotStarted,
+            PercentComplete = 0,
+            CompletedUtc = null,
+            LastModified = when,
+        };
+
+        return (done, advanced);
+    }
+
+    /// <summary>The task as the recurrence engine reads one: an instant at its due date.</summary>
+    private static CalendarEvent AsEvent(TaskItem task) => new()
+    {
+        Uid = task.Uid,
+        Summary = task.Summary,
+        Start = task.Due!,
+        End = task.Due!,
+        Rrule = task.Rrule,
+        ExceptionDates = task.ExceptionDates,
+    };
+
+    /// <summary>
     /// The same task marked done, or put back: the tick sets all three of the things a task can
     /// say about being finished, because a client reading any one of them should agree with the
     /// other two.

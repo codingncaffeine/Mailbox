@@ -58,15 +58,17 @@ public static class TasksRibbonLayout
                     RibbonItem.Sheddable(TaskCommands.MarkComplete.Id),
                     RibbonItem.Sheddable(TaskCommands.RemoveFromList.Id)),
 
+                // The capture's bar ends at the Tags cluster and its overflow: there is no Find
+                // cluster on it — search lives in the title bar — and the room one took here is
+                // what kept the eight sheddable labels from fitting at the capture's own width.
                 Cluster("tags", "Tags",
                     RibbonItem.Sheddable(TaskCommands.FollowUp.Id, RibbonItemKind.DropDown),
                     RibbonItem.Sheddable(TaskCommands.Categorize.Id, RibbonItemKind.DropDown),
-                    RibbonItem.Small(TaskCommands.Private.Id),
-                    RibbonItem.Small(TaskCommands.HighImportance.Id),
-                    RibbonItem.Small(TaskCommands.LowImportance.Id)),
-
-                Cluster("find", "Find",
-                    RibbonItem.Small(MailCommands.Search.Id))),
+                    // Bare icons, as the reference draws these three: their words ate the room
+                    // the eight sheddable labels needed, so the bar was labelling the wrong set.
+                    RibbonItem.Glyph(TaskCommands.Private.Id),
+                    RibbonItem.Glyph(TaskCommands.HighImportance.Id),
+                    RibbonItem.Glyph(TaskCommands.LowImportance.Id))),
 
             ["sendreceive"] = Bar(
                 Cluster("sendreceive", "Send & Receive",

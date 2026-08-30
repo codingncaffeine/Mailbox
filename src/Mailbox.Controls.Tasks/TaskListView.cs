@@ -29,8 +29,16 @@ namespace Mailbox.Controls.Tasks;
 /// </remarks>
 public sealed class TaskListView : DrawnSurface
 {
-    /// <summary>Measured: the arrangement bar, and the hairline closing it.</summary>
+    /// <summary>Measured: the arrangement bar itself.</summary>
     public const double ArrangeHeight = 16;
+
+    /// <summary>
+    /// Measured: the pane ground above the bar's rule, and the rule itself. The reference draws
+    /// the rule <em>above</em> the bar — the new-task box's accent edge follows the bar with no
+    /// second rule between.
+    /// </summary>
+    public const double ArrangeInset = 23;
+    public const double ArrangeTop = ArrangeInset + 1;
 
     /// <summary>Measured: the box that makes a new task, borders included.</summary>
     public const double NewTaskHeight = 20;
@@ -330,7 +338,9 @@ public sealed class TaskListView : DrawnSurface
                     break;
                 }
 
-                case "Status":
+                // A borrowed row is a message or a contact, and neither has a status or a
+                // percentage: their cells stay empty rather than claiming "Not Started".
+                case "Status" when !row.IsBorrowed:
                     DrawAt(context, Ink(Ellipsize(TodoCodec.ProgressLabel(task.Progress), cell.Width, TextSize), TextSize, ink), left, baseline);
                     break;
 
@@ -338,7 +348,7 @@ public sealed class TaskListView : DrawnSurface
                     DrawAt(context, Ink(Ellipsize(row.DueText(), cell.Width, TextSize), TextSize, ink), left, baseline);
                     break;
 
-                case "% Complete":
+                case "% Complete" when !row.IsBorrowed:
                     DrawAt(context, Ink($"{task.PercentComplete}%", TextSize, ink), left, baseline);
                     break;
 
@@ -357,26 +367,38 @@ public sealed class TaskListView : DrawnSurface
     }
 
     /// <summary>
-    /// The bar above the list: what it is arranged by on the left, and the column it is sorted
-    /// on with its direction against the right edge.
+    /// The bar above the list, as the capture measures it: pane ground, then the dark rule,
+    /// then the bar — what it is arranged by on the left, a column divider, the sort bucket
+    /// starting its own column, and the solid triangle held clear of the right edge. No rule
+    /// underneath: the new-task box's accent edge follows the bar directly.
     /// </summary>
     private void DrawArrangement(DrawingContext context, double width)
     {
+        Fill(context, new Rect(0, ArrangeInset, width, 1), Colour(TokenKeys.Border.Subtle));
+
         var ink = Colour(TokenKeys.List.HeaderText);
-        DrawAt(context, Ink("Arrange by: " + ArrangedBy, 11, ink), 6, 12);
+        var baseline = ArrangeTop + 12;
+        DrawAt(context, Ink("Arrange by: " + ArrangedBy, 11, ink), 6, baseline);
 
-        var by = Ink("Today", 11, ink);
-        DrawAt(context, by, width - by.Width - 20, 12);
+        // The sort bucket's own column: the divider, then "Today" flush to it.
+        var column = Math.Max(120, width - 90);
+        Fill(context, new Rect(Math.Round(column), ArrangeTop + 3, 1, ArrangeHeight - 6), Colour(TokenKeys.List.Separator));
+        DrawAt(context, Ink("Today", 11, ink), column + 8, baseline);
 
-        // The direction mark: pointing up, the reference's own soonest-first.
-        var pen = new Pen(Brush(ink), 1.2);
-        var x = width - 14;
-        context.DrawLine(pen, new Point(x - 4, 9), new Point(x, 5));
-        context.DrawLine(pen, new Point(x, 5), new Point(x + 4, 9));
+        // The direction mark: a filled 9px triangle pointing up — soonest first — held clear
+        // of the edge, as the capture measures it.
+        var x = width - 19;
+        var top = ArrangeTop + 5;
+        var mark = new StreamGeometry();
+        using (var open = mark.Open())
+        {
+            open.BeginFigure(new Point(x + 4.5, top), true);
+            open.LineTo(new Point(x + 9, top + 5));
+            open.LineTo(new Point(x, top + 5));
+            open.EndFigure(true);
+        }
 
-        // The rule under the bar is dark on the pane, which is what the capture shows — the
-        // list's own separator is the light line between two rows and reads as a gap here.
-        Fill(context, new Rect(0, ArrangeHeight, width, 1), Colour(TokenKeys.Border.Subtle));
+        context.DrawGeometry(Brush(ink), null, mark);
     }
 
     /// <summary>
@@ -388,7 +410,10 @@ public sealed class TaskListView : DrawnSurface
     {
         var box = new Rect(0, NewTaskTop, width, NewTaskHeight);
         Fill(context, box, Colour(TokenKeys.List.RowBackground));
-        var edge = Colour(_typing ? TokenKeys.Accent.Rest : TokenKeys.Border.Subtle);
+
+        // The accent line round the box at rest, which is what the capture measures — the box
+        // is the module's one always-armed control, and the edge is what says so.
+        var edge = Colour(TokenKeys.Accent.Rest);
         Fill(context, new Rect(box.X, box.Y, box.Width, 1), edge);
         Fill(context, new Rect(box.X, box.Bottom - 1, box.Width, 1), edge);
 
@@ -707,7 +732,7 @@ public sealed class TaskListView : DrawnSurface
     /// Where the new-task row starts: under the arrangement bar, or under the columns when the
     /// detailed view has drawn a header in its place.
     /// </summary>
-    private double NewTaskTop => ShowColumns ? HeaderHeight : ArrangeHeight + 1;
+    private double NewTaskTop => ShowColumns ? HeaderHeight : ArrangeTop + ArrangeHeight;
 
     /// <summary>The new-task box, which a pose types into.</summary>
     public Rect NewTaskBox => new(0, NewTaskTop, Bounds.Width, NewTaskHeight);

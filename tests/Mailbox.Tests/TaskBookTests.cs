@@ -347,4 +347,85 @@ public class TaskBookTests
         Assert.Equal("Every word of it.", book.Open(row.Id)!.Description);
         Assert.Null(book.Open(row.Id + 100));
     }
+
+    [Fact]
+    public void TickingARepeatingTaskFinishesTheOccurrenceAndMovesTheSeriesOn()
+    {
+        var weekly = new TaskItem
+        {
+            Uid = "water@mailbox",
+            Summary = "Water the plants",
+            Due = EventTime.Date(new DateOnly(2026, 8, 14)),
+            Rrule = "FREQ=WEEKLY;BYDAY=FR",
+        };
+
+        var (done, advanced) = PimTodoCodec.CompleteOccurrence(weekly, new DateTimeOffset(2026, 8, 16, 9, 0, 0, TimeSpan.Zero));
+
+        // The finished copy stands alone: complete, no rule, an identity of its own.
+        Assert.True(done.IsComplete);
+        Assert.Null(done.Rrule);
+        Assert.NotEqual(weekly.Uid, done.Uid);
+
+        // The master keeps its rule and moves to the next Friday, not started.
+        Assert.NotNull(advanced);
+        Assert.Equal(weekly.Uid, advanced.Uid);
+        Assert.Equal("FREQ=WEEKLY;BYDAY=FR", advanced.Rrule);
+        Assert.Equal(new DateOnly(2026, 8, 21), DateOnly.FromDateTime(advanced.Due!.Wall));
+        Assert.False(advanced.IsComplete);
+        Assert.Equal(0, advanced.PercentComplete);
+    }
+
+    [Fact]
+    public void TickingTheLastOccurrenceSimplyFinishesTheSeries()
+    {
+        var last = new TaskItem
+        {
+            Uid = "twice@mailbox",
+            Summary = "Twice only",
+            Due = EventTime.Date(new DateOnly(2026, 8, 14)),
+            Rrule = "FREQ=WEEKLY;BYDAY=FR;COUNT=1",
+        };
+
+        var (done, advanced) = PimTodoCodec.CompleteOccurrence(last, new DateTimeOffset(2026, 8, 16, 9, 0, 0, TimeSpan.Zero));
+
+        Assert.True(done.IsComplete);
+        Assert.Null(advanced);
+    }
+
+    [Fact]
+    public void ATaskWithoutARuleCompletesInPlace()
+    {
+        var plain = Due(Today);
+        var (done, advanced) = PimTodoCodec.CompleteOccurrence(plain, DateTimeOffset.UnixEpoch);
+
+        Assert.True(done.IsComplete);
+        Assert.Equal(plain.Uid, done.Uid);
+        Assert.Null(advanced);
+    }
+
+    [Fact]
+    public void TheTasksFolderShowsTasksAloneWhereTheToDoListShowsTheJoin()
+    {
+        var (store, repository, book, list) = Fresh();
+        using var _ = store;
+
+        Add(repository, list.Id, "A task", Today);
+
+        var contacts = repository.AddCollection(CollectionKind.Contacts, "Contacts", "#0078D4", string.Empty);
+        repository.AddItem(new PimItem
+        {
+            CollectionId = contacts.Id,
+            Uid = "person@mailbox",
+            Kind = CollectionKind.Contacts,
+            RawPayload = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:A. Person\r\nEND:VCARD\r\n",
+            Summary = "A. Person",
+            FileAs = "Person, A.",
+            FollowUpDue = new DateTimeOffset(Today.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero),
+        });
+
+        // The join carries the flagged contact; the tasks-only reading does not.
+        Assert.Equal(2, book.Rows(Today, includeFlagged: true).Count);
+        Assert.Single(book.Rows(Today, includeFlagged: false));
+        Assert.All(book.Rows(Today, includeFlagged: false), r => Assert.False(r.IsBorrowed));
+    }
 }
