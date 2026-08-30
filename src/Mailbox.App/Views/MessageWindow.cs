@@ -197,6 +197,51 @@ public sealed class MessageWindow : Window
         ShowMessage(verified);
     }
 
+    // ---- The warm window ---------------------------------------------------------------------
+    //
+    // Opening a message pays for the web engine: a fresh window spawns a fresh render process,
+    // and the reader watches an empty body while it comes up. So the shell keeps one window
+    // warm — hidden, engine alive — and Replace above puts the next message into it, which is
+    // the same journey the QAT's stepping arrows already make. Hiding a window leaves its
+    // visual tree attached, and the engine's life is tied to the tree, not to the glass.
+
+    /// <summary>Puts the per-reading state back where a fresh window would have it.</summary>
+    public void ResetForReuse()
+    {
+        _zoomPercent = 100;
+        _noticeTimer?.Stop();
+        _notice.IsVisible = false;
+    }
+
+    /// <summary>Shows the window warmed — the reverse of the invisible warm-up below.</summary>
+    public void ShowWarmed(Window owner)
+    {
+        Opacity = 1;
+        ShowInTaskbar = true;
+        ShowActivated = true;
+        Show(owner);
+
+        // Again, after the show: the value was set while the window was hidden, and a windowing
+        // backend that applies opacity at map time keeps the glass it mapped with — visible to
+        // the toolkit, invisible on the screen — unless it is asserted on the mapped window.
+        Opacity = 1;
+        Activate();
+        Log.Info($"The warm window shows at {Position} sized {Width}x{Height}, opacity {Opacity}.");
+    }
+
+    /// <summary>
+    /// Shows the window so its engine spawns, without the reader seeing a window: fully
+    /// transparent, unactivated and off the taskbar. The compositor honours the opacity, so
+    /// nothing flashes; the tree attaches, which is what the engine's life is gated on.
+    /// </summary>
+    public void ShowInvisible(Window owner)
+    {
+        Opacity = 0;
+        ShowInTaskbar = false;
+        ShowActivated = false;
+        Show(owner);
+    }
+
     private void ShowMessage(DkimResult? verified = null)
     {
         Title = TitleOf(_message.Subject);

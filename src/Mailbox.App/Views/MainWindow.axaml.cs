@@ -254,19 +254,29 @@ public partial class MainWindow : Window
         {
             _harnessRan = true;
 
-            // One post per command, as a person's presses arrive — not all of them in one pass of
+            // One pass per command, as a person's presses arrive — not all of them in one pass of
             // the loop. A command that reloads the list replaces every row with a fresh object,
             // and the next command in the same pass then acts on a selection that no longer holds
             // anything: pressing the flag command twice reported the second press as a no-op and
             // left the message flagged rather than complete, which reads exactly like a command
             // that does not work. MAILBOX_KEY has posted one per pass for this reason since it was
-            // written; this had not.
-            Opened += (_, _) =>
+            // written; this had not. And a pose that must let something settle first says so in
+            // the list itself: `wait-5000` between two ids holds the next press that long, which
+            // is how anything driven by idle-time machinery is caught up with.
+            Opened += (_, _) => Dispatcher.UIThread.Post(async () =>
             {
                 foreach (var id in run.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                 {
                     var one = id;
-                    Dispatcher.UIThread.Post(
+
+                    if (one.StartsWith("wait-", StringComparison.OrdinalIgnoreCase)
+                        && int.TryParse(one["wait-".Length..], out var pause))
+                    {
+                        await System.Threading.Tasks.Task.Delay(pause);
+                        continue;
+                    }
+
+                    await Dispatcher.UIThread.InvokeAsync(
                         () =>
                         {
                             Log.Info($"Harness: running {one}.");
@@ -302,7 +312,7 @@ public partial class MainWindow : Window
                         },
                         DispatcherPriority.Background);
                 }
-            };
+            }, DispatcherPriority.Background);
         }
 
         // Links the posed selection to whoever the value names, and reads both cards back —
@@ -3158,6 +3168,7 @@ public partial class MainWindow : Window
         };
 
         ShowSelectedMessage(shell);
+        PrewarmMessageWindow(shell);
     }
 
     // ---- Read by looking: the Reading Pane options ---------------------------------------------
@@ -3796,14 +3807,98 @@ public partial class MainWindow : Window
             return;
         }
 
+        var context = shell.SelectedMessage is { } row
+            ? new OpenedMessageContext(row.Address, row.Id, row.FolderId)
+            : null;
+
+        // The warm window first: its engine is already alive, so the body is on screen for the
+        // cost of a navigation rather than a process. Wiring and the close hold-back are still
+        // attached from its first life; Replace is the same journey stepping makes.
+        if (_warmMessageWindow is { } warm)
+        {
+            _warmMessageWindow = null;
+            warm.ResetForReuse();
+            warm.Replace(message, _openRaw, Verified(shell), context);
+            warm.ShowWarmed(this);
+            Log.Info("The warm message window takes the message.");
+            return;
+        }
+
         var window = new MessageWindow(
-            App.Themes, () => shell.CurrentMail, message, _openRaw, Verified(shell),
-            shell.SelectedMessage is { } row
-                ? new OpenedMessageContext(row.Address, row.Id, row.FolderId)
-                : null);
+            App.Themes, () => shell.CurrentMail, message, _openRaw, Verified(shell), context);
 
         WireMessageWindow(shell, window);
+        HoldWarmOnClose(window);
         window.Show(this);
+    }
+
+    /// <summary>The one message window kept alive and hidden between readings, engine and all.</summary>
+    private MessageWindow? _warmMessageWindow;
+
+    /// <summary>
+    /// Turns this window's close into a hide, so the next open pays a navigation instead of an
+    /// engine spawn.
+    /// </summary>
+    /// <remarks>
+    /// Only a close the reader asked for is held back — a window dying because the application
+    /// or its owner is shutting down must actually die, or the hold-back would block the
+    /// shutdown it is cancelling. One window is kept: the second simultaneous window closes for
+    /// real, since a pool of engines would cost a render process of memory apiece.
+    /// </remarks>
+    private void HoldWarmOnClose(MessageWindow window)
+    {
+        window.Closing += (_, e) =>
+        {
+            if (e.CloseReason != WindowCloseReason.WindowClosing || _warmMessageWindow is not null) return;
+
+            e.Cancel = true;
+            window.Hide();
+            _warmMessageWindow = window;
+            Log.Info("The message window is kept warm for the next open.");
+        };
+    }
+
+    /// <summary>
+    /// Builds the warm window before the first double-click asks for it, so even the first
+    /// message opens onto a living engine.
+    /// </summary>
+    /// <remarks>
+    /// The engine's life is gated on being shown, so the warm-up shows the window fully
+    /// transparent and unactivated, gives the engine a moment to come up, and hides it into
+    /// the pool. Idle priority and a posed-run gate keep it out of startup's way and out of
+    /// captures — except when a pose asks for it by name, which is how it is verified.
+    /// </remarks>
+    private void PrewarmMessageWindow(ShellViewModel shell)
+    {
+        var wanted = (Environment.GetEnvironmentVariable("MAILBOX_STATE") ?? string.Empty)
+            .Contains("warm-window", StringComparison.OrdinalIgnoreCase);
+        if (Mailbox.App.Theming.WindowCapture.IsRequested && !wanted) return;
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_warmMessageWindow is not null) return;
+
+            var window = new MessageWindow(
+                App.Themes, () => shell.CurrentMail, new MimeKit.MimeMessage(), raw: null);
+            WireMessageWindow(shell, window);
+            HoldWarmOnClose(window);
+            window.ShowInvisible(this);
+
+            DispatcherTimer.RunOnce(() =>
+            {
+                if (_warmMessageWindow is not null || !window.IsVisible)
+                {
+                    // A reader beat the warm-up to it, or something closed the window: let this
+                    // one go rather than pool a window in an unknown state.
+                    if (window.IsVisible) window.Close();
+                    return;
+                }
+
+                window.Hide();
+                _warmMessageWindow = window;
+                Log.Info("A message window is warmed and waiting.");
+            }, TimeSpan.FromSeconds(3));
+        }, DispatcherPriority.ApplicationIdle);
     }
 
     /// <summary>
@@ -6952,8 +7047,10 @@ public partial class MainWindow : Window
             return "not a desktop lifetime";
         }
 
+        // Visible ones only: the answer is what a reader can see, and the warm message window
+        // waiting hidden in its pool is machinery, not an answer.
         var others = desktop.Windows
-            .Where(w => !ReferenceEquals(w, this))
+            .Where(w => !ReferenceEquals(w, this) && w.IsVisible)
             .Select(w => string.IsNullOrWhiteSpace(w.Title) ? w.GetType().Name : w.Title)
             .ToList();
 

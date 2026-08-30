@@ -562,8 +562,10 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
     /// screen. Proven by damaging the page on a timer and photographing the window from
     /// outside: exports resumed at once and the text appeared. So after every successful load,
     /// an invisible style flick runs through two animation frames — real damage with no visible
-    /// effect — and the export it forces carries the finished paint. Twice, a few hundred
-    /// milliseconds apart, for the load whose first nudge lands before the text has been drawn.
+    /// effect — and the export it forces carries the finished paint. A handful of them on a
+    /// short cadence rather than two far apart: the reader is watching this gap, and the paint
+    /// becomes visible at the first flick after the text is rasterised, so the cadence is the
+    /// worst case a small message waits.
     /// </remarks>
     private static async Task NudgeFrameOutAsync(NativeWebView web)
     {
@@ -574,11 +576,12 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
             + " });";
         try
         {
-            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(
-                async () => await web.InvokeScript(nudge));
-            await Task.Delay(400);
-            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(
-                async () => await web.InvokeScript(nudge));
+            for (var i = 0; i < 5; i++)
+            {
+                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(
+                    async () => await web.InvokeScript(nudge));
+                await Task.Delay(120);
+            }
         }
         catch
         {
