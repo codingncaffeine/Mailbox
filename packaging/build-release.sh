@@ -26,9 +26,17 @@ dotnet publish src/Mailbox.App/Mailbox.App.csproj -c Release -r linux-x64 \
 cp LICENSE "$PUB/LICENSE"
 cp packaging/NOTICES.txt "$PUB/NOTICES.txt"
 cp assets/fonts/Selawik-LICENSE.txt "$PUB/Selawik-LICENSE.txt"
+
+# The runtime's LTTng tracing shim is dlopened only when tracing is asked for, and it wants a
+# library none of the targets ship. Tracing is not a mail feature; the dependency sweep's bar
+# is that nothing in the package wants anything the package did not bring.
+rm -f "$PUB/libcoreclrtraceptprovider.so"
 mkdir -p "$PUB/packaging"
 cp packaging/mailbox.desktop packaging/install-desktop-files.sh "$PUB/packaging/"
 cp packaging/io.github.codingncaffeine.Mailbox.metainfo.xml "$PUB/packaging/"
+# The AUR package builds from this tarball and installs the hardened launcher out of it, so
+# the launcher has to travel: without this line the PKGBUILD's package() has nothing to read.
+cp packaging/mailbox-launcher.sh "$PUB/packaging/"
 mkdir -p "$PUB/assets/icons"
 cp assets/icons/mailbox-*.png "$PUB/assets/icons/"
 
