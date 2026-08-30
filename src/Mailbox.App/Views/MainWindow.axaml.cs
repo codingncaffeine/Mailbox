@@ -5433,6 +5433,7 @@ public partial class MainWindow : Window
         if (id == MailCommands.NewEmail.Id) { NewMessage(); return; }
         if (id == ViewCommands.ShowProgress.Id) { ShowProgressDialog(shell); return; }
         if (id == ViewCommands.Zoom.Id) { ShowZoomDialog(shell); return; }
+        if (id == MailCommands.AdvancedFind.Id) { ShowAdvancedFind(shell); return; }
         if (id == MailCommands.ViewSource.Id) { ShowMessageSource(shell); return; }
         if (id == MailCommands.TrackerReport.Id) { _ = _reading?.ShowTrackerReportAsync(); return; }
         if (id == MailCommands.AuthenticationDetails.Id) { _ = _reading?.ShowAuthenticationAsync(); return; }
@@ -7930,6 +7931,26 @@ public partial class MainWindow : Window
     /// reading pane is doing. The button used to answer "not wired yet" while the figure below
     /// it worked, which the press sweep caught.
     /// </summary>
+    /// <summary>
+    /// Advanced Find: the dialog composes one query in the box's own grammar and the box runs
+    /// it, so scope, highlighting and the results list are exactly the search the reader knows.
+    /// </summary>
+    private async void ShowAdvancedFind(ShellViewModel shell)
+    {
+        try
+        {
+            if (await MailAdvancedFindDialog.AskAsync(this) is not { Length: > 0 } query) return;
+
+            shell.SearchText = query;
+            Log.Info($"Harness: advanced find — “{query}”.");
+        }
+        catch (Exception ex)
+        {
+            // An async void handler: an exception here would land on the dispatcher unobserved.
+            Log.Warn("The Advanced Find dialog failed.", ex);
+        }
+    }
+
     private async void ShowZoomDialog(ShellViewModel shell)
     {
         try

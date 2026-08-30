@@ -19,8 +19,8 @@ app.module.people	SILENT	acts on pixels; status, rows and windows cannot see it
 app.module.tasks	SILENT	acts on pixels; status, rows and windows cannot see it
 app.processheaders	ACTED
 app.redo	ACTED
-app.searchpeople	ACTED
 app.search	SILENT	moves focus to the search box, which no channel sees
+app.searchpeople	ACTED
 app.sendall	ACTED
 app.sendreceive.all	ACTED
 app.sendreceive.groups	SILENT	opens its flyout; the run log carries the menu read-back
@@ -45,14 +45,14 @@ calendar.new.calendar	ACTED
 calendar.new.items	SILENT	acts on pixels; status, rows and windows cannot see it
 calendar.new.meeting	ACTED
 calendar.next7	SILENT	acts on pixels; status, rows and windows cannot see it
+calendar.open	SILENT	acts on pixels; status, rows and windows cannot see it
 calendar.open.file	SILENT	opens a system file picker, which is no window of the app's
 calendar.open.internet	ACTED
-calendar.open	SILENT	acts on pixels; status, rows and windows cannot see it
 calendar.options	ACTED
 calendar.overlay	ACTED
+calendar.share	SILENT	acts on pixels; status, rows and windows cannot see it
 calendar.share.email	ACTED
 calendar.share.publish	ACTED
-calendar.share	SILENT	acts on pixels; status, rows and windows cannot see it
 calendar.timescale	SILENT	opens its flyout; the run log carries the menu read-back
 calendar.today	SILENT	a no-op in the pose: the pinned clock already shows today
 calendar.view.day	SILENT	acts on pixels; status, rows and windows cannot see it
@@ -63,8 +63,8 @@ calendar.view.week	SILENT	acts on pixels; status, rows and windows cannot see it
 calendar.view.workweek	SILENT	acts on pixels; status, rows and windows cannot see it
 feeds.board.link	ACTED
 feeds.board.remove	ACTED
-feeds.boards	ACTED
 feeds.board.save	ACTED
+feeds.boards	ACTED
 feeds.categorize	SILENT	unproven: the sweep's seed carries no feeds to act on
 feeds.delete	SILENT	unproven: the sweep's seed carries no feeds to act on
 feeds.export.opml	ACTED
@@ -124,16 +124,17 @@ journal.view.calls	SILENT	acts on pixels; status, rows and windows cannot see it
 journal.view.entries	SILENT	acts on pixels; status, rows and windows cannot see it
 journal.view.timeline	SILENT	a no-op in the pose: the timeline is already the view
 journal.view.week	SILENT	acts on pixels; status, rows and windows cannot see it
+mail.advancedfind	ACTED	opens the Advanced Find dialog over the search grammar
 mail.archive	ACTED
 mail.authresults	ACTED
+mail.cleanup	SILENT	opens its flyout; the run log carries the menu read-back
 mail.cleanup.conversation	ACTED
 mail.cleanup.folder	ACTED
-mail.cleanup	SILENT	opens its flyout; the run log carries the menu read-back
 mail.cleanup.subfolders	ACTED
 mail.delete	ACTED
 mail.delete.permanent	ACTED
 mail.filter	SILENT	opens its flyout; the run log carries the menu read-back
-mail.find	NOTWIRED	the ribbon's Find; queued in USER-REQUESTS as Advanced Find
+mail.find	NOTWIRED	deliberate, and the declaration says why: the embedding exposes no find for the engine-drawn body
 mail.flag.toggle	ACTED
 mail.focus.focused	ACTED
 mail.focus.focused.always	ACTED
@@ -141,13 +142,13 @@ mail.focus.other	ACTED
 mail.focus.other.always	ACTED
 mail.forward	SILENT	acts on pixels; status, rows and windows cannot see it
 mail.ignore	ACTED
+mail.junk	SILENT	opens its flyout; the run log carries the menu read-back
 mail.junk.block	ACTED
 mail.junk.neverblock	ACTED
 mail.junk.neverblockdomain	ACTED
 mail.junk.neverblockgroup	ACTED
 mail.junk.notjunk	ACTED
 mail.junk.options	ACTED
-mail.junk	SILENT	opens its flyout; the run log carries the menu read-back
 mail.markunread	ACTED
 mail.meeting.reply	ACTED
 mail.move	SILENT	opens its flyout; the run log carries the menu read-back
@@ -157,17 +158,17 @@ mail.new.items	SILENT	opens its flyout; the run log carries the menu read-back
 mail.next	SILENT	acts on pixels; status, rows and windows cannot see it
 mail.open	ACTED
 mail.previous	SILENT	the selection is the newest row: there is no previous to step to
+mail.print	SILENT	hands the message to the engine's own print surface
 mail.print.list	ACTED
 mail.print.pdf	SILENT	hands off to a system save dialog; no app surface
-mail.print	SILENT	hands the message to the engine's own print surface
-mail.quicksteps	ACTED
 mail.quickstep.teamemail	ACTED
 mail.quickstep.tomanager	ACTED
+mail.quicksteps	ACTED
 mail.read	ACTED
 mail.readaloud	ACTED
 mail.recoverdeleted	ACTED
-mail.reply.all	SILENT	acts on pixels; status, rows and windows cannot see it
 mail.reply	SILENT	acts on pixels; status, rows and windows cannot see it
+mail.reply.all	SILENT	acts on pixels; status, rows and windows cannot see it
 mail.respond.more	SILENT	opens its flyout; the run log carries the menu read-back
 mail.rules	SILENT	opens its flyout; the run log carries the menu read-back
 mail.searchfolder.new	ACTED
@@ -233,7 +234,6 @@ tasks.view.simple	SILENT	acts on pixels; status, rows and windows cannot see it
 tasks.view.todo	SILENT	acts on pixels; status, rows and windows cannot see it
 view.addcolumns	ACTED
 view.applyto	ACTED
-view.arrangeby	SILENT	opens its flyout; the run log carries the menu read-back
 view.arrange.categories	ACTED
 view.arrange.date	ACTED
 view.arrange.flagdue	ACTED
@@ -242,9 +242,10 @@ view.arrange.flagstatus	ACTED
 view.arrange.from	ACTED
 view.arrange.size	ACTED
 view.arrange.to	ACTED
+view.arrangeby	SILENT	opens its flyout; the run log carries the menu read-back
+view.change	SILENT	opens its flyout; the run log carries the menu read-back
 view.change.compact	ACTED
 view.change.preview	ACTED
-view.change	SILENT	opens its flyout; the run log carries the menu read-back
 view.change.single	ACTED
 view.closeall	ACTED
 view.conversations	ACTED

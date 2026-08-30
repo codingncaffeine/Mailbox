@@ -508,6 +508,24 @@ public static class MailCommands
         AlsoGestures = ["F3"],
     };
 
+    /// <summary>
+    /// The reference reaches this by keyboard from anywhere and from Search Tools; there is no
+    /// Search Tools tab here, so the keyboard and Customize Ribbon are the doors — which is why
+    /// it ships out of the default layout rather than squeezed into a group the reference does
+    /// not draw it in.
+    /// </summary>
+    public static readonly MailboxCommand AdvancedFind = new()
+    {
+        Id = new("mail.advancedfind"),
+        Label = "Advanced Find",
+        Description = "Find messages by field — from, subject, dates, attachments — without typing search syntax.",
+        Icon = "search",
+        Category = "Find",
+        Scope = ModuleScope.Mail,
+        DefaultGesture = "Ctrl+Shift+F",
+        InDefaultLayout = false,
+    };
+
     public static readonly MailboxCommand AddressBook = new()
     {
         Id = new("app.addressbook"),
@@ -913,7 +931,7 @@ public static class MailCommands
         Reply, ReplyAll, Forward, Meeting, MoreRespond,
         MoveTo, Rules, QuickSteps,
         Unread, Categorize, FollowUp,
-        Search, AddressBook, FilterEmail,
+        Search, AdvancedFind, AddressBook, FilterEmail,
         SendReceiveAll, WorkOffline, Undo,
         Snooze, ViewSource, TrackerReport, AuthenticationDetails, Print, PrintToPdf, PrintList,
         RecoverDeleted, NewSearchFolder,
