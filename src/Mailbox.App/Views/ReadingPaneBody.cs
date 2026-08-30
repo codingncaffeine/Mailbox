@@ -723,6 +723,18 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
             return;
         }
 
+        // ShowText hands the surface to the text fallback — an empty selection does it, and a
+        // selection cleared by a folder switch does it again — and this is the only path that
+        // hands it back. A web view out of the tree has no engine behind it: a navigate into
+        // one attaches nothing, logs nothing and draws nothing, which reads as an empty pane
+        // over a perfectly healthy application.
+        if (!ReferenceEquals(_surface.Content, _web))
+        {
+            _surface.Content = _web;
+            if (Mailbox.App.Theming.WindowCapture.IsRequested)
+                Log.Info("Harness: reading surface — the web view takes the pane back.");
+        }
+
         try
         {
             // The dump run's hold, taken before the navigation so the capture cannot fire
@@ -806,7 +818,12 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
         _fallback.FontSize = MessageFontSize;
         Bind(_fallback, TextBlock.ForegroundProperty, "reading.infobar.text.brush");
 
-        if (_web is not null && !ReferenceEquals(_surface.Content, _fallbackHost)) _surface.Content = _fallbackHost;
+        if (_web is not null && !ReferenceEquals(_surface.Content, _fallbackHost))
+        {
+            _surface.Content = _fallbackHost;
+            if (Mailbox.App.Theming.WindowCapture.IsRequested)
+                Log.Info("Harness: reading surface — the text fallback takes the pane.");
+        }
     }
 
     /// <summary>

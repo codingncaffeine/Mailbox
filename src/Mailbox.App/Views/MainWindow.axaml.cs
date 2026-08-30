@@ -4286,6 +4286,25 @@ public partial class MainWindow : Window
                 // The reference's default: beside the list. A pose, because the scratch settings
                 // carry whatever the machine last chose and a capture must be able to say.
                 case "reading-right": shell.ReadingPaneAtBottom = false; shell.ReadingPaneVisible = true; break;
+
+                // The pane turned on mid-session, after the journey ordinary reading makes and
+                // no startup pose can: the selection cleared (a folder switch does it, and it
+                // hands the pane to the text fallback), a message selected through the real
+                // dispatcher, and only then the pane shown — which must pick up the message it
+                // was hidden and fallback-held for.
+                case "reading-late":
+                    Dispatcher.UIThread.Post(async () =>
+                    {
+                        await System.Threading.Tasks.Task.Delay(1000);
+                        shell.SelectedMessage = null;
+                        await System.Threading.Tasks.Task.Delay(400);
+                        shell.SelectedMessage = shell.Messages.FirstOrDefault();
+                        await System.Threading.Tasks.Task.Delay(400);
+                        shell.ReadingPaneAtBottom = false;
+                        shell.ReadingPaneVisible = true;
+                        Log.Info("Harness: the reading pane was turned on late.");
+                    }, DispatcherPriority.Background);
+                    break;
                 case "zoom-in": shell.ZoomIn.Execute(null); break;
                 case "zoom-out": shell.ZoomOut.Execute(null); break;
                 case "attachments": shell.Filter = ShellViewModel.ListFilter.HasAttachments; break;
