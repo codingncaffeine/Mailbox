@@ -123,6 +123,11 @@ public partial class MainWindow
             // the item over the page it was pressed on and leaves the page where it was.
             _today.AppointmentRequested += (_, id) => _ = OpenAppointmentByIdAsync(shell, id, andShowTheModule: false);
             _today.TaskRequested += (_, id) => _ = OpenTaskByIdAsync(shell, id, andShowTheModule: false);
+            _today.BorrowedRequested += (_, row) =>
+            {
+                if (row.IsMessage) OpenFlaggedMessage(shell, row);
+                else if (row.IsContact) OpenFlaggedContact(shell, row);
+            };
         }
 
         _today.Reload();

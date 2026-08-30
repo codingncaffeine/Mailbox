@@ -3342,6 +3342,9 @@ public partial class MainWindow : Window
 
         var folder = made.Account.Mail.AddSearchFolder(made.Name, made.Query, DateTimeOffset.UtcNow);
         shell.SelectSearchFolder(folder.Id);
+
+        // A sentence, as every ordinary folder verb writes one.
+        shell.StatusRight = $"Search folder “{made.Name}” created.";
     }
 
     /// <summary>
@@ -3434,9 +3437,11 @@ public partial class MainWindow : Window
             {
                 account.Mail.OrderFolders([.. children.OrderBy(f => f.Name, StringComparer.CurrentCultureIgnoreCase).Select(f => f.Id)]);
                 shell.Refresh();
-                shell.StatusRight = $"The {children.Count} folders under “{folder.Name}” sorted.";
+                shell.StatusRight = children.Count == 1
+                    ? $"The folder under “{folder.Name}” sorted."
+                    : $"The {children.Count} folders under “{folder.Name}” sorted.";
                 return Task.CompletedTask;
-            }, children.Count > 1);
+            }, children.Count > 0);
             Entry("Move Up", () => ReorderSibling(shell, account, siblings, at, -1), at > 0);
             Entry("Move Down", () => ReorderSibling(shell, account, siblings, at, 1), at >= 0 && at < siblings.Count - 1);
         }
@@ -3492,7 +3497,7 @@ public partial class MainWindow : Window
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             Log.Warn($"New Folder failed: {ex.Message}");
-            await Confirm.SayAsync(this, "Create New Folder", $"The folder could not be created: {ex.Message}");
+            await Confirm.SayAsync(this, "Create New Folder", $"The folder could not be created — {FolderTrouble(ex)}");
         }
     }
 
@@ -3515,14 +3520,17 @@ public partial class MainWindow : Window
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             Log.Warn($"Rename Folder failed: {ex.Message}");
-            await Confirm.SayAsync(this, "Rename Folder", $"The folder could not be renamed: {ex.Message}");
+            await Confirm.SayAsync(this, "Rename Folder", $"The folder could not be renamed — {FolderTrouble(ex)}");
         }
     }
 
     /// <summary>The picker every folder dialog is, with New… making folders the way New Folder does — on the server first for IMAP.</summary>
-    private FolderPickerDialog FolderPicker(string title, string? prompt, (OpenAccount, long?)? preselect, bool allowRoot, (OpenAccount, long)? exclude = null)
+    private FolderPickerDialog FolderPicker(string title, string? prompt, (OpenAccount, long?)? preselect, bool allowRoot, (OpenAccount, long)? exclude = null, OpenAccount? only = null)
     {
-        var dialog = new FolderPickerDialog(title, prompt, App.Accounts.All, preselect, allowRoot, exclude)
+        // A picker offers the destinations it will honour: Move and Copy act within one account,
+        // so they pass `only` and the other accounts' trees are simply not on the list.
+        IReadOnlyList<OpenAccount> accounts = only is { } one ? [one] : App.Accounts.All;
+        var dialog = new FolderPickerDialog(title, prompt, accounts, preselect, allowRoot, exclude)
         {
             MakeFolder = async (account, name, parent) =>
             {
@@ -3540,6 +3548,15 @@ public partial class MainWindow : Window
         return dialog;
     }
 
+    /// <summary>
+    /// A folder failure as a person reads one. The store's own words — "SQLite Error 19: UNIQUE
+    /// constraint failed: folders.account_id…" — stay in the log, where they are for.
+    /// </summary>
+    private static string FolderTrouble(Exception ex)
+        => ex is Microsoft.Data.Sqlite.SqliteException { SqliteErrorCode: 19 }
+            ? "a folder with that name is already there."
+            : "the change was refused; the log has the detail.";
+
     /// <summary>Ctrl+Y: choose a folder from any account and open it.</summary>
     private async Task GoToFolderAsync(ShellViewModel shell)
     {
@@ -3555,13 +3572,15 @@ public partial class MainWindow : Window
     private async Task MoveFolderAsync(ShellViewModel shell, OpenAccount account, Folder folder)
     {
         var dialog = FolderPicker("Move Folder", $"Move the selected folder to the folder:",
-            (account, folder.ParentId), allowRoot: true, exclude: (account, folder.Id));
+            (account, folder.ParentId), allowRoot: true, exclude: (account, folder.Id), only: account);
         await dialog.ShowDialog(this);
         if (dialog.Result is not { } chosen) return;
 
-        if (!string.Equals(chosen.Account.Account.Address, account.Account.Address, StringComparison.OrdinalIgnoreCase))
+        // The picker preselects the folder's own parent, so OK with nothing changed is a
+        // no-move: saying "moved" about it reported work that never happened.
+        if (chosen.Folder?.Id == folder.ParentId || (chosen.Folder is null && folder.ParentId is null))
         {
-            await Confirm.SayAsync(this, "Move Folder", "A folder can be moved within its own account. To put its mail in another account, move the messages.");
+            shell.StatusRight = $"“{folder.Name}” is already there.";
             return;
         }
 
@@ -3583,7 +3602,7 @@ public partial class MainWindow : Window
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             Log.Warn($"Move Folder failed: {ex.Message}");
-            await Confirm.SayAsync(this, "Move Folder", $"The folder could not be moved: {ex.Message}");
+            await Confirm.SayAsync(this, "Move Folder", $"The folder could not be moved — {FolderTrouble(ex)}");
         }
     }
 
@@ -3591,15 +3610,9 @@ public partial class MainWindow : Window
     private async Task CopyFolderAsync(ShellViewModel shell, OpenAccount account, Folder folder)
     {
         var dialog = FolderPicker("Copy Folder", $"Copy the selected folder to the folder:",
-            (account, folder.ParentId), allowRoot: true, exclude: (account, folder.Id));
+            (account, folder.ParentId), allowRoot: true, exclude: (account, folder.Id), only: account);
         await dialog.ShowDialog(this);
         if (dialog.Result is not { } chosen) return;
-
-        if (!string.Equals(chosen.Account.Account.Address, account.Account.Address, StringComparison.OrdinalIgnoreCase))
-        {
-            await Confirm.SayAsync(this, "Copy Folder", "A folder can be copied within its own account. To put its mail in another account, copy the messages.");
-            return;
-        }
 
         try
         {
@@ -3611,7 +3624,7 @@ public partial class MainWindow : Window
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             Log.Warn($"Copy Folder failed: {ex.Message}");
-            await Confirm.SayAsync(this, "Copy Folder", $"The folder could not be copied: {ex.Message}");
+            await Confirm.SayAsync(this, "Copy Folder", $"The folder could not be copied — {FolderTrouble(ex)}");
         }
     }
 
@@ -3630,7 +3643,7 @@ public partial class MainWindow : Window
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             Log.Warn($"Delete Folder failed: {ex.Message}");
-            await Confirm.SayAsync(this, "Delete Folder", $"The folder could not be deleted: {ex.Message}");
+            await Confirm.SayAsync(this, "Delete Folder", $"The folder could not be deleted — {FolderTrouble(ex)}");
         }
     }
 
@@ -3712,6 +3725,7 @@ public partial class MainWindow : Window
                 if (dialog.Result is not { } edited) return;
                 account.Mail.UpdateSearchFolder(search.Id, edited.Name, edited.Query);
                 shell.SelectSearchFolder(search.Id);
+                shell.StatusRight = $"Search folder “{edited.Name}” updated.";
             };
             flyout.Items.Add(customize);
 
@@ -3722,6 +3736,7 @@ public partial class MainWindow : Window
                 if (string.IsNullOrWhiteSpace(name)) return;
                 account.Mail.UpdateSearchFolder(search.Id, name.Trim(), search.Query);
                 shell.SelectSearchFolder(search.Id);
+                shell.StatusRight = $"Search folder renamed to “{name.Trim()}”.";
             };
             flyout.Items.Add(rename);
 
@@ -3733,6 +3748,7 @@ public partial class MainWindow : Window
                 if (!go) return;
                 account.Mail.DeleteSearchFolder(search.Id);
                 shell.Refresh();
+                shell.StatusRight = $"Search folder “{search.Name}” deleted.";
             };
             flyout.Items.Add(delete);
         }

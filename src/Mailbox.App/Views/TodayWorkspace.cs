@@ -86,6 +86,9 @@ public sealed class TodayWorkspace : Border
 
     public event EventHandler<long>? TaskRequested;
 
+    /// <summary>A borrowed row — flagged mail, or a flagged contact — whose own window should open.</summary>
+    public event EventHandler<TaskRow>? BorrowedRequested;
+
     /// <summary>What the status bar says while this page is up.</summary>
     public string Status { get; private set; } = string.Empty;
 
@@ -169,14 +172,16 @@ public sealed class TodayWorkspace : Border
 
             // A borrowed row is a message or a contact, and its id belongs to another store's
             // numbering: asking the task module to open one would open whatever task happened to
-            // share the number.
-            var borrowed = row.IsBorrowed;
+            // share the number. It is still a link — the page's rule is that everything on it
+            // opens its own window — so it goes out under its own name.
+            var taken = row;
             rows.Add(Line(
                 "Tasks",
                 row.Task.Due is { } due ? $"{row.Summary}   ({due.Wall:d})" : row.Summary,
                 () =>
                 {
-                    if (!borrowed) TaskRequested?.Invoke(this, id);
+                    if (taken.IsBorrowed) BorrowedRequested?.Invoke(this, taken);
+                    else TaskRequested?.Invoke(this, id);
                 }));
         }
 
@@ -195,14 +200,13 @@ public sealed class TodayWorkspace : Border
             var mail = account.Mail;
 
             // The three the reference lists, and the counts it lists them with: what is unread in
-            // the Inbox, and what is simply there in Drafts and the Outbox.
+            // the Inbox, and what is simply there in Drafts and the Outbox — all three at zero
+            // too, because one rule for three rows is the whole of what the column says.
             foreach (var folder in mail.Folders(account.Account.Id)
                          .Where(f => f.Role is FolderRole.Inbox or FolderRole.Drafts or FolderRole.Outbox)
                          .OrderBy(f => f.Role))
             {
                 var count = folder.Role == FolderRole.Inbox ? folder.Unread : folder.Total;
-                if (count == 0 && folder.Role != FolderRole.Inbox) continue;
-
                 total += count;
                 var name = folder.Name;
                 var whose = address;

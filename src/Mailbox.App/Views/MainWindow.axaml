@@ -1058,11 +1058,17 @@
                                        Margin="0,0,0,8"
                                        TextWrapping="Wrap" />
 
-                            <StackPanel Grid.Row="1" Grid.Column="0" Spacing="2">
+                            <!-- Trimmed with an ellipsis rather than hard-cut by the pane's clip:
+                                 beside the docked To-Do Bar this column is squeezed to a sliver,
+                                 and the sender is the one thing the header exists to say — so it
+                                 keeps a least width instead of vanishing under the buttons. -->
+                            <StackPanel Grid.Row="1" Grid.Column="0" Spacing="2" MinWidth="90">
                                 <TextBlock Text="{Binding ReadingFrom}"
-                                           FontWeight="SemiBold" />
+                                           FontWeight="SemiBold"
+                                           TextTrimming="CharacterEllipsis" />
                                 <TextBlock Text="{Binding SelectedMessage.ToLine}"
-                                           Classes="small secondary" />
+                                           Classes="small secondary"
+                                           TextTrimming="CharacterEllipsis" />
                             </StackPanel>
 
                             <!-- the reference application puts Reply / Reply All / Forward at the top right of

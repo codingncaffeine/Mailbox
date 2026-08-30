@@ -24,7 +24,9 @@ public sealed class NewFolderDialog : Window
         var name = new TextBox { Width = 360, HorizontalAlignment = HorizontalAlignment.Left };
         var contains = new ComboBox { Width = 200, HorizontalAlignment = HorizontalAlignment.Left, ItemsSource = new[] { "Mail and Post Items" }, SelectedIndex = 0 };
 
-        var folders = account.Mail.Folders(account.Account.Id).Where(f => f.Role is not (FolderRole.Outbox or FolderRole.Drafts)).ToList();
+        // Every folder, Drafts and the Outbox included: the Move and Copy picker beside this
+        // one lists both, and two "where to put a folder" trees that disagree read as a bug.
+        var folders = account.Mail.Folders(account.Account.Id).ToList();
         var ordered = new List<Folder?> { null };
         void Add(long? parent) { foreach (var f in folders.Where(f => f.ParentId == parent).OrderBy(f => f.Ordinal).ThenBy(f => f.Name)) { ordered.Add(f); Add(f.Id); } }
         Add(null);

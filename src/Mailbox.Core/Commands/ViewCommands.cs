@@ -264,7 +264,7 @@ public static class ViewCommands
     {
         Id = new("app.apps"),
         Label = "All Apps",
-        Description = "Open the apps list — Folders, Notes, Shortcuts and anything installed.",
+        Description = "Open the apps list — the plugins installed here.",
         Icon = "apps",
         IconTint = "ribbon.icon.blue",
         Category = "Add-ins",
