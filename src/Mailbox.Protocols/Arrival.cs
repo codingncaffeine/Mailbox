@@ -44,9 +44,30 @@ public interface ISentHandler
 }
 
 /// <summary>Runs several handlers in order, each seeing where the last one left the message.</summary>
-public sealed class ArrivalPipeline(params IArrivalHandler[] handlers) : IArrivalHandler
+public sealed class ArrivalPipeline : IArrivalHandler
 {
-    private readonly IReadOnlyList<IArrivalHandler> _handlers = handlers;
+    private readonly IReadOnlyList<IArrivalHandler> _handlers;
+
+    public ArrivalPipeline(params IArrivalHandler[] handlers)
+    {
+        ArgumentNullException.ThrowIfNull(handlers);
+
+        // Refused at construction rather than survived per message: a null here is a field read
+        // before its assignment, and the per-handler catch below would otherwise turn that
+        // wiring mistake into a warning on every arriving message — a sync that looks like it
+        // works while one handler silently never runs.
+        for (var i = 0; i < handlers.Length; i++)
+        {
+            if (handlers[i] is null)
+            {
+                throw new ArgumentException(
+                    $"Arrival handler {i} is null — a handler wired before it was constructed.",
+                    nameof(handlers));
+            }
+        }
+
+        _handlers = handlers;
+    }
 
     public long? Handle(MailRepository mail, Folder folder, long messageId, MimeMessage message)
     {

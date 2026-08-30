@@ -407,6 +407,21 @@ public class RulesTests
         Assert.Null(repo.GetMessage(other));
     }
 
+    /// <summary>
+    /// A null handler is a field read before its assignment, and the pipeline's per-handler
+    /// catch would turn it into a warning on every arriving message — a sync that looks like
+    /// it works while one handler silently never runs. Construction is where it must fail.
+    /// </summary>
+    [Fact]
+    public void ANullHandlerIsRefusedWhenThePipelineIsBuilt()
+    {
+        var seen = new List<string>();
+        var real = new Recording("real", seen, (_, folder, _) => folder.Id);
+
+        var refused = Assert.Throws<ArgumentException>(() => new ArrivalPipeline(real, null!));
+        Assert.Contains("handler 1", refused.Message);
+    }
+
     private sealed class Recording(string name, List<string> seen, Func<MailRepository, Folder, long, long?> act) : IArrivalHandler
     {
         public long? Handle(MailRepository mail, Folder folder, long messageId, MimeMessage message)

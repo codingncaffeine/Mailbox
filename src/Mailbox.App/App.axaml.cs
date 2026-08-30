@@ -724,6 +724,14 @@ public partial class App : Application
         // follow-up today" writes a date, and a date written from a second clock disagrees with
         // the one the list is grouping by the moment MAILBOX_TODAY pins anything. Live and
         // identical to the machine's in an ordinary run — see PosedClock.
+        //
+        // The feed lists stand before the pipeline that carries their router: the pipeline takes
+        // its handlers by value, so a field assigned below this line rides along as null — and a
+        // null handler throws on every arriving message while the ones behind it still run,
+        // which reads as a working sync with a warning in the log and no newsletters in Feeds.
+        Feeds = new Mailbox.Core.Feeds.FeedSubscriptions(Settings);
+        Mutes = new Mailbox.Core.Feeds.MuteFilters(Settings);
+        Newsletters = new Mailbox.Protocols.NewsletterRouter(Feeds);
         Rules = new RulesHandler(() => Mailbox.Core.PosedClock.Now);
         Arrival = new ArrivalPipeline(
             Junk, new IgnoreHandler(), new FocusedInboxHandler(), Rules, Newsletters, Plugins.Arrivals);
@@ -768,9 +776,6 @@ public partial class App : Application
         Favourites = new Mailbox.Core.Folders.Favourites(Settings);
         ContactFavourites = new Mailbox.Core.People.ContactFavourites(Settings);
         Security = new SecurityOptions(Settings);
-        Feeds = new Mailbox.Core.Feeds.FeedSubscriptions(Settings);
-        Mutes = new Mailbox.Core.Feeds.MuteFilters(Settings);
-        Newsletters = new Mailbox.Protocols.NewsletterRouter(Feeds);
 
         // Built here with the other settings-backed lists, and handed to the sync service, which
         // was made further up before this existed.

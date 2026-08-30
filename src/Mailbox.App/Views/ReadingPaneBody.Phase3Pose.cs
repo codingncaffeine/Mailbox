@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Mailbox.Core.Diagnostics;
 
@@ -103,6 +104,107 @@ public sealed partial class ReadingPaneBody
         LogBars();
         LogAttachments();
         PressForHarness();
+    }
+
+    /// <summary>Holds the capture while the engine is still drawing, so the answer below exists.</summary>
+    private IDisposable? _engineHold;
+
+    /// <summary>Takes a hold for the load that is about to start, releasing any earlier one.</summary>
+    /// <remarks>
+    /// The pane is refreshed more than once as a selection lands, and each load supersedes the
+    /// last — so the hold moves to the newest load rather than stacking, and releasing twice is
+    /// safe by <see cref="Mailbox.App.Theming.WindowCapture.Hold"/>'s own contract. Two guards
+    /// keep a hold from outliving its answer: a pane that is not visible loads into an engine
+    /// that never initialises — the shell's own pane still refreshes with the reading pane off —
+    /// so no hold is taken for it; and a watchdog lets go after fifteen seconds regardless,
+    /// because a hold that waits on an engine that never answers is a run that never ends.
+    /// </remarks>
+    private void HoldForEngine()
+    {
+        if (!DumpRequested || !Mailbox.App.Theming.WindowCapture.IsRequested) return;
+
+        // Attached and not visible is the reading pane switched off: its engine will never
+        // initialise, so a hold for it would only ever be the watchdog's to release. A pane
+        // that is not attached yet is a message window still being built — that one is about
+        // to be shown, and its engine's answer is the whole point of the hold.
+        if (TopLevel.GetTopLevel(this) is not null && !IsEffectivelyVisible) return;
+
+        _engineHold?.Dispose();
+        var hold = Mailbox.App.Theming.WindowCapture.Hold();
+        _engineHold = hold;
+
+        _ = Task.Delay(15_000).ContinueWith(
+            _ =>
+            {
+                if (ReferenceEquals(_engineHold, hold))
+                {
+                    Log.Warn($"Harness: reading engine — “{_message?.Subject}” never finished "
+                             + "loading within 15s (a pane that never attached never will; "
+                             + "a visible one that logs this never drew).");
+                }
+
+                hold.Dispose();
+            },
+            TaskScheduler.Default);
+    }
+
+    /// <summary>
+    /// Asks the engine what it actually drew, and writes the answer beside the sanitizer's.
+    /// </summary>
+    /// <remarks>
+    /// The pane's other read-backs stop at the document: what the sanitizer produced and what
+    /// was handed to the engine. Between that hand-off and the screen sits a whole web engine,
+    /// and a capture cannot arbitrate — the offscreen renderer regularly has no frame yet when
+    /// the settle timer fires, so a blank picture is expected even when everything worked. This
+    /// is the read-back for that last leg: once the engine says the load finished, it is asked
+    /// for the body's own text, which is the words a reader would see. A message whose document
+    /// says one thing and whose engine says nothing is exactly the failure nothing else here
+    /// can catch.
+    /// </remarks>
+    private async Task ReportEngineWordsAsync(bool loaded)
+    {
+        if (!DumpRequested || !Mailbox.App.Theming.WindowCapture.IsRequested) return;
+
+        try
+        {
+            if (!loaded)
+            {
+                Log.Warn("Harness: reading engine — the load did not succeed; nothing to ask.");
+                return;
+            }
+
+            if (_web is not { } web) return;
+
+            // On the dispatcher, which is where the engine's bridge lives; bounded, because a
+            // hold with no timeout turns an engine that never answers into a run that never ends.
+            object? answer = null;
+            var read = Dispatcher.UIThread.InvokeAsync(
+                async () => answer = await web.InvokeScript("document.body.innerText"));
+            var done = await Task.WhenAny(read, Task.Delay(10_000));
+
+            if (done != read)
+            {
+                Log.Warn("Harness: reading engine — no answer to the text read-back within 10s.");
+                return;
+            }
+
+            await read;
+
+            var words = System.Text.RegularExpressions.Regex
+                .Replace(answer?.ToString() ?? string.Empty, @"\s+", " ").Trim();
+
+            Log.Info($"Harness: reading engine — the engine draws {words.Length} character(s)"
+                     + (words.Length > 0 ? $": “{words[Math.Max(0, words.Length - 110)..]}”" : "."));
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Harness: reading engine — the text read-back failed.", ex);
+        }
+        finally
+        {
+            _engineHold?.Dispose();
+            _engineHold = null;
+        }
     }
 
     /// <summary>What a run asked to be pressed on the pane's bars, or null.</summary>

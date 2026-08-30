@@ -176,6 +176,40 @@ public class HtmlSanitizerTests
         Assert.Contains("class=\"lead\"", body, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The shape the reference's own composer sends: word-processor HTML, with the stylesheet
+    /// wrapped in an HTML comment, conditional comments hiding <c>&lt;xml&gt;</c> islands,
+    /// unquoted attribute values and namespaced <c>&lt;o:p&gt;</c> tags. The words and the
+    /// block structure must come through — a large share of real correspondence is written by
+    /// exactly this composer, and nothing else in these tests exercises its dialect.
+    /// </summary>
+    [Fact]
+    public void WordProcessorHtmlFromTheReferencesComposerKeepsItsWords()
+    {
+        var body = Body(
+            "<html xmlns:v=\"urn:schemas-microsoft-com:vml\" "
+            + "xmlns:o=\"urn:schemas-microsoft-com:office:office\" "
+            + "xmlns=\"http://www.w3.org/TR/REC-html40\"><head>"
+            + "<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=us-ascii\">"
+            + "<meta name=Generator content=\"Microsoft Word 15 (filtered medium)\">"
+            + "<style><!--\n/* Style Definitions */\np.MsoNormal, li.MsoNormal, div.MsoNormal\n"
+            + "\t{margin:0in;\n\tfont-size:12.0pt;}\n@page WordSection1\n\t{size:8.5in 11.0in;}\n"
+            + "div.WordSection1\n\t{page:WordSection1;}\n--></style>"
+            + "<!--[if gte mso 9]><xml>\n<o:shapedefaults v:ext=\"edit\" spidmax=\"1026\" />\n"
+            + "</xml><![endif]--></head>"
+            + "<body lang=EN-US style='word-wrap:break-word'><div class=WordSection1>"
+            + "<p class=MsoNormal>The words the reader came for<o:p></o:p></p></div></body></html>");
+
+        Assert.Contains("The words the reader came for", body, StringComparison.Ordinal);
+        Assert.Contains("class=\"WordSection1\"", body, StringComparison.Ordinal);
+        Assert.Contains("class=\"MsoNormal\"", body, StringComparison.Ordinal);
+
+        // The islands are a way of hiding markup from a sanitizer that reads comments as text.
+        Assert.DoesNotContain("shapedefaults", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("<xml", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("<o:p", body, StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>The head is transparent, not trusted: what is dropped inside one still is.</summary>
     [Theory]
     [InlineData("<title>Secret</title>", "Secret")]

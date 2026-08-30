@@ -71,6 +71,14 @@ done
 # procfs — so any one of them turns the first rendered message into a crash. What they would
 # mask is root's to write anyway (/proc/sys, /proc/kmsg), and sethostname is still refused by
 # the syscall filter, so keeping the engine's own sandbox costs nothing it actually held.
+#
+# mincore is admitted by name: the EGL loader probes its own mappings with it while the web
+# process brings up its display, and @system-service does not carry it — so the filter killed
+# the web process with SIGSYS on the first page load, after every whole-process wall above had
+# been taken down. The application stayed up and every message body was silently blank, which
+# is the worst failure shape this launcher can produce: nothing crashed, nothing logged, and
+# the reading pane's engine simply never finished a load. It is a read-only query about page
+# residency — it writes nothing and reaches nothing outside the process's own address space.
 # A terminal launch gets a pty so Ctrl+C reaches the application; a desktop launch has no
 # tty and takes the pipe.
 IO=--pipe
@@ -98,5 +106,5 @@ exec systemd-run --user --quiet --collect --wait "$IO" \
     --property=ProtectClock=yes \
     --property=RestrictRealtime=yes \
     --property=RestrictAddressFamilies="AF_UNIX AF_INET AF_INET6 AF_NETLINK" \
-    --property=SystemCallFilter="@system-service @mount seccomp" \
+    --property=SystemCallFilter="@system-service @mount seccomp mincore" \
     "$@"

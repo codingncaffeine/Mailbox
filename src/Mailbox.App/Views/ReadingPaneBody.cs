@@ -528,6 +528,10 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
             {
                 if (e.IsSuccess) Log.Debug("The reading pane loaded a message.");
                 else Log.Warn("The reading pane could not load the message.");
+
+                // Under the dump gate only: the engine has finished loading, so it can be asked
+                // what it drew — which a capture cannot answer, racing the offscreen frame.
+                _ = ReportEngineWordsAsync(e.IsSuccess);
             };
 
             return _web;
@@ -674,6 +678,10 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
 
         try
         {
+            // The dump run's hold, taken before the navigation so the capture cannot fire
+            // between the two; released when the engine answers for what it drew.
+            HoldForEngine();
+
             // A base of about:blank, so a relative reference the sanitizer let through has
             // nowhere to resolve to.
             _web.NavigateToString(html, new Uri("about:blank"));
@@ -681,6 +689,8 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
         catch (Exception ex)
         {
             Log.Warn("The web engine would not load the message; showing text instead.", ex);
+            _engineHold?.Dispose();
+            _engineHold = null;
             _surface.Content = _fallbackHost;
 
             // Dispose rather than just forgetting it: an engine dropped while still in the tree
