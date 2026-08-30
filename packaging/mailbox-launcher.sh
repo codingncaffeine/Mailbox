@@ -24,12 +24,20 @@ CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/mailbox"
 STATE="${XDG_STATE_HOME:-$HOME/.local/state}/mailbox"
 
 # The single-instance socket's own directory: the runtime directory stays read-only to the
-# unit, and this is the one place in it the application may bind.
+# unit, and the named carve-outs below are the only places in it the application may write.
 RUNTIME="${XDG_RUNTIME_DIR:-/tmp}/mailbox"
+
+# The web engine builds its own sandbox in the runtime directory — bubblewrap bookkeeping
+# under .flatpak, its D-Bus and accessibility proxy sockets under wpe — and it aborts the
+# whole process the first time a message renders if it cannot. Two carve-outs rather than
+# opening the runtime directory: everything else in there (other applications' sockets, the
+# session's own) stays out of reach.
+WPE_RUNTIME="${XDG_RUNTIME_DIR:-/tmp}/wpe"
+WEBKIT_RUNTIME="${XDG_RUNTIME_DIR:-/tmp}/.flatpak"
 
 # The write paths must exist before the namespace is built: a ReadWritePaths entry that is
 # missing is skipped (the "-" prefix), and the application could then never create it.
-mkdir -p "$DATA" "$CONFIG" "$STATE" "$RUNTIME"
+mkdir -p "$DATA" "$CONFIG" "$STATE" "$RUNTIME" "$WPE_RUNTIME" "$WEBKIT_RUNTIME"
 
 # Where a saved attachment or an export lands by default. Everything else under $HOME is
 # read-only to the unit; a save elsewhere fails with the picker's own error, which is the
@@ -52,7 +60,17 @@ done
 
 # MemoryDenyWriteExecute stays off: the .NET JIT needs W^X mappings and the runtime aborts
 # without them. RestrictNamespaces stays off: the web engine builds its own sandbox out of
-# namespaces, and taking them away would trade its sandbox for this one.
+# namespaces, and taking them away would trade its sandbox for this one. The syscall filter
+# admits @mount and seccomp for the same reason — bubblewrap assembles that sandbox out of
+# mount, pivot_root and seccomp calls, and under @system-service alone its helper dies on
+# SIGSYS the first time a message renders.
+#
+# ProtectKernelTunables, ProtectKernelLogs and ProtectHostname stay off, each proven alone to
+# be fatal: all three overmount pieces of /proc, the kernel refuses to mount a fresh procfs in
+# a user namespace while the parent's is partly masked, and the engine's sandbox needs that
+# procfs — so any one of them turns the first rendered message into a crash. What they would
+# mask is root's to write anyway (/proc/sys, /proc/kmsg), and sethostname is still refused by
+# the syscall filter, so keeping the engine's own sandbox costs nothing it actually held.
 # A terminal launch gets a pty so Ctrl+C reaches the application; a desktop launch has no
 # tty and takes the pipe.
 IO=--pipe
@@ -68,18 +86,17 @@ exec systemd-run --user --quiet --collect --wait "$IO" \
     --property=ReadWritePaths="$CONFIG" \
     --property=ReadWritePaths="$STATE" \
     --property=ReadWritePaths="$RUNTIME" \
+    --property=ReadWritePaths="$WPE_RUNTIME" \
+    --property=ReadWritePaths="$WEBKIT_RUNTIME" \
     --property=ReadWritePaths=-"$DOWNLOADS" \
     --property=PrivateTmp=yes \
     --property=CapabilityBoundingSet= \
     --property=RestrictSUIDSGID=yes \
     --property=LockPersonality=yes \
-    --property=ProtectKernelTunables=yes \
     --property=ProtectKernelModules=yes \
-    --property=ProtectKernelLogs=yes \
     --property=ProtectControlGroups=yes \
     --property=ProtectClock=yes \
-    --property=ProtectHostname=yes \
     --property=RestrictRealtime=yes \
     --property=RestrictAddressFamilies="AF_UNIX AF_INET AF_INET6 AF_NETLINK" \
-    --property=SystemCallFilter=@system-service \
+    --property=SystemCallFilter="@system-service @mount seccomp" \
     "$@"

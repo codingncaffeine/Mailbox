@@ -590,10 +590,21 @@ public partial class App : Application
         RestoreAppearance();
         WatchThemeFiles(themesDirectory);
 
-        // A directory under the harness's own path when capturing, so a screenshot run never
-        // touches real mail.
+        // A capture run that names no store gets an empty scratch one, never the real thing —
+        // the settings above are a throwaway copy for exactly this reason, and the store is more
+        // so: opening the real one under a newer tree migrates it forward in place, and the
+        // installed build then refuses to start until it is rebuilt. pim.db, feeds.db and the
+        // keyring all sit beside the accounts directory, so one path guards the lot. A pose that
+        // wants mail in the picture says MAILBOX_STORE, which every batch runner already does.
         AccountOrder = new SettingsAccountOrder(Settings);
-        var accountsDirectory = Environment.GetEnvironmentVariable("MAILBOX_STORE") ?? AccountStores.DefaultDirectory();
+        var accountsDirectory = Environment.GetEnvironmentVariable("MAILBOX_STORE");
+        if (string.IsNullOrEmpty(accountsDirectory))
+        {
+            accountsDirectory = WindowCapture.IsRequested
+                ? System.IO.Directory.CreateDirectory(System.IO.Path.Combine(
+                    System.IO.Path.GetTempPath(), $"mailbox-store-{Environment.ProcessId}", "accounts")).FullName
+                : AccountStores.DefaultDirectory();
+        }
         Accounts = new AccountStores(accountsDirectory, AccountOrder);
 
         // feeds.db sits beside the accounts directory, for the same reason pim.db does — and
