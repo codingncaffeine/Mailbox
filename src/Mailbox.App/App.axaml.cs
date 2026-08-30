@@ -541,6 +541,55 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        try
+        {
+            StartUp();
+        }
+        catch (Exception failure) when (ShowStartupFailure(failure))
+        {
+            // Swallowed on purpose: the failure window is the application now. It says what
+            // happened, and closing it ends a process whose exit code still says failure.
+        }
+    }
+
+    /// <summary>
+    /// A startup that cannot proceed says so on screen. Seven launches died invisibly in one
+    /// evening to a store written by a newer build — the log had the exact sentence and the
+    /// reader saw nothing. False hands the exception on to the crash log unchanged: a posed
+    /// run reads logs and must exit rather than wait on a window, and a failure before the
+    /// lifetime exists has nowhere to show one.
+    /// </summary>
+    private bool ShowStartupFailure(Exception failure)
+    {
+        if (WindowCapture.IsRequested)
+        {
+            Log.Info($"Harness: the startup failure window would say — {failure.Message}");
+            return false;
+        }
+
+        if (ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop) return false;
+
+        try
+        {
+            Log.Error("Startup failed; showing the failure window.", failure);
+            Environment.ExitCode = 1;
+
+            var window = new Views.StartupFailureWindow(failure);
+            desktop.MainWindow = window;
+            desktop.ShutdownMode = ShutdownMode.OnMainWindowClose;
+            window.Show();
+            window.Activate();
+            return true;
+        }
+        catch
+        {
+            // The window itself failing to build must not eat the original failure.
+            return false;
+        }
+    }
+
+    private void StartUp()
+    {
         // Composition root. Bundled typefaces register before the resolver is built, and font
         // resolution happens before the theme is composed, because typography tokens are
         // rewritten to families this machine can actually draw.
