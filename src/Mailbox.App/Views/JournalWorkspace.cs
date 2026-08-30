@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Mailbox.Controls.Journal;
 using Mailbox.Scheduling;
@@ -12,7 +13,7 @@ namespace Mailbox.App.Views;
 /// </summary>
 /// <remarks>
 /// The same shape the other PIM modules have. What it does not have is the calendar's toolbar
-/// row: the timeline writes the span it is showing in its own top heading, and Today, Back and
+/// row: the timeline writes the months it is showing in its own top heading, and Today, Back and
 /// Forward are on the ribbon where the module's other commands are.
 /// </remarks>
 public sealed class JournalWorkspace : Border
@@ -22,7 +23,8 @@ public sealed class JournalWorkspace : Border
     private readonly JournalView _view = new();
     private readonly CollectionNavPane _navPane;
 
-    private JournalArrangement _arrangement = JournalArrangement.Timeline;
+    private JournalArrangement _arrangement = JournalArrangement.ByType;
+    private JournalArrangement _lastTimeline = JournalArrangement.ByType;
 
     public JournalWorkspace(PimRepository repository, DateOnly today, DayOfWeek firstDayOfWeek = DayOfWeek.Sunday)
     {
@@ -39,7 +41,9 @@ public sealed class JournalWorkspace : Border
         ClipToBounds = true;
         this[!BackgroundProperty] = new DynamicResourceExtension("list.background.brush");
 
-        _navPane = new CollectionNavPane(repository, CollectionKind.Journal, "My Journals");
+        // Only the folders that can put a row in this module: notes live next door, and a
+        // folder of them here would be a tick that can never change what the timeline shows.
+        _navPane = new CollectionNavPane(repository, CollectionKind.Journal, "My Journals", HoldsEntries);
         _navPane.VisibilityChanged += (_, _) => Reload();
 
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
@@ -50,6 +54,7 @@ public sealed class JournalWorkspace : Border
 
         _view.EntrySelected += (_, row) => { Selected = row; Changed?.Invoke(this, EventArgs.Empty); };
         _view.EntryActivated += (_, row) => EntryOpened?.Invoke(this, row);
+        _view.MonthBandPressed += (_, pressed) => OpenMonthMenu(pressed.Month);
 
         Reload();
     }
@@ -83,6 +88,9 @@ public sealed class JournalWorkspace : Border
     /// <summary>The drawn view, which the harness presses.</summary>
     internal JournalView View => _view;
 
+    /// <summary>The folders the pane offers, which is this module's own list and nobody else's.</summary>
+    public IReadOnlyList<string> PaneNames => _navPane.Listed();
+
     public event EventHandler? Changed;
 
     public event EventHandler<JournalRow>? EntryOpened;
@@ -91,6 +99,7 @@ public sealed class JournalWorkspace : Border
     {
         if (_arrangement == arrangement) return;
         _arrangement = arrangement;
+        if (JournalBook.IsTimeline(arrangement)) _lastTimeline = arrangement;
         Reload();
     }
 
@@ -101,10 +110,10 @@ public sealed class JournalWorkspace : Border
         // before the scale rather than after it: a week is the scale the module opens at, so
         // leaving early when the scale had not changed meant Week did nothing at all from the
         // Entry List — the one arrangement a reader presses it from.
-        if (_view.Scale == scale && _arrangement == JournalArrangement.Timeline) return;
+        if (_view.Scale == scale && JournalBook.IsTimeline(_arrangement)) return;
 
         _view.Scale = scale;
-        _arrangement = JournalArrangement.Timeline;
+        _arrangement = _lastTimeline;
         Reload();
     }
 
@@ -127,7 +136,13 @@ public sealed class JournalWorkspace : Border
         Reload();
     }
 
-    /// <summary>Reads the store again — after a write, or when a journal is shown or hidden.</summary>
+    /// <summary>Moves the timeline to a chosen day, which a month band's drop-down picks.</summary>
+    public void GoTo(DateOnly day)
+    {
+        _view.Anchor = day;
+        Reload();
+    }
+
     /// <summary>What Instant Search is looking for here, matched against the store's own index.</summary>
     public string Search
     {
@@ -141,8 +156,13 @@ public sealed class JournalWorkspace : Border
         }
     } = string.Empty;
 
+    /// <summary>Reads the store again — after a write, or when a journal is shown or hidden.</summary>
     public void Reload()
     {
+        // A search's answer is a table of every match, whatever arrangement is chosen: the
+        // timeline shows a span, and an answer that depended on which span the reader last
+        // moved to said three different things about one store.
+        _view.IsSearch = Search.Length > 0;
         _view.Arrangement = _arrangement;
         var rows = _book.Rows(_arrangement, Today);
         if (Search.Length > 0)
@@ -155,6 +175,30 @@ public sealed class JournalWorkspace : Border
         Selected = _view.Selected;
         _navPane.Refresh();
         Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// The drop-down a month band carries: a date navigator that moves the span. Built full and
+    /// then shown, because a flyout filled from its own Opening event is measured empty.
+    /// </summary>
+    private void OpenMonthMenu(DateOnly month)
+    {
+        var picker = new Calendar
+        {
+            DisplayDate = month.ToDateTime(TimeOnly.MinValue),
+            SelectedDate = _view.Anchor.ToDateTime(TimeOnly.MinValue),
+        };
+
+        var flyout = new Flyout { Content = picker, Placement = PlacementMode.Pointer };
+
+        picker.SelectedDatesChanged += (_, _) =>
+        {
+            if (picker.SelectedDate is not { } chosen) return;
+            flyout.Hide();
+            GoTo(DateOnly.FromDateTime(chosen));
+        };
+
+        MenuProbe.Show($"journal month band {month:yyyy-MM}", flyout, _view, atPointer: true);
     }
 
     /// <summary>The journal a new entry goes in: the one that holds them, made if there is none.</summary>
@@ -181,4 +225,11 @@ public sealed class JournalWorkspace : Border
 
     /// <summary>Whether a collection already holds journal entries rather than notes.</summary>
     private bool Holds(Collection list) => _book.Rows(JournalArrangement.EntryList, Today, [list.Id]).Count > 0;
+
+    /// <summary>
+    /// Whether a collection belongs on this module's pane: it holds entries, or it is the folder
+    /// this module writes to. The kind cannot say — notes share it — so what is in the folder does.
+    /// </summary>
+    private bool HoldsEntries(Collection list)
+        => Holds(list) || string.Equals(list.DisplayName, JournalFolder, StringComparison.OrdinalIgnoreCase);
 }

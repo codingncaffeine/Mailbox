@@ -311,6 +311,7 @@ public partial class MainWindow
         }
 
         Log.Info($"Harness: notes showing {notes.Arrangement}, {notes.Status}.");
+        Log.Info($"Harness: notes pane lists [{string.Join(" | ", notes.PaneNames)}].");
         foreach (var row in notes.Rows)
         {
             Log.Info($"Harness: note “{row.Title}” — {row.MadeText(CalendarToday, CultureInfo.InvariantCulture)}"

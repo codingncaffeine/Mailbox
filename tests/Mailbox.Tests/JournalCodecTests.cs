@@ -94,8 +94,52 @@ public class JournalCodecTests
     [InlineData(60, "1 hour")]
     [InlineData(120, "2 hours")]
     [InlineData(90, "1 hour 30 minutes")]
+    [InlineData(1440, "1 day")]
+    [InlineData(2880, "2 days")]
     public void HowLongItTookReadsAsWords(int minutes, string expected)
         => Assert.Equal(expected, JournalCodec.DurationText(TimeSpan.FromMinutes(minutes), System.Globalization.CultureInfo.InvariantCulture));
+
+    [Fact]
+    public void TheCompanyAndThePrivateMarkTravelBothWays()
+    {
+        var entry = Note() with
+        {
+            EntryType = "Phone call",
+            Company = "Pipes Ltd",
+            IsPrivate = true,
+        };
+
+        var text = JournalCodec.Serialize(entry);
+        Assert.Contains("X-MAILBOX-COMPANY:Pipes Ltd", text, StringComparison.Ordinal);
+        Assert.Contains("CLASS:PRIVATE", text, StringComparison.Ordinal);
+
+        var back = JournalCodec.Parse(text).Single();
+        Assert.Equal("Pipes Ltd", back.Company);
+        Assert.True(back.IsPrivate);
+
+        // And through the store's row: the Entry List groups off the columns, never the text.
+        var item = PimJournalCodec.ToItem(entry, 7);
+        Assert.Equal("Pipes Ltd", item.Company);
+        Assert.True(item.IsPrivate);
+        var fromColumns = PimJournalCodec.FromColumns(item);
+        Assert.Equal("Pipes Ltd", fromColumns.Company);
+        Assert.True(fromColumns.IsPrivate);
+    }
+
+    [Fact]
+    public void ConfidentialFromAnotherClientReadsAsPrivate()
+    {
+        var text = """
+            BEGIN:VJOURNAL
+            UID:other@example.com
+            DTSTAMP:20260816T090000Z
+            SUMMARY:Kept back
+            CLASS:CONFIDENTIAL
+            END:VJOURNAL
+            """;
+
+        Assert.True(JournalCodec.Parse(text).Single().IsPrivate);
+    }
 
     // ---- The store's row ---------------------------------------------------------------------
 

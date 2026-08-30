@@ -3,13 +3,22 @@ using Mailbox.Store.Pim;
 
 namespace Mailbox.Scheduling;
 
-/// <summary>How the Journal module is showing what it holds, which is its Current View group.</summary>
+/// <summary>
+/// How the Journal module is showing what it holds — the reference's own six views: three
+/// timelines told apart by what their bands group, and three tables.
+/// </summary>
 public enum JournalArrangement
 {
-    /// <summary>The timeline, which is what the module opens in: entries hung under the day they happened.</summary>
-    Timeline,
+    /// <summary>The timeline the module opens in: entries hung under the day they happened, banded by entry type.</summary>
+    ByType,
 
-    /// <summary>One row an entry, grouped by what kind of thing it was.</summary>
+    /// <summary>The same timeline, its bands one per contact.</summary>
+    ByContact,
+
+    /// <summary>The same timeline, its bands one per category.</summary>
+    ByCategory,
+
+    /// <summary>The table: one row an entry, grouped by company.</summary>
     EntryList,
 
     /// <summary>The same rows, kept to the calls.</summary>
@@ -49,6 +58,8 @@ public sealed record JournalRow
 
     public IReadOnlyList<string> Categories => Entry.Categories;
 
+    public string Company => Entry.Company;
+
     public string StartText(IFormatProvider? culture = null)
         => Start.ToString("g", culture ?? CultureInfo.CurrentCulture);
 
@@ -87,6 +98,34 @@ public sealed class JournalBook(PimRepository repository)
 
     /// <summary>What a call is called, which is what the Phone Calls view keeps.</summary>
     public const string PhoneCall = "Phone call";
+
+    /// <summary>What a group whose field is empty is headed, which is the reference's own word.</summary>
+    public const string None = "(none)";
+
+    /// <summary>Whether an arrangement is one of the three timelines rather than a table.</summary>
+    public static bool IsTimeline(JournalArrangement arrangement)
+        => arrangement is JournalArrangement.ByType or JournalArrangement.ByContact or JournalArrangement.ByCategory;
+
+    /// <summary>
+    /// The glyph an entry type draws with, wherever an entry is drawn — the timeline's boxes and
+    /// the table's icon column alike. Names only, so the store side needs no theming reference;
+    /// a type another client invented falls back to the module's own mark.
+    /// </summary>
+    public static string IconName(string entryType) => entryType.ToLowerInvariant() switch
+    {
+        "phone call" => "phone",
+        "meeting" => "meeting",
+        "e-mail message" or "email message" => "mail",
+        "conversation" => "chat",
+        "letter" => "letter",
+        "fax" => "fax",
+        "document" => "document",
+        "note" => "notes",
+        "task" => "tasks",
+        "task request" => "task-request",
+        "remote session" => "remote-session",
+        _ => "journal-entry",
+    };
 
     /// <summary>The journals, in the order the navigation pane shows them.</summary>
     public IReadOnlyList<Collection> Lists() => _repository.Collections(CollectionKind.Journal);
@@ -140,8 +179,8 @@ public sealed class JournalBook(PimRepository repository)
         => _repository.Item(itemId) is { } item ? PimJournalCodec.FromItem(item) : null;
 
     /// <summary>
-    /// The rows grouped as the Entry List view groups them: by type, the types in the order the
-    /// reference lists them and anything else after, alphabetically.
+    /// The rows grouped by type, the types in the order the reference lists them and anything
+    /// else after, alphabetically — the By Type bands, and the heading the two filtered tables keep.
     /// </summary>
     public static IReadOnlyList<(string Type, IReadOnlyList<JournalRow> Rows)> ByType(IEnumerable<JournalRow> rows)
     {
@@ -151,6 +190,47 @@ public sealed class JournalBook(PimRepository repository)
             .OrderBy(g => Rank(g.Key))
             .ThenBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase)
             .Select(g => (g.Key, (IReadOnlyList<JournalRow>)[.. g]))];
+    }
+
+    /// <summary>
+    /// The rows in an arrangement's own groups, each with the heading the reference writes over
+    /// it. The timelines band by what their names say; the Entry List groups by company; the two
+    /// filtered tables keep the type heading. An entry with two contacts hangs in both bands, as
+    /// the reference duplicates it, and an empty field groups under <see cref="None"/>.
+    /// </summary>
+    public static IReadOnlyList<(string Label, IReadOnlyList<JournalRow> Rows)> Grouped(
+        IEnumerable<JournalRow> rows, JournalArrangement arrangement)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+
+        return arrangement switch
+        {
+            JournalArrangement.ByContact => ByField(rows, r => r.Entry.Contacts, "Contact: "),
+            JournalArrangement.ByCategory => ByField(rows, r => r.Categories, "Categories: "),
+            JournalArrangement.EntryList => ByField(rows, r => r.Company.Length > 0 ? [r.Company] : [], "Company: "),
+            _ => [.. ByType(rows).Select(g => ($"Entry Type: {g.Type}", g.Rows))],
+        };
+    }
+
+    /// <summary>One group per value of a field, "(none)" first, the rest alphabetically.</summary>
+    private static IReadOnlyList<(string Label, IReadOnlyList<JournalRow> Rows)> ByField(
+        IEnumerable<JournalRow> rows, Func<JournalRow, IReadOnlyList<string>> field, string heading)
+    {
+        var groups = new Dictionary<string, List<JournalRow>>(StringComparer.CurrentCultureIgnoreCase);
+        foreach (var row in rows)
+        {
+            var values = field(row);
+            foreach (var value in values.Count > 0 ? values : [None])
+            {
+                if (!groups.TryGetValue(value, out var held)) groups[value] = held = [];
+                held.Add(row);
+            }
+        }
+
+        return [.. groups
+            .OrderBy(g => string.Equals(g.Key, None, StringComparison.Ordinal) ? 0 : 1)
+            .ThenBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase)
+            .Select(g => (heading + g.Key, (IReadOnlyList<JournalRow>)[.. g.Value]))];
     }
 
     /// <summary>Where a type sits in the reference's own list, or past its end for one of ours.</summary>

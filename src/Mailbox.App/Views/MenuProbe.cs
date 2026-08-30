@@ -36,6 +36,25 @@ public static class MenuProbe
     }
 
     /// <summary>
+    /// Shows a content flyout — a picker, a calendar — through the same door, so a posed run
+    /// reads back its size the way it reads a menu's.
+    /// </summary>
+    public static void Show(string what, Flyout flyout, Control at, bool atPointer = false)
+    {
+        ArgumentNullException.ThrowIfNull(flyout);
+        ArgumentNullException.ThrowIfNull(at);
+
+        if (WindowCapture.IsRequested)
+        {
+            Dispatcher.UIThread.Post(
+                () => Log.Info($"Harness: {FlyoutProbe.Describe(what, flyout)}"),
+                DispatcherPriority.Background);
+        }
+
+        flyout.ShowAt(at, showAtPointer: atPointer);
+    }
+
+    /// <summary>
     /// Remembers a menu something else is about to show — the ribbon's own
     /// <c>OpenMenuUnder</c> — and under a posed run logs it once it has laid out.
     /// </summary>

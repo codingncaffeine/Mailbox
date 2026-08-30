@@ -27,16 +27,17 @@ internal static class DialogChrome
     /// <summary>
     /// Wraps <paramref name="content"/> in a caption bar and the rounded, clipping surface, and
     /// sets it as the window's content. The window's <see cref="Window.Title"/> is what the bar
-    /// shows, so it must be set first.
+    /// shows, so it must be set first. <paramref name="iconName"/> puts the named glyph at the
+    /// caption's left — item windows carry their item's icon in the reference, plain dialogs none.
     /// </summary>
-    internal static void Apply(Window window, Control content)
+    internal static void Apply(Window window, Control content, string? iconName = null)
     {
         ArgumentNullException.ThrowIfNull(window);
         ArgumentNullException.ThrowIfNull(content);
 
         WindowFrame.Apply(window);
 
-        var bar = TitleBar(window);
+        var bar = TitleBar(window, iconName);
 
         var root = new Grid { RowDefinitions = new RowDefinitions($"{TitleBarHeight},*") };
         Grid.SetRow(bar, 0);
@@ -55,7 +56,7 @@ internal static class DialogChrome
         WindowFrame.Drags(window, bar);
     }
 
-    private static Control TitleBar(Window window)
+    private static Control TitleBar(Window window, string? iconName)
     {
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
 
@@ -65,13 +66,36 @@ internal static class DialogChrome
             Margin = new Thickness(14, 0, 0, 0),
         };
 
+        if (iconName is { Length: > 0 })
+        {
+            var icon = new TextBlock
+            {
+                Text = Mailbox.Theming.Icons.IconGlyphs.GetOrEmpty(iconName, 16),
+                FontFamily = Mailbox.Theming.Icons.IconFont.Family,
+                FontSize = 14,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(12, 0, -6, 0),
+            };
+            Bind(icon, TextBlock.ForegroundProperty, "dialog.foreground.brush");
+
+            var pair = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
+            pair.Children.Add(icon);
+            Grid.SetColumn(title, 1);
+            pair.Children.Add(title);
+            Grid.SetColumn(pair, 0);
+            grid.Children.Add(pair);
+        }
+
         // Followed rather than copied. A dialog whose caption says something that changes —
         // the Reminders window counts what it is holding — set its Title and kept the words it
         // had been given when the frame was built.
         title.Bind(TextBlock.TextProperty, window.GetObservable(Window.TitleProperty));
         Bind(title, TextBlock.ForegroundProperty, "dialog.foreground.brush");
-        Grid.SetColumn(title, 0);
-        grid.Children.Add(title);
+        if (title.Parent is null)
+        {
+            Grid.SetColumn(title, 0);
+            grid.Children.Add(title);
+        }
 
         var buttons = new CaptionButtons(window, dialog: true);
         Grid.SetColumn(buttons, 1);

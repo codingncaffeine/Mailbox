@@ -23,12 +23,19 @@ internal sealed class CollectionNavPane : Border
 {
     private readonly PimRepository _repository;
     private readonly CollectionKind _kind;
+    private readonly Func<Collection, bool>? _belongs;
     private readonly StackPanel _names = new();
 
-    public CollectionNavPane(PimRepository repository, CollectionKind kind, string heading)
+    /// <param name="belongs">
+    /// Which of the kind's collections are this module's to list — Notes and Journal share a
+    /// kind, and each pane should offer only the folders that can put a row in its own view.
+    /// Null lists them all.
+    /// </param>
+    public CollectionNavPane(PimRepository repository, CollectionKind kind, string heading, Func<Collection, bool>? belongs = null)
     {
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _kind = kind;
+        _belongs = belongs;
 
         Width = this.TryFindResource("nav.width.value", out var width) && width is double w and > 0 ? w : 235;
         this[!BackgroundProperty] = new DynamicResourceExtension("nav.background.brush");
@@ -81,11 +88,18 @@ internal sealed class CollectionNavPane : Border
     /// <summary>A collection was shown or hidden, so whatever is drawing them should read again.</summary>
     public event EventHandler? VisibilityChanged;
 
+    /// <summary>What the pane is listing, top to bottom — the read-back for a drawn set of rows.</summary>
+    public IReadOnlyList<string> Listed()
+        => [.. _names.Children.OfType<Border>()
+            .Select(row => (row.Child as StackPanel)?.Children.OfType<TextBlock>().FirstOrDefault()?.Text ?? string.Empty)
+            .Where(name => name.Length > 0)];
+
     /// <summary>Reads the collections again and redraws the rows.</summary>
     public void Refresh()
     {
         _names.Children.Clear();
-        var collections = _repository.Collections(_kind);
+        IReadOnlyList<Collection> collections = _repository.Collections(_kind);
+        if (_belongs is { } belongs) collections = [.. collections.Where(belongs)];
 
         foreach (var collection in collections)
         {

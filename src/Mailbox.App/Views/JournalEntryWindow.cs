@@ -13,14 +13,15 @@ namespace Mailbox.App.Views;
 /// The journal entry window: one entry's form, as the reference opens one.
 /// </summary>
 /// <remarks>
-/// <b>No capture of this window exists</b>, so its fields are the reference's own — subject, entry
-/// type, start time, duration, the timer beside it, who it was with, categories and the notes
-/// underneath — in the order its form lists them, and the geometry is this application's dialog
-/// chrome rather than a measurement.
+/// <b>No capture of this window exists</b>, so its fields are the reference's own, in the order
+/// its form lists them: the subject; the entry type beside the company; the start time with
+/// Start Timer; the duration with Pause Timer, greyed until the timer runs; the notes; and a
+/// footer of Contacts… and Categories… buttons with a Private tick at the right. The geometry is
+/// this application's dialog chrome rather than a measurement.
 /// <para>
-/// The timer is the reference's own Start Timer / Pause Timer, and it is what a journal entry is
-/// for: press it and the duration grows from the clock rather than from a dropdown. What it
-/// accumulates is added to whatever the duration already said, so timing something twice adds up.
+/// The timer is what a journal entry is for: press it and the duration grows from the clock
+/// rather than from a dropdown. What it accumulates is added to whatever the duration already
+/// said, so timing something twice adds up.
 /// </para>
 /// </remarks>
 public sealed class JournalEntryWindow : Window
@@ -28,6 +29,7 @@ public sealed class JournalEntryWindow : Window
     private readonly JournalEntry _original;
     private readonly TextBox _subject = new() { PlaceholderText = "Subject" };
     private readonly ComboBox _type = new();
+    private readonly TextBox _company = new();
     // The appointment window's own custom format, which is what puts the weekday in front of the
     // date — a CalendarDatePicker writes a bare one otherwise. Wider than that window's 150,
     // because this one draws its picker button inside the box rather than beside it.
@@ -39,21 +41,31 @@ public sealed class JournalEntryWindow : Window
     };
     private readonly TextBox _startTime = new() { Width = 90 };
     private readonly ComboBox _duration = new();
-    private readonly Button _timer = new() { Content = "Start Timer", Width = 110 };
-    private readonly TextBox _contacts = new() { PlaceholderText = "Contacts" };
-    private readonly TextBox _categories = new() { PlaceholderText = "Categories" };
+
+    // The reference's own pair: one starts, the other pauses, and a reader can see the second
+    // exists before the first has ever been pressed — which one toggling button could not say.
+    private readonly Button _start = new() { Content = "Start Timer", Width = 110 };
+    private readonly Button _pause = new() { Content = "Pause Timer", Width = 110, IsEnabled = false };
+
+    private readonly Button _contactsButton = new() { Content = "Contacts…", Width = 100 };
+    private readonly Button _categoriesButton = new() { Content = "Categories…", Width = 100 };
+    private readonly TextBox _contacts = new() { MinWidth = 150 };
+    private readonly TextBox _categories = new() { MinWidth = 150 };
+    private readonly CheckBox _private = new() { Content = "Private" };
     private readonly TextBox _notes = new() { AcceptsReturn = true, TextWrapping = Avalonia.Media.TextWrapping.Wrap, MinHeight = 120 };
     private readonly Button _save = new() { Content = "Save & Close", Width = 110, IsDefault = true };
     private readonly Button _delete = new() { Content = "Delete", Width = 84 };
     private readonly Button _cancel = new() { Content = "Cancel", Width = 84, IsCancel = true };
 
-    /// <summary>The reference's own list, in its order — the last is what a timer produces.</summary>
+    /// <summary>The reference's own list, down to its one- and three-minute entries.</summary>
     private static readonly TimeSpan[] Durations =
     [
         TimeSpan.Zero,
-        TimeSpan.FromMinutes(15), TimeSpan.FromMinutes(30), TimeSpan.FromMinutes(45),
+        TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(3), TimeSpan.FromMinutes(5),
+        TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(15), TimeSpan.FromMinutes(30),
         TimeSpan.FromHours(1), TimeSpan.FromHours(2), TimeSpan.FromHours(3),
-        TimeSpan.FromHours(4), TimeSpan.FromHours(8),
+        TimeSpan.FromHours(4), TimeSpan.FromHours(8), TimeSpan.FromHours(12),
+        TimeSpan.FromDays(1), TimeSpan.FromDays(2),
     ];
 
     private DispatcherTimer? _ticking;
@@ -70,7 +82,7 @@ public sealed class JournalEntryWindow : Window
         // Wide enough for the form's two starred columns to hold what is in them: the right-hand
         // one carries the date box beside its time, and a narrower window clips the time.
         Width = 700;
-        Height = 520;
+        Height = 540;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
         // The application's own clock rather than the machine's, so an entry made under a pinned
@@ -84,6 +96,7 @@ public sealed class JournalEntryWindow : Window
         // an entry another client wrote saying something else keeps what it says.
         _type.ItemsSource = Types(entry.EntryType);
         _type.SelectedIndex = Math.Max(0, Types(entry.EntryType).ToList().IndexOf(entry.EntryType));
+        _company.Text = entry.Company;
         _startDate.SelectedDate = when.Date;
         _startTime.Text = when.ToString("t", CultureInfo.CurrentCulture);
         // The entry's own duration, put in the list rather than snapped to the nearest thing on
@@ -94,11 +107,15 @@ public sealed class JournalEntryWindow : Window
         ShowDuration(_timed);
         _contacts.Text = string.Join("; ", entry.Contacts);
         _categories.Text = string.Join(", ", entry.Categories);
+        _private.IsChecked = entry.IsPrivate;
         _notes.Text = entry.Description;
 
-        _timer.Click += (_, _) => ToggleTimer();
+        _start.Click += (_, _) => StartTimer();
+        _pause.Click += (_, _) => StopTimer();
+        _contactsButton.Click += async (_, _) => await PickContactsAsync();
+        _categoriesButton.Click += async (_, _) => await PickCategoriesAsync();
 
-        DialogChrome.Apply(this, BuildBody());
+        DialogChrome.Apply(this, BuildBody(), "journal-entry");
         Bind(this, BackgroundProperty, "dialog.background.brush");
 
         // A timer left running when the window closes is stopped, so its time is counted once.
@@ -129,19 +146,18 @@ public sealed class JournalEntryWindow : Window
 
         Place(grid, 0, 0, "Subject:", _subject, span: 3);
         Place(grid, 1, 0, "Entry type:", _type);
+        Place(grid, 1, 2, "Company:", _company);
 
         var start = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
         start.Children.Add(_startDate);
         start.Children.Add(_startTime);
-        Place(grid, 1, 2, "Start time:", start);
+        start.Children.Add(_start);
+        Place(grid, 2, 0, "Start time:", start, span: 3);
 
         var timing = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
         timing.Children.Add(_duration);
-        timing.Children.Add(_timer);
-        Place(grid, 2, 0, "Duration:", timing, span: 3);
-
-        Place(grid, 3, 0, "Contacts:", _contacts);
-        Place(grid, 3, 2, "Categories:", _categories);
+        timing.Children.Add(_pause);
+        Place(grid, 3, 0, "Duration:", timing, span: 3);
 
         _save.Click += (_, _) =>
         {
@@ -158,6 +174,21 @@ public sealed class JournalEntryWindow : Window
 
         _cancel.Click += (_, _) => Close();
 
+        // The reference's footer: the two picker buttons with their boxes, and Private at the
+        // right — a button that opens a chooser, not a label that only looks like one.
+        var footer = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,*,Auto"),
+            Margin = new Thickness(0, 10, 0, 0),
+        };
+        PlaceCell(footer, 0, _contactsButton);
+        PlaceCell(footer, 1, _contacts);
+        PlaceCell(footer, 2, _categoriesButton);
+        PlaceCell(footer, 3, _categories);
+        _private.VerticalAlignment = VerticalAlignment.Center;
+        _private.Margin = new Thickness(6, 0, 0, 0);
+        PlaceCell(footer, 4, _private);
+
         return new DockPanel
         {
             Margin = new Thickness(18),
@@ -172,6 +203,7 @@ public sealed class JournalEntryWindow : Window
                     Margin = new Thickness(0, 16, 0, 0),
                     Children = { _save, _delete, _cancel },
                 },
+                new Border { [DockPanel.DockProperty] = Dock.Bottom, Child = footer },
                 new DockPanel
                 {
                     Children =
@@ -184,6 +216,44 @@ public sealed class JournalEntryWindow : Window
         };
     }
 
+    private static void PlaceCell(Grid grid, int column, Control control)
+    {
+        control.Margin = new Thickness(column == 0 ? 0 : 8, 0, 0, 0);
+        Grid.SetColumn(control, column);
+        grid.Children.Add(control);
+    }
+
+    // ---- The pickers ---------------------------------------------------------------------------
+
+    /// <summary>Contacts…: the address book, its picks appended to the box.</summary>
+    private async Task PickContactsAsync()
+    {
+        var picked = await AddressBookDialog.PickAsync(this, App.Contacts);
+        if (picked is null || picked.IsEmpty) return;
+
+        var have = (_contacts.Text ?? string.Empty)
+            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+        foreach (var name in picked.To.Concat(picked.Cc).Concat(picked.Bcc))
+        {
+            if (!have.Contains(name, StringComparer.OrdinalIgnoreCase)) have.Add(name);
+        }
+
+        _contacts.Text = string.Join("; ", have);
+    }
+
+    /// <summary>Categories…: the reader's own set, ticked, written back to the box.</summary>
+    private async Task PickCategoriesAsync()
+    {
+        var offered = App.Categories.All()
+            .Select(c => new PickListDialog.Item(c.Name, c.Name)).ToList();
+        var ticked = (_categories.Text ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        var chosen = await PickListDialog.PickAsync(this, "Categorize", "Categories:", offered, ticked);
+        if (chosen is null) return;
+        _categories.Text = string.Join(", ", chosen);
+    }
+
     // ---- The timer -----------------------------------------------------------------------------
 
     /// <summary>
@@ -193,17 +263,14 @@ public sealed class JournalEntryWindow : Window
     /// </summary>
     internal Func<DateTimeOffset> TimerClock { get; set; } = () => DateTimeOffset.UtcNow;
 
-    private void ToggleTimer()
+    private void StartTimer()
     {
-        if (_startedAt is not null)
-        {
-            StopTimer();
-            return;
-        }
+        if (_startedAt is not null) return;
 
         _timed = Chosen();
         _startedAt = TimerClock();
-        _timer.Content = "Pause Timer";
+        _start.IsEnabled = false;
+        _pause.IsEnabled = true;
 
         // A second rather than a minute, so that the duration a reader sees moves while they
         // watch it — the reference's own timer does, and a minute of nothing looks broken.
@@ -220,7 +287,8 @@ public sealed class JournalEntryWindow : Window
         _startedAt = null;
         _ticking?.Stop();
         _ticking = null;
-        _timer.Content = "Start Timer";
+        _start.IsEnabled = true;
+        _pause.IsEnabled = false;
         ShowDuration(_timed);
     }
 
@@ -272,6 +340,8 @@ public sealed class JournalEntryWindow : Window
             Summary = _subject.Text?.Trim() ?? string.Empty,
             Description = _notes.Text ?? string.Empty,
             EntryType = _type.SelectedItem as string ?? _original.EntryType,
+            Company = _company.Text?.Trim() ?? string.Empty,
+            IsPrivate = _private.IsChecked == true,
             When = EventTime.At(date.Add(time.ToTimeSpan()), TimeZoneInfo.Local.Id),
             Duration = duration > TimeSpan.Zero ? duration : null,
             Contacts = (_contacts.Text ?? string.Empty)
@@ -309,6 +379,11 @@ public sealed class JournalEntryWindow : Window
             case "notes": _notes.Text = value; return $"notes are now {(_notes.Text ?? string.Empty).Length} characters";
             case "contacts": _contacts.Text = value; return $"contacts box says “{_contacts.Text}”";
             case "categories": _categories.Text = value; return $"categories box says “{_categories.Text}”";
+            case "company": _company.Text = value; return $"company box says “{_company.Text}”";
+
+            case "private":
+                _private.IsChecked = value.Length == 0 || value is "1" or "on" or "true" or "yes";
+                return $"private is now {(_private.IsChecked == true ? "ticked" : "clear")}";
 
             case "type":
             {
@@ -336,10 +411,40 @@ public sealed class JournalEntryWindow : Window
                 return $"duration list is now on “{_duration.SelectedItem}”";
             }
 
-            // The button, not the method behind it: whether the button is wired is half the claim.
-            case "timer":
-                _timer.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
-                return $"the timer button says “{_timer.Content}”, running: {IsTiming}";
+            // The buttons, not the methods behind them: whether each is wired is half the claim.
+            case "timer" or "starttimer":
+                _start.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+                return $"Start Timer {(_start.IsEnabled ? "stands" : "greyed")}, Pause Timer {(_pause.IsEnabled ? "stands" : "greyed")}, running: {IsTiming}";
+
+            case "pausetimer":
+                _pause.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+                return $"Start Timer {(_start.IsEnabled ? "stands" : "greyed")}, Pause Timer {(_pause.IsEnabled ? "stands" : "greyed")}, running: {IsTiming}";
+
+            case "contactspicker":
+                _contactsButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+                return "Contacts… pressed";
+
+            case "categoriespicker":
+                _categoriesButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+                return "Categories… pressed";
+
+            // What child the pickers opened, and a way to shut it so the run can end.
+            case "windows":
+            {
+                var owned = OwnedWindows;
+                return owned.Count == 0 ? "no child window is open"
+                    : $"open: {string.Join(" | ", owned.Select(w => $"“{w.Title}” {w.Bounds.Width:0}x{w.Bounds.Height:0}"))}";
+            }
+
+            case "closechild":
+            {
+                var owned = OwnedWindows;
+                if (owned.Count == 0) return "no child window to close";
+                var last = owned[^1];
+                var title = last.Title;
+                last.Close();
+                return $"closed “{title}”";
+            }
 
             // Moves the clock the timer is counting against, which is the only way an elapsed
             // duration can be the same number twice.
@@ -371,14 +476,16 @@ public sealed class JournalEntryWindow : Window
     internal string FormState()
     {
         var would = Collect();
-        return $"subject “{_subject.Text}”, type “{_type.SelectedItem}”, "
+        return $"subject “{_subject.Text}”, type “{_type.SelectedItem}”, company “{_company.Text}”, "
                + $"start {_startDate.SelectedDate:yyyy-MM-dd} {_startTime.Text}, "
                + $"duration list “{_duration.SelectedItem}” of {_duration.ItemsSource?.Cast<string>().Count() ?? 0}, "
-               + $"timer {(IsTiming ? "running" : "stopped")}, "
+               + $"timer {(IsTiming ? "running" : "stopped")} (Start {(_start.IsEnabled ? "stands" : "greyed")}, Pause {(_pause.IsEnabled ? "stands" : "greyed")}), "
+               + $"private {(_private.IsChecked == true ? "ticked" : "clear")}, "
                + $"contacts “{_contacts.Text}”, categories “{_categories.Text}”, "
                + $"notes {(_notes.Text ?? string.Empty).Length} characters "
                + $"→ would save: duration {(would.Duration is { } d ? JournalCodec.DurationText(d, CultureInfo.InvariantCulture) + $" ({d})" : "none")}, "
-               + $"starts {would.When?.Wall:yyyy-MM-dd HH:mm}, type “{would.EntryType}”, "
+               + $"starts {would.When?.Wall:yyyy-MM-dd HH:mm}, type “{would.EntryType}”, company “{would.Company}”, "
+               + $"{(would.IsPrivate ? "private, " : string.Empty)}"
                + $"contacts [{string.Join(" | ", would.Contacts)}], categories [{string.Join(" | ", would.Categories)}]";
     }
 

@@ -45,6 +45,12 @@ public sealed record JournalEntry
     /// <summary>Whoever the entry is about, which the reference's journal keeps beside it.</summary>
     public IReadOnlyList<string> Contacts { get; init; } = [];
 
+    /// <summary>The company the entry concerns — the reference's own field, and what its Entry List groups by.</summary>
+    public string Company { get; init; } = string.Empty;
+
+    /// <summary>Kept to oneself when the collection is shared — CLASS:PRIVATE, as an event's is.</summary>
+    public bool IsPrivate { get; init; }
+
     public int Sequence { get; init; }
 
     public DateTimeOffset LastModified { get; init; } = DateTimeOffset.UtcNow;
@@ -79,6 +85,7 @@ public sealed record JournalEntry
            && When == other.When && Duration == other.Duration && EntryType == other.EntryType
            && Categories.SequenceEqual(other.Categories, StringComparer.Ordinal)
            && Contacts.SequenceEqual(other.Contacts, StringComparer.Ordinal)
+           && Company == other.Company && IsPrivate == other.IsPrivate
            && Sequence == other.Sequence && LastModified == other.LastModified;
 
     public override int GetHashCode() => HashCode.Combine(Uid, Summary, Description, When, EntryType, LastModified);

@@ -25,7 +25,9 @@ public static class JournalCodec
 
     private const string TypeProperty = "X-MAILBOX-ENTRY-TYPE";
     private const string DurationProperty = "X-MAILBOX-ENTRY-DURATION";
+    private const string CompanyProperty = "X-MAILBOX-COMPANY";
     private const string ContactProperty = "CONTACT";
+    private const string PrivateClass = "PRIVATE";
 
     /// <summary>One VJOURNAL block, as the store keeps a row.</summary>
     public static string Serialize(JournalEntry entry)
@@ -104,6 +106,9 @@ public static class JournalCodec
             ical.Properties.Add(new CalendarProperty(DurationProperty, XmlConvert.ToString(duration)));
         }
 
+        if (entry.Company.Length > 0) ical.Properties.Add(new CalendarProperty(CompanyProperty, entry.Company));
+        if (entry.IsPrivate) ical.Class = PrivateClass;
+
         return ical;
     }
 
@@ -136,6 +141,12 @@ public static class JournalCodec
                 .Select(p => p.Value?.ToString() ?? string.Empty)
                 .Where(v => v.Length > 0)
                 .ToList(),
+            Company = ical.Properties.Get<string>(CompanyProperty) ?? string.Empty,
+            // CONFIDENTIAL reads as private here for the reason the event codec gives: both mean
+            // "not for the reader of a shared collection".
+            IsPrivate = ical.Class is { Length: > 0 } klass
+                && (klass.Equals(PrivateClass, StringComparison.OrdinalIgnoreCase)
+                    || klass.Equals("CONFIDENTIAL", StringComparison.OrdinalIgnoreCase)),
             Sequence = ical.Sequence,
             LastModified = ical.LastModified is { } lm ? new DateTimeOffset(lm.AsUtc, TimeSpan.Zero)
                 : ical.DtStamp is { } ds ? new DateTimeOffset(ds.AsUtc, TimeSpan.Zero)
@@ -143,11 +154,12 @@ public static class JournalCodec
         };
     }
 
-    /// <summary>How long an entry took, as a list writes it: "30 minutes", "2 hours".</summary>
+    /// <summary>How long an entry took, as a list writes it: "30 minutes", "2 hours", "1 day".</summary>
     public static string DurationText(TimeSpan duration, IFormatProvider? culture = null)
     {
         var format = culture ?? CultureInfo.CurrentCulture;
         if (duration < TimeSpan.FromHours(1)) return Plural((int)Math.Round(duration.TotalMinutes), "minute", format);
+        if (duration >= TimeSpan.FromDays(1) && duration.TotalDays % 1 == 0) return Plural((int)duration.TotalDays, "day", format);
         if (duration.TotalHours % 1 == 0) return Plural((int)duration.TotalHours, "hour", format);
         return Plural((int)duration.TotalHours, "hour", format) + " " + Plural(duration.Minutes, "minute", format);
     }

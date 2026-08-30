@@ -72,8 +72,7 @@ public partial class MainWindow
                 return true;
 
             case "journal.forward" when journal.Selected is { } sent:
-                NewMessage(new Mailbox.Core.Compose.MailtoLink([], [], [], sent.Subject, sent.Entry.Description));
-                shell.StatusRight = $"“{sent.Subject}” ready to send.";
+                ForwardJournalEntry(shell, sent);
                 return true;
 
             case "journal.today":
@@ -108,7 +107,17 @@ public partial class MainWindow
                 return true;
 
             case "journal.view.timeline":
-                journal.SetView(JournalArrangement.Timeline);
+                journal.SetView(JournalArrangement.ByType);
+                shell.ModuleStatusLeft = journal.Status;
+                return true;
+
+            case "journal.view.bycontact":
+                journal.SetView(JournalArrangement.ByContact);
+                shell.ModuleStatusLeft = journal.Status;
+                return true;
+
+            case "journal.view.bycategory":
+                journal.SetView(JournalArrangement.ByCategory);
                 shell.ModuleStatusLeft = journal.Status;
                 return true;
 
@@ -159,6 +168,51 @@ public partial class MainWindow
             App.Pim.UpdateItem(item);
             return item;
         }
+    }
+
+    /// <summary>
+    /// Forward: a message with the journal entry attached as an iCalendar file, the way an
+    /// appointment forwards.
+    /// </summary>
+    /// <remarks>
+    /// The item travels whole — the VJOURNAL carries the type, the start, the duration, the
+    /// contacts and the company, which a subject-and-notes mailto dropped — and the body says the
+    /// same things in words for a reader whose client will not open the attachment.
+    /// </remarks>
+    private void ForwardJournalEntry(ShellViewModel shell, JournalRow row)
+    {
+        var entry = row.Entry;
+        var payload = JournalCodec.SerializeCalendar([entry]);
+
+        var attachment = new MimeKit.TextPart("calendar") { Text = payload };
+        attachment.ContentType.Parameters["charset"] = "utf-8";
+        attachment.ContentType.Name = SafeName(row.Subject, "journal-entry") + ".ics";
+        attachment.ContentDisposition = new MimeKit.ContentDisposition(MimeKit.ContentDisposition.Attachment)
+        {
+            FileName = attachment.ContentType.Name,
+        };
+
+        var described = string.Join("\n", new[]
+        {
+            row.Subject,
+            $"Entry type: {row.EntryType}",
+            $"Start: {row.StartText(CultureInfo.CurrentCulture)}",
+            row.DurationText(CultureInfo.CurrentCulture) is { Length: > 0 } duration ? $"Duration: {duration}" : null,
+            row.Contacts.Length > 0 ? $"Contacts: {row.Contacts}" : null,
+            row.Company.Length > 0 ? $"Company: {row.Company}" : null,
+            entry.Description.Length > 0 ? "\n" + entry.Description : null,
+        }.Where(line => line is not null));
+
+        var draft = new Mailbox.Rendering.ReplyDraft
+        {
+            Subject = "FW: " + row.Subject,
+            QuotedText = described,
+            Attachments = [new Mailbox.Rendering.CarriedPart(attachment.ContentType.Name, "text/calendar", attachment)],
+        };
+
+        NewMessage(draft, Mailbox.Rendering.ReplyKind.Forward);
+        shell.StatusRight = $"“{row.Subject}” is attached to a new message.";
+        Log.Info($"Journal: forwarding “{row.Subject}” as {attachment.ContentType.Name}.");
     }
 
     private void DeleteJournalEntry(ShellViewModel shell, JournalRow row)
@@ -238,11 +292,14 @@ public partial class MainWindow
                 "entries" or "entrylist" or "list" => JournalArrangement.EntryList,
                 "calls" or "phone" => JournalArrangement.PhoneCalls,
                 "week" or "last7" or "lastsevendays" => JournalArrangement.LastSevenDays,
-                _ => JournalArrangement.Timeline,
+                "bycontact" or "contact" => JournalArrangement.ByContact,
+                "bycategory" or "category" => JournalArrangement.ByCategory,
+                _ => JournalArrangement.ByType,
             });
         }
 
         Log.Info($"Harness: journal showing {journal.Arrangement} at {journal.Scale} — {journal.SpanText}, {journal.Status}.");
+        Log.Info($"Harness: journal pane lists [{string.Join(" | ", journal.PaneNames)}].");
         foreach (var row in journal.Rows)
         {
             Log.Info($"Harness: entry “{row.Subject}” — {row.EntryType}, {row.StartText(CultureInfo.InvariantCulture)}"
@@ -292,6 +349,38 @@ public partial class MainWindow
         }
 
         var wanted = spec.Contains(':', StringComparison.Ordinal) ? spec[(spec.IndexOf(':', StringComparison.Ordinal) + 1)..].Trim() : spec;
+
+        if (spec.StartsWith("band:", StringComparison.OrdinalIgnoreCase))
+        {
+            var folded = journal.View.ToggleBand(wanted);
+            Log.Info($"Harness: the “{wanted}” band is now {(folded ? "folded" : "open")}.");
+            return;
+        }
+
+        // Presses the upper scale's month band through the real pointer path, so the drop-down
+        // it opens is measured rather than assumed.
+        if (spec.StartsWith("month:", StringComparison.OrdinalIgnoreCase))
+        {
+            var band = journal.View.ScaleBands().FirstOrDefault(b => b.Label.Contains(wanted, StringComparison.OrdinalIgnoreCase));
+            if (band.Label is null or "")
+            {
+                Log.Info($"Harness: no month band matching “{wanted}” is on the scale.");
+                return;
+            }
+
+            Press(journal.View, band.Box.Center);
+            Log.Info($"Harness: pressed the “{band.Label}” band.");
+            return;
+        }
+
+        if (spec.StartsWith("sort:", StringComparison.OrdinalIgnoreCase))
+        {
+            var parts = wanted.Split(',', StringSplitOptions.TrimEntries);
+            journal.View.SortBy(parts[0], parts.Length > 1 && parts[1].StartsWith("desc", StringComparison.OrdinalIgnoreCase));
+            Log.Info($"Harness: the journal table is sorted by “{parts[0]}”.");
+            return;
+        }
+
         var row = journal.Rows.FirstOrDefault(r => r.Subject.Contains(wanted, StringComparison.OrdinalIgnoreCase));
         if (row is null)
         {

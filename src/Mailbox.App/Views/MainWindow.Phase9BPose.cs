@@ -78,20 +78,27 @@ public partial class MainWindow
                  + $"{view.Arrangement} at {view.Scale}, anchor {view.Anchor:yyyy-MM-dd}, today {view.Today:yyyy-MM-dd}, "
                  + $"week starts {view.FirstDayOfWeek}, showing {view.Count} of {view.Rows.Count}.");
 
-        if (view.Arrangement == JournalArrangement.Timeline)
+        if (JournalBook.IsTimeline(view.Arrangement) && !view.IsSearch)
         {
             DumpTimeline(view);
             return;
         }
 
-        foreach (var (type, row, box) in view.DrawnLines())
+        foreach (var (key, label, left, width, sort) in view.HeaderLaid())
+        {
+            Log.Info($"Harness: journal header “{(label.Length > 0 ? label : key)}” — x {left:0}..{left + width:0} "
+                     + $"({width:0} wide){(sort.Length > 0 ? $", sorted {sort}" : string.Empty)}.");
+        }
+
+        foreach (var (label, row, box) in view.DrawnLines())
         {
             Log.Info(row is null
-                ? $"Harness: journal heading “Entry Type: {type}” — y {box.Y:0}..{box.Bottom:0} ({box.Height:0} tall)."
+                ? $"Harness: journal heading “{label}” — y {box.Y:0}..{box.Bottom:0} ({box.Height:0} tall)."
                 : $"Harness: journal row “{row.Subject}” — y {box.Y:0}..{box.Bottom:0} ({box.Height:0} tall), "
                   + $"{row.EntryType}, {row.StartText(CultureInfo.InvariantCulture)}"
                   + $", duration “{(row.DurationText(CultureInfo.InvariantCulture) is { Length: > 0 } d ? d : "—")}”"
                   + $", contacts “{(row.Contacts.Length > 0 ? row.Contacts : "—")}”"
+                  + $", company “{(row.Company.Length > 0 ? row.Company : "—")}”"
                   + $", categories [{string.Join(" | ", row.Categories)}].");
         }
     }
@@ -102,6 +109,17 @@ public partial class MainWindow
         Log.Info($"Harness: journal heading “{view.SpanText()}” — span row {JournalView.SpanRowHeight:0}px "
                  + $"over a day row {JournalView.DayRowHeight:0}px, {JournalView.HeadingHeight:0}px in all; "
                  + $"{view.ColumnCount} columns inset {JournalView.TimelineInset:0}px each side.");
+
+        foreach (var (label, month, box) in view.ScaleBands())
+        {
+            Log.Info($"Harness: journal month band “{label}” for {month:yyyy-MM} — x {box.X:0.0}..{box.Right:0.0} ({box.Width:0.0} wide).");
+        }
+
+        foreach (var (label, collapsed, lanes, entries) in view.BandsLaid())
+        {
+            Log.Info($"Harness: journal band “{label}” — {entries} entr{(entries == 1 ? "y" : "ies")} in {lanes} lane(s)"
+                     + (collapsed ? ", folded." : "."));
+        }
 
         foreach (var (index, label, day, left, width, isToday) in view.Columns())
         {
@@ -134,14 +152,10 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// What the message Forward built is actually carrying.
+    /// What the message Forward built is actually carrying: the body's words, and the item
+    /// itself on the attachment strip. <c>MAILBOX_COMPOSE_QUEUE</c> presses Send only on
+    /// windows the compose poses open themselves, so nothing else could read this one at all.
     /// </summary>
-    /// <remarks>
-    /// Forward hands the entry to the compose window as a mailto, and a mailto is a subject and a
-    /// body — so whether the type, the duration and the contact went with it is a question about
-    /// the window, not about the command. <c>MAILBOX_COMPOSE_QUEUE</c> presses Send only on
-    /// windows the compose poses open themselves, so nothing could read this one at all.
-    /// </remarks>
     private static void DumpForwardedEntry()
     {
         var compose = (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)
@@ -156,7 +170,9 @@ public partial class MainWindow
         var body = compose.BodyText.Replace("\r", string.Empty, StringComparison.Ordinal)
             .Replace("\n", " ⏎ ", StringComparison.Ordinal).Trim();
 
-        Log.Info($"Harness: forwarded as “{compose.Title}” — {body.Length} characters of body: “{body}”.");
+        var strip = compose.AttachmentStrip;
+        Log.Info($"Harness: forwarded as “{compose.Title}” — {body.Length} characters of body: “{body}”; "
+                 + $"attachments {(strip.IsVisible ? $"[{string.Join(" | ", strip.Files)}]" : "none")}.");
     }
 
     /// <summary>
@@ -175,6 +191,8 @@ public partial class MainWindow
                          + $"starts {entry.When?.Wall:yyyy-MM-dd HH:mm}, "
                          + $"duration {(entry.Duration is { } d ? JournalCodec.DurationText(d, CultureInfo.InvariantCulture) + $" ({d})" : "none")}, "
                          + $"contacts [{string.Join(" | ", entry.Contacts)}], "
+                         + $"company “{(entry.Company.Length > 0 ? entry.Company : "—")}”, "
+                         + $"{(entry.IsPrivate ? "private, " : string.Empty)}"
                          + $"categories [{string.Join(" | ", entry.Categories)}], "
                          + $"{item.SyncState}.");
             }

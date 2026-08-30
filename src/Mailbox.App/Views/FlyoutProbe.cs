@@ -52,4 +52,23 @@ public static class FlyoutProbe
         return $"{what}: open={flyout.IsOpen}, {entries.Count} entries "
                + $"[{string.Join(" | ", described)}], popup {size}";
     }
+
+    /// <summary>
+    /// Describes a content flyout — a picker, a calendar — the same way: what it holds and the
+    /// popup's real size, because <c>IsOpen</c> proves as little here as it does for a menu.
+    /// </summary>
+    public static string Describe(string what, Flyout flyout)
+    {
+        ArgumentNullException.ThrowIfNull(flyout);
+
+        var content = flyout.Content as Control;
+        var root = content is null ? null : TopLevel.GetTopLevel(content);
+
+        var size = root is null
+            ? "not presented — built but never shown, or shown with nothing in it"
+            : $"{root.ClientSize.Width:0}x{root.ClientSize.Height:0}"
+              + (root is Window ? " (the shell's own size — the content is not in a popup)" : string.Empty);
+
+        return $"{what}: open={flyout.IsOpen}, holding {content?.GetType().Name ?? "nothing"}, popup {size}";
+    }
 }

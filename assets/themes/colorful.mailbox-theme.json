@@ -144,7 +144,7 @@
     "journal.header.background": "{palette.neutral.lighter}",
     "journal.header.line": "{palette.neutral.light}",
     "journal.header.text": "#3B3A39",
-    "journal.today.fill": "#FAF9F8",
+    "journal.today.fill": "#E2EDF7",
     "list.background": "{palette.neutral.white}",
     "list.group.header.background": "{palette.neutral.lighter}",
     "list.group.header.height": "26",

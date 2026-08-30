@@ -37,7 +37,10 @@ public sealed class NotesWorkspace : Border
         ClipToBounds = true;
         this[!BackgroundProperty] = new DynamicResourceExtension("list.background.brush");
 
-        _navPane = new CollectionNavPane(repository, CollectionKind.Journal, "My Notes");
+        // Only the folders that can put a note on the wall: journal entries live next door, and
+        // their folder here would be a tick that can never change what the wall shows. A folder
+        // holding both — another client's — is honestly on both panes.
+        _navPane = new CollectionNavPane(repository, CollectionKind.Journal, "My Notes", HoldsNotes);
         _navPane.VisibilityChanged += (_, _) => Reload();
 
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
@@ -74,6 +77,9 @@ public sealed class NotesWorkspace : Border
 
     /// <summary>The drawn view, which the harness presses.</summary>
     internal NotesView View => _view;
+
+    /// <summary>The folders the pane offers, which is this module's own list and nobody else's.</summary>
+    public IReadOnlyList<string> PaneNames => _navPane.Listed();
 
     public event EventHandler? Changed;
 
@@ -163,4 +169,14 @@ public sealed class NotesWorkspace : Border
 
     /// <summary>Whether a collection already holds notes rather than journal entries.</summary>
     private bool Holds(Collection list) => _book.Rows(NoteArrangement.Icons, Today, [list.Id]).Count > 0;
+
+    /// <summary>
+    /// Whether a collection belongs on this module's pane: it holds notes, or it is empty and not
+    /// the journal's own folder — an empty folder reads as notes because a note is the component's
+    /// default, exactly as an untyped entry is.
+    /// </summary>
+    private bool HoldsNotes(Collection list)
+        => Holds(list)
+           || (!string.Equals(list.DisplayName, "Journal", StringComparison.OrdinalIgnoreCase)
+               && _repository.Items(list.Id).All(i => i.SyncState == PimSyncState.Deleted));
 }

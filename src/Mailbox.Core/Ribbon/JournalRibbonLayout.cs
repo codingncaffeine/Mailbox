@@ -40,6 +40,8 @@ public static class JournalRibbonLayout
 
                 Cluster("view", "Current View",
                     RibbonItem.Sheddable(JournalCommands.TimelineView.Id),
+                    RibbonItem.Sheddable(JournalCommands.ByContactView.Id),
+                    RibbonItem.Sheddable(JournalCommands.ByCategoryView.Id),
                     RibbonItem.Sheddable(JournalCommands.EntryListView.Id),
                     RibbonItem.Sheddable(JournalCommands.PhoneCallsView.Id),
                     RibbonItem.Sheddable(JournalCommands.LastSevenDaysView.Id)),
@@ -137,6 +139,8 @@ public static class JournalRibbonLayout
                         Items =
                         [
                             RibbonItem.Large(JournalCommands.TimelineView.Id),
+                            RibbonItem.Large(JournalCommands.ByContactView.Id),
+                            RibbonItem.Large(JournalCommands.ByCategoryView.Id),
                             RibbonItem.Large(JournalCommands.EntryListView.Id),
                             RibbonItem.Large(JournalCommands.PhoneCallsView.Id),
                             RibbonItem.Large(JournalCommands.LastSevenDaysView.Id),

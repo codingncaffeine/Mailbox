@@ -102,6 +102,85 @@ public class JournalBookTests
     }
 
     [Fact]
+    public void TheTimelinesBandByWhatTheirNamesSay()
+    {
+        var (store, repository, book, journal) = Fresh();
+        using var _ = store;
+
+        Add(repository, journal.Id, "Rang A", "Phone call", Today, contact: "A. Person");
+        Add(repository, journal.Id, "Rang B", "Phone call", Today, contact: "B. Person");
+        Add(repository, journal.Id, "Wrote it up", "Document", Today);
+
+        var rows = book.Rows(JournalArrangement.ByType, Today);
+
+        var byType = JournalBook.Grouped(rows, JournalArrangement.ByType);
+        Assert.Equal(["Entry Type: Phone call", "Entry Type: Document"], byType.Select(g => g.Label));
+
+        // One band per contact, and an entry that names nobody goes under "(none)" first.
+        var byContact = JournalBook.Grouped(rows, JournalArrangement.ByContact);
+        Assert.Equal(["Contact: (none)", "Contact: A. Person", "Contact: B. Person"], byContact.Select(g => g.Label));
+        Assert.Equal(["Wrote it up"], byContact[0].Rows.Select(r => r.Subject));
+    }
+
+    [Fact]
+    public void AnEntryWithTwoContactsHangsInBothBands()
+    {
+        var (store, repository, book, journal) = Fresh();
+        using var _ = store;
+
+        repository.AddItem(PimJournalCodec.ToItem(
+            new JournalEntry
+            {
+                Uid = "both",
+                Summary = "Conference call",
+                EntryType = "Phone call",
+                When = EventTime.At(Today.ToDateTime(new TimeOnly(10, 0)), "Europe/London"),
+                Contacts = ["A. Person", "B. Person"],
+            },
+            journal.Id));
+
+        var byContact = JournalBook.Grouped(book.Rows(JournalArrangement.ByContact, Today), JournalArrangement.ByContact);
+        Assert.Equal(2, byContact.Count);
+        Assert.All(byContact, g => Assert.Equal(["Conference call"], g.Rows.Select(r => r.Subject)));
+    }
+
+    [Fact]
+    public void TheEntryListGroupsByCompany()
+    {
+        var (store, repository, book, journal) = Fresh();
+        using var _ = store;
+
+        repository.AddItem(PimJournalCodec.ToItem(
+            new JournalEntry
+            {
+                Uid = "c1",
+                Summary = "Rang the plumber",
+                EntryType = "Phone call",
+                Company = "Pipes Ltd",
+                When = EventTime.At(Today.ToDateTime(new TimeOnly(10, 0)), "Europe/London"),
+            },
+            journal.Id));
+        Add(repository, journal.Id, "No company", "Meeting", Today);
+
+        var groups = JournalBook.Grouped(book.Rows(JournalArrangement.EntryList, Today), JournalArrangement.EntryList);
+        Assert.Equal(["Company: (none)", "Company: Pipes Ltd"], groups.Select(g => g.Label));
+    }
+
+    [Fact]
+    public void EveryEntryTypeHasAGlyphTheMapKnows()
+    {
+        foreach (var type in JournalBook.Types)
+        {
+            var name = JournalBook.IconName(type);
+            Assert.True(Mailbox.Theming.Icons.IconGlyphs.Has(name),
+                $"the “{type}” entry type asks for the '{name}' icon, which is not in the glyph map.");
+        }
+
+        // A type another client invented falls back to the module's own mark, and that mark exists.
+        Assert.True(Mailbox.Theming.Icons.IconGlyphs.Has(JournalBook.IconName("Interpretive dance")));
+    }
+
+    [Fact]
     public void AnEntryWritesHowLongItTookAndWhoItWasWith()
     {
         var (store, repository, book, journal) = Fresh();

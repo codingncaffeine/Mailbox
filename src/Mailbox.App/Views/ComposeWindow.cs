@@ -176,6 +176,9 @@ public sealed partial class ComposeWindow : Window
     /// <summary>The body as text and as markup, for a run to read back what typing did.</summary>
     public string BodyText => _surface.BodyText;
 
+    /// <summary>The attachment strip's state, for a run to read back what a forward carried.</summary>
+    public (bool IsVisible, string Text, IReadOnlyList<string> Files) AttachmentStrip => _surface.HarnessAttachments;
+
     public string BodyHtml => _surface.BodyHtml;
 
     /// <summary>Presses Send, for the harness.</summary>

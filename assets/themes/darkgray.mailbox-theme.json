@@ -152,7 +152,7 @@
     "journal.header.background": "#A19F9D",
     "journal.header.line": "#3B3A39",
     "journal.header.text": "#000000",
-    "journal.today.fill": "#C6C4C2",
+    "journal.today.fill": "#ABBCCA",
     "list.background": "{palette.content.pane}",
     "list.group.header.background": "{palette.content.groupheader}",
     "list.group.header.height": "26",

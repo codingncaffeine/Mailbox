@@ -439,7 +439,7 @@ public static class OfficeThemes
         t.Set(TokenKeys.Journal.HeaderText, "#000000");
         t.Set(TokenKeys.Journal.HeaderLine, "#3B3A39");
         t.Set(TokenKeys.Journal.GridLine, "#323130");
-        t.Set(TokenKeys.Journal.TodayFill, "#C6C4C2");
+        t.Set(TokenKeys.Journal.TodayFill, "#ABBCCA");
         t.Set(TokenKeys.Journal.EntryGround, "#F4F4F4");
         t.Set(TokenKeys.Journal.EntryText, "#000000");
         t.Set(TokenKeys.Journal.EntryBorder, "#A19F9D");
@@ -859,7 +859,7 @@ public static class OfficeThemes
         t.Set(TokenKeys.Journal.HeaderText, "#E1DFDD");
         t.Set(TokenKeys.Journal.HeaderLine, "#000000");
         t.Set(TokenKeys.Journal.GridLine, "#000000");
-        t.Set(TokenKeys.Journal.TodayFill, "#3B3A39");
+        t.Set(TokenKeys.Journal.TodayFill, "#304456");
         t.Set(TokenKeys.Journal.EntryGround, "#060608");
         t.Set(TokenKeys.Journal.EntryTint, "0.5");
         t.Set(TokenKeys.Journal.EntryText, "#FAF9F8");
@@ -1274,7 +1274,7 @@ public static class OfficeThemes
         t.Set(TokenKeys.Journal.HeaderText, "#3B3A39");
         t.Set(TokenKeys.Journal.HeaderLine, "{palette.neutral.light}");
         t.Set(TokenKeys.Journal.GridLine, "#D2D0CE");
-        t.Set(TokenKeys.Journal.TodayFill, "#FAF9F8");
+        t.Set(TokenKeys.Journal.TodayFill, "#E2EDF7");
         t.Set(TokenKeys.Journal.EntryGround, "{palette.neutral.white}");
         t.Set(TokenKeys.Journal.EntryTint, "0.8");
         t.Set(TokenKeys.Journal.EntryText, "{palette.neutral.primary}");

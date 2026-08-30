@@ -5,10 +5,13 @@ The bundled font is microsoft/fluentui-system-icons (MIT). This script maps Mail
 logical icon names onto its codepoints so that commands can reference icons by name and a
 theme can swap the entire icon set without touching a command definition.
 
-Usage:
-    curl -fsSLO https://raw.githubusercontent.com/microsoft/fluentui-system-icons/main/fonts/FluentSystemIcons-Regular.json
-    curl -fsSLO https://raw.githubusercontent.com/microsoft/fluentui-system-icons/main/fonts/FluentSystemIcons-Filled.json
-    python3 tools/generate-icons.py FluentSystemIcons-Regular.json FluentSystemIcons-Filled.json
+Usage — the metadata comes from the bundled fonts themselves, never from upstream: the
+repository's own JSON describes whatever the font is today, and a map generated from it once
+pointed three names at codepoints the bundled TTF does not have, so those buttons drew blank.
+
+    python3 tools/font-metadata.py assets/fonts/FluentSystemIcons-Regular.ttf regular.json
+    python3 tools/font-metadata.py assets/fonts/FluentSystemIcons-Filled.ttf filled.json
+    python3 tools/generate-icons.py regular.json filled.json
 """
 
 import json
@@ -55,7 +58,7 @@ WANTED = {
     "journal": "book",
     "rss": "rss",
     "import": "arrow_import",
-    "export": "arrow_export",
+    "export": "arrow_export_ltr",
     "refresh": "arrow_clockwise",
     "remove-feed": "subtract_circle",
     "attach": "attach",
@@ -138,7 +141,7 @@ WANTED = {
     # ---- Tasks, Notes and Journal (Phase 13) --------------------------------------------
     "remove-from-list": "dismiss",
     "task-detailed": "apps_list_detail",
-    "task-simple-list": "text_bullet_list",
+    "task-simple-list": "text_bullet_list_ltr",
     "todo-list": "task_list_ltr",
     "assign-task": "person_arrow_right",
     "status-report": "mail_arrow_up",
@@ -148,6 +151,14 @@ WANTED = {
     "notes-icons": "grid",
     "last-seven-days": "history",
     "journal-timeline": "timeline",
+    # The journal's entry types, one glyph each, so a call and a document stop drawing as
+    # the same coloured square. Types with a module of their own reuse that module's icon.
+    "chat": "chat",
+    "letter": "document_text",
+    "fax": "fax",
+    "document": "document",
+    "task-request": "clipboard_task",
+    "remote-session": "desktop_arrow_right",
 
     # ---- People module (Phase 12) -------------------------------------------------------
     "contact-group": "people_team",
@@ -181,7 +192,7 @@ WANTED = {
     "highlight": "highlight",
     "font-color": "text_color",
     "clear-formatting": "text_clear_formatting",
-    "bullets": "text_bullet_list",
+    "bullets": "text_bullet_list_ltr",
     "numbering": "text_number_list_ltr",
     "multilevel-list": "text_bullet_list_tree",
     "indent-increase": "text_indent_increase_ltr",

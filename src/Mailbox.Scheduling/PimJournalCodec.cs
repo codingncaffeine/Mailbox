@@ -36,6 +36,10 @@ public static class PimJournalCodec
             Sequence = entry.Sequence,
             Categories = string.Join(",", entry.Categories),
             Organizer = string.Join(",", entry.Contacts),
+            // The company goes in the column the contact rows already use, for the reason the
+            // type rides in Status: the Entry List groups by it, and a list reads columns.
+            Company = entry.Company,
+            IsPrivate = entry.IsPrivate,
             LastModified = entry.LastModified,
             SyncState = syncState ?? (existing is null ? PimSyncState.New : existing.SyncState == PimSyncState.New ? PimSyncState.New : PimSyncState.Modified),
             DavHref = existing?.DavHref,
@@ -75,6 +79,8 @@ public static class PimJournalCodec
             EntryType = item.Status.Length > 0 ? item.Status : JournalEntry.NoteType,
             Categories = item.Categories.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
             Contacts = item.Organizer.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+            Company = item.Company,
+            IsPrivate = item.IsPrivate,
             Sequence = item.Sequence,
             LastModified = item.LastModified,
         };

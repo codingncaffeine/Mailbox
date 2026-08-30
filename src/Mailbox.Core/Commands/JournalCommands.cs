@@ -166,12 +166,34 @@ public static class JournalCommands
     public static readonly MailboxCommand TimelineView = new()
     {
         Id = new("journal.view.timeline"),
-        Label = "Timeline",
-        Description = "The entries hung under when they happened.",
+        Label = "By Type",
+        Description = "The timeline, its bands one per entry type.",
         Icon = "journal-timeline",
         Category = "Current View",
         Scope = ModuleScope.Journal,
         KeyTip = "VT",
+    };
+
+    public static readonly MailboxCommand ByContactView = new()
+    {
+        Id = new("journal.view.bycontact"),
+        Label = "By Contact",
+        Description = "The timeline, its bands one per contact.",
+        Icon = "person",
+        Category = "Current View",
+        Scope = ModuleScope.Journal,
+        KeyTip = "VC",
+    };
+
+    public static readonly MailboxCommand ByCategoryView = new()
+    {
+        Id = new("journal.view.bycategory"),
+        Label = "By Category",
+        Description = "The timeline, its bands one per colour category.",
+        Icon = "categorize",
+        Category = "Current View",
+        Scope = ModuleScope.Journal,
+        KeyTip = "VG",
     };
 
     public static readonly MailboxCommand EntryListView = new()
@@ -214,6 +236,6 @@ public static class JournalCommands
         Delete, Open, Forward, Categorize,
         Today, Back, Forwards,
         DayScale, WeekScale, MonthScale,
-        TimelineView, EntryListView, PhoneCallsView, LastSevenDaysView,
+        TimelineView, ByContactView, ByCategoryView, EntryListView, PhoneCallsView, LastSevenDaysView,
     ];
 }
