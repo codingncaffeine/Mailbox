@@ -102,6 +102,30 @@ public class CalendarSubscriptionSyncTests
     /// only one of them is a document.
     /// </summary>
     [Fact]
+    public async Task TheCheapCheckSendsNoPropfindAtASubscription()
+    {
+        using var store = PimStore.Transient();
+        var repository = new PimRepository(store);
+        var server = new PublishedCalendarServer();
+
+        var subscription = repository.AddCollection(
+            CollectionKind.Events, "Holidays", account: string.Empty,
+            davUrl: server.Url.ToString(), readOnly: true);
+
+        // A CTag would arm the DAV cheap check; a published file must skip it even so.
+        repository.SetCollectionSync(subscription.Id, "some-ctag", null);
+        var armed = repository.Collection(subscription.Id)!;
+
+        using var client = new DavClient(handler: server);
+        var unchanged = await new DavSync(client, repository).IsUnchangedAsync(armed, TestContext.Current.CancellationToken);
+
+        // "Go and fetch" — and not one request spent asking a file server DAV questions,
+        // which was a guaranteed 405 in the publisher's log every poll.
+        Assert.False(unchanged);
+        Assert.Empty(server.Methods);
+    }
+
+    [Fact]
     public void ASubscriptionIsToldFromASharedCalendarByItsAccount()
     {
         using var store = PimStore.Transient();

@@ -198,6 +198,17 @@ public static class AppointmentCommands
         InDefaultLayout = false,
     };
 
+    public static readonly MailboxCommand AppointmentPage = new()
+    {
+        Id = new("appointment.page"),
+        Label = "Appointment",
+        Description = "Back to the appointment's own form.",
+        Icon = "calendar",
+        Category = "Show",
+        Scope = ModuleScope.Calendar,
+        InDefaultLayout = false,
+    };
+
     /// <summary>Every command this class declares, stamped as the appointment window's.</summary>
     public static IEnumerable<MailboxCommand> All =>
         Declared.Select(c => c with { Surface = CommandSurface.Appointment });
@@ -207,6 +218,6 @@ public static class AppointmentCommands
         SaveAndClose, Send, Delete, CopyToMyCalendar, Forward,
         InviteAttendees, ResponseOptions, ShowAs, Reminder, MakeRecurring,
         Categorize, Private, HighImportance, LowImportance,
-        Rooms, SchedulingAssistant,
+        Rooms, SchedulingAssistant, AppointmentPage,
     ];
 }

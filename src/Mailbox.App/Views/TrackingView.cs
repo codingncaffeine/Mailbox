@@ -33,6 +33,17 @@ internal sealed class TrackingView : Border
         stack.Children.Add(Summary(meeting));
         stack.Children.Add(Head());
 
+        // The organiser first, as the reference's table lists them: the summary above counts a
+        // reply nobody could otherwise see the row for.
+        if (meeting.Organizer is { Length: > 0 } organizer)
+        {
+            var row = Columns();
+            Add(row, Address(organizer), 0, semiBold: false);
+            Add(row, "Meeting Organizer", 1, semiBold: false);
+            Add(row, "None", 2, semiBold: false);
+            stack.Children.Add(new Border { Child = row, Padding = new Thickness(0, 5, 0, 5) });
+        }
+
         foreach (var attendee in meeting.Attendees)
         {
             stack.Children.Add(Row(attendee));

@@ -483,13 +483,27 @@ public partial class MainWindow
         }
 
         var start = master.Start.Wall;
-        var dialog = new RecurrenceDialog(master.Rrule, DateOnly.FromDateTime(start), master.End.Wall - start, master.Start.Zone());
+        var dialog = new RecurrenceDialog(master.Rrule, DateOnly.FromDateTime(start), master.End.Wall - start, master.Start.Zone(),
+            master.Start.AllDay ? null : TimeOnly.FromDateTime(start));
         await dialog.ShowDialog(this);
         if (dialog.Cancelled) return;
+
+        // The dialog's own Appointment time and range Start move the series with the pattern,
+        // as the reference's dialog does.
+        var movedDate = dialog.EditedStartDate ?? DateOnly.FromDateTime(start);
+        var movedTime = dialog.EditedStartTime ?? (master.Start.AllDay ? TimeOnly.MinValue : TimeOnly.FromDateTime(start));
+        var movedStart = movedDate.ToDateTime(movedTime);
+        var length = dialog.EditedDuration ?? master.End.Wall - start;
 
         var changed = master with
         {
             Rrule = string.IsNullOrEmpty(dialog.Rrule) ? null : dialog.Rrule,
+            Start = master.Start.AllDay
+                ? EventTime.Date(movedDate)
+                : EventTime.At(movedStart, master.Start.TzId ?? TimeZoneInfo.Local.Id),
+            End = master.Start.AllDay
+                ? EventTime.Date(DateOnly.FromDateTime(movedStart + length))
+                : EventTime.At(movedStart + length, master.End.TzId ?? TimeZoneInfo.Local.Id),
             Sequence = master.Sequence + 1,
             LastModified = DateTimeOffset.UtcNow,
         };

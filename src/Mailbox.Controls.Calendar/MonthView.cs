@@ -50,6 +50,7 @@ public sealed class MonthView : CalendarSurface
 
     private readonly List<(Rect Box, CalendarEntry Entry)> _entryHits = [];
     private readonly List<(Rect Box, DateOnly Day)> _dayHits = [];
+    private readonly List<(Rect Box, DateOnly Day)> _moreHits = [];
     private Rect _gutter;
     private ChipDrag? _drag;
 
@@ -119,6 +120,9 @@ public sealed class MonthView : CalendarSurface
 
     public event EventHandler<DateOnly>? DaySelected;
     public event EventHandler<DateOnly>? DayActivated;
+
+    /// <summary>The cell's "more" mark pressed: the reference goes to that day.</summary>
+    public event EventHandler<DateOnly>? MoreRequested;
     public event EventHandler<CalendarEntry>? EntryActivated;
     public event EventHandler<CalendarEntry>? EntrySelected;
 
@@ -173,6 +177,7 @@ public sealed class MonthView : CalendarSurface
     {
         _entryHits.Clear();
         _dayHits.Clear();
+        _moreHits.Clear();
 
         var width = Math.Max(0, Bounds.Width - GutterWidth);
         var height = Bounds.Height;
@@ -407,7 +412,7 @@ public sealed class MonthView : CalendarSurface
             var room = bottom - y;
             if (room < ChipHeight(1))
             {
-                DrawMoreMark(context, cell);
+                DrawMoreMark(context, cell, date);
                 return;
             }
 
@@ -420,12 +425,13 @@ public sealed class MonthView : CalendarSurface
         }
     }
 
-    /// <summary>The mark a cell carries when it holds more than it can show.</summary>
-    private void DrawMoreMark(DrawingContext context, Rect cell)
+    /// <summary>The mark a cell carries when it holds more than it can show — a press goes to the day.</summary>
+    private void DrawMoreMark(DrawingContext context, Rect cell, DateOnly day)
     {
         var ink = Palette.Brush(Palette.Colour(TokenKeys.Calendar.DayText));
         var x = cell.Right - ChipRightInset - 8;
         var y = cell.Y + 10;
+        _moreHits.Add((new Rect(x - 4, y - 5, 17, 15), day));
         var figure = new StreamGeometry();
         using (var draw = figure.Open())
         {
@@ -484,6 +490,16 @@ public sealed class MonthView : CalendarSurface
         if (_gutter.Contains(point))
         {
             Scrolled?.Invoke(this, point.Y < _gutter.Center.Y ? -1 : 1);
+            e.Handled = true;
+            return;
+        }
+
+        // The "more" mark before the cell it sits in: pressing it goes to the day, as the
+        // reference does — it used to select the day like any other press and no more.
+        foreach (var (box, day) in _moreHits)
+        {
+            if (!box.Contains(point)) continue;
+            MoreRequested?.Invoke(this, day);
             e.Handled = true;
             return;
         }

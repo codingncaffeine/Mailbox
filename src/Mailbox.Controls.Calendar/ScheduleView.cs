@@ -179,7 +179,7 @@ public sealed class ScheduleView : CalendarSurface
         Fill(context, new Rect(0, dateTop, Bounds.Width, DateBandHeight), headerFill);
         DrawAt(
             context,
-            Ink(Day.ToString("dddd, MMMM d", Culture), RulerTextSize, Palette.Colour(TokenKeys.Calendar.HeaderText), SemiBoldFace),
+            Ink(Day.ToString("dddd, MMMM d, yyyy", Culture), RulerTextSize, Palette.Colour(TokenKeys.Calendar.HeaderText), SemiBoldFace),
             NameWidth + 8,
             dateTop + RulerBaseline);
         Fill(context, new Rect(0, dateTop + DateBandHeight, Bounds.Width, 1), Palette.Colour(TokenKeys.Calendar.HeaderLine));

@@ -67,19 +67,102 @@ public sealed class RecurrenceDialog : Window
     /// <summary>The appointment's zone, which is what "end by" a date means in.</summary>
     private readonly TimeZoneInfo? _zone;
 
-    public RecurrenceDialog(string? rrule, DateOnly start, TimeSpan duration, TimeZoneInfo? zone = null)
+    private readonly (DateOnly Date, TimeOnly? Time, TimeSpan Duration) _openedOn;
+
+    private readonly ComboBox _startTimeBox = new() { MinWidth = 110 };
+    private readonly ComboBox _endTimeBox = new() { MinWidth = 110 };
+    private readonly ComboBox _durationBox = new() { MinWidth = 110 };
+    private readonly CalendarDatePicker _rangeStart = new() { MinWidth = 160 };
+    private readonly List<TimeOnly> _timeSlots = [];
+    private bool _interlocking;
+
+    /// <summary>The reference's own duration list for this dialog's drop-down.</summary>
+    private static readonly TimeSpan[] Durations =
+    [
+        TimeSpan.FromMinutes(15), TimeSpan.FromMinutes(30), TimeSpan.FromMinutes(45),
+        TimeSpan.FromHours(1), TimeSpan.FromMinutes(90), TimeSpan.FromHours(2),
+        TimeSpan.FromHours(3), TimeSpan.FromHours(4), TimeSpan.FromHours(8),
+    ];
+
+    /// <summary>The appointment time as edited here, or null for each half left alone.</summary>
+    public TimeOnly? EditedStartTime { get; private set; }
+    public TimeSpan? EditedDuration { get; private set; }
+
+    /// <summary>The range's Start date as edited, or null when it was left where it was.</summary>
+    public DateOnly? EditedStartDate { get; private set; }
+
+    private int Slot(TimeOnly time) => Math.Clamp((time.Hour * 2) + (time.Minute >= 30 ? 1 : 0), 0, 47);
+
+    private void MoveEndKeepingDuration()
+    {
+        _interlocking = true;
+        var start = _timeSlots[Math.Clamp(_startTimeBox.SelectedIndex, 0, 47)];
+        _endTimeBox.SelectedIndex = Slot(start.AddMinutes(Math.Clamp(CurrentDuration().TotalMinutes, 0, 1439)));
+        _interlocking = false;
+    }
+
+    private void RecomputeDuration()
+    {
+        _interlocking = true;
+        var start = _timeSlots[Math.Clamp(_startTimeBox.SelectedIndex, 0, 47)];
+        var end = _timeSlots[Math.Clamp(_endTimeBox.SelectedIndex, 0, 47)];
+        var minutes = (end.ToTimeSpan() - start.ToTimeSpan()).TotalMinutes;
+        if (minutes <= 0) minutes += 24 * 60;
+        ShowDuration(TimeSpan.FromMinutes(minutes));
+        _interlocking = false;
+    }
+
+    private void MoveEndFromDuration()
+    {
+        _interlocking = true;
+        var start = _timeSlots[Math.Clamp(_startTimeBox.SelectedIndex, 0, 47)];
+        _endTimeBox.SelectedIndex = Slot(start.AddMinutes(Math.Clamp(CurrentDuration().TotalMinutes, 0, 1439)));
+        _interlocking = false;
+    }
+
+    /// <summary>What the duration list says, offered or written in as the appointment's own.</summary>
+    private TimeSpan CurrentDuration()
+    {
+        var index = _durationBox.SelectedIndex;
+        if (index >= 0 && index < Durations.Length) return Durations[index];
+        return _openedOn.Duration;
+    }
+
+    /// <summary>Puts a duration on the list even when it is not one of the drop-down's own.</summary>
+    private void ShowDuration(TimeSpan duration)
+    {
+        var label = Length(duration);
+        var items = Durations.Select(Length).ToList();
+        if (!items.Contains(label)) items.Add(label);
+        _durationBox.ItemsSource = items;
+        _durationBox.SelectedIndex = items.IndexOf(label);
+    }
+
+    /// <summary>The reference's first group: the appointment's own Start, End and Duration.</summary>
+    private Control TimeBox()
+    {
+        var row = Row(
+            Text("Start:"), _startTimeBox,
+            Text("End:"), _endTimeBox,
+            Text("Duration:"), _durationBox);
+        return Group("Appointment time", row);
+    }
+
+    public RecurrenceDialog(string? rrule, DateOnly start, TimeSpan duration, TimeZoneInfo? zone = null, TimeOnly? startTime = null)
     {
         _existing = rrule;
         _zone = zone;
+        _openedOn = (start, startTime, duration);
         Title = "Appointment Recurrence";
-        Width = 520;
-        Height = 520;
+        Width = 560;
+        SizeToContent = SizeToContent.Height;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
-        var names = CultureInfo.CurrentCulture.DateTimeFormat.AbbreviatedDayNames;
+        // Spelt out, as the reference spells them: Sunday, not Sun.
+        var names = CultureInfo.CurrentCulture.DateTimeFormat.DayNames;
         _weekDays =
         [
-            .. Enumerable.Range(0, 7).Select(i => new CheckBox { Content = names[i], MinWidth = 70 }),
+            .. Enumerable.Range(0, 7).Select(i => new CheckBox { Content = names[i], MinWidth = 110 }),
         ];
         foreach (var box in _weekDays) Bind(box, TemplatedControl.ForegroundProperty, "dialog.foreground.brush");
 
@@ -94,20 +177,42 @@ public sealed class RecurrenceDialog : Window
         _occurrences.Value = 10;
         _until.SelectedDate = start.AddMonths(3).ToDateTime(TimeOnly.MinValue);
 
-        Load(RecurrencePattern.Parse(rrule) ?? RecurrencePattern.Weekly(start));
-
-        var summary = new TextBlock
+        // The reference's first group: Start, End and Duration drop-downs — the appointment's
+        // own time, editable here as it is there. Interlocked the way its form interlocks:
+        // moving Start keeps the duration, moving End or Duration recomputes the other.
+        for (var half = 0; half < 48; half++)
         {
-            Text = $"Appointment time: {start.ToDateTime(TimeOnly.MinValue).ToString("d", CultureInfo.CurrentCulture)}, "
-                   + $"{Length(duration)}",
-            Margin = new Thickness(0, 0, 0, 12),
-        };
-        Bind(summary, TextBlock.ForegroundProperty, "dialog.foreground.brush");
+            _timeSlots.Add(new TimeOnly(half / 2, (half % 2) * 30));
+        }
+
+        _startTimeBox.ItemsSource = _timeSlots.Select(t => t.ToString("t", CultureInfo.CurrentCulture)).ToList();
+        _endTimeBox.ItemsSource = _timeSlots.Select(t => t.ToString("t", CultureInfo.CurrentCulture)).ToList();
+        _durationBox.ItemsSource = Durations.Select(Length).ToList();
+
+        var opens = startTime ?? new TimeOnly(8, 0);
+        _startTimeBox.SelectedIndex = Slot(opens);
+        _endTimeBox.SelectedIndex = Slot(opens.AddMinutes(Math.Clamp(duration.TotalMinutes, 0, 1439)));
+        ShowDuration(duration);
+
+        var whole = startTime is null;
+        _startTimeBox.IsEnabled = !whole;
+        _endTimeBox.IsEnabled = !whole;
+        _durationBox.IsEnabled = !whole;
+
+        _startTimeBox.SelectionChanged += (_, _) => { if (_interlocking) return; MoveEndKeepingDuration(); };
+        _endTimeBox.SelectionChanged += (_, _) => { if (_interlocking) return; RecomputeDuration(); };
+        _durationBox.SelectionChanged += (_, _) => { if (_interlocking) return; MoveEndFromDuration(); };
+
+        // And the range's own Start date, which the reference's group begins with.
+        _rangeStart.SelectedDate = start.ToDateTime(TimeOnly.MinValue);
+
+        Load(RecurrencePattern.Parse(rrule) ?? RecurrencePattern.Weekly(start));
 
         var ok = new Button { Content = "OK", Width = 84, IsDefault = true };
         ok.Click += (_, _) =>
         {
             Rrule = Build().ToRrule(_zone);
+            CollectTime();
             Cancelled = false;
             Close();
         };
@@ -123,19 +228,15 @@ public sealed class RecurrenceDialog : Window
         var cancel = new Button { Content = "Cancel", Width = 84, IsCancel = true };
         cancel.Click += (_, _) => Close();
 
-        var buttons = new Grid
+        var buttons = new StackPanel
         {
             [DockPanel.DockProperty] = Dock.Bottom,
-            ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto"),
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Spacing = 8,
             Margin = new Thickness(0, 14, 0, 0),
+            Children = { ok, cancel, remove },
         };
-        Grid.SetColumn(remove, 0);
-        buttons.Children.Add(remove);
-        ok.Margin = new Thickness(0, 0, 8, 0);
-        Grid.SetColumn(ok, 2);
-        buttons.Children.Add(ok);
-        Grid.SetColumn(cancel, 3);
-        buttons.Children.Add(cancel);
 
         var body = new DockPanel
         {
@@ -146,7 +247,7 @@ public sealed class RecurrenceDialog : Window
                 new StackPanel
                 {
                     Spacing = 10,
-                    Children = { summary, PatternBox(), RangeBox() },
+                    Children = { TimeBox(), PatternBox(), RangeBox() },
                 },
             },
         };
@@ -398,6 +499,7 @@ public sealed class RecurrenceDialog : Window
             Spacing = 6,
             Children =
             {
+                Row(Text("Start:"), _rangeStart),
                 _noEnd,
                 Row(_endAfter, _occurrences, Text("occurrences")),
                 Row(_endBy, _until),
@@ -515,6 +617,24 @@ public sealed class RecurrenceDialog : Window
         if (_endAfter.IsChecked == true) return pattern with { Count = Whole(_occurrences) };
         if (_endBy.IsChecked == true && _until.SelectedDate is { } until) return pattern with { Until = DateOnly.FromDateTime(until.Date) };
         return pattern;
+    }
+
+    /// <summary>What the Appointment time group and the range's Start now say, where edited.</summary>
+    private void CollectTime()
+    {
+        if (_startTimeBox.IsEnabled && _openedOn.Time is { } wasAt)
+        {
+            var start = _timeSlots[Math.Clamp(_startTimeBox.SelectedIndex, 0, 47)];
+            if (start != wasAt) EditedStartTime = start;
+
+            var duration = CurrentDuration();
+            if (duration != _openedOn.Duration && duration > TimeSpan.Zero) EditedDuration = duration;
+        }
+
+        if (_rangeStart.SelectedDate is { } picked && DateOnly.FromDateTime(picked) != _openedOn.Date)
+        {
+            EditedStartDate = DateOnly.FromDateTime(picked);
+        }
     }
 
     /// <summary>The rule the dialog was opened on, for a caller that wants to know it changed.</summary>

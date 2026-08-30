@@ -443,7 +443,10 @@ public sealed class CalendarWorkspace : Border
             AfterMove();
         };
         _month.DaySelected += (_, day) => Select(day);
-        _month.DayActivated += (_, day) => NewRequested?.Invoke(this, (day.ToDateTime(new TimeOnly(9, 0)), false));
+        _month.MoreRequested += (_, day) => GoToRange(day, day);
+        // At the working day's start, which Options names and AddFocusTime already reads — not a
+        // nine o'clock of this file's own invention.
+        _month.DayActivated += (_, day) => NewRequested?.Invoke(this, (day.ToDateTime(App.CalendarOptions.WorkDayStart), false));
         _month.EntrySelected += (_, entry) => SelectedEntry = entry;
         _month.EntryActivated += (_, entry) => EntryOpened?.Invoke(this, entry);
 
@@ -481,6 +484,10 @@ public sealed class CalendarWorkspace : Border
     {
         var days = last.DayNumber - first.DayNumber + 1;
         _anchor = first;
+
+        // The picked day is highlighted in the grid it lands in, not merely shown.
+        _month.Selected = first;
+        _timeGrid.Selected = first;
         _rolling = false;
         _kind = days switch
         {

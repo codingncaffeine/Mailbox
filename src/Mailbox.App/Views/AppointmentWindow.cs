@@ -179,6 +179,7 @@ public sealed class AppointmentWindow : Window
     private bool RunHere(CommandId id)
     {
         if (id == AppointmentCommands.SchedulingAssistant.Id) { SelectTab("scheduling"); return true; }
+        if (id == AppointmentCommands.AppointmentPage.Id) { SelectTab(_meeting ? "meeting" : "appointment"); return true; }
         if (id == AppointmentCommands.CopyToMyCalendar.Id) { CopyRequested?.Invoke(this, _surface.Current()); return true; }
         if (id == AppointmentCommands.Forward.Id) { ForwardRequested?.Invoke(this, _surface.Current()); return true; }
         if (id == AppointmentCommands.ShowAs.Id) { ShowAsMenu(); return true; }

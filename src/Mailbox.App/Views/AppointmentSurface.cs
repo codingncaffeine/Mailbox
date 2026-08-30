@@ -780,10 +780,26 @@ public sealed class AppointmentSurface : UserControl
     {
         if (TopLevel.GetTopLevel(this) is not Window owner) return;
         var start = StartWall();
-        var dialog = new RecurrenceDialog(_rrule, DateOnly.FromDateTime(start), EndWall() - start, TimeZoneInfo.Local);
+        var dialog = new RecurrenceDialog(
+            _rrule, DateOnly.FromDateTime(start), EndWall() - start, TimeZoneInfo.Local,
+            _allDay.IsChecked == true ? null : TimeOnly.FromDateTime(start));
         await dialog.ShowDialog(owner);
         if (dialog.Cancelled) return;
         _rrule = dialog.Rrule;
+
+        // The dialog's Appointment time group is the appointment's own time: what was moved
+        // there moves the form, exactly as the reference's dialog does.
+        var wasLong = EndWall() - start;
+        if (dialog.EditedStartDate is { } day) _startDate.SelectedDate = day.ToDateTime(TimeOnly.MinValue);
+        if (dialog.EditedStartTime is { } at) _startTime.SelectedIndex = Slot((_startDate.SelectedDate ?? DateTime.Today).Date + at.ToTimeSpan());
+        if (dialog.EditedStartTime is not null || dialog.EditedDuration is not null || dialog.EditedStartDate is not null)
+        {
+            var moved = StartWall();
+            var end = moved + (dialog.EditedDuration ?? (wasLong > TimeSpan.Zero ? wasLong : TimeSpan.FromMinutes(30)));
+            _endDate.SelectedDate = end.Date;
+            _endTime.SelectedIndex = Slot(end);
+        }
+
         if (_recurringCaption is { } caption) RefreshRecurrence(caption);
         Changed?.Invoke(this, EventArgs.Empty);
     }

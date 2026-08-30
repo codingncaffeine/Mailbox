@@ -417,6 +417,14 @@ public sealed class DavSync(DavClient client, PimRepository repository, IDavPayl
     /// </summary>
     public async Task<bool> IsUnchangedAsync(Collection collection, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(collection);
+
+        // A subscription is a published file, not a DAV collection: a PROPFIND at it is a
+        // guaranteed 405 in the publisher's log before the document fetch does the real work.
+        // Its own cheap check is the fetch path's conditional request, so the answer here is
+        // simply "go and fetch".
+        if (IsSubscription(collection)) return false;
+
         if (collection.Ctag is not { Length: > 0 } ctag) return false;
         if (collection.DavUrl is not { Length: > 0 } url || !Uri.TryCreate(url, UriKind.Absolute, out var root)) return false;
         var current = await ReadCtagAsync(root, cancellationToken).ConfigureAwait(false);

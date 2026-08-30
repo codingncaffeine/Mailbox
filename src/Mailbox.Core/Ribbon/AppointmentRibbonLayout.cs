@@ -22,6 +22,60 @@ public static class AppointmentRibbonLayout
 
     private static SimplifiedBar Bar(params RibbonGroup[] groups) => new() { Groups = groups };
 
+    /// <summary>
+    /// The groups the two page tabs carry: the reference's Show pair back and forth, the
+    /// attendee commands, and — on the assistant — the Options the Meeting tab also offers.
+    /// </summary>
+    private static IEnumerable<RibbonGroup> PageGroups(bool meeting, bool showOptions)
+    {
+        yield return new RibbonGroup
+        {
+            Id = "show",
+            Label = "Show",
+            KeyTip = "ZH",
+            CollapsePriority = 4,
+            Items =
+            [
+                RibbonItem.Large(AppointmentCommands.AppointmentPage.Id),
+                RibbonItem.Large(AppointmentCommands.SchedulingAssistant.Id),
+            ],
+        };
+
+        yield return new RibbonGroup
+        {
+            Id = "attendees",
+            Label = "Attendees",
+            KeyTip = "ZT",
+            CollapsePriority = 2,
+            Items = meeting
+                ?
+                [
+                    RibbonItem.Large(AppointmentCommands.ResponseOptions.Id, RibbonItemKind.DropDown),
+                    RibbonItem.Small(AppointmentCommands.Rooms.Id),
+                ]
+                :
+                [
+                    RibbonItem.Large(AppointmentCommands.InviteAttendees.Id),
+                ],
+        };
+
+        if (!showOptions) yield break;
+
+        yield return new RibbonGroup
+        {
+            Id = "options",
+            Label = "Options",
+            KeyTip = "ZO",
+            CollapsePriority = 1,
+            Items =
+            [
+                RibbonItem.LabelledCombo(AppointmentCommands.ShowAs.Id, ShowAsWidth, "Busy"),
+                RibbonItem.LabelledCombo(AppointmentCommands.Reminder.Id, ReminderWidth, "15 minutes"),
+                RibbonItem.Small(AppointmentCommands.MakeRecurring.Id),
+            ],
+        };
+    }
+
     private static RibbonGroup Cluster(string id, string label, params RibbonItem[] items)
         => new() { Id = id, Label = label, Items = items };
 
@@ -72,6 +126,24 @@ public static class AppointmentRibbonLayout
 
                 Cluster("apps", "Apps",
                     RibbonItem.Sheddable(ViewCommands.Apps.Id))),
+
+            ["scheduling"] = Bar(
+                Cluster("show", "Show",
+                    RibbonItem.Small(AppointmentCommands.AppointmentPage.Id),
+                    RibbonItem.Small(AppointmentCommands.SchedulingAssistant.Id)),
+                Cluster("attendees", "Attendees",
+                    meeting
+                        ? RibbonItem.Sheddable(AppointmentCommands.ResponseOptions.Id, RibbonItemKind.DropDown)
+                        : RibbonItem.Sheddable(AppointmentCommands.InviteAttendees.Id)),
+                Cluster("options", "Options",
+                    RibbonItem.Sheddable(AppointmentCommands.MakeRecurring.Id))),
+
+            ["tracking"] = Bar(
+                Cluster("show", "Show",
+                    RibbonItem.Small(AppointmentCommands.AppointmentPage.Id),
+                    RibbonItem.Small(AppointmentCommands.SchedulingAssistant.Id)),
+                Cluster("attendees", "Attendees",
+                    RibbonItem.Sheddable(AppointmentCommands.ResponseOptions.Id, RibbonItemKind.DropDown))),
 
             ["insert"] = Bar(
                 Cluster("include", "Include",
@@ -181,14 +253,30 @@ public static class AppointmentRibbonLayout
                 ],
             },
 
-            // These two replace the form rather than adding buttons above it, which is why they
-            // carry no groups: the window swaps its workspace when one is chosen.
-            new RibbonTab { Id = "scheduling", Label = "Scheduling Assistant", KeyTip = "G", Groups = [] },
+            // These two replace the form below the bar — and the bar still holds a ribbon,
+            // because a tab whose strip is nothing but an overflow chevron is a shape the
+            // reference never shows: its assistant tab carries Show, Attendees and Options.
+            new RibbonTab
+            {
+                Id = "scheduling",
+                Label = "Scheduling Assistant",
+                KeyTip = "G",
+                Groups = [.. PageGroups(meeting, showOptions: true)],
+            },
 
             // Tracking is the organizer's own tab: an appointment nobody was asked to has nothing
             // to track, and the reference does not offer it there either.
             .. meeting
-                ? new[] { new RibbonTab { Id = "tracking", Label = "Tracking", KeyTip = "K", Groups = [] } }
+                ? new[]
+                {
+                    new RibbonTab
+                    {
+                        Id = "tracking",
+                        Label = "Tracking",
+                        KeyTip = "K",
+                        Groups = [.. PageGroups(meeting: true, showOptions: false)],
+                    },
+                }
                 : [],
 
             new RibbonTab { Id = "insert", Label = "Insert", KeyTip = "N", Groups = [] },
