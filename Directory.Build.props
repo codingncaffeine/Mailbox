@@ -34,9 +34,11 @@
   -->
   <PropertyGroup>
     <AvaloniaVersion>12.1.1</AvaloniaVersion>
-    <!-- Its own release train, not Avalonia's: the WebView package is versioned separately
-         and 12.0.1 is the newest that exists. -->
-    <AvaloniaWebViewVersion>12.0.1</AvaloniaWebViewVersion>
+    <!-- Its own release train, not Avalonia's: the WebView package is versioned separately.
+         12.1.0 (2026-08-15, MIT now) carries the WPE script-callback fix the paint nudge
+         leans on; the nudge itself stays, because the offscreen export path it covers is
+         unchanged upstream and that release's "first paint" fix is GTK-only. -->
+    <AvaloniaWebViewVersion>12.1.0</AvaloniaWebViewVersion>
     <MailKitVersion>4.17.0</MailKitVersion>
     <SqliteVersion>10.0.11</SqliteVersion>
     <IcalNetVersion>5.2.3</IcalNetVersion>
