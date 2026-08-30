@@ -268,9 +268,11 @@ public sealed partial class ReadingPaneBody
                 foreach (var visual in ((Visual)web).GetSelfAndVisualDescendants())
                 {
                     Log.Info($"Harness: reading surface — {visual.GetType().Name} bounds {visual.Bounds}"
-                             + (visual.IsVisible ? string.Empty : " (hidden)"));
+                             + (visual.IsVisible ? string.Empty : " (hidden)")
+                             + (TopLevel.GetTopLevel(visual) is null ? " (DETACHED)" : string.Empty));
                 }
             });
+
         }
         catch (Exception ex)
         {

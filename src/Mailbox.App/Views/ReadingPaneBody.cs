@@ -533,6 +533,8 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
                 if (e.IsSuccess) Log.Debug("The reading pane loaded a message.");
                 else Log.Warn("The reading pane could not load the message.");
 
+                if (e.IsSuccess) _ = NudgeFrameOutAsync(_web);
+
                 // Under the dump gate only: the engine has finished loading, so it can be asked
                 // what it drew — which a capture cannot answer, racing the offscreen frame.
                 _ = ReportEngineWordsAsync(e.IsSuccess);
@@ -546,6 +548,41 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
             Log.Warn("No web engine is available; the reading pane will render text only.", ex);
             _web = null;
             return _fallbackHost;
+        }
+    }
+
+    /// <summary>
+    /// Makes the offscreen engine export the frame it has already painted.
+    /// </summary>
+    /// <remarks>
+    /// The offscreen embedding delivers a frame only on damage, and a static message stops
+    /// causing damage the moment its last paint lands — which can be before the text was
+    /// rasterised, leaving the pane holding an earlier, bare frame: an empty body over a
+    /// perfectly healthy engine, with the words readable in the document and nothing on the
+    /// screen. Proven by damaging the page on a timer and photographing the window from
+    /// outside: exports resumed at once and the text appeared. So after every successful load,
+    /// an invisible style flick runs through two animation frames — real damage with no visible
+    /// effect — and the export it forces carries the finished paint. Twice, a few hundred
+    /// milliseconds apart, for the load whose first nudge lands before the text has been drawn.
+    /// </remarks>
+    private static async Task NudgeFrameOutAsync(NativeWebView web)
+    {
+        const string nudge =
+            "requestAnimationFrame(function(){"
+            + " document.documentElement.style.opacity='0.9999';"
+            + " requestAnimationFrame(function(){ document.documentElement.style.opacity=''; });"
+            + " });";
+        try
+        {
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(
+                async () => await web.InvokeScript(nudge));
+            await Task.Delay(400);
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(
+                async () => await web.InvokeScript(nudge));
+        }
+        catch
+        {
+            // A pane torn down mid-nudge is a pane that no longer needs one.
         }
     }
 
