@@ -1,0 +1,271 @@
+# What every pressed command is expected to land as, and why the quiet ones are quiet.
+# Written by the first press sweep, 30 August 2026, each SILENT and NOTWIRED row triaged
+# by hand: flyout-openers against their menu read-backs, visual actors against capture
+# hashes, state no-ops against the pose that holds them still. tools/press-sweep.sh
+# classifies a fresh batch and diffs it against this file; drift is the finding.
+# Columns: id, class, note (the note only where the class needs its reasons).
+app.addressbook	ACTED
+app.apps	SILENT	opens its flyout; the run log carries the menu read-back
+app.cancelall	ACTED
+app.downloadheaders	ACTED
+app.keyboard	ACTED
+app.markdownload	ACTED
+app.module.calendar	SILENT	acts on pixels; status, rows and windows cannot see it
+app.module.feeds	SILENT	acts on pixels; status, rows and windows cannot see it
+app.module.journal	SILENT	acts on pixels; status, rows and windows cannot see it
+app.module.mail	SILENT	a no-op in the pose: Mail is already the module
+app.module.notes	SILENT	acts on pixels; status, rows and windows cannot see it
+app.module.people	SILENT	acts on pixels; status, rows and windows cannot see it
+app.module.tasks	SILENT	acts on pixels; status, rows and windows cannot see it
+app.processheaders	ACTED
+app.redo	ACTED
+app.searchpeople	ACTED
+app.search	SILENT	moves focus to the search box, which no channel sees
+app.sendall	ACTED
+app.sendreceive.all	ACTED
+app.sendreceive.groups	SILENT	opens its flyout; the run log carries the menu read-back
+app.showprogress	ACTED
+app.undo	ACTED
+app.unmarkdownload	ACTED
+app.updatefolder	ACTED
+app.workoffline	ACTED
+calendar.back	SILENT	acts on pixels; status, rows and windows cannot see it
+calendar.colour	SILENT	opens its flyout; the run log carries the menu read-back
+calendar.delete.calendar	ACTED
+calendar.focustime	ACTED
+calendar.forward	SILENT	acts on pixels; status, rows and windows cannot see it
+calendar.goto	ACTED
+calendar.groups	ACTED
+calendar.item.categorize	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+calendar.item.delete	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+calendar.item.open	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+calendar.item.recurrence	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+calendar.new.appointment	ACTED
+calendar.new.calendar	ACTED
+calendar.new.items	SILENT	acts on pixels; status, rows and windows cannot see it
+calendar.new.meeting	ACTED
+calendar.next7	SILENT	acts on pixels; status, rows and windows cannot see it
+calendar.open.file	SILENT	opens a system file picker, which is no window of the app's
+calendar.open.internet	ACTED
+calendar.open	SILENT	acts on pixels; status, rows and windows cannot see it
+calendar.options	ACTED
+calendar.overlay	ACTED
+calendar.share.email	ACTED
+calendar.share.publish	ACTED
+calendar.share	SILENT	acts on pixels; status, rows and windows cannot see it
+calendar.timescale	SILENT	opens its flyout; the run log carries the menu read-back
+calendar.today	SILENT	a no-op in the pose: the pinned clock already shows today
+calendar.view.day	SILENT	acts on pixels; status, rows and windows cannot see it
+calendar.view.month	SILENT	a no-op in the pose: the calendar already draws Month
+calendar.view.schedule	SILENT	acts on pixels; status, rows and windows cannot see it
+calendar.view.tasklist	SILENT	opens its flyout; the run log carries the menu read-back
+calendar.view.week	SILENT	acts on pixels; status, rows and windows cannot see it
+calendar.view.workweek	SILENT	acts on pixels; status, rows and windows cannot see it
+feeds.board.link	ACTED
+feeds.board.remove	ACTED
+feeds.boards	ACTED
+feeds.board.save	ACTED
+feeds.categorize	SILENT	unproven: the sweep's seed carries no feeds to act on
+feeds.delete	SILENT	unproven: the sweep's seed carries no feeds to act on
+feeds.export.opml	ACTED
+feeds.import.opml	SILENT	opens a system file picker; and the sweep's seed carries no feeds
+feeds.markallread	ACTED
+feeds.mute	ACTED
+feeds.mute.this	ACTED
+feeds.newsletters	ACTED
+feeds.next.unread	SILENT	unproven: the sweep's seed carries no feeds to act on
+feeds.open.original	SILENT	unproven: the sweep's seed carries no feeds to act on
+feeds.pause	ACTED
+feeds.reading	ACTED
+feeds.readlater	SILENT	unproven: the sweep's seed carries no feeds to act on
+feeds.settings	ACTED
+feeds.subscribe	ACTED
+feeds.unsubscribe	ACTED
+feeds.update	ACTED
+feeds.update.one	ACTED
+folder.autoarchive	ACTED
+folder.copy	ACTED
+folder.delete	ACTED
+folder.deleteall	ACTED
+folder.favorites	ACTED
+folder.markallread	ACTED
+folder.move	ACTED
+folder.new	ACTED
+folder.permissions	ACTED
+folder.properties	ACTED
+folder.rename	ACTED
+folder.runrules	ACTED
+folder.sortatoz	ACTED
+help.diagnostics	ACTED
+help.feedback	ACTED
+help.manual	ACTED
+help.suggest	ACTED
+help.support	ACTED
+help.supporttool	ACTED
+help.training	ACTED
+help.whatsnew	ACTED
+item.categorize	SILENT	opens its flyout; the run log carries the menu read-back
+item.followup	SILENT	opens its flyout; the run log carries the menu read-back
+journal.back	ACTED
+journal.categorize	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+journal.delete	ACTED
+journal.forward	ACTED
+journal.new	ACTED
+journal.new.items	SILENT	acts on pixels; status, rows and windows cannot see it
+journal.next	ACTED
+journal.open	ACTED
+journal.scale.day	SILENT	acts on pixels; status, rows and windows cannot see it
+journal.scale.month	SILENT	acts on pixels; status, rows and windows cannot see it
+journal.scale.week	SILENT	a no-op in the pose: the journal is already at Week
+journal.today	ACTED
+journal.view.bycategory	SILENT	acts on pixels; status, rows and windows cannot see it
+journal.view.bycontact	SILENT	acts on pixels; status, rows and windows cannot see it
+journal.view.calls	SILENT	acts on pixels; status, rows and windows cannot see it
+journal.view.entries	SILENT	acts on pixels; status, rows and windows cannot see it
+journal.view.timeline	SILENT	a no-op in the pose: the timeline is already the view
+journal.view.week	SILENT	acts on pixels; status, rows and windows cannot see it
+mail.archive	ACTED
+mail.authresults	ACTED
+mail.cleanup.conversation	ACTED
+mail.cleanup.folder	ACTED
+mail.cleanup	SILENT	opens its flyout; the run log carries the menu read-back
+mail.cleanup.subfolders	ACTED
+mail.delete	ACTED
+mail.delete.permanent	ACTED
+mail.filter	SILENT	opens its flyout; the run log carries the menu read-back
+mail.find	NOTWIRED	the ribbon's Find; queued in USER-REQUESTS as Advanced Find
+mail.flag.toggle	ACTED
+mail.focus.focused	ACTED
+mail.focus.focused.always	ACTED
+mail.focus.other	ACTED
+mail.focus.other.always	ACTED
+mail.forward	SILENT	acts on pixels; status, rows and windows cannot see it
+mail.ignore	ACTED
+mail.junk.block	ACTED
+mail.junk.neverblock	ACTED
+mail.junk.neverblockdomain	ACTED
+mail.junk.neverblockgroup	ACTED
+mail.junk.notjunk	ACTED
+mail.junk.options	ACTED
+mail.junk	SILENT	opens its flyout; the run log carries the menu read-back
+mail.markunread	ACTED
+mail.meeting.reply	ACTED
+mail.move	SILENT	opens its flyout; the run log carries the menu read-back
+mail.moveto.quick	ACTED
+mail.new	ACTED
+mail.new.items	SILENT	opens its flyout; the run log carries the menu read-back
+mail.next	SILENT	acts on pixels; status, rows and windows cannot see it
+mail.open	ACTED
+mail.previous	SILENT	the selection is the newest row: there is no previous to step to
+mail.print.list	ACTED
+mail.print.pdf	SILENT	hands off to a system save dialog; no app surface
+mail.print	SILENT	hands the message to the engine's own print surface
+mail.quicksteps	ACTED
+mail.quickstep.teamemail	ACTED
+mail.quickstep.tomanager	ACTED
+mail.read	ACTED
+mail.readaloud	ACTED
+mail.recoverdeleted	ACTED
+mail.reply.all	SILENT	acts on pixels; status, rows and windows cannot see it
+mail.reply	SILENT	acts on pixels; status, rows and windows cannot see it
+mail.respond.more	SILENT	opens its flyout; the run log carries the menu read-back
+mail.rules	SILENT	opens its flyout; the run log carries the menu read-back
+mail.searchfolder.new	ACTED
+mail.snooze	SILENT	opens its flyout; the run log carries the menu read-back
+mail.trackers	ACTED
+mail.unread	ACTED
+mail.viewsource	ACTED
+nav.folder	ACTED
+nav.inbox	SILENT	a no-op in the pose: the Inbox is already open
+nav.outbox	ACTED
+notes.categorize	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+notes.delete	ACTED
+notes.forward	ACTED
+notes.moveto	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+notes.new	ACTED
+notes.new.items	SILENT	acts on pixels; status, rows and windows cannot see it
+notes.open	ACTED
+notes.view.icons	SILENT	a no-op in the pose: Icons is already the arrangement
+notes.view.list	SILENT	acts on pixels; status, rows and windows cannot see it
+notes.view.week	SILENT	acts on pixels; status, rows and windows cannot see it
+people.book.delete	ACTED
+people.book.new	ACTED
+people.categorize	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+people.communicate.more	ACTED
+people.delete	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+people.email	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+people.favourite	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+people.followup	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+people.forward	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+people.mailmerge	ACTED
+people.meeting	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+people.move	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+people.new.contact	ACTED
+people.new.group	ACTED
+people.new.items	SILENT	acts on pixels; status, rows and windows cannot see it
+people.open	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+people.open.shared	ACTED
+people.private	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+people.share	SILENT	acts on pixels; status, rows and windows cannot see it
+people.view.businesscard	ACTED
+people.view.card	ACTED
+people.view.list	ACTED
+people.view.people	ACTED
+people.view.phone	ACTED
+tasks.categorize	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+tasks.complete	ACTED
+tasks.delete	ACTED
+tasks.followup	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+tasks.forward	ACTED
+tasks.importance.high	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+tasks.importance.low	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+tasks.moveto	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+tasks.new	ACTED
+tasks.new.email	ACTED
+tasks.new.items	SILENT	acts on pixels; status, rows and windows cannot see it
+tasks.open	ACTED
+tasks.private	GUARDED	the pose selects only in the message list; module selection is the sweep's next door
+tasks.remove	ACTED
+tasks.reply	ACTED
+tasks.replyall	ACTED
+tasks.view.detailed	SILENT	acts on pixels; status, rows and windows cannot see it
+tasks.view.simple	SILENT	acts on pixels; status, rows and windows cannot see it
+tasks.view.todo	SILENT	acts on pixels; status, rows and windows cannot see it
+view.addcolumns	ACTED
+view.applyto	ACTED
+view.arrangeby	SILENT	opens its flyout; the run log carries the menu read-back
+view.arrange.categories	ACTED
+view.arrange.date	ACTED
+view.arrange.flagdue	ACTED
+view.arrange.flagstart	ACTED
+view.arrange.flagstatus	ACTED
+view.arrange.from	ACTED
+view.arrange.size	ACTED
+view.arrange.to	ACTED
+view.change.compact	ACTED
+view.change.preview	ACTED
+view.change	SILENT	opens its flyout; the run log carries the menu read-back
+view.change.single	ACTED
+view.closeall	ACTED
+view.conversations	ACTED
+view.conversations.settings	ACTED
+view.expandcollapse	SILENT	opens its flyout; the run log carries the menu read-back
+view.focusedinbox	ACTED
+view.folderpane	SILENT	opens its flyout; the run log carries the menu read-back
+view.layout	SILENT	opens its flyout; the run log carries the menu read-back
+view.manage	ACTED
+view.messagepreview	SILENT	opens its flyout; the run log carries the menu read-back
+view.newwindow	ACTED
+view.reader	ACTED
+view.readingpane	SILENT	opens its flyout; the run log carries the menu read-back
+view.refresh	SILENT	acts on pixels; status, rows and windows cannot see it
+view.reminders	ACTED
+view.reset	ACTED
+view.reversesort	SILENT	acts on pixels; status, rows and windows cannot see it
+view.saveas	ACTED
+view.settings	SILENT	opens its flyout; the run log carries the menu read-back
+view.tighterspacing	SILENT	a state toggle; its pixels belong to the single-line layout, and the posed list draws cards
+view.todobar	SILENT	opens its flyout; the run log carries the menu read-back
+view.translate	NOTWIRED	deliberate: the translate family stays unwired until a service is ever chosen
+view.viewsettings	ACTED
+view.zoom	NOTWIRED	a real gap: the status bar zooms and this button answers "not wired yet"

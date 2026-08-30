@@ -1,0 +1,34 @@
+# The press sweep: every shell-reachable command pressed through the real dispatcher, one
+# posed run each, classified from the settled read-back and held to
+# tools/poses/press-expectations.tsv. Any drift — a command going quiet, a new command with no
+# expectation, an expectation with no command — fails the run.
+#
+# Dispatched by hand rather than scheduled or per-push: the batch is ~265 application starts
+# and takes the better part of half an hour, and a gate this size earns its place on demand —
+# after a stretch of command work, before a release — not on every push. Run it from the
+# Actions tab; the report is uploaded either way.
+name: Press sweep
+
+on:
+  workflow_dispatch:
+
+jobs:
+  press:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Install a display and the web engine
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb libwebkit2gtk-4.1-0
+      - name: Press every command
+        run: xvfb-run -a tools/press-sweep.sh --ci --timeout 90
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: press-report
+          path: |
+            artifacts/audit/phasepress/press-report.tsv
+            artifacts/audit/phasepress/summary.tsv

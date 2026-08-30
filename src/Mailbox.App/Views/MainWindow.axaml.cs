@@ -265,6 +265,11 @@ public partial class MainWindow : Window
             // is how anything driven by idle-time machinery is caught up with.
             Opened += (_, _) => Dispatcher.UIThread.Post(async () =>
             {
+                // Held across the whole list: render-and-exit fires at the first idle moment,
+                // and a wait- entry hands it one — a pose that said wait-6000 before its press
+                // was photographed and gone at two seconds, press never run, exit code clean.
+                using var hold = WindowCapture.Hold();
+
                 foreach (var id in run.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                 {
                     var one = id;
@@ -276,9 +281,20 @@ public partial class MainWindow : Window
                         continue;
                     }
 
+                    var known = false;
+                    string statusBefore = string.Empty;
+                    var rowsBefore = 0;
+
                     await Dispatcher.UIThread.InvokeAsync(
                         () =>
                         {
+                            known = App.Commands.TryGet(new CommandId(one), out _);
+                            if (DataContext is ShellViewModel before)
+                            {
+                                statusBefore = before.StatusRight;
+                                rowsBefore = before.Messages.Count;
+                            }
+
                             Log.Info($"Harness: running {one}.");
 
                             // Reply and forward open a window only when the Options page asks for
@@ -309,6 +325,24 @@ public partial class MainWindow : Window
                             {
                                 Log.Info($"Harness: status \u201c{s.StatusRight}\u201d, windows: {OtherWindows()}");
                             }
+                        },
+                        DispatcherPriority.Background);
+
+                    // The settled read, which is the one the press sweep classifies from: a
+                    // handler that hands off \u2014 a dialog shown from an async continuation, a
+                    // task queued \u2014 has not answered when the press returns, and the immediate
+                    // line above reads "nothing happened" about a command that is mid-happening.
+                    // Same lesson as the caption door's settle, at the same 600ms.
+                    await System.Threading.Tasks.Task.Delay(600);
+                    await Dispatcher.UIThread.InvokeAsync(
+                        () =>
+                        {
+                            if (DataContext is not ShellViewModel s) return;
+
+                            Log.Info(
+                                $"Harness: ran {one} \u2014 {(known ? "known" : "UNKNOWN to the catalogue")}, "
+                                + $"status \u201c{statusBefore}\u201d\u2192\u201c{s.StatusRight}\u201d, "
+                                + $"rows {rowsBefore}\u2192{s.Messages.Count}, windows: {OtherWindows()}");
                         },
                         DispatcherPriority.Background);
                 }
