@@ -14,7 +14,8 @@ conflicts=('mailbox')
 # wpewebkit renders the reading pane (text-only without it); libsecret keeps passwords in the
 # keyring through secret-tool; libnotify raises the toasts. The publish is otherwise
 # self-contained (.NET bundled).
-depends=('fontconfig' 'libx11' 'libxext' 'libxi' 'libxrandr' 'libxcursor' 'libice' 'libsm'
+depends=('glibc' 'gcc-libs' 'bash'
+         'fontconfig' 'libx11' 'libxext' 'libxi' 'libxrandr' 'libxcursor' 'libice' 'libsm'
          'libglvnd' 'wayland' 'libxkbcommon' 'mesa' 'glib2' 'libsoup3'
          'wpewebkit' 'libwpe' 'wpebackend-fdo' 'libsecret' 'libnotify')
 optdepends=('hunspell-en_us: spelling, against the desktop dictionaries'
@@ -29,6 +30,10 @@ sha256sums=('e8edaf05a26805c3c781f46dca501817d7e4713d8aceddf09f37fba0cb2f7e23')
 package() {
     install -dm755 "$pkgdir/usr/lib/mailbox" "$pkgdir/usr/bin" "$pkgdir/usr/share/doc/mailbox"
     cp -a "$srcdir"/. "$pkgdir/usr/lib/mailbox/"
+
+    # makepkg links every source file into srcdir, and the copy above would ship that link as
+    # a dangling symlink in every install.
+    rm -f "$pkgdir/usr/lib/mailbox/Mailbox-$pkgver-linux-x64.tar.gz"
 
     # The tarball carries the desktop files and licences for a reader who unpacks it by hand;
     # here they go where a package puts them.
