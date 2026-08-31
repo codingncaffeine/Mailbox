@@ -221,6 +221,15 @@ internal sealed class FeedsWorkspace : Border
         _articles.BorderThickness = new Thickness(0);
         _articles.Padding = new Thickness(0);
         ScrollViewer.SetHorizontalScrollBarVisibility(_articles, ScrollBarVisibility.Disabled);
+
+        // The name goes on the item, not the card: the item is the node a screen reader lands
+        // on, and an unnamed one announces the summary's class name. ContainerPrepared covers
+        // recycling — a reused item is re-prepared for the article it now holds.
+        _articles.ContainerPrepared += (_, e) =>
+        {
+            if (e.Container is ListBoxItem item && item.DataContext is MessageSummary article)
+                Avalonia.Automation.AutomationProperties.SetName(item, SpokenArticle(article));
+        };
         _articles.SelectionChanged += (_, _) =>
         {
             if (_articles.SelectedItem is not MessageSummary chosen) return;
@@ -1944,6 +1953,18 @@ internal sealed class FeedsWorkspace : Border
     /// One article, as the reference pictures draw it: the picture on the left, the headline, who
     /// published it and when, and the first two lines of it.
     /// </summary>
+    /// <summary>The article as a screen reader should say it: read state, source, headline, when.</summary>
+    private string SpokenArticle(MessageSummary article)
+    {
+        var said = new System.Text.StringBuilder();
+        if (!article.IsRead) said.Append("Unread. ");
+        var source = _feedByFolder.GetValueOrDefault(article.FolderId)?.Name ?? article.DisplayFrom;
+        if (source is { Length: > 0 }) said.Append(source).Append(". ");
+        said.Append(article.Subject.Length > 0 ? article.Subject : "No headline").Append(". ");
+        said.Append(ViewModels.MessageRow.DateLabel(article.Received, Mailbox.Core.Views.ViewFields.Received)).Append('.');
+        return said.ToString();
+    }
+
     private Control Card(MessageSummary message)
     {
         var grid = new Grid

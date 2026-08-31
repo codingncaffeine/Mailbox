@@ -492,9 +492,13 @@
                              BorderThickness="0"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <ListBox.Styles>
-                            <Style Selector="ListBoxItem">
+                            <Style Selector="ListBoxItem" x:DataType="vm:ISpokenRow">
                                 <Setter Property="Padding" Value="8,3" />
                                 <Setter Property="MinHeight" Value="22" />
+                                <!-- On the item itself, not just the template's grid: the item
+                                     is the node a screen reader lands on, and an unnamed one
+                                     falls back to announcing the row's class name. -->
+                                <Setter Property="(AutomationProperties.Name)" Value="{Binding Spoken}" />
                             </Style>
 
                             <!--
@@ -663,9 +667,13 @@
                              BorderThickness="0"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <ListBox.Styles>
-                            <Style Selector="ListBoxItem">
+                            <Style Selector="ListBoxItem" x:DataType="vm:ISpokenRow">
                                 <Setter Property="Padding" Value="0" />
                                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <!-- Every row shape — message, conversation, group header,
+                                     footer — writes the sentence a reader should hear into
+                                     Spoken; the item is where a reader hears it. -->
+                                <Setter Property="(AutomationProperties.Name)" Value="{Binding Spoken}" />
                             </Style>
 
                             <!-- A row paints its own ground over the item, so the item's

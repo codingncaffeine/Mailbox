@@ -60,7 +60,18 @@ public enum FolderNodeKind
     Unified,
 }
 
-public sealed class FolderNode(string name, int depth, int unread, bool bold = false, FolderNodeKind kind = FolderNodeKind.Folder)
+/// <summary>
+/// A row that can say itself. The list templates bind their items' automation name to
+/// <see cref="Spoken"/>, so every shape a list can hold writes the one sentence a screen
+/// reader hears for it — the interface is what lets one binding cover them all.
+/// </summary>
+public interface ISpokenRow
+{
+    /// <summary>The row as a screen reader should say it.</summary>
+    string Spoken { get; }
+}
+
+public sealed class FolderNode(string name, int depth, int unread, bool bold = false, FolderNodeKind kind = FolderNodeKind.Folder) : ISpokenRow
 {
     public string Name { get; } = name;
     public int Unread { get; } = unread;
@@ -199,7 +210,7 @@ public sealed class MessageRow(
     DateTimeOffset received,
     bool isUnread,
     string toLine,
-    string body) : ObservableObject, IThreadable
+    string body) : ObservableObject, IThreadable, ISpokenRow
 {
     /// <summary>The store's id, so a command knows what it is acting on.</summary>
     public long Id { get; } = id;
@@ -485,7 +496,7 @@ public sealed class MessageRow(
 /// Only drawn for threads of two or more. A single message is not a conversation and showing it
 /// with an expander that reveals itself would be nonsense.
 /// </remarks>
-public sealed class ConversationRow(MessageRow newest, int count, bool expanded, bool split)
+public sealed class ConversationRow(MessageRow newest, int count, bool expanded, bool split) : ISpokenRow
 {
     public MessageRow Newest { get; } = newest;
     public int Count { get; } = count;
@@ -517,7 +528,7 @@ public sealed class ConversationRow(MessageRow newest, int count, bool expanded,
 /// A group header in the list. Sits in the same flat sequence as the rows it heads, which is
 /// what lets one virtualizing list draw both without nesting a panel per group.
 /// </summary>
-public sealed class GroupHeaderRow(string header, int count, bool collapsed)
+public sealed class GroupHeaderRow(string header, int count, bool collapsed) : ISpokenRow
 {
     public string Header { get; } = header;
     public int Count { get; } = count;
@@ -548,7 +559,7 @@ public enum MoreRowKind
 /// The row after the last message: what this list is not showing, and the offer to show it.
 /// Sits in the same flat sequence the group headers do, so the one virtualizing list draws it.
 /// </summary>
-public sealed class MoreRow(MoreRowKind kind, string label)
+public sealed class MoreRow(MoreRowKind kind, string label) : ISpokenRow
 {
     public MoreRowKind Kind { get; } = kind;
     public string Label { get; } = label;

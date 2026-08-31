@@ -1,6 +1,10 @@
+<!-- Name is what assistive technology lists the application as: the accessibility bus
+     takes it for the tree's root, and without it a screen reader announces the toolkit's
+     own placeholder rather than the program the user launched. -->
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="Mailbox.App.App"
+             Name="Mailbox"
              RequestedThemeVariant="Default">
 
     <Application.Styles>
