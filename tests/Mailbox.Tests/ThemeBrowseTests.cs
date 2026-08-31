@@ -61,16 +61,38 @@ public class ThemeBrowseTests
     public async Task TheDirectorySourceServesTheFixturesAndSearchesThem()
     {
         var source = new DirectoryThemeSource(Fixtures);
-        var (all, total) = await source.SearchAsync("", ThemeSort.Popular, null, 1, CancellationToken.None);
+        var (all, total) = await source.SearchAsync("", ThemeSort.Popular, null, null, 1, CancellationToken.None);
         Assert.Equal(2, total);
         Assert.Contains(all, l => l.Slug == "midnight");
         Assert.Contains(all, l => l.Slug == "harvest" && l.LicenceName == "All Rights Reserved");
 
-        var (found, _) = await source.SearchAsync("harvest", ThemeSort.Popular, null, 1, CancellationToken.None);
+        var (found, _) = await source.SearchAsync("harvest", ThemeSort.Popular, null, null, 1, CancellationToken.None);
         Assert.Single(found);
 
         var bytes = await source.FetchAsync("midnight.xpi", 1024 * 1024, CancellationToken.None);
         Assert.True(bytes.Length > 100);
+    }
+
+    [Fact]
+    public void TheSearchUrlCarriesWhatWasAsked()
+    {
+        var recommended = AmoThemeSource.BuildSearchUrl("https://example.test/api/v5", "", ThemeSort.Recommended, null, null, 1);
+        Assert.Contains("type=statictheme", recommended);
+        Assert.Contains("app=firefox", recommended);
+        Assert.Contains("promoted=recommended", recommended);
+        Assert.Contains("sort=users", recommended);
+
+        var narrowed = AmoThemeSource.BuildSearchUrl("https://example.test/api/v5", "forest cabin", ThemeSort.TopRated, "#1A4A6B", "nature", 3);
+        Assert.Contains("q=forest%20cabin", narrowed);
+        Assert.Contains("sort=rating", narrowed);
+        Assert.Contains("color=1A4A6B", narrowed);
+        Assert.Contains("category=nature", narrowed);
+        Assert.Contains("page=3", narrowed);
+        Assert.DoesNotContain("promoted", narrowed);
+
+        // The category row is the API's own shelf list, slugged exactly.
+        Assert.Contains(AmoThemeSource.Categories, c => c is ("Nature", "nature"));
+        Assert.Contains(AmoThemeSource.Categories, c => c is ("Film & TV", "film-and-tv"));
     }
 
     [Fact]

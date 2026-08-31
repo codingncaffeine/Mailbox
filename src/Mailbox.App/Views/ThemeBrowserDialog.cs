@@ -44,7 +44,14 @@ internal sealed class ThemeBrowserDialog : Window
     private readonly TextBox _search = new() { PlaceholderText = "Search themes", Width = 220 };
     private readonly ComboBox _sort = new()
     {
-        ItemsSource = new List<string> { "Popular", "Top rated", "Trending" },
+        ItemsSource = new List<string> { "Recommended", "Popular", "Top rated", "Trending" },
+        SelectedIndex = 0,
+        VerticalAlignment = VerticalAlignment.Center,
+    };
+
+    private readonly ComboBox _category = new()
+    {
+        ItemsSource = (List<string>)["All categories", .. AmoThemeSource.Categories.Select(c => c.Name)],
         SelectedIndex = 0,
         VerticalAlignment = VerticalAlignment.Center,
     };
@@ -134,6 +141,7 @@ internal sealed class ThemeBrowserDialog : Window
             if (e.Key == Avalonia.Input.Key.Enter) await SearchAsync(reset: true);
         };
         _sort.SelectionChanged += async (_, _) => await SearchAsync(reset: true);
+        _category.SelectionChanged += async (_, _) => await SearchAsync(reset: true);
         _more.Click += async (_, _) => await SearchAsync(reset: false);
         _list.SelectionChanged += async (_, _) => await PreviewAsync();
         _install.Click += async (_, _) => await InstallAsync();
@@ -168,7 +176,7 @@ internal sealed class ThemeBrowserDialog : Window
             Spacing = 8,
             Children =
             {
-                new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { _search, go, _sort } },
+                new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { _search, go, _sort, _category } },
                 colours,
             },
         };
@@ -266,11 +274,28 @@ internal sealed class ThemeBrowserDialog : Window
             _page++;
         }
 
-        var sort = _sort.SelectedIndex switch { 1 => ThemeSort.TopRated, 2 => ThemeSort.Trending, _ => ThemeSort.Popular };
+        var sort = _sort.SelectedIndex switch
+        {
+            1 => ThemeSort.Popular,
+            2 => ThemeSort.TopRated,
+            3 => ThemeSort.Trending,
+            _ => ThemeSort.Recommended,
+        };
+        var query = _search.Text?.Trim() ?? string.Empty;
+        var category = _category.SelectedIndex > 0 ? AmoThemeSource.Categories[_category.SelectedIndex - 1].Slug : null;
+
+        // The showcase shelf is small and curated; intersecting it with a search, a colour or
+        // a category would answer with slivers. A narrowed browse means "the whole catalogue,
+        // by reach" — quietly.
+        if (sort == ThemeSort.Recommended && (query.Length > 0 || _colour is not null || category is not null))
+        {
+            sort = ThemeSort.Popular;
+        }
+
         _status.Text = "Searching…";
         try
         {
-            var (results, total) = await _source.SearchAsync(_search.Text?.Trim() ?? string.Empty, sort, _colour, _page, CancellationToken.None);
+            var (results, total) = await _source.SearchAsync(query, sort, _colour, category, _page, CancellationToken.None);
             _listings.AddRange(results);
             _total = total;
             _list.ItemsSource = _listings.Select(Row).ToList();
@@ -339,9 +364,23 @@ internal sealed class ThemeBrowserDialog : Window
             var bytes = await _source.FetchAsync(listing.FileUrl, ThemeFileCap, CancellationToken.None);
             if (stamp != _previewStamp) return; // a later selection overtook this one
 
-            Directory.CreateDirectory(CacheDirectory());
-            var cached = Path.Combine(CacheDirectory(), Slug(listing.Slug) + ".xpi");
-            await File.WriteAllBytesAsync(cached, bytes);
+            // The cache first; somewhere that must exist second. A sandbox that closed the
+            // cache is no reason the preview goes dark — the file only has to live as long
+            // as this dialog.
+            string cached;
+            try
+            {
+                Directory.CreateDirectory(CacheDirectory());
+                cached = Path.Combine(CacheDirectory(), Slug(listing.Slug) + ".xpi");
+                await File.WriteAllBytesAsync(cached, bytes);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Log.Debug($"Theme browser: the cache is closed here ({ex.Message}); using the run's own temp.");
+                cached = Path.Combine(Path.GetTempPath(), "mailbox-theme-" + Slug(listing.Slug) + ".xpi");
+                await File.WriteAllBytesAsync(cached, bytes);
+            }
+
             _cachedPath = cached;
 
             using var package = BrowserThemePackage.Open(cached);

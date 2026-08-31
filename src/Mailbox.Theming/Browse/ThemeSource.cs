@@ -19,6 +19,8 @@ public sealed record ThemeListing(
 /// <summary>How a search is ordered. The names are ours; each source maps them to its own.</summary>
 public enum ThemeSort
 {
+    /// <summary>The source's own showcase — AMO's curated recommended shelf, artwork first.</summary>
+    Recommended,
     Popular,
     TopRated,
     Trending,
@@ -32,7 +34,7 @@ public interface IThemeSource
 {
     /// <summary>A page of results and how many there are in all.</summary>
     Task<(IReadOnlyList<ThemeListing> Results, long Total)> SearchAsync(
-        string query, ThemeSort sort, string? colourHex, int page, CancellationToken cancel);
+        string query, ThemeSort sort, string? colourHex, string? category, int page, CancellationToken cancel);
 
     /// <summary>One file by the URL a listing gave, bounded — a byte past the cap is a refusal, not a truncation.</summary>
     Task<byte[]> FetchAsync(string url, long maxBytes, CancellationToken cancel);
@@ -49,7 +51,7 @@ public sealed class ThemeSourceException(string message, Exception? inner = null
 public sealed class DirectoryThemeSource(string directory) : IThemeSource
 {
     public Task<(IReadOnlyList<ThemeListing> Results, long Total)> SearchAsync(
-        string query, ThemeSort sort, string? colourHex, int page, CancellationToken cancel)
+        string query, ThemeSort sort, string? colourHex, string? category, int page, CancellationToken cancel)
     {
         var path = Path.Combine(directory, "listing.json");
         if (!File.Exists(path)) throw new ThemeSourceException($"\"{directory}\" has no listing.json.");

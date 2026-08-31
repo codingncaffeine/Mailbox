@@ -23,6 +23,11 @@ DATA="${XDG_DATA_HOME:-$HOME/.local/share}/mailbox"
 CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/mailbox"
 STATE="${XDG_STATE_HOME:-$HOME/.local/state}/mailbox"
 
+# The theme browser's download cache — a handful of kilobyte files. Its own carve-out
+# because everything else under ~/.cache stays out of reach, exactly as with the runtime
+# directory's sockets.
+CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/mailbox"
+
 # The single-instance socket's own directory: the runtime directory stays read-only to the
 # unit, and the named carve-outs below are the only places in it the application may write.
 RUNTIME="${XDG_RUNTIME_DIR:-/tmp}/mailbox"
@@ -37,7 +42,7 @@ WEBKIT_RUNTIME="${XDG_RUNTIME_DIR:-/tmp}/.flatpak"
 
 # The write paths must exist before the namespace is built: a ReadWritePaths entry that is
 # missing is skipped (the "-" prefix), and the application could then never create it.
-mkdir -p "$DATA" "$CONFIG" "$STATE" "$RUNTIME" "$WPE_RUNTIME" "$WEBKIT_RUNTIME"
+mkdir -p "$DATA" "$CONFIG" "$STATE" "$CACHE" "$RUNTIME" "$WPE_RUNTIME" "$WEBKIT_RUNTIME"
 
 # Where a saved attachment or an export lands by default. Everything else under $HOME is
 # read-only to the unit; a save elsewhere fails with the picker's own error, which is the
@@ -114,6 +119,7 @@ exec systemd-run --user --quiet --collect --wait "$IO" \
     --property=ReadWritePaths="$DATA" \
     --property=ReadWritePaths="$CONFIG" \
     --property=ReadWritePaths="$STATE" \
+    --property=ReadWritePaths="$CACHE" \
     --property=ReadWritePaths="$RUNTIME" \
     --property=ReadWritePaths="$WPE_RUNTIME" \
     --property=ReadWritePaths="$WEBKIT_RUNTIME" \

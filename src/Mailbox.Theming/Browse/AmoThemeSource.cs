@@ -45,8 +45,20 @@ public sealed class AmoThemeSource : IThemeSource, IDisposable
         ("Grey", "#7F8C8D"), ("Black", "#20232A"),
     ];
 
-    public async Task<(IReadOnlyList<ThemeListing> Results, long Total)> SearchAsync(
-        string query, ThemeSort sort, string? colourHex, int page, CancellationToken cancel)
+    /// <summary>
+    /// The categories AMO files its themes under — the shelves its own themes page browses
+    /// by, and where the artwork lives. Name-cased for the row; the slug is the API's.
+    /// </summary>
+    public static IReadOnlyList<(string Name, string Slug)> Categories { get; } =
+    [
+        ("Abstract", "abstract"), ("Causes", "causes"), ("Fashion", "fashion"),
+        ("Film & TV", "film-and-tv"), ("Holiday", "holiday"), ("Music", "music"),
+        ("Nature", "nature"), ("Scenery", "scenery"), ("Seasonal", "seasonal"),
+        ("Solid", "solid"), ("Sports", "sports"), ("Websites", "websites"), ("Other", "other"),
+    ];
+
+    /// <summary>The search URL for one page — separate and static, so a test can hold it still.</summary>
+    public static string BuildSearchUrl(string baseUrl, string query, ThemeSort sort, string? colourHex, string? category, int page)
     {
         var sortKey = sort switch
         {
@@ -55,9 +67,19 @@ public sealed class AmoThemeSource : IThemeSource, IDisposable
             _ => "users",
         };
 
-        var url = $"{_baseUrl}/addons/search/?type=statictheme&page_size={PageSize}&page={Math.Max(1, page)}&sort={sortKey}";
+        var url = $"{baseUrl.TrimEnd('/')}/addons/search/?type=statictheme&app=firefox"
+                  + $"&page_size={PageSize}&page={Math.Max(1, page)}&sort={sortKey}";
+        if (sort == ThemeSort.Recommended) url += "&promoted=recommended";
         if (query.Length > 0) url += "&q=" + Uri.EscapeDataString(query);
         if (colourHex is { Length: > 0 }) url += "&color=" + Uri.EscapeDataString(colourHex.TrimStart('#'));
+        if (category is { Length: > 0 }) url += "&category=" + Uri.EscapeDataString(category);
+        return url;
+    }
+
+    public async Task<(IReadOnlyList<ThemeListing> Results, long Total)> SearchAsync(
+        string query, ThemeSort sort, string? colourHex, string? category, int page, CancellationToken cancel)
+    {
+        var url = BuildSearchUrl(_baseUrl, query, sort, colourHex, category, page);
 
         string json;
         try
