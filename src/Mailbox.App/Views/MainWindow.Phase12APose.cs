@@ -132,7 +132,12 @@ internal static class OptionsPageAudit
         if (toggle)
         {
             return all.OfType<ToggleButton>()
-                .FirstOrDefault(c => Caption(c).Contains(wanted, StringComparison.OrdinalIgnoreCase));
+                .FirstOrDefault(c => Caption(c).Contains(wanted, StringComparison.OrdinalIgnoreCase))
+
+                // A slot's plain button — Import…, Remove, Align… — pressed by its own caption,
+                // so a pose reaches what the reader reaches.
+                ?? all.FirstOrDefault(c => c is Button b && !(b is ToggleButton)
+                    && Caption(b).Contains(wanted, StringComparison.OrdinalIgnoreCase));
         }
 
         return all.FirstOrDefault(c =>
@@ -152,6 +157,12 @@ internal static class OptionsPageAudit
             case ToggleButton toggle:
                 toggle.IsChecked = toggle.IsChecked != true;
                 return toggle.IsChecked == true ? "on" : "off";
+
+            case Button button:
+                // The click the reader would make, raised on the control itself so the row's
+                // own handler runs; any dialog it opens is MAILBOX_ANSWER's to answer.
+                button.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent) { Source = button });
+                return "pressed";
 
             case ComboBox combo when value is not null:
                 if (int.TryParse(value, CultureInfo.InvariantCulture, out var index))

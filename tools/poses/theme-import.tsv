@@ -1,2 +1,4 @@
 import-midnight-apply	MAILBOX_TODAY=2026-08-16	MAILBOX_THEME_IMPORT=tests/fixtures/theme-import	MAILBOX_THEME_IMPORT_DUMP=1	MAILBOX_THEME_SWITCH=harness-midnight
 import-midnight-edit-door	MAILBOX_TODAY=2026-08-16	MAILBOX_THEME_IMPORT=tests/fixtures/theme-import	MAILBOX_THEME_SWITCH=harness-midnight	MAILBOX_OPTIONS_PAGE=general
+import-options-rows	MAILBOX_PEEK=options	MAILBOX_TODAY=2026-08-16	MAILBOX_THEME_IMPORT=tests/fixtures/theme-import	MAILBOX_OPTIONS_PAGE=general	MAILBOX_OPTIONS_DUMP=1
+import-remove-press	MAILBOX_PEEK=options	MAILBOX_TODAY=2026-08-16	MAILBOX_THEME_IMPORT=tests/fixtures/theme-import	MAILBOX_THEME=harness-midnight	MAILBOX_OPTIONS_PAGE=general	MAILBOX_OPTIONS_PRESS=Remove	MAILBOX_ANSWER=Remove Theme=yes

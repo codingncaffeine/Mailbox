@@ -508,12 +508,46 @@ public sealed class OptionsWindow : Window
 
         if (renderer.Slots.TryGetValue("theme", out var theme))
         {
-            var customize = new Button { Content = "Customize…", VerticalAlignment = VerticalAlignment.Center };
-            customize.Click += async (_, _) => await new ThemeEditorWindow(_themes).ShowDialog(this);
-            var combo = ThemeCombo();
-            renderer.Remember(combo, App.ThemeSetting);
-            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { combo, customize } };
-            theme.Content = LabelledLive("Mailbox Theme:", row);
+            // Rebuilt after an import or a removal, so the combo lists what the library now
+            // holds rather than what it held when the page opened.
+            void FillThemeRow()
+            {
+                var customize = new Button { Content = "Customize…", VerticalAlignment = VerticalAlignment.Center };
+                customize.Click += async (_, _) => await new ThemeEditorWindow(_themes).ShowDialog(this);
+
+                var import = new Button { Content = "Import…", VerticalAlignment = VerticalAlignment.Center };
+                import.Click += async (_, _) =>
+                {
+                    if (await ImportThemeAsync()) FillThemeRow();
+                };
+
+                var remove = new Button
+                {
+                    Content = "Remove",
+                    VerticalAlignment = VerticalAlignment.Center,
+                    IsEnabled = !Mailbox.Theming.Files.ThemeLibrary.IsBuiltIn(_themes.ThemeId),
+                };
+                ToolTip.SetTip(remove, "Removes the current theme's file and images. Built-ins cannot be removed.");
+                remove.Click += async (_, _) =>
+                {
+                    if (await RemoveThemeAsync()) FillThemeRow();
+                };
+
+                var combo = ThemeCombo();
+                renderer.Remember(combo, App.ThemeSetting);
+                combo.SelectionChanged += (_, _) =>
+                    remove.IsEnabled = !Mailbox.Theming.Files.ThemeLibrary.IsBuiltIn(_themes.ThemeId);
+
+                var row = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 8,
+                    Children = { combo, customize, import, remove },
+                };
+                theme.Content = LabelledLive("Mailbox Theme:", row);
+            }
+
+            FillThemeRow();
         }
 
         if (renderer.Slots.TryGetValue("density", out var density))
@@ -1535,6 +1569,92 @@ public sealed class OptionsWindow : Window
             App.Settings.Set(App.DensitySetting, density.ToString());
         };
         return combo;
+    }
+
+    /// <summary>
+    /// One import, pressed from the row: the picker, the same machinery the CLI door runs, the
+    /// summary in the report's own sentences, and the theme applied. True when the library
+    /// changed and the row should rebuild.
+    /// </summary>
+    private async Task<bool> ImportThemeAsync()
+    {
+        var files = await StorageProvider.OpenFilePickerAsync(new()
+        {
+            Title = "Import a theme",
+            AllowMultiple = false,
+            FileTypeFilter =
+            [
+                new FilePickerFileType("Browser themes") { Patterns = ["*.xpi", "*.zip", "manifest.json"] },
+                FilePickerFileTypes.All,
+            ],
+        });
+        if (files.Count == 0 || files[0].TryGetLocalPath() is not { } source) return false;
+
+        var directory = Mailbox.Theming.Files.ThemeLibrary.DefaultDirectory();
+        Mailbox.Theming.Import.ImportOutcome outcome;
+        try
+        {
+            outcome = Mailbox.Theming.Import.ImportedThemes.Import(source, directory, Theming.ThemeImportDoor.Reencode);
+        }
+        catch (Exception ex) when (ex is Mailbox.Theming.Import.BrowserThemeException
+                                       or Mailbox.Theming.Files.ThemeFileException
+                                       or IOException or UnauthorizedAccessException)
+        {
+            await Confirm.TellAsync(this, "Import a theme", ex.Message);
+            return false;
+        }
+
+        _themes.ReplaceLibrary(Mailbox.Theming.Files.ThemeLibrary.Load(directory));
+        var id = _themes.Library.Canonical(outcome.Result.File.Id);
+        if (id is not null)
+        {
+            _themes.ApplyFresh(id);
+            App.Settings.Set(App.ThemeSetting, _themes.ThemeId);
+        }
+
+        var lines = new StackPanel { Spacing = 6, MaxWidth = 480 };
+        foreach (var line in Mailbox.Theming.Import.ImportReport.Lines(outcome))
+        {
+            var text = new TextBlock { Text = line, TextWrapping = TextWrapping.Wrap };
+            text[!TextBlock.ForegroundProperty] = new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("dialog.foreground.brush");
+            lines.Children.Add(text);
+        }
+
+        await Confirm.ShowAsync(this, "Import a theme", new ScrollViewer { Content = lines, MaxHeight = 320 });
+        Mailbox.Core.Diagnostics.Log.Info($"Theme import from Options: \"{outcome.Result.File.Id}\" applied; active theme is {_themes.ThemeId}.");
+        return true;
+    }
+
+    /// <summary>Removes the current user theme — file and images — after asking. Never a built-in.</summary>
+    private async Task<bool> RemoveThemeAsync()
+    {
+        var id = _themes.ThemeId;
+        if (Mailbox.Theming.Files.ThemeLibrary.IsBuiltIn(id)) return false;
+
+        var name = _themes.DisplayName(id);
+        if (!await Confirm.AskAsync(this, "Remove Theme",
+                $"Remove “{name}”? Its file and any images it brought are deleted.", "Remove"))
+        {
+            return false;
+        }
+
+        var directory = Mailbox.Theming.Files.ThemeLibrary.DefaultDirectory();
+        try
+        {
+            Mailbox.Theming.Import.ImportedThemes.Remove(id, directory);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            await Confirm.TellAsync(this, "Remove Theme", ex.Message);
+            return false;
+        }
+
+        // ReplaceLibrary's documented fallback: a current theme the library no longer has
+        // falls back to Colorful.
+        _themes.ReplaceLibrary(Mailbox.Theming.Files.ThemeLibrary.Load(directory));
+        App.Settings.Set(App.ThemeSetting, _themes.ThemeId);
+        Mailbox.Core.Diagnostics.Log.Info($"Theme \"{id}\" removed; active theme is {_themes.ThemeId}.");
+        return true;
     }
 
     /// <summary>
