@@ -261,6 +261,11 @@ public static class OptionsPages
             [
                 new CheckRow("Show Paste Options buttons", true),
                 new CheckRow("Use single-key reading with the Reading Pane", true),
+                // The capture's own wording and default. Lowercase entries because the
+                // reference's are: the combo finishes the label's sentence.
+                new ComboRow("After moving or deleting an open item:",
+                    ["open the previous item", "open the next item", "return to the current folder"],
+                    2, 220, 260) { Key = MailOptions.AfterOpenItemKey },
             ]),
         ]);
 

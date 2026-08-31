@@ -8,6 +8,14 @@ public enum ComposeFormat
     RichText,
 }
 
+/// <summary>What shows after an open item is moved or deleted — the Options › Mail combo.</summary>
+public enum AfterOpenItem
+{
+    PreviousItem,
+    NextItem,
+    ReturnToFolder,
+}
+
 /// <summary>
 /// The Mail page's settings, read by the code that acts on them.
 /// </summary>
@@ -83,6 +91,7 @@ public sealed class MailOptions(SettingsStore settings)
     public const string RequestReadReceiptKey = "mail.tracking.read";
     public const string EmptyDeletedOnExitKey = "mail.exit.emptydeleted";
     public const string ConfirmPermanentDeleteKey = "mail.delete.confirmpermanent";
+    public const string AfterOpenItemKey = "mail.delete.afteropen";
     public const string SendImmediatelyKey = "mail.send.immediately";
 
     // No key for the send/receive schedule. The Advanced page's row edits the All Accounts
@@ -419,6 +428,24 @@ public sealed class MailOptions(SettingsStore settings)
         get => _settings.GetBool(ConfirmPermanentDeleteKey, true);
         set => _settings.Set(ConfirmPermanentDeleteKey, value);
     }
+
+    /// <summary>
+    /// What opens after moving or deleting an open item: the previous item, the next one, or
+    /// nothing — back to the folder. The combo's own order, and the reference ships the third.
+    /// </summary>
+    /// <remarks>
+    /// It governs two surfaces the same way it does in the reference: a message open in its own
+    /// window steps to the neighbour instead of closing, and the list's selection after a delete
+    /// moves up rather than down when the previous item is the choice. "Return to the current
+    /// folder" means the window closes — and in the list it reads as the default it is, the next
+    /// item down, because the list never left the folder to return to it.
+    /// </remarks>
+    public AfterOpenItem AfterOpenItem => (int)_settings.GetNumber(AfterOpenItemKey, 2) switch
+    {
+        0 => AfterOpenItem.PreviousItem,
+        1 => AfterOpenItem.NextItem,
+        _ => AfterOpenItem.ReturnToFolder,
+    };
 
     /// <summary>Focused Inbox: whether the Inbox is split into Focused and Other. Off until asked.</summary>
     public bool ShowFocusedInbox

@@ -286,6 +286,7 @@ public partial class MainWindow : Window
                     string statusBefore = string.Empty;
                     string moduleBefore = string.Empty;
                     var rowsBefore = 0;
+                    string selectedBefore = string.Empty;
 
                     await Dispatcher.UIThread.InvokeAsync(
                         () =>
@@ -296,6 +297,7 @@ public partial class MainWindow : Window
                                 statusBefore = before.StatusRight;
                                 moduleBefore = before.ModuleStatusLeft;
                                 rowsBefore = before.Messages.Count;
+                                selectedBefore = before.SelectedMessage?.Subject ?? "none";
                             }
 
                             Log.Info($"Harness: running {one}.");
@@ -345,11 +347,15 @@ public partial class MainWindow : Window
                             // The module status is the channel the drawn modules speak on \u2014 the
                             // feeds list's "Today: 4 articles" and its kin \u2014 which the mail
                             // list's row count cannot see.
+                            // The selection line is how "what did the delete leave selected?"
+                            // is read back \u2014 the after-open-item choice's own evidence.
                             Log.Info(
                                 $"Harness: ran {one} \u2014 {(known ? "known" : "UNKNOWN to the catalogue")}, "
                                 + $"status \u201c{statusBefore}\u201d\u2192\u201c{s.StatusRight}\u201d, "
                                 + $"module \u201c{moduleBefore}\u201d\u2192\u201c{s.ModuleStatusLeft}\u201d, "
-                                + $"rows {rowsBefore}\u2192{s.Messages.Count}, windows: {OtherWindows()}");
+                                + $"rows {rowsBefore}\u2192{s.Messages.Count}, "
+                                + $"selection \u201c{selectedBefore}\u201d\u2192\u201c{s.SelectedMessage?.Subject ?? "none"}\u201d, "
+                                + $"windows: {OtherWindows()}");
                         },
                         DispatcherPriority.Background);
                 }
@@ -4080,6 +4086,42 @@ public partial class MainWindow : Window
                 window.Replace(stepped, _openRaw, Verified(shell),
                     shell.SelectedMessage is { } row
                         ? new OpenedMessageContext(row.Address, row.Id, row.FolderId)
+                        : null);
+            }, DispatcherPriority.Background);
+        };
+
+        // "After moving or deleting an open item": the neighbour takes the window. Only while
+        // the shell still shows the row as its selection — the same guard a Quick Step uses —
+        // because the neighbour is a place in the shell's list and nothing else has one. The
+        // selection steps off the doomed row first, so taking the row out doesn't move it
+        // again; the row leaves through the shell's own delete (undo and all) when the deed is
+        // still to be done, else it is just dropped, the store having already changed.
+        window.NeighborRequested += (_, e) =>
+        {
+            if (window.Context is not { } context
+                || shell.SelectedMessage is not { } row
+                || row.Id != context.MessageId
+                || !string.Equals(row.Address, context.Address, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            StepSelection(shell, e.Delta);
+            if (shell.SelectedMessage is not { } neighbor || ReferenceEquals(neighbor, row)) return;
+
+            if (e.DeleteRow) shell.Delete([row], permanently: false);
+            else shell.DropRow(row);
+
+            e.Opened = true;
+            Log.Info($"Message window: the {(e.Delta < 0 ? "previous" : "next")} item takes "
+                     + $"the window — “{neighbor.Subject}”.");
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (_openMessage is not { } stepped) return;
+
+                window.Replace(stepped, _openRaw, Verified(shell),
+                    shell.SelectedMessage is { } now
+                        ? new OpenedMessageContext(now.Address, now.Id, now.FolderId)
                         : null);
             }, DispatcherPriority.Background);
         };

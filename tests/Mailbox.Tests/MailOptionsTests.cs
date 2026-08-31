@@ -52,6 +52,23 @@ public class MailOptionsTests : IDisposable
 
         // The junk filter defaults to Low — the reference's own default, a high bar.
         Assert.Equal(1, options.JunkLevelIndex);
+
+        // "After moving or deleting an open item": back to the folder, as the capture shows.
+        Assert.Equal(AfterOpenItem.ReturnToFolder, options.AfterOpenItem);
+    }
+
+    /// <summary>The after-open-item combo, in its own order, out-of-range falling to the default.</summary>
+    [Theory]
+    [InlineData(0, AfterOpenItem.PreviousItem)]
+    [InlineData(1, AfterOpenItem.NextItem)]
+    [InlineData(2, AfterOpenItem.ReturnToFolder)]
+    [InlineData(9, AfterOpenItem.ReturnToFolder)]
+    public void AfterOpenItemFollowsTheCombosOrder(int stored, AfterOpenItem meant)
+    {
+        var store = Store();
+        store.Set(MailOptions.AfterOpenItemKey, stored);
+
+        Assert.Equal(meant, new MailOptions(store).AfterOpenItem);
     }
 
     /// <summary>The combo persists an index in the reference's own order; this names it.</summary>

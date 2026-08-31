@@ -4156,7 +4156,9 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>
     /// Takes rows out of the list — deleted, moved, archived — and moves the selection to the
     /// row that followed the last of them, or the one before, as the reference does; the list
-    /// never ends up showing nothing after a delete.
+    /// never ends up showing nothing after a delete. Options › Mail's "After moving or deleting
+    /// an open item" turns that preference around: "open the previous item" prefers the row
+    /// above. Either way the other direction is the fallback rather than an empty list.
     /// </summary>
     private void RemoveRows(IReadOnlyList<MessageRow> rows)
     {
@@ -4167,8 +4169,11 @@ public sealed partial class ShellViewModel : ObservableObject
         if (wasSelected)
         {
             var last = rows.Select(r => visible.IndexOf(r)).DefaultIfEmpty(-1).Max();
-            next = visible.Skip(last + 1).FirstOrDefault(r => !removed.Contains(r))
-                   ?? visible.Take(Math.Max(0, last)).LastOrDefault(r => !removed.Contains(r));
+            var below = visible.Skip(last + 1).FirstOrDefault(r => !removed.Contains(r));
+            var above = visible.Take(Math.Max(0, last)).LastOrDefault(r => !removed.Contains(r));
+            next = App.MailOptions.AfterOpenItem == AfterOpenItem.PreviousItem
+                ? above ?? below
+                : below ?? above;
         }
 
         foreach (var row in rows) Messages.Remove(row);
@@ -4179,6 +4184,18 @@ public sealed partial class ShellViewModel : ObservableObject
             SelectedRow = next;
             SelectedMessage = next;
         }
+    }
+
+    /// <summary>
+    /// Takes one row out of the list after an open window changed its store row — moved it,
+    /// mostly. The deed is already done; the list just has to stop showing the row, without the
+    /// full reload that would throw the selection away.
+    /// </summary>
+    public void DropRow(MessageRow row)
+    {
+        if (!Messages.Contains(row)) return;
+        RemoveRows([row]);
+        RefreshCounts();
     }
 
     /// <summary>Rows on show, headers excluded. What the status bar counts.</summary>

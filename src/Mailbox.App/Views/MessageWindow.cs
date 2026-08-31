@@ -11,6 +11,7 @@ using Mailbox.Controls.Ribbon;
 using Mailbox.Core.Commands;
 using Mailbox.Core.Diagnostics;
 using Mailbox.Core.Ribbon;
+using Mailbox.Core.Settings;
 using Mailbox.Rendering;
 using Mailbox.Security;
 using Mailbox.Store;
@@ -22,6 +23,21 @@ namespace Mailbox.App.Views;
 
 /// <summary>Which stored row an opened message is, so the window's buttons can act on it.</summary>
 public sealed record OpenedMessageContext(string Address, long MessageId, long FolderId);
+
+/// <summary>
+/// A message window asking for the previous (-1) or next (+1) message after its open item was
+/// moved or deleted — Options › Mail's "After moving or deleting an open item".
+/// </summary>
+public sealed class OpenNeighborEventArgs(int delta, bool deleteRow) : EventArgs
+{
+    public int Delta { get; } = delta;
+
+    /// <summary>Whether the row still has to be deleted — the window has not touched the store.</summary>
+    public bool DeleteRow { get; } = deleteRow;
+
+    /// <summary>Set by the handler that stepped and refilled the window; unset, it closes.</summary>
+    public bool Opened { get; set; }
+}
 
 /// <summary>
 /// One message in a window of its own, as double-clicking a row opens it: the read ribbon over
@@ -71,6 +87,15 @@ public sealed class MessageWindow : Window
 
     /// <summary>The QAT's arrows: step to the previous (-1) or next (+1) message.</summary>
     public event EventHandler<int>? StepRequested;
+
+    /// <summary>
+    /// The open item here was deleted or moved and Options wants a neighbour shown instead of
+    /// the window closing. The shell steps its selection, takes the row out of its list —
+    /// deleting it too when the deed is still to be done — and refills this window; a handler
+    /// that could not (the shell no longer shows the row, or there is no neighbour that way)
+    /// leaves <see cref="OpenNeighborEventArgs.Opened"/> unset and the window closes instead.
+    /// </summary>
+    public event EventHandler<OpenNeighborEventArgs>? NeighborRequested;
 
     /// <summary>Something here changed the store, so the shell's list should look again.</summary>
     public event EventHandler? Changed;
@@ -386,6 +411,7 @@ public sealed class MessageWindow : Window
 
             mail.MoveMessage(context.MessageId, archive.Id);
             Log.Info($"Message window: {context.MessageId} archived.");
+            if (AskForNeighbor(deleteRow: false)) return;
             Changed?.Invoke(this, EventArgs.Empty);
             Close();
             return;
@@ -440,10 +466,47 @@ public sealed class MessageWindow : Window
 
     private void Delete(OpenedMessageContext context, MailRepository mail)
     {
-        mail.DeleteMessage(context.MessageId);
-        Log.Info($"Message window: {context.MessageId} deleted.");
+        // The shell's own delete when it still shows the row — Deleted Items, an undo entry,
+        // and the neighbour opening here when Options asks for one.
+        if (AskForNeighbor(deleteRow: true)) return;
+
+        // Alone, the window does what the shell's delete would: to Deleted Items, for good
+        // only when the message is already there or the account has no such folder.
+        var deleted = mail.FolderWithRole(AccountId(mail), FolderRole.Deleted);
+        if (deleted is null || context.FolderId == deleted.Id)
+        {
+            mail.DeleteMessage(context.MessageId);
+            Log.Info($"Message window: {context.MessageId} permanently deleted.");
+        }
+        else
+        {
+            mail.MoveMessage(context.MessageId, deleted.Id);
+            Log.Info($"Message window: {context.MessageId} moved to Deleted Items.");
+        }
+
         Changed?.Invoke(this, EventArgs.Empty);
         Close();
+    }
+
+    /// <summary>
+    /// The way out after the open item's life here ended, per Options › Mail's "After moving or
+    /// deleting an open item": true when a neighbour took the window over, false when the
+    /// caller should tell the shell and close — the reference's "return to the current folder",
+    /// which is also where a window whose row the shell has moved on from always goes.
+    /// </summary>
+    private bool AskForNeighbor(bool deleteRow)
+    {
+        var delta = App.MailOptions.AfterOpenItem switch
+        {
+            AfterOpenItem.PreviousItem => -1,
+            AfterOpenItem.NextItem => +1,
+            _ => 0,
+        };
+        if (delta == 0) return false;
+
+        var args = new OpenNeighborEventArgs(delta, deleteRow);
+        NeighborRequested?.Invoke(this, args);
+        return args.Opened;
     }
 
     /// <summary>The chevron half's menu. Authored — no capture shows the reference's open.</summary>
@@ -462,6 +525,7 @@ public sealed class MessageWindow : Window
             if (mail.FolderWithRole(AccountId(mail), FolderRole.Junk) is not { } folder) return;
             mail.MoveMessage(context.MessageId, folder.Id);
             Log.Info($"Message window: {context.MessageId} moved to Junk Email.");
+            if (AskForNeighbor(deleteRow: false)) return;
             Changed?.Invoke(this, EventArgs.Empty);
             Close();
         };
@@ -484,6 +548,7 @@ public sealed class MessageWindow : Window
             {
                 mail.MoveMessage(context.MessageId, folder.Id);
                 Log.Info($"Message window: {context.MessageId} moved to “{folder.Name}”.");
+                if (AskForNeighbor(deleteRow: false)) return;
                 Changed?.Invoke(this, EventArgs.Empty);
                 Close();
             };

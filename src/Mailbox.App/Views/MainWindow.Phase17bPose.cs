@@ -24,7 +24,8 @@ namespace Mailbox.App.Views;
 /// answer is a menu logs it); <c>taskflag</c> opens the Tasks module's flag menu over the first
 /// row; <c>openmsg</c> opens the selected message's own window; <c>msgwin:&lt;verb&gt;</c> opens
 /// that window's menus (<c>delete</c>, <c>move</c>, <c>categorize</c>, <c>followup</c>,
-/// <c>more</c>, <c>apps</c>); <c>hide</c> closes whatever menu is open so the next can present;
+/// <c>more</c>, <c>apps</c>) or presses its buttons outright (<c>deletenow</c>,
+/// <c>archive</c>); <c>hide</c> closes whatever menu is open so the next can present;
 /// <c>wait</c> is a beat.
 /// </para>
 /// </remarks>
@@ -114,6 +115,10 @@ public partial class MainWindow
                         switch (arg)
                         {
                             case "delete": opened.PressChevron(MailCommands.Delete.Id); break;
+                            // The button half, not the chevron's menu — what the after-open-item
+                            // choice acts on, so its three ways out can be posed and read back.
+                            case "deletenow": opened.Press(MailCommands.Delete.Id); break;
+                            case "archive": opened.Press(MailCommands.Archive.Id); break;
                             case "move": opened.Press(MailCommands.MoveTo.Id); break;
                             case "categorize": opened.Press(MailCommands.Categorize.Id); break;
                             case "followup": opened.Press(MailCommands.FollowUp.Id); break;
