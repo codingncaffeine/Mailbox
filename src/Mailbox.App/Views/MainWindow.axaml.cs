@@ -186,6 +186,15 @@ public partial class MainWindow : Window
 
         DataContext = shell;
 
+        // A fresh profile opens on the account wizard: with no account there is nothing to
+        // draw, and the reference starts its own first run the same way. Ordinary runs only —
+        // a capture has nobody to answer a wizard, and a pose that wants one says so.
+        if (!WindowCapture.IsRequested && App.Accounts.All.Count == 0)
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(
+                async () => await AddAccountAsync(), DispatcherPriority.Background);
+        }
+
         // The status bar, as the bar itself reads it, just before the capture is taken. The
         // counts are the one part of the shell a photograph shows but nothing can check: a
         // number rendered at 11px is not evidence it agrees with the store, and every pose that

@@ -135,8 +135,8 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
     /// Shows a message.
     /// </summary>
     /// <param name="message">
-    /// The message as it arrived, or null while the sample is on screen — there is no MIME
-    /// behind a sample row, and inventing some would be a worse lie than rendering its text.
+    /// The message as it arrived, or null while no account exists — there is no MIME to load
+    /// then, and inventing some would be a worse lie than rendering the row's own text.
     /// </param>
     /// <param name="fallbackText">What to show when there is no message to parse.</param>
     /// <param name="verified">

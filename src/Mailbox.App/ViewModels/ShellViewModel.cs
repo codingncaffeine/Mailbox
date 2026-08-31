@@ -588,9 +588,9 @@ public sealed class MoreRow(MoreRowKind kind, string label) : ISpokenRow
 public sealed record MoreRequest(MoreRowKind Kind, OpenAccount Account, long FolderId, string SearchText);
 
 /// <summary>
-/// The shell's own state. Most collections are filled from the store; the few that are still
-/// sample data are there because the chrome has to pass a squint test against the reference
-/// whether or not a store is open, and a posed run may have none.
+/// The shell's own state, filled from the store. With no account there is nothing to fill and
+/// the panes stay empty — nothing is invented: an invented mailbox reads as a real account,
+/// and Account Settings can neither list nor remove it.
 /// </summary>
 public sealed partial class ShellViewModel : ObservableObject
 {
@@ -641,66 +641,13 @@ public sealed partial class ShellViewModel : ObservableObject
             if (catalog.TryGet(id, out var command)) CommandBar.Add(new QuickAccessButton(command));
         }
 
-        Folders =
-        [
-            new FolderNode("Favourites", 0, 0, bold: true),
-            new FolderNode("Inbox", 1, 4),
-            new FolderNode("Sent Items", 1, 0),
-            new FolderNode("Deleted Items", 1, 0),
-            new FolderNode("you@example.com", 0, 0, bold: true),
-            new FolderNode("Inbox", 1, 4),
-            new FolderNode("Drafts", 1, 1),
-            new FolderNode("Sent Items", 1, 0),
-            new FolderNode("Deleted Items", 1, 0),
-            new FolderNode("Junk Email", 1, 0),
-            new FolderNode("Archive", 1, 0),
-            new FolderNode("Outbox", 1, 0),
-            new FolderNode("RSS Feeds", 1, 0),
-            new FolderNode("Search Folders", 1, 0),
-        ];
+        // Empty until the store fills them. There used to be an invented mailbox here so an
+        // unconfigured shell had something to draw, but it read as a real account that could
+        // not be removed; now the first-run answer is the account wizard, not a pretence.
+        Folders = [];
+        Messages = [];
 
-        // Sample shown until an account exists. Dates are relative to now so the arrangement's
-        // Today / Yesterday buckets are exercised rather than always reading "last year".
-        var now = DateTimeOffset.Now;
-        Messages =
-        [
-            new MessageRow(1, "Alice Chen", "Re: Q3 numbers",
-                "Thanks for pulling those together — the variance on line 14 is the one I'd want to talk through before Thursday.",
-                now.AddHours(-4), true, "To: you@example.com",
-                "Thanks for pulling those together.\n\nThe variance on line 14 is the one I'd want to " +
-                "talk through before Thursday. Everything else reconciles against what finance sent " +
-                "over last week.\n\nAlice") { SizeBytes = 4_200, ThreadKey = "q3 numbers" },
-            new MessageRow(2, "Build Notifications", "mailbox/main — build passed",
-                "Commit 4f2a1c9 built successfully on linux-x64. 0 warnings, 0 errors.",
-                now.AddHours(-5), true, "To: you@example.com",
-                "Commit 4f2a1c9 built successfully on linux-x64.\n\n0 warnings, 0 errors.\nElapsed 00:00:04.62")
-                { SizeBytes = 1_100, ThreadKey = "mailbox/main — build passed" },
-            new MessageRow(3, "Dana Whitfield", "Lunch Thursday?",
-                "There's a new place near the office that does a decent laksa. Around 12:30?",
-                now.AddDays(-1), false, "To: you@example.com",
-                "There's a new place near the office that does a decent laksa.\n\nAround 12:30?")
-                { SizeBytes = 900, ThreadKey = "lunch thursday?" },
-            new MessageRow(4, "Sam Reyes", "Draft agenda attached",
-                "Rough cut for Monday. Shout if there's anything you want added before I send it round.",
-                now.AddDays(-1).AddHours(-3), false, "To: you@example.com",
-                "Rough cut for Monday.\n\nShout if there's anything you want added before I send it round.")
-                { SizeBytes = 38_000, HasAttachment = true, ThreadKey = "draft agenda attached" },
-            new MessageRow(5, "Fastmail", "Your account statement is ready",
-                "Your monthly statement for August is available to download.",
-                now.AddDays(-3), false, "To: you@example.com",
-                "Your monthly statement for August is available to download.") { SizeBytes = 2_400, ThreadKey = "your account statement is ready" },
-            new MessageRow(6, "Priya Raman", "Re: Font substitution question",
-                "Confirmed — Carlito is metric-compatible with Calibri, so the layout holds either way.",
-                now.AddDays(-9), false, "To: you@example.com",
-                "Confirmed — Carlito is metric-compatible with Calibri, so the layout holds either way.")
-                { SizeBytes = 1_800, ThreadKey = "font substitution question" },
-        ];
-
-        _selectedFolder = Folders[5];
-        // With an account configured the shell shows that account. Without one it shows the
-        // sample above, which is what makes an unconfigured Mailbox worth looking at — and is
-        // replaced the moment there is real mail rather than mixed with it.
-        if (LoadFromStore()) HasAccount = true;
+        LoadFromStore();
 
         _selectedMessage = Messages.FirstOrDefault();
 
@@ -718,7 +665,7 @@ public sealed partial class ShellViewModel : ObservableObject
         ZoomOut = new RelayCommand(() => ZoomPercent -= 10);
 
         // Nothing is on screen until the rows have been grouped, and grouping is what the list
-        // binds to. Last, so it sees whichever source — store or sample — was loaded above.
+        // binds to. Last, so it sees what the store loaded above.
         Rebuild();
     }
 
@@ -874,10 +821,8 @@ public sealed partial class ShellViewModel : ObservableObject
     public ObservableCollection<FolderNode> Folders { get; }
     public ObservableCollection<MessageRow> Messages { get; }
 
-    /// <summary>True once an account exists. Until then the shell is showing the sample.</summary>
+    /// <summary>True once an account exists and its store has been read.</summary>
     public bool HasAccount { get; private set; }
-
-    public bool ShowSampleNotice => !HasAccount;
 
     /// <summary>
     /// Which account and folder each row stands for. Every account has its own store, so a
@@ -943,8 +888,8 @@ public sealed partial class ShellViewModel : ObservableObject
     private readonly Dictionary<FolderNode, OpenAccount> _searchFolderRoots = [];
 
     /// <summary>
-    /// Replaces the sample with what the store holds. Returns false when there is no account,
-    /// which leaves the sample in place.
+    /// Fills the panes with what the store holds. Returns false when there is no account,
+    /// which leaves them empty.
     /// </summary>
     private bool LoadFromStore(bool selectFirst = true)
     {
@@ -952,6 +897,10 @@ public sealed partial class ShellViewModel : ObservableObject
 
         var accounts = _accounts.All;
         if (accounts.Count == 0) return false;
+
+        // Set here rather than by the constructor, so the first account the wizard adds
+        // switches the shell on without a restart — Refresh lands here too.
+        HasAccount = true;
 
         Folders.Clear();
         _accountHeadings.Clear();
@@ -2155,6 +2104,7 @@ public sealed partial class ShellViewModel : ObservableObject
             _readingFrom = null;
 
             Set(ref _selectedMessage, value);
+            Raise(nameof(ReadingTo));
         }
     }
 
@@ -2171,6 +2121,13 @@ public sealed partial class ShellViewModel : ObservableObject
 
     /// <summary>The sender the pane's header draws. See <see cref="ReadingSubject"/>.</summary>
     public string ReadingFrom => _readingFrom ?? SelectedMessage?.From ?? string.Empty;
+
+    /// <summary>
+    /// The recipients line the pane's header draws — the row's, empty when nothing is
+    /// selected. Bound here rather than through <c>SelectedMessage.ToLine</c>, whose chain
+    /// breaks (and logs) whenever no row is selected.
+    /// </summary>
+    public string ReadingTo => SelectedMessage?.ToLine ?? string.Empty;
 
     /// <summary>Draws the pane's header from a message's own protected header fields, or from its row.</summary>
     public void ReadFrom(string? subject, string? from)
@@ -2190,8 +2147,8 @@ public sealed partial class ShellViewModel : ObservableObject
     // Status-bar and pane glyphs. Held here so the XAML never names an icon codepoint.
     public FontFamily IconFamily { get; } = IconFont.Family;
     // ---- List shaping ---------------------------------------------------------------------
-    // Filtering, sorting and grouping run over the in-memory sample for now. They are view
-    // state either way: the store swap changed the source collection, not any of this.
+    // Filtering, sorting and grouping are view state: they run over whatever rows the store
+    // put in the list, never against the store itself.
 
     // ---- Ignore and Clean Up ---------------------------------------------------------------------
 
@@ -3555,7 +3512,7 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>The address of the account whose folder is on screen, for a new message to come from.</summary>
     public string? CurrentAddress => CurrentAccount?.Account.Address;
 
-    /// <summary>The folder on screen, from the store, or null while the sample is showing.</summary>
+    /// <summary>The folder on screen, from the store, or null while no account exists.</summary>
     public Folder? CurrentFolder =>
         SelectedFolder is { } folder && _folderIds.TryGetValue(folder, out var where)
             ? where.Account.Mail.GetFolder(where.FolderId)
@@ -4059,7 +4016,7 @@ public sealed partial class ShellViewModel : ObservableObject
     }
 
     /// <summary>
-    /// The store the rows belong to. Null while the sample is showing, which is what keeps the
+    /// The store the rows belong to. Null while no account exists, which is what keeps the
     /// commands from pretending to act on mail that is not really there.
     /// </summary>
     private MailRepository? Mail(IReadOnlyList<MessageRow> rows)
@@ -4135,8 +4092,8 @@ public sealed partial class ShellViewModel : ObservableObject
     /// The store behind what is on screen, for the reading pane.
     /// </summary>
     /// <remarks>
-    /// Null while the sample is showing, which is what tells the pane to render the row's text
-    /// rather than go looking for MIME that was never received.
+    /// Null while no account exists, which is what tells the pane there is no MIME to go
+    /// looking for.
     /// </remarks>
     public MailRepository? CurrentMail => HasAccount ? CurrentAccount?.Mail : null;
 

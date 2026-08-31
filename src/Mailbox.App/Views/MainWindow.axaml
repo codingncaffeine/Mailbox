@@ -1091,7 +1091,7 @@
                                 <TextBlock Text="{Binding ReadingFrom}"
                                            FontWeight="SemiBold"
                                            TextTrimming="CharacterEllipsis" />
-                                <TextBlock Text="{Binding SelectedMessage.ToLine}"
+                                <TextBlock Text="{Binding ReadingTo}"
                                            Classes="small secondary"
                                            TextTrimming="CharacterEllipsis" />
                             </StackPanel>
