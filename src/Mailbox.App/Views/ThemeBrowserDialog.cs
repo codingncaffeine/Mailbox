@@ -35,7 +35,7 @@ internal sealed class ThemeBrowserDialog : Window
     internal const string BrowseVariable = "MAILBOX_THEME_BROWSE";
 
     private const long ThemeFileCap = 16 * 1024 * 1024;
-    private const long ThumbnailCap = 512 * 1024;
+    private const long ThumbnailCap = 2 * 1024 * 1024;
 
     private readonly ThemeService _themes;
     private readonly IThemeSource _source;
@@ -66,7 +66,17 @@ internal sealed class ThemeBrowserDialog : Window
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
 
     private readonly List<ThemeListing> _listings = [];
-    private readonly Dictionary<string, Bitmap> _thumbnails = new(StringComparer.Ordinal);
+    private readonly System.Collections.ObjectModel.ObservableCollection<Control> _rows = [];
+
+    // Thumbnails are cached as tasks, so two rows wanting one image share one fetch — and a
+    // bitmap is NEVER disposed while the dialog lives: the old cap disposed images still
+    // painted by visible rows, which is a thumbnail that shows and then stops showing.
+    // Decoded small, a page of them is kilobytes; everything goes together when the dialog
+    // closes. A failed fetch is not cached, so a rebuilt row tries again.
+    private readonly Dictionary<string, Task<Bitmap?>> _thumbnails = new(StringComparer.Ordinal);
+    private readonly List<Task> _thumbnailWork = [];
+    private int _thumbnailsShown;
+    private int _thumbnailsFailed;
     private string? _colour;
     private int _page = 1;
     private long _total;
@@ -106,7 +116,11 @@ internal sealed class ThemeBrowserDialog : Window
         };
         Closed += (_, _) =>
         {
-            foreach (var bitmap in _thumbnails.Values) bitmap.Dispose();
+            foreach (var task in _thumbnails.Values.Where(t => t.IsCompletedSuccessfully))
+            {
+                task.Result?.Dispose();
+            }
+
             (_source as IDisposable)?.Dispose();
         };
     }
@@ -143,6 +157,7 @@ internal sealed class ThemeBrowserDialog : Window
         _sort.SelectionChanged += async (_, _) => await SearchAsync(reset: true);
         _category.SelectionChanged += async (_, _) => await SearchAsync(reset: true);
         _more.Click += async (_, _) => await SearchAsync(reset: false);
+        _list.ItemsSource = _rows;
         _list.SelectionChanged += async (_, _) => await PreviewAsync();
         _install.Click += async (_, _) => await InstallAsync();
 
@@ -235,7 +250,7 @@ internal sealed class ThemeBrowserDialog : Window
             VerticalAlignment = VerticalAlignment.Center,
         };
         Bind(thumb, Border.BackgroundProperty, "dialog.surface.brush");
-        if (listing.ThumbnailUrl is { } url) _ = LoadThumbnailAsync(thumb, url);
+        if (listing.ThumbnailUrl is { } url) _thumbnailWork.Add(LoadThumbnailAsync(thumb, url));
 
         // The rows stand on the list box's own surface, whose ink is not the dialog ground's —
         // Dark Gray's light boxes under dark chrome are the case that decides it.
@@ -268,6 +283,9 @@ internal sealed class ThemeBrowserDialog : Window
         {
             _page = 1;
             _listings.Clear();
+            _rows.Clear();
+            _thumbnailsShown = 0;
+            _thumbnailsFailed = 0;
         }
         else
         {
@@ -298,7 +316,10 @@ internal sealed class ThemeBrowserDialog : Window
             var (results, total) = await _source.SearchAsync(query, sort, _colour, category, _page, CancellationToken.None);
             _listings.AddRange(results);
             _total = total;
-            _list.ItemsSource = _listings.Select(Row).ToList();
+
+            // Only the new rows are built: More appends, and the rows already on screen keep
+            // their thumbnails and their scroll position instead of being rebuilt and refetched.
+            foreach (var listing in results) _rows.Add(Row(listing));
             _more.IsEnabled = _listings.Count < _total;
             _status.Text = _total == 0
                 ? "Nothing matched."
@@ -313,27 +334,40 @@ internal sealed class ThemeBrowserDialog : Window
 
     private async Task LoadThumbnailAsync(Border host, string url)
     {
+        if (!_thumbnails.TryGetValue(url, out var task))
+        {
+            task = FetchThumbnailAsync(url);
+            _thumbnails[url] = task;
+        }
+
+        var bitmap = await task;
+        if (bitmap is null)
+        {
+            // Not cached, so a rebuilt row gets another try rather than a permanent blank.
+            _thumbnails.Remove(url);
+            _thumbnailsFailed++;
+            return;
+        }
+
+        host.Background = new ImageBrush(bitmap) { Stretch = Stretch.UniformToFill };
+        _thumbnailsShown++;
+    }
+
+    private async Task<Bitmap?> FetchThumbnailAsync(string url)
+    {
         try
         {
-            if (!_thumbnails.TryGetValue(url, out var bitmap))
-            {
-                var bytes = await _source.FetchAsync(url, ThumbnailCap, CancellationToken.None);
-                using var stream = new MemoryStream(bytes);
-                bitmap = new Bitmap(stream);
-                if (_thumbnails.Count > 60)
-                {
-                    foreach (var kept in _thumbnails.Values) kept.Dispose();
-                    _thumbnails.Clear();
-                }
+            var bytes = await _source.FetchAsync(url, ThumbnailCap, CancellationToken.None);
+            using var stream = new MemoryStream(bytes);
 
-                _thumbnails[url] = bitmap;
-            }
-
-            host.Background = new ImageBrush(bitmap) { Stretch = Stretch.UniformToFill };
+            // Decoded at the row's own size: a full preview strip arrives sometimes — not
+            // every theme carries a small thumbnail — and at 144px they all weigh the same.
+            return Bitmap.DecodeToWidth(stream, 144);
         }
-        catch (Exception ex) when (ex is ThemeSourceException or ArgumentException or NotSupportedException)
+        catch (Exception ex) when (ex is ThemeSourceException or ArgumentException or NotSupportedException or IOException)
         {
             Log.Debug($"Theme browser: thumbnail skipped — {ex.Message}");
+            return null;
         }
     }
 
@@ -515,7 +549,20 @@ internal sealed class ThemeBrowserDialog : Window
         foreach (var op in script.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
-            if (op.StartsWith("search:", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(op, "more", StringComparison.OrdinalIgnoreCase))
+            {
+                await SearchAsync(reset: false);
+                Log.Info($"Harness: theme browser — more: {_listings.Count} of {_total} listed, {_rows.Count} row(s).");
+            }
+            else if (string.Equals(op, "thumbs", StringComparison.OrdinalIgnoreCase))
+            {
+                // Every started fetch settled, then the tally — the claim a photograph of
+                // the list cannot make on its own.
+                await Task.WhenAll(_thumbnailWork);
+                Log.Info($"Harness: theme browser — thumbnails: {_thumbnailsShown} shown, {_thumbnailsFailed} failed, "
+                         + $"{_rows.Count} row(s), {_listings.Count(l => l.ThumbnailUrl is not null)} with a thumbnail to show.");
+            }
+            else if (op.StartsWith("search:", StringComparison.OrdinalIgnoreCase))
             {
                 _search.Text = op[7..];
                 await SearchAsync(reset: true);
