@@ -93,13 +93,23 @@ public static class SlimThemeImport
             overlay.Set(TokenKeys.Rail.ItemPressed, pressed);
         }
 
-        // The header image rides the caption backdrop, placed as the manifest placed it.
+        // The header image rides the caption backdrop, placed as the manifest placed it —
+        // and where the author said nothing, centred vertically rather than the browser's
+        // top-anchored default: its header band is four times this caption's height, and the
+        // top sliver of a tall image is usually its empty sky. The middle is the artwork.
         if (backdropPath is not null)
         {
             overlay.Set(TokenKeys.TitleBar.Backdrop, backdropPath);
-            overlay.Set(TokenKeys.TitleBar.BackdropAlignment, theme.Alignment);
+            overlay.Set(TokenKeys.TitleBar.BackdropAlignment, theme.Alignment ?? "right center");
             overlay.Set(TokenKeys.TitleBar.BackdropTiling, theme.Tiling);
-            overlay.Set(TokenKeys.TitleBar.BackdropSize, "auto");
+
+            // Cover, not natural size: the browser's header band is four times this
+            // caption's height, so a header drawn at its own pixels shows a sliver of sky
+            // where the artist put nothing, much of it under the caption buttons. Scaled to
+            // cover the band, the artwork is ambience across the whole strip and the
+            // alignment picks which band of it survives — the author's stated one, else the
+            // middle, which is where artists put the picture.
+            overlay.Set(TokenKeys.TitleBar.BackdropSize, "cover");
             overlay.Set(TokenKeys.TitleBar.BackdropOpacity, "1");
         }
 

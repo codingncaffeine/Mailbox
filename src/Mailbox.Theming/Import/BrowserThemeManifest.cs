@@ -15,7 +15,7 @@ public sealed record BrowserTheme(
     IReadOnlyDictionary<string, string> DarkColours,
     string? FrameImage,
     IReadOnlyList<string> AdditionalBackgrounds,
-    string Alignment,
+    string? Alignment,
     string Tiling,
     string? ColorScheme,
     IReadOnlyList<string> Skipped);
@@ -148,7 +148,7 @@ public static class BrowserThemeManifest
         return (frame, additional);
     }
 
-    private static (string Alignment, string Tiling, string? Scheme) Properties(JsonObject? theme)
+    private static (string? Alignment, string Tiling, string? Scheme) Properties(JsonObject? theme)
     {
         var properties = theme?["properties"] as JsonObject;
 
@@ -160,8 +160,11 @@ public static class BrowserThemeManifest
             _ => null,
         };
 
+        // Alignment stays null when the author said nothing: the browser's default and ours
+        // differ — its header band is four times our caption's height — so "unstated" is a
+        // fact the mapper needs, not a value to paper over here.
         return (
-            First(properties?["additional_backgrounds_alignment"]) ?? "right top",
+            First(properties?["additional_backgrounds_alignment"]),
             First(properties?["additional_backgrounds_tiling"]) ?? "no-repeat",
             Text(properties?["color_scheme"])?.ToLowerInvariant());
     }

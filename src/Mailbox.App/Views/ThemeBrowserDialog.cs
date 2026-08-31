@@ -445,7 +445,9 @@ internal sealed class ThemeBrowserDialog : Window
                 App.Settings.Set(App.ThemeSetting, _themes.ThemeId);
             }
 
-            _status.Text = $"Installed and applied — “{outcome.Result.File.Name}”. Remove it any time from the theme row.";
+            var yielded = Theming.BackdropChoice.YieldToTheme(App.Settings, _themes, outcome.Result.File);
+            _status.Text = $"Installed and applied — “{outcome.Result.File.Name}”. Remove it any time from the theme row."
+                           + (yielded ? " The Mailbox Background choice returned to (From the theme) so its artwork shows." : "");
             Installed?.Invoke();
             Log.Info($"Harness: theme browser — installed \"{outcome.Result.File.Id}\"; active theme is {_themes.ThemeId}.");
         }

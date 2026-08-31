@@ -66,6 +66,23 @@ internal static class BackdropChoice
     /// <summary>The current stored choice.</summary>
     internal static string Current(SettingsStore settings) => settings.GetString(Setting);
 
+    /// <summary>
+    /// Installing a theme that brings its own background is a newer wish than whatever the
+    /// Mailbox Background row held: a "(None)" chosen months ago must not silently blank the
+    /// artwork somebody installed a theme for. The choice returns to "(From the theme)";
+    /// picking it again afterwards works exactly as before.
+    /// </summary>
+    /// <returns>True when the standing choice was cleared for the theme's own background.</returns>
+    internal static bool YieldToTheme(SettingsStore settings, ThemeService themes, Mailbox.Theming.Files.ThemeFile file)
+    {
+        if (Current(settings).Length == 0) return false;
+        if (!file.Tokens.TryGetRaw(TokenKeys.TitleBar.Backdrop, out var backdrop) || backdrop.Length == 0) return false;
+
+        Log.Info($"\"{file.Id}\" brings its own background; the Mailbox Background choice returns to (From the theme).");
+        Choose(settings, themes, string.Empty);
+        return true;
+    }
+
     private static void Apply(ThemeService themes, string choice, string alignment)
     {
         if (choice.Length == 0)

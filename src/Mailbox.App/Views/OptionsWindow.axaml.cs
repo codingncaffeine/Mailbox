@@ -503,7 +503,12 @@ public sealed class OptionsWindow : Window
     {
         if (renderer.Slots.TryGetValue("background", out var background))
         {
-            background.Content = LabelledLive("Mailbox Background:", BackgroundRow());
+            // Rebuilt after an install hands the choice back to the theme, so the combo says
+            // what the settings now say.
+            void FillBackgroundRow()
+                => background.Content = LabelledLive("Mailbox Background:", BackgroundRow());
+            FillBackgroundRow();
+            _refillBackgroundRow = FillBackgroundRow;
         }
 
         if (renderer.Slots.TryGetValue("theme", out var theme))
@@ -518,7 +523,11 @@ public sealed class OptionsWindow : Window
                 var import = new Button { Content = "Import…", VerticalAlignment = VerticalAlignment.Center };
                 import.Click += async (_, _) =>
                 {
-                    if (await ImportThemeAsync()) FillThemeRow();
+                    if (await ImportThemeAsync())
+                    {
+                        FillThemeRow();
+                        _refillBackgroundRow?.Invoke();
+                    }
                 };
 
                 var browse = new Button { Content = "Browse…", VerticalAlignment = VerticalAlignment.Center };
@@ -529,7 +538,11 @@ public sealed class OptionsWindow : Window
                     var installed = false;
                     browser.Installed += () => installed = true;
                     await browser.ShowDialog(this);
-                    if (installed) FillThemeRow();
+                    if (installed)
+                    {
+                        FillThemeRow();
+                        _refillBackgroundRow?.Invoke();
+                    }
                 };
 
                 var remove = new Button
@@ -1627,6 +1640,7 @@ public sealed class OptionsWindow : Window
         {
             _themes.ApplyFresh(id);
             App.Settings.Set(App.ThemeSetting, _themes.ThemeId);
+            Theming.BackdropChoice.YieldToTheme(App.Settings, _themes, outcome.Result.File);
         }
 
         var lines = new StackPanel { Spacing = 6, MaxWidth = 480 };
@@ -1675,6 +1689,7 @@ public sealed class OptionsWindow : Window
     }
 
     private Action? _refillThemeRow;
+    private Action? _refillBackgroundRow;
 
     /// <summary>
     /// The Palette row: a curated colour scheme, the desktop's own colours, or a scheme read

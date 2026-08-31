@@ -356,6 +356,7 @@ public class ThemeImportTests
         Assert.Equal($"images/{id}/frame.png", accepted.Result.File.Tokens[TokenKeys.TitleBar.Backdrop]);
         Assert.Equal("left top", accepted.Result.File.Tokens[TokenKeys.TitleBar.BackdropAlignment]);
         Assert.Equal("repeat-x", accepted.Result.File.Tokens[TokenKeys.TitleBar.BackdropTiling]);
+        Assert.Equal("cover", accepted.Result.File.Tokens[TokenKeys.TitleBar.BackdropSize]);
         Assert.True(File.Exists(Path.Combine(themes, "images", id, "frame.png")));
 
         // A decoder that rejects the bytes leaves the caption plain and the notes honest.
@@ -399,6 +400,29 @@ public class ThemeImportTests
 
         // One background became the header; only the second is reported unused.
         Assert.Contains(outcome.Notes, n => n.Contains("1 additional background(s)"));
+    }
+
+    [Fact]
+    public void AnUnstatedAlignmentCentresAndTheImageCoversTheBand()
+    {
+        // The browser's header band is four times this caption's height: a theme whose author
+        // said nothing about placement gets the artwork's middle, covering the strip — not the
+        // browser's top-anchored sliver of sky at natural pixels.
+        var root = Scratch();
+        byte[] fakeImage = [0x89, 0x50, 0x4E, 0x47];
+        var package = PackageWith(root, """
+            {
+              "manifest_version": 2, "version": "1", "name": "Unstated Placement Fixture",
+              "theme": {
+                "colors": { "frame": "#01050F" },
+                "images": { "theme_frame": "header.png" }
+              }
+            }
+            """, ("header.png", fakeImage));
+
+        var result = ImportedThemes.Import(package, Path.Combine(root, "themes"), bytes => bytes).Result;
+        Assert.Equal("right center", result.File.Tokens[TokenKeys.TitleBar.BackdropAlignment]);
+        Assert.Equal("cover", result.File.Tokens[TokenKeys.TitleBar.BackdropSize]);
     }
 
     [Fact]

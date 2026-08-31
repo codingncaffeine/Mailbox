@@ -66,11 +66,17 @@ internal sealed class ThemePreview : Control
             context.FillRectangle(B(TokenKeys.TitleBar.Background), R(0, 0, 320, 22));
             if (_backdrop is not null)
             {
+                // The same arithmetic the real band uses — cover, panned by the theme's own
+                // alignment — so the preview's crop is the installed crop, miniaturised.
                 var band = R(0, 0, 320, 22);
-                var imageScale = band.Height / _backdrop.PixelSize.Height;
-                var w = _backdrop.PixelSize.Width * imageScale;
+                var alignment = CaptionBackdrop.ParseAlignment(
+                    t.TryGetString(TokenKeys.TitleBar.BackdropAlignment, out var stated) ? stated : "right center");
+                var cover = Math.Max(band.Width / _backdrop.PixelSize.Width, band.Height / _backdrop.PixelSize.Height);
+                var w = _backdrop.PixelSize.Width * cover;
+                var h = _backdrop.PixelSize.Height * cover;
+                using var bandClip = context.PushClip(band);
                 context.DrawImage(_backdrop, new Rect(_backdrop.Size),
-                    new Rect(band.Right - w, band.Top, w, band.Height));
+                    new Rect(band.Left + ((band.Width - w) * alignment.X), band.Top + ((band.Height - h) * alignment.Y), w, h));
             }
 
             context.FillRectangle(B(TokenKeys.TitleBar.Search), R(110, 5, 100, 12), (float)(6 * scale));
