@@ -1,0 +1,16 @@
+# The caption backdrop: the shipped patterns over every built-in, the explicit none, and the
+# caption's own states drawn OVER the layer — the failure mode being a wash that reads on a
+# flat caption and vanishes on a busy one. Image poses run by hand with a generated fixture;
+# nothing third-party is ever committed.
+backdrop-colorful-theme	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=colorful MAILBOX_BACKDROP=theme
+backdrop-colorful-none	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=colorful MAILBOX_BACKDROP=none
+backdrop-colorful-stitches	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=colorful MAILBOX_BACKDROP=stitches
+backdrop-colorful-waves	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=colorful MAILBOX_BACKDROP=waves
+backdrop-white-dots	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=white MAILBOX_BACKDROP=dots
+backdrop-white-weave	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=white MAILBOX_BACKDROP=weave
+backdrop-darkgray-hatch	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=darkgray MAILBOX_BACKDROP=hatch
+backdrop-darkgray-rings	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=darkgray MAILBOX_BACKDROP=rings
+backdrop-black-waves	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=black MAILBOX_BACKDROP=waves
+backdrop-colorful-hold-close	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=colorful MAILBOX_BACKDROP=stitches MAILBOX_CAPTION=hold:close
+backdrop-darkgray-hold-minimize	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=darkgray MAILBOX_BACKDROP=hatch MAILBOX_CAPTION=hold:minimize
+backdrop-white-hold-maximize	MAILBOX_TODAY=2026-08-16 MAILBOX_THEME=white MAILBOX_BACKDROP=dots MAILBOX_CAPTION=hold:maximize

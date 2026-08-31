@@ -5308,6 +5308,54 @@ public partial class MainWindow : Window
         WindowFrame.Drags(this, bar);
     }
 
+    private bool _backdropAligning;
+
+    /// <summary>
+    /// The align session: the caption backdrop takes the pointer, a drag places the image, each
+    /// release keeps the position, Ctrl+Z puts it back where the session found it, and Escape
+    /// ends the session. Direct manipulation writing the alignment token — the value kept is
+    /// exactly what the hand placed.
+    /// </summary>
+    internal void BeginBackdropAlign()
+    {
+        if (_backdropAligning) return;
+        if (this.FindControl<CaptionBackdrop>("TitleBarBackdrop") is not { } backdrop) return;
+
+        _backdropAligning = true;
+        backdrop.Aligning = true;
+        Activate();
+
+        void Committed(string alignment)
+            => Mailbox.App.Theming.BackdropChoice.Align(App.Settings, App.Themes, alignment);
+        backdrop.AlignmentCommitted += Committed;
+
+        void OnKey(object? sender, Avalonia.Input.KeyEventArgs e)
+        {
+            if (e.Key == Avalonia.Input.Key.Escape)
+            {
+                End();
+                e.Handled = true;
+            }
+            else if (e.Key == Avalonia.Input.Key.Z && e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Control))
+            {
+                backdrop.RevertAlign();
+                e.Handled = true;
+            }
+        }
+
+        void End()
+        {
+            _backdropAligning = false;
+            backdrop.Aligning = false;
+            backdrop.AlignmentCommitted -= Committed;
+            RemoveHandler(Avalonia.Input.InputElement.KeyDownEvent, OnKey);
+            Log.Info($"Backdrop align ended; {backdrop.Describe()}.");
+        }
+
+        AddHandler(Avalonia.Input.InputElement.KeyDownEvent, OnKey, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        Log.Info("Backdrop align began: drag places the image, Esc finishes, Ctrl+Z reverts.");
+    }
+
     /// <summary>
     /// <c>MAILBOX_CAPTION=hold:&lt;button&gt;</c> paints a caption button's held state, and
     /// <c>MAILBOX_CAPTION=press:&lt;button&gt;</c> clicks it. Both name minimize, maximize or

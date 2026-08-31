@@ -538,6 +538,9 @@ public partial class App : Application
             }
         }
 
+        // The Mailbox Background rides the appearance slot, whatever the theme decision was.
+        Theming.BackdropChoice.Restore(Settings, Themes);
+
         if (Environment.GetEnvironmentVariable(ThemeService.DensityVariable) is not null) return;
 
         if (Enum.TryParse<Density>(Settings.GetString(DensitySetting), out var density))

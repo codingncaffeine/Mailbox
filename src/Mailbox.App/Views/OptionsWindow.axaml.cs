@@ -501,6 +501,11 @@ public sealed class OptionsWindow : Window
     /// </summary>
     private void FillLiveSlots(OptionsPageRenderer renderer)
     {
+        if (renderer.Slots.TryGetValue("background", out var background))
+        {
+            background.Content = LabelledLive("Mailbox Background:", BackgroundRow());
+        }
+
         if (renderer.Slots.TryGetValue("theme", out var theme))
         {
             var customize = new Button { Content = "Customize…", VerticalAlignment = VerticalAlignment.Center };
@@ -1530,6 +1535,97 @@ public sealed class OptionsWindow : Window
             App.Settings.Set(App.DensitySetting, density.ToString());
         };
         return combo;
+    }
+
+    /// <summary>
+    /// The Mailbox Background row: the shipped patterns, the reader's own image, or nothing.
+    /// The choice applies as it is made and persists at once — it is a personal setting like
+    /// density, carried in the appearance slot so no theme decision can disturb it and it can
+    /// disturb none.
+    /// </summary>
+    private Control BackgroundRow()
+    {
+        var entries = new List<string> { "(From the theme)", "(None)" };
+        entries.AddRange(CaptionPatterns.Names.Select(CaptionPatterns.DisplayName));
+
+        var current = Theming.BackdropChoice.Current(App.Settings);
+        var hasImage = current.Length > 0 && current != "none"
+                       && !current.StartsWith("pattern:", StringComparison.OrdinalIgnoreCase);
+        if (hasImage) entries.Add("(Your image)");
+
+        var combo = new ComboBox
+        {
+            ItemsSource = entries,
+            MinWidth = 160,
+            VerticalAlignment = VerticalAlignment.Center,
+            SelectedIndex = current.Length == 0 ? 0
+                : current == "none" ? 1
+                : current.StartsWith("pattern:", StringComparison.OrdinalIgnoreCase)
+                    ? 2 + Math.Max(0, CaptionPatterns.Names.ToList()
+                        .FindIndex(n => string.Equals("pattern:" + n, current, StringComparison.OrdinalIgnoreCase)))
+                    : entries.Count - 1,
+        };
+
+        var align = new Button
+        {
+            Content = "Align…",
+            VerticalAlignment = VerticalAlignment.Center,
+            IsEnabled = hasImage,
+        };
+        ToolTip.SetTip(align, "Drag the image along the title bar. Esc finishes; Ctrl+Z puts it back.");
+
+        combo.SelectionChanged += (_, _) =>
+        {
+            var choice = combo.SelectedIndex switch
+            {
+                0 => string.Empty,
+                1 => "none",
+                var i when i >= 2 && i - 2 < CaptionPatterns.Names.Count => "pattern:" + CaptionPatterns.Names[i - 2],
+                _ => Theming.BackdropChoice.Current(App.Settings), // "(Your image)" — already stored
+            };
+            Theming.BackdropChoice.Choose(App.Settings, _themes, choice);
+            align.IsEnabled = choice.Length > 0 && choice != "none"
+                              && !choice.StartsWith("pattern:", StringComparison.OrdinalIgnoreCase);
+        };
+
+        var browse = new Button { Content = "Image…", VerticalAlignment = VerticalAlignment.Center };
+        browse.Click += async (_, _) =>
+        {
+            var files = await StorageProvider.OpenFilePickerAsync(new()
+            {
+                Title = "Choose a background image",
+                AllowMultiple = false,
+                FileTypeFilter = [FilePickerFileTypes.ImageAll],
+            });
+            if (files.Count == 0 || files[0].TryGetLocalPath() is not { } source) return;
+            if (Theming.BackdropChoice.ImportImage(source) is not { } stored) return;
+
+            Theming.BackdropChoice.Choose(App.Settings, _themes, stored);
+            if (!entries.Contains("(Your image)"))
+            {
+                entries.Add("(Your image)");
+                combo.ItemsSource = null;
+                combo.ItemsSource = entries;
+            }
+            combo.SelectedIndex = entries.Count - 1;
+            align.IsEnabled = true;
+        };
+
+        align.Click += (_, _) =>
+        {
+            if (Owner is MainWindow shell)
+            {
+                Close();
+                shell.BeginBackdropAlign();
+            }
+        };
+
+        return new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            Children = { combo, browse, align },
+        };
     }
 
     private Control LabelledLive(string label, Control control)

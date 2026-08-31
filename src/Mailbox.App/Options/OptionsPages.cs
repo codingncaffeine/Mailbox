@@ -9,9 +9,12 @@ namespace Mailbox.App.Options;
 /// </summary>
 /// <remarks>
 /// vendor-cloud options are deliberately absent rather than stubbed: cloud settings
-/// storage, Office Background, OneDrive and SharePoint attachment handling, LinkedIn, Rights
-/// Protected message previews, Send to OneNote and the Developer tab. Everything that survives
-/// is rewritten from "Office" and "the reference application" to "Mailbox".
+/// storage, OneDrive and SharePoint attachment handling, LinkedIn, Rights Protected message
+/// previews, Send to OneNote and the Developer tab. The reference's background picker has its
+/// own answer here instead — the "Mailbox Background:" row, whose patterns are this
+/// application's and whose images are the reader's, decided 31 August 2026 when the theme
+/// work made the caption's backdrop a real layer. Everything that survives is rewritten from
+/// "Office" and "the reference application" to "Mailbox".
 /// </remarks>
 public static class OptionsPages
 {
@@ -107,6 +110,7 @@ public static class OptionsPages
                 new TextRow("User name:", "A. Person") { Key = Keys.UserName },
                 new TextRow("Initials:", "AP", Width: 74) { Key = Keys.Initials },
                 // Filled with a live control by the window; see OptionsWindow.
+                new SlotRow("background"),
                 new SlotRow("theme"),
                 new SlotRow("density"),
             ]),

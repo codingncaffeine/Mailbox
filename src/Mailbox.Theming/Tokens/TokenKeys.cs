@@ -185,6 +185,25 @@ public static class TokenKeys
         public const string CaptionClose = "titlebar.caption.close";
         public const string CaptionClosePressed = "titlebar.caption.close.pressed";
         public const string CaptionCloseText = "titlebar.caption.close.text";
+
+        /// <summary>
+        /// The decorative layer behind the caption's controls: empty, <c>pattern:&lt;name&gt;</c>
+        /// for one of the shipped patterns, or an image path — absolute, or relative to the
+        /// themes directory so a theme and its images move together.
+        /// </summary>
+        /// <remarks>
+        /// Deliberately <b>not</b> required: "no backdrop" is a legitimate state rather than an
+        /// unpainted surface, and requiring the family would break every theme file a reader
+        /// has already written. The built-ins set empty defaults so the exported files document
+        /// the family.
+        /// </remarks>
+        public const string Backdrop = "titlebar.backdrop";
+
+        /// <summary>CSS <c>background-position</c> keywords, or <c>x% y%</c> — what a drag writes.</summary>
+        public const string BackdropAlignment = "titlebar.backdrop.alignment";
+        public const string BackdropTiling = "titlebar.backdrop.tiling";
+        public const string BackdropSize = "titlebar.backdrop.size";
+        public const string BackdropOpacity = "titlebar.backdrop.opacity";
     }
 
     /// <summary>The account button in the title bar, and the panel it opens.</summary>

@@ -64,6 +64,11 @@
                 Name="TitleBar"
                 Background="{DynamicResource titlebar.background.brush}"
                 Height="{DynamicResource titlebar.height.value}">
+            <Panel>
+            <!-- The decorative layer first, so every control in the band stands over it. It is
+                 not hit-testable outside an align session, so the drag and the caption
+                 buttons see the pointer exactly as they did when the band was plain. -->
+            <views:CaptionBackdrop Name="TitleBarBackdrop" />
             <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto">
                 <!-- The app icon carries the window menu, which the window itself must now
                      provide: it is drawn without a system frame. -->
@@ -235,6 +240,7 @@
                 <!-- Windows-style caption buttons, added in code. -->
                 <ContentControl Grid.Column="5" Name="CaptionHost" />
             </Grid>
+            </Panel>
         </Border>
 
         <!-- ====================== Ribbon / command bar ======================= -->

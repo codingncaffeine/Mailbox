@@ -113,8 +113,16 @@ public static class TokenMap
                 .Where(k => !AreaByToken.ContainsKey(k)
                             && prefixes.Any(p => k.StartsWith(p, StringComparison.OrdinalIgnoreCase)));
 
-        // Chrome, in the order a window stacks it.
-        Add("titlebar", "Title Bar", [.. Prefixed("titlebar.", "avatar.")], image: true);
+        // Chrome, in the order a window stacks it. The backdrop family is optional — not in
+        // Required — but it is still the title bar's, and an editor must list it there.
+        Add("titlebar", "Title Bar",
+            [
+                .. Prefixed("titlebar.", "avatar."),
+                TokenKeys.TitleBar.Backdrop, TokenKeys.TitleBar.BackdropAlignment,
+                TokenKeys.TitleBar.BackdropTiling, TokenKeys.TitleBar.BackdropSize,
+                TokenKeys.TitleBar.BackdropOpacity,
+            ],
+            image: true);
         Add("ribbon", "Ribbon", Prefixed("ribbon."));
         Add("backstage", "File view", Prefixed("backstage."));
         Add("rail", "App Rail", Prefixed("rail."));
@@ -188,6 +196,7 @@ public static class TokenMap
         if (key.StartsWith("type.") || key.StartsWith("elevation.") || key.StartsWith("space.")
             || key.StartsWith("radius.") || key.StartsWith("motion.")
             || key is "icons.set" or "workspace.inset"
+            || key.Contains(".backdrop")
             || key.Contains(".height") || key.EndsWith(".width") || key.EndsWith(".size")
             || key.EndsWith(".inset") || key.EndsWith(".offset") || key.EndsWith(".tint"))
         {

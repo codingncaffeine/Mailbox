@@ -93,6 +93,16 @@ public static class OfficeThemes
         t.Set(TokenKeys.Ribbon.Height, "100");
         t.Set(TokenKeys.Nav.Width, "236");
 
+        // The caption backdrop, empty in every built-in: the reference's stock look carries no
+        // background, and an empty default is what lets "no backdrop" be a state a theme can
+        // return to rather than a missing token. The opacity is calibrated for the shipped
+        // patterns, which draw in the caption's own ink; an image states its own, usually 1.
+        t.Set(TokenKeys.TitleBar.Backdrop, "");
+        t.Set(TokenKeys.TitleBar.BackdropAlignment, "right top");
+        t.Set(TokenKeys.TitleBar.BackdropTiling, "no-repeat");
+        t.Set(TokenKeys.TitleBar.BackdropSize, "auto");
+        t.Set(TokenKeys.TitleBar.BackdropOpacity, "0.16");
+
         // Title bar, all measured. The search box clears the top by 7px and its left edge
         // sits where the message list starts: rail (57) + folder pane (236) + splitter (1).
         t.Set(TokenKeys.TitleBar.Height, "49");
