@@ -103,23 +103,45 @@ public static class ThemePack
             if (name.Length == 0 || entry.FullName.Contains("..")) continue;
             if (entry.Length > 16 * 1024 * 1024) { notes.Add($"\"{name}\" is over the image size limit and was left out"); continue; }
 
+            using var stream = entry.Open();
+            using var buffer = new MemoryStream();
+            stream.CopyTo(buffer, 81920);
+
+            // The animation's timing file travels with its frames: parsed and re-serialised,
+            // never copied — the same laundering rule as the images beside it.
+            if (string.Equals(name, ImportedThemes.AnimationManifest, StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    var parsed = System.Text.Json.Nodes.JsonNode.Parse(System.Text.Encoding.UTF8.GetString(buffer.ToArray()));
+                    if (parsed is System.Text.Json.Nodes.JsonObject timing)
+                    {
+                        Directory.CreateDirectory(imageDirectory);
+                        File.WriteAllText(Path.Combine(imageDirectory, ImportedThemes.AnimationManifest), timing.ToJsonString());
+                    }
+                }
+                catch (System.Text.Json.JsonException)
+                {
+                    notes.Add("the animation's timing file does not parse and was left out");
+                }
+
+                continue;
+            }
+
             if (reencode is null)
             {
                 notes.Add($"\"{name}\" was skipped — no image decoder in this door");
                 continue;
             }
 
-            using var stream = entry.Open();
-            using var buffer = new MemoryStream();
-            stream.CopyTo(buffer, 81920);
-            if (reencode(buffer.ToArray()) is not { } png)
+            if (reencode(buffer.ToArray()) is not { Count: > 0 } frames)
             {
                 notes.Add($"\"{name}\" does not decode as an image and was refused");
                 continue;
             }
 
             Directory.CreateDirectory(imageDirectory);
-            File.WriteAllBytes(Path.Combine(imageDirectory, Path.ChangeExtension(name, ".png")), png);
+            File.WriteAllBytes(Path.Combine(imageDirectory, Path.ChangeExtension(name, ".png")), frames[0].Png);
         }
 
         var stray = zip.Entries.Count(e =>

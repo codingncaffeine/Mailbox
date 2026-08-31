@@ -44,7 +44,7 @@ public class ThemePackTests
 
         // The one door: ImportedThemes.Import recognises the pack and routes it.
         var destination = Path.Combine(root, "themes-b");
-        var outcome = ImportedThemes.Import(pack, destination, bytes => bytes);
+        var outcome = ImportedThemes.Import(pack, destination, bytes => [new ReencodedFrame(bytes, 0)]);
 
         Assert.Equal("pack", outcome.Result.Origin);
         Assert.True(File.Exists(Path.Combine(destination, id + ThemeFileFormat.Extension)));
@@ -55,7 +55,7 @@ public class ThemePackTests
         Assert.Equal($"images/{id}/frame.png", arrived.Tokens[TokenKeys.TitleBar.Backdrop]);
 
         // Again is an update, not a twin.
-        Assert.True(ImportedThemes.Import(pack, destination, bytes => bytes).Updated);
+        Assert.True(ImportedThemes.Import(pack, destination, bytes => [new ReencodedFrame(bytes, 0)]).Updated);
     }
 
     [Fact]

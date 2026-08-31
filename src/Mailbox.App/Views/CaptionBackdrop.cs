@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Threading;
 using Mailbox.Core.Diagnostics;
 using Mailbox.Theming.Tokens;
 
@@ -45,7 +46,12 @@ internal sealed class CaptionBackdrop : Control
             App.Themes.Changed += OnThemeChanged;
             ReadTokens();
         };
-        DetachedFromVisualTree += (_, _) => App.Themes.Changed -= OnThemeChanged;
+        DetachedFromVisualTree += (_, _) =>
+        {
+            App.Themes.Changed -= OnThemeChanged;
+            _timer?.Stop();
+            _timer = null;
+        };
     }
 
     private void OnThemeChanged(object? sender, EventArgs e) => ReadTokens();
@@ -61,6 +67,12 @@ internal sealed class CaptionBackdrop : Control
                    && double.TryParse(o, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var value)
             ? Math.Clamp(value, 0, 1)
             : 0.16;
+
+        // A changed backdrop starts its animation from its first frame; playback re-syncs on
+        // the next render pass against whatever the new value turns out to be.
+        _frame = 0;
+        _timer?.Stop();
+        _timer = null;
         InvalidateVisual();
     }
 
@@ -69,17 +81,31 @@ internal sealed class CaptionBackdrop : Control
     // ------------------------------------------------------------------------------------
 
     private static readonly bool HarnessAnnounce =
-        Environment.GetEnvironmentVariable(Theming.BackdropChoice.Variable) is not null;
+        Environment.GetEnvironmentVariable(Theming.BackdropChoice.Variable) is not null
+        || Environment.GetEnvironmentVariable("MAILBOX_BACKDROP_FRAME") is not null;
 
     private bool _announced;
 
     public override void Render(DrawingContext context)
     {
-        // The harness's claim is the drawn layer, not the token: one line, from the render pass.
-        if (HarnessAnnounce && !_announced)
+        // The harness's claim is the drawn layer, not the token: one line, from the render
+        // pass. A frame pose applies its theme after the first paint, so the announcement
+        // waits for a backdrop unless the pose explicitly asked about the empty state — and
+        // an image path announces after playback has synced, so the frame it names is the
+        // frame it drew.
+        void Announce()
         {
+            if (!HarnessAnnounce || _announced) return;
             _announced = true;
             Log.Info($"Harness: caption backdrop — {Describe()}.");
+        }
+
+        if (_backdrop.Length == 0 || _backdrop.StartsWith("pattern:", StringComparison.OrdinalIgnoreCase))
+        {
+            if (_backdrop.Length > 0 || Environment.GetEnvironmentVariable(Theming.BackdropChoice.Variable) is not null)
+            {
+                Announce();
+            }
         }
 
         if (_backdrop.Length == 0 || Bounds.Width <= 0 || Bounds.Height <= 0) return;
@@ -96,7 +122,11 @@ internal sealed class CaptionBackdrop : Control
             return;
         }
 
-        if (LoadImage(_backdrop) is not { } image) return;
+        var loaded = LoadImage(_backdrop);
+        SyncPlayback(loaded);
+        Announce();
+        if (loaded is null) return;
+        var image = loaded.Frames[_frame % loaded.Frames.Length];
 
         var (destW, destH) = _size switch
         {
@@ -133,14 +163,20 @@ internal sealed class CaptionBackdrop : Control
     }
 
     // ------------------------------------------------------------------------------------
-    // The image cache: a handful of decoded bitmaps by path and write time, so a theme swap
-    // does not re-decode and an edited file shows its new self.
+    // The image cache: a handful of decoded backdrops by path and write time, so a theme
+    // swap does not re-decode and an edited file shows its new self. An animated backdrop is
+    // its frames and their delays, read from the timing file the importer wrote beside them.
     // ------------------------------------------------------------------------------------
 
-    private static readonly Dictionary<string, (DateTime Written, Bitmap Image)> Cache = new(StringComparer.Ordinal);
+    private sealed record LoadedBackdrop(DateTime Written, Bitmap[] Frames, int[] Delays)
+    {
+        public bool Animated => Frames.Length > 1;
+    }
+
+    private static readonly Dictionary<string, LoadedBackdrop> Cache = new(StringComparer.Ordinal);
     private static readonly HashSet<string> Warned = new(StringComparer.Ordinal);
 
-    private Bitmap? LoadImage(string path)
+    private LoadedBackdrop? LoadImage(string path)
     {
         var resolved = ResolvePath(path);
         if (resolved is null) { WarnOnce($"The backdrop path \"{path}\" is not usable."); return null; }
@@ -148,26 +184,98 @@ internal sealed class CaptionBackdrop : Control
         try
         {
             var written = File.GetLastWriteTimeUtc(resolved);
-            if (Cache.TryGetValue(resolved, out var kept) && kept.Written == written) return kept.Image;
+            if (Cache.TryGetValue(resolved, out var kept) && kept.Written == written) return kept;
             if (!File.Exists(resolved)) { WarnOnce($"The backdrop image \"{resolved}\" is not there; the caption stays plain."); return null; }
 
-            var image = new Bitmap(resolved);
+            var loaded = LoadFrames(resolved, written);
             if (Cache.Count >= 4 && !Cache.ContainsKey(resolved))
             {
                 var oldest = Cache.OrderBy(p => p.Value.Written).First();
-                oldest.Value.Image.Dispose();
+                foreach (var frame in oldest.Value.Frames) frame.Dispose();
                 Cache.Remove(oldest.Key);
             }
 
-            Cache[resolved] = (written, image);
+            Cache[resolved] = loaded;
             Warned.Remove(resolved);
-            return image;
+            return loaded;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
             WarnOnce($"The backdrop image \"{resolved}\" could not be read: {ex.Message}");
             return null;
         }
+    }
+
+    private static LoadedBackdrop LoadFrames(string resolved, DateTime written)
+    {
+        var directory = Path.GetDirectoryName(resolved)!;
+        var manifest = Path.Combine(directory, Mailbox.Theming.Import.ImportedThemes.AnimationManifest);
+        if (File.Exists(manifest))
+        {
+            try
+            {
+                if (System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(manifest)) is System.Text.Json.Nodes.JsonObject timing
+                    && timing["frames"] is System.Text.Json.Nodes.JsonArray names
+                    && timing["delays"] is System.Text.Json.Nodes.JsonArray delays
+                    && names.Count == delays.Count && names.Count > 1)
+                {
+                    var frames = new List<Bitmap>();
+                    var frameDelays = new List<int>();
+                    foreach (var (name, delay) in names.Zip(delays))
+                    {
+                        var file = Path.GetFileName(name?.GetValue<string>() ?? string.Empty);
+                        var framePath = Path.Combine(directory, file);
+                        if (file.Length == 0 || !File.Exists(framePath)) continue;
+                        frames.Add(new Bitmap(framePath));
+                        frameDelays.Add(Math.Max(20, delay?.GetValue<int>() ?? 100));
+                    }
+
+                    if (frames.Count > 1) return new LoadedBackdrop(written, [.. frames], [.. frameDelays]);
+                    foreach (var frame in frames) frame.Dispose();
+                }
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                // A timing file that does not parse leaves a perfectly good still image.
+            }
+        }
+
+        return new LoadedBackdrop(written, [new Bitmap(resolved)], [0]);
+    }
+
+    // ------------------------------------------------------------------------------------
+    // Playback: one timer while an animated backdrop is on show — and stillness for the
+    // harness, whose photographs must not depend on when the shutter fell.
+    // ------------------------------------------------------------------------------------
+
+    private DispatcherTimer? _timer;
+    private int _frame;
+
+    private static readonly bool Frozen = Mailbox.App.Theming.WindowCapture.IsRequested;
+
+    private static readonly int FrozenFrame =
+        int.TryParse(Environment.GetEnvironmentVariable("MAILBOX_BACKDROP_FRAME"), out var posed) ? posed : 0;
+
+    private void SyncPlayback(LoadedBackdrop? loaded)
+    {
+        if (loaded is not { Animated: true } || Frozen)
+        {
+            _timer?.Stop();
+            _timer = null;
+            if (Frozen && loaded is { Animated: true }) _frame = Math.Clamp(FrozenFrame, 0, loaded.Frames.Length - 1);
+            return;
+        }
+
+        if (_timer is not null) return;
+        _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(loaded.Delays[_frame % loaded.Delays.Length]) };
+        _timer.Tick += (_, _) =>
+        {
+            if (_timer is null) return;
+            _frame++;
+            _timer.Interval = TimeSpan.FromMilliseconds(loaded.Delays[_frame % loaded.Delays.Length]);
+            InvalidateVisual();
+        };
+        _timer.Start();
     }
 
     /// <summary>Absolute stays; relative resolves against the themes directory; a path that climbs out is refused.</summary>
@@ -227,7 +335,8 @@ internal sealed class CaptionBackdrop : Control
     protected override void OnPointerMoved(PointerEventArgs e)
     {
         if (!_aligning || !Equals(e.Pointer.Captured, this)) return;
-        if (LoadImage(_backdrop) is not { } image) return;
+        if (LoadImage(_backdrop) is not { } loaded) return;
+        var image = loaded.Frames[0];
 
         var (destW, destH) = _size switch
         {
@@ -256,9 +365,15 @@ internal sealed class CaptionBackdrop : Control
 
     /// <summary>What a harness pose reads back: the layer as it is actually being drawn.</summary>
     internal string Describe()
-        => _backdrop.Length == 0
-            ? "backdrop: none"
-            : $"backdrop: {_backdrop}; alignment {AlignmentText()}; tiling {_tiling}; size {_size}; opacity {_opacity.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+    {
+        if (_backdrop.Length == 0) return "backdrop: none";
+        var animated = !_backdrop.StartsWith("pattern:", StringComparison.OrdinalIgnoreCase)
+                       && LoadImage(_backdrop) is { Animated: true } loaded
+            ? $"; animated {loaded.Frames.Length} frame(s), showing {_frame % loaded.Frames.Length}"
+            : string.Empty;
+        return $"backdrop: {_backdrop}; alignment {AlignmentText()}; tiling {_tiling}; size {_size}; "
+               + $"opacity {_opacity.ToString(System.Globalization.CultureInfo.InvariantCulture)}{animated}";
+    }
 
     // ------------------------------------------------------------------------------------
     // Parsing

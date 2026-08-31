@@ -253,7 +253,7 @@ public class ThemeImportTests
         }
 
         var hostileDirectory = Path.Combine(root, "themes-hostile");
-        Assert.Throws<BrowserThemeException>(() => ImportedThemes.Import(hostile, hostileDirectory, _ => [1]));
+        Assert.Throws<BrowserThemeException>(() => ImportedThemes.Import(hostile, hostileDirectory, _ => [new ReencodedFrame([1], 0)]));
         Assert.False(Directory.Exists(hostileDirectory) && Directory.EnumerateFiles(hostileDirectory).Any());
     }
 
@@ -351,7 +351,7 @@ public class ThemeImportTests
             """, ("header.png", fakeImage));
 
         var themes = Path.Combine(root, "themes");
-        var accepted = ImportedThemes.Import(package, themes, bytes => bytes);
+        var accepted = ImportedThemes.Import(package, themes, bytes => [new ReencodedFrame(bytes, 0)]);
         var id = accepted.Result.File.Id;
         Assert.Equal($"images/{id}/frame.png", accepted.Result.File.Tokens[TokenKeys.TitleBar.Backdrop]);
         Assert.Equal("left top", accepted.Result.File.Tokens[TokenKeys.TitleBar.BackdropAlignment]);
@@ -392,7 +392,7 @@ public class ThemeImportTests
         File.WriteAllBytes(Path.Combine(package, "images", "1.jpg"), fakeImage);
 
         var themes = Path.Combine(root, "themes");
-        var outcome = ImportedThemes.Import(package, themes, bytes => bytes);
+        var outcome = ImportedThemes.Import(package, themes, bytes => [new ReencodedFrame(bytes, 0)]);
         var id = outcome.Result.File.Id;
 
         Assert.Equal($"images/{id}/frame.png", outcome.Result.File.Tokens[TokenKeys.TitleBar.Backdrop]);
@@ -400,6 +400,43 @@ public class ThemeImportTests
 
         // One background became the header; only the second is reported unused.
         Assert.Contains(outcome.Notes, n => n.Contains("1 additional background(s)"));
+    }
+
+    [Fact]
+    public void AnAnimationKeepsItsFramesAndTheirTiming()
+    {
+        var root = Scratch();
+        byte[] fakeImage = [0x89, 0x50, 0x4E, 0x47];
+        var package = PackageWith(root, """
+            {
+              "manifest_version": 2, "version": "1", "name": "Animated Fixture",
+              "theme": {
+                "colors": { "frame": "#101010" },
+                "images": { "theme_frame": "anim.png" }
+              }
+            }
+            """, ("anim.png", fakeImage));
+
+        var themes = Path.Combine(root, "themes");
+        var outcome = ImportedThemes.Import(package, themes, _ =>
+            [new ReencodedFrame([1], 120), new ReencodedFrame([2], 80), new ReencodedFrame([3], 200)]);
+        var id = outcome.Result.File.Id;
+
+        Assert.True(File.Exists(Path.Combine(themes, "images", id, "frame.png")));
+        Assert.True(File.Exists(Path.Combine(themes, "images", id, "frame-001.png")));
+        Assert.True(File.Exists(Path.Combine(themes, "images", id, "frame-002.png")));
+        Assert.Contains(outcome.Notes, n => n.Contains("3 frames"));
+
+        var timing = System.Text.Json.Nodes.JsonNode.Parse(
+            File.ReadAllText(Path.Combine(themes, "images", id, ImportedThemes.AnimationManifest)))!.AsObject();
+        Assert.Equal(3, timing["frames"]!.AsArray().Count);
+        Assert.Equal(80, timing["delays"]!.AsArray()[1]!.GetValue<int>());
+
+        // A re-import replaces the images wholesale — no stale frames from a longer animation.
+        var again = ImportedThemes.Import(package, themes, _ => [new ReencodedFrame([9], 0)]);
+        Assert.True(again.Updated);
+        Assert.False(File.Exists(Path.Combine(themes, "images", id, "frame-001.png")));
+        Assert.False(File.Exists(Path.Combine(themes, "images", id, ImportedThemes.AnimationManifest)));
     }
 
     [Fact]
@@ -420,7 +457,7 @@ public class ThemeImportTests
             }
             """, ("header.png", fakeImage));
 
-        var result = ImportedThemes.Import(package, Path.Combine(root, "themes"), bytes => bytes).Result;
+        var result = ImportedThemes.Import(package, Path.Combine(root, "themes"), bytes => [new ReencodedFrame(bytes, 0)]).Result;
         Assert.Equal("right center", result.File.Tokens[TokenKeys.TitleBar.BackdropAlignment]);
         Assert.Equal("cover", result.File.Tokens[TokenKeys.TitleBar.BackdropSize]);
     }

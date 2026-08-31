@@ -16,22 +16,12 @@ internal static class ThemeImportDoor
     /// <summary>Adds the full mapping table to the read-back, one line per token.</summary>
     internal const string DumpVariable = "MAILBOX_THEME_IMPORT_DUMP";
 
-    /// <summary>Decode whatever arrived, emit PNG; null for anything the decoder rejects — SVG included, for now.</summary>
-    internal static byte[]? Reencode(byte[] source)
-    {
-        try
-        {
-            using var input = new MemoryStream(source);
-            using var image = new Avalonia.Media.Imaging.Bitmap(input);
-            using var output = new MemoryStream();
-            image.Save(output, Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
-            return output.ToArray();
-        }
-        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or IOException or NullReferenceException)
-        {
-            return null;
-        }
-    }
+    /// <summary>
+    /// Decode whatever arrived — still or animated — into freshly encoded PNG frames; null for
+    /// anything the decoder rejects, SVG included, for now.
+    /// </summary>
+    internal static IReadOnlyList<Mailbox.Theming.Import.ReencodedFrame>? Reencode(byte[] source)
+        => AnimatedImageDecoder.Decode(source);
 
     /// <summary>
     /// The harness door: <c>MAILBOX_THEME_IMPORT=&lt;path&gt;</c> runs one import through

@@ -1,0 +1,9 @@
+{
+  "manifest_version": 2,
+  "version": "1.0",
+  "name": "Harness Bands",
+  "theme": {
+    "colors": { "frame": "#101018", "tab_background_text": "#E8E8F0" },
+    "images": { "theme_frame": "bands.gif" }
+  }
+}

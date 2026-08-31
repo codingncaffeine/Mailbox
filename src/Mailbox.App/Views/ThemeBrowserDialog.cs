@@ -389,17 +389,24 @@ internal sealed class ThemeBrowserDialog : Window
             var resolved = new Mailbox.Theming.Files.ThemeLibrary([result.File]).Build("preview").Resolve();
 
             Bitmap? backdrop = null;
+            var animatedFrames = 1;
             if ((theme.FrameImage ?? theme.AdditionalBackgrounds.FirstOrDefault()) is { } frame
                 && package.ReadImage(frame) is { } image)
             {
                 try
                 {
                     backdrop = new Bitmap(new MemoryStream(image));
+                    animatedFrames = Theming.AnimatedImageDecoder.FrameCount(image);
                 }
                 catch (Exception ex) when (ex is ArgumentException or NotSupportedException)
                 {
                     Log.Debug($"Theme browser: the header image does not decode — {ex.Message}");
                 }
+            }
+
+            if (animatedFrames > 1)
+            {
+                _metaDetail.Text += $" · animated, {animatedFrames} frames";
             }
 
             _preview.Show(resolved, backdrop);

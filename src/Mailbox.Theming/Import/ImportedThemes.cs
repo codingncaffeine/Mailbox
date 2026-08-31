@@ -3,12 +3,16 @@ using Mailbox.Theming.Themes;
 
 namespace Mailbox.Theming.Import;
 
+/// <summary>One laundered frame of an image: freshly encoded PNG bytes, and how long it stands when animated.</summary>
+public sealed record ReencodedFrame(byte[] Png, int DelayMs);
+
 /// <summary>
-/// Turns image bytes from a stranger's package into PNG bytes through a real decoder, or null
-/// for anything that does not decode. Supplied by the application, which owns a toolkit;
-/// nothing from the package ever lands on disk with its original bytes.
+/// Turns image bytes from a stranger's package into freshly encoded PNG frames through a real
+/// decoder — one frame for a still, several for an animation — or null for anything that does
+/// not decode. Supplied by the application, which owns a toolkit; nothing from the package
+/// ever lands on disk with its original bytes.
 /// </summary>
-public delegate byte[]? ImageReencoder(byte[] source);
+public delegate IReadOnlyList<ReencodedFrame>? ImageReencoder(byte[] source);
 
 /// <summary>What an import did, beyond the mapping: where it wrote, whether it replaced an earlier self, and the notes.</summary>
 public sealed record ImportOutcome(ImportResult Result, string Path, bool Updated, IReadOnlyList<string> Notes);
@@ -80,7 +84,7 @@ public static class ImportedThemes
             {
                 notes.Add($"the header image \"{frameImage}\" is named by the manifest and not in the package");
             }
-            else if (reencode(bytes) is not { } png)
+            else if (reencode(bytes) is not { Count: > 0 } frames)
             {
                 notes.Add($"the header image \"{frameImage}\" does not decode as an image and was refused");
             }
@@ -89,8 +93,16 @@ public static class ImportedThemes
                 var imageDirectory = Path.Combine(directory, "images", id);
                 if (Directory.Exists(imageDirectory)) Directory.Delete(imageDirectory, recursive: true);
                 Directory.CreateDirectory(imageDirectory);
-                File.WriteAllBytes(Path.Combine(imageDirectory, "frame.png"), png);
+                File.WriteAllBytes(Path.Combine(imageDirectory, "frame.png"), frames[0].Png);
                 backdropPath = string.Join('/', "images", id, "frame.png");
+
+                // An animation keeps its frames, each its own laundered file, with the timing
+                // beside them — the backdrop layer plays them back.
+                if (frames.Count > 1)
+                {
+                    WriteAnimation(imageDirectory, frames);
+                    notes.Add($"the animation kept its {frames.Count} frames");
+                }
             }
         }
 
@@ -106,6 +118,28 @@ public static class ImportedThemes
         File.WriteAllText(path, ThemeFileFormat.Write(result.File));
 
         return new ImportOutcome(result, path, updated, notes);
+    }
+
+    /// <summary>The animation's timing file, beside the frames it times.</summary>
+    public const string AnimationManifest = "animation.json";
+
+    /// <summary>Writes an animation's extra frames and its timing file into the image directory.</summary>
+    public static void WriteAnimation(string imageDirectory, IReadOnlyList<ReencodedFrame> frames)
+    {
+        var names = new List<string> { "frame.png" };
+        for (var i = 1; i < frames.Count; i++)
+        {
+            var name = $"frame-{i:000}.png";
+            File.WriteAllBytes(Path.Combine(imageDirectory, name), frames[i].Png);
+            names.Add(name);
+        }
+
+        var manifest = new System.Text.Json.Nodes.JsonObject
+        {
+            ["frames"] = new System.Text.Json.Nodes.JsonArray([.. names.Select(n => (System.Text.Json.Nodes.JsonNode)n)]),
+            ["delays"] = new System.Text.Json.Nodes.JsonArray([.. frames.Select(f => (System.Text.Json.Nodes.JsonNode)f.DelayMs)]),
+        };
+        File.WriteAllText(Path.Combine(imageDirectory, AnimationManifest), manifest.ToJsonString());
     }
 
     /// <summary>Removes a user theme and its images. A built-in is refused by the caller's guard, not trusted here either.</summary>

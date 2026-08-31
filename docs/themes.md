@@ -97,10 +97,15 @@ placed as the manifest placed it. Everything else the theme says is listed in th
 seen-but-unmapped rather than guessed at. Dark themes land on a Dark Gray base, light on
 White; the reading surfaces stay the base's, always.
 
+**Animated themes animate.** A GIF or APNG header keeps its animation: every frame is
+decoded, composited and re-encoded individually, the timing travels beside them, and the
+title bar plays them back. Animation is bounded like everything imported — at most ninety
+frames within a pixel budget; a longer one keeps its first frames and the summary says so.
+
 The import is careful with strangers' files: archives are size- and entry-limited, paths
 that climb out are refused, and every image is re-encoded through a real decoder before it
-touches disk — nothing arrives with its original bytes. Importing the same theme again
-updates it in place.
+touches disk — nothing arrives with its original bytes, animation frames included.
+Importing the same theme again updates it in place.
 
 **Licensing, plainly:** importing a theme you downloaded, for your own use on your own
 machine, is ordinary use of a file you lawfully obtained; nothing is redistributed and
