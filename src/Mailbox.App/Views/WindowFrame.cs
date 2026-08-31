@@ -108,11 +108,16 @@ internal static class WindowFrame
             Classes = { "windowshape" },
         };
 
+        // The 1px inset the old stroke gave the content, kept — the ring paints the gap, so
+        // the straight edges are pixel-for-pixel what they were and only the corners gain
+        // their arcs.
+        var inset = new Decorator { Child = content, Classes = { "windowinset" } };
+
         var border = new Border
         {
             CornerRadius = new CornerRadius(RibbonMetrics.BodyCornerRadius),
             ClipToBounds = true,
-            Child = new Panel { Children = { content, hairline } },
+            Child = new Panel { Children = { inset, hairline } },
         };
         border[!Border.BackgroundProperty] = new DynamicResourceExtension(background);
 

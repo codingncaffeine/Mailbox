@@ -28,7 +28,7 @@
             ClipToBounds="True"
             Background="{DynamicResource ribbon.tabstrip.background.brush}">
     <Panel>
-    <Grid Name="ShellRoot" RowDefinitions="Auto,Auto,*,Auto" ColumnDefinitions="Auto,*">
+    <Grid Name="ShellRoot" Classes="windowinset" RowDefinitions="Auto,Auto,*,Auto" ColumnDefinitions="Auto,*">
         <Grid.Resources>
             <theming:TokenBrushConverter x:Key="TokenBrush" />
             <theming:InkTokenConverter x:Key="InkBrush" />

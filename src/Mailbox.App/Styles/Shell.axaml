@@ -29,6 +29,17 @@
         <Setter Property="BorderThickness" Value="0" />
     </Style>
 
+    <!-- The content stands 1px inside the hairline, exactly as it did when the line was the
+         outer border's own stroke — the ring paints the gap, and the whole calibrated layout
+         keeps its measured positions. Maximized drops the inset with the line. -->
+    <Style Selector=":is(Control).windowinset">
+        <Setter Property="Margin" Value="1" />
+    </Style>
+
+    <Style Selector="Window[WindowState=Maximized] :is(Control).windowinset">
+        <Setter Property="Margin" Value="0" />
+    </Style>
+
     <Style Selector="TextBlock">
         <Setter Property="FontFamily" Value="{DynamicResource ui.fontfamily}" />
         <Setter Property="FontSize" Value="{DynamicResource type.ui.size.value}" />
