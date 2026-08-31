@@ -122,6 +122,13 @@ public interface IImapSession : IDisposable
     /// <summary>The UIDs in the open folder carrying a Message-ID header, for finding a message the server did not name.</summary>
     Task<IReadOnlyList<long>> SearchByMessageIdAsync(string messageId, CancellationToken cancellation);
 
+    /// <summary>
+    /// The UIDs in the open folder matching a reader's query — the server-answerable half of
+    /// it, per <see cref="ImapSearchTranslator"/>. The caller re-applies the whole grammar
+    /// locally to whatever it downloads, so this is recall, never the verdict.
+    /// </summary>
+    Task<IReadOnlyList<long>> SearchAsync(Mailbox.Core.Search.SearchQuery query, CancellationToken cancellation);
+
     /// <summary>Flags, arrival time and size for these UIDs in the open folder.</summary>
     Task<IReadOnlyList<RemoteMessageInfo>> FetchInfoAsync(IReadOnlyList<long> uids, CancellationToken cancellation);
 
@@ -389,6 +396,11 @@ public sealed class MailKitImapSession : IImapSession
 
     public async Task<IReadOnlyList<long>> SearchAllAsync(CancellationToken cancellation)
         => [.. (await Open.SearchAsync(SearchQuery.All, cancellation)).Select(u => (long)u.Id)];
+
+    public async Task<IReadOnlyList<long>> SearchAsync(Mailbox.Core.Search.SearchQuery query, CancellationToken cancellation)
+        => ImapSearchTranslator.Translate(query) is { } translated
+            ? [.. (await Open.SearchAsync(translated, cancellation)).Select(u => (long)u.Id)]
+            : [];
 
     public async Task<IReadOnlyList<long>> SearchByMessageIdAsync(string messageId, CancellationToken cancellation)
         => [.. (await Open.SearchAsync(SearchQuery.HeaderContains("Message-Id", messageId), cancellation)).Select(u => (long)u.Id)];

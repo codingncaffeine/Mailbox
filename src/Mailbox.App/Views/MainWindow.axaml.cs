@@ -178,6 +178,7 @@ public partial class MainWindow : Window
 
         // The summary page, which an account's heading in the folder pane opens.
         shell.TodayRequested += (_, address) => ShowToday(shell, address);
+        shell.MoreRequested += async (_, more) => await FetchMoreAsync(shell, more);
 
         // Undo and Redo are greyed while there is nothing to take back, so the bar has to hear
         // about a step being pushed, undone or redone.
@@ -3532,6 +3533,73 @@ public partial class MainWindow : Window
 
     /// <summary>The account's connection for a folder operation on the server — null for POP3, whose folders live here.</summary>
     /// <remarks>Asynchronous because reading the password is: see <see cref="AccountSettings.ToConnectionAsync"/>.</remarks>
+    /// <summary>
+    /// Answers the list's footer row: the mail the offline window left on the server — the next
+    /// batch of it, or the matches of a search taken there. What comes home is stored like any
+    /// other mail; a search then re-runs locally, which applies the whole grammar to it.
+    /// </summary>
+    private async Task FetchMoreAsync(ShellViewModel shell, MoreRequest more)
+    {
+        if (await ConnectionForAsync(more.Account) is not { } connection)
+        {
+            shell.StatusRight = "That account has no server connection to fetch from.";
+            return;
+        }
+
+        shell.StatusRight = more.Kind == MoreRowKind.ServerSearch
+            ? "Searching the server…"
+            : "Downloading older messages…";
+
+        try
+        {
+            // Its own synchronizer rather than a send/receive: this touches one folder on one
+            // account and must not queue behind, or race, a full poll. The backfill flag keeps
+            // the rules and the junk filter off mail the reader filed an age ago.
+            var sync = new ImapSynchronizer(more.Account.Mail);
+            var progress = new Progress<PollProgress>(p =>
+            {
+                if (p.Total > 0) shell.StatusRight = $"Downloading older messages… {p.Done} of {p.Total}";
+            });
+
+            var (downloaded, remaining, refused) = await Task.Run(async () =>
+                more.Kind == MoreRowKind.ServerSearch
+                    ? await sync.SearchServerAsync(
+                        connection, more.FolderId,
+                        Mailbox.Core.Search.SearchQuery.Parse(more.SearchText, Mailbox.Core.PosedClock.Now),
+                        ShellViewModel.OlderBatch, progress)
+                    : await sync.FetchOlderAsync(
+                        connection, more.FolderId, ShellViewModel.OlderBatch, progress));
+
+            if (refused is { Length: > 0 })
+            {
+                shell.StatusRight = refused;
+                return;
+            }
+
+            shell.ReloadAfterFetch();
+            shell.StatusRight = more.Kind switch
+            {
+                MoreRowKind.ServerSearch when downloaded == 0 =>
+                    "The server found nothing more for that search.",
+                MoreRowKind.ServerSearch =>
+                    $"{downloaded} more message{(downloaded == 1 ? string.Empty : "s")} matched on the server"
+                    + (remaining > 0 ? $"; {remaining} further match{(remaining == 1 ? string.Empty : "es")} remain" : string.Empty)
+                    + ".",
+                _ =>
+                    $"{downloaded} older message{(downloaded == 1 ? string.Empty : "s")} downloaded"
+                    + (remaining > 0 ? $"; {remaining:N0} older remain on the server" : "; the folder is all here now")
+                    + ".",
+            };
+
+            Log.Info($"Fetch more: {more.Kind} on folder {more.FolderId} — {downloaded} down, {remaining} remaining.");
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Fetching more from the server failed.", ex);
+            shell.StatusRight = $"The server could not be reached: {ex.Message}";
+        }
+    }
+
     private static async Task<AccountConnection?> ConnectionForAsync(OpenAccount account)
         => account.Account.Protocol == MailProtocol.Imap
            && AccountSettings.Load(App.Settings, account.Account.Address) is { } settings

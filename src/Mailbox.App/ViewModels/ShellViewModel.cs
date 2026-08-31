@@ -531,6 +531,35 @@ public sealed class GroupHeaderRow(string header, int count, bool collapsed)
         + (IsCollapsed ? ", collapsed" : string.Empty);
 }
 
+/// <summary>Which kind of more a footer row offers.</summary>
+public enum MoreRowKind
+{
+    /// <summary>The store holds more of this folder than the page shows.</summary>
+    LocalPage,
+
+    /// <summary>The server holds mail older than the offline window.</summary>
+    ServerOlder,
+
+    /// <summary>A search that could also ask the server, where the window has left mail.</summary>
+    ServerSearch,
+}
+
+/// <summary>
+/// The row after the last message: what this list is not showing, and the offer to show it.
+/// Sits in the same flat sequence the group headers do, so the one virtualizing list draws it.
+/// </summary>
+public sealed class MoreRow(MoreRowKind kind, string label)
+{
+    public MoreRowKind Kind { get; } = kind;
+    public string Label { get; } = label;
+
+    /// <summary>The row as a screen reader should say it.</summary>
+    public string Spoken => Label;
+}
+
+/// <summary>What a footer row asked for, with everything the handler needs to do it.</summary>
+public sealed record MoreRequest(MoreRowKind Kind, OpenAccount Account, long FolderId, string SearchText);
+
 /// <summary>
 /// The shell's own state. Most collections are filled from the store; the few that are still
 /// sample data are there because the chrome has to pass a squint test against the reference
@@ -828,6 +857,25 @@ public sealed partial class ShellViewModel : ObservableObject
     /// folder id alone is not enough to find its mail.
     /// </summary>
     private readonly Dictionary<FolderNode, (OpenAccount Account, long FolderId, FolderRole Role)> _folderIds = [];
+
+    /// <summary>How many rows the open folder's page holds; grown by the footer row's press.</summary>
+    private int _listLimit = Store.MailRepository.ListPage;
+
+    /// <summary>Which folder the page size belongs to — a switch starts back at one page.</summary>
+    private FolderNode? _pagedFolder;
+
+    /// <summary>A page size a posed run chose, so a seeded store can fill a page. Capture runs only.</summary>
+    private int? _posedPage;
+
+    /// <summary>Harness only: shrinks the page so the footer row is reachable over a seeded store.</summary>
+    internal void PoseListPage(int limit)
+    {
+        _posedPage = Math.Max(1, limit);
+        _listLimit = _posedPage.Value;
+    }
+
+    /// <summary>A footer row was pressed and the shell cannot answer it alone: the server half.</summary>
+    public event EventHandler<MoreRequest>? MoreRequested;
 
     /// <summary>Which role each unified folder gathers, when the unified mailbox is on.</summary>
     private readonly Dictionary<FolderNode, FolderRole> _unifiedRoles = [];
@@ -1204,6 +1252,14 @@ public sealed partial class ShellViewModel : ObservableObject
     {
         if (_accounts is null || folder is null) return;
 
+        // A different folder starts back at one page; reloading the same one keeps its growth,
+        // which is what lets the footer row's press survive the reload it causes.
+        if (!ReferenceEquals(folder, _pagedFolder))
+        {
+            _pagedFolder = folder;
+            _listLimit = _posedPage ?? Store.MailRepository.ListPage;
+        }
+
         // The account's heading: the summary page rather than a list of nothing.
         if (_accountHeadings.TryGetValue(folder, out var whose))
         {
@@ -1272,7 +1328,7 @@ public sealed partial class ShellViewModel : ObservableObject
         var half = FocusedInboxOn && where.Role == FolderRole.Inbox ? (bool?)!ShowOther : null;
         var summaries = ShowSnoozed
             ? where.Account.Mail.Snoozed(where.FolderId)
-            : where.Account.Mail.Messages(where.FolderId, half);
+            : where.Account.Mail.Messages(where.FolderId, half, _listLimit);
 
         foreach (var summary in summaries)
         {
@@ -2024,6 +2080,7 @@ public sealed partial class ShellViewModel : ObservableObject
             if (!Set(ref field, value)) return;
             if (value is MessageRow row) SelectedMessage = row;
             if (value is GroupHeaderRow header) Later(() => ToggleGroupCollapsed(header.Header));
+            if (value is MoreRow more) Later(() => ActOnMore(more));
             if (value is ConversationRow thread)
             {
                 SelectedMessage = thread.Newest;
@@ -2590,6 +2647,7 @@ public sealed partial class ShellViewModel : ObservableObject
         {
             var flat = groups.SelectMany(g => g.Items).ToList();
             var content = ShowAsConversations ? Threaded(flat) : [.. flat.Select(r => (object)Reset(r))];
+            content.AddRange(FooterRows());
             VisibleRows = content;
             Raise(nameof(VisibleCount));
             Raise(nameof(StatusLeft));
@@ -2650,9 +2708,111 @@ public sealed partial class ShellViewModel : ObservableObject
             }
         }
 
+        built.AddRange(FooterRows());
         VisibleRows = built;
         Raise(nameof(VisibleCount));
         Raise(nameof(StatusLeft));
+    }
+
+    /// <summary>
+    /// The rows after the last message: what this list is not showing, and the offer to show
+    /// it. At most one — the nearest wall first: the local page before the server's older mail,
+    /// because a reader wants what is already here before what has to be fetched.
+    /// </summary>
+    private List<object> FooterRows()
+    {
+        var footer = new List<object>();
+        if (_accounts is null) return footer;
+
+        // Under a search: the offer to take the query to the server, where the window has left
+        // mail this store cannot match against.
+        if (IsSearching)
+        {
+            // The offer stands for the folder in front of the reader, in the scopes where that
+            // folder is what is being searched — a query taken to the server is folder-scoped,
+            // and All Mailboxes has no one folder to take it to.
+            if (_scope is SearchScope.ThisFolder or SearchScope.CurrentMailbox
+                && _selectedFolder is { } searched && _folderIds.TryGetValue(searched, out var scope)
+                && scope.Account.Account.Protocol == MailProtocol.Imap
+                && scope.Account.Mail.GetFolder(scope.FolderId) is { ServerOlder: > 0 } deep)
+            {
+                footer.Add(new MoreRow(
+                    MoreRowKind.ServerSearch,
+                    $"Older mail is on the server — search it too "
+                    + $"({deep.ServerOlder:N0} message{(deep.ServerOlder == 1 ? string.Empty : "s")} beyond the offline window)"));
+            }
+
+            return footer;
+        }
+
+        if (ShowSnoozed || IsTodayShowing || ShowOther) return footer;
+        if (_selectedFolder is not { } folder || !_folderIds.TryGetValue(folder, out var where)) return footer;
+        if (where.Role == FolderRole.Outbox) return footer;
+        if (where.Account.Mail.GetFolder(where.FolderId) is not { } stored) return footer;
+
+        if (Messages.Count >= _listLimit && stored.Total > Messages.Count)
+        {
+            footer.Add(new MoreRow(
+                MoreRowKind.LocalPage,
+                $"Showing the newest {Messages.Count:N0} of {stored.Total:N0} — show more"));
+        }
+        else if (stored.ServerOlder > 0 && where.Account.Account.Protocol == MailProtocol.Imap)
+        {
+            footer.Add(new MoreRow(
+                MoreRowKind.ServerOlder,
+                $"{stored.ServerOlder:N0} older message{(stored.ServerOlder == 1 ? string.Empty : "s")} "
+                + $"on the server — download the next {Math.Min(stored.ServerOlder, OlderBatch):N0}"));
+        }
+
+        return footer;
+    }
+
+    /// <summary>How many older messages one press of the footer row fetches.</summary>
+    public const int OlderBatch = 100;
+
+    /// <summary>Answers a pressed footer row: the local page here, the server halves by event.</summary>
+    private void ActOnMore(MoreRow more)
+    {
+        if (more.Kind == MoreRowKind.LocalPage)
+        {
+            GrowPage();
+            return;
+        }
+
+        if (_selectedFolder is { } folder && _folderIds.TryGetValue(folder, out var where))
+        {
+            MoreRequested?.Invoke(this, new MoreRequest(more.Kind, where.Account, where.FolderId, _searchText.Trim()));
+        }
+    }
+
+    /// <summary>One more page of the open folder, with the reader's place kept.</summary>
+    private void GrowPage()
+    {
+        var keep = SelectedMessage?.Id;
+        _listLimit += _posedPage ?? Store.MailRepository.ListPage;
+        LoadMessages(_selectedFolder);
+
+        if (keep is { } id && Messages.FirstOrDefault(m => m.Id == id) is { } again)
+        {
+            SelectedRow = again;
+        }
+    }
+
+    /// <summary>Reloads the open folder after mail arrived outside the sync's own flow.</summary>
+    public void ReloadAfterFetch()
+    {
+        if (IsSearching)
+        {
+            RunSearch();
+            return;
+        }
+
+        var keep = SelectedMessage?.Id;
+        LoadMessages(_selectedFolder);
+        if (keep is { } id && Messages.FirstOrDefault(m => m.Id == id) is { } again)
+        {
+            SelectedRow = again;
+        }
     }
 
     /// <summary>Rows for one group with conversations folded, in the group's own order.</summary>

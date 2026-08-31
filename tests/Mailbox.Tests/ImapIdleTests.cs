@@ -118,6 +118,9 @@ public class ImapIdleTests
         public Task DeleteFolderAsync(string path, CancellationToken c) => throw new NotSupportedException();
         public Task<FolderState> OpenAsync(string path, CancellationToken c) => throw new NotSupportedException();
         public Task<IReadOnlyList<long>> SearchAllAsync(CancellationToken c) => Task.FromResult<IReadOnlyList<long>>([]);
+
+        public Task<IReadOnlyList<long>> SearchAsync(Mailbox.Core.Search.SearchQuery query, CancellationToken c)
+            => Task.FromResult<IReadOnlyList<long>>([]);
         public Task<IReadOnlyList<long>> SearchByMessageIdAsync(string messageId, CancellationToken c) => Task.FromResult<IReadOnlyList<long>>([]);
         public Task<IReadOnlyList<RemoteMessageInfo>> FetchInfoAsync(IReadOnlyList<long> uids, CancellationToken c) => Task.FromResult<IReadOnlyList<RemoteMessageInfo>>([]);
         public Task<IReadOnlyList<RemoteMessageInfo>> FetchFlagsChangedSinceAsync(long modSeq, CancellationToken c) => Task.FromResult<IReadOnlyList<RemoteMessageInfo>>([]);

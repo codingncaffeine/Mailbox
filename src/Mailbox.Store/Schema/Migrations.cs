@@ -749,6 +749,16 @@ public static class Migrations
         """
         ALTER TABLE messages ADD COLUMN item_type TEXT;
         """,
+
+        // ---- 34: what the server holds beyond the offline window ---------------------------
+        //
+        // A windowed folder looked complete: nothing recorded that the server held older mail,
+        // so the list could not say so and nothing could offer to fetch it. The sync counts
+        // what it skipped for being older than the window and writes it here; zero — every
+        // existing folder's value — is what a fully-downloaded folder already means.
+        """
+        ALTER TABLE folders ADD COLUMN server_older INTEGER NOT NULL DEFAULT 0;
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>

@@ -30,10 +30,14 @@ public sealed class RowTemplateSelector : IDataTemplate
     /// <summary>The compact card for a folded conversation.</summary>
     public IDataTemplate? ConversationCard { get; set; }
 
-    public bool Match(object? data) => data is MessageRow or GroupHeaderRow or ConversationRow;
+    /// <summary>The footer: the row that offers what the list is not showing.</summary>
+    public IDataTemplate? More { get; set; }
+
+    public bool Match(object? data) => data is MessageRow or GroupHeaderRow or ConversationRow or ViewModels.MoreRow;
 
     public Control? Build(object? data) => data switch
     {
+        ViewModels.MoreRow => More?.Build(data),
         GroupHeaderRow => Header?.Build(data),
         ConversationRow { IsCard: true } when ConversationCard is not null => ConversationCard.Build(data),
         ConversationRow => Conversation?.Build(data),

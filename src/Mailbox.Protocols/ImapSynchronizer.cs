@@ -337,6 +337,184 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
         return flags;
     }
 
+    /// <summary>
+    /// Downloads the next slice of mail older than the offline window, newest of the old first,
+    /// and says how much older still remains on the server.
+    /// </summary>
+    /// <remarks>
+    /// The window gates the sync's own downloads and nothing else: mail fetched here is stored
+    /// like any other and stays — the sync deletes only what the server no longer has. The
+    /// batch is by messages rather than months, because "the next 100" is a promise a click can
+    /// keep whatever the mailbox's shape.
+    /// </remarks>
+    public async Task<(int Downloaded, int Remaining, string? Refused)> FetchOlderAsync(
+        AccountConnection account,
+        long folderId,
+        int batch,
+        IProgress<PollProgress>? progress = null,
+        CancellationToken cancellation = default)
+    {
+        if (_repository.GetFolder(folderId) is not { ImapPath: { Length: > 0 } } folder)
+        {
+            return (0, 0, "That folder is not on the server.");
+        }
+
+        var session = SessionFactory?.Invoke() ?? new MailKitImapSession();
+
+        try
+        {
+            progress?.Report(new PollProgress(account.Address, 0, 0, "Connecting"));
+            await session.ConnectAsync(account.Incoming, cancellation);
+            await session.AuthenticateAsync(account.Incoming, cancellation);
+
+            var state = await session.OpenAsync(folder.ImapPath!, cancellation);
+            if (folder.UidValidity is { } known && known != state.UidValidity)
+            {
+                // Every UID this folder knows means something else now. The sync's own pass
+                // owns that recovery; fetching older into a folder mid-identity-change would
+                // file mail against the wrong map.
+                return (0, folder.ServerOlder, "The folder changed on the server — run a send/receive first.");
+            }
+
+            var missing = await MissingUidsAsync(session, folder, cancellation);
+            var info = (await session.FetchInfoAsync(missing, cancellation)).ToDictionary(i => i.Uid, i => i);
+
+            // Oldest-facing: everything the window has been skipping, newest of it first, so
+            // the list grows downward the way a reader scrolls.
+            var older = missing
+                .Where(uid => info.TryGetValue(uid, out var meta) && meta.InternalDate is { } arrived
+                              && (account.Sync.Cutoff(_now()) is not { } limit || arrived < limit))
+                .OrderByDescending(uid => info[uid].InternalDate)
+                .ToList();
+
+            var chosen = older.Take(Math.Max(1, batch)).ToList();
+            var pulled = await DownloadAsync(
+                session, folder, chosen, cutoff: null, progress, account.Address, cancellation, backfill: true);
+
+            var remaining = older.Count - pulled.Count;
+            _repository.SetFolderServerOlder(folder.Id, remaining);
+
+            Log.Info($"{folder.ImapPath}: fetched {pulled.Count} older message(s); {remaining} older remain on the server.");
+            return (pulled.Count, remaining, null);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Fetching older mail failed for {account.Address}.", ex);
+            return (0, folder.ServerOlder, Pop3Receiver.Explain(ex));
+        }
+        finally
+        {
+            await CloseQuietlyAsync(session, cancellation);
+        }
+    }
+
+    /// <summary>
+    /// Asks the server for matches to a reader's query and downloads the ones this store does
+    /// not hold, newest first, up to a cap. What comes home is stored like any other mail; the
+    /// caller re-runs the search locally, which applies the whole grammar to it.
+    /// </summary>
+    public async Task<(int Downloaded, int MoreMatches, string? Refused)> SearchServerAsync(
+        AccountConnection account,
+        long folderId,
+        Mailbox.Core.Search.SearchQuery query,
+        int cap,
+        IProgress<PollProgress>? progress = null,
+        CancellationToken cancellation = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        if (_repository.GetFolder(folderId) is not { ImapPath: { Length: > 0 } } folder)
+        {
+            return (0, 0, "That folder is not on the server.");
+        }
+
+        if (ImapSearchTranslator.Translate(query) is null)
+        {
+            // Nothing in the query is server-answerable; going anyway would download the world.
+            return (0, 0, "That search only asks things the server cannot answer.");
+        }
+
+        var session = SessionFactory?.Invoke() ?? new MailKitImapSession();
+
+        try
+        {
+            progress?.Report(new PollProgress(account.Address, 0, 0, "Connecting"));
+            await session.ConnectAsync(account.Incoming, cancellation);
+            await session.AuthenticateAsync(account.Incoming, cancellation);
+
+            var state = await session.OpenAsync(folder.ImapPath!, cancellation);
+            if (folder.UidValidity is { } known && known != state.UidValidity)
+            {
+                return (0, 0, "The folder changed on the server — run a send/receive first.");
+            }
+
+            var matched = (await session.SearchAsync(query, cancellation)).ToHashSet();
+            var missing = (await MissingUidsAsync(session, folder, cancellation))
+                .Where(matched.Contains)
+                .ToList();
+
+            if (missing.Count == 0) return (0, 0, null);
+
+            var info = (await session.FetchInfoAsync(missing, cancellation)).ToDictionary(i => i.Uid, i => i);
+            var chosen = missing
+                .OrderByDescending(uid => info.GetValueOrDefault(uid)?.InternalDate ?? DateTimeOffset.MinValue)
+                .Take(Math.Max(1, cap))
+                .ToList();
+
+            var pulled = await DownloadAsync(
+                session, folder, chosen, cutoff: null, progress, account.Address, cancellation, backfill: true);
+
+            Log.Info($"{folder.ImapPath}: server search brought {pulled.Count} message(s) home; "
+                     + $"{missing.Count - chosen.Count} more matched.");
+            return (pulled.Count, missing.Count - chosen.Count, null);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Server search failed for {account.Address}.", ex);
+            return (0, 0, Pop3Receiver.Explain(ex));
+        }
+        finally
+        {
+            await CloseQuietlyAsync(session, cancellation);
+        }
+    }
+
+    /// <summary>The open folder's UIDs this store does not hold and is not mid-move on.</summary>
+    private async Task<IReadOnlyList<long>> MissingUidsAsync(
+        IImapSession session, Folder folder, CancellationToken cancellation)
+    {
+        var serverUids = await session.SearchAllAsync(cancellation);
+        var localByUid = _repository.MessageIdsByServerUid(folder.Id);
+        var pending = _repository.PendingUidsIn(folder.Id);
+
+        return [.. serverUids.Where(uid =>
+            !localByUid.ContainsKey(uid.ToString()) && !pending.Contains(uid.ToString()))];
+    }
+
+    private static async Task CloseQuietlyAsync(IImapSession session, CancellationToken cancellation)
+    {
+        try
+        {
+            await session.DisconnectAsync(cancellation);
+        }
+        catch (Exception)
+        {
+            // Leaving is not a step that can fail usefully.
+        }
+        finally
+        {
+            session.Dispose();
+        }
+    }
+
     // ---- Pulling --------------------------------------------------------------------------
 
     /// <summary>
@@ -385,6 +563,11 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
         _repository.SetFolderSyncState(folder.Id, state.UidValidity, state.UidNext,
             state.SupportsModSeq ? state.HighestModSeq : null);
 
+        // What the window left on the server, so the list can say the folder is deeper than it
+        // looks and offer to fetch it. Counted fresh every sync: a fetch-older narrows it, and
+        // mail ageing past the window widens it.
+        _repository.SetFolderServerOlder(folder.Id, downloaded.SkippedOlder);
+
         return (downloaded, removed);
     }
 
@@ -428,7 +611,7 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
     /// <summary>What a pull of one folder brought: how many, and which of them stayed put.</summary>
     /// <param name="Count">Messages downloaded and stored, wherever the handler then put them.</param>
     /// <param name="InPlace">The ids still in the folder they were pulled into — the arrivals a toast is about.</param>
-    private sealed record Pulled(int Count, IReadOnlyList<long> InPlace);
+    private sealed record Pulled(int Count, IReadOnlyList<long> InPlace, int SkippedOlder = 0);
 
     private async Task<Pulled> DownloadAsync(
         IImapSession session,
@@ -437,7 +620,8 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
         DateTimeOffset? cutoff,
         IProgress<PollProgress>? progress,
         string address,
-        CancellationToken cancellation)
+        CancellationToken cancellation,
+        bool backfill = false)
     {
         if (uids.Count == 0) return new Pulled(0, []);
 
@@ -454,6 +638,9 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
                           || arrived >= limit)
             .OrderByDescending(u => u)
             .ToList();
+
+        // What the window is leaving behind, for the folder to say so.
+        var skippedOlder = uids.Count - wanted.Count;
 
         var count = 0;
         var inPlace = new List<long>();
@@ -492,7 +679,10 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
                 // Handed to the junk filter and the rules only when it is new to the Inbox. What
                 // they do to it — a move, a delete — is journalled to the server like any change
                 // made here, which is why it is stored where the server had it first.
-                var endedIn = folder.Role == FolderRole.Inbox
+                // A backfill is the server catching up on old mail, not an arrival: a rule
+                // or the junk filter acting on a two-year-old message would move mail the
+                // reader filed an age ago.
+                var endedIn = folder.Role == FolderRole.Inbox && !backfill
                     ? Arrival.Handle(OnArrival, _repository, folder, messageId, message)
                     : folder.Id;
 
@@ -503,6 +693,6 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
             }
         }
 
-        return new Pulled(count, inPlace);
+        return new Pulled(count, inPlace, skippedOlder);
     }
 }

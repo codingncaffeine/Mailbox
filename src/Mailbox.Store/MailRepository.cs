@@ -158,6 +158,15 @@ public sealed class MailRepository(MailStore store)
     }
 
     /// <summary>
+    /// What the sync found beyond the offline window: messages on the server it deliberately
+    /// did not download. Zero means the folder is as deep here as it is there.
+    /// </summary>
+    public void SetFolderServerOlder(long folderId, int count)
+        => _store.Execute(
+            "UPDATE folders SET server_older = $n WHERE id = $id",
+            ("$n", Math.Max(0, count)), ("$id", folderId));
+
+    /// <summary>
     /// Puts a folder under another parent, or at the top, keeping its name; the folders under
     /// it come along. With a server name, the tree is re-pathed the way <see cref="RenameFolder"/>
     /// re-paths it — the server has already renamed the tree, or is about to.
@@ -3066,6 +3075,7 @@ public sealed class MailRepository(MailStore store)
         UidValidity = NullableLong(r, "uidvalidity"),
         UidNext = NullableLong(r, "uidnext"),
         HighestModSeq = NullableLong(r, "highestmodseq"),
+        ServerOlder = r.GetInt32(r.GetOrdinal("server_older")),
     };
 
     private static long? NullableLong(SqliteDataReader r, string column)

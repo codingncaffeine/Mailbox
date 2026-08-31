@@ -99,6 +99,46 @@ public partial class MainWindow
             Opened += (_, _) => _ = PressInDialogAsync(steps, hold);
         }
 
+        // The footer row's own doors. MAILBOX_LIST_PAGE=<n> shrinks the page so a seeded store
+        // can fill one; MAILBOX_SERVER_OLDER=<n> writes the count the sync would have written,
+        // so the server rows draw without a server; MAILBOX_MORE=press finds the footer row,
+        // presses it through the real selection path, and reads back what changed.
+        if (Environment.GetEnvironmentVariable("MAILBOX_LIST_PAGE") is { Length: > 0 } page
+            && int.TryParse(page, out var posedPage))
+        {
+            // Directly at Opened, not posted: the folder pose acts in a posted pass, and the
+            // page size has to be set before the folder it sizes loads.
+            Opened += (_, _) =>
+            {
+                if (DataContext is ShellViewModel sizing) sizing.PoseListPage(posedPage);
+            };
+        }
+
+        if (Environment.GetEnvironmentVariable("MAILBOX_SERVER_OLDER") is { Length: > 0 } older
+            && int.TryParse(older, out var posedOlder))
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(
+                () =>
+                {
+                    if (DataContext is not ShellViewModel s) return;
+                    if (s.SelectedFolder is not { } node || s.FolderOf(node) is not { } where)
+                    {
+                        Log.Info("Harness: no folder is open to pose server-older on.");
+                        return;
+                    }
+
+                    where.Account.Mail.SetFolderServerOlder(where.Folder.Id, posedOlder);
+                    s.ReloadAfterFetch();
+                    Log.Info($"Harness: “{where.Folder.Name}” poses {posedOlder} older on the server.");
+                },
+                DispatcherPriority.Background);
+        }
+
+        if (Environment.GetEnvironmentVariable("MAILBOX_MORE") is "press")
+        {
+            Opened += (_, _) => Dispatcher.UIThread.Post(async () => await PoseMorePressAsync(), DispatcherPriority.ApplicationIdle);
+        }
+
         // MAILBOX_DRAG_OUT=<part of a subject> builds the list's own drag payload over the
         // matching row and consumes its file half, which is what a drop target outside would
         // do — the one half of a drag a run can hold in its hands. The written file is read
@@ -107,6 +147,40 @@ public partial class MainWindow
         if (Environment.GetEnvironmentVariable("MAILBOX_DRAG_OUT") is { Length: > 0 } dragOut)
         {
             Opened += (_, _) => Dispatcher.UIThread.Post(async () => await PoseDragOutAsync(dragOut), DispatcherPriority.ApplicationIdle);
+        }
+    }
+
+    /// <summary>
+    /// Presses the list's footer row through the real selection path and reads back what it
+    /// changed: the rows now showing, whether a footer remains, and what the status line says —
+    /// which for the server kinds in a posed run is the honest refusal about having no server.
+    /// </summary>
+    private async Task PoseMorePressAsync()
+    {
+        try
+        {
+            // Held across the press: the settle awaits, and the capture's exit must not land
+            // between the press and its read-back.
+            using var hold = WindowCapture.Hold();
+
+            if (DataContext is not ShellViewModel shell) return;
+
+            var more = shell.VisibleRows.OfType<MoreRow>().FirstOrDefault();
+            Log.Info(more is null
+                ? $"Harness: no footer row is showing over {shell.Messages.Count} row(s)."
+                : $"Harness: the footer offers “{more.Label}” ({more.Kind}).");
+            if (more is null) return;
+
+            shell.SelectedRow = more;
+            await Task.Delay(900);
+
+            var after = shell.VisibleRows.OfType<MoreRow>().FirstOrDefault();
+            Log.Info($"Harness: after the press — {shell.Messages.Count} row(s), footer "
+                     + $"{(after is null ? "gone" : $"“{after.Label}”")}, status “{shell.StatusRight}”.");
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("Harness: the footer press pose failed.", ex);
         }
     }
 

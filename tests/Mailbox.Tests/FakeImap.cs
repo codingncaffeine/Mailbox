@@ -167,6 +167,18 @@ internal sealed class FakeImap : IImapSession
 
     private ServerFolder Open => _open ?? throw new InvalidOperationException("No folder open.");
 
+    /// <summary>Queries handed to the server-side search, for a test to assert on.</summary>
+    public List<Mailbox.Core.Search.SearchQuery> SearchedFor { get; } = [];
+
+    /// <summary>What the next server-side search answers with.</summary>
+    public List<long> SearchAnswer { get; } = [];
+
+    public Task<IReadOnlyList<long>> SearchAsync(Mailbox.Core.Search.SearchQuery query, CancellationToken c)
+    {
+        SearchedFor.Add(query);
+        return Task.FromResult<IReadOnlyList<long>>([.. SearchAnswer]);
+    }
+
     public Task<IReadOnlyList<long>> SearchAllAsync(CancellationToken c)
         => Task.FromResult<IReadOnlyList<long>>([.. Open.Messages.Select(m => m.Uid)]);
 

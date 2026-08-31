@@ -707,6 +707,23 @@
                             </DataTemplate>
                             </views:RowTemplateSelector.Header>
 
+                            <views:RowTemplateSelector.More>
+                            <!-- The offer at the foot of the list: more of this folder, or the
+                                 mail the offline window left on the server. Drawn as the
+                                 reference draws its own more-on-the-server line - a quiet
+                                 centred link-blue sentence inside the scroll. -->
+                            <DataTemplate x:DataType="vm:MoreRow">
+                                <Border AutomationProperties.Name="{Binding Spoken}"
+                                        Background="{DynamicResource list.background.brush}"
+                                        Padding="8,10">
+                                    <TextBlock Text="{Binding Label}"
+                                               HorizontalAlignment="Center"
+                                               TextWrapping="Wrap"
+                                               Foreground="{DynamicResource accent.rest.brush}" />
+                                </Border>
+                            </DataTemplate>
+                            </views:RowTemplateSelector.More>
+
                             <views:RowTemplateSelector.Conversation>
                             <!-- A folded conversation: the newest message, a count, and the
                                  marker for a thread whose messages are in more than one folder. -->

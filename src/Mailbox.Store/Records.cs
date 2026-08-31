@@ -69,6 +69,12 @@ public sealed record Folder(
     /// <summary>The highest MODSEQ seen, for asking only what changed since.</summary>
     public long? HighestModSeq { get; init; }
 
+    /// <summary>
+    /// How many messages the server holds in this folder beyond the offline window — counted by
+    /// the sync from what it skipped, so the list can say the folder is deeper than it looks.
+    /// </summary>
+    public int ServerOlder { get; init; }
+
     /// <summary>A folder that stands for one on the server.</summary>
     public bool IsMapped => ImapPath is not null;
 }
