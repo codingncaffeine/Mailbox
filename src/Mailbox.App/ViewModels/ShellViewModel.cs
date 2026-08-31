@@ -2008,7 +2008,7 @@ public sealed partial class ShellViewModel : ObservableObject
                 t => _themes.DisplayName(t) == value) ?? OfficeThemes.Colorful;
             try
             {
-                _themes.Apply(id);
+                _themes.ApplyFresh(id);
             }
             catch (Mailbox.Theming.Tokens.ThemeResolutionException ex)
             {

@@ -878,10 +878,12 @@ public static class OfficeThemes
     // button rather than by theme — the title bar, a dialog's own ground and the system
     // dialogs' desktop-light band are three different answers inside one theme.
     // ------------------------------------------------------------------------------------
-    private const string CaptionWashOverDark = "#22FFFFFF";
-    private const string CaptionWashOverDarkPressed = "#33FFFFFF";
-    private const string CaptionWashOverLight = "#14000000";
-    private const string CaptionWashOverLightPressed = "#26000000";
+    // One definition, shared with the recolour policies: an automated door that picks a wash
+    // for a new ground must pick exactly what the built-ins carry, never a fifth value.
+    private const string CaptionWashOverDark = Tokens.Recolour.WashOverDark;
+    private const string CaptionWashOverDarkPressed = Tokens.Recolour.WashOverDarkPressed;
+    private const string CaptionWashOverLight = Tokens.Recolour.WashOverLight;
+    private const string CaptionWashOverLightPressed = Tokens.Recolour.WashOverLightPressed;
 
     /// <param name="lightTitleBar">True when this theme's title bar is pale, as White's is.</param>
     /// <param name="lightDialog">True when this theme's dialogs stand on a pale ground.</param>

@@ -118,7 +118,7 @@ public static class DesktopTheme
 
             try
             {
-                App.Themes.Apply(resolved);
+                App.Themes.ApplyFresh(resolved);
                 Log.Info($"Desktop theme changed; following it to {resolved}.");
             }
             catch (Mailbox.Theming.Tokens.ThemeResolutionException ex)

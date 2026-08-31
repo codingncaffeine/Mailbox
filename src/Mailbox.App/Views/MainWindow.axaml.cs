@@ -5416,7 +5416,7 @@ public partial class MainWindow : Window
 
                 try
                 {
-                    App.Themes.Apply(id);
+                    App.Themes.ApplyFresh(id);
                 }
                 catch (Mailbox.Theming.Tokens.ThemeResolutionException ex)
                 {

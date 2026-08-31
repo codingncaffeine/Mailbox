@@ -1489,7 +1489,9 @@ public sealed class OptionsWindow : Window
             var id = combo.SelectedIndex == 0 ? DesktopTheme.Resolve() : ids[combo.SelectedIndex - 1];
             try
             {
-                _themes.Apply(id);
+                // Fresh, not layered: picking a theme means that theme, with no session edits
+                // riding along — the clean return to a built-in is a promise.
+                _themes.ApplyFresh(id);
                 App.Settings.Set(App.ThemeSetting,
                     combo.SelectedIndex == 0 ? DesktopTheme.Sentinel : id);
                 if (combo.SelectedIndex == 0) DesktopTheme.Watch();

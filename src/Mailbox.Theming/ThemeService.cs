@@ -93,6 +93,15 @@ public sealed class ThemeService
     /// <summary>User overrides layered on top of the built-in. Null for an unmodified theme.</summary>
     public TokenSet? UserOverrides { get; private set; }
 
+    /// <summary>
+    /// The reader's persistent appearance choices — a backdrop, its alignment — composed over
+    /// every theme, under the editor's session overrides. A separate slot because the two have
+    /// different lifetimes: the editor's "Reset All" wipes its scratchpad and must not take a
+    /// kept personal choice with it. Bounded by policy to the appearance token families; it is
+    /// a setting like density, never a place a theme can leave residue.
+    /// </summary>
+    public TokenSet? Appearance { get; private set; }
+
     public bool IsDark => Library.IsDark(ThemeId);
 
     /// <summary>What the theme picker shows for a theme, built-in or file.</summary>
@@ -109,7 +118,26 @@ public sealed class ThemeService
         Changed?.Invoke(this, new ThemeChangedEventArgs(Tokens, ThemeId, Density));
     }
 
+    /// <summary>
+    /// The picker's door: the theme it names, with no session edits over it. Choosing a theme
+    /// must return exactly that theme — overrides carried silently across a switch are how a
+    /// theme editor leaves residue, and the clean return to a built-in is a promise.
+    /// <see cref="Appearance"/> stays: it is the reader's own setting, like density.
+    /// </summary>
+    public void ApplyFresh(string themeId)
+    {
+        UserOverrides = null;
+        Apply(themeId);
+    }
+
     public void SetDensity(Density density) => Apply(ThemeId, density);
+
+    /// <summary>Replaces the appearance slot — null clears it — and re-applies.</summary>
+    public void SetAppearance(TokenSet? appearance)
+    {
+        Appearance = appearance;
+        Apply(ThemeId, Density);
+    }
 
     public void ClearOverrides()
     {
@@ -123,6 +151,7 @@ public sealed class ThemeService
         ApplyDensity(tokens, density);
         ApplyFontResolution(tokens);
 
+        if (Appearance is not null) tokens = tokens.OverlaidWith(Appearance);
         if (overrides is not null) tokens = tokens.OverlaidWith(overrides);
 
         var resolved = tokens.Resolve();
