@@ -2,7 +2,7 @@
 # Builds the Linux release artifacts from one publish:
 #   Mailbox-<ver>-linux-x64.tar.gz   self-contained; extract anywhere and run ./mailbox, or run
 #                                    packaging/install-desktop-files.sh for the desktop entry
-#   mailbox_<ver>_amd64.deb          system install under /usr/lib/mailbox, launcher /usr/bin/mailbox
+#   Mailbox.deb                      system install under /usr/lib/mailbox, launcher /usr/bin/mailbox
 # The AUR package (packaging/aur/PKGBUILD) repackages the tarball from the GitHub release, so the
 # tarball's name and layout are a contract with it — change both together.
 #
@@ -83,7 +83,10 @@ Description: Desktop mail client with a ribbon, calendar peek and reading pane
  flags, and integrates with the desktop: mailto: links, notifications, the
  tray, autostart. Passwords go to the desktop keyring through secret-tool.
 CTRL
-dpkg-deb --build --root-owner-group "$DEB" "$OUT/mailbox_${VER}_amd64.deb" > /dev/null
+# Named for the person downloading it, not for an apt archive: a software centre titles a
+# sideloaded file by its name up to the first dot, so mailbox_0.5.0_amd64.deb reads as
+# "mailbox_0" in the installer. The version lives in the control file and the release tag.
+dpkg-deb --build --root-owner-group "$DEB" "$OUT/Mailbox.deb" > /dev/null
 
 rm -rf "$DEB"
 echo "── artifacts:"

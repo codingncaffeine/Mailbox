@@ -99,7 +99,7 @@ wherever it is extracted, and a `.deb` for Debian 13 and its relatives. `packagi
 repackages the tarball for Arch.
 
 ```sh
-bash packaging/build-release.sh     # packaging/out/Mailbox-<ver>-linux-x64.tar.gz and mailbox_<ver>_amd64.deb
+bash packaging/build-release.sh     # packaging/out/Mailbox-<ver>-linux-x64.tar.gz and Mailbox.deb
 bash packaging/test-deb.sh          # installs the .deb in a clean debian:trixie container (podman) and probes it
 ```
 

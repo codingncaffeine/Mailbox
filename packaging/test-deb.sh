@@ -13,8 +13,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-VER=$(grep -oPm1 '(?<=<VersionPrefix>)[^<]+' Directory.Build.props)
-DEB="mailbox_${VER}_amd64.deb"
+DEB="Mailbox.deb"
 IMAGE="${IMAGE:-debian:trixie}"
 OUT="$(pwd)/packaging/out"
 
