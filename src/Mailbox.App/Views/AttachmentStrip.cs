@@ -26,12 +26,12 @@ namespace Mailbox.App.Views;
 /// </remarks>
 public sealed class AttachmentStrip : Border
 {
-    /// <summary>The settings key that remembers the open warning has been shown and accepted.</summary>
-    private const string OpenWarnedKey = "mail.attachments.openwarned";
-
     private readonly WrapPanel _chips = new() { Orientation = Orientation.Horizontal };
     private IReadOnlyList<Attachment> _attachments = [];
     private bool _posed;
+
+    /// <summary>The reader asked to see a file before saving it; the host places the preview.</summary>
+    public event EventHandler<Attachment>? PreviewRequested;
 
     public AttachmentStrip()
     {
@@ -129,6 +129,10 @@ public sealed class AttachmentStrip : Border
     {
         var menu = new MenuFlyout();
 
+        var preview = new MenuItem { Header = "_Preview" };
+        preview.Click += (_, _) => PreviewRequested?.Invoke(this, attachment);
+        menu.Items.Add(preview);
+
         var open = new MenuItem { Header = "_Open" };
         open.Click += async (_, _) => await OpenAsync(attachment);
         menu.Items.Add(open);
@@ -159,33 +163,14 @@ public sealed class AttachmentStrip : Border
     /// sanitized name, never the raw one: a file name arrives with the message and is text a
     /// stranger chose.
     /// </remarks>
-    private async Task OpenAsync(Attachment attachment)
+    internal async Task OpenAsync(Attachment attachment)
     {
         if (TopLevel.GetTopLevel(this) is not Window owner) return;
-
-        if (!App.Settings.GetBool(OpenWarnedKey))
-        {
-            var opening = await Confirm.AskAsync(
-                owner,
-                "Open attachment",
-                $"“{attachment.SafeName}” came with a message, and opening it runs whatever "
-                + "program the desktop uses for that kind of file. Only open attachments you "
-                + "are expecting. This is asked once.",
-                "Open",
-                destructive: false);
-
-            if (!opening)
-            {
-                Log.Info("An attachment open was declined at the warning.");
-                return;
-            }
-
-            App.Settings.Set(OpenWarnedKey, true);
-        }
+        if (!await AttachmentOpening.ConfirmedAsync(owner, attachment.SafeName)) return;
 
         try
         {
-            var path = WriteForOpening(attachment);
+            var path = AttachmentOpening.WriteForOpening(attachment.SafeName, attachment.SaveTo);
             var outcome = DesktopOpen.Open(path);
             Log.Info($"Attachment: {(outcome == DesktopOpenResult.Failed ? "the desktop could not open" : "opened")} "
                      + $"“{attachment.SafeName}” ({attachment.Size} bytes) from the runtime directory.");
@@ -194,40 +179,6 @@ public sealed class AttachmentStrip : Border
         {
             Log.Warn("Could not write an attachment for opening.", ex);
         }
-    }
-
-    /// <summary>
-    /// The file, written where the desktop can read it and nobody else can: a 0700 directory
-    /// under <c>$XDG_RUNTIME_DIR</c>, which is per-login tmpfs and cleaned up with the session.
-    /// </summary>
-    private static string WriteForOpening(Attachment attachment)
-    {
-        var runtime = Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
-        var root = string.IsNullOrEmpty(runtime)
-            ? Path.Combine(Path.GetTempPath(), "mailbox-opened")
-            : Path.Combine(runtime, "mailbox", "opened");
-
-        Directory.CreateDirectory(root);
-
-        // 0700, said explicitly: the runtime dir itself is private, but a fallback under /tmp
-        // is not, and a directory of opened attachments is the reader's own mail.
-        if (OperatingSystem.IsLinux())
-        {
-            File.SetUnixFileMode(root, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        }
-
-        // A fresh directory per open, so two attachments with one name cannot overwrite each
-        // other while one of them is on screen in another program.
-        var dir = Path.Combine(root, Guid.NewGuid().ToString("n")[..8]);
-        Directory.CreateDirectory(dir);
-
-        var path = Path.Combine(dir, attachment.SafeName);
-        using (var stream = File.Create(path))
-        {
-            attachment.SaveTo(stream);
-        }
-
-        return path;
     }
 
     /// <summary>
@@ -242,7 +193,7 @@ public sealed class AttachmentStrip : Border
     /// message and is therefore text a stranger chose — hostile input, and treated as such.
     /// </para>
     /// </remarks>
-    private async Task SaveAsAsync(Attachment attachment)
+    internal async Task SaveAsAsync(Attachment attachment)
     {
         if (TopLevel.GetTopLevel(this) is not { } top) return;
 
@@ -357,7 +308,23 @@ public sealed class AttachmentStrip : Border
                         }
 
                         await OpenAsync(attachment);
-                        Log.Info($"Harness: open pressed — warned key {App.Settings.GetBool(OpenWarnedKey)}.");
+                        Log.Info($"Harness: open pressed — warned key {App.Settings.GetBool(AttachmentOpening.WarnedKey)}.");
+                        return;
+                    }
+
+                    if (spec.StartsWith("preview:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var wanted = spec["preview:".Length..];
+                        var attachment = _attachments.FirstOrDefault(
+                            a => a.SafeName.Contains(wanted, StringComparison.OrdinalIgnoreCase));
+                        if (attachment is null)
+                        {
+                            Log.Info($"Harness: no attachment matches “{wanted}” to preview.");
+                            return;
+                        }
+
+                        PreviewRequested?.Invoke(this, attachment);
+                        Log.Info($"Harness: preview requested for “{attachment.SafeName}”.");
                         return;
                     }
 

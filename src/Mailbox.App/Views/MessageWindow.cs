@@ -39,6 +39,7 @@ public sealed class MessageWindow : Window
 {
     private readonly ReadingPaneBody _body;
     private readonly AttachmentStrip _attachments = new();
+    private readonly AttachmentPreview _attachmentPreview = new();
     private readonly Func<MailRepository?> _mail;
     private readonly RibbonView _ribbon;
     private Button? _moreButton;
@@ -262,6 +263,7 @@ public sealed class MessageWindow : Window
             : null;
 
         _body.MessageFontSize = 14.5 * (_zoomPercent / 100d);
+        _attachmentPreview.Hide();
         _attachments.Show(_message);
         _body.Show(_message, _message.TextBody ?? string.Empty, verified);
         _ = _body.ApplySenderPolicyAsync();
@@ -626,6 +628,12 @@ public sealed class MessageWindow : Window
 
         var workspace = new Grid();
         workspace.Children.Add(_body);
+
+        // The preview sits over the body, under the ribbon's float layer; Back is one
+        // visibility change and the engine keeps whatever it was showing.
+        workspace.Children.Add(_attachmentPreview);
+        _attachments.PreviewRequested += (_, attachment) => _attachmentPreview.Show(attachment, _attachments);
+
         _floatLayer = new Canvas { IsHitTestVisible = true, ZIndex = 1 };
         workspace.Children.Add(_floatLayer);
         root.Children.Add(workspace);

@@ -75,7 +75,7 @@ public sealed partial class ComposeSurface
 
     /// <summary>The attachment strip's text, and the files behind it.</summary>
     public (bool IsVisible, string Text, IReadOnlyList<string> Files) HarnessAttachments
-        => (_attachmentRow.IsVisible, _attachmentStrip.Text ?? string.Empty,
+        => (_attachmentRow.IsVisible, AttachedSummary(),
             [.. _attachments.Select(f => f.Name), .. _carried.Select(c => c.Name)]);
 
     /// <summary>Whether this message is signed, sealed, both or neither; and the delayed-delivery time.</summary>
@@ -96,6 +96,26 @@ public sealed partial class ComposeSurface
 
     /// <summary>Whether a command is usable right now, for the run that checks the ribbon's greying.</summary>
     public bool HarnessEnabled(string id) => IsCommandEnabled(new CommandId(id));
+
+    /// <summary>Removes the first attachment whose name carries the words — the chip's own Remove.</summary>
+    public string PoseRemoveAttachment(string named)
+    {
+        if (_attachments.FirstOrDefault(f => f.Name.Contains(named, StringComparison.OrdinalIgnoreCase)) is { } file)
+        {
+            _attachments.Remove(file);
+            AfterAttachmentRemoved(file.Name);
+            return file.Name;
+        }
+
+        if (_carried.FirstOrDefault(c => c.Name.Contains(named, StringComparison.OrdinalIgnoreCase)) is { } part)
+        {
+            _carried.Remove(part);
+            AfterAttachmentRemoved(part.Name);
+            return part.Name;
+        }
+
+        return $"nothing is attached under “{named}”";
+    }
 
     /// <summary>
     /// Attaches real files by path, without the desktop's picker.

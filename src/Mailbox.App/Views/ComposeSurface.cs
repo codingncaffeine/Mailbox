@@ -147,7 +147,9 @@ public sealed partial class ComposeSurface : UserControl
 
     private string? _sendingAddress;
     private readonly TextBlock _status = new();
-    private readonly TextBlock _attachmentStrip = new() { TextWrapping = TextWrapping.Wrap };
+
+    /// <summary>One chip per attachment, like the reading side's strip — not a sentence.</summary>
+    private readonly WrapPanel _attachmentChips = new() { Orientation = Orientation.Horizontal };
 
     // Each address row is one control, so showing or hiding it is one visibility change on one
     // thing rather than two halves that have to agree.
@@ -579,11 +581,7 @@ public sealed partial class ComposeSurface : UserControl
         _carried.AddRange(Mailbox.Rendering.MessageAttachments.List(message)
             .Select(a => new CarriedPart(a.Name, a.MimeType, a.Part)));
 
-        if (_carried.Count > 0)
-        {
-            _attachmentStrip.Text = "Attached: " + string.Join(", ", _carried.Select(c => c.Name));
-            _attachmentRow.IsVisible = true;
-        }
+        RefreshAttachmentStrip();
 
         // The document as it was written. The HTML half where there is one, because that is
         // what carried the formatting; the text half otherwise. Through the renderer rather
@@ -641,11 +639,7 @@ public sealed partial class ComposeSurface : UserControl
         _references = draft.References;
 
         _carried.AddRange(draft.Attachments);
-        if (_carried.Count > 0)
-        {
-            _attachmentStrip.Text = "Attached: " + string.Join(", ", _carried.Select(c => c.Name));
-            _attachmentRow.IsVisible = true;
-        }
+        RefreshAttachmentStrip();
 
         // The signature for a reply, if the account has one, then the quote — with two blank
         // lines above the lot for the answer to go in.
@@ -1003,12 +997,9 @@ public sealed partial class ComposeSurface : UserControl
         _bccRow = AddressRow(rows, "Bcc", _bcc);
         AddressRow(rows, "Subject", _subject, opensAddressBook: false);
 
-        _attachmentStrip.Text = string.Empty;
-        // Sits in the header, so it takes the header's ink like everything else there.
-        Bind(_attachmentStrip, TextBlock.ForegroundProperty, "compose.header.label.brush");
         _attachmentRow = new Border
         {
-            Child = _attachmentStrip,
+            Child = _attachmentChips,
             Padding = new Thickness(76, 6, 0, 0),
             IsVisible = false,
         };
@@ -1918,15 +1909,176 @@ public sealed partial class ComposeSurface : UserControl
         if (files.Count == 0) return;
 
         _attachments.AddRange(files);
-        _attachmentStrip.Text = "Attached: " +
-            string.Join(", ", _attachments.Select(f => f.Name));
-        _attachmentRow.IsVisible = true;
+        RefreshAttachmentStrip();
 
         // Attaching is a change like typing is. Only the text fields marked the surface dirty,
         // so a message whose only content was a file it had just been given looked to the close
         // prompt exactly like one nobody had touched.
         _dirty = true;
         UpdateStatus();
+    }
+
+    /// <summary>What the strip says in one line, for the harness and the tooltip family.</summary>
+    private string AttachedSummary()
+        => "Attached: " + string.Join(", ",
+            _attachments.Select(f => f.Name).Concat(_carried.Select(c => c.Name)));
+
+    /// <summary>
+    /// Redraws the strip as chips — one per file being attached and one per part carried from
+    /// a message — each with the menu the reading side's chips taught: Open, and Remove, which
+    /// is what "short of discarding the draft" used to be the only way to do.
+    /// </summary>
+    private void RefreshAttachmentStrip()
+    {
+        _attachmentChips.Children.Clear();
+
+        foreach (var file in _attachments.ToList())
+        {
+            var size = file.TryGetLocalPath() is { } local && File.Exists(local)
+                ? new FileInfo(local).Length
+                : (long?)null;
+            _attachmentChips.Children.Add(AttachmentChip(
+                file.Name, size,
+                open: () => OpenOwnFile(file),
+                remove: () =>
+                {
+                    _attachments.Remove(file);
+                    AfterAttachmentRemoved(file.Name);
+                }));
+        }
+
+        foreach (var part in _carried.ToList())
+        {
+            _attachmentChips.Children.Add(AttachmentChip(
+                part.Name, size: null,
+                open: () => _ = OpenCarriedAsync(part),
+                remove: () =>
+                {
+                    _carried.Remove(part);
+                    AfterAttachmentRemoved(part.Name);
+                }));
+        }
+
+        _attachmentRow.IsVisible = _attachments.Count + _carried.Count > 0;
+    }
+
+    private void AfterAttachmentRemoved(string name)
+    {
+        RefreshAttachmentStrip();
+        _dirty = true;
+        UpdateStatus();
+        RaiseEnablementChanged();
+        Log.Info($"Compose: “{name}” removed from the message.");
+    }
+
+    private Control AttachmentChip(string name, long? size, Action open, Action remove)
+    {
+        var row = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 7,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+
+        var glyph = new TextBlock
+        {
+            Text = Mailbox.Theming.Icons.IconGlyphs.GetOrEmpty("attach", 16),
+            FontFamily = Mailbox.Theming.Icons.IconFont.Family,
+            FontSize = 13,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+        Bind(glyph, TextBlock.ForegroundProperty, "accent.rest.brush");
+        row.Children.Add(glyph);
+
+        var label = new TextBlock
+        {
+            Text = name,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            MaxWidth = 220,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        Bind(label, TextBlock.ForegroundProperty, "text.primary.brush");
+        row.Children.Add(label);
+
+        if (size is { } bytes)
+        {
+            var sized = new TextBlock
+            {
+                Text = $"({Mailbox.Rendering.Attachment.Sized(bytes)})",
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            };
+            Bind(sized, TextBlock.ForegroundProperty, "text.secondary.brush");
+            row.Children.Add(sized);
+        }
+
+        var button = new Button
+        {
+            Content = row,
+            Padding = new Thickness(9, 4),
+            Margin = new Thickness(0, 0, 6, 6),
+            BorderThickness = new Thickness(1),
+            [ToolTip.TipProperty] = name,
+        };
+        Bind(button, BorderBrushProperty, "border.subtle.brush");
+        Bind(button, TemplatedControl.BackgroundProperty, "surface.raised.brush");
+
+        // The chip's click is its menu: a file being attached has nothing to save and nothing
+        // to preview — what a writer wants is to check it or take it off.
+        void Menu(Control at)
+        {
+            var menu = new MenuFlyout();
+
+            var opener = new MenuItem { Header = "_Open" };
+            opener.Click += (_, _) => open();
+            menu.Items.Add(opener);
+
+            var remover = new MenuItem { Header = "_Remove Attachment" };
+            remover.Click += (_, _) => remove();
+            menu.Items.Add(remover);
+
+            MenuProbe.Show("the compose attachment menu", menu, at, atPointer: true);
+        }
+
+        button.Click += (_, _) => Menu(button);
+        button.AddHandler(ContextRequestedEvent, (_, e) => { Menu(button); e.Handled = true; });
+
+        return button;
+    }
+
+    /// <summary>
+    /// Opens a file the writer attached themselves — their own file, no warning to show.
+    /// </summary>
+    private void OpenOwnFile(Avalonia.Platform.Storage.IStorageFile file)
+    {
+        if (file.TryGetLocalPath() is not { } path)
+        {
+            Report($"“{file.Name}” has no local path to open.");
+            return;
+        }
+
+        var outcome = Mailbox.Core.Platform.DesktopOpen.Open(path);
+        Log.Info($"Compose: {(outcome == Mailbox.Core.Platform.DesktopOpenResult.Failed ? "the desktop could not open" : "opened")} “{file.Name}”.");
+    }
+
+    /// <summary>
+    /// Opens a part carried from a message — a stranger's file, so the reading side's one-time
+    /// warning and its private runtime directory both apply.
+    /// </summary>
+    private async Task OpenCarriedAsync(Mailbox.Rendering.CarriedPart part)
+    {
+        var carried = new Mailbox.Rendering.Attachment(part.Name, part.MimeType, 0, part.Entity);
+        if (!await AttachmentOpening.ConfirmedAsync(Host, carried.SafeName)) return;
+
+        try
+        {
+            var path = AttachmentOpening.WriteForOpening(carried.SafeName, carried.SaveTo);
+            var outcome = Mailbox.Core.Platform.DesktopOpen.Open(path);
+            Log.Info($"Compose: {(outcome == Mailbox.Core.Platform.DesktopOpenResult.Failed ? "the desktop could not open" : "opened")} “{carried.SafeName}” from the runtime directory.");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.Warn("Could not write a carried attachment for opening.", ex);
+        }
     }
 
     private async Task ShowWordCountAsync()

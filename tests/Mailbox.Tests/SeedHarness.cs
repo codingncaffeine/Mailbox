@@ -92,6 +92,8 @@ public class SeedHarness
                 + "it round.",
                 "agenda.pdf", "application/pdf", 38_000),
 
+            WithPreviewables(),
+
             Invitation("Priya Raman", "priya@example.net", "work@example.net", SeedToday().AddDays(4)),
 
             Forwarded(),
@@ -628,6 +630,42 @@ public class SeedHarness
         };
 
         return message;
+    }
+
+    /// <summary>
+    /// A message whose attachments the preview can actually draw: a real (tiny) PNG and a real
+    /// text file, plus one archive nothing previews — so the three panes the preview has are
+    /// all reachable from one seeded row. The picture is invented, not lifted: a generated
+    /// 2x2 PNG.
+    /// </summary>
+    private static MimeMessage WithPreviewables()
+    {
+        var message = Envelope("Sam Reyes", "sam@example.net", "Venue photo and notes");
+
+        // A valid 1x1 PNG, generated once and carried as bytes — the smallest real picture.
+        var png = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+
+        var notes = System.Text.Encoding.UTF8.GetBytes(
+            "Room A holds forty; the projector takes HDMI only.\nAsk for Priya at the desk.\n");
+
+        message.Body = new Multipart("mixed")
+        {
+            new TextPart("plain") { Text = "Picture and my notes attached.\n\nSam" },
+            Part("venue.png", "image/png", png),
+            Part("notes.txt", "text/plain", notes),
+            Part("floorplans.zip", "application/zip", new byte[2048]),
+        };
+
+        return message;
+
+        static MimePart Part(string name, string type, byte[] bytes) => new(ContentType.Parse(type))
+        {
+            FileName = name,
+            Content = new MimeContent(new MemoryStream(bytes)),
+            ContentDisposition = new ContentDisposition(ContentDisposition.Attachment),
+            ContentTransferEncoding = ContentEncoding.Base64,
+        };
     }
 
     /// <summary>

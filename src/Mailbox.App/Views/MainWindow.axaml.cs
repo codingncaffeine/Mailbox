@@ -3150,6 +3150,7 @@ public partial class MainWindow : Window
 
     private ReadingPaneBody? _reading;
     private readonly AttachmentStrip _attachments = new();
+    private readonly AttachmentPreview _attachmentPreview = new();
 
     /// <summary>The selected message as it arrived, kept for the source view and its own window.</summary>
     private MimeKit.MimeMessage? _openMessage;
@@ -3170,8 +3171,14 @@ public partial class MainWindow : Window
             MessageFontSize = shell.ReadingFontSize,
         };
 
-        this.FindControl<ContentControl>("ReadingBody")!.Content = _reading;
+        // The preview sits over the body in the same slot, so Back is one visibility change
+        // and the engine underneath keeps whatever it was showing.
+        this.FindControl<ContentControl>("ReadingBody")!.Content = new Grid
+        {
+            Children = { _reading, _attachmentPreview },
+        };
         this.FindControl<ContentControl>("ReadingAttachments")!.Content = _attachments;
+        _attachments.PreviewRequested += (_, attachment) => _attachmentPreview.Show(attachment, _attachments);
 
         // An answered invitation is two things: a write into the calendar, which the bar has
         // already done, and a message to the organizer, which only the shell can queue.
@@ -3297,6 +3304,9 @@ public partial class MainWindow : Window
 
         // The pane first, then the strip from what the pane is showing: an encrypted message's
         // attachments are inside it, and the envelope has none worth offering.
+        // A preview belongs to the message it came from; a new message takes the pane back.
+        _attachmentPreview.Hide();
+
         _reading.Show(message, shell.SelectedMessage?.Body ?? string.Empty, Verified(shell),
             suspectedJunk: shell.CurrentFolderRole == FolderRole.Junk);
         _attachments.Show(_reading.Carried);

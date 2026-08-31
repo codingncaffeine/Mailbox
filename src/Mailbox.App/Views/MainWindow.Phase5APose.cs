@@ -168,6 +168,17 @@ public partial class MainWindow
                     continue;
                 }
 
+                // "remove:<name>" presses the chip's Remove through its own handler — the way
+                // off a message that used to mean discarding the draft.
+                if (id.StartsWith("remove:", StringComparison.OrdinalIgnoreCase))
+                {
+                    var taken = compose.Surface.PoseRemoveAttachment(id["remove:".Length..]);
+                    var (nowVisible, nowText, nowFiles) = compose.HarnessAttachments;
+                    Log.Info($"Harness: remove — {taken}; strip visible={nowVisible}, "
+                             + $"“{nowText}”, {nowFiles.Count} file(s) left.");
+                    continue;
+                }
+
                 // wait-<ms> holds the next press, as the shell's run door does — for anything
                 // driven by idle-time machinery.
                 if (id.StartsWith("wait-", StringComparison.OrdinalIgnoreCase)

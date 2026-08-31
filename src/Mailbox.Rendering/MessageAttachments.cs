@@ -17,11 +17,14 @@ public sealed record Attachment(string Name, string MimeType, long Size, MimeEnt
     public bool IsMessage => Part is MessagePart;
 
     /// <summary>The size as a reader reads it.</summary>
-    public string Describe() => Size switch
+    public string Describe() => Sized(Size);
+
+    /// <summary>The same reading for any byte count — the compose strip sizes its chips with it.</summary>
+    public static string Sized(long bytes) => bytes switch
     {
-        < 1024 => $"{Size} B",
-        < 1024 * 1024 => $"{Size / 1024.0:0.#} KB",
-        _ => $"{Size / (1024.0 * 1024):0.#} MB",
+        < 1024 => $"{bytes} B",
+        < 1024 * 1024 => $"{bytes / 1024.0:0.#} KB",
+        _ => $"{bytes / (1024.0 * 1024):0.#} MB",
     };
 
     /// <summary>
