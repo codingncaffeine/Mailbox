@@ -248,6 +248,8 @@ public sealed class HeaderDownloader(MailRepository repository, Func<DateTimeOff
                 HasAttachment: false)
             {
                 HeaderOnly = true,
+                IsAnswered = header.IsAnswered,
+                IsForwarded = header.IsForwarded,
             };
 
             if (_repository.AddMessage(folder.Id, summary) is not null) written++;
@@ -263,7 +265,8 @@ public sealed class HeaderDownloader(MailRepository repository, Func<DateTimeOff
         message.WriteTo(buffer);
         var raw = buffer.ToArray();
 
-        var filled = MessageMapper.ToSummary(message, header.ServerUid, raw.LongLength, _now(), header.IsRead, header.IsFlagged);
+        var filled = MessageMapper.ToSummary(message, header.ServerUid, raw.LongLength, _now(), header.IsRead, header.IsFlagged)
+            with { IsAnswered = header.IsAnswered, IsForwarded = header.IsForwarded };
         return _repository.FillHeader(header.Id, filled, raw);
     }
 }

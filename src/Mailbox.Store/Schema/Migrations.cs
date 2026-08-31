@@ -759,6 +759,43 @@ public static class Migrations
         """
         ALTER TABLE folders ADD COLUMN server_older INTEGER NOT NULL DEFAULT 0;
         """,
+
+        // ---- 35: answered and forwarded, the Icon column's other two states ----------------
+        //
+        // Nothing recorded that a message had been replied to or forwarded, so the Icon column
+        // could only tell read from unread. Stamped when a reply or forward of the message is
+        // queued, and taken from the server's own \Answered and $Forwarded marks on sync;
+        // zero — every existing row — is what a message never answered already means.
+        //
+        // The journal's flag column carries the two new marks to the server, and its CHECK
+        // named only the first two — which SQLite cannot widen in place, so the table is
+        // rebuilt around whatever ops are waiting. The indexes go and come back by the same
+        // names; the foreign keys are re-declared as they were.
+        """
+        ALTER TABLE messages ADD COLUMN answered INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE messages ADD COLUMN forwarded INTEGER NOT NULL DEFAULT 0;
+
+        CREATE TABLE sync_ops_new (
+            id                INTEGER PRIMARY KEY,
+            kind              TEXT    NOT NULL CHECK (kind IN ('flags', 'move', 'delete', 'append')),
+            folder_id         INTEGER NOT NULL REFERENCES folders(id) ON DELETE CASCADE,
+            server_uid        TEXT,
+            message_id        INTEGER          REFERENCES messages(id) ON DELETE SET NULL,
+            target_folder_id  INTEGER          REFERENCES folders(id)  ON DELETE CASCADE,
+            flag              TEXT    CHECK (flag IN ('seen', 'flagged', 'answered', 'forwarded')),
+            value             INTEGER,
+            created_utc       INTEGER NOT NULL,
+            attempts          INTEGER NOT NULL DEFAULT 0,
+            last_error        TEXT
+        );
+
+        INSERT INTO sync_ops_new SELECT * FROM sync_ops;
+        DROP TABLE sync_ops;
+        ALTER TABLE sync_ops_new RENAME TO sync_ops;
+
+        CREATE INDEX sync_ops_by_folder ON sync_ops (folder_id, server_uid);
+        CREATE INDEX sync_ops_by_message ON sync_ops (message_id);
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>

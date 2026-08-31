@@ -221,6 +221,8 @@ public sealed class MessageCells : Grid
                     VerticalAlignment = VerticalAlignment.Center,
                 };
                 icon[!MessageStateIcon.IsUnreadProperty] = new Avalonia.Data.Binding(nameof(MessageRow.IsUnread));
+                icon[!MessageStateIcon.IsAnsweredProperty] = new Avalonia.Data.Binding(nameof(MessageRow.IsAnswered));
+                icon[!MessageStateIcon.IsForwardedProperty] = new Avalonia.Data.Binding(nameof(MessageRow.IsForwarded));
                 return icon;
             }
             case ViewFields.Flag:

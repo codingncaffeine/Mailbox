@@ -140,7 +140,8 @@ public partial class MainWindow
         }
 
         using var stream = new MemoryStream(raw);
-        Respond(shell, kind, MimeKit.MimeMessage.Load(stream));
+        Respond(shell, kind, MimeKit.MimeMessage.Load(stream),
+            source: new OpenedMessageContext(account.Account.Address, message.MessageId, FolderId: 0));
     }
 
     /// <summary>Everything showing to-dos reads the store again: the module, the bar, the mail list.</summary>

@@ -167,8 +167,8 @@ public class MailStoreTests : IDisposable
         // stores already migrated past it differing from a fresh one — and since the schema
         // fixtures landed, detectably: AuditStoreMigrationTests takes each step from the commit
         // that introduced it and fails on the exact step that moved. This count is the cheap
-        // tripwire in front of that; 31 is the top level's unique name, twins renamed first.
-        Assert.Equal(34, Migrations.Steps.Count);
+        // tripwire in front of that; 35 is the answered and forwarded marks.
+        Assert.Equal(35, Migrations.Steps.Count);
         Assert.Equal(Migrations.Steps.Count, Migrations.Latest);
     }
 }

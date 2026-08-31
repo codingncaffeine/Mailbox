@@ -318,12 +318,14 @@ public sealed class MailRepository(MailStore store)
                 INSERT OR IGNORE INTO messages
                     (folder_id, blob_id, server_uid, message_id, in_reply_to, thread_key,
                      from_name, from_address, subject, preview, body_text, sent_utc, received_utc,
-                     size_bytes, is_read, is_flagged, has_attachment, importance, to_addresses, cc_addresses, expires_utc,
+                     size_bytes, is_read, is_flagged, answered, forwarded, has_attachment, importance,
+                     to_addresses, cc_addresses, expires_utc,
                      header_only, feed_link, feed_image, feed_words, item_type)
                 VALUES
                     ($folder, $blob, $uid, $messageId, $inReplyTo, $thread,
                      $fromName, $fromAddress, $subject, $preview, $bodyText, $sent, $received,
-                     $size, $read, $flagged, $attachment, $importance, $to, $cc, $expires,
+                     $size, $read, $flagged, $answered, $forwarded, $attachment, $importance,
+                     $to, $cc, $expires,
                      $headerOnly, $feedLink, $feedImage, $feedWords, $itemType)
                 """,
                 ("$folder", folderId),
@@ -343,6 +345,8 @@ public sealed class MailRepository(MailStore store)
                 ("$size", message.SizeBytes),
                 ("$read", message.IsRead ? 1 : 0),
                 ("$flagged", message.IsFlagged ? 1 : 0),
+                ("$answered", message.IsAnswered ? 1 : 0),
+                ("$forwarded", message.IsForwarded ? 1 : 0),
                 ("$attachment", message.HasAttachment ? 1 : 0),
                 ("$importance", message.Importance),
                 ("$to", string.Join(',', message.To)),
@@ -508,15 +512,26 @@ public sealed class MailRepository(MailStore store)
     /// Takes the server's word for a message's flags. Used by the sync for changes made
     /// elsewhere; the journal is not written, because this is the server telling us.
     /// </summary>
-    public void ApplyServerFlags(long messageId, bool read, bool flagged) => _store.Execute(
-        "UPDATE messages SET is_read = $read, is_flagged = $flagged WHERE id = $id",
-        ("$read", read ? 1 : 0), ("$flagged", flagged ? 1 : 0), ("$id", messageId));
+    /// <remarks>
+    /// Answered and forwarded only ever accrete from the server: a reply sent from another
+    /// client sets them here, but their absence clears nothing — a server that does not keep
+    /// the $Forwarded keyword would otherwise wipe the mark this store made itself.
+    /// </remarks>
+    public void ApplyServerFlags(long messageId, bool read, bool flagged,
+        bool answered = false, bool forwarded = false) => _store.Execute(
+        """
+        UPDATE messages SET is_read = $read, is_flagged = $flagged,
+            answered = max(answered, $answered), forwarded = max(forwarded, $forwarded)
+        WHERE id = $id
+        """,
+        ("$read", read ? 1 : 0), ("$flagged", flagged ? 1 : 0),
+        ("$answered", answered ? 1 : 0), ("$forwarded", forwarded ? 1 : 0), ("$id", messageId));
 
-    /// <summary>The read and flagged state of a row, for deciding whether the server differs.</summary>
-    public (bool IsRead, bool IsFlagged)? Flags(long messageId) => _store.Query(
-        "SELECT is_read, is_flagged FROM messages WHERE id = $id",
-        r => (r.GetInt32(0) != 0, r.GetInt32(1) != 0), ("$id", messageId))
-        .Select(f => ((bool, bool)?)f).FirstOrDefault();
+    /// <summary>The flag states of a row, for deciding whether the server differs.</summary>
+    public (bool IsRead, bool IsFlagged, bool IsAnswered, bool IsForwarded)? Flags(long messageId) => _store.Query(
+        "SELECT is_read, is_flagged, answered, forwarded FROM messages WHERE id = $id",
+        r => (r.GetInt32(0) != 0, r.GetInt32(1) != 0, r.GetInt32(2) != 0, r.GetInt32(3) != 0), ("$id", messageId))
+        .Select(f => ((bool, bool, bool, bool)?)f).FirstOrDefault();
 
     /// <summary>
     /// Removes rows the server no longer has. Not journalled: the change came from the server.
@@ -905,6 +920,37 @@ public sealed class MailRepository(MailStore store)
                 $"UPDATE messages SET is_flagged = $flagged WHERE id IN ({Ids(messageIds)})",
                 ("$flagged", flagged ? 1 : 0));
             JournalFlag(messageIds, SyncFlag.Flagged, flagged);
+            return changed;
+        });
+    }
+
+    /// <summary>
+    /// Marks messages answered — a reply to them was queued — and tells the server. Never
+    /// cleared: the reference has no gesture that unanswers a message, and neither does IMAP.
+    /// </summary>
+    public int SetAnswered(IReadOnlyCollection<long> messageIds)
+    {
+        if (messageIds.Count == 0) return 0;
+
+        return _store.InTransaction(() =>
+        {
+            var changed = _store.Execute(
+                $"UPDATE messages SET answered = 1 WHERE id IN ({Ids(messageIds)})");
+            JournalFlag(messageIds, SyncFlag.Answered, true);
+            return changed;
+        });
+    }
+
+    /// <summary>Marks messages forwarded, as <see cref="SetAnswered"/> marks them answered.</summary>
+    public int SetForwarded(IReadOnlyCollection<long> messageIds)
+    {
+        if (messageIds.Count == 0) return 0;
+
+        return _store.InTransaction(() =>
+        {
+            var changed = _store.Execute(
+                $"UPDATE messages SET forwarded = 1 WHERE id IN ({Ids(messageIds)})");
+            JournalFlag(messageIds, SyncFlag.Forwarded, true);
             return changed;
         });
     }
@@ -1714,13 +1760,25 @@ public sealed class MailRepository(MailStore store)
         r.IsDBNull(3) ? null : r.GetString(3),
         r.IsDBNull(4) ? null : r.GetInt64(4),
         r.IsDBNull(5) ? null : r.GetInt64(5),
-        r.IsDBNull(6) ? null : r.GetString(6) == "flagged" ? SyncFlag.Flagged : SyncFlag.Seen,
+        r.IsDBNull(6) ? null : r.GetString(6) switch
+        {
+            "flagged" => SyncFlag.Flagged,
+            "answered" => SyncFlag.Answered,
+            "forwarded" => SyncFlag.Forwarded,
+            _ => SyncFlag.Seen,
+        },
         r.IsDBNull(7) ? null : r.GetInt64(7) != 0,
         DateTimeOffset.FromUnixTimeSeconds(r.GetInt64(8)),
         r.GetInt32(9),
         r.IsDBNull(10) ? null : r.GetString(10));
 
-    private static string Wire(SyncFlag flag) => flag == SyncFlag.Flagged ? "flagged" : "seen";
+    private static string Wire(SyncFlag flag) => flag switch
+    {
+        SyncFlag.Flagged => "flagged",
+        SyncFlag.Answered => "answered",
+        SyncFlag.Forwarded => "forwarded",
+        _ => "seen",
+    };
 
     private static long Now() => DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
@@ -3102,6 +3160,8 @@ public sealed class MailRepository(MailStore store)
         r.GetInt32(r.GetOrdinal("is_flagged")) != 0,
         r.GetInt32(r.GetOrdinal("has_attachment")) != 0)
     {
+        IsAnswered = r.GetInt32(r.GetOrdinal("answered")) != 0,
+        IsForwarded = r.GetInt32(r.GetOrdinal("forwarded")) != 0,
         FollowUpDue = NullableLong(r, "follow_up_due") is { } due
             ? DateTimeOffset.FromUnixTimeSeconds(due)
             : null,

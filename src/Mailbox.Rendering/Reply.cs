@@ -88,6 +88,15 @@ public sealed record ReplyDraft
     /// prefixing are done on the loaded document rather than in this markup.
     /// </summary>
     public QuoteStyle Style { get; init; } = QuoteStyle.Include;
+
+    /// <summary>
+    /// The stored row this responds to — its account's address and its id — so the send can
+    /// stamp it answered or forwarded, the Icon column's other two states. Null for a draft
+    /// with no stored original: a new message, a forward built from loose bytes.
+    /// </summary>
+    public string? SourceAddress { get; init; }
+
+    public long? SourceId { get; init; }
 }
 
 /// <summary>

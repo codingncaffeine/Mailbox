@@ -411,6 +411,20 @@ public sealed class MessageRow(
         set { if (Set(ref field, value)) Raise(nameof(FlagGlyph)); }
     }
 
+    /// <summary>Whether a reply to this message went out — the Icon column's left arrow.</summary>
+    public bool IsAnswered
+    {
+        get;
+        set => Set(ref field, value);
+    }
+
+    /// <summary>Whether this message was forwarded — the Icon column's right arrow.</summary>
+    public bool IsForwarded
+    {
+        get;
+        set => Set(ref field, value);
+    }
+
     /// <summary>Whether a follow-up on this message has been marked complete.</summary>
     public bool FollowUpComplete { get; init; }
 
@@ -462,6 +476,8 @@ public sealed class MessageRow(
 
             if (HasAttachment) said.Append(" With attachment.");
             if (IsFlagged) said.Append(" Flagged.");
+            if (IsAnswered) said.Append(" Replied to.");
+            else if (IsForwarded) said.Append(" Forwarded.");
             if (FolderLabel.Length > 0) said.Append(" In ").Append(FolderLabel).Append('.');
 
             return said.ToString();
@@ -1363,6 +1379,8 @@ public sealed partial class ShellViewModel : ObservableObject
                 SizeBytes = summary.SizeBytes,
                 HasAttachment = summary.HasAttachment,
                 IsFlagged = summary.IsFlagged,
+                IsAnswered = summary.IsAnswered,
+                IsForwarded = summary.IsForwarded,
                 FollowUpComplete = summary.FollowUpComplete,
                 FollowUpDue = summary.FollowUpDue,
                 FollowUpStart = summary.FollowUpStart,
@@ -1458,6 +1476,8 @@ public sealed partial class ShellViewModel : ObservableObject
                     SizeBytes = summary.SizeBytes,
                     HasAttachment = summary.HasAttachment,
                     IsFlagged = summary.IsFlagged,
+                    IsAnswered = summary.IsAnswered,
+                    IsForwarded = summary.IsForwarded,
                     FollowUpComplete = summary.FollowUpComplete,
                     FollowUpDue = summary.FollowUpDue,
                 FollowUpStart = summary.FollowUpStart,
@@ -1774,6 +1794,8 @@ public sealed partial class ShellViewModel : ObservableObject
                     SizeBytes = summary.SizeBytes,
                     HasAttachment = summary.HasAttachment,
                     IsFlagged = summary.IsFlagged,
+                    IsAnswered = summary.IsAnswered,
+                    IsForwarded = summary.IsForwarded,
                     FollowUpComplete = summary.FollowUpComplete,
                     FollowUpDue = summary.FollowUpDue,
                 FollowUpStart = summary.FollowUpStart,
@@ -1833,6 +1855,8 @@ public sealed partial class ShellViewModel : ObservableObject
                 SizeBytes = summary.SizeBytes,
                 HasAttachment = summary.HasAttachment,
                 IsFlagged = summary.IsFlagged,
+                IsAnswered = summary.IsAnswered,
+                IsForwarded = summary.IsForwarded,
                 FollowUpComplete = summary.FollowUpComplete,
                 FollowUpDue = summary.FollowUpDue,
                 FollowUpStart = summary.FollowUpStart,

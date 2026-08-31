@@ -266,6 +266,82 @@ public class ImapSyncTests
     }
 
     [Fact]
+    public async Task AnsweredAndForwardedReachTheServerAsFlagAndKeyword()
+    {
+        var (store, repo, accountId) = Imap();
+        using var _ = store;
+
+        var server = new FakeImap();
+        server.Deliver("INBOX", "To be replied to");
+        await Sync(repo, server).SyncAsync(Connection(), null, Ct);
+
+        var inbox = repo.FolderWithRole(accountId, FolderRole.Inbox)!;
+        var message = repo.Messages(inbox.Id).Single();
+
+        repo.SetAnswered([message.Id]);
+        repo.SetForwarded([message.Id]);
+
+        var result = await Sync(repo, server).SyncAsync(Connection(), null, Ct);
+
+        Assert.Equal(2, result.OpsPlayed);
+        var onServer = server.Contents("INBOX").Single();
+        Assert.True(onServer.Flags.HasFlag(MessageFlags.Answered));
+        Assert.True(onServer.Forwarded);
+        Assert.Contains(server.KeywordStores, k => k.Keyword == "$Forwarded" && k.Set);
+        Assert.Empty(repo.PendingOps());
+    }
+
+    [Fact]
+    public async Task TheServersAnsweredAndForwardedMarksComeHome()
+    {
+        var (store, repo, accountId) = Imap();
+        using var _ = store;
+
+        var server = new FakeImap();
+        server.Deliver("INBOX", "Answered elsewhere");
+        await Sync(repo, server).SyncAsync(Connection(), null, Ct);
+
+        var inbox = repo.FolderWithRole(accountId, FolderRole.Inbox)!;
+        var before = repo.Messages(inbox.Id).Single();
+        Assert.False(before.IsAnswered);
+        Assert.False(before.IsForwarded);
+
+        // Another client replied to and forwarded the message on the server.
+        var onServer = server.Contents("INBOX").Single();
+        onServer.Flags |= MessageFlags.Answered;
+        onServer.Forwarded = true;
+
+        await Sync(repo, server).SyncAsync(Connection(), null, Ct);
+
+        var after = repo.Messages(inbox.Id).Single();
+        Assert.True(after.IsAnswered);
+        Assert.True(after.IsForwarded);
+    }
+
+    [Fact]
+    public async Task AServerWithoutTheKeywordDoesNotUnforwardTheStore()
+    {
+        var (store, repo, accountId) = Imap();
+        using var _ = store;
+
+        var server = new FakeImap();
+        server.Deliver("INBOX", "Forwarded here, unmarked there");
+        await Sync(repo, server).SyncAsync(Connection(), null, Ct);
+
+        var inbox = repo.FolderWithRole(accountId, FolderRole.Inbox)!;
+        var message = repo.Messages(inbox.Id).Single();
+
+        repo.SetForwarded([message.Id]);
+        await Sync(repo, server).SyncAsync(Connection(), null, Ct);
+
+        // The server dropped the keyword — some do — and reports the message bare.
+        server.Contents("INBOX").Single().Forwarded = false;
+        await Sync(repo, server).SyncAsync(Connection(), null, Ct);
+
+        Assert.True(repo.Messages(inbox.Id).Single().IsForwarded);
+    }
+
+    [Fact]
     public async Task AMoveIsPlayedAndTheMessageKeepsItsIdentityInTheNewFolder()
     {
         var (store, repo, accountId) = Imap();

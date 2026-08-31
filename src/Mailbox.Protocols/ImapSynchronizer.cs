@@ -214,8 +214,21 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
 
                 await session.OpenAsync(folder.ImapPath, cancellation);
                 var uids = ops.Select(o => long.Parse(o.ServerUid!)).ToList();
-                var flag = group.Key.Flag == SyncFlag.Flagged ? MessageFlags.Flagged : MessageFlags.Seen;
-                await session.StoreFlagsAsync(uids, flag, group.Key.Value == true, cancellation);
+                if (group.Key.Flag == SyncFlag.Forwarded)
+                {
+                    // $Forwarded is a keyword, which the system-flag STORE cannot carry.
+                    await session.StoreKeywordAsync(uids, "$Forwarded", group.Key.Value == true, cancellation);
+                }
+                else
+                {
+                    var flag = group.Key.Flag switch
+                    {
+                        SyncFlag.Flagged => MessageFlags.Flagged,
+                        SyncFlag.Answered => MessageFlags.Answered,
+                        _ => MessageFlags.Seen,
+                    };
+                    await session.StoreFlagsAsync(uids, flag, group.Key.Value == true, cancellation);
+                }
 
                 _repository.CompleteOps(ops.Select(o => o.Id));
                 played += ops.Count;
@@ -332,6 +345,9 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
         {
             if (state.IsRead) flags |= MessageFlags.Seen;
             if (state.IsFlagged) flags |= MessageFlags.Flagged;
+            // The answered mark travels with an append; $Forwarded cannot — it is a keyword,
+            // and this append's flags are the system set.
+            if (state.IsAnswered) flags |= MessageFlags.Answered;
         }
 
         return flags;
@@ -604,7 +620,8 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
             // value is the newer one until the server has been told.
             if (_repository.PendingUidsIn(folder.Id).Contains(info.Uid.ToString())) continue;
 
-            _repository.ApplyServerFlags(messageId, read, flagged);
+            _repository.ApplyServerFlags(messageId, read, flagged,
+                info.Flags.HasFlag(MessageFlags.Answered), info.IsForwarded);
         }
     }
 
@@ -669,7 +686,11 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
             await message.WriteToAsync(buffer, cancellation);
             var raw = buffer.ToArray();
 
-            var summary = MessageMapper.ToSummary(message, uid.ToString(), raw.Length, _now(), read, flagged);
+            var summary = MessageMapper.ToSummary(message, uid.ToString(), raw.Length, _now(), read, flagged) with
+            {
+                IsAnswered = meta2?.Flags.HasFlag(MessageFlags.Answered) ?? false,
+                IsForwarded = meta2?.IsForwarded ?? false,
+            };
             var id = _repository.AddMessage(folder.Id, summary, raw);
 
             if (id is { } messageId)

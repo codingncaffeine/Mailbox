@@ -4050,7 +4050,7 @@ public partial class MainWindow : Window
         // fields and all, before the window goes; Pop Out is then the way back to a window.
         window.RespondRequested += (_, kind) =>
         {
-            Respond(shell, kind, window.Current, covered: window.Covered);
+            Respond(shell, kind, window.Current, covered: window.Covered, source: window.Context);
             window.Close();
             Activate();
         };
@@ -5799,13 +5799,20 @@ public partial class MainWindow : Window
     }
 
     private void Respond(ShellViewModel shell, ReplyKind kind, MimeKit.MimeMessage? message = null,
-        IReadOnlyList<string>? to = null, ProtectedHeaders? covered = null)
+        IReadOnlyList<string>? to = null, ProtectedHeaders? covered = null,
+        OpenedMessageContext? source = null)
     {
         if ((message ?? _openMessage) is not { } original)
         {
             shell.StatusRight = "Select a message to reply to.";
             return;
         }
+
+        // The row being answered, for the send to stamp: the caller's own when it has one — a
+        // message window's — else the selection the open message came from.
+        source ??= message is null && shell.SelectedMessage is { } row
+            ? new OpenedMessageContext(row.Address, row.Id, row.FolderId)
+            : null;
 
         // RFC 9788 §4.4.4 and §6.2, both MUSTs: a reply to a message that carried its own header
         // fields is addressed from those and from nothing outside them. The attack is a replay with
@@ -5829,6 +5836,11 @@ public partial class MainWindow : Window
 
         // A Quick Step's forward already knows who to: the To line is filled in.
         if (to is { Count: > 0 }) draft = draft with { To = to };
+
+        if (source is { } from)
+        {
+            draft = draft with { SourceAddress = from.Address, SourceId = from.MessageId };
+        }
 
         // The account the message arrived in, which is what a reply means.
         var address = shell.CurrentAddress;

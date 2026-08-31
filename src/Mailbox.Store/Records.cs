@@ -100,6 +100,12 @@ public enum SyncFlag
 {
     Seen,
     Flagged,
+
+    /// <summary>The server's \Answered — a reply to the message has been sent.</summary>
+    Answered,
+
+    /// <summary>The $Forwarded keyword — most servers keep it, none is required to.</summary>
+    Forwarded,
 }
 
 /// <summary>
@@ -153,6 +159,12 @@ public sealed record MessageSummary(
     /// the whole body, so a search reaches a word buried in it. Empty for a row built by hand.
     /// </summary>
     public string BodyText { get; init; } = string.Empty;
+
+    /// <summary>Whether a reply to this message has been sent — the Icon column's left arrow.</summary>
+    public bool IsAnswered { get; init; }
+
+    /// <summary>Whether this message has been forwarded — the Icon column's right arrow.</summary>
+    public bool IsForwarded { get; init; }
 
     /// <summary>When a follow-up is due, or null for a flag with no date or no flag at all.</summary>
     public DateTimeOffset? FollowUpDue { get; init; }

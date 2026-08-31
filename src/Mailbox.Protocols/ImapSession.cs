@@ -50,7 +50,9 @@ public sealed record RemoteFolder(
 public sealed record FolderState(long UidValidity, long UidNext, long HighestModSeq, bool SupportsModSeq, int Count);
 
 /// <summary>What the server holds about a message short of the message itself.</summary>
-public sealed record RemoteMessageInfo(long Uid, MessageFlags Flags, DateTimeOffset? InternalDate, long Size);
+/// <param name="IsForwarded">The $Forwarded keyword, which lives outside <see cref="MessageFlags"/>.</param>
+public sealed record RemoteMessageInfo(long Uid, MessageFlags Flags, DateTimeOffset? InternalDate, long Size,
+    bool IsForwarded = false);
 
 /// <summary>
 /// A message described but not fetched: what Download Headers brings back.
@@ -71,7 +73,9 @@ public sealed record RemoteHeader(
     DateTimeOffset Received,
     long Size,
     bool IsRead,
-    bool IsFlagged);
+    bool IsFlagged,
+    bool IsAnswered = false,
+    bool IsForwarded = false);
 
 /// <summary>
 /// The part of IMAP this application uses.
@@ -149,6 +153,9 @@ public interface IImapSession : IDisposable
     Task<MimeMessage?> GetMessageAsync(long uid, CancellationToken cancellation);
 
     Task StoreFlagsAsync(IReadOnlyList<long> uids, MessageFlags flags, bool set, CancellationToken cancellation);
+
+    /// <summary>Sets or clears a keyword — $Forwarded — which system flags cannot carry.</summary>
+    Task StoreKeywordAsync(IReadOnlyList<long> uids, string keyword, bool set, CancellationToken cancellation);
 
     /// <summary>
     /// Moves messages out of the open folder. Returns the old-to-new UID map when the server
@@ -459,14 +466,21 @@ public sealed class MailKitImapSession : IImapSession
             Received: summary.InternalDate ?? envelope?.Date ?? DateTimeOffset.UtcNow,
             Size: summary.Size ?? 0,
             IsRead: flags.HasFlag(MessageFlags.Seen),
-            IsFlagged: flags.HasFlag(MessageFlags.Flagged));
+            IsFlagged: flags.HasFlag(MessageFlags.Flagged),
+            IsAnswered: flags.HasFlag(MessageFlags.Answered),
+            IsForwarded: HasForwardedKeyword(summary));
     }
 
     private static RemoteMessageInfo Info(IMessageSummary summary) => new(
         summary.UniqueId.Id,
         summary.Flags ?? MessageFlags.None,
         summary.InternalDate,
-        summary.Size ?? 0);
+        summary.Size ?? 0,
+        IsForwarded: HasForwardedKeyword(summary));
+
+    /// <summary>Keywords are case-insensitive on the wire, so the comparison is too.</summary>
+    private static bool HasForwardedKeyword(IMessageSummary summary)
+        => summary.Keywords?.Any(k => string.Equals(k, "$Forwarded", StringComparison.OrdinalIgnoreCase)) == true;
 
     public async Task<MimeMessage?> GetMessageAsync(long uid, CancellationToken cancellation)
     {
@@ -486,6 +500,15 @@ public sealed class MailKitImapSession : IImapSession
         return set
             ? Open.AddFlagsAsync(ids, flags, true, cancellation)
             : Open.RemoveFlagsAsync(ids, flags, true, cancellation);
+    }
+
+    public Task StoreKeywordAsync(IReadOnlyList<long> uids, string keyword, bool set, CancellationToken cancellation)
+    {
+        IList<UniqueId> ids = [.. uids.Select(u => new UniqueId((uint)u))];
+        var keywords = new HashSet<string> { keyword };
+        return set
+            ? Open.AddFlagsAsync(ids, MessageFlags.None, keywords, true, cancellation)
+            : Open.RemoveFlagsAsync(ids, MessageFlags.None, keywords, true, cancellation);
     }
 
     public async Task<IReadOnlyDictionary<long, long>> MoveAsync(IReadOnlyList<long> uids, string destinationPath, CancellationToken cancellation)

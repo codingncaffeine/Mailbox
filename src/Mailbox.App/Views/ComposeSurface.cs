@@ -240,6 +240,12 @@ public sealed partial class ComposeSurface : UserControl
     private string _pristineQuoted = string.Empty;
 
     /// <summary>
+    /// The stored row this message responds to and how, or null for a new message. The send
+    /// stamps it — answered for a reply, forwarded for a forward — once the message is queued.
+    /// </summary>
+    private (string Address, long Id, ReplyKind Kind)? _respondingTo;
+
+    /// <summary>
     /// The blocks the automatic signature occupies, so changing the sending account can replace
     /// that signature in place. Empty when none stands — the account has no signature, or a
     /// switch took it out.
@@ -637,6 +643,11 @@ public sealed partial class ComposeSurface : UserControl
         _subject.Text = draft.Subject;
         _inReplyTo = draft.InReplyTo;
         _references = draft.References;
+
+        // The row this responds to, kept so the send can stamp it answered or forwarded.
+        _respondingTo = draft.SourceAddress is { Length: > 0 } sourceAddress && draft.SourceId is { } sourceId
+            ? (sourceAddress, sourceId, kind)
+            : null;
 
         _carried.AddRange(draft.Attachments);
         RefreshAttachmentStrip();
@@ -2673,6 +2684,18 @@ public sealed partial class ComposeSurface : UserControl
 
             _sent = true;
             _autosave?.Stop();
+
+            // The Icon column's other two states: the original is stamped the moment its
+            // reply or forward is queued, as the reference stamps its own — not at delivery,
+            // which the writer never watches. The stamp journals to the server too.
+            if (_respondingTo is { } responding
+                && _accounts?.Find(responding.Address) is { } sourceAccount)
+            {
+                if (responding.Kind == ReplyKind.Forward) sourceAccount.Mail.SetForwarded([responding.Id]);
+                else sourceAccount.Mail.SetAnswered([responding.Id]);
+                Log.Info($"Compose: {responding.Address}/{responding.Id} stamped "
+                         + $"{(responding.Kind == ReplyKind.Forward ? "forwarded" : "answered")}.");
+            }
 
             // A draft that has been sent is no longer a draft.
             if (_draftId is { } draft) account.Mail.DeleteMessage(draft);

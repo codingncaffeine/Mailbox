@@ -18,6 +18,10 @@ internal sealed class FakeImap : IImapSession
         public long Uid { get; set; } = uid;
         public MimeMessage Message { get; } = message;
         public MessageFlags Flags { get; set; }
+
+        /// <summary>The $Forwarded keyword, which <see cref="MessageFlags"/> cannot carry.</summary>
+        public bool Forwarded { get; set; }
+
         public DateTimeOffset Internal { get; set; } = new(2026, 8, 1, 9, 0, 0, TimeSpan.Zero);
     }
 
@@ -189,7 +193,7 @@ internal sealed class FakeImap : IImapSession
     public Task<IReadOnlyList<RemoteMessageInfo>> FetchInfoAsync(IReadOnlyList<long> uids, CancellationToken c)
         => Task.FromResult<IReadOnlyList<RemoteMessageInfo>>(
             [.. Open.Messages.Where(m => uids.Contains(m.Uid))
-                .Select(m => new RemoteMessageInfo(m.Uid, m.Flags, m.Internal, 100))]);
+                .Select(m => new RemoteMessageInfo(m.Uid, m.Flags, m.Internal, 100, m.Forwarded))]);
 
     /// <summary>Download Headers: the envelope of each message, without its body.</summary>
     public Task<IReadOnlyList<RemoteHeader>> FetchHeadersAsync(IReadOnlyList<long> uids, CancellationToken c)
@@ -208,7 +212,7 @@ internal sealed class FakeImap : IImapSession
 
     public Task<IReadOnlyList<RemoteMessageInfo>> FetchFlagsChangedSinceAsync(long modSeq, CancellationToken c)
         => Task.FromResult<IReadOnlyList<RemoteMessageInfo>>(
-            [.. Open.Messages.Select(m => new RemoteMessageInfo(m.Uid, m.Flags, m.Internal, 100))]);
+            [.. Open.Messages.Select(m => new RemoteMessageInfo(m.Uid, m.Flags, m.Internal, 100, m.Forwarded))]);
 
     public Task<MimeMessage?> GetMessageAsync(long uid, CancellationToken c)
         => Task.FromResult(Open.Messages.FirstOrDefault(m => m.Uid == uid)?.Message);
@@ -223,6 +227,23 @@ internal sealed class FakeImap : IImapSession
             if (Open.Messages.FirstOrDefault(m => m.Uid == uid) is { } m)
             {
                 m.Flags = set ? m.Flags | flags : m.Flags & ~flags;
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public List<(long Uid, string Keyword, bool Set)> KeywordStores { get; } = [];
+
+    public Task StoreKeywordAsync(IReadOnlyList<long> uids, string keyword, bool set, CancellationToken c)
+    {
+        foreach (var uid in uids)
+        {
+            KeywordStores.Add((uid, keyword, set));
+            if (string.Equals(keyword, "$Forwarded", StringComparison.OrdinalIgnoreCase)
+                && Open.Messages.FirstOrDefault(m => m.Uid == uid) is { } m)
+            {
+                m.Forwarded = set;
             }
         }
 

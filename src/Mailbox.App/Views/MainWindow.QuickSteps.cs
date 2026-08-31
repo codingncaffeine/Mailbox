@@ -215,15 +215,15 @@ public partial class MainWindow
             }
 
             case QuickStepKind.Reply:
-                if (original is not null) Respond(shell, ReplyKind.Reply, original);
+                if (original is not null) Respond(shell, ReplyKind.Reply, original, source: SelectedContext(shell));
                 break;
 
             case QuickStepKind.ReplyAll:
-                if (original is not null) Respond(shell, ReplyKind.ReplyAll, original);
+                if (original is not null) Respond(shell, ReplyKind.ReplyAll, original, source: SelectedContext(shell));
                 break;
 
             case QuickStepKind.Forward:
-                if (original is not null) Respond(shell, ReplyKind.Forward, original, action.Values);
+                if (original is not null) Respond(shell, ReplyKind.Forward, original, action.Values, source: SelectedContext(shell));
                 break;
 
             case QuickStepKind.ForwardAsAttachment:
@@ -231,6 +231,12 @@ public partial class MainWindow
                 break;
         }
     }
+
+    /// <summary>The selected row as a source to stamp, which is the row a Quick Step ran on.</summary>
+    private static OpenedMessageContext? SelectedContext(ShellViewModel shell)
+        => shell.SelectedMessage is { } row
+            ? new OpenedMessageContext(row.Address, row.Id, row.FolderId)
+            : null;
 
     /// <summary>
     /// Forward as an attachment: a new message carrying the whole original as a
