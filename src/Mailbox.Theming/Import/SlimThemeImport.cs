@@ -14,7 +14,8 @@ public sealed record ImportResult(
     IReadOnlyList<string> Unmapped,
     IReadOnlyList<string> Skipped,
     IReadOnlyList<RepairedInk> Repaired,
-    IReadOnlyList<ContrastFinding> Residual);
+    IReadOnlyList<ContrastFinding> Residual,
+    string Origin = "browser");
 
 /// <summary>
 /// The slim mapper: a browser theme's caption strip and left chrome onto Mailbox, and nothing

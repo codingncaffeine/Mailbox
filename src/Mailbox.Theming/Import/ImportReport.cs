@@ -13,15 +13,19 @@ public static class ImportReport
         var result = outcome.Result;
         var lines = new List<string>
         {
-            $"\"{result.File.Name}\" {(outcome.Updated ? "updated" : "imported")} as \"{result.File.Id}\", "
-            + $"based on {result.BaseId} ({result.DarkSignal}).",
+            result.Origin == "pack"
+                ? $"\"{result.File.Name}\" {(outcome.Updated ? "updated" : "installed")} as \"{result.File.Id}\", based on {result.BaseId}."
+                : $"\"{result.File.Name}\" {(outcome.Updated ? "updated" : "imported")} as \"{result.File.Id}\", "
+                  + $"based on {result.BaseId} ({result.DarkSignal}).",
         };
 
         // An images-only theme is the common case and a good result: a few tokens plus a
         // backdrop inheriting the rest from the base — said in those words, not as a ratio.
         lines.Add(result.TokensWritten.Count == 0
             ? "It brings no colours of its own; the base stands whole."
-            : $"It sets {result.TokensWritten.Count} token(s) — the caption strip and left chrome — and the base carries every content surface.");
+            : result.Origin == "pack"
+                ? $"It carries {result.TokensWritten.Count} token(s) of its own; everything else is its base's."
+                : $"It sets {result.TokensWritten.Count} token(s) — the caption strip and left chrome — and the base carries every content surface.");
 
         if (result.Repaired.Count > 0)
         {

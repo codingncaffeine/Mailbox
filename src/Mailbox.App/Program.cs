@@ -36,6 +36,24 @@ internal static class Program
             return ImportTheme(args[1]);
         }
 
+        // `mailbox --export-theme-pack <id> [path]` zips a user theme with its images — the
+        // form a theme travels in when it carries more than colours.
+        if (args.Length >= 2 && string.Equals(args[0], "--export-theme-pack", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                var pack = Mailbox.Theming.Import.ThemePack.Export(
+                    args[1], Mailbox.Theming.Files.ThemeLibrary.DefaultDirectory(), args.Length > 2 ? args[2] : null);
+                Console.WriteLine($"Wrote {pack}. Anyone can install it with --import-theme, or by choosing it from Import… in Options.");
+                return 0;
+            }
+            catch (Exception ex) when (ex is ArgumentException or FileNotFoundException or IOException or UnauthorizedAccessException)
+            {
+                Console.Error.WriteLine(ex.Message);
+                return 2;
+            }
+        }
+
         // One instance per session: a second launch — a mailto: click while Mailbox is open —
         // hands its command line to the running one and exits, rather than starting a second
         // copy. Skipped for a capture run, where the fidelity harness deliberately starts many
@@ -98,13 +116,15 @@ internal static class Program
 
     private static int ImportTheme(string path)
     {
-        // The image half wants a decoder, which wants the rendering platform. A box where it
-        // cannot come up — a bare build server — still imports the colours; the report says
-        // the image was skipped rather than pretending.
+        // The image half wants a decoder, which wants the rendering platform — and nothing
+        // more: a bare Application, never Mailbox's own, whose startup would open the real
+        // stores for what is a file-conversion command. A box where the platform cannot come
+        // up — a bare build server — still imports the colours; the report says the image was
+        // skipped rather than pretending.
         Mailbox.Theming.Import.ImageReencoder? reencode = null;
         try
         {
-            BuildAvaloniaApp().SetupWithoutStarting();
+            AppBuilder.Configure<Application>().UsePlatformDetect().SetupWithoutStarting();
             reencode = Theming.ThemeImportDoor.Reencode;
         }
         catch (Exception ex)

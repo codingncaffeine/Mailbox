@@ -49,6 +49,13 @@ public static class ImportedThemes
         ArgumentException.ThrowIfNullOrWhiteSpace(packagePath);
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
 
+        // One door for both shapes: a zip carrying a Mailbox theme at its root is a theme
+        // pack; everything else is read as a browser theme.
+        if (File.Exists(packagePath) && ThemePack.IsPack(packagePath))
+        {
+            return ThemePack.Import(packagePath, directory, reencode);
+        }
+
         using var package = BrowserThemePackage.Open(packagePath);
         var theme = BrowserThemeManifest.Parse(package.ManifestJson);
         var notes = new List<string>();
