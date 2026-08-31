@@ -2606,6 +2606,30 @@ public sealed partial class ComposeSurface : UserControl
         // send goes ahead — a spelling check is a chance to fix things, not a gate.
         if (App.MailOptions.CheckSpellingBeforeSend) await CheckSpellingAsync(quietWhenClean: true);
 
+        // "Warn me when I send a message that may be missing an attachment": the writer's own
+        // words speak of one and nothing is attached. The quoted original does not count —
+        // its "attached" was somebody else's promise — which is the same pristine-tail cut
+        // the spelling check makes.
+        if (App.MailOptions.WarnMissingAttachment
+            && _attachments.Count == 0 && _carried.Count == 0)
+        {
+            var typed = _body.GetPlainText();
+            if (_pristineQuoted.Length > 0)
+            {
+                typed = SpellCheck.WithoutPristineTail(typed, _pristineQuoted);
+            }
+
+            if (AttachmentReminder.MentionsAttachment(typed)
+                && Owner is { } owner
+                && !await Confirm.AskAsync(owner, "Attachment reminder",
+                    "The message mentions an attachment, but nothing is attached.\n"
+                    + "Send it anyway?", "Send Anyway"))
+            {
+                Report("The send was stopped — the message mentions an attachment and has none.");
+                return;
+            }
+        }
+
         MimeMessage message;
         try
         {

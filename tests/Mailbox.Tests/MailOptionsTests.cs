@@ -55,6 +55,9 @@ public class MailOptionsTests : IDisposable
 
         // "After moving or deleting an open item": back to the folder, as the capture shows.
         Assert.Equal(AfterOpenItem.ReturnToFolder, options.AfterOpenItem);
+
+        // The attachment reminder ships on, as the capture shows it ticked.
+        Assert.True(options.WarnMissingAttachment);
     }
 
     /// <summary>The after-open-item combo, in its own order, out-of-range falling to the default.</summary>

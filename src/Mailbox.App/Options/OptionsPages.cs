@@ -223,6 +223,8 @@ public static class OptionsPages
                 new CheckRow("CTRL+ENTER sends a message", true) { Key = MailOptions.CtrlEnterSendsKey },
                 // Live: the switch and the Empty button share the row, as the reference has it.
                 new SlotRow("autocomplete"),
+                new CheckRow("Warn me when I send a message that may be missing an attachment", true)
+                    { Key = MailOptions.WarnMissingAttachmentKey },
             ]),
 
             new OptionSection("Tracking",

@@ -47,6 +47,7 @@ public sealed class MailOptions(SettingsStore settings)
     public const string CommasSeparateRecipientsKey = "mail.send.commas";
     public const string AutomaticNameCheckingKey = "mail.send.checknames";
     public const string CtrlEnterSendsKey = "mail.send.ctrlenter";
+    public const string WarnMissingAttachmentKey = "mail.send.warnattachment";
 
     /// <summary>
     /// The unified mailbox: an "All Accounts" root at the top of the folder pane — an addition beyond the reference.
@@ -233,6 +234,12 @@ public sealed class MailOptions(SettingsStore settings)
     public bool AutomaticNameChecking => _settings.GetBool(AutomaticNameCheckingKey, true);
 
     public bool CtrlEnterSends => _settings.GetBool(CtrlEnterSendsKey, true);
+
+    /// <summary>
+    /// "Warn me when I send a message that may be missing an attachment". On, as the
+    /// reference ships it — the reminder saves a follow-up mail every time it fires.
+    /// </summary>
+    public bool WarnMissingAttachment => _settings.GetBool(WarnMissingAttachmentKey, true);
 
     /// <summary>Whether the folder pane opens with an "All Accounts" root. Off unless asked for.</summary>
     public bool UnifiedMailbox => _settings.GetBool(UnifiedMailboxKey, false);
