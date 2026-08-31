@@ -108,22 +108,48 @@ public sealed class AppointmentWindow : Window
         }
 
         // MAILBOX_APPOINTMENT_RUN presses this window's ribbon by id — through its own
-        // dispatcher, not the shell's, which does not own these commands and rightly says so.
-        // Each press logs what the form then holds, which is the claim; the capture shows what
-        // the presses left behind on the tag strip.
+        // dispatcher, not the shell's, which does not own these commands and rightly says so —
+        // with the settled read-back the press sweep classifies from: the info bar as the
+        // status channel, the whole form as the fields digest, and what a press opened.
         if (Environment.GetEnvironmentVariable("MAILBOX_APPOINTMENT_RUN") is { Length: > 0 } presses)
         {
             Opened += (_, _) => Dispatcher.UIThread.Post(
-                () =>
+                async () =>
                 {
+                    // Held across the presses: the settled read awaits, and the capture's exit
+                    // must not land between a press and its read-back.
+                    using var hold = WindowCapture.Hold();
+
                     foreach (var id in presses.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                     {
                         // A step that fills the form rather than pressing a command, so a pose can
                         // make an appointment and keep it. Anything else is still a command id.
                         if (RunStep(id)) continue;
 
+                        var known = false;
+                        try
+                        {
+                            known = App.Commands.TryGet(new CommandId(id), out _);
+                        }
+                        catch (ArgumentException)
+                        {
+                            // A malformed id is as unknown as an unregistered one.
+                        }
+
+                        var barBefore = _surface.InfoBar;
+                        var fieldsBefore = FormDigest();
+
                         Log.Info($"Harness: appointment window running {id}.");
-                        Press(new CommandId(id));
+                        if (known) Press(new CommandId(id));
+
+                        await Task.Delay(600);
+
+                        Log.Info(
+                            $"Harness: ran {id} — {(known ? "known" : "UNKNOWN to the catalogue")}, "
+                            + $"bar “{barBefore}”→“{_surface.InfoBar}”, "
+                            + $"fields {(FormDigest() == fieldsBefore ? "unchanged" : "changed")}, "
+                            + $"window {(IsVisible ? "open" : "closed")}, "
+                            + $"windows: {MainWindow.WindowsBeside(this)}");
                     }
 
                     Log.Info($"Harness: appointment — {_surface.ShowAsText}, reminder {_surface.ReminderText}, "
@@ -153,6 +179,21 @@ public sealed class AppointmentWindow : Window
 
     /// <summary>The surface, for the harness: it poses the form and presses the big button.</summary>
     internal AppointmentSurface Surface => _surface;
+
+    /// <summary>
+    /// The whole form on one line, so a press has a before and after: a tag command that writes
+    /// only its own strip still moves this digest, which is how the sweep sees it act.
+    /// </summary>
+    private string FormDigest()
+    {
+        var current = _surface.Current();
+        return $"tab={_ribbon.ActiveTabId} “{current.Summary}” at “{current.Location}” "
+               + $"{current.Start.Wall:yyyy-MM-dd HH:mm}–{current.End.Wall:HH:mm} allday={current.Start.AllDay} "
+               + $"rrule={(current.Rrule is { Length: > 0 } ? current.Rrule : "none")} "
+               + $"private={current.IsPrivate} urgency={current.Urgency} busy={current.Busy} "
+               + $"showas={_surface.ShowAsText} reminder={_surface.ReminderText} "
+               + $"categories={(_surface.Categories.Count == 0 ? "none" : string.Join("/", _surface.Categories))}";
+    }
 
     /// <summary>
     /// Copy to My Calendar: the appointment as the form states it, for the default calendar.

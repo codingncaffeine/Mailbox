@@ -32,6 +32,26 @@ app.undo	ACTED
 app.unmarkdownload	ACTED
 app.updatefolder	ACTED
 app.workoffline	ACTED
+# The appointment and contact windows’ commands, pressed inside their own windows —
+# opened by the shell’s press over the seeded item; shell-side consequences live on
+# the shell press’s own settled line in the same run.
+appointment.categorize	SILENT	opens its flyout; the run log carries the menu read-back
+appointment.copy	SILENT	acts on the shell — its settled line in the same run carries the copy and the count moving
+appointment.delete	ACTED
+appointment.forward	ACTED
+appointment.importance.high	ACTED
+appointment.importance.low	ACTED
+appointment.invite	ACTED
+appointment.page	SILENT	a no-op in the pose: the appointment tab is already the page
+appointment.private	ACTED
+appointment.recurrence	ACTED
+appointment.reminder	SILENT	opens its flyout; the run log carries the menu read-back
+appointment.responseoptions	ACTED
+appointment.rooms	ACTED
+appointment.saveclose	ACTED
+appointment.scheduling	ACTED
+appointment.send	ACTED
+appointment.showas	SILENT	opens its flyout; the run log carries the menu read-back
 calendar.back	ACTED
 calendar.colour	SILENT	opens its flyout; the run log carries the menu read-back
 calendar.delete.calendar	ACTED
@@ -85,6 +105,31 @@ compose.properties	NOTWIRED	answers its recorded status; the run log carries the
 compose.save	ACTED
 compose.send	ACTED
 compose.signature	ACTED
+contact.addressbook	ACTED
+contact.businesscard	SILENT	answers on the shell — the run log carries the shell press’s own settled line with the sentence
+contact.checknames	SILENT	answers on the shell — the run log carries the shell press’s own settled line with the sentence
+contact.delete	ACTED
+contact.email	ACTED
+contact.forward	ACTED
+contact.meeting	ACTED
+contact.more	SILENT	answers on the shell — the run log carries the shell press’s own settled line with the sentence
+contact.picture	ACTED
+contact.save	ACTED
+contact.save.new	ACTED
+contact.show.allfields	ACTED
+contact.show.certificates	ACTED
+contact.show.details	ACTED
+contact.show.general	SILENT	a no-op in the pose: General is already the page
+insert.bookmark	NOTWIRED	answers its recorded status; the run log carries the sentence
+insert.businesscard	NOTWIRED	answers its recorded status; the run log carries the sentence
+insert.datetime	ACTED
+insert.dropcap	NOTWIRED	answers its recorded status; the run log carries the sentence
+insert.horizontalline	ACTED
+insert.object	NOTWIRED	answers its recorded status; the run log carries the sentence
+insert.quickparts	NOTWIRED	answers its recorded status; the run log carries the sentence
+insert.screenshot	NOTWIRED	answers its recorded status; the run log carries the sentence
+insert.textbox	NOTWIRED	answers its recorded status; the run log carries the sentence
+insert.wordart	NOTWIRED	answers its recorded status; the run log carries the sentence
 format.align	ACTED
 format.bold	ACTED
 format.borders	NOTWIRED	answers its recorded status; the run log carries the sentence

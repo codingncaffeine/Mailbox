@@ -113,19 +113,55 @@ public sealed class ContactWindow : Window
         }
 
         // Presses this window's own commands, as MAILBOX_RUN does the shell's:
-        // MAILBOX_CONTACT_RUN=format.bold,insert.datetime. The note is a document now, and a
-        // document's commands are only provable by running them over one.
+        // MAILBOX_CONTACT_RUN=format.bold,insert.datetime — with the settled read-back the
+        // press sweep classifies from. The bar carries the surface's typed refusal (the
+        // recorded reason an Insert entry is absent here), which is this window's own honest
+        // "not wired yet"; a refusal also opens its explaining dialog, which the windows list
+        // shows.
         if (Environment.GetEnvironmentVariable("MAILBOX_CONTACT_RUN") is { Length: > 0 } run)
         {
-            Opened += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-            {
-                foreach (var id in run.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            Opened += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(
+                async () =>
                 {
-                    Log.Info($"Harness: contact running {id}.");
-                    var refused = _surface.Invoke(new CommandId(id));
-                    Log.Info($"Harness: contact {id} → {refused ?? "acted"}; note is now “{_surface.NoteText}”.");
-                }
-            }, Avalonia.Threading.DispatcherPriority.Background);
+                    // Held across the presses: the settled read awaits, and the capture's exit
+                    // must not land between a press and its read-back.
+                    using var hold = WindowCapture.Hold();
+
+                    foreach (var id in run.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    {
+                        var known = false;
+                        try
+                        {
+                            known = App.Commands.TryGet(new CommandId(id), out _);
+                        }
+                        catch (ArgumentException)
+                        {
+                            // A malformed id is as unknown as an unregistered one.
+                        }
+
+                        var fieldsBefore = _surface.DescribeForm();
+                        var noteBefore = _surface.NoteText;
+                        var markupBefore = _surface.DescribeNote();
+                        var pageBefore = _page;
+
+                        Log.Info($"Harness: contact running {id}.");
+                        var refused = known ? _surface.Invoke(new CommandId(id)) : null;
+
+                        await Task.Delay(600);
+
+                        Log.Info(
+                            $"Harness: ran {id} — {(known ? "known" : "UNKNOWN to the catalogue")}"
+                            + $"{(refused is { Length: > 0 } ? ", fallback" : string.Empty)}, "
+                            + $"bar “”→“{refused ?? string.Empty}”, "
+                            + $"fields {(_surface.DescribeForm() == fieldsBefore ? "unchanged" : "changed")}, "
+                            + $"body {noteBefore.Length}→{_surface.NoteText.Length}, "
+                            + $"markup {(_surface.DescribeNote() == markupBefore ? "unchanged" : "changed")}, "
+                            + $"state {(_page == pageBefore ? "unchanged" : $"“{pageBefore}”→“{_page}”")}, "
+                            + $"window {(IsVisible ? "open" : "closed")}, "
+                            + $"windows: {MainWindow.WindowsBeside(this)}");
+                    }
+                },
+                Avalonia.Threading.DispatcherPriority.Background);
         }
 
         KeyDown += (_, e) =>
@@ -167,8 +203,12 @@ public sealed class ContactWindow : Window
     /// The form is kept rather than rebuilt — it holds everything typed so far, and a reader who
     /// looks at All Fields and comes back has not lost the name they were in the middle of.
     /// </remarks>
+    /// <summary>Which of the four pages the workspace is showing, for the door's read-back.</summary>
+    private string _page = "contact.show.general";
+
     private void ShowPage(string page)
     {
+        _page = page;
         Control body = page switch
         {
             "contact.show.details" => DetailsPage(),

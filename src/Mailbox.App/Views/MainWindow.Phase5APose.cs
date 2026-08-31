@@ -279,13 +279,17 @@ public partial class MainWindow
                + (plainText ? " plain" : string.Empty);
     }
 
-    /// <summary>Visible windows other than the shell and this compose window — what a press opened.</summary>
-    private static string WindowsBeside(ComposeWindow compose)
+    /// <summary>
+    /// Visible windows other than the shell and the given one — what an item window's press
+    /// opened. Shared by the compose, contact and appointment doors, whose settled lines all
+    /// answer the same question.
+    /// </summary>
+    internal static string WindowsBeside(Avalonia.Controls.Window besides)
     {
         var others = (Avalonia.Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)
             ?.Windows
-            .Where(w => !ReferenceEquals(w, compose) && w is not MainWindow && w.IsVisible)
+            .Where(w => !ReferenceEquals(w, besides) && w is not MainWindow && w.IsVisible)
             .Select(w => string.IsNullOrWhiteSpace(w.Title) ? w.GetType().Name : w.Title)
             .ToList() ?? [];
 

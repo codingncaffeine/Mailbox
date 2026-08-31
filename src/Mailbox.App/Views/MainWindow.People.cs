@@ -213,6 +213,19 @@ public partial class MainWindow
             if (id == ContactCommands.AddressBook.Id) { _ = ShowAddressBookAsync(shell); return; }
             if (id == ContactCommands.CheckNames.Id) { CheckContactNames(shell, window); return; }
             if (id == ContactCommands.Forward.Id) { ForwardCard(shell, window.Surface.Current()); return; }
+
+            // Meeting invites whoever the form describes — the same path the list's own button
+            // takes, over this window's contact rather than the selection. It used to fall
+            // through this handler unanswered, which pressed as a button that does nothing.
+            if (id == ContactCommands.Meeting.Id) { MeetWith(shell, window.Surface.Current()); return; }
+
+            // More answers with the module's own recorded sentence rather than falling through
+            // silently — the same words the list's button says, from the one place they live.
+            if (id == ContactCommands.More.Id)
+            {
+                shell.StatusRight = WaitingPeopleCommand(PeopleCommands.MoreCommunicate.Id)!;
+                return;
+            }
             if (id == ContactCommands.BusinessCard.Id)
             {
                 shell.StatusRight = "The card is drawn beside the form; designing one is not built yet.";
@@ -634,7 +647,13 @@ public partial class MainWindow
             return;
         }
 
-        var contact = App.Contacts.Full(row.Id) ?? row.Contact;
+        MeetWith(shell, App.Contacts.Full(row.Id) ?? row.Contact);
+    }
+
+    /// <summary>The meeting window with this contact already asked — the list's path and the
+    /// contact window's own Meeting button both end here.</summary>
+    private void MeetWith(ShellViewModel shell, Contact contact)
+    {
         var asked = contact.IsGroup
             ? contact.Members.Select(m => m.Address).Where(a => a is { Length: > 0 }).ToList()
             : contact.PrimaryEmail is { Length: > 0 } one ? [one] : new List<string>();
