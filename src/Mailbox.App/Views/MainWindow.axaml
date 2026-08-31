@@ -26,8 +26,8 @@
     -->
     <Border CornerRadius="8"
             ClipToBounds="True"
-            Classes="windowshape"
             Background="{DynamicResource ribbon.tabstrip.background.brush}">
+    <Panel>
     <Grid Name="ShellRoot" RowDefinitions="Auto,Auto,*,Auto" ColumnDefinitions="Auto,*">
         <Grid.Resources>
             <theming:TokenBrushConverter x:Key="TokenBrush" />
@@ -1284,6 +1284,14 @@
             </Grid>
         </Border>
     </Grid>
+
+    <!-- The hairline, drawn over everything so it traces the rounded corners whatever
+         paints beneath — the reference's line overlaps the window's own edge the same way.
+         The class owns its brush, and its disappearance when the window is maximized. -->
+    <Border CornerRadius="8"
+            IsHitTestVisible="False"
+            Classes="windowshape" />
+    </Panel>
     </Border>
 
 </Window>

@@ -95,15 +95,24 @@ internal static class WindowFrame
     {
         ArgumentNullException.ThrowIfNull(content);
 
+        // The hairline is a ring drawn OVER the content, not the outer border's own stroke:
+        // the rounded clip lets a child paint right up to the curve, which covered the
+        // stroke's corner arcs and left the line square while the window was round. Drawn
+        // last, it traces the curve whatever paints beneath — which is how the reference
+        // draws it too, the line overlapping the window's own edge. The class still owns
+        // its brush and its disappearance when maximized.
+        var hairline = new Border
+        {
+            CornerRadius = new CornerRadius(RibbonMetrics.BodyCornerRadius),
+            IsHitTestVisible = false,
+            Classes = { "windowshape" },
+        };
+
         var border = new Border
         {
             CornerRadius = new CornerRadius(RibbonMetrics.BodyCornerRadius),
             ClipToBounds = true,
-            Child = content,
-
-            // The hairline round the window, by class so one stylesheet rule owns it — and
-            // drops it when the window is maximized, where there is no edge to tell apart.
-            Classes = { "windowshape" },
+            Child = new Panel { Children = { content, hairline } },
         };
         border[!Border.BackgroundProperty] = new DynamicResourceExtension(background);
 
