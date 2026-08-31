@@ -317,6 +317,7 @@ mail.searchfolder.new	ACTED
 mail.snooze	SILENT	opens its flyout; the run log carries the menu read-back
 mail.trackers	ACTED
 mail.unread	ACTED
+mail.unsubscribe	ACTED
 mail.viewsource	ACTED
 nav.folder	ACTED
 nav.inbox	SILENT	a no-op in the pose: the Inbox is already open

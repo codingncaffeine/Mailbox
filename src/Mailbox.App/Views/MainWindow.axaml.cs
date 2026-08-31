@@ -3365,6 +3365,40 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// mail.unsubscribe over the selection: the catalogue's door to the same journey the
+    /// reading pane's bar takes — for the keyboard, and for the layout that reads with the
+    /// pane off and so never sees the bar.
+    /// </summary>
+    private async Task UnsubscribeSelectedAsync(ShellViewModel shell)
+    {
+        if (_openMessage is not { } message)
+        {
+            shell.StatusRight = "Select a message first.";
+            return;
+        }
+
+        if (shell.CurrentFolderRole == FolderRole.Junk)
+        {
+            shell.StatusRight = "Not from Junk — an unsubscribe tells a junk sender the address is read.";
+            return;
+        }
+
+        var offer = UnsubscribeOffer.Parse(
+            message.Headers["List-Unsubscribe"], message.Headers["List-Unsubscribe-Post"]);
+        if (offer is null)
+        {
+            shell.StatusRight = "This message does not offer an unsubscribe.";
+            return;
+        }
+
+        var sender = message.From.Mailboxes.FirstOrDefault()?.Address ?? string.Empty;
+        if (await Unsubscriber.ActAsync(this, offer, sender) is { } outcome)
+        {
+            shell.StatusRight = outcome;
+        }
+    }
+
+    /// <summary>
     /// Printing goes through the engine, which is the only thing that knows how the message is
     /// laid out. There is nothing to print from the text fallback.
     /// </summary>
@@ -5596,6 +5630,7 @@ public partial class MainWindow : Window
         if (id == ViewCommands.Zoom.Id) { ShowZoomDialog(shell); return; }
         if (id == MailCommands.AdvancedFind.Id) { ShowAdvancedFind(shell); return; }
         if (id == MailCommands.ViewSource.Id) { ShowMessageSource(shell); return; }
+        if (id == MailCommands.Unsubscribe.Id) { _ = UnsubscribeSelectedAsync(shell); return; }
         if (id == MailCommands.TrackerReport.Id) { _ = _reading?.ShowTrackerReportAsync(); return; }
         if (id == MailCommands.AuthenticationDetails.Id) { _ = _reading?.ShowAuthenticationAsync(); return; }
         if (id == MailCommands.Print.Id) { PrintMessage(shell); return; }

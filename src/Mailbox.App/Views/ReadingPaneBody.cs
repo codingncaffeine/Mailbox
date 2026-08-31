@@ -5,6 +5,7 @@ using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.Platform;
 using Avalonia.Platform.Storage;
+using Mailbox.Core;
 using Mailbox.Core.Diagnostics;
 using Mailbox.Rendering;
 using RenderOptions = Mailbox.Rendering.RenderOptions;
@@ -193,6 +194,11 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
 
     internal InvitationBar? Invitation => _invitation;
 
+    /// <summary>The unsubscribe bar's button, for the harness, on the same grounds.</summary>
+    private Button? _unsubscribeButton;
+
+    internal Button? UnsubscribeButton => _unsubscribeButton;
+
     /// <summary>Raised when Accept, Tentative or Decline was pressed; the shell sends the reply.</summary>
     public event EventHandler<InvitationBar.Answer>? InvitationAnswered;
 
@@ -230,6 +236,7 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
     private void Refresh()
     {
         _bars.Children.Clear();
+        _unsubscribeButton = null;
 
         if (_message is null)
         {
@@ -366,6 +373,16 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
 
         if (disableLinks) _bars.Children.Add(JunkBar());
         if (_rendered.HasRemoteContent) _bars.Children.Add(RemoteImageBar(_rendered));
+
+        // The way out of a mailing list, surfaced — but never on suspected junk, where
+        // "unsubscribe" is exactly the button that confirms the address is read.
+        if (!_suspectedJunk
+            && UnsubscribeOffer.Parse(
+                _message.Headers["List-Unsubscribe"],
+                _message.Headers["List-Unsubscribe-Post"]) is { } offer)
+        {
+            _bars.Children.Add(UnsubscribeBar(offer));
+        }
 
         // The plugins' bars come after the application's own, so what the application says about
         // a message always outranks an add-in. Providers answer from what they already know —
@@ -1335,6 +1352,56 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
         grid.Children.Add(actions);
 
         bar.Child = grid;
+        return bar;
+    }
+
+    /// <summary>The mailing-list bar: one sentence, one button, and the answer said in place.</summary>
+    private Control UnsubscribeBar(UnsubscribeOffer offer)
+    {
+        var bar = Bar("reading.infobar.background.brush");
+
+        var text = new TextBlock
+        {
+            Text = "This message came from a mailing list.",
+            TextWrapping = TextWrapping.Wrap,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Bind(text, TextBlock.ForegroundProperty, "reading.infobar.text.brush");
+        Grid.SetColumn(text, 1);
+
+        var glyph = Glyph("mail");
+        Grid.SetColumn(glyph, 0);
+
+        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        var unsubscribe = BarButton("Unsubscribe");
+        unsubscribe.Click += async (_, _) =>
+        {
+            if (TopLevel.GetTopLevel(this) is not Window owner) return;
+
+            unsubscribe.IsEnabled = false;
+            var said = await Unsubscriber.ActAsync(owner, offer, SenderAddress);
+            unsubscribe.IsEnabled = said is null;
+
+            // The bar's own sentence carries the outcome — the pane may be in a window whose
+            // status bar is the shell's, three metres of screen away.
+            if (said is { } outcome)
+            {
+                text.Text = outcome;
+                Log.Info($"Harness: unsubscribe bar — “{outcome}”");
+            }
+        };
+        actions.Children.Add(unsubscribe);
+        _unsubscribeButton = unsubscribe;
+        Grid.SetColumn(actions, 2);
+
+        var grid = Row();
+        grid.Children.Add(glyph);
+        grid.Children.Add(text);
+        grid.Children.Add(actions);
+
+        bar.Child = grid;
+        Log.Info($"Harness: unsubscribe bar shown — mailto {offer.Mailto.Count}, web {offer.Web.Count}, "
+                 + $"one-click {(offer.OneClick is null ? "no" : "yes")}.");
         return bar;
     }
 

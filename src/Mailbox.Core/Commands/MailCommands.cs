@@ -609,6 +609,20 @@ public static class MailCommands
         InDefaultLayout = false,
     };
 
+    public static readonly MailboxCommand Unsubscribe = new()
+    {
+        Id = new("mail.unsubscribe"),
+        Label = "Unsubscribe",
+        Description = "Ask the mailing list this message came from to stop sending it — "
+                      + "directly when the list supports one-click, else by the message or "
+                      + "page it offers.",
+        Icon = "mail",
+        Category = "Delete",
+        Scope = ModuleScope.Mail,
+        RequiresSingleSelection = true,
+        InDefaultLayout = false,
+    };
+
     public static readonly MailboxCommand TrackerReport = new()
     {
         Id = new("mail.trackers"),
@@ -933,7 +947,7 @@ public static class MailCommands
         Unread, Categorize, FollowUp,
         Search, AdvancedFind, AddressBook, FilterEmail,
         SendReceiveAll, WorkOffline, Undo,
-        Snooze, ViewSource, TrackerReport, AuthenticationDetails, Print, PrintToPdf, PrintList,
+        Snooze, ViewSource, Unsubscribe, TrackerReport, AuthenticationDetails, Print, PrintToPdf, PrintList,
         RecoverDeleted, NewSearchFolder,
         MoveToOther, MoveToFocused, AlwaysMoveToOther, AlwaysMoveToFocused,
         OpenItem, ToggleFlag, NextMessage, PreviousMessage,
