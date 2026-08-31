@@ -67,6 +67,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.6.0" date="2026-08-31">
+      <description>
+        <p>The theme engine grows up: title-bar backgrounds with drag-to-align images, palettes from curated colour schemes or your desktop's own, a point-at-it editor, a Firefox theme importer, and an in-app browser for half a million community themes — previewed as Mailbox would wear them, animated themes included. Switching back to a built-in theme is always a complete return to stock.</p>
+      </description>
+    </release>
     <release version="0.5.0" date="2026-08-30">
       <description>
         <p>Screen-reader support across the application: the drawn lists, the modules, the dialogs and the ribbon speak their names, rows and states over AT-SPI.</p>
