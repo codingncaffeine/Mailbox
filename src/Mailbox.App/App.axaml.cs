@@ -516,18 +516,25 @@ public partial class App : Application
     private static void RestoreAppearance()
     {
         if (Environment.GetEnvironmentVariable(ThemeService.ThemeVariable) is null
-            && Settings.GetString(ThemeSetting) is { Length: > 0 } theme
-            && Themes.Library.Canonical(theme) is { } known)
+            && Settings.GetString(ThemeSetting) is { Length: > 0 } theme)
         {
-            try
+            // "Use the desktop's setting" stores a sentinel, not a theme id: the id it means
+            // is asked of the desktop now, and re-asked whenever the desktop changes its mind.
+            var chosen = theme == DesktopTheme.Sentinel ? DesktopTheme.Resolve() : theme;
+            if (theme == DesktopTheme.Sentinel) DesktopTheme.Watch();
+
+            if (Themes.Library.Canonical(chosen) is { } known)
             {
-                Themes.Apply(known);
-            }
-            catch (Mailbox.Theming.Tokens.ThemeResolutionException ex)
-            {
-                // A theme file that no longer resolves — a base gone, a token missing — is not
-                // a reason the application will not start; it says so and stays on Colorful.
-                Log.Warn($"The saved theme \"{theme}\" could not be applied: {ex.Message}");
+                try
+                {
+                    Themes.Apply(known);
+                }
+                catch (Mailbox.Theming.Tokens.ThemeResolutionException ex)
+                {
+                    // A theme file that no longer resolves — a base gone, a token missing — is not
+                    // a reason the application will not start; it says so and stays on Colorful.
+                    Log.Warn($"The saved theme \"{theme}\" could not be applied: {ex.Message}");
+                }
             }
         }
 

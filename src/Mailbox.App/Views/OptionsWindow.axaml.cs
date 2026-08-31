@@ -1465,24 +1465,34 @@ public sealed class OptionsWindow : Window
 
     private ComboBox ThemeCombo()
     {
-        // The built-ins, then the reader's theme files, in the library's order.
+        // The desktop-following choice first, then the built-ins, then the reader's theme
+        // files, in the library's order. The first entry stores a sentinel rather than an id,
+        // because what it means is the desktop's to say and changes with it.
         var ids = _themes.Library.Ids;
+        var followingDesktop = App.Settings.GetString(App.ThemeSetting) == DesktopTheme.Sentinel;
+        var names = new List<string> { "Use the desktop's setting" };
+        names.AddRange(ids.Select(_themes.DisplayName));
+
         var combo = new ComboBox
         {
-            ItemsSource = ids.Select(_themes.DisplayName).ToList(),
-            SelectedIndex = ids.ToList().FindIndex(id => string.Equals(id, _themes.ThemeId, StringComparison.OrdinalIgnoreCase)),
+            ItemsSource = names,
+            SelectedIndex = followingDesktop
+                ? 0
+                : ids.ToList().FindIndex(id => string.Equals(id, _themes.ThemeId, StringComparison.OrdinalIgnoreCase)) + 1,
             MinWidth = 160,
             VerticalAlignment = VerticalAlignment.Center,
         };
         combo.SelectionChanged += (_, _) =>
         {
-            if (combo.SelectedIndex < 0 || combo.SelectedIndex >= ids.Count) return;
+            if (combo.SelectedIndex < 0 || combo.SelectedIndex > ids.Count) return;
 
-            var id = ids[combo.SelectedIndex];
+            var id = combo.SelectedIndex == 0 ? DesktopTheme.Resolve() : ids[combo.SelectedIndex - 1];
             try
             {
                 _themes.Apply(id);
-                App.Settings.Set(App.ThemeSetting, id);
+                App.Settings.Set(App.ThemeSetting,
+                    combo.SelectedIndex == 0 ? DesktopTheme.Sentinel : id);
+                if (combo.SelectedIndex == 0) DesktopTheme.Watch();
             }
             catch (Mailbox.Theming.Tokens.ThemeResolutionException ex)
             {
