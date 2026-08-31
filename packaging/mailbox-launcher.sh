@@ -44,6 +44,15 @@ mkdir -p "$DATA" "$CONFIG" "$STATE" "$RUNTIME" "$WPE_RUNTIME" "$WEBKIT_RUNTIME"
 # trade the confinement makes.
 DOWNLOADS="$(command -v xdg-user-dir >/dev/null 2>&1 && xdg-user-dir DOWNLOAD || echo "$HOME/Downloads")"
 
+# The folder the Backup & Restore window was told to write to, read out of the settings so
+# the wall opens exactly where the reader pointed and nowhere else. The naive extraction is
+# fine here: the value is a path the picker chose, and a path with a quote in it has larger
+# problems than this line. Skipped when unset ("-" prefix below), and created first because
+# a ReadWritePaths entry that is missing is silently dropped.
+BACKUP_DIR="$(sed -n 's/.*"backup\.directory"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$CONFIG/settings.json" 2>/dev/null | head -n 1)"
+[ -n "$BACKUP_DIR" ] || BACKUP_DIR="$DOWNLOADS/Mailbox Backups"
+mkdir -p "$BACKUP_DIR" 2>/dev/null || true
+
 # The transient unit inherits the user manager's environment, not this shell's — so the
 # variables that matter travel explicitly: the session's own, and every MAILBOX_* the harness
 # or a terminal set.
@@ -108,7 +117,8 @@ exec systemd-run --user --quiet --collect --wait "$IO" \
     --property=ReadWritePaths="$RUNTIME" \
     --property=ReadWritePaths="$WPE_RUNTIME" \
     --property=ReadWritePaths="$WEBKIT_RUNTIME" \
-    --property=ReadWritePaths=-"$DOWNLOADS" \
+    --property=ReadWritePaths="-\"$DOWNLOADS\"" \
+    --property=ReadWritePaths="-\"$BACKUP_DIR\"" \
     --property=PrivateTmp=yes \
     --property=CapabilityBoundingSet= \
     --property=LockPersonality=yes \

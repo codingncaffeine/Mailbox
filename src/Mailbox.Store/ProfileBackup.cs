@@ -57,14 +57,29 @@ public static class ProfileBackup
         string? feedsDb,
         IEnumerable<(string Path, string ArchiveName)> files,
         IEnumerable<(string Directory, string Prefix)> directories,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        IProgress<(int Done, int Total, string Item)>? progress = null)
     {
         var scratch = Directory.CreateTempSubdirectory("mailbox-backup-").FullName;
+        var fileList = files.ToList();
+        var directoryList = directories.ToList();
 
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(destination))!);
             if (File.Exists(destination)) File.Delete(destination);
+
+            // Counted up front so the bar can be a fraction rather than a pulse.
+            var planned =
+                (Directory.Exists(accountsDirectory) ? Directory.EnumerateFiles(accountsDirectory, "*.db").Count() : 0)
+                + (pimDb is { Length: > 0 } && File.Exists(pimDb) ? 1 : 0)
+                + (feedsDb is { Length: > 0 } && File.Exists(feedsDb) ? 1 : 0)
+                + fileList.Count(f => File.Exists(f.Path))
+                + directoryList.Where(d => Directory.Exists(d.Directory))
+                    .Sum(d => Directory.EnumerateFiles(d.Directory, "*", SearchOption.AllDirectories).Count());
+            var done = 0;
+
+            void Step(string item) => progress?.Report((++done, planned, item));
 
             var entries = new List<string>();
             using (var zip = ZipFile.Open(destination, ZipArchiveMode.Create))
@@ -74,6 +89,7 @@ public static class ProfileBackup
                     foreach (var db in Directory.EnumerateFiles(accountsDirectory, "*.db").OrderBy(p => p))
                     {
                         var name = "accounts/" + Path.GetFileName(db);
+                        Step(Path.GetFileName(db));
                         if (CopyStore(db, mail: true, scratch) is not { } copied)
                         {
                             return ProfileArchiveResult.Failed(destination,
@@ -87,6 +103,7 @@ public static class ProfileBackup
 
                 if (pimDb is { Length: > 0 } && File.Exists(pimDb))
                 {
+                    Step("pim.db");
                     if (CopyStore(pimDb, mail: false, scratch) is not { } copied)
                     {
                         return ProfileArchiveResult.Failed(destination, "The calendar store did not copy cleanly.");
@@ -98,6 +115,7 @@ public static class ProfileBackup
 
                 if (feedsDb is { Length: > 0 } && File.Exists(feedsDb))
                 {
+                    Step("feeds.db");
                     if (CopyStore(feedsDb, mail: true, scratch) is not { } copied)
                     {
                         return ProfileArchiveResult.Failed(destination, "The feeds store did not copy cleanly.");
@@ -107,19 +125,21 @@ public static class ProfileBackup
                     entries.Add("feeds.db");
                 }
 
-                foreach (var (path, archiveName) in files)
+                foreach (var (path, archiveName) in fileList)
                 {
                     if (!File.Exists(path)) continue;
+                    Step(archiveName);
                     zip.CreateEntryFromFile(path, archiveName);
                     entries.Add(archiveName);
                 }
 
-                foreach (var (directory, prefix) in directories)
+                foreach (var (directory, prefix) in directoryList)
                 {
                     if (!Directory.Exists(directory)) continue;
                     foreach (var file in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories))
                     {
                         var name = prefix + "/" + Path.GetRelativePath(directory, file).Replace('\\', '/');
+                        Step(name);
                         zip.CreateEntryFromFile(file, name);
                         entries.Add(name);
                     }

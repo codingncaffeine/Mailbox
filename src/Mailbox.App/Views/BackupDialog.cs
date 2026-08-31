@@ -34,6 +34,12 @@ public sealed class BackupDialog : Window
     private readonly ComboBox _keep = new() { ItemsSource = new[] { 3, 5, 10, 20 }, Width = 70 };
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap, MaxWidth = 470 };
 
+    // The bar, drawn rather than templated, as the send/receive dialog draws its own: two
+    // star-sized columns whose widths are the fraction and its remainder.
+    private readonly Grid _bar = new() { ColumnDefinitions = new ColumnDefinitions("0*,1*") };
+    private Border _barTrack = null!;
+    private readonly TextBlock _stage = new() { TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis };
+
     public BackupDialog()
     {
         Title = "Backup & Restore";
@@ -42,8 +48,11 @@ public sealed class BackupDialog : Window
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         CanResize = false;
 
-        _directory.Text = App.Settings.GetString(DirectoryKey,
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Mailbox Backups"));
+        // Downloads, not Documents: the hardened launcher keeps the home read-only outside
+        // Mailbox's own directories and Downloads, and a default the sandbox refuses is a
+        // button that does not work.
+        _directory.Text = App.Settings.GetString(DirectoryKey, Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads", "Mailbox Backups"));
         _daily.IsChecked = App.Settings.GetBool(EnabledKey);
         _keep.SelectedItem = (int)App.Settings.GetNumber(KeepKey, 5) is var kept && ((int[])[3, 5, 10, 20]).Contains(kept) ? kept : 5;
 
@@ -117,6 +126,7 @@ public sealed class BackupDialog : Window
                     keepRow,
                     new Separator { Margin = new Thickness(0, 8) },
                     restore,
+                    BarRow(),
                     _status,
                     new StackPanel
                     {
@@ -174,6 +184,45 @@ public sealed class BackupDialog : Window
         return result;
     }
 
+    private Control BarRow()
+    {
+        var fill = new Border();
+        Bind(fill, Border.BackgroundProperty, "systemdialog.accent.brush");
+        Grid.SetColumn(fill, 0);
+        _bar.Children.Add(fill);
+
+        _barTrack = new Border
+        {
+            Child = _bar,
+            Height = 14,
+            BorderThickness = new Thickness(1),
+            IsVisible = false,
+        };
+        Bind(_barTrack, Border.BackgroundProperty, "systemdialog.banner.brush");
+        Bind(_barTrack, Border.BorderBrushProperty, "systemdialog.field.border.brush");
+
+        _stage.IsVisible = false;
+        Bind(_stage, TextBlock.ForegroundProperty, "systemdialog.foreground.subtle.brush");
+
+        return new StackPanel { Spacing = 4, Children = { _barTrack, _stage } };
+    }
+
+    private void ShowProgress(int done, int total, string item)
+    {
+        _barTrack.IsVisible = true;
+        _stage.IsVisible = true;
+        var fraction = total > 0 ? Math.Clamp(done / (double)total, 0, 1) : 0;
+        _bar.ColumnDefinitions[0].Width = new GridLength(fraction, GridUnitType.Star);
+        _bar.ColumnDefinitions[1].Width = new GridLength(1 - fraction, GridUnitType.Star);
+        _stage.Text = $"Copying {item} ({done} of {total})…";
+    }
+
+    private void HideProgress()
+    {
+        _barTrack.IsVisible = false;
+        _stage.IsVisible = false;
+    }
+
     private async Task BackUpAsync()
     {
         var directory = (_directory.Text ?? string.Empty).Trim();
@@ -183,22 +232,44 @@ public sealed class BackupDialog : Window
             return;
         }
 
-        _status.Text = "Backing up…";
-        Directory.CreateDirectory(directory);
-        var destination = Path.Combine(directory, ProfileBackup.SuggestedName(DateTimeOffset.Now));
-        var result = await Task.Run(() => WriteArchive(destination));
+        try
+        {
+            _status.Text = "Backing up…";
+            Directory.CreateDirectory(directory);
+            var destination = Path.Combine(directory, ProfileBackup.SuggestedName(DateTimeOffset.Now));
+            var progress = new Progress<(int Done, int Total, string Item)>(p => ShowProgress(p.Done, p.Total, p.Item));
+            var result = await Task.Run(() => WriteArchive(destination, progress));
 
-        if (result.Ok)
-        {
-            var pruned = ProfileBackup.Prune(directory, KeepCount());
-            _status.Text = $"Backed up to {Path.GetFileName(result.Path)} "
-                           + $"({Mailbox.Rendering.Attachment.Sized(result.Bytes)}, {result.Entries} items"
-                           + (pruned > 0 ? $"; {pruned} old backup{(pruned == 1 ? string.Empty : "s")} pruned" : string.Empty)
-                           + ").";
+            if (result.Ok)
+            {
+                var pruned = ProfileBackup.Prune(directory, KeepCount());
+                _status.Text = $"Backed up to {Path.GetFileName(result.Path)} "
+                               + $"({Mailbox.Rendering.Attachment.Sized(result.Bytes)}, {result.Entries} items"
+                               + (pruned > 0 ? $"; {pruned} old backup{(pruned == 1 ? string.Empty : "s")} pruned" : string.Empty)
+                               + ").";
+            }
+            else
+            {
+                _status.Text = $"The backup failed: {result.Error}";
+            }
         }
-        else
+        catch (IOException ex) when (ex.Message.Contains("Read-only", StringComparison.OrdinalIgnoreCase))
         {
-            _status.Text = $"The backup failed: {result.Error}";
+            // The hardened launcher's wall, named as itself — an unhandled throw here left the
+            // status frozen on "Backing up…", which read as a hang.
+            _status.Text = "That folder is outside what the hardened launcher lets Mailbox write "
+                           + "to. Choose a folder under Downloads — or pick the folder you want, "
+                           + "close Mailbox, and start it again: the launcher opens the chosen "
+                           + "backup folder on the way in.";
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("The backup failed.", ex);
+            _status.Text = $"The backup failed: {ex.Message}";
+        }
+        finally
+        {
+            HideProgress();
         }
     }
 
@@ -244,7 +315,18 @@ public sealed class BackupDialog : Window
             return;
         }
 
-        var result = await Task.Run(() => RestoreArchive(archive));
+        ProfileRestoreResult result;
+        try
+        {
+            result = await Task.Run(() => RestoreArchive(archive));
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("The restore failed.", ex);
+            _status.Text = $"The restore failed, and nothing was touched: {ex.Message}";
+            return;
+        }
+
         if (!result.Ok)
         {
             _status.Text = $"The restore failed, and nothing was touched: {result.Error}";
@@ -265,7 +347,8 @@ public sealed class BackupDialog : Window
     private int KeepCount() => _keep.SelectedItem is int kept ? kept : 5;
 
     /// <summary>Everything the archive carries, from the running application's own paths.</summary>
-    internal static ProfileArchiveResult WriteArchive(string destination)
+    internal static ProfileArchiveResult WriteArchive(
+        string destination, IProgress<(int Done, int Total, string Item)>? progress = null)
         => ProfileBackup.WriteArchive(
             destination,
             Path.Combine(App.StoreDirectory, "accounts"),
@@ -279,7 +362,8 @@ public sealed class BackupDialog : Window
                 (Mailbox.Theming.Files.ThemeLibrary.DefaultDirectory(), "themes"),
                 (App.Plugins.Root, "plugins"),
             ],
-            DateTimeOffset.Now);
+            DateTimeOffset.Now,
+            progress);
 
     private static ProfileRestoreResult RestoreArchive(string archive)
         => ProfileBackup.Restore(
