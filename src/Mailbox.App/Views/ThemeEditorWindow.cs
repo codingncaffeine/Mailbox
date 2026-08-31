@@ -45,10 +45,20 @@ public sealed class ThemeEditorWindow : Window
     private readonly ItemsControl _contrast = new();
 
     private List<string> _keys = [];
+    private IReadOnlyList<string>? _areaIds;
+    private readonly TextBlock _areaLabel = new() { VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
+    private readonly Button _allTokens = new() { Content = "All tokens" };
 
     public ThemeEditorWindow(ThemeService themes)
+        : this(themes, areaIds: null)
+    {
+    }
+
+    /// <summary>The editor scoped to the areas the picker chose; null is the whole theme.</summary>
+    public ThemeEditorWindow(ThemeService themes, IReadOnlyList<string>? areaIds)
     {
         _themes = themes;
+        _areaIds = areaIds;
         _editedTheme = themes.ThemeId;
         _base = themes.Library.Build(_editedTheme);
         foreach (var (key, value) in Overpairs(themes.UserOverrides)) _overrides.Set(key, value);
@@ -63,6 +73,12 @@ public sealed class ThemeEditorWindow : Window
         DialogChrome.Apply(this, BuildBody());
         RefreshList();
         RefreshContrast();
+        if (_areaIds is not null)
+        {
+            Mailbox.Core.Diagnostics.Log.Info(
+                $"Theme editor scoped to [{string.Join(", ", _areaIds)}] — {_keys.Count} token(s).");
+        }
+
         Opened += (_, _) => _ = HarnessAsync();
     }
 
@@ -153,11 +169,42 @@ public sealed class ThemeEditorWindow : Window
             Children = { resetAll, saveAs, close },
         };
 
+        // The area scope: what the picker chose, and the way back out of it. The picker
+        // itself lives on the shell — the shell is the preview, so that is where pointing
+        // at a region means something.
+        Bind(_areaLabel, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
+        _allTokens.Click += (_, _) =>
+        {
+            _areaIds = null;
+            RefreshScopeLabel();
+            RefreshList();
+        };
+
+        var pickArea = new Button { Content = "Pick an area…" };
+        ToolTip.SetTip(pickArea, "Point at a part of Mailbox and this editor scopes to what paints it.");
+        pickArea.Click += (_, _) =>
+        {
+            // The shell is down the owner chain; the dialogs between close so the picker has
+            // the shell to point at. The shell itself is never closed here.
+            var owner = Owner as Window;
+            Close();
+            while (owner is not null && owner is not MainWindow)
+            {
+                var next = owner.Owner as Window;
+                owner.Close();
+                owner = next;
+            }
+
+            if (owner is MainWindow shell) shell.BeginAreaInspect();
+        };
+
+        RefreshScopeLabel();
+
         var header = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             Spacing = 12,
-            Children = { _search, _modifiedCount },
+            Children = { _search, pickArea, _areaLabel, _allTokens, _modifiedCount },
         };
 
         var body = new Grid
@@ -186,14 +233,42 @@ public sealed class ThemeEditorWindow : Window
     private string? SelectedKey =>
         _list.SelectedIndex >= 0 && _list.SelectedIndex < _keys.Count ? _keys[_list.SelectedIndex] : null;
 
+    /// <summary>The scoped tokens, or null for the whole theme.</summary>
+    private HashSet<string>? AreaTokens()
+    {
+        if (_areaIds is null) return null;
+        var tokens = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var area in Mailbox.Theming.Tokens.TokenMap.Areas.Where(a => _areaIds.Contains(a.Id)))
+        {
+            foreach (var token in area.Tokens) tokens.Add(token);
+        }
+
+        return tokens;
+    }
+
+    private void RefreshScopeLabel()
+    {
+        var names = _areaIds is null
+            ? []
+            : Mailbox.Theming.Tokens.TokenMap.Areas.Where(a => _areaIds.Contains(a.Id)).Select(a => a.Name).ToList();
+        _areaLabel.Text = names.Count == 0 ? string.Empty : $"Area: {string.Join(" + ", names)}";
+        _areaLabel.IsVisible = names.Count > 0;
+        _allTokens.IsVisible = names.Count > 0;
+    }
+
     private void RefreshList()
     {
         var selected = SelectedKey;
         var filter = _search.Text?.Trim() ?? string.Empty;
+        var scope = AreaTokens();
 
+        // Scoped, the list reads as the area does: grounds first, then inks, washes, lines —
+        // the roles the map knows — instead of the alphabet.
         _keys = _base.Keys
+            .Where(k => scope is null || scope.Contains(k))
             .Where(k => filter.Length == 0 || k.Contains(filter, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(k => k, StringComparer.Ordinal)
+            .OrderBy(k => scope is null ? 0 : (int)Mailbox.Theming.Tokens.TokenMap.RoleOf(k))
+            .ThenBy(k => k, StringComparer.Ordinal)
             .ToList();
 
         _list.ItemsSource = _keys.Select(Row).ToList();
@@ -263,7 +338,9 @@ public sealed class ThemeEditorWindow : Window
         if (SelectedKey is not { } key) return;
 
         _keyLabel.Text = key;
-        _layerLabel.Text = $"{TokenLayerExtensions.InferLayer(key)} token";
+        var area = Mailbox.Theming.Tokens.TokenMap.AreaOf(key);
+        _layerLabel.Text = $"{TokenLayerExtensions.InferLayer(key)} token · {Mailbox.Theming.Tokens.TokenMap.RoleOf(key)}"
+                           + (area is null ? string.Empty : $" · {area.Name}");
         _baseLabel.Text = $"Theme value: {_base[key]}";
         _value.Text = _overrides.TryGetRaw(key, out var over) ? over : _base[key];
         _reset.IsEnabled = _overrides.TryGetRaw(key, out _);

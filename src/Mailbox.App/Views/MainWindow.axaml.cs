@@ -5302,10 +5302,107 @@ public partial class MainWindow : Window
 
         PoseCaption(caption);
         PoseLiveTheme();
+        PoseInspect();
 
         if (this.FindControl<Control>("TitleBar") is not { } bar) return;
 
         WindowFrame.Drags(this, bar);
+    }
+
+    private InspectOverlay? _inspect;
+
+    /// <summary>The shell's pointable regions, for the area picker: label, token areas, control.</summary>
+    private List<InspectRegion> InspectRegions()
+    {
+        var regions = new List<InspectRegion>();
+        void Add(string name, string control, params string[] areas)
+        {
+            if (this.FindControl<Control>(control) is { } found)
+            {
+                regions.Add(new InspectRegion(name, areas, found));
+            }
+        }
+
+        Add("Title Bar", "TitleBar", "titlebar");
+        Add("Ribbon", "RibbonHost", "ribbon");
+        Add("App Rail", "AppRail", "rail");
+        Add("Folder Pane", "NavPane", "nav");
+        Add("Message List", "ListPane", "list-chrome", "list-rows");
+        Add("Reading Pane", "ReadingPane", "reading");
+        Add("Status Bar", "StatusBarHost", "statusbar");
+        return regions;
+    }
+
+    /// <summary>
+    /// The area picker: dims the shell, names the region under the pointer, and opens the
+    /// theme editor scoped to what was clicked — beside the shell rather than over it, since
+    /// the running application is the editor's preview. Escape leaves without choosing.
+    /// </summary>
+    internal void BeginAreaInspect()
+    {
+        if (_inspect is not null) return;
+        if (this.FindControl<Grid>("ShellRoot") is not { } root) return;
+
+        var overlay = new InspectOverlay(InspectRegions(), region =>
+        {
+            if (_inspect is null) return;
+            root.Children.Remove(_inspect);
+            _inspect = null;
+
+            if (region is null)
+            {
+                Log.Info("Area inspect ended without a choice.");
+                return;
+            }
+
+            Log.Info($"Area inspect chose {region.Name} → [{string.Join(", ", region.AreaIds)}].");
+            var editor = new ThemeEditorWindow(App.Themes, region.AreaIds);
+            editor.Show(this);
+        });
+
+        Grid.SetRowSpan(overlay, 4);
+        Grid.SetColumnSpan(overlay, 2);
+        overlay.ZIndex = 1000;
+        root.Children.Add(overlay);
+        _inspect = overlay;
+        overlay.Focus();
+        Log.Info("Area inspect began: point at a region, click to edit it, Esc to leave.");
+    }
+
+    /// <summary>
+    /// <c>MAILBOX_INSPECT=&lt;region&gt;</c> opens the picker and chooses that region through
+    /// its own machinery; <c>show:&lt;region&gt;</c> only poses the hover, which is what a
+    /// photograph of the overlay wants. Either way the regions and their bounds are the
+    /// read-back.
+    /// </summary>
+    private void PoseInspect()
+    {
+        if (Environment.GetEnvironmentVariable("MAILBOX_INSPECT") is not { Length: > 0 } wanted) return;
+
+        Opened += (_, _) => Dispatcher.UIThread.Post(
+            () =>
+            {
+                BeginAreaInspect();
+                if (_inspect is null) return;
+                Log.Info($"Harness: inspect regions — {_inspect.Describe()}.");
+
+                if (wanted.StartsWith("show:", StringComparison.OrdinalIgnoreCase))
+                {
+                    _inspect.Pose(wanted[5..]);
+                    return;
+                }
+
+                var region = _inspect.Find(wanted);
+                Log.Info(region is null
+                    ? $"Harness: inspect — no region named “{wanted}”."
+                    : $"Harness: inspect — choosing {region.Name}.");
+                if (region is not null)
+                {
+                    _inspect.Pose(wanted);
+                    _inspect.Choose(region);
+                }
+            },
+            DispatcherPriority.Loaded);
     }
 
     private bool _backdropAligning;

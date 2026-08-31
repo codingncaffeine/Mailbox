@@ -1,0 +1,6 @@
+# The area picker: the overlay posed over a hovered region for the photograph, and a region
+# chosen through the picker's own completion — the read-back is every region's bounds and the
+# editor's scoped landing.
+inspect-show-titlebar	MAILBOX_TODAY=2026-08-16	MAILBOX_THEME=colorful	MAILBOX_INSPECT=show:Title Bar
+inspect-show-reading-darkgray	MAILBOX_TODAY=2026-08-16	MAILBOX_THEME=darkgray	MAILBOX_INSPECT=show:Reading
+inspect-choose-list	MAILBOX_TODAY=2026-08-16	MAILBOX_THEME=colorful	MAILBOX_INSPECT=Message List

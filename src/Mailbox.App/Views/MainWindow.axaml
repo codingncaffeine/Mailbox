@@ -28,7 +28,7 @@
             ClipToBounds="True"
             Classes="windowshape"
             Background="{DynamicResource ribbon.tabstrip.background.brush}">
-    <Grid RowDefinitions="Auto,Auto,*,Auto" ColumnDefinitions="Auto,*">
+    <Grid Name="ShellRoot" RowDefinitions="Auto,Auto,*,Auto" ColumnDefinitions="Auto,*">
         <Grid.Resources>
             <theming:TokenBrushConverter x:Key="TokenBrush" />
             <theming:InkTokenConverter x:Key="InkBrush" />
@@ -370,6 +370,7 @@
              is a rule rather than the edge of either. The width is unchanged — the last of the
              57 pixels is the rule, which is how the reference spends it. -->
         <Border Grid.Row="1" Grid.RowSpan="2" Grid.Column="0"
+                Name="AppRail"
                 IsVisible="{Binding ShowAppRail}"
                 Width="{DynamicResource rail.width.value}"
                 BorderThickness="0,0,1,0"
@@ -443,6 +444,7 @@
 
             <!-- Navigation pane -->
             <Border Grid.Column="1" Grid.RowSpan="3"
+                    Name="NavPane"
                     IsVisible="{Binding NavVisible}"
                     Width="{DynamicResource nav.width.value}"
                     Background="{DynamicResource nav.background.brush}">
@@ -1177,6 +1179,7 @@
                         HorizontalAlignment="Right" VerticalAlignment="Bottom" />
 
         <Border Grid.Row="3" Grid.ColumnSpan="2"
+                Name="StatusBarHost"
                 Background="{DynamicResource statusbar.background.brush}"
                 Height="{DynamicResource statusbar.height.value}">
             <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="10,0">
