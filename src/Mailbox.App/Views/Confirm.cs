@@ -92,6 +92,10 @@ public static class Confirm
     /// </summary>
     public static async Task TellAsync(Window owner, string title, string message)
     {
+        // A posed answer, as AskAsync takes one: an OK-only dialog still blocks a run that
+        // cannot press it, and what the pose needs is for the telling to have happened.
+        if (HarnessAnswer.Next(title) is not null) return;
+
         var text = new TextBlock
         {
             Text = message,

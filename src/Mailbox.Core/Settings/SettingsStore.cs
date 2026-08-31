@@ -22,6 +22,9 @@ namespace Mailbox.Core.Settings;
 public sealed class SettingsStore
 {
     private readonly string? _path;
+
+    /// <summary>Where this store lives on disk, or null for a transient one — the backup names it.</summary>
+    public string? PathOnDisk => _path;
     private JsonObject _values;
 
     /// <summary>Raised after any value changes, with the key that changed.</summary>

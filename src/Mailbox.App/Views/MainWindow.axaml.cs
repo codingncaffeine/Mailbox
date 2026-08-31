@@ -7636,6 +7636,57 @@ public partial class MainWindow : Window
     /// second would find nothing the first had not already taken.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// The daily backup, hung off the same minute timer the send/receive schedule uses: once a
+    /// day, when the Backup &amp; Restore window asked for one, written and pruned off the UI
+    /// thread and reported on the status line only when something went wrong — a backup that
+    /// worked is not news twice a day.
+    /// </summary>
+    private void RunDailyBackupIfDue(ShellViewModel shell)
+    {
+        if (!App.Settings.GetBool(BackupDialog.EnabledKey)) return;
+        if (App.Settings.GetString(BackupDialog.DirectoryKey) is not { Length: > 0 } directory) return;
+
+        var today = Mailbox.Core.PosedClock.Now.ToString("yyyy-MM-dd");
+        if (App.Settings.GetString(BackupDialog.LastKey) == today) return;
+        if (_backingUp) return;
+
+        _backingUp = true;
+        App.Settings.Set(BackupDialog.LastKey, today);
+
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                System.IO.Directory.CreateDirectory(directory);
+                var destination = System.IO.Path.Combine(
+                    directory, Mailbox.Store.ProfileBackup.SuggestedName(DateTimeOffset.Now));
+                var result = BackupDialog.WriteArchive(destination);
+
+                if (result.Ok)
+                {
+                    var keep = (int)App.Settings.GetNumber(BackupDialog.KeepKey, 5);
+                    Mailbox.Store.ProfileBackup.Prune(directory, keep);
+                }
+                else
+                {
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                        shell.StatusRight = $"The daily backup failed: {result.Error}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("The daily backup failed.", ex);
+            }
+            finally
+            {
+                _backingUp = false;
+            }
+        });
+    }
+
+    private volatile bool _backingUp;
+
     private void WireSchedule(ShellViewModel shell)
     {
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
@@ -7644,6 +7695,7 @@ public partial class MainWindow : Window
         {
             WakeSnoozed(shell);
             CheckReminders(shell);
+            RunDailyBackupIfDue(shell);
 
             if (_transferring || App.Transfer.WorkOffline) return;
 

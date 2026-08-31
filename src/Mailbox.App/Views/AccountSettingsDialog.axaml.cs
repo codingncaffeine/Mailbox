@@ -550,7 +550,11 @@ public sealed class AccountSettingsDialog : Window
         _files.SelectionChanged += (_, _) => UpdateFileButtons();
         _files.ItemActivated += async (_, _) => await FileSettingsAsync();
 
-        var toolbar = Toolbar(_fileAdd, _fileSettings, _fileDefault, _fileRemove, _fileOpen);
+        // The owner's own addition to the reference's tab: the whole profile into one
+        // archive, and back — reached from the tab that names the files it protects.
+        var backup = ToolButton("archive", "Backup & Restore...", OpenBackupAsync);
+
+        var toolbar = Toolbar(_fileAdd, _fileSettings, _fileDefault, _fileRemove, _fileOpen, backup);
 
         var paragraph = Paragraph(
             "Select a data file in the list, then click Settings for more details or click Open "
@@ -608,6 +612,12 @@ public sealed class AccountSettingsDialog : Window
         Changed = true;
         Reload();
         _files.SelectedIndex = _files.Rows.ToList().FindIndex(r => Equals(r.Tag, account.Account.Address));
+    }
+
+    private async Task OpenBackupAsync()
+    {
+        var dialog = new BackupDialog();
+        await dialog.ShowDialog(this);
     }
 
     private async Task FileSettingsAsync()
@@ -1203,6 +1213,7 @@ public sealed class AccountSettingsDialog : Window
                     _tabs.SelectedIndex = int.Parse(argument, CultureInfo.InvariantCulture);
                     break;
                 case "setdefault": Press(_setDefault); break;
+                case "backup": _ = OpenBackupAsync(); break;
                 case "filedefault": Press(_fileDefault); break;
                 case "up": Press(_up); break;
                 case "down": Press(_down); break;
