@@ -25,6 +25,7 @@ public sealed class NotesWorkspace : Border
 
     public NotesWorkspace(PimRepository repository, DateOnly today)
     {
+        Avalonia.Automation.AutomationProperties.SetName(_view, "Notes");
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _book = new NoteBook(repository);
         Today = today;

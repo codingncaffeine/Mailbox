@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Automation.Peers;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
@@ -25,7 +26,7 @@ namespace Mailbox.Controls.Notes;
 /// everything drawn over it comes from the theme.
 /// </para>
 /// </remarks>
-public sealed class NotesView : DrawnSurface
+public sealed class NotesView : DrawnSurface, ISpokenRows
 {
     /// <summary>Authored: one note's cell on the wall, and the square inside it.</summary>
     public const double CellWidth = 106;
@@ -68,6 +69,7 @@ public sealed class NotesView : DrawnSurface
             if (_selected is { } chosen) _selected = _rows.FirstOrDefault(r => r.ItemId == chosen.ItemId);
             _scroll = Math.Clamp(_scroll, 0, Math.Max(0, LineCount() - 1));
             InvalidateVisual();
+            SpokenRowsChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -84,6 +86,7 @@ public sealed class NotesView : DrawnSurface
         {
             _selected = value;
             InvalidateVisual();
+            SpokenSelectionChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -542,4 +545,43 @@ public sealed class NotesView : DrawnSurface
         var line = Math.Max(0, (int)Math.Ceiling(Math.Max(0, used) / (double)columns));
         return new Point(WallInset + (CellWidth / 2), WallInset + (line * CellHeight) + (CellHeight / 2));
     }
+
+    // ---- The wall, spoken for --------------------------------------------------------------
+
+    /// <summary>The notes in the order the reader sees: the wall's own, or the sorted list's.</summary>
+    private List<NoteRow> SpokenOrder() => IsWall ? [.. _rows] : Ordered();
+
+    public event EventHandler? SpokenRowsChanged;
+
+    public event EventHandler? SpokenSelectionChanged;
+
+    int ISpokenRows.SpokenCount => _rows.Count;
+
+    string ISpokenRows.SpokenRow(int index)
+    {
+        var row = SpokenOrder()[index];
+        var said = new System.Text.StringBuilder();
+        said.Append(row.Title).Append(". ").Append(row.MadeText(Today, Culture)).Append('.');
+        if (row.Categories.Count > 0) said.Append(' ').Append(string.Join(", ", row.Categories)).Append('.');
+        return said.ToString();
+    }
+
+    int ISpokenRows.SpokenSelectedIndex
+        => _selected is { } chosen ? SpokenOrder().FindIndex(r => r.ItemId == chosen.ItemId) : -1;
+
+    void ISpokenRows.SpokenSelect(int index)
+    {
+        var row = SpokenOrder()[index];
+        Selected = row;
+        NoteSelected?.Invoke(this, row);
+    }
+
+    Rect? ISpokenRows.SpokenRowBounds(int index)
+    {
+        var order = SpokenOrder();
+        if (index < 0 || index >= order.Count) return null;
+        return BoxOf(order[index].ItemId);
+    }
+
+    protected override AutomationPeer OnCreateAutomationPeer() => new SpokenRowsPeer(this);
 }

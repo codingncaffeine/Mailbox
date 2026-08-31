@@ -1,6 +1,8 @@
 using Avalonia;
+using Avalonia.Automation.Peers;
 using Avalonia.Input;
 using Avalonia.Media;
+using Mailbox.Controls.Common;
 using Mailbox.Scheduling;
 using Mailbox.Theming.Tokens;
 
@@ -22,7 +24,7 @@ namespace Mailbox.Controls.Calendar;
 /// under it hold different numbers of appointments.
 /// </para>
 /// </remarks>
-public sealed class MonthView : CalendarSurface
+public sealed class MonthView : CalendarSurface, ISpokenRows
 {
     /// <summary>The weekday header's own height, between the grid's top line and its own.</summary>
     private const double HeaderHeight = 28;
@@ -95,7 +97,12 @@ public sealed class MonthView : CalendarSurface
     public CalendarEntry? SelectedEntry
     {
         get => _selectedEntry;
-        set => Set(ref _selectedEntry, value);
+        set
+        {
+            if (ReferenceEquals(_selectedEntry, value)) return;
+            Set(ref _selectedEntry, value);
+            SpokenSelectionChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     public IReadOnlyList<CalendarEntry> Entries
@@ -105,6 +112,7 @@ public sealed class MonthView : CalendarSurface
         {
             _entries = value ?? [];
             InvalidateVisual();
+            SpokenRowsChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -677,4 +685,50 @@ public sealed class MonthView : CalendarSurface
         Scrolled?.Invoke(this, weeks);
         e.Handled = true;
     }
+
+    // ---- The grid's appointments, spoken for -----------------------------------------------
+
+    public event EventHandler? SpokenRowsChanged;
+
+    public event EventHandler? SpokenSelectionChanged;
+
+    int ISpokenRows.SpokenCount => _entryHits.Count;
+
+    string ISpokenRows.SpokenRow(int index)
+    {
+        var entry = _entryHits[index].Entry;
+        var said = new System.Text.StringBuilder();
+        said.Append(entry.Summary.Length > 0 ? entry.Summary : "(No subject)").Append(". ");
+        said.Append(entry.AllDay
+            ? entry.StartWall.ToString("ddd d MMM", Culture) + ", all day"
+            : entry.StartWall.ToString("ddd d MMM h:mm tt", Culture) + " to " + entry.EndWall.ToString("h:mm tt", Culture));
+        said.Append('.');
+        if (entry.Location.Length > 0) said.Append(' ').Append(entry.Location).Append('.');
+        return said.ToString();
+    }
+
+    int ISpokenRows.SpokenSelectedIndex
+    {
+        get
+        {
+            for (var i = 0; i < _entryHits.Count; i++)
+            {
+                if (ReferenceEquals(_entryHits[i].Entry, SelectedEntry)) return i;
+            }
+
+            return -1;
+        }
+    }
+
+    void ISpokenRows.SpokenSelect(int index)
+    {
+        var entry = _entryHits[index].Entry;
+        SelectedEntry = entry;
+        EntrySelected?.Invoke(this, entry);
+    }
+
+    Rect? ISpokenRows.SpokenRowBounds(int index)
+        => index >= 0 && index < _entryHits.Count ? _entryHits[index].Box : null;
+
+    protected override AutomationPeer OnCreateAutomationPeer() => new SpokenRowsPeer(this);
 }

@@ -1,5 +1,6 @@
 using System.Globalization;
 using Avalonia;
+using Avalonia.Automation.Peers;
 using Avalonia.Input;
 using Avalonia.Media;
 using Mailbox.Controls.Common;
@@ -27,7 +28,7 @@ namespace Mailbox.Controls.Journal;
 /// span that always fits is what makes Back, Forward and Today mean something.
 /// </para>
 /// </remarks>
-public sealed class JournalView : DrawnSurface
+public sealed class JournalView : DrawnSurface, ISpokenRows
 {
     /// <summary>Authored: the months over the days inside them.</summary>
     public const double SpanRowHeight = 22;
@@ -114,6 +115,7 @@ public sealed class JournalView : DrawnSurface
             if (_selected is { } chosen) _selected = _rows.FirstOrDefault(r => r.ItemId == chosen.ItemId);
             _scroll = Math.Clamp(_scroll, 0, Math.Max(0, LineCount() - 1));
             InvalidateVisual();
+            SpokenRowsChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -144,6 +146,7 @@ public sealed class JournalView : DrawnSurface
         {
             _selected = value;
             InvalidateVisual();
+            SpokenSelectionChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -1062,4 +1065,45 @@ public sealed class JournalView : DrawnSurface
 
     /// <summary>Where a moment lands across the view, which is where an entry is hung.</summary>
     public double XOf(DateTime moment) => X(moment);
+
+    // ---- The timeline, spoken for ----------------------------------------------------------
+
+    /// <summary>The entries in the order the arrow keys walk them.</summary>
+    private List<JournalRow> SpokenOrder() => IsTimeline ? InSpan() : Sorted(_rows);
+
+    public event EventHandler? SpokenRowsChanged;
+
+    public event EventHandler? SpokenSelectionChanged;
+
+    int ISpokenRows.SpokenCount => SpokenOrder().Count;
+
+    string ISpokenRows.SpokenRow(int index)
+    {
+        var row = SpokenOrder()[index];
+        var said = new System.Text.StringBuilder();
+        said.Append(row.EntryType).Append(". ").Append(row.Subject).Append(". ")
+            .Append(row.StartText(Culture)).Append('.');
+        if (row.DurationText(Culture) is { Length: > 0 } duration) said.Append(' ').Append(duration).Append('.');
+        if (row.Contacts is { Length: > 0 } contacts) said.Append(" With ").Append(contacts).Append('.');
+        return said.ToString();
+    }
+
+    int ISpokenRows.SpokenSelectedIndex
+        => _selected is { } chosen ? SpokenOrder().FindIndex(r => r.ItemId == chosen.ItemId) : -1;
+
+    void ISpokenRows.SpokenSelect(int index)
+    {
+        var row = SpokenOrder()[index];
+        Selected = row;
+        EntrySelected?.Invoke(this, row);
+    }
+
+    Rect? ISpokenRows.SpokenRowBounds(int index)
+    {
+        var order = SpokenOrder();
+        if (index < 0 || index >= order.Count) return null;
+        return BoxOf(order[index].ItemId);
+    }
+
+    protected override AutomationPeer OnCreateAutomationPeer() => new SpokenRowsPeer(this);
 }

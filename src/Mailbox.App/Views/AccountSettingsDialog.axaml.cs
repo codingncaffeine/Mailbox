@@ -58,7 +58,7 @@ public sealed class AccountSettingsDialog : Window
     private readonly TextBlock _bannerText = Label(string.Empty);
 
     // Email
-    private readonly ClassicListView _accounts = new();
+    private readonly ClassicListView _accounts = Named(new ClassicListView(), "Email accounts");
     private readonly Button _new;
     private readonly Button _repair;
     private readonly Button _change;
@@ -71,18 +71,18 @@ public sealed class AccountSettingsDialog : Window
     private readonly TextBlock _deliveryFile = Label(string.Empty);
 
     // Published Calendars
-    private readonly ClassicListView _publishedList = new();
+    private readonly ClassicListView _publishedList = Named(new ClassicListView(), "Published calendars");
     private readonly Button _publishedChange;
     private readonly Button _publishedRemove;
 
     // Internet Calendars
-    private readonly ClassicListView _calendars = new();
+    private readonly ClassicListView _calendars = Named(new ClassicListView(), "Internet calendars");
     private readonly Button _calendarNew;
     private readonly Button _calendarChange;
     private readonly Button _calendarRemove;
 
     // Data Files
-    private readonly ClassicListView _files = new();
+    private readonly ClassicListView _files = Named(new ClassicListView(), "Data files");
     private readonly Button _fileAdd;
     private readonly Button _fileOpen;
     private readonly Button _fileSettings;
@@ -212,6 +212,13 @@ public sealed class AccountSettingsDialog : Window
     /// below the list — 122px, measured — that each tab fills its own way. The list takes the
     /// height that is left, which at the reference's size is its 175px.
     /// </summary>
+    /// <summary>The list, named for a screen reader on the way through.</summary>
+    private static ClassicListView Named(ClassicListView list, string name)
+    {
+        Avalonia.Automation.AutomationProperties.SetName(list, name);
+        return list;
+    }
+
     private static Grid Page(StackPanel toolbar, ClassicListView list, Panel? below)
     {
         var page = new Grid { RowDefinitions = new RowDefinitions("39,*,122") };
@@ -715,7 +722,7 @@ public sealed class AccountSettingsDialog : Window
     /// </remarks>
     private Control RssTab()
     {
-        var list = new ClassicListView
+        var list = Named(new ClassicListView
         {
             Columns =
             [
@@ -723,7 +730,7 @@ public sealed class AccountSettingsDialog : Window
                 new ClassicColumn("Last Updated On", 174),
                 new ClassicColumn("Status", 173),
             ],
-        };
+        }, "RSS feeds");
 
         var location = Label(string.Empty, bold: true);
         var changeFolder = PushButton("Change Folder", ChangeFeedFolderAsync, width: 92);
@@ -1120,10 +1127,10 @@ public sealed class AccountSettingsDialog : Window
 
     private Control AddressBooksTab()
     {
-        var list = new ClassicListView
+        var list = Named(new ClassicListView
         {
             Columns = [new ClassicColumn("Name", 282), new ClassicColumn("Type", 281)],
-        };
+        }, "Address books");
 
         _refreshOnSelect[5] = Fill;
 

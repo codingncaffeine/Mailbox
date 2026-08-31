@@ -62,9 +62,15 @@ public interface ISpokenRows
 public class SpokenRowsPeer : ControlAutomationPeer, ISelectionProvider
 {
     private readonly List<SpokenRowPeer> _rows = [];
+    private readonly AutomationControlType _role;
+    private readonly AutomationControlType _rowRole;
 
-    public SpokenRowsPeer(Control owner) : base(owner)
+    public SpokenRowsPeer(Control owner,
+        AutomationControlType role = AutomationControlType.List,
+        AutomationControlType rowRole = AutomationControlType.ListItem) : base(owner)
     {
+        _role = role;
+        _rowRole = rowRole;
         var view = (ISpokenRows)owner;
         view.SpokenRowsChanged += (_, _) => InvalidateChildren();
         // The container's selection property is the one change the accessibility bridge turns
@@ -75,7 +81,9 @@ public class SpokenRowsPeer : ControlAutomationPeer, ISelectionProvider
 
     internal ISpokenRows View => (ISpokenRows)Owner;
 
-    protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.List;
+    protected override AutomationControlType GetAutomationControlTypeCore() => _role;
+
+    internal AutomationControlType RowRole => _rowRole;
 
     protected override IReadOnlyList<AutomationPeer> GetChildrenCore()
     {
@@ -112,7 +120,7 @@ public sealed class SpokenRowPeer(SpokenRowsPeer list, int index)
 
     protected override AutomationPeer GetParentCore() => list;
 
-    protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.ListItem;
+    protected override AutomationControlType GetAutomationControlTypeCore() => list.RowRole;
 
     protected override string GetNameCore() => View.SpokenRow(index);
 

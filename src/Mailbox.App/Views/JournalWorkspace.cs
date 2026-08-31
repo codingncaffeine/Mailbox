@@ -28,6 +28,7 @@ public sealed class JournalWorkspace : Border
 
     public JournalWorkspace(PimRepository repository, DateOnly today, DayOfWeek firstDayOfWeek = DayOfWeek.Sunday)
     {
+        Avalonia.Automation.AutomationProperties.SetName(_view, "Journal timeline");
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _book = new JournalBook(repository);
         Today = today;

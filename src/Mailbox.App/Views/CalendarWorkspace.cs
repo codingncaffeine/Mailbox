@@ -74,6 +74,9 @@ public sealed class CalendarWorkspace : Border
 
     public CalendarWorkspace(PimRepository repository, CalendarOptions options, DateOnly today, DateTime? now)
     {
+        Avalonia.Automation.AutomationProperties.SetName(_month, "Month calendar");
+        Avalonia.Automation.AutomationProperties.SetName(_timeGrid, "Calendar");
+        Avalonia.Automation.AutomationProperties.SetName(_schedule, "Schedule");
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _source = new CalendarSource(repository);

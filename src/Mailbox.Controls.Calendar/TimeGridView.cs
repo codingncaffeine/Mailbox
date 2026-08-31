@@ -1,7 +1,9 @@
 using Avalonia;
+using Avalonia.Automation.Peers;
 using Avalonia.Input;
 using Avalonia.Media;
 using Mailbox.Core.Settings;
+using Mailbox.Controls.Common;
 using Mailbox.Scheduling;
 using Mailbox.Theming.Tokens;
 
@@ -34,7 +36,7 @@ public enum TimeGridSpan
 /// decision rather than a measurement it says so, and a capture would settle it.
 /// </para>
 /// </remarks>
-public sealed class TimeGridView : CalendarSurface
+public sealed class TimeGridView : CalendarSurface, ISpokenRows
 {
     /// <summary>The ruler's width. Authored: wide enough for "12" at 20px and "00" beside it.</summary>
     private const double RulerWidth = 62;
@@ -129,13 +131,19 @@ public sealed class TimeGridView : CalendarSurface
         {
             _entries = value ?? [];
             InvalidateVisual();
+            SpokenRowsChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
     public CalendarEntry? SelectedEntry
     {
         get => _selectedEntry;
-        set => Set(ref _selectedEntry, value);
+        set
+        {
+            if (ReferenceEquals(_selectedEntry, value)) return;
+            Set(ref _selectedEntry, value);
+            SpokenSelectionChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     public DateOnly? Selected
@@ -961,4 +969,50 @@ public sealed class TimeGridView : CalendarSurface
         ScrollMinutes -= e.Delta.Y * SlotMinutes * 3;
         e.Handled = true;
     }
+
+    // ---- The grid's appointments, spoken for -----------------------------------------------
+
+    public event EventHandler? SpokenRowsChanged;
+
+    public event EventHandler? SpokenSelectionChanged;
+
+    int ISpokenRows.SpokenCount => _entryHits.Count;
+
+    string ISpokenRows.SpokenRow(int index)
+    {
+        var entry = _entryHits[index].Entry;
+        var said = new System.Text.StringBuilder();
+        said.Append(entry.Summary.Length > 0 ? entry.Summary : "(No subject)").Append(". ");
+        said.Append(entry.AllDay
+            ? entry.StartWall.ToString("ddd d MMM", Culture) + ", all day"
+            : entry.StartWall.ToString("ddd d MMM h:mm tt", Culture) + " to " + entry.EndWall.ToString("h:mm tt", Culture));
+        said.Append('.');
+        if (entry.Location.Length > 0) said.Append(' ').Append(entry.Location).Append('.');
+        return said.ToString();
+    }
+
+    int ISpokenRows.SpokenSelectedIndex
+    {
+        get
+        {
+            for (var i = 0; i < _entryHits.Count; i++)
+            {
+                if (ReferenceEquals(_entryHits[i].Entry, SelectedEntry)) return i;
+            }
+
+            return -1;
+        }
+    }
+
+    void ISpokenRows.SpokenSelect(int index)
+    {
+        var entry = _entryHits[index].Entry;
+        SelectedEntry = entry;
+        EntrySelected?.Invoke(this, entry);
+    }
+
+    Rect? ISpokenRows.SpokenRowBounds(int index)
+        => index >= 0 && index < _entryHits.Count ? _entryHits[index].Box : null;
+
+    protected override AutomationPeer OnCreateAutomationPeer() => new SpokenRowsPeer(this);
 }

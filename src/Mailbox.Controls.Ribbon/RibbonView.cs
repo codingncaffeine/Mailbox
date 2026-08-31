@@ -914,6 +914,7 @@ public sealed class RibbonView : ContentControl
             Flyout = BuildDisplayOptionsMenu(),
         };
         ToolTip.SetTip(chevron, Screentip("Ribbon Display Options", "Choose how much of the ribbon is shown."));
+        Avalonia.Automation.AutomationProperties.SetName(chevron, "Ribbon Display Options");
 
         _displayOptions = chevron;
         return chevron;
@@ -1792,6 +1793,7 @@ public sealed class RibbonView : ContentControl
             Classes = { RibbonButtonClass },
         };
         ToolTip.SetTip(button, Screentip(tip, description ?? "Show what the bar has no room for."));
+        Avalonia.Automation.AutomationProperties.SetName(button, tip);
         button.Click += (_, _) => onClick();
         return button;
     }
@@ -1907,6 +1909,7 @@ public sealed class RibbonView : ContentControl
             VerticalContentAlignment = VerticalAlignment.Center,
         };
         ToolTip.SetTip(button, Screentip(GroupLabel(group), $"The {GroupLabel(group)} commands, which this window is too narrow to show."));
+        Avalonia.Automation.AutomationProperties.SetName(button, GroupLabel(group));
 
         // Built when it is first opened rather than with the button. Most collapsed groups are
         // never opened, and this tree is the same size as the one the group would have drawn.
@@ -2068,6 +2071,7 @@ public sealed class RibbonView : ContentControl
 
         var button = new Button { Content = text, Classes = { "flat" }, Padding = new Thickness(2, 0) };
         ToolTip.SetTip(button, Screentip(tip, "Scroll the gallery."));
+        Avalonia.Automation.AutomationProperties.SetName(button, tip);
         button.Click += (_, _) => onClick();
         return button;
     }
@@ -2184,6 +2188,7 @@ public sealed class RibbonView : ContentControl
         Bind(launcher, TemplatedControl.ForegroundProperty, "ribbon.group.label.brush");
         Bind(launcher, TemplatedControl.FontSizeProperty, "type.ui.size.small.value");
         ToolTip.SetTip(launcher, Screentip($"{GroupLabel(group)} options", $"Open the full options for {GroupLabel(group)}."));
+        Avalonia.Automation.AutomationProperties.SetName(launcher, $"{GroupLabel(group)} options");
 
         var opens = group.DialogLauncher.Value;
         launcher.Click += (_, _) =>
@@ -2435,6 +2440,10 @@ public sealed class RibbonView : ContentControl
             VerticalContentAlignment = VerticalAlignment.Center,
             Classes = { RibbonButtonClass },
         };
+
+        // Each half speaks for itself: the action is the command, the chevron its menu.
+        Avalonia.Automation.AutomationProperties.SetName(action, command.Label);
+        Avalonia.Automation.AutomationProperties.SetName(chevron, command.Label + " menu");
 
         var divider = new Border { Width = 1, Margin = new Thickness(0, 3), Classes = { "ribbonsplitdivider" } };
 

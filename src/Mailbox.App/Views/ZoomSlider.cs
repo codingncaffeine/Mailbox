@@ -1,4 +1,7 @@
 using Avalonia;
+using Avalonia.Automation;
+using Avalonia.Automation.Peers;
+using Avalonia.Automation.Provider;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
@@ -138,5 +141,44 @@ public sealed class ZoomSlider : Control
         if (Bounds.Width <= 0) return;
         var fraction = Math.Clamp(x / Bounds.Width, 0, 1);
         Value = Math.Round(Minimum + (fraction * (Maximum - Minimum)));
+    }
+
+    protected override AutomationPeer OnCreateAutomationPeer() => new ZoomSliderPeer(this);
+
+    /// <summary>
+    /// The hairline as a slider: a screen reader hears the zoom as a value it can read and set,
+    /// which a drawn track and tick otherwise keep entirely to the eye.
+    /// </summary>
+    private sealed class ZoomSliderPeer : ControlAutomationPeer, IRangeValueProvider
+    {
+        private readonly ZoomSlider _slider;
+
+        public ZoomSliderPeer(ZoomSlider slider) : base(slider)
+        {
+            _slider = slider;
+            _slider.PropertyChanged += (_, e) =>
+            {
+                if (e.Property == ValueProperty)
+                    RaisePropertyChangedEvent(RangeValuePatternIdentifiers.ValueProperty, e.OldValue, e.NewValue);
+            };
+        }
+
+        protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Slider;
+
+        protected override string GetNameCore() => "Zoom";
+
+        public bool IsReadOnly => false;
+
+        public double Minimum => _slider.Minimum;
+
+        public double Maximum => _slider.Maximum;
+
+        public double Value => _slider.Value;
+
+        public double SmallChange => 10;
+
+        public double LargeChange => 25;
+
+        public void SetValue(double value) => _slider.Value = Math.Round(Math.Clamp(value, Minimum, Maximum));
     }
 }

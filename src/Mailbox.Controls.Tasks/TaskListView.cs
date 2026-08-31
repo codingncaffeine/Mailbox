@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Automation.Peers;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
@@ -27,7 +28,7 @@ namespace Mailbox.Controls.Tasks;
 /// indistinguishable, which threw away the only thing the red says.
 /// </para>
 /// </remarks>
-public sealed class TaskListView : DrawnSurface
+public sealed class TaskListView : DrawnSurface, ISpokenRows
 {
     /// <summary>Measured: the arrangement bar itself.</summary>
     public const double ArrangeHeight = 16;
@@ -106,6 +107,7 @@ public sealed class TaskListView : DrawnSurface
             if (_selected is { } chosen) _selected = _rows.FirstOrDefault(r => r.Key == chosen.Key);
             _scroll = Math.Clamp(_scroll, 0, Math.Max(0, Lines().Count - 1));
             InvalidateVisual();
+            SpokenRowsChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -116,6 +118,7 @@ public sealed class TaskListView : DrawnSurface
         {
             _selected = value;
             InvalidateVisual();
+            SpokenSelectionChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -736,4 +739,74 @@ public sealed class TaskListView : DrawnSurface
 
     /// <summary>The new-task box, which a pose types into.</summary>
     public Rect NewTaskBox => new(0, NewTaskTop, Bounds.Width, NewTaskHeight);
+
+    // ---- The list, spoken for --------------------------------------------------------------
+
+    public event EventHandler? SpokenRowsChanged;
+
+    public event EventHandler? SpokenSelectionChanged;
+
+    int ISpokenRows.SpokenCount => Lines().Count;
+
+    /// <summary>A heading says its band and how many are under it; a task says its state and when.</summary>
+    string ISpokenRows.SpokenRow(int index)
+    {
+        var line = Lines()[index];
+        if (line.Row is not { } row)
+            return $"{TaskBook.Heading(line.Band)}, {_rows.Count(r => r.Band == line.Band)} " +
+                   (_rows.Count(r => r.Band == line.Band) == 1 ? "task" : "tasks");
+
+        var said = new System.Text.StringBuilder();
+        if (row.IsComplete) said.Append("Complete. ");
+        else if (row.IsOverdue) said.Append("Overdue. ");
+        said.Append(row.Summary).Append('.');
+        if (row.DueText() is { Length: > 0 } due) said.Append(" Due ").Append(due).Append('.');
+        if (row.Message is { } message) said.Append(" Flagged message from ").Append(message.From).Append('.');
+        else if (row.IsContact) said.Append(" Flagged contact.");
+        return said.ToString();
+    }
+
+    int ISpokenRows.SpokenSelectedIndex
+    {
+        get
+        {
+            if (_selected is not { } chosen) return -1;
+            var lines = Lines();
+            for (var i = 0; i < lines.Count; i++)
+            {
+                if (lines[i].Row?.Key == chosen.Key) return i;
+            }
+
+            return -1;
+        }
+    }
+
+    void ISpokenRows.SpokenSelect(int index)
+    {
+        if (Lines()[index].Row is not { } row) return;
+        Selected = row;
+        TaskSelected?.Invoke(this, row);
+    }
+
+    Rect? ISpokenRows.SpokenRowBounds(int index)
+    {
+        var at = _scroll;
+        foreach (var (_, box) in Placed())
+        {
+            if (at == index) return box;
+            at++;
+        }
+
+        return null;
+    }
+
+    bool? ISpokenRows.SpokenRowToggled(int index)
+        => Lines()[index].Row is { } row ? row.IsComplete : null;
+
+    void ISpokenRows.SpokenToggle(int index)
+    {
+        if (Lines()[index].Row is { } row) TaskToggled?.Invoke(this, row);
+    }
+
+    protected override AutomationPeer OnCreateAutomationPeer() => new SpokenRowsPeer(this);
 }

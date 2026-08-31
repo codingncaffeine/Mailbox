@@ -131,6 +131,11 @@ internal static class SystemDialogKit
             };
         }
 
+        // The name a screen reader speaks: the word on the button, or for the wordless move
+        // arrows the icon's own key, said as a word.
+        Avalonia.Automation.AutomationProperties.SetName(button,
+            text.Length > 0 ? text : char.ToUpperInvariant(icon[0]) + icon[1..].Replace('-', ' '));
+
         // A label wants the button's text at rest and the disabled ink otherwise; the stylesheet
         // handles both, but only when the label carries no ink of its own.
         return button;

@@ -46,6 +46,7 @@ public sealed class PeopleWorkspace : Border
 
     public PeopleWorkspace(ContactBook book, PeopleOptions options)
     {
+        Avalonia.Automation.AutomationProperties.SetName(_list, "Contact list");
         _book = book ?? throw new ArgumentNullException(nameof(book));
         _options = options ?? throw new ArgumentNullException(nameof(options));
 

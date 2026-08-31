@@ -1,9 +1,11 @@
 using System.Globalization;
 using Avalonia;
+using Avalonia.Automation.Peers;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Mailbox.Controls.Common;
 
 namespace Mailbox.App.Views;
 
@@ -66,6 +68,7 @@ public sealed class ClassicTabControl : Grid
             _page.Child = _tabs[value].Content;
             _strip.InvalidateVisual();
             SelectionChanged?.Invoke(this, EventArgs.Empty);
+            _strip.SaySelectionChanged();
         }
     }
 
@@ -79,14 +82,44 @@ public sealed class ClassicTabControl : Grid
         if (_selected < 0) SelectedIndex = 0;
         _strip.InvalidateMeasure();
         _strip.InvalidateVisual();
+        _strip.SayRowsChanged();
     }
 
     private static void Bind(AvaloniaObject target, AvaloniaProperty property, string key)
         => target[!property] = new DynamicResourceExtension(key);
 
     /// <summary>The row of tabs, and the page's top edge between and beside them.</summary>
-    private sealed class Strip : Control
+    private sealed class Strip : Control, ISpokenRows
     {
+        // ---- The tabs, spoken for ----------------------------------------------------------
+
+        public int SpokenCount => _owner._tabs.Count;
+
+        public string SpokenRow(int index) => _owner._tabs[index].Header;
+
+        public int SpokenSelectedIndex => _owner._selected;
+
+        public void SpokenSelect(int index) => _owner.SelectedIndex = index;
+
+        public Rect? SpokenRowBounds(int index)
+        {
+            var spans = Spans();
+            if (index < 0 || index >= spans.Count) return null;
+            var (left, right) = spans[index];
+            return new Rect(left - Rise, 0, right - left + (2 * Rise), Bounds.Height);
+        }
+
+        public event EventHandler? SpokenRowsChanged;
+
+        public event EventHandler? SpokenSelectionChanged;
+
+        internal void SayRowsChanged() => SpokenRowsChanged?.Invoke(this, EventArgs.Empty);
+
+        internal void SaySelectionChanged() => SpokenSelectionChanged?.Invoke(this, EventArgs.Empty);
+
+        protected override AutomationPeer OnCreateAutomationPeer()
+            => new SpokenRowsPeer(this, AutomationControlType.Tab, AutomationControlType.TabItem);
+
         /// <summary>The tabs begin two pixels in, which is where the first one's rise lands when it is selected.</summary>
         private const double Origin = 2;
         private const double Rise = 2;

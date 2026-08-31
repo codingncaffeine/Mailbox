@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Automation.Peers;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
@@ -40,7 +41,7 @@ public enum ContactArrangement
 /// scrollbar drag.
 /// </para>
 /// </remarks>
-public sealed class ContactListView : DrawnSurface
+public sealed class ContactListView : DrawnSurface, ISpokenRows
 {
     /// <summary>
     /// The index column's width, and where its letters sit inside it.
@@ -118,6 +119,7 @@ public sealed class ContactListView : DrawnSurface
             _scroll = Math.Clamp(_scroll, 0, Math.Max(0, _rows.Count - 1));
             if (_selected is { } chosen && !_rows.Any(r => r.Id == chosen.Id)) _selected = null;
             InvalidateVisual();
+            SpokenRowsChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -128,6 +130,7 @@ public sealed class ContactListView : DrawnSurface
         {
             _selected = value;
             InvalidateVisual();
+            SpokenSelectionChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -710,4 +713,60 @@ public sealed class ContactListView : DrawnSurface
 
         int Rows() => Math.Max(1, (int)(Bounds.Height / RowHeight));
     }
+
+    // ---- The list, spoken for --------------------------------------------------------------
+
+    public event EventHandler? SpokenRowsChanged;
+
+    public event EventHandler? SpokenSelectionChanged;
+
+    int ISpokenRows.SpokenCount => _rows.Count;
+
+    /// <summary>Who it is, as filed; then what the cards say about them.</summary>
+    string ISpokenRows.SpokenRow(int index)
+    {
+        var contact = _rows[index].Contact;
+        var said = new System.Text.StringBuilder();
+        said.Append(contact.FiledAs(Order)).Append('.');
+        var work = string.Join(", ", new[] { contact.JobTitle, contact.Company }.Where(part => part.Length > 0));
+        if (work.Length > 0) said.Append(' ').Append(work).Append('.');
+        var reach = contact.PrimaryEmail is { Length: > 0 } mail ? mail : contact.Phones.FirstOrDefault()?.Number ?? string.Empty;
+        if (reach.Length > 0) said.Append(' ').Append(reach).Append('.');
+        return said.ToString();
+    }
+
+    int ISpokenRows.SpokenSelectedIndex
+    {
+        get
+        {
+            if (_selected is not { } chosen) return -1;
+            for (var i = 0; i < _rows.Count; i++)
+            {
+                if (_rows[i].Id == chosen.Id) return i;
+            }
+
+            return -1;
+        }
+    }
+
+    void ISpokenRows.SpokenSelect(int index)
+    {
+        var row = _rows[index];
+        Selected = row;
+        ContactSelected?.Invoke(this, row);
+    }
+
+    Rect? ISpokenRows.SpokenRowBounds(int index)
+    {
+        if (index < 0 || index >= _rows.Count) return null;
+        var id = _rows[index].Id;
+        foreach (var (box, row) in _rowHits)
+        {
+            if (row.Id == id) return box;
+        }
+
+        return null;
+    }
+
+    protected override AutomationPeer OnCreateAutomationPeer() => new SpokenRowsPeer(this);
 }

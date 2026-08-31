@@ -43,6 +43,7 @@ public sealed class TasksWorkspace : Border
         DateOnly today,
         Func<IReadOnlyList<(string Address, MailRepository Mail)>>? mailboxes = null)
     {
+        Avalonia.Automation.AutomationProperties.SetName(_list, "Task list");
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
 
         // With the mail behind it the list holds the flagged messages too, which is what the
