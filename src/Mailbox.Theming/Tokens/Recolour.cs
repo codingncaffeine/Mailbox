@@ -113,6 +113,26 @@ public static class Recolour
     }
 
     /// <summary>
+    /// A colour moved until it reads on a ground: OKLCH lightness walked away from the
+    /// ground's side in 0.04 steps, hue and chroma kept, capped at ten. The original comes
+    /// back when the cap cannot clear the ratio — the caller decides what that means.
+    /// </summary>
+    public static string ReadableOn(string inkHex, string groundHex, double minimum = ContrastAudit.MinimumRatio)
+    {
+        if ((ContrastAudit.Ratio(inkHex, groundHex) ?? 0) >= minimum) return inkHex;
+        if (Oklch.Parse(inkHex) is not { } ink || ContrastAudit.Luminance(groundHex) is not { } groundLuminance) return inkHex;
+
+        var direction = groundLuminance < MidGreyLuminance ? 1 : -1;
+        for (var step = 1; step <= 10; step++)
+        {
+            var moved = ink.WithLightness(ink.L + (direction * 0.04 * step));
+            if ((ContrastAudit.Ratio(moved.ToHex(), groundHex) ?? 0) >= minimum) return moved.ToHex();
+        }
+
+        return inkHex;
+    }
+
+    /// <summary>
     /// The contrast repair: for each audit finding whose ink the caller itself wrote, walk the
     /// ink's OKLCH lightness away from the ground in 0.04 steps — hue and chroma kept — until
     /// the ratio clears, capped at ten steps. Findings on tokens the base owns are never

@@ -112,6 +112,7 @@ public static class OptionsPages
                 // Filled with a live control by the window; see OptionsWindow.
                 new SlotRow("background"),
                 new SlotRow("theme"),
+                new SlotRow("palette"),
                 new SlotRow("density"),
             ]),
 

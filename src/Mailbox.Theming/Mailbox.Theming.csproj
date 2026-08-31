@@ -33,6 +33,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The curated colour schemes, vendored from tinted-theming/schemes (MIT — the licence
+         text ships beside them, and each file carries its author). Embedded so the palette
+         picker works from the assembly alone. -->
+    <EmbeddedResource Include="Palettes\schemes\*.json" />
+    <EmbeddedResource Include="Palettes\schemes\LICENSE" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Mailbox.Core\Mailbox.Core.csproj" />
   </ItemGroup>
 

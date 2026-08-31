@@ -1,0 +1,5 @@
+# The palette picker: a dark and a light curated scheme applied whole, read back live with the
+# light-content assertion; and the Options row pressed as a reader would press it.
+palette-nord	MAILBOX_TODAY=2026-08-16	MAILBOX_PALETTE=nord	MAILBOX_THEME_SWITCH=palette-nord
+palette-solarized-light	MAILBOX_TODAY=2026-08-16	MAILBOX_PALETTE=solarized-light	MAILBOX_THEME_SWITCH=palette-solarized-light
+palette-row-press	MAILBOX_TODAY=2026-08-16	MAILBOX_PEEK=options	MAILBOX_OPTIONS_PAGE=general	MAILBOX_OPTIONS_PRESS=Palette:=Gruvbox dark

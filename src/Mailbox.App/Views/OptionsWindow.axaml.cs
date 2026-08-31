@@ -548,6 +548,12 @@ public sealed class OptionsWindow : Window
             }
 
             FillThemeRow();
+            _refillThemeRow = FillThemeRow;
+        }
+
+        if (renderer.Slots.TryGetValue("palette", out var palette))
+        {
+            palette.Content = LabelledLive("Palette:", PaletteRow());
         }
 
         if (renderer.Slots.TryGetValue("density", out var density))
@@ -1655,6 +1661,106 @@ public sealed class OptionsWindow : Window
         App.Settings.Set(App.ThemeSetting, _themes.ThemeId);
         Mailbox.Core.Diagnostics.Log.Info($"Theme \"{id}\" removed; active theme is {_themes.ThemeId}.");
         return true;
+    }
+
+    private Action? _refillThemeRow;
+
+    /// <summary>
+    /// The Palette row: a curated colour scheme, the desktop's own colours, or a scheme read
+    /// off the reader's background image — each becoming an ordinary theme file over a
+    /// built-in base, so trying one is applying it and removing one is the theme row's Remove.
+    /// Content is never recoloured; a palette paints what frames the mail.
+    /// </summary>
+    private Control PaletteRow()
+    {
+        var curated = Mailbox.Theming.Palettes.ColourSchemes.Curated;
+        var entries = new List<string> { "(Pick a palette…)" };
+        entries.AddRange(curated.Select(s => s.Name));
+        entries.Add("(Desktop colours)");
+        entries.Add("(From your background image)");
+
+        var combo = new ComboBox
+        {
+            ItemsSource = entries,
+            SelectedIndex = 0,
+            MinWidth = 220,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        var applying = false;
+        combo.SelectionChanged += async (_, _) =>
+        {
+            if (applying || combo.SelectedIndex <= 0) return;
+
+            Mailbox.Theming.Palettes.ColourScheme? scheme;
+            if (combo.SelectedIndex <= curated.Count)
+            {
+                scheme = curated[combo.SelectedIndex - 1];
+            }
+            else if (combo.SelectedIndex == curated.Count + 1)
+            {
+                scheme = Theming.PaletteDoor.DesktopScheme();
+                if (scheme is null)
+                {
+                    await Confirm.TellAsync(this, "Palette",
+                        "The desktop's colour scheme could not be read here.");
+                }
+            }
+            else
+            {
+                scheme = SchemeFromBackdrop();
+                if (scheme is null)
+                {
+                    await Confirm.TellAsync(this, "Palette",
+                        "Choose a background image first — the palette is read off it.");
+                }
+            }
+
+            if (scheme is null)
+            {
+                applying = true;
+                combo.SelectedIndex = 0;
+                applying = false;
+                return;
+            }
+
+            var directory = Mailbox.Theming.Files.ThemeLibrary.DefaultDirectory();
+            var (result, _) = Mailbox.Theming.Palettes.PaletteThemes.Write(scheme, directory);
+            _themes.ReplaceLibrary(Mailbox.Theming.Files.ThemeLibrary.Load(directory));
+            if (_themes.Library.Canonical(result.File.Id) is { } id)
+            {
+                _themes.ApplyFresh(id);
+                App.Settings.Set(App.ThemeSetting, _themes.ThemeId);
+            }
+
+            Mailbox.Core.Diagnostics.Log.Info(
+                $"Palette \"{scheme.Name}\" applied as \"{result.File.Id}\" "
+                + $"({result.Repaired.Count} repaired, {result.Residual.Count} residual).");
+            _refillThemeRow?.Invoke();
+
+            // The row is a door, not a state: the theme row now names what is applied.
+            applying = true;
+            combo.SelectedIndex = 0;
+            applying = false;
+        };
+
+        return combo;
+    }
+
+    /// <summary>The scheme read off the current background image, when the background is one.</summary>
+    private Mailbox.Theming.Palettes.ColourScheme? SchemeFromBackdrop()
+    {
+        var current = Theming.BackdropChoice.Current(App.Settings);
+        if (current.Length == 0 || current == "none"
+            || current.StartsWith("pattern:", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var path = Path.IsPathRooted(current)
+            ? current
+            : Path.Combine(Mailbox.Theming.Files.ThemeLibrary.DefaultDirectory(), current);
+        return File.Exists(path) ? Theming.PaletteDoor.SchemeFromImage(path) : null;
     }
 
     /// <summary>
