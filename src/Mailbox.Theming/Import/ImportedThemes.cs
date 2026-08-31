@@ -63,8 +63,14 @@ public static class ImportedThemes
         var (id, updated) = AllocateId(theme, directory, notes);
 
         // The header image, re-encoded through the application's decoder or not written at all.
+        // A great many themes carry no theme_frame and put their picture in
+        // additional_backgrounds instead — the first entry is what the browser draws on top,
+        // so with no frame image it IS the header.
         string? backdropPath = null;
-        if (theme.FrameImage is { } frameImage)
+        var spareBackgrounds = theme.FrameImage is null && theme.AdditionalBackgrounds.Count > 0
+            ? theme.AdditionalBackgrounds.Count - 1
+            : theme.AdditionalBackgrounds.Count;
+        if ((theme.FrameImage ?? theme.AdditionalBackgrounds.FirstOrDefault()) is { } frameImage)
         {
             if (reencode is null)
             {
@@ -88,9 +94,9 @@ public static class ImportedThemes
             }
         }
 
-        if (theme.AdditionalBackgrounds.Count > 0)
+        if (spareBackgrounds > 0)
         {
-            notes.Add($"{theme.AdditionalBackgrounds.Count} additional background(s) not used by the slim import");
+            notes.Add($"{spareBackgrounds} additional background(s) not used by the slim import");
         }
 
         var result = SlimThemeImport.Map(theme, id, theme.Name, backdropPath);

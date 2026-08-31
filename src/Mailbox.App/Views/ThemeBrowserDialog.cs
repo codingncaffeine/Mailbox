@@ -389,7 +389,8 @@ internal sealed class ThemeBrowserDialog : Window
             var resolved = new Mailbox.Theming.Files.ThemeLibrary([result.File]).Build("preview").Resolve();
 
             Bitmap? backdrop = null;
-            if (theme.FrameImage is { } frame && package.ReadImage(frame) is { } image)
+            if ((theme.FrameImage ?? theme.AdditionalBackgrounds.FirstOrDefault()) is { } frame
+                && package.ReadImage(frame) is { } image)
             {
                 try
                 {
@@ -505,7 +506,13 @@ internal sealed class ThemeBrowserDialog : Window
         foreach (var op in script.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
-            if (op.StartsWith("select:", StringComparison.OrdinalIgnoreCase))
+            if (op.StartsWith("search:", StringComparison.OrdinalIgnoreCase))
+            {
+                _search.Text = op[7..];
+                await SearchAsync(reset: true);
+                Log.Info($"Harness: theme browser — searched \"{op[7..]}\": {_listings.Count} of {_total} listed.");
+            }
+            else if (op.StartsWith("select:", StringComparison.OrdinalIgnoreCase))
             {
                 var slug = op[7..];
                 var index = _listings.FindIndex(l => string.Equals(l.Slug, slug, StringComparison.OrdinalIgnoreCase));

@@ -370,6 +370,38 @@ public class ThemeImportTests
     }
 
     [Fact]
+    public void AnAdditionalBackgroundIsTheHeaderWhenThereIsNoFrameImage()
+    {
+        // The common AMO shape: no theme_frame at all, the picture in additional_backgrounds.
+        // The first entry is what the browser draws on top, so it is the header here too.
+        var root = Scratch();
+        byte[] fakeImage = [0xFF, 0xD8, 0xFF];
+        var package = PackageWith(root, """
+            {
+              "manifest_version": 2, "version": "1", "name": "Additional Only Fixture",
+              "theme": {
+                "colors": { "frame": "#0B1026", "tab_background_text": "#DDE4FF" },
+                "images": { "additional_backgrounds": ["images/0.jpg", "images/1.jpg"] },
+                "properties": { "additional_backgrounds_alignment": ["right top"] }
+              }
+            }
+            """);
+        Directory.CreateDirectory(Path.Combine(package, "images"));
+        File.WriteAllBytes(Path.Combine(package, "images", "0.jpg"), fakeImage);
+        File.WriteAllBytes(Path.Combine(package, "images", "1.jpg"), fakeImage);
+
+        var themes = Path.Combine(root, "themes");
+        var outcome = ImportedThemes.Import(package, themes, bytes => bytes);
+        var id = outcome.Result.File.Id;
+
+        Assert.Equal($"images/{id}/frame.png", outcome.Result.File.Tokens[TokenKeys.TitleBar.Backdrop]);
+        Assert.True(File.Exists(Path.Combine(themes, "images", id, "frame.png")));
+
+        // One background became the header; only the second is reported unused.
+        Assert.Contains(outcome.Notes, n => n.Contains("1 additional background(s)"));
+    }
+
+    [Fact]
     public void TheWrittenFileRoundTrips()
     {
         var root = Scratch();
