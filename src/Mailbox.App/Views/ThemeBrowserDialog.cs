@@ -5,6 +5,7 @@ using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Mailbox.Core.Diagnostics;
 using Mailbox.Theming;
 using Mailbox.Theming.Browse;
@@ -157,6 +158,11 @@ internal sealed class ThemeBrowserDialog : Window
         _sort.SelectionChanged += async (_, _) => await SearchAsync(reset: true);
         _category.SelectionChanged += async (_, _) => await SearchAsync(reset: true);
         _more.Click += async (_, _) => await SearchAsync(reset: false);
+        // No virtualization: recycled containers were dropping the rows' thumbnails as they
+        // scrolled in and out — shown, then gone, exactly as reported. A few hundred light
+        // rows at most is nothing to keep realised, and a row that exists always paints.
+        _list.ItemsPanel = new Avalonia.Controls.Templates.FuncTemplate<Panel?>(() => new StackPanel());
+        ScrollViewer.SetHorizontalScrollBarVisibility(_list, Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled);
         _list.ItemsSource = _rows;
         _list.SelectionChanged += async (_, _) => await PreviewAsync();
         _install.Click += async (_, _) => await InstallAsync();
@@ -206,9 +212,11 @@ internal sealed class ThemeBrowserDialog : Window
             ColumnDefinitions = new ColumnDefinitions("320,16,*"),
             RowDefinitions = new RowDefinitions("*"),
         };
-        var listScroll = new ScrollViewer { Content = _list };
-        Grid.SetColumn(listScroll, 0);
-        columns.Children.Add(listScroll);
+        // The list scrolls itself — a ListBox wrapped in another ScrollViewer is measured
+        // against an infinite viewport, which is both scrolling that fights itself and
+        // virtualization that cannot work.
+        Grid.SetColumn(_list, 0);
+        columns.Children.Add(_list);
         Grid.SetColumn(meta, 2);
         columns.Children.Add(meta);
 
@@ -561,6 +569,22 @@ internal sealed class ThemeBrowserDialog : Window
                 await Task.WhenAll(_thumbnailWork);
                 Log.Info($"Harness: theme browser — thumbnails: {_thumbnailsShown} shown, {_thumbnailsFailed} failed, "
                          + $"{_rows.Count} row(s), {_listings.Count(l => l.ThumbnailUrl is not null)} with a thumbnail to show.");
+            }
+            else if (op.StartsWith("scroll:", StringComparison.OrdinalIgnoreCase))
+            {
+                // The owner's own observation: the act of scrolling matters. Realise it.
+                var scroller = _list.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault();
+                if (scroller is null)
+                {
+                    Log.Info("Harness: theme browser — no scroller to drive.");
+                }
+                else
+                {
+                    if (string.Equals(op[7..], "end", StringComparison.OrdinalIgnoreCase)) scroller.ScrollToEnd();
+                    else if (string.Equals(op[7..], "home", StringComparison.OrdinalIgnoreCase)) scroller.ScrollToHome();
+                    await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Render);
+                    Log.Info($"Harness: theme browser — scrolled to {op[7..]}; offset {scroller.Offset.Y:0} of {scroller.Extent.Height:0}.");
+                }
             }
             else if (op.StartsWith("search:", StringComparison.OrdinalIgnoreCase))
             {
