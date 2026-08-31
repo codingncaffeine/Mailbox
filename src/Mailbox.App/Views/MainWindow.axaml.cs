@@ -1484,6 +1484,31 @@ public partial class MainWindow : Window
                 };
                 break;
 
+            // The theme browser, over whatever source MAILBOX_THEME_SOURCE poses — a capture
+            // run browses committed fixtures, never a network. The hold keeps the shell's own
+            // shot and exit back while the dialog's script (select, preview, install) runs;
+            // the log lines are the claims, the photograph is the look afterwards.
+            case "themebrowser":
+                Opened += async (_, _) =>
+                {
+                    using var hold = WindowCapture.Hold();
+                    var dialog = new ThemeBrowserDialog(App.Themes);
+                    dialog.Opened += async (_, _) =>
+                    {
+                        await dialog.HarnessDone;
+                        await Task.Delay(500);
+                        if (WindowCapture.RequestedPath is { } path)
+                        {
+                            WindowCapture.Capture(dialog, path, WindowCapture.Scale);
+                            Console.WriteLine($"Captured {path}");
+                        }
+
+                        Environment.Exit(0);
+                    };
+                    await dialog.ShowDialog(this);
+                };
+                break;
+
             // The small dialogs size themselves to their content, which is the awkward case for
             // a frame that draws its own rounded shape — nothing else in the application has a
             // window whose height is decided after it is built.

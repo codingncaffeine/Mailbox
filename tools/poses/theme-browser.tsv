@@ -1,0 +1,7 @@
+# The theme browser over the committed fixture source — offline, deterministic. The claims are
+# the log lines: the listing count, the preview's mapped base and token count with the licence,
+# and the install landing with the active theme; the photographs are the look, in a light theme
+# and Dark Gray.
+browser-list	MAILBOX_TODAY=2026-08-16	MAILBOX_THEME=colorful	MAILBOX_PEEK=themebrowser	MAILBOX_THEME_SOURCE=tests/fixtures/theme-browser	MAILBOX_THEME_BROWSE=select:harvest
+browser-preview-darkgray	MAILBOX_TODAY=2026-08-16	MAILBOX_THEME=darkgray	MAILBOX_PEEK=themebrowser	MAILBOX_THEME_SOURCE=tests/fixtures/theme-browser	MAILBOX_THEME_BROWSE=select:midnight
+browser-install	MAILBOX_TODAY=2026-08-16	MAILBOX_THEME=colorful	MAILBOX_PEEK=themebrowser	MAILBOX_THEME_SOURCE=tests/fixtures/theme-browser	MAILBOX_THEME_BROWSE=select:midnight,install	MAILBOX_ANSWER=Install Theme=yes

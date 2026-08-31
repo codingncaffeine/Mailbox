@@ -27,7 +27,7 @@ public static class HarnessDoors
         "newmeeting", "recurrence", "editscope", "gotodate", "conflict", "conflicts",
         "contact", "contactgroup", "addressbook", "selectnames", "undosend", "docked",
         "todobar", "todotasks", "todopeople", "backstage", "rowmenu", "overflow",
-        "menu", "themeeditor", "options", "confirm", "prompt", "passphrase",
+        "menu", "themeeditor", "themebrowser", "options", "confirm", "prompt", "passphrase",
         "newkey", "linkcontacts", "duplicate", "subscribe", "newsletters", "mutefilters",
         "accounts", "modifybutton", "addaccount", "certificate", "subscription", "datafile",
         "quickclickcategory", "quickclickflag", "cleanup", "recover", "searchfolder", "customflag",

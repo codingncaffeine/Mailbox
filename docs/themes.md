@@ -108,6 +108,27 @@ nothing is fetched from any network. Mailbox itself never ships anyone else's th
 — not in the repository, not in screenshots, not in releases — and that is a project rule,
 not an accident.
 
+## Browsing themes
+
+Options › General › **Browse…** opens the theme browser: the community themes on
+addons.mozilla.org — over half a million — searched by words, popularity, rating, trending
+or colour, from inside the application. Selecting one downloads its file (they are tiny)
+and shows it **as Mailbox would wear it**: the preview is drawn from the same mapping an
+install produces, not from a screenshot of another program. Each theme's licence is named
+in the pane, because you should know a theme's terms while declining is still a button.
+
+**Install** runs the downloaded file through the same door as any import — the size limits,
+the traversal checks, the image re-encoding — and asks first, in plain words: these themes
+are made and uploaded by their authors, not by Mailbox or Mozilla; Mailbox reads only the
+colours and re-encodes the images, but anything downloaded from the internet deserves a
+moment's doubt, so install only what you trust. An installed theme is an ordinary theme
+file: the theme row's **Remove** takes it away whole, and switching to a built-in is always
+a complete return to stock.
+
+**What touches the network, exactly:** the browser, only while it is open, and only
+addons.mozilla.org. Importing a file, applying a theme, palettes, backgrounds — none of it
+speaks to any network, ever.
+
 ## Sharing a theme
 
 A colours-only theme is one file: hand somebody the `.mailbox-theme.json` and they drop it

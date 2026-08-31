@@ -1,0 +1,44 @@
+{
+  "page_size": 24,
+  "count": 514655,
+  "results": [
+    {
+      "id": 1,
+      "slug": "sample-balanced",
+      "name": { "en-US": "Sample Balanced" },
+      "authors": [ { "name": "A Sample Author" } ],
+      "average_daily_users": 301399,
+      "ratings": { "average": 4.6323 },
+      "previews": [
+        { "image_url": "https://addons.mozilla.org/user-media/version-previews/full/1/1.svg" },
+        { "image_url": "https://addons.mozilla.org/user-media/version-previews/full/1/2.png",
+          "thumbnail_url": "https://addons.mozilla.org/user-media/version-previews/thumbs/1/2.png" }
+      ],
+      "current_version": {
+        "file": { "url": "https://addons.mozilla.org/firefox/downloads/file/1/sample.xpi", "size": 9543 },
+        "license": {
+          "name": { "en-US": "Creative Commons Attribution 3.0" },
+          "slug": "CC-BY-3.0",
+          "url": "https://creativecommons.org/licenses/by/3.0/"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "slug": "sample-bare",
+      "name": "Sample Bare",
+      "authors": [],
+      "previews": [],
+      "current_version": {
+        "file": { "url": "https://addons.mozilla.org/firefox/downloads/file/2/bare.xpi" },
+        "license": { "name": null, "url": null }
+      }
+    },
+    {
+      "id": 3,
+      "slug": "sample-fileless",
+      "name": { "en-US": "No File" },
+      "current_version": {}
+    }
+  ]
+}

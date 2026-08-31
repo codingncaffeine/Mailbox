@@ -521,6 +521,17 @@ public sealed class OptionsWindow : Window
                     if (await ImportThemeAsync()) FillThemeRow();
                 };
 
+                var browse = new Button { Content = "Browse…", VerticalAlignment = VerticalAlignment.Center };
+                ToolTip.SetTip(browse, "Browse community themes and preview them as Mailbox would wear them.");
+                browse.Click += async (_, _) =>
+                {
+                    var browser = new ThemeBrowserDialog(_themes);
+                    var installed = false;
+                    browser.Installed += () => installed = true;
+                    await browser.ShowDialog(this);
+                    if (installed) FillThemeRow();
+                };
+
                 var remove = new Button
                 {
                     Content = "Remove",
@@ -542,7 +553,7 @@ public sealed class OptionsWindow : Window
                 {
                     Orientation = Orientation.Horizontal,
                     Spacing = 8,
-                    Children = { combo, customize, import, remove },
+                    Children = { combo, customize, browse, import, remove },
                 };
                 theme.Content = LabelledLive("Mailbox Theme:", row);
             }

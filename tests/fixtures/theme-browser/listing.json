@@ -1,0 +1,23 @@
+[
+  {
+    "slug": "midnight",
+    "name": "Fixture Midnight",
+    "author": "The Harness",
+    "users": 4200,
+    "rating": 4.7,
+    "file": "midnight.xpi",
+    "size": 400,
+    "licenceName": "Creative Commons Attribution 4.0",
+    "licenceUrl": "https://creativecommons.org/licenses/by/4.0/"
+  },
+  {
+    "slug": "harvest",
+    "name": "Fixture Harvest",
+    "author": "The Harness",
+    "users": 900,
+    "rating": 4.1,
+    "file": "harvest.xpi",
+    "size": 4200,
+    "licenceName": "All Rights Reserved"
+  }
+]
