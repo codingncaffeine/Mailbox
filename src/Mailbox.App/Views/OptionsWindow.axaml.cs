@@ -1872,11 +1872,29 @@ public sealed class OptionsWindow : Window
             }
         };
 
+        // The reach: how far down the band an image goes — the theme's own answer, the
+        // caption alone, or through the tab strip. Its own choice, because a theme may be
+        // reined back and a chosen image may be sent further.
+        var reach = new ComboBox
+        {
+            ItemsSource = new List<string> { "(From the theme)", "Title bar", "Title bar + tab strip" },
+            SelectedIndex = Theming.BackdropChoice.Reach(App.Settings) switch
+            {
+                "caption" => 1,
+                "tabs" => 2,
+                _ => 0,
+            },
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        ToolTip.SetTip(reach, "How far down the window an image reaches.");
+        reach.SelectionChanged += (_, _) => Theming.BackdropChoice.Reach(App.Settings, _themes,
+            reach.SelectedIndex switch { 1 => "caption", 2 => "tabs", _ => string.Empty });
+
         return new StackPanel
         {
             Orientation = Orientation.Horizontal,
             Spacing = 8,
-            Children = { combo, browse, align },
+            Children = { combo, browse, align, reach },
         };
     }
 

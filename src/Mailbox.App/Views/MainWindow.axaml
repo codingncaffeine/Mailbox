@@ -53,6 +53,16 @@
                 ZIndex="0"
                 Background="{DynamicResource ribbon.tabstrip.background.brush}" />
 
+        <!-- The backdrop's lower slice: the same image the caption wears, continuing through
+             the tab strip when the theme's extent says so — the browser themes were drawn
+             for a band that tall. Behind the ribbon host in document order, never the
+             pointer's. -->
+        <views:CaptionBackdrop Name="TabsBackdrop" LowerSegment="True"
+                               Grid.Row="1" Grid.ColumnSpan="2"
+                               VerticalAlignment="Top"
+                               Height="{DynamicResource ribbon.tabstrip.height.value}"
+                               ZIndex="0" />
+
         <!-- ============================ Title bar ============================ -->
         <!--
             Client-side decorated: the window draws its own caption so there is exactly one

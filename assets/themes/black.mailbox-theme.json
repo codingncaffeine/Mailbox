@@ -323,6 +323,7 @@
     "tags.flag.pole": "#D4D4D4",
     "titlebar.backdrop": "",
     "titlebar.backdrop.alignment": "right top",
+    "titlebar.backdrop.extent": "caption",
     "titlebar.backdrop.opacity": "0.16",
     "titlebar.backdrop.size": "auto",
     "titlebar.backdrop.tiling": "no-repeat",

@@ -320,6 +320,7 @@
     "tags.flag.pole": "#3A3A38",
     "titlebar.backdrop": "",
     "titlebar.backdrop.alignment": "right top",
+    "titlebar.backdrop.extent": "caption",
     "titlebar.backdrop.opacity": "0.16",
     "titlebar.backdrop.size": "auto",
     "titlebar.backdrop.tiling": "no-repeat",

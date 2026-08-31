@@ -475,8 +475,11 @@ public sealed class RibbonView : ContentControl
             strip.Children.Add(hint);
         }
 
+        // No fill of its own: every window that hosts a ribbon already paints
+        // ribbon.tabstrip.background as its chrome behind this strip, and an opaque copy
+        // here was covering the caption backdrop's lower slice — the band a browser theme's
+        // image reaches through. The tabs themselves carry their own grounds.
         var host = new Border { Height = RibbonMetrics.TabStripHeight, Child = strip };
-        Bind(host, Border.BackgroundProperty, "ribbon.tabstrip.background.brush");
         return host;
     }
 

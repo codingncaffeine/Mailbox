@@ -67,8 +67,11 @@ internal sealed class ThemePreview : Control
             if (_backdrop is not null)
             {
                 // The same arithmetic the real band uses — cover, panned by the theme's own
-                // alignment — so the preview's crop is the installed crop, miniaturised.
-                var band = R(0, 0, 320, 22);
+                // alignment, reaching the tab strip when the extent says so — so the
+                // preview's crop is the installed crop, miniaturised.
+                var tabs = t.TryGetString(TokenKeys.TitleBar.BackdropExtent, out var extent)
+                           && string.Equals(extent.Trim(), "tabs", StringComparison.OrdinalIgnoreCase);
+                var band = R(0, 0, 320, tabs ? 36 : 22);
                 var alignment = CaptionBackdrop.ParseAlignment(
                     t.TryGetString(TokenKeys.TitleBar.BackdropAlignment, out var stated) ? stated : "right center");
                 var cover = Math.Max(band.Width / _backdrop.PixelSize.Width, band.Height / _backdrop.PixelSize.Height);

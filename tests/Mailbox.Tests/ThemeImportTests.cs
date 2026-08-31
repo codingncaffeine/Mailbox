@@ -460,6 +460,18 @@ public class ThemeImportTests
         var result = ImportedThemes.Import(package, Path.Combine(root, "themes"), bytes => [new ReencodedFrame(bytes, 0)]).Result;
         Assert.Equal("right center", result.File.Tokens[TokenKeys.TitleBar.BackdropAlignment]);
         Assert.Equal("cover", result.File.Tokens[TokenKeys.TitleBar.BackdropSize]);
+
+        // And the image reaches through the tab strip: the band these themes were drawn for.
+        Assert.Equal("tabs", result.File.Tokens[TokenKeys.TitleBar.BackdropExtent]);
+    }
+
+    [Fact]
+    public void TheBuiltInsKeepTheImageToTheCaption()
+    {
+        foreach (var id in OfficeThemes.All)
+        {
+            Assert.Equal("caption", OfficeThemes.Build(id).Resolve().GetString(TokenKeys.TitleBar.BackdropExtent));
+        }
     }
 
     [Fact]

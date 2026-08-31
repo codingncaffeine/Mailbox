@@ -111,6 +111,10 @@ public static class SlimThemeImport
             // middle, which is where artists put the picture.
             overlay.Set(TokenKeys.TitleBar.BackdropSize, "cover");
             overlay.Set(TokenKeys.TitleBar.BackdropOpacity, "1");
+
+            // Browser themes were drawn for a band the height of tabs, toolbar and address
+            // bar together; the image reaches through the tab strip so the artwork shows.
+            overlay.Set(TokenKeys.TitleBar.BackdropExtent, "tabs");
         }
 
         var written = overlay.Keys.ToList();

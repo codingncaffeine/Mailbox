@@ -120,7 +120,7 @@ public static class TokenMap
                 .. Prefixed("titlebar.", "avatar."),
                 TokenKeys.TitleBar.Backdrop, TokenKeys.TitleBar.BackdropAlignment,
                 TokenKeys.TitleBar.BackdropTiling, TokenKeys.TitleBar.BackdropSize,
-                TokenKeys.TitleBar.BackdropOpacity,
+                TokenKeys.TitleBar.BackdropOpacity, TokenKeys.TitleBar.BackdropExtent,
             ],
             image: true);
         Add("ribbon", "Ribbon", Prefixed("ribbon."));

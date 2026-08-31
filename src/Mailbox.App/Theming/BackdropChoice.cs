@@ -21,6 +21,9 @@ internal static class BackdropChoice
     /// <summary>The alignment a drag wrote, as "x% y%"; empty leaves the theme's.</summary>
     internal const string AlignmentSetting = "appearance.backdrop.alignment";
 
+    /// <summary>The reach override: "" (from the theme), "caption", or "tabs".</summary>
+    internal const string ExtentSetting = "appearance.backdrop.extent";
+
     /// <summary>Overrides the stored choice at startup: a pattern name, "none", "theme", or a path.</summary>
     internal const string Variable = "MAILBOX_BACKDROP";
 
@@ -37,7 +40,7 @@ internal static class BackdropChoice
             ? forcedAlign
             : settings.GetString(AlignmentSetting);
 
-        Apply(themes, choice, alignment);
+        Apply(themes, choice, alignment, settings.GetString(ExtentSetting));
 
         if (Environment.GetEnvironmentVariable(Variable) is not null)
         {
@@ -53,18 +56,28 @@ internal static class BackdropChoice
     {
         settings.Set(Setting, choice);
         if (choice.Length == 0 || choice == "none") settings.Set(AlignmentSetting, string.Empty);
-        Apply(themes, choice, settings.GetString(AlignmentSetting));
+        Apply(themes, choice, settings.GetString(AlignmentSetting), settings.GetString(ExtentSetting));
     }
 
     /// <summary>Stores the alignment a drag committed and applies it.</summary>
     internal static void Align(SettingsStore settings, ThemeService themes, string alignment)
     {
         settings.Set(AlignmentSetting, alignment);
-        Apply(themes, settings.GetString(Setting), alignment);
+        Apply(themes, settings.GetString(Setting), alignment, settings.GetString(ExtentSetting));
+    }
+
+    /// <summary>Stores the reach override — "" hands it back to the theme — and applies it.</summary>
+    internal static void Reach(SettingsStore settings, ThemeService themes, string extent)
+    {
+        settings.Set(ExtentSetting, extent);
+        Apply(themes, settings.GetString(Setting), settings.GetString(AlignmentSetting), extent);
     }
 
     /// <summary>The current stored choice.</summary>
     internal static string Current(SettingsStore settings) => settings.GetString(Setting);
+
+    /// <summary>The current stored reach override.</summary>
+    internal static string Reach(SettingsStore settings) => settings.GetString(ExtentSetting);
 
     /// <summary>
     /// Installing a theme that brings its own background is a newer wish than whatever the
@@ -83,26 +96,34 @@ internal static class BackdropChoice
         return true;
     }
 
-    private static void Apply(ThemeService themes, string choice, string alignment)
+    private static void Apply(ThemeService themes, string choice, string alignment, string extent)
     {
-        if (choice.Length == 0)
+        if (choice.Length == 0 && extent.Length == 0)
         {
             themes.SetAppearance(null);
             return;
         }
 
         var appearance = new TokenSet();
-        appearance.Set(TokenKeys.TitleBar.Backdrop, choice == "none" ? string.Empty : choice);
-
-        // A chosen image is drawn whole and opaque; a pattern keeps the theme's calibrated
-        // subtlety. Both are references, not values, wherever the theme already decides.
-        if (choice != "none" && !choice.StartsWith("pattern:", StringComparison.OrdinalIgnoreCase))
+        if (choice.Length > 0)
         {
-            appearance.Set(TokenKeys.TitleBar.BackdropOpacity, "1");
-            appearance.Set(TokenKeys.TitleBar.BackdropSize, "cover");
+            appearance.Set(TokenKeys.TitleBar.Backdrop, choice == "none" ? string.Empty : choice);
+
+            // A chosen image is drawn whole and opaque; a pattern keeps the theme's
+            // calibrated subtlety. Both are references, not values, wherever the theme
+            // already decides.
+            if (choice != "none" && !choice.StartsWith("pattern:", StringComparison.OrdinalIgnoreCase))
+            {
+                appearance.Set(TokenKeys.TitleBar.BackdropOpacity, "1");
+                appearance.Set(TokenKeys.TitleBar.BackdropSize, "cover");
+            }
+
+            if (alignment.Length > 0) appearance.Set(TokenKeys.TitleBar.BackdropAlignment, alignment);
         }
 
-        if (alignment.Length > 0) appearance.Set(TokenKeys.TitleBar.BackdropAlignment, alignment);
+        // The reach is its own choice: it may rein a theme's image back to the caption, or
+        // send a chosen image down through the tab strip — with or without a choice above.
+        if (extent.Length > 0) appearance.Set(TokenKeys.TitleBar.BackdropExtent, extent);
 
         themes.SetAppearance(appearance);
     }

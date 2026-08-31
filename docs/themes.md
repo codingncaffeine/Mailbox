@@ -73,8 +73,12 @@ Themes can carry a background of their own through the same tokens:
 | `titlebar.backdrop.tiling` | `no-repeat`, `repeat`, `repeat-x`, `repeat-y` |
 | `titlebar.backdrop.size` | `auto`, `cover`, `contain` |
 | `titlebar.backdrop.opacity` | `0`–`1` |
+| `titlebar.backdrop.extent` | `caption`, or `tabs` to reach through the tab strip |
 
-None are required; absent means none.
+None are required; absent means none. Imported browser themes reach through the tab strip
+by default — they were drawn for a band that tall — and the Background row's **Reach**
+choice can rein any theme back to the title bar, or send your own image further down.
+Patterns keep to the caption whatever the reach says.
 
 ## Palettes
 

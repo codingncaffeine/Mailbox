@@ -201,6 +201,13 @@ public static class TokenKeys
 
         /// <summary>CSS <c>background-position</c> keywords, or <c>x% y%</c> — what a drag writes.</summary>
         public const string BackdropAlignment = "titlebar.backdrop.alignment";
+
+        /// <summary>
+        /// How far down the band the image reaches: <c>caption</c> (the title bar alone) or
+        /// <c>tabs</c> (through the tab strip too — the browser themes were drawn for a band
+        /// that tall, and imports say so). Patterns keep to the caption whatever this says.
+        /// </summary>
+        public const string BackdropExtent = "titlebar.backdrop.extent";
         public const string BackdropTiling = "titlebar.backdrop.tiling";
         public const string BackdropSize = "titlebar.backdrop.size";
         public const string BackdropOpacity = "titlebar.backdrop.opacity";

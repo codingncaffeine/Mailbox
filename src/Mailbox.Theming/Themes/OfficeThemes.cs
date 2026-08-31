@@ -99,6 +99,7 @@ public static class OfficeThemes
         // patterns, which draw in the caption's own ink; an image states its own, usually 1.
         t.Set(TokenKeys.TitleBar.Backdrop, "");
         t.Set(TokenKeys.TitleBar.BackdropAlignment, "right top");
+        t.Set(TokenKeys.TitleBar.BackdropExtent, "caption");
         t.Set(TokenKeys.TitleBar.BackdropTiling, "no-repeat");
         t.Set(TokenKeys.TitleBar.BackdropSize, "auto");
         t.Set(TokenKeys.TitleBar.BackdropOpacity, "0.16");

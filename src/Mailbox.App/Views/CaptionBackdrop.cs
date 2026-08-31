@@ -29,6 +29,16 @@ internal sealed class CaptionBackdrop : Control
     private string _tiling = "no-repeat";
     private string _size = "auto";
     private double _opacity = 0.16;
+    private bool _extentTabs;
+    private double _captionHeight = 49;
+    private double _tabStripHeight = 29;
+
+    /// <summary>
+    /// True for the second host, the one behind the tab strip: it draws the band's lower
+    /// slice — the same image, the same arithmetic, offset by the caption's height — and only
+    /// while the extent says the image reaches that far. Patterns never do.
+    /// </summary>
+    public bool LowerSegment { get; set; }
 
     private bool _aligning;
     private Point _dragStart;
@@ -67,6 +77,19 @@ internal sealed class CaptionBackdrop : Control
                    && double.TryParse(o, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var value)
             ? Math.Clamp(value, 0, 1)
             : 0.16;
+        _extentTabs = tokens.TryGetString(TokenKeys.TitleBar.BackdropExtent, out var extent)
+                      && string.Equals(extent.Trim(), "tabs", StringComparison.OrdinalIgnoreCase);
+        if (tokens.TryGetString(TokenKeys.TitleBar.Height, out var th)
+            && double.TryParse(th, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var titleHeight))
+        {
+            _captionHeight = titleHeight;
+        }
+
+        if (tokens.TryGetString(TokenKeys.Ribbon.TabStripHeight, out var sh)
+            && double.TryParse(sh, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var stripHeight))
+        {
+            _tabStripHeight = stripHeight;
+        }
 
         // A changed backdrop starts its animation from its first frame; playback re-syncs on
         // the next render pass against whatever the new value turns out to be.
@@ -100,54 +123,68 @@ internal sealed class CaptionBackdrop : Control
             Log.Info($"Harness: caption backdrop — {Describe()}.");
         }
 
-        if (_backdrop.Length == 0 || _backdrop.StartsWith("pattern:", StringComparison.OrdinalIgnoreCase))
+        var isPattern = _backdrop.StartsWith("pattern:", StringComparison.OrdinalIgnoreCase);
+        if (_backdrop.Length == 0 || isPattern)
         {
-            if (_backdrop.Length > 0 || Environment.GetEnvironmentVariable(Theming.BackdropChoice.Variable) is not null)
+            if (!LowerSegment
+                && (_backdrop.Length > 0 || Environment.GetEnvironmentVariable(Theming.BackdropChoice.Variable) is not null))
             {
                 Announce();
             }
         }
 
         if (_backdrop.Length == 0 || Bounds.Width <= 0 || Bounds.Height <= 0) return;
-        var bounds = new Rect(Bounds.Size);
 
-        using var clip = context.PushClip(bounds);
+        // The lower segment exists for images the extent sends past the caption; a pattern
+        // keeps to the caption band always.
+        if (LowerSegment && (isPattern || !_extentTabs)) return;
+
+        // The band the image is laid out against: the caption alone, or caption plus tab
+        // strip when the extent says so — one arithmetic for both hosts, each drawing its own
+        // slice of it. Everything below is in band coordinates, offset per segment.
+        var offset = LowerSegment ? _captionHeight : 0;
+        var bandHeight = _extentTabs ? _captionHeight + _tabStripHeight : Bounds.Height;
+        var band = new Rect(0, -offset, Bounds.Width, bandHeight);
+        var slice = new Rect(0, 0, Bounds.Width, Math.Min(Bounds.Height, bandHeight - offset));
+        if (slice.Height <= 0) return;
+
+        using var clip = context.PushClip(slice);
         using var opacity = context.PushOpacity(_opacity);
 
-        if (_backdrop.StartsWith("pattern:", StringComparison.OrdinalIgnoreCase))
+        if (isPattern)
         {
             var name = _backdrop["pattern:".Length..].Trim();
             if (!CaptionPatterns.IsKnown(name)) { WarnOnce($"No pattern named \"{name}\"."); return; }
-            CaptionPatterns.Draw(name, context, bounds, App.Themes.Tokens.GetBrush(TokenKeys.TitleBar.Foreground));
+            CaptionPatterns.Draw(name, context, slice, App.Themes.Tokens.GetBrush(TokenKeys.TitleBar.Foreground));
             return;
         }
 
         var loaded = LoadImage(_backdrop);
         SyncPlayback(loaded);
-        Announce();
+        if (!LowerSegment) Announce();
         if (loaded is null) return;
         var image = loaded.Frames[_frame % loaded.Frames.Length];
 
         var (destW, destH) = _size switch
         {
-            "cover" => Scale(image, bounds, Math.Max),
-            "contain" => Scale(image, bounds, Math.Min),
+            "cover" => Scale(image, band, Math.Max),
+            "contain" => Scale(image, band, Math.Min),
             _ => (image.PixelSize.Width, (double)image.PixelSize.Height),
         };
         if (destW < 1 || destH < 1) return;
 
-        var x = bounds.Left + ((bounds.Width - destW) * _alignment.X);
-        var y = bounds.Top + ((bounds.Height - destH) * _alignment.Y);
+        var x = band.Left + ((band.Width - destW) * _alignment.X);
+        var y = band.Top + ((band.Height - destH) * _alignment.Y);
         var source = new Rect(image.Size);
 
         var tileX = _tiling is "repeat" or "repeat-x";
         var tileY = _tiling is "repeat" or "repeat-y";
-        var startX = tileX ? x - (Math.Ceiling((x - bounds.Left) / destW) * destW) : x;
-        var startY = tileY ? y - (Math.Ceiling((y - bounds.Top) / destH) * destH) : y;
+        var startX = tileX ? x - (Math.Ceiling((x - band.Left) / destW) * destW) : x;
+        var startY = tileY ? y - (Math.Ceiling((y - band.Top) / destH) * destH) : y;
 
-        for (var dy = startY; dy < bounds.Bottom; dy += destH)
+        for (var dy = startY; dy < band.Bottom; dy += destH)
         {
-            for (var dx = startX; dx < bounds.Right; dx += destW)
+            for (var dx = startX; dx < band.Right; dx += destW)
             {
                 context.DrawImage(image, source, new Rect(dx, dy, destW, destH));
                 if (!tileX) break;
@@ -256,25 +293,40 @@ internal sealed class CaptionBackdrop : Control
     private static readonly int FrozenFrame =
         int.TryParse(Environment.GetEnvironmentVariable("MAILBOX_BACKDROP_FRAME"), out var posed) ? posed : 0;
 
+    /// <summary>
+    /// One clock for every backdrop host, so the caption slice and the tab-strip slice of the
+    /// same animation always show the same frame — two free-running timers would drift the
+    /// band apart at its seam.
+    /// </summary>
+    private static readonly System.Diagnostics.Stopwatch AnimationClock = System.Diagnostics.Stopwatch.StartNew();
+
     private void SyncPlayback(LoadedBackdrop? loaded)
     {
         if (loaded is not { Animated: true } || Frozen)
         {
             _timer?.Stop();
             _timer = null;
-            if (Frozen && loaded is { Animated: true }) _frame = Math.Clamp(FrozenFrame, 0, loaded.Frames.Length - 1);
+            _frame = Frozen && loaded is { Animated: true }
+                ? Math.Clamp(FrozenFrame, 0, loaded.Frames.Length - 1)
+                : 0;
             return;
         }
 
-        if (_timer is not null) return;
-        _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(loaded.Delays[_frame % loaded.Delays.Length]) };
-        _timer.Tick += (_, _) =>
+        // The frame is a function of the shared clock, not of how many ticks this host saw.
+        var cycle = loaded.Delays.Sum();
+        var at = (int)(AnimationClock.ElapsedMilliseconds % Math.Max(1, cycle));
+        var frame = 0;
+        for (var cumulative = 0; frame < loaded.Delays.Length - 1; frame++)
         {
-            if (_timer is null) return;
-            _frame++;
-            _timer.Interval = TimeSpan.FromMilliseconds(loaded.Delays[_frame % loaded.Delays.Length]);
-            InvalidateVisual();
-        };
+            cumulative += loaded.Delays[frame];
+            if (at < cumulative) break;
+        }
+
+        _frame = frame;
+
+        if (_timer is not null) return;
+        _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(Math.Max(20, loaded.Delays.Min())) };
+        _timer.Tick += (_, _) => InvalidateVisual();
         _timer.Start();
     }
 
@@ -338,16 +390,18 @@ internal sealed class CaptionBackdrop : Control
         if (LoadImage(_backdrop) is not { } loaded) return;
         var image = loaded.Frames[0];
 
+        // The same band the render lays out against, so a drag moves what the eye sees.
+        var alignBand = new Rect(0, 0, Bounds.Width, _extentTabs ? _captionHeight + _tabStripHeight : Bounds.Height);
         var (destW, destH) = _size switch
         {
-            "cover" => Scale(image, new Rect(Bounds.Size), Math.Max),
-            "contain" => Scale(image, new Rect(Bounds.Size), Math.Min),
+            "cover" => Scale(image, alignBand, Math.Max),
+            "contain" => Scale(image, alignBand, Math.Min),
             _ => (image.PixelSize.Width, (double)image.PixelSize.Height),
         };
 
         var position = e.GetPosition(this);
-        var leftoverX = Bounds.Width - destW;
-        var leftoverY = Bounds.Height - destH;
+        var leftoverX = alignBand.Width - destW;
+        var leftoverY = alignBand.Height - destH;
         _alignment = (
             Math.Abs(leftoverX) < 1 ? _dragFrom.X : Math.Clamp(_dragFrom.X + ((position.X - _dragStart.X) / leftoverX), 0, 1),
             Math.Abs(leftoverY) < 1 ? _dragFrom.Y : Math.Clamp(_dragFrom.Y + ((position.Y - _dragStart.Y) / leftoverY), 0, 1));
@@ -372,6 +426,7 @@ internal sealed class CaptionBackdrop : Control
             ? $"; animated {loaded.Frames.Length} frame(s), showing {_frame % loaded.Frames.Length}"
             : string.Empty;
         return $"backdrop: {_backdrop}; alignment {AlignmentText()}; tiling {_tiling}; size {_size}; "
+               + $"extent {(_extentTabs ? "tabs" : "caption")}; "
                + $"opacity {_opacity.ToString(System.Globalization.CultureInfo.InvariantCulture)}{animated}";
     }
 
