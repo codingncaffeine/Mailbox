@@ -102,6 +102,29 @@ public class OptionsRowWiringTests
     }
 
     /// <summary>
+    /// The Tracking radios persist their labels, and the read-receipt answer is read back by
+    /// label — so a rewording must fail here, loudly, rather than quietly turning a stored
+    /// choice back into the default.
+    /// </summary>
+    [Fact]
+    public void TheReadReceiptRadiosCarryTheWordsTheAccessorReads()
+    {
+        var mail = OptionsPages.All.Single(p => p.Id == "mail");
+        var labels = mail.Sections
+            .SelectMany(s => s.Rows)
+            .OfType<RadioRow>()
+            .Where(r => r.Group == "readreceipt")
+            .Select(r => r.Label)
+            .ToList();
+
+        Assert.Equal(
+            ["Always send a read receipt",
+             "Never send a read receipt",
+             "Ask each time whether to send a read receipt"],
+            labels);
+    }
+
+    /// <summary>
     /// The rows on a page that carry a value and have no key of their own — a tick or a choice
     /// that persists under its own label and is read by no feature. A row that carries no value
     /// (a button, a heading) has nothing to wire and is not the concern here.

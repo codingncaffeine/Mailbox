@@ -16,6 +16,14 @@ public enum AfterOpenItem
     ReturnToFolder,
 }
 
+/// <summary>What to do about an arriving read-receipt request — the Tracking radios.</summary>
+public enum ReadReceiptAnswer
+{
+    Always,
+    Never,
+    Ask,
+}
+
 /// <summary>
 /// The Mail page's settings, read by the code that acts on them.
 /// </summary>
@@ -407,6 +415,23 @@ public sealed class MailOptions(SettingsStore settings)
     public bool RequestDeliveryReceipt => _settings.GetBool(RequestDeliveryReceiptKey, false);
 
     public bool RequestReadReceipt => _settings.GetBool(RequestReadReceiptKey, false);
+
+    /// <summary>
+    /// Where the Tracking radios persist. Radios store the chosen label under their group name,
+    /// so the values here are the rows' own words — reword the rows and these must follow.
+    /// </summary>
+    public const string ReadReceiptAnswerKey = "readreceipt";
+
+    /// <summary>
+    /// "For any message received that includes a read receipt request": always answer, never
+    /// answer, or ask each time — the reference's default, and the only honest one to ship.
+    /// </summary>
+    public ReadReceiptAnswer ReadReceiptAnswer => _settings.GetString(ReadReceiptAnswerKey) switch
+    {
+        "Always send a read receipt" => ReadReceiptAnswer.Always,
+        "Never send a read receipt" => ReadReceiptAnswer.Never,
+        _ => ReadReceiptAnswer.Ask,
+    };
 
     /// <summary>
     /// Whether a message goes as soon as it can, rather than on the next send/receive. On, as

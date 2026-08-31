@@ -3318,6 +3318,16 @@ public partial class MainWindow : Window
         _attachments.Show(_reading.Carried);
         LogAttachmentStrip();
         _ = _reading.ApplySenderPolicyAsync();
+
+        // A read-receipt request is answered when the message is displayed, and the pane only
+        // displays it while it is on — with the pane off, selecting a row shows nobody
+        // anything, and the message window's own open answers instead.
+        if (shell.ReadingPaneVisible && message is not null
+            && shell.SelectedMessage is { } displayed
+            && App.Accounts.Find(displayed.Address) is { } displayedIn)
+        {
+            _ = ReadReceipts.MaybeAnswerAsync(this, displayedIn, displayed.Id, message, shell.CurrentFolderRole);
+        }
     }
 
     /// <summary>
@@ -3940,6 +3950,13 @@ public partial class MainWindow : Window
             ? new OpenedMessageContext(row.Address, row.Id, row.FolderId)
             : null;
 
+        // The window is this message being displayed — the read-receipt trigger for the
+        // pane-off layout, and settled bookkeeping makes it free when the pane already asked.
+        if (context is { } shown && App.Accounts.Find(shown.Address) is { } shownIn)
+        {
+            _ = ReadReceipts.MaybeAnswerAsync(this, shownIn, shown.MessageId, message, shell.CurrentFolderRole);
+        }
+
         // The warm window first: its engine is already alive, so the body is on screen for the
         // cost of a navigation rather than a process. Wiring and the close hold-back are still
         // attached from its first life; Replace is the same journey stepping makes.
@@ -4087,6 +4104,13 @@ public partial class MainWindow : Window
                     shell.SelectedMessage is { } row
                         ? new OpenedMessageContext(row.Address, row.Id, row.FolderId)
                         : null);
+
+                // Stepping displays the next message the way opening it would.
+                if (shell.SelectedMessage is { } steppedTo
+                    && App.Accounts.Find(steppedTo.Address) is { } steppedIn)
+                {
+                    _ = ReadReceipts.MaybeAnswerAsync(window, steppedIn, steppedTo.Id, stepped, shell.CurrentFolderRole);
+                }
             }, DispatcherPriority.Background);
         };
 
@@ -4123,6 +4147,12 @@ public partial class MainWindow : Window
                     shell.SelectedMessage is { } now
                         ? new OpenedMessageContext(now.Address, now.Id, now.FolderId)
                         : null);
+
+                if (shell.SelectedMessage is { } tookOver
+                    && App.Accounts.Find(tookOver.Address) is { } tookOverIn)
+                {
+                    _ = ReadReceipts.MaybeAnswerAsync(window, tookOverIn, tookOver.Id, stepped, shell.CurrentFolderRole);
+                }
             }, DispatcherPriority.Background);
         };
 

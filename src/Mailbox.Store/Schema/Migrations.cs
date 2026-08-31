@@ -796,6 +796,18 @@ public static class Migrations
         CREATE INDEX sync_ops_by_folder ON sync_ops (folder_id, server_uid);
         CREATE INDEX sync_ops_by_message ON sync_ops (message_id);
         """,
+
+        // ---- 36: the read-receipt question is asked once -----------------------------------
+        //
+        // A message that asks for a read receipt is answered when it is first displayed —
+        // sent, or declined, per the Tracking radios — and this records that the question is
+        // settled either way, so a message re-opened across sessions is never asked about
+        // twice. Local bookkeeping only: nothing on the server carries it, so it is never
+        // journalled. Zero — every existing row — means the question is still open, which for
+        // old mail somebody has plainly already seen errs on the side of asking.
+        """
+        ALTER TABLE messages ADD COLUMN receipt_settled INTEGER NOT NULL DEFAULT 0;
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>

@@ -955,6 +955,15 @@ public sealed class MailRepository(MailStore store)
         });
     }
 
+    /// <summary>Whether this message's read-receipt question is settled — answered or declined.</summary>
+    public bool ReceiptSettled(long messageId) => _store.Query(
+        "SELECT receipt_settled FROM messages WHERE id = $id",
+        r => r.GetInt32(0) != 0, ("$id", messageId)).FirstOrDefault();
+
+    /// <summary>Settles the read-receipt question for good. Local bookkeeping; never journalled.</summary>
+    public void SetReceiptSettled(long messageId) => _store.Execute(
+        "UPDATE messages SET receipt_settled = 1 WHERE id = $id", ("$id", messageId));
+
     /// <summary>
     /// Flags messages for follow-up with an optional due date, clearing any completed mark.
     /// </summary>
