@@ -1,9 +1,12 @@
 using System.Globalization;
 using Avalonia;
+using Avalonia.Automation;
+using Avalonia.Automation.Peers;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Mailbox.Controls.Common;
 
 namespace Mailbox.App.Views;
 
@@ -71,6 +74,11 @@ public sealed class ClassicListView : Border
         stack.Children.Add(_header);
         stack.Children.Add(_scroller);
         Child = stack;
+
+        // The body is the focusable control and so the node a screen reader lands on; the name
+        // a dialog gives the list rides down to it, so "Accounts list" is heard there and not
+        // on a silent border two levels up.
+        _body.Bind(AutomationProperties.NameProperty, this.GetObservable(AutomationProperties.NameProperty));
     }
 
     /// <summary>Raised when the selected row changes, including to nothing.</summary>
@@ -104,6 +112,7 @@ public sealed class ClassicListView : Border
             if (clamped == _selected) return;
             _selected = clamped;
             _body.InvalidateVisual();
+            _body.SaySelectionChanged();
             SelectionChanged?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -117,6 +126,7 @@ public sealed class ClassicListView : Border
         _rows = rows;
         _body.InvalidateMeasure();
         _body.InvalidateVisual();
+        _body.SayRowsChanged();
 
         var index = keep is null ? -1 : rows.ToList().FindIndex(r => Equals(r.Tag, keep));
         _selected = -2; // so the setter always raises, even for the same index over new rows
@@ -189,10 +199,43 @@ public sealed class ClassicListView : Border
     }
 
     /// <summary>The rows, and everything the pointer and keyboard do to them.</summary>
-    private sealed class Body : Control
+    private sealed class Body : Control, ISpokenRows
     {
         private readonly ClassicListView _owner;
         private int _hot = -1;
+
+        // ---- The list, spoken for --------------------------------------------------------
+
+        public int SpokenCount => _owner._rows.Count;
+
+        /// <summary>The cells in column order, and the marks that are otherwise silent ink.</summary>
+        public string SpokenRow(int index)
+        {
+            var row = _owner._rows[index];
+            var said = string.Join(", ", row.Cells.Where(c => c.Length > 0));
+            return row.Marked ? said + ", the default" : said;
+        }
+
+        public int SpokenSelectedIndex => _owner._selected;
+
+        public void SpokenSelect(int index) => _owner.SelectedIndex = index;
+
+        public Rect? SpokenRowBounds(int index)
+            => new Rect(0, index * RowHeight, Math.Max(1, _owner._columns.Sum(c => c.Width)), RowHeight);
+
+        public bool? SpokenRowToggled(int index) => _owner._rows[index].Checked;
+
+        public void SpokenToggle(int index) => _owner.RowToggled?.Invoke(_owner, index);
+
+        public event EventHandler? SpokenRowsChanged;
+
+        public event EventHandler? SpokenSelectionChanged;
+
+        internal void SayRowsChanged() => SpokenRowsChanged?.Invoke(this, EventArgs.Empty);
+
+        internal void SaySelectionChanged() => SpokenSelectionChanged?.Invoke(this, EventArgs.Empty);
+
+        protected override AutomationPeer OnCreateAutomationPeer() => new SpokenRowsPeer(this);
 
         public static readonly StyledProperty<IBrush?> InkProperty =
             AvaloniaProperty.Register<Body, IBrush?>(nameof(Ink));
