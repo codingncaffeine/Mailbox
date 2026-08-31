@@ -28,6 +28,14 @@ internal static class Program
             return ExportTheme(args[1], args.Length > 2 ? args[2] : null);
         }
 
+        // `mailbox --import-theme <file>` reads a browser theme — an .xpi, a zip, an unpacked
+        // directory or a bare manifest.json — writes it into the themes directory, and exits;
+        // the watcher of a running instance picks it up live.
+        if (args.Length >= 2 && string.Equals(args[0], "--import-theme", StringComparison.OrdinalIgnoreCase))
+        {
+            return ImportTheme(args[1]);
+        }
+
         // One instance per session: a second launch — a mailto: click while Mailbox is open —
         // hands its command line to the running one and exits, rather than starting a second
         // copy. Skipped for a capture run, where the fidelity harness deliberately starts many
@@ -84,6 +92,38 @@ internal static class Program
         {
             Console.Error.WriteLine(ex.Message);
             Console.Error.WriteLine("Built-in themes: " + string.Join(", ", Mailbox.Theming.Themes.OfficeThemes.All));
+            return 2;
+        }
+    }
+
+    private static int ImportTheme(string path)
+    {
+        // The image half wants a decoder, which wants the rendering platform. A box where it
+        // cannot come up — a bare build server — still imports the colours; the report says
+        // the image was skipped rather than pretending.
+        Mailbox.Theming.Import.ImageReencoder? reencode = null;
+        try
+        {
+            BuildAvaloniaApp().SetupWithoutStarting();
+            reencode = Theming.ThemeImportDoor.Reencode;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"No rendering platform for the import's image half: {ex.Message}");
+        }
+
+        try
+        {
+            var directory = Mailbox.Theming.Files.ThemeLibrary.DefaultDirectory();
+            var outcome = Mailbox.Theming.Import.ImportedThemes.Import(path, directory, reencode);
+            foreach (var line in Mailbox.Theming.Import.ImportReport.Lines(outcome)) Console.WriteLine(line);
+            return 0;
+        }
+        catch (Exception ex) when (ex is Mailbox.Theming.Import.BrowserThemeException
+                                       or Mailbox.Theming.Files.ThemeFileException
+                                       or IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine(ex.Message);
             return 2;
         }
     }

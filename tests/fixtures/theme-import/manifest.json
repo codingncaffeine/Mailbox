@@ -1,0 +1,15 @@
+{
+  "manifest_version": 2,
+  "version": "1.0",
+  "name": "Harness Midnight",
+  "theme": {
+    "colors": {
+      "frame": "#1A1030",
+      "tab_background_text": "#E6E0F5",
+      "sidebar": "#241A3E",
+      "sidebar_text": "#D8D2EA"
+    },
+    "images": { "theme_frame": "header.png" },
+    "properties": { "additional_backgrounds_alignment": ["right top"] }
+  }
+}

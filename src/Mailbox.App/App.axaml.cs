@@ -645,6 +645,8 @@ public partial class App : Application
         // The reader's theme files beside the built-ins, and a watch on their directory so an
         // edit to the theme in use shows without a restart (the hot reload).
         var themesDirectory = Mailbox.Theming.Files.ThemeLibrary.DefaultDirectory();
+        // The import door runs before the library loads, so a pose can import and apply in one run.
+        Theming.ThemeImportDoor.RunIfAsked(themesDirectory);
         Themes = new ThemeService(Fonts, Mailbox.Theming.Files.ThemeLibrary.Load(themesDirectory));
         RestoreAppearance();
         WatchThemeFiles(themesDirectory);

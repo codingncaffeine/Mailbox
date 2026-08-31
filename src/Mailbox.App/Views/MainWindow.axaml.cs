@@ -5493,6 +5493,17 @@ public partial class MainWindow : Window
                     + $"rail.background {Live("rail.background")}, "
                     + $"ribbon.background {Live("ribbon.background")}, "
                     + $"titlebar.caption.hover {Live("titlebar.caption.hover")}.");
+
+                // The light-content assertion, from the same dictionary: whatever a theme —
+                // imported ones above all — did to the chrome, the content surfaces must be
+                // the base's. A dark reading pane here is the failure the whole rule exists
+                // to prevent.
+                Log.Info(
+                    $"Harness: theme content — "
+                    + $"list.row.background {Live("list.row.background")}, "
+                    + $"reading.background {Live("reading.background")}, "
+                    + $"text.primary {Live("text.primary")}, "
+                    + $"compose.body.background {Live("compose.body.background")}.");
             },
             DispatcherPriority.Loaded);
     }

@@ -386,12 +386,9 @@ public sealed class ThemeEditorWindow : Window
         // the untouched built-in and lose the reader's edits behind a sentence saying the
         // opposite; a file named after a built-in without its id — "Dark Gray" slugs to
         // dark-gray, the built-in is darkgray — loads fine and puts two identical names in
-        // every theme list. Both are the same mistake from the reader's chair.
-        var shadows = ThemeLibrary.IsBuiltIn(id)
-                      || Mailbox.Theming.Themes.OfficeThemes.All.Any(
-                          b => Slug(_themes.DisplayName(b)).Equals(id, StringComparison.OrdinalIgnoreCase));
-
-        if (shadows)
+        // every theme list. Both are the same mistake from the reader's chair, and one rule
+        // guards every writer of theme files — the importer included.
+        if (Mailbox.Theming.Import.ImportedThemes.ShadowsBuiltIn(id))
         {
             _status.Text = $"“{name}” is a built-in theme's name. Save under another.";
             Log.Info($"Theme editor: refused to save under the built-in name \"{name}\".");
