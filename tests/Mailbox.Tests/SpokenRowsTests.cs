@@ -151,6 +151,7 @@ public sealed class SpokenRowsTests
         [
             new TaskListView(), new NotesView(), new JournalView(), new ContactListView(),
             new TimeGridView(), new MonthView(), new ScheduleView(),
+            new DateNavigator(), new PeekView(docked: true), new DailyTaskListView(), new FreeBusyView(),
         ];
 
         foreach (var view in views)
@@ -188,5 +189,67 @@ public sealed class SpokenRowsTests
         var spoken = (ISpokenRows)journal;
         Assert.Equal(1, spoken.SpokenCount);
         Assert.StartsWith("Phone call. Called the bank.", spoken.SpokenRow(0));
+    }
+
+    /// <summary>
+    /// The peek's rows are its agenda — the day's appointments — rather than the little month's
+    /// cells: the grid up there chooses which day is listed, and the list is what the peek is for.
+    /// </summary>
+    [Fact]
+    public void ThePeekSaysTheDaysAppointments()
+    {
+        var peek = new PeekView(docked: true) { Selected = new DateOnly(2026, 8, 17) };
+        peek.Entries = [Entry(new DateTime(2026, 8, 17, 9, 0, 0), new DateTime(2026, 8, 17, 10, 0, 0), "Standup", "Room 2")];
+
+        var spoken = (ISpokenRows)peek;
+        Assert.Equal(1, spoken.SpokenCount);
+        Assert.Equal("Standup. 9:00 AM. Room 2.", spoken.SpokenRow(0));
+
+        // Nothing on a peek is selected — a press opens the appointment — so the reader is not
+        // told there is a current row when there is not.
+        Assert.Equal(-1, spoken.SpokenSelectedIndex);
+
+        CalendarEntry? opened = null;
+        peek.EntryActivated += (_, entry) => opened = entry;
+        spoken.SpokenSelect(0);
+        Assert.Equal("Standup", opened?.Summary);
+    }
+
+    /// <summary>
+    /// The four smaller calendar surfaces are read, not driven. A list that reported a current
+    /// row it has no way to move would tell a reader something untrue about itself.
+    /// </summary>
+    [Fact]
+    public void TheReadOnlyCalendarSurfacesOfferNoSelection()
+    {
+        foreach (ISpokenRows view in (ISpokenRows[])[new PeekView(docked: true), new DailyTaskListView(), new FreeBusyView()])
+        {
+            Assert.Equal(-1, view.SpokenSelectedIndex);
+        }
+    }
+
+    private static CalendarEntry Entry(DateTime start, DateTime end, string summary, string location)
+    {
+        var appointment = new CalendarEvent
+        {
+            Uid = summary + "@spoken",
+            Summary = summary,
+            Location = location,
+            Start = EventTime.At(start, "UTC"),
+            End = EventTime.At(end, "UTC"),
+        };
+
+        var occurrence = Recurrence.Expand(
+            [appointment],
+            appointment.Start.ToUtc().AddDays(-1),
+            appointment.End.ToUtc().AddDays(1)).First();
+
+        return new CalendarEntry
+        {
+            Occurrence = occurrence,
+            CollectionId = 1,
+            ItemId = 1,
+            Zone = TimeZoneInfo.Utc,
+        };
     }
 }

@@ -1,7 +1,9 @@
 using System.Globalization;
 using Avalonia;
+using Avalonia.Automation.Peers;
 using Avalonia.Input;
 using Avalonia.Media;
+using Mailbox.Controls.Common;
 using Mailbox.Scheduling;
 using Mailbox.Theming.Tokens;
 
@@ -18,7 +20,7 @@ namespace Mailbox.Controls.Calendar;
 /// popup is a desktop popup and keeps the desktop's light colours in every theme — which is what
 /// the reference's own capture over the Dark Gray shell shows.
 /// </remarks>
-public sealed class PeekView : CalendarSurface
+public sealed class PeekView : CalendarSurface, ISpokenRows
 {
     private readonly List<(Rect Box, DateOnly Day)> _dayHits = [];
     private readonly List<(Rect Box, PeekAgendaRow Row)> _entryHits = [];
@@ -135,6 +137,12 @@ public sealed class PeekView : CalendarSurface
         _agenda = PeekAgenda.For(_entries, _selected, Culture);
         _scroll = 0;
         InvalidateVisual();
+        SpokenRowsChanged?.Invoke(this, EventArgs.Empty);
+
+        // The rows are gone and with them whatever a reader was on, which is a move to nothing —
+        // the bridge is told, because a reader left pointing at a row that no longer exists is
+        // the failure this event is for.
+        SpokenSelectionChanged?.Invoke(this, EventArgs.Empty);
     }
 
     // ---- Measure ---------------------------------------------------------------------------
@@ -629,4 +637,52 @@ public sealed class PeekView : CalendarSurface
         e.Handled = true;
         InvalidateVisual();
     }
+
+    // ---- The day's agenda, spoken for ------------------------------------------------------
+    //
+    // The rows are the appointments, not the little month's days: the grid up there is a way of
+    // choosing which day the agenda lists, and the agenda is what the peek is for. A reader is
+    // told the day in the list's own name and then each appointment on it.
+
+    public event EventHandler? SpokenRowsChanged;
+
+    public event EventHandler? SpokenSelectionChanged;
+
+    int ISpokenRows.SpokenCount => _agenda.Count;
+
+    string ISpokenRows.SpokenRow(int index)
+    {
+        var row = _agenda[index];
+        var said = new System.Text.StringBuilder();
+        said.Append(row.Subject.Length > 0 ? row.Subject : "(No subject)").Append(". ");
+        said.Append(row.Time);
+        if (row.Detail.Length > 0) said.Append(". ").Append(row.Detail);
+        said.Append('.');
+        return said.ToString();
+    }
+
+    /// <summary>
+    /// The peek has no selected appointment: a press on one opens it. So nothing is current, and
+    /// the row's own door is the press.
+    /// </summary>
+    int ISpokenRows.SpokenSelectedIndex => -1;
+
+    /// <summary>Opens the appointment, which is what a press on its row does.</summary>
+    void ISpokenRows.SpokenSelect(int index) => EntryActivated?.Invoke(this, _agenda[index].Entry);
+
+    /// <summary>
+    /// Where the row was drawn. The agenda scrolls under a fixed frame, so a row wheeled out of
+    /// sight has a box outside the view's bounds and the peer works the rest out.
+    /// </summary>
+    Rect? ISpokenRows.SpokenRowBounds(int index)
+    {
+        foreach (var (box, row) in _entryHits)
+        {
+            if (ReferenceEquals(row, _agenda[index])) return box;
+        }
+
+        return null;
+    }
+
+    protected override AutomationPeer OnCreateAutomationPeer() => new SpokenRowsPeer(this);
 }

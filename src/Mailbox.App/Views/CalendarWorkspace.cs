@@ -77,6 +77,8 @@ public sealed class CalendarWorkspace : Border
         Avalonia.Automation.AutomationProperties.SetName(_month, "Month calendar");
         Avalonia.Automation.AutomationProperties.SetName(_timeGrid, "Calendar");
         Avalonia.Automation.AutomationProperties.SetName(_schedule, "Schedule");
+        Avalonia.Automation.AutomationProperties.SetName(_navigator, "Date navigator");
+        Avalonia.Automation.AutomationProperties.SetName(_dailyTasks, "Daily task list");
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _source = new CalendarSource(repository);

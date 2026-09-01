@@ -1688,6 +1688,7 @@ public partial class MainWindow
             ShowWeekNumbers = App.Settings.GetBool(OptionsPages.Keys.ShowWeekNumbers),
         };
 
+        Avalonia.Automation.AutomationProperties.SetName(view, "Calendar peek");
         view.Stepped += (_, direction) => view.Anchor = view.Anchor.AddMonths(direction);
 
         view.DayPicked += (_, day) =>

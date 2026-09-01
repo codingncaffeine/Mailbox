@@ -1,5 +1,7 @@
 using Avalonia;
+using Avalonia.Automation.Peers;
 using Avalonia.Media;
+using Mailbox.Controls.Common;
 using Mailbox.Scheduling;
 using Mailbox.Theming.Tokens;
 
@@ -24,7 +26,7 @@ public sealed record DailyTask(DateOnly Day, string Summary, bool IsComplete, bo
 /// is worse than no band: every task would sit under the wrong day at the edges.
 /// </para>
 /// </remarks>
-public sealed class DailyTaskListView : CalendarSurface
+public sealed class DailyTaskListView : CalendarSurface, ISpokenRows
 {
     /// <summary>The band's own header, the height the grid gives its weekday row.</summary>
     public const double HeaderHeight = 28;
@@ -43,17 +45,28 @@ public sealed class DailyTaskListView : CalendarSurface
     private double _rulerWidth = 62;
     private bool _minimized;
 
+    /// <summary>What the last render actually drew, which is what there is to speak.</summary>
+    private readonly List<(Rect Box, DailyTask Task)> _drawn = [];
+
     /// <summary>The days the grid above is showing, in its order.</summary>
     public IReadOnlyList<DateOnly> Days
     {
         get => _days;
-        set => Set(ref _days, value ?? []);
+        set
+        {
+            Set(ref _days, value ?? []);
+            SpokenRowsChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     public IReadOnlyList<DailyTask> Tasks
     {
         get => _tasks;
-        set => Set(ref _tasks, value ?? []);
+        set
+        {
+            Set(ref _tasks, value ?? []);
+            SpokenRowsChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     /// <summary>The grid's ruler column, so the band's first column starts where the grid's does.</summary>
@@ -104,6 +117,7 @@ public sealed class DailyTaskListView : CalendarSurface
         var text = Palette.Colour(TokenKeys.Calendar.DayText);
         var subtle = Palette.Colour(TokenKeys.Calendar.PastText);
 
+        _drawn.Clear();
         Fill(context, new Rect(0, 0, width, height), ground);
 
         // The rule that separates the band from the grid, and the one under its own header.
@@ -129,6 +143,7 @@ public sealed class DailyTaskListView : CalendarSurface
             var top = HeaderHeight + 3;
             foreach (var task in due)
             {
+                _drawn.Add((new Rect(x, top, column, RowHeight), task));
                 var colour = task.IsOverdue ? Palette.Colour(TokenKeys.Status.Danger)
                     : task.IsComplete ? subtle
                     : text;
@@ -158,4 +173,49 @@ public sealed class DailyTaskListView : CalendarSurface
         return [.. Enumerable.Range(0, columns).Select(i => whole + (i < over ? 1 : 0))];
     }
 
+
+    // ---- The band, spoken for --------------------------------------------------------------
+    //
+    // Read-only, which is what this band is: it shows what is due under each day and nothing on
+    // it can be pressed. So the rows are named and stated and there is no current one — a list
+    // with no selection rather than a list pretending to have one.
+
+    public event EventHandler? SpokenRowsChanged;
+
+    /// <summary>
+    /// Never raised, because nothing here is selectable and so the current row never moves.
+    /// Written as an explicit implementation so that saying so costs no field and no pretence.
+    /// </summary>
+    event EventHandler? ISpokenRows.SpokenSelectionChanged
+    {
+        add { }
+        remove { }
+    }
+
+    int ISpokenRows.SpokenCount => _drawn.Count;
+
+    string ISpokenRows.SpokenRow(int index)
+    {
+        var task = _drawn[index].Task;
+        var said = new System.Text.StringBuilder(task.Summary.Length > 0 ? task.Summary : "(No subject)");
+        said.Append(". Due ").Append(task.Day.ToString("ddd d MMM", Culture));
+        if (task.IsComplete) said.Append(", done");
+        else if (task.IsOverdue) said.Append(", overdue");
+        said.Append('.');
+        return said.ToString();
+    }
+
+    int ISpokenRows.SpokenSelectedIndex => -1;
+
+    void ISpokenRows.SpokenSelect(int index)
+    {
+    }
+
+    Rect? ISpokenRows.SpokenRowBounds(int index)
+        => index >= 0 && index < _drawn.Count ? _drawn[index].Box : null;
+
+    bool? ISpokenRows.SpokenRowToggled(int index)
+        => index >= 0 && index < _drawn.Count ? _drawn[index].Task.IsComplete : null;
+
+    protected override AutomationPeer OnCreateAutomationPeer() => new SpokenRowsPeer(this);
 }

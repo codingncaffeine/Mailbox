@@ -432,6 +432,8 @@ public sealed class AppointmentWindow : Window
             To = new TimeOnly(Math.Max(18, Math.Min(23, meeting.End.Wall.Hour + 1)), 0),
         };
 
+        Avalonia.Automation.AutomationProperties.SetName(view, "Free/busy grid");
+
         view.MeetingMoved += (_, when) => _surface.MoveTo(when.Start, when.End);
         return view;
     }

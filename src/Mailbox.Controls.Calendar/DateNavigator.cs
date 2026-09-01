@@ -1,6 +1,8 @@
 using Avalonia;
+using Avalonia.Automation.Peers;
 using Avalonia.Input;
 using Avalonia.Media;
+using Mailbox.Controls.Common;
 using Mailbox.Theming.Tokens;
 
 namespace Mailbox.Controls.Calendar;
@@ -20,7 +22,7 @@ namespace Mailbox.Controls.Calendar;
 /// per month.
 /// </para>
 /// </remarks>
-public sealed class DateNavigator : CalendarSurface
+public sealed class DateNavigator : CalendarSurface, ISpokenRows
 {
     private const double TitleRowHeight = 24;
     private const double WeekdayRowHeight = 20;
@@ -74,13 +76,21 @@ public sealed class DateNavigator : CalendarSurface
     public DateOnly RangeStart
     {
         get => _rangeStart;
-        set => Set(ref _rangeStart, value);
+        set
+        {
+            if (!Set(ref _rangeStart, value)) return;
+            SpokenSelectionChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     public DateOnly RangeEnd
     {
         get => _rangeEnd;
-        set => Set(ref _rangeEnd, value);
+        set
+        {
+            if (!Set(ref _rangeEnd, value)) return;
+            SpokenSelectionChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     public DayOfWeek FirstDayOfWeek
@@ -97,6 +107,7 @@ public sealed class DateNavigator : CalendarSurface
         {
             _busyDays = value ?? new HashSet<DateOnly>();
             InvalidateVisual();
+            SpokenRowsChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -111,11 +122,12 @@ public sealed class DateNavigator : CalendarSurface
     /// <summary>The two arrows: -1 back a month, +1 on.</summary>
     public event EventHandler<int>? Stepped;
 
-    private void Set<T>(ref T field, T value)
+    private bool Set<T>(ref T field, T value)
     {
-        if (EqualityComparer<T>.Default.Equals(field, value)) return;
+        if (EqualityComparer<T>.Default.Equals(field, value)) return false;
         field = value;
         InvalidateVisual();
+        return true;
     }
 
     protected override Size MeasureOverride(Size availableSize)
@@ -342,4 +354,52 @@ public sealed class DateNavigator : CalendarSurface
         var box = back ? _previous : _next;
         return box.Width > 0 ? box.Center : null;
     }
+
+    // ---- The little months, spoken for -----------------------------------------------------
+    //
+    // A grid of dates a reader can only reach with a pointer is a grid a reader cannot reach. The
+    // days are the rows: what each one is, whether anything is on it — which is the whole of what
+    // the bold in this control means — and which of them the main view is showing.
+
+    public event EventHandler? SpokenRowsChanged;
+
+    public event EventHandler? SpokenSelectionChanged;
+
+    int ISpokenRows.SpokenCount => _dayHits.Count;
+
+    string ISpokenRows.SpokenRow(int index)
+    {
+        var day = _dayHits[index].Day;
+        var said = new System.Text.StringBuilder(day.ToString("dddd d MMMM yyyy", Culture));
+        if (day == Today) said.Append(", today");
+        if (_busyDays.Contains(day)) said.Append(", has appointments");
+        if (day >= RangeStart && day <= RangeEnd) said.Append(", showing");
+        return said.ToString();
+    }
+
+    /// <summary>
+    /// The first day of the run the main view is showing, which is what this control marks. A
+    /// range of days is one block here rather than a multiple selection, so the block's start is
+    /// the current row.
+    /// </summary>
+    int ISpokenRows.SpokenSelectedIndex
+    {
+        get
+        {
+            for (var i = 0; i < _dayHits.Count; i++)
+            {
+                if (_dayHits[i].Day == RangeStart) return i;
+            }
+
+            return -1;
+        }
+    }
+
+    /// <summary>Picks a day, which is what a click on a cell does — the view goes there.</summary>
+    void ISpokenRows.SpokenSelect(int index) => DayPicked?.Invoke(this, _dayHits[index].Day);
+
+    Rect? ISpokenRows.SpokenRowBounds(int index)
+        => index >= 0 && index < _dayHits.Count ? _dayHits[index].Box : null;
+
+    protected override AutomationPeer OnCreateAutomationPeer() => new SpokenRowsPeer(this);
 }

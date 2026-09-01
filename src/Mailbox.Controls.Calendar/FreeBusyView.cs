@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Automation.Peers;
 using Avalonia.Input;
 using Avalonia.Media;
 using Mailbox.Controls.Common;
@@ -31,7 +32,7 @@ public sealed record FreeBusyRow(string Name, string Address, bool IsOrganizer, 
 /// not know (rule 4).
 /// </para>
 /// </remarks>
-public sealed class FreeBusyView : CalendarSurface
+public sealed class FreeBusyView : CalendarSurface, ISpokenRows
 {
     /// <summary>The names column, wide enough for "A. Person" and a mail address beneath it.</summary>
     private const double NamesWidth = 190;
@@ -43,6 +44,9 @@ public sealed class FreeBusyView : CalendarSurface
     private const double HourTextSize = 12;
 
     private IReadOnlyList<FreeBusyRow> _rows = [];
+
+    /// <summary>The rows the last render had room for, which is what there is to speak.</summary>
+    private readonly List<(Rect Box, FreeBusyRow Row)> _drawn = [];
     private DateOnly _day = DateOnly.FromDateTime(DateTime.Today);
     private TimeOnly _from = new(8, 0);
     private TimeOnly _to = new(18, 0);
@@ -56,6 +60,7 @@ public sealed class FreeBusyView : CalendarSurface
         {
             _rows = value ?? [];
             InvalidateVisual();
+            SpokenRowsChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -131,9 +136,11 @@ public sealed class FreeBusyView : CalendarSurface
         DrawHours(context, grid, line);
 
         var y = grid.Y;
+        _drawn.Clear();
         foreach (var row in _rows)
         {
             if (y + RowHeight > Bounds.Height) break;
+            _drawn.Add((new Rect(0, y, width, RowHeight), row));
             DrawRow(context, row, new Rect(0, y, width, RowHeight), grid, line);
             y += RowHeight;
         }
@@ -293,4 +300,74 @@ public sealed class FreeBusyView : CalendarSurface
         MeetingMoved?.Invoke(this, (start, start + (_end - _start)));
         e.Handled = true;
     }
+
+    // ---- Who was asked, spoken for ---------------------------------------------------------
+    //
+    // The grid's whole answer is per person — this one is busy then, nothing is known of that
+    // one — and a reader who cannot see the blocks gets none of it from the picture. So each row
+    // says who it is and what is known of their day in words, which is the only form of this
+    // view a reader has. Nothing here is selectable: the grid is read, and the meeting's own
+    // time is moved by the boxes above it.
+
+    public event EventHandler? SpokenRowsChanged;
+
+    /// <summary>
+    /// Never raised, because nothing here is selectable. Written as an explicit implementation so
+    /// that saying so costs no field and no pretence.
+    /// </summary>
+    event EventHandler? ISpokenRows.SpokenSelectionChanged
+    {
+        add { }
+        remove { }
+    }
+
+    int ISpokenRows.SpokenCount => _drawn.Count;
+
+    string ISpokenRows.SpokenRow(int index)
+    {
+        var row = _drawn[index].Row;
+        var said = new System.Text.StringBuilder(row.Name.Length > 0 ? row.Name : row.Address);
+        if (row.IsOrganizer) said.Append(", organiser");
+        said.Append('.');
+
+        if (!row.Known)
+        {
+            said.Append(" Nothing is known of this day.");
+            return said.ToString();
+        }
+
+        if (row.Busy.Count == 0)
+        {
+            said.Append(" Free all day.");
+            return said.ToString();
+        }
+
+        foreach (var (start, end, kind) in row.Busy)
+        {
+            said.Append(' ').Append(Word(kind)).Append(' ')
+                .Append(start.ToString("h:mm tt", Culture)).Append(" to ")
+                .Append(end.ToString("h:mm tt", Culture)).Append('.');
+        }
+
+        return said.ToString();
+    }
+
+    private static string Word(BusyStatus kind) => kind switch
+    {
+        BusyStatus.Tentative => "Tentative",
+        BusyStatus.OutOfOffice => "Out of office",
+        BusyStatus.Free => "Free",
+        _ => "Busy",
+    };
+
+    int ISpokenRows.SpokenSelectedIndex => -1;
+
+    void ISpokenRows.SpokenSelect(int index)
+    {
+    }
+
+    Rect? ISpokenRows.SpokenRowBounds(int index)
+        => index >= 0 && index < _drawn.Count ? _drawn[index].Box : null;
+
+    protected override AutomationPeer OnCreateAutomationPeer() => new SpokenRowsPeer(this);
 }
