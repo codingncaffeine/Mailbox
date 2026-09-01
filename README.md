@@ -16,8 +16,8 @@ against that same store rather than placeholders, and the Add Account window als
 CalDAV or CardDAV server: it finds the calendars and address books on offer and keeps the ones
 you pick in sync on every send/receive.
 
-**One caveat before you install.** Outlook.com and other Microsoft consumer mailboxes still ask
-you to register a client application of your own and paste its id into the account wizard — the
+**One caveat before you install.** Microsoft consumer mailboxes still ask you to register a
+client application of your own and paste its id into the account wizard — the
 OAuth2 flow is built and correct, but the project has not registered a public client yet. Gmail,
 Yahoo and AOL want an app password rather than your ordinary one, and Gmail additionally wants
 two-step verification on and IMAP switched on in its own settings — the wizard says so, with the
