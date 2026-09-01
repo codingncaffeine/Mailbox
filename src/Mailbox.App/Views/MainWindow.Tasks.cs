@@ -45,6 +45,24 @@ public partial class MainWindow
         var workspace = new TasksWorkspace(App.Pim, CalendarToday, App.Mailboxes)
         {
             IsNavVisible = shell.NavVisible,
+            ReadingPaneVisible = shell.ReadingPaneVisible,
+            ReadingPaneAtBottom = shell.ReadingPaneAtBottom,
+        };
+
+        // The reading pane is one choice for the whole window, as View › Layout offers it: a
+        // reader who puts the pane under the list in Mail means it there in Tasks too. Mail's own
+        // panes follow these through bindings; this module is built in code, so it is told.
+        shell.PropertyChanged += (_, e) =>
+        {
+            switch (e.PropertyName)
+            {
+                case nameof(ShellViewModel.ReadingPaneVisible):
+                    workspace.ReadingPaneVisible = shell.ReadingPaneVisible;
+                    break;
+                case nameof(ShellViewModel.ReadingPaneAtBottom):
+                    workspace.ReadingPaneAtBottom = shell.ReadingPaneAtBottom;
+                    break;
+            }
         };
 
         workspace.Changed += (_, _) =>
@@ -744,6 +762,13 @@ public partial class MainWindow
 
         Log.Info($"Harness: tasks showing {tasks.Kind} in “{tasks.OpenFolderName}”, {tasks.Status}.");
         Log.Info($"Harness: tasks pane lists [{string.Join(" | ", tasks.PaneNames)}].");
+
+        // What the reading pane says about the selection. A capture shows it, but only a run that
+        // reads it back can say the pane followed the selection rather than happening to hold the
+        // right item — and it is the pane's own sentences, not a rebuild of them.
+        Log.Info($"Harness: tasks reading pane "
+            + (tasks.ReadingPaneVisible ? tasks.ReadingPaneAtBottom ? "under the list" : "beside the list" : "off")
+            + $" — [{string.Join(" | ", tasks.ReadingLines)}].");
         foreach (var row in tasks.Rows)
         {
             Log.Info($"Harness: task “{row.Summary}” — {TaskBook.Heading(row.Band)}"
