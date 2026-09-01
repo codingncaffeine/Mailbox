@@ -326,7 +326,7 @@ public class ManageSieveTests
 
         Assert.False(repo.ServerRulesCurrent());
 
-        var outcome = await SievePublisher.PublishAsync(Server(fake), repo, accountId, ["you@example.com"], () => T0, TestContext.Current.CancellationToken);
+        var outcome = await SievePublisher.PublishAsync(Server(fake), repo, accountId, ["you@example.com"], () => T0, cancellation: TestContext.Current.CancellationToken);
         Assert.True(outcome.Ok, outcome.Message);
         Assert.Equal(1, outcome.RulesOnServer);
 
@@ -353,7 +353,7 @@ public class ManageSieveTests
         repo.MapFolder(receipts.Id, "INBOX/Shopping", "Shopping", null);
         Assert.False(repo.ServerRulesCurrent());
 
-        outcome = await SievePublisher.PublishAsync(Server(fake), repo, accountId, ["you@example.com"], () => T0, TestContext.Current.CancellationToken);
+        outcome = await SievePublisher.PublishAsync(Server(fake), repo, accountId, ["you@example.com"], () => T0, cancellation: TestContext.Current.CancellationToken);
         Assert.True(outcome.Ok);
         Assert.Contains("fileinto \"INBOX/Shopping\";", fake.Scripts["mailbox"]);
         Assert.True(repo.ServerRulesCurrent());
@@ -367,7 +367,7 @@ public class ManageSieveTests
         await using var fake = new FakeSieveServer(presetActive: "roundcube", presetScript: "keep;\r\n");
 
         var stored = repo.AddRule(MoveRule(receipts), T0);
-        var outcome = await SievePublisher.PublishAsync(Server(fake), repo, accountId, ["you@example.com"], () => T0, TestContext.Current.CancellationToken);
+        var outcome = await SievePublisher.PublishAsync(Server(fake), repo, accountId, ["you@example.com"], () => T0, cancellation: TestContext.Current.CancellationToken);
         Assert.True(outcome.Ok, outcome.Message);
         Assert.Contains("\"roundcube\" still runs first", outcome.Message);
         Assert.Contains("include :personal \"roundcube\";", fake.Scripts["mailbox"]);
@@ -377,7 +377,7 @@ public class ManageSieveTests
 
         // The last server-side rule goes: the server gets its old script back and ours is gone.
         repo.DeleteRule(stored.Id);
-        outcome = await SievePublisher.PublishAsync(Server(fake), repo, accountId, ["you@example.com"], () => T0, TestContext.Current.CancellationToken);
+        outcome = await SievePublisher.PublishAsync(Server(fake), repo, accountId, ["you@example.com"], () => T0, cancellation: TestContext.Current.CancellationToken);
         Assert.True(outcome.Ok, outcome.Message);
         Assert.Equal("roundcube", fake.Active);
         Assert.False(fake.Scripts.ContainsKey("mailbox"));
@@ -392,20 +392,20 @@ public class ManageSieveTests
         await using var fake = new FakeSieveServer();
 
         repo.AddRule(MoveRule(receipts), T0);
-        Assert.True((await SievePublisher.PublishAsync(Server(fake), repo, accountId, ["you@example.com"], () => T0, TestContext.Current.CancellationToken)).Ok);
+        Assert.True((await SievePublisher.PublishAsync(Server(fake), repo, accountId, ["you@example.com"], () => T0, cancellation: TestContext.Current.CancellationToken)).Ok);
         Assert.True(repo.ServerRulesCurrent());
 
         // A rule changed; the server now refuses everything.
         repo.SetRuleEnabled(repo.Rules()[0].Id, false);
         fake.RefusePutWith = "quota exceeded";
         repo.AddRule(MoveRule(receipts) with { Name = "Second" }, T0);
-        var outcome = await SievePublisher.PublishAsync(Server(fake), repo, accountId, ["you@example.com"], () => T0, TestContext.Current.CancellationToken);
+        var outcome = await SievePublisher.PublishAsync(Server(fake), repo, accountId, ["you@example.com"], () => T0, cancellation: TestContext.Current.CancellationToken);
         Assert.False(outcome.Ok);
         Assert.Contains("quota exceeded", outcome.Message);
         Assert.False(repo.ServerRulesCurrent());
 
         // A wrong password is a failure with the server's words, not a crash.
-        outcome = await SievePublisher.PublishAsync(Server(fake, password: "nope"), repo, accountId, ["you@example.com"], () => T0, TestContext.Current.CancellationToken);
+        outcome = await SievePublisher.PublishAsync(Server(fake, password: "nope"), repo, accountId, ["you@example.com"], () => T0, cancellation: TestContext.Current.CancellationToken);
         Assert.False(outcome.Ok);
         Assert.Contains("Authentication failed", outcome.Message);
 
@@ -413,7 +413,7 @@ public class ManageSieveTests
         await using var closed = new FakeSieveServer();
         var port = closed.Port;
         await closed.DisposeAsync();
-        outcome = await SievePublisher.PublishAsync(new ServerSettings("127.0.0.1", port, SecureSocketOptions.None, "you@example.com", "secret"), repo, accountId, ["you@example.com"], () => T0, TestContext.Current.CancellationToken);
+        outcome = await SievePublisher.PublishAsync(new ServerSettings("127.0.0.1", port, SecureSocketOptions.None, "you@example.com", "secret"), repo, accountId, ["you@example.com"], () => T0, cancellation: TestContext.Current.CancellationToken);
         Assert.False(outcome.Ok);
     }
 
@@ -535,7 +535,7 @@ public class ManageSieveTests
         var skipped = new MailRule { Name = "Local", Conditions = [new RuleCondition(RuleConditionKind.Flagged)], Actions = [new RuleAction(RuleActionKind.MarkAsRead)] };
 
         var script = SieveCompiler.Script([first, skipped, second], Dovecot, include: "roundcube");
-        Assert.StartsWith("# Rules from Mailbox.", script);
+        Assert.StartsWith("# Written by Mailbox,", script);
         Assert.Contains("require [\"fileinto\", \"include\"];", script);
         Assert.Contains("include :personal \"roundcube\";", script);
         Assert.Contains("header :contains \"subject\" \"spam \\\"quoted\\\"\"", script);
@@ -545,5 +545,159 @@ public class ManageSieveTests
         Assert.DoesNotContain("# Rule: Local", script);
         Assert.True(script.IndexOf("# Rule: Delete it", StringComparison.Ordinal) < script.IndexOf("# Rule: Gone", StringComparison.Ordinal));
         Assert.Equal(16, SieveCompiler.Hash(script).Length);
+    }
+
+    // ---- The automatic reply ---------------------------------------------------------------
+
+    private static readonly AwayMessage Away = new()
+    {
+        Enabled = true,
+        Subject = "Away until Monday",
+        Body = "I am away and will answer when I am back.\n\n. and a line that starts with a stop.",
+        Days = 3,
+        Addresses = ["me@alias.example"],
+    };
+
+    /// <summary>
+    /// The whole point of holding the reply on the server: the dates are the server's to keep, so
+    /// the window is a currentdate test and not something this application has to be running for.
+    /// </summary>
+    [Fact]
+    public void TheAutomaticReplyCompilesToVacationInsideItsDates()
+    {
+        var context = Dovecot with
+        {
+            Extensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "vacation", "date", "relational", "fileinto" },
+        };
+
+        var compiled = SieveCompiler.Vacation(
+            Away with { From = new DateOnly(2026, 9, 7), Until = new DateOnly(2026, 9, 14) }, context);
+
+        Assert.True(compiled.Compiles);
+        Assert.Empty(compiled.Reasons);
+        Assert.Equal(new HashSet<string> { "vacation", "date", "relational" }, compiled.Requires.ToHashSet());
+
+        var block = compiled.Block!;
+        Assert.Contains("if allof(currentdate :value \"ge\" \"date\" \"2026-09-07\", currentdate :value \"le\" \"date\" \"2026-09-14\") {", block);
+        Assert.Contains("vacation :days 3 :subject \"Away until Monday\"", block);
+
+        // Both addresses, the account's own included, or a message to an alias is not "to me" as
+        // far as the server is concerned and goes unanswered.
+        Assert.Contains(":addresses [\"me@alias.example\", \"you@example.com\"]", block);
+
+        // The reply is a multi-line literal, and none of it is indented — every character between
+        // text: and the closing stop is the message.
+        Assert.Contains("text:\nI am away and will answer when I am back.\n\n.. and a line that starts with a stop.\n.\n;", block);
+    }
+
+    /// <summary>
+    /// A server without the date extensions still sends the reply, and says so. Refusing to
+    /// publish at all would leave somebody away with nothing answering.
+    /// </summary>
+    [Fact]
+    public void WithoutTheDateExtensionsTheReplyRunsAndSaysSo()
+    {
+        var context = Dovecot with
+        {
+            Extensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "vacation" },
+        };
+
+        var compiled = SieveCompiler.Vacation(Away with { Until = new DateOnly(2026, 9, 14) }, context);
+
+        Assert.True(compiled.Compiles);
+        Assert.DoesNotContain("currentdate", compiled.Block!);
+        Assert.Contains("switched off", string.Join(" ", compiled.Reasons));
+    }
+
+    [Fact]
+    public void AServerWithNoVacationActionIsToldAboutRatherThanWorkedAround()
+    {
+        var refused = SieveCompiler.Vacation(Away, Dovecot with { Extensions = new HashSet<string> { "fileinto" } });
+        Assert.False(refused.Compiles);
+        Assert.Contains("does not offer", string.Join(" ", refused.Reasons));
+
+        var empty = SieveCompiler.Vacation(
+            Away with { Body = "   " },
+            Dovecot with { Extensions = new HashSet<string> { "vacation" } });
+        Assert.False(empty.Compiles);
+        Assert.Contains("nothing to say", string.Join(" ", empty.Reasons));
+    }
+
+    /// <summary>
+    /// The reply goes before the rules. A rule that stops processing would otherwise skip it, and
+    /// somebody away is away for every message, not only the ones no rule matched.
+    /// </summary>
+    [Fact]
+    public void TheReplyIsPublishedAheadOfTheRules()
+    {
+        var context = Dovecot with
+        {
+            Extensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "vacation", "fileinto" },
+        };
+
+        var rule = new MailRule
+        {
+            Name = "Receipts",
+            Conditions = [new RuleCondition(RuleConditionKind.From) { Values = ["@shop.example"] }],
+            Actions = [new RuleAction(RuleActionKind.MoveToFolder) { FolderId = 10, FolderName = "Receipts" }, new RuleAction(RuleActionKind.StopProcessing)],
+        };
+
+        var script = SieveCompiler.Script([rule], context, include: null, away: Away);
+
+        Assert.Contains("require [\"fileinto\", \"vacation\"];", script);
+        Assert.True(
+            script.IndexOf("vacation :days", StringComparison.Ordinal) < script.IndexOf("# Rule: Receipts", StringComparison.Ordinal),
+            "the reply has to be reachable before a rule can stop processing");
+    }
+
+    /// <summary>An automatic reply on its own is reason enough to have a script at all.</summary>
+    [Fact]
+    public async Task TheReplyIsPublishedWithNoRulesAtAll()
+    {
+        var (store, repo, accountId, _) = Fresh();
+        using var _keep = store;
+        await using var fake = new FakeSieveServer { Extensions = "fileinto vacation date relational" };
+
+        var outcome = await SievePublisher.PublishAsync(
+            Server(fake), repo, accountId, ["you@example.com"], () => T0,
+            Away with { Until = new DateOnly(2026, 9, 14) },
+            TestContext.Current.CancellationToken);
+
+        Assert.True(outcome.Ok, outcome.Message);
+        Assert.Equal("mailbox", fake.Active);
+        Assert.Contains("vacation :days 3", fake.Scripts["mailbox"]);
+        Assert.Contains("automatic reply", outcome.Message);
+        Assert.True(repo.ServerRulesCurrent());
+
+        // And switching it off takes the script down again, which is what stops a server
+        // answering for somebody who came back.
+        outcome = await SievePublisher.PublishAsync(
+            Server(fake), repo, accountId, ["you@example.com"], () => T0,
+            Away with { Enabled = false },
+            TestContext.Current.CancellationToken);
+
+        Assert.True(outcome.Ok, outcome.Message);
+        Assert.DoesNotContain("mailbox", fake.Scripts.Keys);
+    }
+
+    /// <summary>
+    /// A server that cannot reply at all: the rules still go up, and the outcome says the reply
+    /// did not — a reader who is told nothing believes their mail is being answered.
+    /// </summary>
+    [Fact]
+    public async Task AServerWithoutVacationPublishesTheRulesAndSaysWhatItCouldNotDo()
+    {
+        var (store, repo, accountId, receipts) = Fresh();
+        using var _keep = store;
+        await using var fake = new FakeSieveServer { Extensions = "fileinto" };
+
+        repo.AddRule(MoveRule(receipts), T0);
+        var outcome = await SievePublisher.PublishAsync(
+            Server(fake), repo, accountId, ["you@example.com"], () => T0, Away,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(outcome.Ok, outcome.Message);
+        Assert.Contains("The automatic reply is not", outcome.Message);
+        Assert.DoesNotContain("vacation", fake.Scripts["mailbox"]);
     }
 }

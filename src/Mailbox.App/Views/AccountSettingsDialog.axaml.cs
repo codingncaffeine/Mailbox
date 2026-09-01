@@ -502,6 +502,7 @@ public sealed class AccountSettingsDialog : Window
         await App.Secrets.DeleteAsync(address, Credentials.Incoming);
         await App.Secrets.DeleteAsync(address, Credentials.Outgoing);
         AccountSettings.Forget(App.Settings, address);
+        Mailbox.Core.Rules.AwayMessage.Forget(App.Settings, address);
 
         Changed = true;
         Reload();

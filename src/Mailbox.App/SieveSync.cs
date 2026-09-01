@@ -93,7 +93,8 @@ public static class SieveSync
                 }
 
                 return await SievePublisher.PublishAsync(
-                    server, account.Mail, account.Account.Id, [account.Account.Address], null, cancellation);
+                    server, account.Mail, account.Account.Id, [account.Account.Address], null,
+                    AwayMessage.Load(App.Settings, account.Account.Address), cancellation);
             }, cancellation);
         }
         finally
@@ -115,7 +116,8 @@ public static class SieveSync
             if (!Supports(account)) continue;
             var behind = account.Mail.SieveState() is { } state
                 ? state.Stale
-                : account.Mail.Rules().Any(r => r.Enabled && r.ServerSide);
+                : account.Mail.Rules().Any(r => r.Enabled && r.ServerSide)
+                  || AwayMessage.Load(App.Settings, account.Account.Address).Enabled;
             if (!behind) continue;
 
             var outcome = await PublishAsync(account);

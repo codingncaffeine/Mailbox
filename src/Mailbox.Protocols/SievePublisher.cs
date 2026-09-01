@@ -49,7 +49,7 @@ public static class SievePublisher
     /// </summary>
     public static async Task<SievePublishOutcome> PublishAsync(
         ServerSettings server, MailRepository mail, long accountId, IReadOnlyList<string> ownAddresses,
-        Func<DateTimeOffset>? now = null, CancellationToken cancellation = default)
+        Func<DateTimeOffset>? now = null, AwayMessage? away = null, CancellationToken cancellation = default)
     {
         ArgumentNullException.ThrowIfNull(server);
         ArgumentNullException.ThrowIfNull(mail);
@@ -58,8 +58,9 @@ public static class SievePublisher
         var clock = now ?? (() => DateTimeOffset.UtcNow);
         var rules = mail.Rules().Where(r => r.Enabled && r.ServerSide).ToList();
         var state = mail.SieveState();
+        var replying = away is { Enabled: true };
 
-        if (rules.Count == 0 && state is null)
+        if (rules.Count == 0 && !replying && state is null)
         {
             return new SievePublishOutcome(true, "No rules run on the server.");
         }
@@ -75,9 +76,10 @@ public static class SievePublisher
             var active = scripts.FirstOrDefault(s => s.Active)?.Name;
             var ours = scripts.Any(s => string.Equals(s.Name, SieveCompiler.ScriptName, StringComparison.Ordinal));
 
-            if (rules.Count == 0)
+            if (rules.Count == 0 && !replying)
             {
-                // The last server-side rule went: hand the server back what it had.
+                // The last server-side rule went, and nobody is away: hand the server back what
+                // it had.
                 if (string.Equals(active, SieveCompiler.ScriptName, StringComparison.Ordinal))
                 {
                     await client.SetActiveAsync(state?.Include ?? string.Empty, cancellation).ConfigureAwait(false);
@@ -89,7 +91,7 @@ public static class SievePublisher
                 mail.ClearSieveState();
                 Log.Info($"Sieve: script removed from {server.Host}.");
                 return new SievePublishOutcome(true,
-                    state?.Include is { Length: > 0 } restored ? $"Rules removed from the server; \"{restored}\" is active again." : "Rules removed from the server.",
+                    state?.Include is { Length: > 0 } restored ? $"Nothing runs on the server now; \"{restored}\" is active again." : "Nothing runs on the server now.",
                     capabilities);
             }
 
@@ -113,7 +115,16 @@ public static class SievePublisher
 
             var compiled = rules.Select(r => (Rule: r, Sieve: SieveCompiler.Compile(r, context))).ToList();
             var left = compiled.Where(c => !c.Sieve.Compiles).Select(c => c.Rule.Name).ToList();
-            var script = SieveCompiler.Script(compiled.Where(c => c.Sieve.Compiles).Select(c => c.Rule), context, include);
+
+            // The automatic reply is a server's own job or nothing: a server with no vacation
+            // action cannot be given one, and the reader is told rather than left believing the
+            // reply is being sent.
+            var vacation = replying ? SieveCompiler.Vacation(away!, context) : null;
+            var script = SieveCompiler.Script(
+                compiled.Where(c => c.Sieve.Compiles).Select(c => c.Rule),
+                context,
+                include,
+                vacation is { Compiles: true } ? away : null);
 
             // A rule the server cannot run — a folder that lost its server name, an extension this
             // server lacks — goes back to running here, rather than nowhere.
@@ -129,9 +140,16 @@ public static class SievePublisher
 
             mail.SetSieveState(script, include, clock());
             var count = compiled.Count - left.Count;
-            Log.Info($"Sieve: {count} rule{(count == 1 ? "" : "s")} published to {server.Host}.");
+            Log.Info(
+                $"Sieve: {count} rule{(count == 1 ? "" : "s")} published to {server.Host}"
+                + (vacation is { Compiles: true } ? ", with an automatic reply." : "."));
 
-            var message = $"{count} rule{(count == 1 ? "" : "s")} on the server.";
+            var message = count == 0 && replying
+                ? "Your automatic reply is on the server."
+                : $"{count} rule{(count == 1 ? "" : "s")} on the server.";
+            if (count > 0 && replying && vacation is { Compiles: true }) message += " Your automatic reply is there too.";
+            if (vacation is { Compiles: false } refused) message += $" The automatic reply is not: {string.Join("; ", refused.Reasons)}.";
+            else if (vacation is { Reasons.Count: > 0 } caveat) message += $" {char.ToUpperInvariant(caveat.Reasons[0][0])}{caveat.Reasons[0][1..]}.";
             if (include is { Length: > 0 }) message += $" \"{include}\" still runs first.";
             if (replaced is { Length: > 0 }) message += $" The server's script \"{replaced}\" no longer runs: the server can't include it.";
             if (left.Count > 0) message += $" Left on this computer: {string.Join(", ", left)}.";

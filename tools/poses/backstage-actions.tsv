@@ -1,6 +1,6 @@
 # Every Backstage action, generated from the page builders and the two Info menus.
 # Regenerate: tools/poses/generate-backstage.py
-# 15 section buttons, 9 menu entries.
+# 16 section buttons, 9 menu entries.
 act-print.message	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=print:print.message
 act-print.list	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=print:print.list
 act-print.pdf	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=print:print.pdf
@@ -14,6 +14,7 @@ act-export.vcf	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=saveas:export.vcf
 act-import.maildir	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=openexport:import.maildir
 act-import.thunderbird	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=openexport:import.thunderbird
 act-import.files	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=openexport:import.files
+act-away	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=info:away
 act-rules	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=info:rules
 act-update.check	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=info:update.check
 # Account Settings…

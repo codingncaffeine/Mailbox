@@ -2169,6 +2169,18 @@ public partial class MainWindow : Window
                 };
                 break;
 
+            // Automatic Replies, which MAILBOX_AWAY fills in and can press OK on — the settings
+            // it writes are what the Sieve script is compiled from, and this window is the only
+            // place they are written.
+            case "away":
+                Opened += async (_, _) =>
+                {
+                    CaptureNextWindow();
+                    await new AutomaticRepliesDialog(DataContext is ShellViewModel a ? a.CurrentAddress : null)
+                        .ShowDialog(this);
+                };
+                break;
+
             case "rules":
                 Opened += async (_, _) =>
                 {

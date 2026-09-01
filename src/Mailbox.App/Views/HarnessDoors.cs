@@ -35,7 +35,7 @@ public static class HarnessDoors
         "editoroptions", "autocorrect", "autocorrectexceptions", "newfolder", "folderprops", "folderarchive",
         "gotofolder", "movefolder", "archive", "viewsettings", "showcolumns", "groupby",
         "viewsort", "viewfilter", "othersettings", "conditionalformatting", "formatcolumns", "manageviews",
-        "applyview", "quicksteps", "quickstepedit", "categories", "server", "rules",
+        "applyview", "quicksteps", "quickstepedit", "categories", "server", "away", "rules",
         "rulewizard", "createrule", "runrules", "junk", "message", "groups",
         "printlist", "source", "progress", "transferbar",
     ];

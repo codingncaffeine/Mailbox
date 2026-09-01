@@ -116,6 +116,10 @@ internal static class BackstageActions
                 host.Refresh();
                 break;
 
+            case "away":
+                await new AutomaticRepliesDialog().ShowDialog(host.Owner);
+                break;
+
             // The Mailbox Account page's About panel. What a reader wants from it is what this
             // is, what licence it is under and where their mail actually lives — the last
             // being the thing nobody can guess and everybody eventually needs.

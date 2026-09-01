@@ -25,7 +25,11 @@ public sealed record SieveContext
 /// <summary>One rule turned into Sieve, or the reasons it could not be.</summary>
 /// <param name="Block">The rule's <c>if … { … }</c>, or null when it does not compile.</param>
 /// <param name="Requires">The extensions the block needs, for the script's <c>require</c>.</param>
-/// <param name="Reasons">Why the rule stays on this computer — empty when it compiles.</param>
+/// <param name="Reasons">
+/// Why the rule stays on this computer — empty when it compiles. <see cref="SieveCompiler.Vacation"/>
+/// is the one thing that can hand back both: a block that will run and a reason the reader should
+/// hear anyway, because a server that cannot hold the dates still sends the reply.
+/// </param>
 public sealed record SieveRule(string? Block, IReadOnlySet<string> Requires, IReadOnlyList<string> Reasons)
 {
     public bool Compiles => Block is not null;
@@ -114,13 +118,25 @@ public static class SieveCompiler
     /// left out — the caller has already told the reader which.
     /// </summary>
     /// <param name="include">A script to include first — the one that was active before Mailbox's — or null.</param>
-    public static string Script(IEnumerable<MailRule> rules, SieveContext context, string? include = null)
+    /// <param name="away">
+    /// The automatic reply, when one is switched on. It goes first, before the rules: a rule that
+    /// says stop processing would otherwise skip whatever came after it, and somebody away is
+    /// away for every message and not only for the ones no rule matched.
+    /// </param>
+    public static string Script(
+        IEnumerable<MailRule> rules, SieveContext context, string? include = null, AwayMessage? away = null)
     {
         ArgumentNullException.ThrowIfNull(rules);
         ArgumentNullException.ThrowIfNull(context);
 
         var requires = new SortedSet<string>(StringComparer.Ordinal);
         var blocks = new List<string>();
+
+        if (away is { Enabled: true } && Vacation(away, context) is { Compiles: true } vacation)
+        {
+            requires.UnionWith(vacation.Requires);
+            blocks.Add(vacation.Block!);
+        }
 
         foreach (var rule in rules)
         {
@@ -133,7 +149,8 @@ public static class SieveCompiler
         if (include is { Length: > 0 }) requires.Add("include");
 
         var script = new StringBuilder();
-        script.Append("# Rules from Mailbox. Edited by its Rules and Alerts dialog; changes made here are replaced.\n");
+        script.Append("# Written by Mailbox, from its Rules and Alerts and its automatic reply.\n");
+        script.Append("# Changes made here are replaced the next time either of those changes.\n");
         if (requires.Count > 0)
         {
             script.Append("require [").Append(string.Join(", ", requires.Select(Quote))).Append("];\n");
@@ -148,6 +165,118 @@ public static class SieveCompiler
 
         foreach (var block in blocks) script.Append(block).Append('\n');
         return script.ToString();
+    }
+
+    /// <summary>
+    /// The automatic reply as RFC 5230's <c>vacation</c> action, inside a date test when one was
+    /// asked for — or the reasons the server cannot hold it.
+    /// </summary>
+    /// <remarks>
+    /// The dates are the one part a server can refuse. <c>currentdate</c> is RFC 5260's and its
+    /// <c>:value</c> comparison is RFC 5231's, so a range needs both <c>date</c> and
+    /// <c>relational</c>; without them the reply is still published and simply answers until it is
+    /// switched off, which is the caller's to say out loud rather than to discover.
+    /// <para>
+    /// An ISO date sorts the way it reads, so the default comparator's string ordering is
+    /// chronological ordering and the range needs no numeric comparator to be right.
+    /// </para>
+    /// </remarks>
+    public static SieveRule Vacation(AwayMessage away, SieveContext context)
+    {
+        ArgumentNullException.ThrowIfNull(away);
+        ArgumentNullException.ThrowIfNull(context);
+
+        var requires = new HashSet<string>(StringComparer.Ordinal);
+        if (!context.Has("vacation"))
+        {
+            return new SieveRule(null, requires, ["the server does not offer automatic replies"]);
+        }
+
+        if (away.Body.Trim().Length == 0)
+        {
+            return new SieveRule(null, requires, ["the reply has nothing to say"]);
+        }
+
+        requires.Add("vacation");
+
+        var action = new StringBuilder("vacation");
+        action.Append(" :days ").Append(Math.Clamp(away.Days, 1, 30).ToString(CultureInfo.InvariantCulture));
+        if (away.Subject.Trim().Length > 0) action.Append(" :subject ").Append(Quote(away.Subject.Trim()));
+
+        // Every address of the reader's that this reply belongs to. Without them a message sent to
+        // an alias is not "addressed to me" as far as the server is concerned, and goes unanswered.
+        var addresses = away.Addresses
+            .Concat(context.OwnAddresses)
+            .Select(a => a.Trim())
+            .Where(a => a.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (addresses.Count > 0)
+        {
+            action.Append(" :addresses [").Append(string.Join(", ", addresses.Select(Quote))).Append(']');
+        }
+
+        var dated = away.HasDates && context.Has("date") && context.Has("relational");
+        if (dated)
+        {
+            requires.Add("date");
+            requires.Add("relational");
+        }
+
+        var block = new StringBuilder();
+        block.Append("# Automatic reply. Switched on in Mailbox; changes made here are replaced.\n");
+
+        if (dated)
+        {
+            var tests = new List<string>(2);
+            if (away.From is { } from)
+            {
+                tests.Add($"currentdate :value \"ge\" \"date\" {Quote(from.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))}");
+            }
+
+            if (away.Until is { } until)
+            {
+                tests.Add($"currentdate :value \"le\" \"date\" {Quote(until.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))}");
+            }
+
+            block.Append("if ").Append(tests.Count == 1 ? tests[0] : $"allof({string.Join(", ", tests)})").Append(" {\n");
+
+            // Only the action's own line is indented. What follows it is a multi-line string and
+            // every character of it is the reply, so indenting it would indent the reply.
+            block.Append("    ").Append(action).Append('\n');
+            block.Append(Text(away.Body)).Append('\n');
+            block.Append("}\n");
+        }
+        else
+        {
+            block.Append(action).Append('\n').Append(Text(away.Body)).Append('\n');
+        }
+
+        var reasons = away.HasDates && !dated
+            ? new List<string> { "the server cannot hold the dates, so the reply runs until it is switched off" }
+            : [];
+
+        return new SieveRule(block.ToString(), requires, reasons);
+    }
+
+    /// <summary>
+    /// A Sieve multi-line string, which is how a reply with paragraphs in it is written.
+    /// </summary>
+    /// <remarks>
+    /// A line of a single full stop ends the literal, so a line that begins with one is stuffed
+    /// with a second — the same rule SMTP has, and for the same reason.
+    /// </remarks>
+    private static string Text(string body)
+    {
+        var text = new StringBuilder("text:\n");
+        foreach (var line in body.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'))
+        {
+            if (line.StartsWith('.')) text.Append('.');
+            text.Append(line).Append('\n');
+        }
+
+        text.Append(".\n;");
+        return text.ToString();
     }
 
     /// <summary>A short fingerprint of a script, so the store can tell whether the server has this one.</summary>

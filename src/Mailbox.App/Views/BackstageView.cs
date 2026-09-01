@@ -474,6 +474,16 @@ public sealed class BackstageView : Border
             "Change settings for this account or set up more connections.",
             AccountSettingsMenu()));
 
+        // Where the reference puts it, second on the page — and offered for every account rather
+        // than greyed for all but one kind, because the server-side half of it is a standard the
+        // account's own server either speaks or does not, and the window says which.
+        stack.Children.Add(BuildSection(
+            "reminder", "Automatic\nReplies", false,
+            "Automatic Replies (Out of Office)",
+            "Have your mail server answer for you while you are away — with dates, if it can hold "
+            + "them — so the replies keep going while this computer is off.",
+            action: "away"));
+
         stack.Children.Add(BuildSection(
             "archive", "Tools", true,
             "Mailbox Settings",
