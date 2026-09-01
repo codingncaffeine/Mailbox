@@ -460,6 +460,11 @@ public sealed class CalendarWorkspace : Border
 
         _schedule.EntrySelected += (_, entry) => SelectedEntry = entry;
         _schedule.EntryActivated += (_, entry) => EntryOpened?.Invoke(this, entry);
+        _schedule.SlotActivated += (_, slot) => NewRequested?.Invoke(this, (slot.Day.ToDateTime(slot.At), false));
+
+        // Schedule View shows one day, so its own page keys ask for the day either side — the
+        // same move the toolbar's arrows make, through the same door.
+        _schedule.DayStepped += (_, direction) => Step(direction);
 
         // A drag means the same thing in whichever view it happened, so all three hand it on
         // through one event rather than each being wired to its own handler. Schedule View's

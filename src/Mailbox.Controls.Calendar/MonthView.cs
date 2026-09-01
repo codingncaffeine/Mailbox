@@ -65,6 +65,7 @@ public sealed class MonthView : CalendarSurface, ISpokenRows
     private int _weeks = 6;
     private DateOnly _today = DateOnly.FromDateTime(DateTime.Today);
     private DateOnly? _selected;
+    private DateOnly? _caret;
     private CalendarEntry? _selectedEntry;
     private IReadOnlyList<CalendarEntry> _entries = [];
 
@@ -94,6 +95,23 @@ public sealed class MonthView : CalendarSurface, ISpokenRows
         set => Set(ref _selected, value);
     }
 
+    /// <summary>
+    /// Where the keyboard is in the grid: the day the arrow keys move, <c>Tab</c> walks into and
+    /// <c>Enter</c> acts on. Null until the view is used, so a grid that has only ever been drawn
+    /// draws exactly as it did.
+    /// </summary>
+    /// <remarks>
+    /// A month cell has no time in it, so the caret here is a day where the time grid's is a slot;
+    /// the split it keeps is the same one. The caret is a place and an appointment is a thing —
+    /// arrowing moves between days and lets go of whatever chip was selected, and <c>Tab</c> is
+    /// what reaches into a day that holds several.
+    /// </remarks>
+    public DateOnly? Caret
+    {
+        get => _caret;
+        set => Set(ref _caret, value);
+    }
+
     public CalendarEntry? SelectedEntry
     {
         get => _selectedEntry;
@@ -115,6 +133,9 @@ public sealed class MonthView : CalendarSurface, ISpokenRows
             SpokenRowsChanged?.Invoke(this, EventArgs.Empty);
         }
     }
+
+    /// <summary>The last day on show, in the bottom-right cell.</summary>
+    public DateOnly LastDay => FirstDay.AddDays((Weeks * 7) - 1);
 
     /// <summary>The month the title names — the one most of the shown weeks belong to.</summary>
     public DateOnly DominantMonth
@@ -226,6 +247,8 @@ public sealed class MonthView : CalendarSurface, ISpokenRows
             Fill(context, new Rect(columnX[i] + columns[i], 0, 1, height), gridLine);
         }
 
+        DrawCaret(context);
+
         for (var week = 0; week < Weeks; week++)
         {
             DrawWeekItems(context, week, columns, columnX, rowsTop + rowY[week], rows[week]);
@@ -234,6 +257,24 @@ public sealed class MonthView : CalendarSurface, ISpokenRows
         _gutter = new Rect(width, 0, GutterWidth, height);
         DrawGutter(context, _gutter);
         DrawGhost(context);
+    }
+
+    /// <summary>
+    /// The keyboard's day, ringed rather than filled so the chips in the cell still read as
+    /// themselves — and drawn over the grid lines but under the chips, for the same reason the
+    /// time grid's is: the caret says where the keyboard is, and what is in that day matters more.
+    /// </summary>
+    private void DrawCaret(DrawingContext context)
+    {
+        if (_caret is not { } caret || CellOf(caret) is not { } cell) return;
+
+        // The shell's own focus colour, so a focused day here and a focused anything else in the
+        // application are recognisably the same mark.
+        var ring = Palette.Colour(TokenKeys.Border.Focus);
+        Fill(context, new Rect(cell.X, cell.Y, cell.Width, 1), ring);
+        Fill(context, new Rect(cell.X, cell.Bottom - 1, cell.Width, 1), ring);
+        Fill(context, new Rect(cell.X, cell.Y, 1, cell.Height), ring);
+        Fill(context, new Rect(cell.Right - 1, cell.Y, 1, cell.Height), ring);
     }
 
     /// <summary>
@@ -520,6 +561,10 @@ public sealed class MonthView : CalendarSurface, ISpokenRows
             if (!box.Contains(point)) continue;
             SelectedEntry = entry;
             Selected = entry.Days().First;
+
+            // The press takes the focus as well as the selection, so the caret follows it — a
+            // click and then an arrow key should carry on from the cell that was clicked.
+            Caret = Selected;
             EntrySelected?.Invoke(this, entry);
             if (e.ClickCount >= 2) EntryActivated?.Invoke(this, entry);
             else if (ChipDrag.CanDrag(entry) && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
@@ -548,6 +593,7 @@ public sealed class MonthView : CalendarSurface, ISpokenRows
             if (!box.Contains(point)) continue;
             SelectedEntry = null;
             Selected = day;
+            Caret = day;
             DaySelected?.Invoke(this, day);
             if (e.ClickCount >= 2) DayActivated?.Invoke(this, day);
             e.Handled = true;
@@ -605,12 +651,194 @@ public sealed class MonthView : CalendarSurface, ISpokenRows
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
-        if (e.Key != Key.Escape || _drag is null) return;
+        if (e.Handled) return;
 
-        _drag = null;
-        Cursor = Cursor.Default;
-        InvalidateVisual();
+        if (e.Key == Key.Escape && _drag is not null)
+        {
+            // A drag let go of: nothing is written and the chip is where it was.
+            _drag = null;
+            Cursor = Cursor.Default;
+            InvalidateVisual();
+            e.Handled = true;
+            return;
+        }
+
+        // A drag owns the keyboard while it runs, as it does in the time grid: moving the caret
+        // out from under a chip being carried would leave the two describing different days.
+        if (_drag is not null) return;
+
+        switch (e.Key)
+        {
+            case Key.Left:
+                MoveCaret(-1);
+                break;
+            case Key.Right:
+                MoveCaret(1);
+                break;
+            case Key.Up:
+                MoveCaret(-7);
+                break;
+            case Key.Down:
+                MoveCaret(7);
+                break;
+            case Key.Home:
+                MoveCaretTo(WeekEnd(CaretDay(), last: false));
+                break;
+            case Key.End:
+                MoveCaretTo(WeekEnd(CaretDay(), last: true));
+                break;
+            case Key.PageUp:
+                MoveCaretTo(SameDayInMonth(CaretDay(), -1));
+                break;
+            case Key.PageDown:
+                MoveCaretTo(SameDayInMonth(CaretDay(), 1));
+                break;
+            case Key.Tab:
+                // Tab is the window's key first and the grid's second: it walks the day's own
+                // appointments while there is another one to reach, and the press that runs off
+                // the end is left alone, so it moves the focus out of the calendar as it would
+                // anywhere else. A grid that answered Tab unconditionally would be a trap.
+                if (!StepEntry(e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? -1 : 1)) return;
+                break;
+            case Key.Enter:
+                Activate();
+                break;
+            default:
+                return;
+        }
+
         e.Handled = true;
+    }
+
+    /// <summary>The day the caret is on, settling on something real the first time it is asked.</summary>
+    private DateOnly CaretDay()
+    {
+        if (_caret is { } caret) return caret;
+        if (_selected is { } selected) return selected;
+        return Today >= FirstDay && Today <= LastDay ? Today : FirstDay;
+    }
+
+    private void MoveCaret(int days)
+    {
+        // The first press places the caret rather than moving it, the way the first arrow into a
+        // list picks its first row and not its second.
+        if (_caret is null)
+        {
+            MoveCaretTo(CaretDay());
+            return;
+        }
+
+        MoveCaretTo(CaretDay().AddDays(days));
+    }
+
+    private void MoveCaretTo(DateOnly day)
+    {
+        // The weeks on show follow the caret. FirstDay is always a week's start, so a caret off
+        // either end moves the grid by whole weeks — and it moves through Scrolled, the channel
+        // the wheel and the gutter already use, so the host re-reads the store for the weeks it
+        // now shows instead of drawing a caret over a month it has no appointments for.
+        var weeks = WeeksTo(day);
+        if (weeks != 0) Scrolled?.Invoke(this, weeks);
+
+        var changed = _selected != day;
+        Selected = day;
+        Caret = day;
+
+        // The caret is a place, not a thing. Arrowing onto a day lets go of the chip that was
+        // selected; Tab is what takes hold of one again.
+        SelectedEntry = null;
+        if (changed) DaySelected?.Invoke(this, day);
+    }
+
+    /// <summary>How many whole weeks the grid must move for a day to be on it.</summary>
+    private int WeeksTo(DateOnly day)
+    {
+        if (day >= FirstDay && day <= LastDay) return 0;
+        var weeks = (int)Math.Floor((day.DayNumber - FirstDay.DayNumber) / 7.0);
+        return day < FirstDay ? weeks : weeks - (Weeks - 1);
+    }
+
+    /// <summary>
+    /// The ends of the caret's own row. A month grid's row is a week, so <c>Home</c> and
+    /// <c>End</c> mean its first and last day — the row's ends, as they are in a list.
+    /// </summary>
+    private DateOnly WeekEnd(DateOnly day, bool last)
+    {
+        var offset = (((day.DayNumber - FirstDay.DayNumber) % 7) + 7) % 7;
+        return day.AddDays(last ? 6 - offset : -offset);
+    }
+
+    /// <summary>
+    /// The same day of the next or previous month, which is what a page is in a view of months.
+    /// Short months keep it inside themselves: a page down from the 31st is the 30th, not the 1st.
+    /// </summary>
+    private static DateOnly SameDayInMonth(DateOnly day, int months)
+    {
+        var target = new DateOnly(day.Year, day.Month, 1).AddMonths(months);
+        return new DateOnly(target.Year, target.Month, Math.Min(day.Day, DateTime.DaysInMonth(target.Year, target.Month)));
+    }
+
+    /// <summary>
+    /// What is on a day, in the order the cell draws it: the bars that cross it first, then its
+    /// own appointments in time order.
+    /// </summary>
+    private List<CalendarEntry> EntriesOn(DateOnly day)
+        => [.. Entries
+            .Where(e =>
+            {
+                var (first, last) = e.Days();
+                return first <= day && last >= day;
+            })
+            .OrderByDescending(e => e.IsMultiDay || e.AllDay)
+            .ThenBy(e => e.StartUtc)
+            .ThenBy(e => e.Summary, StringComparer.CurrentCulture)];
+
+    /// <summary>
+    /// Walks the caret day's appointments. Returns false when there is nothing further that way,
+    /// which is what leaves the press to the window and moves the focus on.
+    /// </summary>
+    private bool StepEntry(int direction)
+    {
+        var items = EntriesOn(CaretDay());
+        if (items.Count == 0) return false;
+
+        var at = SelectedEntry is null ? -1 : items.FindIndex(e => ReferenceEquals(e, SelectedEntry));
+        var next = at + direction;
+        if (next >= items.Count) return false;
+
+        // Back past the first appointment is the day itself, not a way out: the selection lets go
+        // and the caret stays where it is. The press after that one leaves.
+        if (next < 0)
+        {
+            if (at < 0) return false;
+            SelectedEntry = null;
+            return true;
+        }
+
+        var entry = items[next];
+        SelectedEntry = entry;
+        EntrySelected?.Invoke(this, entry);
+        return true;
+    }
+
+    /// <summary>
+    /// <c>Enter</c> means "open what I am on": the appointment Tab took hold of, or otherwise a
+    /// new one on the caret's day — which is what a double click already does with a pointer.
+    /// </summary>
+    private void Activate()
+    {
+        var day = CaretDay();
+        if (SelectedEntry is { } entry)
+        {
+            var (first, last) = entry.Days();
+            if (first <= day && last >= day)
+            {
+                EntryActivated?.Invoke(this, entry);
+                return;
+            }
+        }
+
+        DayActivated?.Invoke(this, day);
     }
 
     /// <summary>
