@@ -8,11 +8,21 @@ Mail, Calendar, People, Tasks, Notes, Journal and Feeds in one desktop applicati
 Open protocols only — IMAP, POP3, SMTP, CalDAV, CardDAV — with no cloud service behind it, no
 account required, no AI features and no telemetry.
 
-**Status: early, but it moves mail — and now your calendars.** Add an account and mail works
-end to end over IMAP, POP3 and SMTP against a local SQLite store. The calendar, contacts,
-tasks, notes, journal and feed modules run against that same store, and the Add Account window
-also takes a CalDAV or CardDAV server — it finds the calendars and address books the server
-offers and keeps the ones you pick in sync on every send/receive.
+**Status: it does the whole job now, not just the mail.** Add an account and mail works end to
+end over IMAP, POP3 and SMTP against a local SQLite store — with full-text search, client-side
+rules that compile to Sieve, a junk filter that learns from your own marks, and S/MIME and
+OpenPGP in both directions. Calendar, People, Tasks, Notes, Journal and Feeds are whole modules
+against that same store rather than placeholders, and the Add Account window also takes a
+CalDAV or CardDAV server: it finds the calendars and address books on offer and keeps the ones
+you pick in sync on every send/receive.
+
+**One caveat before you install.** Outlook.com and other Microsoft consumer mailboxes still ask
+you to register a client application of your own and paste its id into the account wizard — the
+OAuth2 flow is built and correct, but the project has not registered a public client yet. Gmail,
+Yahoo and AOL want an app password rather than your ordinary one, and Gmail additionally wants
+two-step verification on and IMAP switched on in its own settings — the wizard says so, with the
+link, when it recognises the address. Servers that speak plain IMAP and SMTP, self-hosted ones
+included, just take a password.
 
 ![The Mailbox shell: folder pane, message list and reading pane](assets/screenshots/shell.png)
 
@@ -133,7 +143,7 @@ never shipped, because they are not redistributable.
 
 ### Environment variables
 
-Useful while the interface is still being built.
+For testing, for scripted captures, and for overriding a platform quirk without opening Options.
 
 | Variable | Values | Purpose |
 |---|---|---|
