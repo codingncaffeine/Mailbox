@@ -791,6 +791,10 @@ public sealed class CalendarWorkspace : Border
         }
 
         if (_viewHost.Children.Count == 1 && ReferenceEquals(_viewHost.Children[0], view)) return;
+
+        // The time grid on its own is the same control the band's panel holds, so it can arrive
+        // here still parented. See WithDailyTasks.
+        Detach(view);
         _viewHost.Children.Clear();
         _viewHost.Children.Add(view);
     }
@@ -817,16 +821,35 @@ public sealed class CalendarWorkspace : Border
 
     private bool ShowDailyTasks => _dailyTaskList != DailyTaskListMode.Off;
 
+    /// <summary>
+    /// The time grid with the band docked under it.
+    /// </summary>
+    /// <remarks>
+    /// The grid is one control shared between two homes — the host on its own, and this panel
+    /// when the band is on — so it has to be taken out of the one before it is put in the other.
+    /// Adding a control that still has a parent throws on the UI thread, which takes the window
+    /// with it: switching the Daily Task List on while a week was showing did exactly that, and
+    /// so did switching it off again.
+    /// </remarks>
     private Control WithDailyTasks()
     {
-        if (_timeGridWithTasks.Children.Count == 0)
+        if (_timeGridWithTasks.Children.Count == 2 && ReferenceEquals(_timeGridWithTasks.Children[1], _timeGrid))
         {
-            DockPanel.SetDock(_dailyTasks, Dock.Bottom);
-            _timeGridWithTasks.Children.Add(_dailyTasks);
-            _timeGridWithTasks.Children.Add(_timeGrid);
+            return _timeGridWithTasks;
         }
 
+        _timeGridWithTasks.Children.Clear();
+        Detach(_timeGrid);
+        DockPanel.SetDock(_dailyTasks, Dock.Bottom);
+        _timeGridWithTasks.Children.Add(_dailyTasks);
+        _timeGridWithTasks.Children.Add(_timeGrid);
         return _timeGridWithTasks;
+    }
+
+    /// <summary>Takes a view out of whatever is holding it, so it can be handed to something else.</summary>
+    private static void Detach(Control view)
+    {
+        if (view.Parent is Panel panel) panel.Children.Remove(view);
     }
 
     /// <summary>
