@@ -96,6 +96,9 @@ public partial class App : Application
     /// <summary>The signatures, and which account uses which.</summary>
     public static Signatures Signatures { get; private set; } = null!;
 
+    /// <summary>The addresses each account may send as, beyond its own.</summary>
+    public static Identities Identities { get; private set; } = null!;
+
     /// <summary>How long a sent message waits before it can actually go.</summary>
     public static UndoSend UndoSend { get; private set; } = null!;
 
@@ -847,6 +850,7 @@ public partial class App : Application
         Stationery = new StationeryFonts(Settings);
         Groups = new SendReceiveGroups(Settings);
         Signatures = new Signatures(Settings);
+        Identities = new Identities(Settings);
         UndoSend = new UndoSend(Settings);
 
         // The list's field vocabulary learns the plugins' columns: the hooks are how a Core

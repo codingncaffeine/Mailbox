@@ -162,6 +162,19 @@ public sealed partial class ComposeSurface
             + (item.IsEnabled ? string.Empty : "  [greyed]"))];
 
     /// <summary>
+    /// The identity this message writes, and the account that will carry it.
+    /// </summary>
+    /// <remarks>
+    /// Two different things once an account has more than one address, and the difference is
+    /// invisible on screen: the From field shows the identity and nothing shows the server. A
+    /// message sent as an alias whose account resolved wrong would go out down the wrong
+    /// connection and look perfectly correct in the window.
+    /// </remarks>
+    public string HarnessSending
+        => $"{SendingIdentity()?.Label ?? "no identity"} through "
+           + $"{SendingAccount()?.Account.Address ?? "no account"}";
+
+    /// <summary>
     /// What the Auto-Complete List offers on Cc and Bcc, not only To.
     /// </summary>
     /// <remarks>

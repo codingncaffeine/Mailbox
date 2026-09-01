@@ -187,6 +187,7 @@ public sealed class ClassicIcon : Control
             case "alert-star": DrawAlertStar(context, p); break;
             case "sound": DrawSound(context, p); break;
             case "envelope": DrawEnvelope(context, p); break;
+            case "identities": DrawIdentities(context, p); break;
             case "send": DrawSend(context, p); break;
             case "tick": DrawTickBox(context, p, ticked: true); break;
             case "untick": DrawTickBox(context, p, ticked: false); break;
@@ -383,6 +384,23 @@ public sealed class ClassicIcon : Control
     {
         c.DrawGeometry(p.Paper, new Pen(p.SteelDark, 1), Poly((1.5, 3.5), (14.5, 3.5), (14.5, 12.5), (1.5, 12.5)));
         c.DrawGeometry(null, new Pen(p.SteelDark, 1), Build([(1.5, 3.5), (8, 9), (14.5, 3.5)], closed: false));
+    }
+
+    /// <summary>
+    /// Two envelopes, one behind the other: the addresses an account may send as.
+    /// </summary>
+    /// <remarks>
+    /// The one in front is the envelope glyph moved down and right, so the two read as the same
+    /// thing twice rather than as two different objects — which is exactly what an identity is.
+    /// The one behind is drawn first and shows only its top and left edges.
+    /// </remarks>
+    private static void DrawIdentities(DrawingContext c, Palette p)
+    {
+        c.DrawGeometry(p.Paper, new Pen(p.SteelDark, 1), Poly((1.5, 2.5), (11.5, 2.5), (11.5, 9.5), (1.5, 9.5)));
+        c.DrawGeometry(null, new Pen(p.SteelDark, 1), Build([(1.5, 2.5), (6.5, 6.5), (11.5, 2.5)], closed: false));
+
+        c.DrawGeometry(p.Paper, new Pen(p.SteelDark, 1), Poly((4.5, 6.5), (14.5, 6.5), (14.5, 13.5), (4.5, 13.5)));
+        c.DrawGeometry(null, new Pen(p.SteelDark, 1), Build([(4.5, 6.5), (9.5, 10.5), (14.5, 6.5)], closed: false));
     }
 
     /// <summary>A paper dart on its way: Apply rule on messages I send.</summary>

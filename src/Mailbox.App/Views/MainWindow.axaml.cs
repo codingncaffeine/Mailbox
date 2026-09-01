@@ -2186,6 +2186,29 @@ public partial class MainWindow : Window
                 };
                 break;
 
+            // The addresses an account may send as. MAILBOX_IDENTITIES presses this window's own
+            // buttons and logs what the settings store holds afterwards, which is the only place
+            // an identity is written — and what the compose window's From menu reads back.
+            case "identities":
+                Opened += async (_, _) =>
+                {
+                    var wanted = Environment.GetEnvironmentVariable("MAILBOX_IDENTITIES_ACCOUNT");
+                    if ((wanted is { Length: > 0 } ? App.Accounts.Find(wanted) : App.Accounts.Default)
+                        is not { } owner)
+                    {
+                        return;
+                    }
+
+                    CaptureNextWindow();
+                    var identities = new IdentitiesDialog(owner);
+                    if (Environment.GetEnvironmentVariable("MAILBOX_IDENTITIES") is { Length: > 0 } actions)
+                    {
+                        identities.Opened += (_, _) => identities.Harness(actions);
+                    }
+                    await identities.ShowDialog(this);
+                };
+                break;
+
             case "rules":
                 Opened += async (_, _) =>
                 {

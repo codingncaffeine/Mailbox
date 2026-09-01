@@ -1381,18 +1381,24 @@ public sealed partial class ComposeSurface : UserControl
     }
 
     /// <summary>
-    /// The From button's menu: one entry per account, ticked for the one being sent from.
+    /// The From button's menu: one entry per identity, ticked for the one being sent from.
     /// </summary>
     /// <remarks>
     /// Filled when it opens rather than when the window is built. An account added while a
     /// message is being written — from the wizard, which this window can reach through the
     /// Backstage — would otherwise be missing from a list captured before it existed, and the
-    /// only way to see it would be to close the message and start again.
+    /// only way to see it would be to close the message and start again. The same is true of an
+    /// identity added from Account Settings, which is reachable from the same place.
     /// <para>
     /// The tick is the point of the menu as much as the choosing is. A message goes out from
-    /// exactly one account and which one is not otherwise visible from here, so a list that
+    /// exactly one address and which one is not otherwise visible from here, so a list that
     /// offers four addresses and marks none of them leaves the reader counting on the field
     /// beside the button to be telling the truth.
+    /// </para>
+    /// <para>
+    /// Flat, in account order, each account's own address first and its extras under it. A
+    /// submenu per account would put the common case — one account, one identity — behind a
+    /// second press for nothing, and the reference's own From menu is a flat list.
     /// </para>
     /// </remarks>
     private List<MenuItem> AccountMenuItems()
@@ -1404,26 +1410,23 @@ public sealed partial class ComposeSurface : UserControl
             return [new MenuItem { Header = "No account is set up yet", IsEnabled = false }];
         }
 
-        return [.. accounts.Select(account =>
-        {
-            var address = account.Account.Address;
-            var name = account.Account.DisplayName;
-
-            var item = new MenuItem
+        return [.. accounts
+            .SelectMany(account => App.Identities.Of(account.Account.Address, account.Account.DisplayName))
+            .Select(identity =>
             {
-                // The name and the address, because two accounts at one provider are told apart
-                // by the name and two names at one address by nothing at all.
-                Header = string.IsNullOrWhiteSpace(name) || string.Equals(name, address, StringComparison.OrdinalIgnoreCase)
-                    ? address
-                    : $"{name}  ({address})",
-                Icon = string.Equals(address, _sendingAddress, StringComparison.OrdinalIgnoreCase)
-                    ? Tick()
-                    : null,
-            };
+                var item = new MenuItem
+                {
+                    // The name and the address, because two accounts at one provider are told
+                    // apart by the name and two names at one address by nothing at all.
+                    Header = identity.Label,
+                    Icon = string.Equals(identity.Address, _sendingAddress, StringComparison.OrdinalIgnoreCase)
+                        ? Tick()
+                        : null,
+                };
 
-            item.Click += (_, _) => SendFrom(address);
-            return item;
-        })];
+                item.Click += (_, _) => SendFrom(identity.Address);
+                return item;
+            })];
     }
 
     /// <summary>The same tick the Quick Access flyout draws, from the same glyph.</summary>
@@ -1434,15 +1437,23 @@ public sealed partial class ComposeSurface : UserControl
         FontSize = 12,
     };
 
-    /// <summary>Starts the message from this account, for the shell to say which folder was open.</summary>
+    /// <summary>
+    /// Starts the message from this address, for the shell to say which folder was open.
+    /// </summary>
+    /// <remarks>
+    /// An account's own address or any identity of one. Anything else is ignored rather than
+    /// accepted, so a caller that names an address this profile cannot send as leaves the
+    /// window on its default rather than on a From line the send would have to walk back.
+    /// </remarks>
     public void SendFromAccount(string address)
     {
-        if (_accounts?.Find(address) is null) return;
+        if (_accounts?.Find(address) is null && App.Identities.AccountFor(address) is null) return;
+
         _sendingAddress = address;
         _fromAddress.Text = address;
 
-        // The signature is the account's, so a different account means a different one — or
-        // none. Only while nothing has been written, which is the only time this is called.
+        // The signature belongs to the identity, so a different one means a different signature
+        // — or none. Only while nothing has been written, which is the only time this is called.
         if (!_dirty)
         {
             InsertDefaultSignature();
@@ -1450,31 +1461,70 @@ public sealed partial class ComposeSurface : UserControl
         }
     }
 
-    /// <summary>Sends from this account, and says so where it is being read from.</summary>
+    /// <summary>Sends as this identity, and says so where it is being read from.</summary>
+    /// <remarks>
+    /// Held as the identity that will actually be written rather than as what was asked for, so
+    /// the field and the header cannot disagree: an address no identity claims resolves to the
+    /// account that would carry it, and the field says that address instead of one this profile
+    /// has no way to send as.
+    /// </remarks>
     private void SendFrom(string address)
     {
         if (string.Equals(address, _sendingAddress, StringComparison.OrdinalIgnoreCase)) return;
 
-        _sendingAddress = address;
-        _fromAddress.Text = address;
+        _sendingAddress = IdentityFor(address)?.Address ?? address;
+        _fromAddress.Text = _sendingAddress;
         _dirty = true;
 
         SwapSignature();
-        Report($"This message will be sent from {address}.");
+        Report($"This message will be sent from {_sendingAddress}.");
     }
 
     /// <summary>
-    /// The signature is the account's, so a different account means a different one — or none —
-    /// put where the old one stands, around whatever has been written.
+    /// The identity this message goes out as: the one whose address is in the From field, or the
+    /// sending account's own when the field names the account itself.
+    /// </summary>
+    /// <remarks>
+    /// Null only when there is no account at all. Everything that writes a header — the From
+    /// line, Reply-To, Organization, the receipt requests — asks this rather than the account,
+    /// which is the whole of what an identity is for.
+    /// </remarks>
+    private Identity? SendingIdentity() => IdentityFor(_sendingAddress);
+
+    /// <summary>
+    /// The identity an address stands for, falling back to its account's own.
+    /// </summary>
+    /// <remarks>
+    /// The fallback is what stops a draft written on another machine — whose From this profile
+    /// has never heard of — from being sent under an address nothing here can send as. The
+    /// account that will carry it is the one whose address is written.
+    /// </remarks>
+    private Identity? IdentityFor(string? address)
+    {
+        if (AccountFor(address) is not { } account) return null;
+
+        var identities = App.Identities.Of(account.Account.Address, account.Account.DisplayName);
+
+        return identities.FirstOrDefault(
+                   i => string.Equals(i.Address, address, StringComparison.OrdinalIgnoreCase))
+               ?? identities.FirstOrDefault();
+    }
+
+    /// <summary>
+    /// The signature belongs to the identity, so a different one means a different signature —
+    /// or none — put where the old one stands, around whatever has been written.
     /// </summary>
     private void SwapSignature()
     {
         if (!_signatureSwaps || _body.Document is not { } document) return;
 
-        var chosen = SendingAccount() is { } account
+        // The identity's address, not the account's. The signature choices were already keyed by
+        // address rather than by a row id, so an alias picks up its own signature the moment one
+        // is chosen for it, and falls back to nothing rather than to the account's.
+        var chosen = SendingIdentity() is { } identity
             ? _prefilled
-                ? App.Signatures.ForReply(account.Account.Address)
-                : App.Signatures.ForNew(account.Account.Address)
+                ? App.Signatures.ForReply(identity.Address)
+                : App.Signatures.ForNew(identity.Address)
             : null;
 
         List<Block> replacement = chosen is { IsEmpty: false } signature && signature.Html.Trim().Length > 0
@@ -2180,18 +2230,18 @@ public sealed partial class ComposeSurface : UserControl
     /// </remarks>
     private void InsertDefaultSignature()
     {
-        if (SendingAccount() is not { } account) return;
+        if (SendingIdentity() is not { } identity) return;
 
         // A new message's signature lives at the end of the document, and from here on the
-        // From menu may swap it for another account's.
+        // From menu may swap it for another identity's.
         _signatureSwaps = true;
         _signatureAnchor = null;
         _signatureBlocks = [];
 
-        if (App.Signatures.ForNew(account.Account.Address) is not { IsEmpty: false } signature)
+        if (App.Signatures.ForNew(identity.Address) is not { IsEmpty: false } signature)
         {
-            // No signature for this account: an empty document, which also undoes the one
-            // that was put in for the account this window started from.
+            // No signature for this identity: an empty document, which also undoes the one
+            // that was put in for the identity this window started from.
             _body.Clear();
             return;
         }
@@ -2582,13 +2632,29 @@ public sealed partial class ComposeSurface : UserControl
     // Send and save
     // ----------------------------------------------------------------------------------
 
-    private OpenAccount? SendingAccount()
+    /// <summary>
+    /// The account this message goes out through: the one whose own address is in the From
+    /// field, or the one an identity in that field belongs to.
+    /// </summary>
+    /// <remarks>
+    /// An identity is a From line, not a second connection — every one of an account's addresses
+    /// is sent through that account's own server, which is what an alias is. Resolving the
+    /// identity here is also what keeps a reopened draft honest: <see cref="Restore"/> takes the
+    /// From address off the saved MIME, and before this it landed on the default account when
+    /// that address was an alias, quietly sending the draft out through the wrong server.
+    /// </remarks>
+    private OpenAccount? SendingAccount() => AccountFor(_sendingAddress);
+
+    private OpenAccount? AccountFor(string? address)
     {
         if (_accounts is null) return null;
+        if (address is null) return _accounts.Default;
 
-        return _sendingAddress is null
-            ? _accounts.Default
-            : _accounts.Find(_sendingAddress) ?? _accounts.Default;
+        if (_accounts.Find(address) is { } own) return own;
+
+        return App.Identities.AccountFor(address) is { } owner
+            ? _accounts.Find(owner) ?? _accounts.Default
+            : _accounts.Default;
     }
 
     private async Task SendAsync()
@@ -2875,8 +2941,16 @@ public sealed partial class ComposeSurface : UserControl
     private async Task<MimeMessage> BuildMessageAsync(OpenAccount account)
     {
         var address = account.Account.Address;
-        var domain = address.Contains('@', StringComparison.Ordinal)
-            ? address[(address.LastIndexOf('@') + 1)..]
+
+        // The identity's, not the account's: an alias, a role address or a forwarding domain is
+        // a From line on the same account, and this is the line it exists to write. It falls
+        // back to the account's own address and name, so an account with no extra identities
+        // writes exactly what it always did.
+        var identity = SendingIdentity();
+        var from = identity?.Address is { Length: > 0 } chosen ? chosen : address;
+
+        var domain = from.Contains('@', StringComparison.Ordinal)
+            ? from[(from.LastIndexOf('@') + 1)..]
             : "localhost";
 
         var message = new MimeMessage
@@ -2885,23 +2959,39 @@ public sealed partial class ComposeSurface : UserControl
             // the machine's hostname into it — and into every cid: below — which is a name a
             // recipient has no business learning from a message header. Minted once per
             // composition: a fresh id per save made every autosave a different message by
-            // identity, which on an IMAP Drafts folder is a new message per autosave.
+            // identity, which on an IMAP Drafts folder is a new message per autosave. That also
+            // fixes the domain to the identity the first save was made under, which is right:
+            // the id names the message, not the address it was last about to go out as.
             MessageId = _messageId ??= MimeUtils.GenerateMessageId(domain),
         };
 
         // A display name only when there is one. The seed, and an account added with nothing
         // but an address, hold the address in that slot too — and "you@example.com"
         // <you@example.com> is what a mail client writes when nobody was looking.
-        var name = account.Account.DisplayName;
-        message.From.Add(string.IsNullOrWhiteSpace(name) || string.Equals(name, address, StringComparison.OrdinalIgnoreCase)
-            ? new MailboxAddress(string.Empty, address)
-            : new MailboxAddress(name, address));
+        var name = identity?.DisplayName ?? account.Account.DisplayName;
+        message.From.Add(string.IsNullOrWhiteSpace(name) || string.Equals(name, from, StringComparison.OrdinalIgnoreCase)
+            ? new MailboxAddress(string.Empty, from)
+            : new MailboxAddress(name, from));
 
         foreach (var entry in Split(_to.Text)) message.To.Add(MailboxAddress.Parse(entry));
         foreach (var entry in Split(_cc.Text)) message.Cc.Add(MailboxAddress.Parse(entry));
         foreach (var entry in Split(_bcc.Text)) message.Bcc.Add(MailboxAddress.Parse(entry));
 
+        // What this message was told, first; the identity's standing answer otherwise. A role
+        // address whose replies belong somewhere else is most of why an identity is made at all,
+        // and it must not override a Reply-To the writer set on this one message by hand.
         if (_replyTo is { } reply) message.ReplyTo.Add(MailboxAddress.Parse(reply));
+        else if (identity?.ReplyTo is { Length: > 0 } standing
+                 && MailboxAddress.TryParse(standing, out var identityReply))
+        {
+            message.ReplyTo.Add(identityReply);
+        }
+
+        // The Organization header, which many work identities carry and no account ever could.
+        if (identity?.Organization is { Length: > 0 } organization)
+        {
+            message.Headers.Add(HeaderId.Organization, organization);
+        }
 
         message.Subject = _subject.Text ?? string.Empty;
         message.Importance = _importance;
@@ -2912,14 +3002,16 @@ public sealed partial class ComposeSurface : UserControl
             _ => MessagePriority.Normal,
         };
 
+        // To the identity that sent it, not to the account behind it: a receipt for a message
+        // sent as a role address belongs at the address the recipient was written to from.
         if (_wantsReadReceipt)
         {
-            message.Headers.Add("Disposition-Notification-To", account.Account.Address);
+            message.Headers.Add("Disposition-Notification-To", from);
         }
 
         if (_wantsDeliveryReceipt)
         {
-            message.Headers.Add("Return-Receipt-To", account.Account.Address);
+            message.Headers.Add("Return-Receipt-To", from);
         }
 
         // The Options page's default sensitivity. Normal is the header's absence.

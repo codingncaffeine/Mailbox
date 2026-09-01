@@ -35,9 +35,51 @@ namespace Mailbox.App.Views;
 /// </remarks>
 public partial class MainWindow
 {
+    /// <summary>
+    /// Gives an account the identities a pose names, before anything reads them.
+    /// </summary>
+    /// <remarks>
+    /// <c>MAILBOX_IDENTITY=&lt;account&gt;|&lt;address&gt;|&lt;name&gt;|&lt;replyTo&gt;|&lt;organization&gt;</c>,
+    /// several separated by commas. The Identities window is where a person writes these and
+    /// <c>MAILBOX_IDENTITIES</c> is how a pose presses it, but a pose that wants to *send* as an
+    /// identity needs one standing before the compose window is built — and a capture run gets
+    /// one window, not two. So this is the seeding half, and the window's own door is the
+    /// pressing half; both write through the same store, and the send is read back out of the
+    /// Outbox as MIME rather than off the screen.
+    /// </remarks>
+    internal static void SeedPosedIdentities()
+    {
+        if (Environment.GetEnvironmentVariable("MAILBOX_IDENTITY") is not { Length: > 0 } spec) return;
+
+        foreach (var group in spec
+                     .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                     .Select(entry => entry.Split('|'))
+                     .Where(parts => parts.Length >= 2)
+                     .GroupBy(parts => parts[0], StringComparer.OrdinalIgnoreCase))
+        {
+            var identities = group.Select(parts => new Mailbox.Core.Settings.Identity
+            {
+                Address = parts[1].Trim(),
+                DisplayName = parts.ElementAtOrDefault(2)?.Trim() ?? string.Empty,
+                ReplyTo = parts.ElementAtOrDefault(3)?.Trim() ?? string.Empty,
+                Organization = parts.ElementAtOrDefault(4)?.Trim() ?? string.Empty,
+            }).ToList();
+
+            App.Identities.Save(group.Key, identities);
+
+            Log.Info($"Harness: {group.Key} sends as "
+                + string.Join("; ", App.Identities
+                    .Of(group.Key, App.Accounts.Find(group.Key)?.Account.DisplayName ?? string.Empty)
+                    .Select(i => i.Label)) + ".");
+        }
+    }
+
     /// <summary>Wires this lane's doors onto a compose window the harness has just built.</summary>
     internal static void WirePhase5ADoors(ComposeWindow compose)
     {
+        // Before the From pick below, which may name one of them.
+        SeedPosedIdentities();
+
         var from = Environment.GetEnvironmentVariable("MAILBOX_COMPOSE_FROM");
         var to = Environment.GetEnvironmentVariable("MAILBOX_COMPOSE_TO");
         var cc = Environment.GetEnvironmentVariable("MAILBOX_COMPOSE_CC");
@@ -321,6 +363,7 @@ public partial class MainWindow
                     Log.Info($"Harness: the From menu offers {entry}");
                 }
 
+                Log.Info($"Harness: sending as {compose.Surface.HarnessSending}.");
                 break;
 
             case "completions":

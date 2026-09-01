@@ -62,6 +62,7 @@ public sealed class AccountSettingsDialog : Window
     private readonly Button _new;
     private readonly Button _repair;
     private readonly Button _change;
+    private readonly Button _identities;
     private readonly Button _remove;
     private readonly Button _setDefault;
     private readonly Button _up;
@@ -120,6 +121,7 @@ public sealed class AccountSettingsDialog : Window
         _new = ToolButton("new", "New...", AddAsync);
         _repair = ToolButton("repair", "Repair...", RepairSelectedAsync);
         _change = ToolButton("change", "Change...", ChangeSelectedAsync);
+        _identities = ToolButton("identities", "Identities...", IdentitiesAsync);
         _setDefault = ToolButton("default", "Set as Default", SetDefault);
         _remove = ToolButton("remove", "Remove", RemoveSelectedAsync);
         _up = ToolButton("up", string.Empty, () => Move(-1));
@@ -257,7 +259,7 @@ public sealed class AccountSettingsDialog : Window
         _accounts.SelectionChanged += (_, _) => UpdateButtons();
         _accounts.ItemActivated += async (_, _) => await ChangeSelectedAsync();
 
-        var toolbar = Toolbar(_new, _repair, _change, _setDefault, _remove, _up, _down);
+        var toolbar = Toolbar(_new, _repair, _change, _identities, _setDefault, _remove, _up, _down);
 
         var below = new Panel
         {
@@ -297,6 +299,7 @@ public sealed class AccountSettingsDialog : Window
         var row = Selected;
         _change.IsEnabled = row is not null;
         _repair.IsEnabled = row is not null;
+        _identities.IsEnabled = row is not null;
         _remove.IsEnabled = row is not null;
         _setDefault.IsEnabled = row is not null && !row.IsDefault;
         _up.IsEnabled = row is not null && _accounts.SelectedIndex > 0;
@@ -389,6 +392,24 @@ public sealed class AccountSettingsDialog : Window
         if (!dialog.Saved) return;
         Changed = true;
         Reload();
+    }
+
+    /// <summary>
+    /// The addresses the selected account may send as, beyond its own.
+    /// </summary>
+    /// <remarks>
+    /// Beside Change… rather than inside it: the server settings are one thing an account has and
+    /// the From lines it may write are another, and putting the second behind the first would
+    /// hide it under a window whose title says servers.
+    /// </remarks>
+    private async Task IdentitiesAsync()
+    {
+        if (Selected is not { } row) return;
+
+        var dialog = new IdentitiesDialog(row);
+        await dialog.ShowDialog(this);
+
+        if (dialog.Changed) Changed = true;
     }
 
     /// <summary>
@@ -503,6 +524,7 @@ public sealed class AccountSettingsDialog : Window
         await App.Secrets.DeleteAsync(address, Credentials.Outgoing);
         AccountSettings.Forget(App.Settings, address);
         Mailbox.Core.Rules.AwayMessage.Forget(App.Settings, address);
+        App.Identities.Forget(address);
 
         Changed = true;
         Reload();
