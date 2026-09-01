@@ -46,6 +46,25 @@ public sealed class PrintPreviewWindow : Window
             13);
     }
 
+    /// <summary>
+    /// The calendar on paper: the days on show in the style the arrangement asks for.
+    /// </summary>
+    /// <remarks>
+    /// Through <see cref="CalendarPrint"/> and then the same engine everything else printed here
+    /// goes through, so a printed week comes off the stylesheet a printed message does.
+    /// </remarks>
+    public static PrintPreviewWindow ForCalendar(
+        ThemeService themes,
+        CalendarPrintStyle kind,
+        DateOnly from,
+        DateOnly to,
+        IReadOnlyList<PrintedAppointment> items)
+    {
+        var title = CalendarPrint.Title(kind, from, to);
+        return new PrintPreviewWindow(
+            themes, title, CalendarPrint.Render(kind, from, to, items, Style(themes), DateTimeOffset.Now));
+    }
+
     /// <summary>A note or any other small document: the same window over ready-made markup.</summary>
     public static PrintPreviewWindow ForText(ThemeService themes, string title, string text)
     {

@@ -182,6 +182,83 @@ public sealed class CalendarWorkspace : Border
     /// <summary>What the toolbar's date reads, which a capture can show and a log cannot.</summary>
     internal string TitleForHarness => _title.Text ?? string.Empty;
 
+    /// <summary>
+    /// The print style the arrangement on screen asks for: printing what is showing is what
+    /// <c>Ctrl+P</c> means everywhere else in this application, and a month printed as a list of
+    /// days is not the month somebody was looking at.
+    /// </summary>
+    public Mailbox.Rendering.CalendarPrintStyle PrintStyle => _kind switch
+    {
+        CalendarViewKind.Month => Mailbox.Rendering.CalendarPrintStyle.Monthly,
+        CalendarViewKind.Week or CalendarViewKind.WorkWeek => Mailbox.Rendering.CalendarPrintStyle.Weekly,
+        _ => Mailbox.Rendering.CalendarPrintStyle.Daily,
+    };
+
+    /// <summary>
+    /// The days a style should print.
+    /// </summary>
+    /// <remarks>
+    /// What is on show, when what is on show suits the style — printing what you are looking at
+    /// is what Print means. It does not always suit it: the month grid shows six weeks, and a
+    /// week style asked for those would be a fortnight of columns with the rest quietly dropped,
+    /// while a day style would be forty-two blocks. So a style whose range is too long for it
+    /// falls back to its own natural run around the day the view is anchored on. Details is the
+    /// exception and takes whatever is showing: a list of a month is a list somebody wants.
+    /// </remarks>
+    public (DateOnly First, DateOnly Last) PrintRange(Mailbox.Rendering.CalendarPrintStyle kind)
+    {
+        var (first, last) = VisibleDays();
+        var days = last.DayNumber - first.DayNumber + 1;
+
+        switch (kind)
+        {
+            case Mailbox.Rendering.CalendarPrintStyle.Monthly:
+                var month = new DateOnly(_anchor.Year, _anchor.Month, 1);
+                return (month, month.AddMonths(1).AddDays(-1));
+
+            case Mailbox.Rendering.CalendarPrintStyle.Weekly when days is < 1 or > 14:
+                var week = WeekStart(_anchor);
+                return (week, week.AddDays(6));
+
+            case Mailbox.Rendering.CalendarPrintStyle.Daily when days is < 1 or > 14:
+                return (_anchor, _anchor);
+
+            default:
+                return (first, last);
+        }
+    }
+
+    /// <summary>
+    /// What is on show, as the printer needs it: a row per day an appointment covers, so a run
+    /// of days prints under each of the days it runs through rather than only under its first.
+    /// </summary>
+    public IReadOnlyList<Mailbox.Rendering.PrintedAppointment> Printable(DateOnly? from = null, DateOnly? to = null)
+    {
+        var (visibleFirst, visibleLast) = VisibleDays();
+        var first = from ?? visibleFirst;
+        var last = to ?? visibleLast;
+        var rows = new List<Mailbox.Rendering.PrintedAppointment>();
+
+        foreach (var entry in _entries)
+        {
+            var (starts, ends) = entry.Days();
+            for (var day = starts > first ? starts : first; day <= ends && day <= last; day = day.AddDays(1))
+            {
+                var banner = entry.AllDay || ends > starts;
+                rows.Add(new Mailbox.Rendering.PrintedAppointment(
+                    day,
+                    banner ? string.Empty : $"{entry.StartWall:HH:mm}–{entry.EndWall:HH:mm}",
+                    entry.Summary.Length > 0 ? entry.Summary : "(No subject)",
+                    entry.Location,
+                    banner,
+                    banner ? 0 : (entry.StartWall.Hour * 60) + entry.StartWall.Minute,
+                    entry.Occurrence.Event.Description));
+            }
+        }
+
+        return rows;
+    }
+
     public event EventHandler? Changed;
 
     /// <summary>A double click on empty time, or the New Appointment command with a day chosen.</summary>

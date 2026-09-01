@@ -604,6 +604,7 @@ public partial class AuditPaintSweepTests
         ["src/Mailbox.Rendering/RenderedMessage.cs"] =
             "RenderStyle.Plain, the palette-free default for tests about markup.",
         ["src/Mailbox.Rendering/TablePrint.cs"] = "the printed table's stylesheet.",
+        ["src/Mailbox.Rendering/CalendarPrint.cs"] = "the printed calendar's stylesheet — rules on paper.",
         ["src/Mailbox.Rendering/Reply.cs"] = "the quote bar in the HTML that goes out on the wire.",
         ["src/Mailbox.Editor/EmailHtml.cs"] = "the same quote bar, written by the editor.",
         ["src/Mailbox.Protocols/OAuth/LoopbackRedirect.cs"] =

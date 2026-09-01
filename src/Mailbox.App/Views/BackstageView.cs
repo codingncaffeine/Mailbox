@@ -28,6 +28,13 @@ public sealed class BackstageView : Border
     private readonly ContentControl _page = new();
     private string _selected = "info";
 
+    /// <summary>
+    /// Which module the shell was showing when this opened. The Print page is the only one that
+    /// asks: a reader who presses File while looking at a week wants that week on paper, not the
+    /// three mail styles.
+    /// </summary>
+    public Mailbox.Core.Commands.MailboxModule Module { get; init; }
+
     public BackstageView()
     {
         Bind(this, BackgroundProperty, "surface.ground.brush");
@@ -259,6 +266,37 @@ public sealed class BackstageView : Border
     {
         var stack = new StackPanel { Spacing = 0, MaxWidth = 720, HorizontalAlignment = HorizontalAlignment.Left };
         stack.Children.Add(Heading("Print"));
+
+        if (Module == Mailbox.Core.Commands.MailboxModule.Calendar)
+        {
+            stack.Children.Add(BuildSection(
+                "calendar", "Daily", hasDropdown: false,
+                "Daily style",
+                "A day at a time, with its appointments under it — every day the view is showing.",
+                action: "print.calendar.daily"));
+
+            stack.Children.Add(BuildSection(
+                "work-week", "Weekly", hasDropdown: false,
+                "Weekly style",
+                "The days across the page, a column each, which is the calendar somebody pins up.",
+                action: "print.calendar.weekly"));
+
+            stack.Children.Add(BuildSection(
+                "month-view", "Monthly", hasDropdown: false,
+                "Monthly style",
+                "The month as its grid, one cell a day — the whole month, whatever run of days "
+                + "the view happens to be showing.",
+                action: "print.calendar.monthly"));
+
+            stack.Children.Add(BuildSection(
+                "document", "Details", hasDropdown: false,
+                "Calendar Details style",
+                "Every appointment in these days in time order, with where it is and whatever was "
+                + "written in it — the one to take into a room.",
+                action: "print.calendar.details"));
+
+            return stack;
+        }
 
         stack.Children.Add(BuildSection(
             "print", "Print", hasDropdown: false,

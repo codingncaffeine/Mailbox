@@ -1386,8 +1386,13 @@ public partial class MainWindow : Window
                 break;
             // MAILBOX_BACKSTAGE names a rail page to open on — openexport, print — the rail
             // being buttons a capture cannot press.
+            //
+            // Posted rather than run on Opened: MAILBOX_MODULE's own switch is posted too, and
+            // the Print page asks which module is showing. Built first, it read Mail and offered
+            // the mail styles over a calendar — the very thing the calendar styles were added to
+            // stop, and invisible in a capture that had nothing to compare against.
             case "backstage":
-                Opened += (_, _) =>
+                Opened += (_, _) => Dispatcher.UIThread.Post(() =>
                 {
                     ShowBackstage();
                     if (this.FindControl<ContentControl>("BackstageHost")!.Content is not BackstageView view) return;
@@ -1431,7 +1436,7 @@ public partial class MainWindow : Window
                         Dispatcher.UIThread.Post(() => view.PoseMenu(which, press), DispatcherPriority.Background);
                         if (press is { Length: > 0 }) ReportBackstageAction(press);
                     }
-                };
+                }, DispatcherPriority.Background);
                 break;
 
             // The menu over a message: seventeen entries and six submenus, none of which a
@@ -2662,7 +2667,10 @@ public partial class MainWindow : Window
     private void ShowBackstage(string? page = null)
     {
         var host = this.FindControl<ContentControl>("BackstageHost")!;
-        var backstage = new BackstageView();
+        var backstage = new BackstageView
+        {
+            Module = (DataContext as ShellViewModel)?.Module ?? MailboxModule.Mail,
+        };
         backstage.OptionsRequested += async (_, _) => await ShowOptions();
         backstage.AddAccountRequested += async (_, _) => await AddAccountAsync();
         backstage.ActionRequested += async (_, action) => await BackstageActionAsync(action);
@@ -3467,6 +3475,35 @@ public partial class MainWindow : Window
     /// Printing goes through the engine, which is the only thing that knows how the message is
     /// laid out. There is nothing to print from the text fallback.
     /// </summary>
+    /// <summary>
+    /// Print, from wherever the reader is. The Calendar module prints the days on show, in the
+    /// style the arrangement asks for; everywhere else this is the selected message.
+    /// </summary>
+    /// <remarks>
+    /// Ctrl+P in the calendar used to answer nothing at all, and File · Print offered the three
+    /// mail styles whatever module was open — so a reader who pressed Print while looking at a
+    /// week got a window titled "Print — Inbox" full of mail.
+    /// </remarks>
+    private void Print(ShellViewModel shell)
+    {
+        if (shell.Module == MailboxModule.Calendar && _calendar is { } calendar)
+        {
+            PrintCalendar(calendar, calendar.PrintStyle);
+            return;
+        }
+
+        PrintMessage(shell);
+    }
+
+    /// <summary>The days on show, in one of the calendar's own styles.</summary>
+    internal void PrintCalendar(CalendarWorkspace calendar, Mailbox.Rendering.CalendarPrintStyle kind)
+    {
+        var (first, last) = calendar.PrintRange(kind);
+        PrintPreviewWindow
+            .ForCalendar(App.Themes, kind, first, last, calendar.Printable(first, last))
+            .Show(this);
+    }
+
     private void PrintMessage(ShellViewModel shell)
     {
         if (_reading?.Print() != true)
@@ -5854,7 +5891,7 @@ public partial class MainWindow : Window
         if (id == MailCommands.Unsubscribe.Id) { _ = UnsubscribeSelectedAsync(shell); return; }
         if (id == MailCommands.TrackerReport.Id) { _ = _reading?.ShowTrackerReportAsync(); return; }
         if (id == MailCommands.AuthenticationDetails.Id) { _ = _reading?.ShowAuthenticationAsync(); return; }
-        if (id == MailCommands.Print.Id) { PrintMessage(shell); return; }
+        if (id == MailCommands.Print.Id) { Print(shell); return; }
         if (id == MailCommands.PrintToPdf.Id) { _ = PrintToPdfAsync(shell); return; }
         if (id == MailCommands.PrintList.Id) { PrintList(shell); return; }
         if (id == MailCommands.RecoverDeleted.Id) { _ = ShowRecoverDeletedAsync(shell); return; }
@@ -8807,6 +8844,25 @@ public partial class MainWindow : Window
                 // because what they open is a window over the shell and the reference's page
                 // closes behind its own Print button too.
                 case "print.message": CloseBackstage(); RunCommand(MailCommands.Print.Id); return;
+
+                // The calendar's four styles. Each prints the days the view is showing rather
+                // than a range of its own, so what comes out is what was being looked at.
+                case "print.calendar.daily":
+                case "print.calendar.weekly":
+                case "print.calendar.monthly":
+                case "print.calendar.details":
+                {
+                    CloseBackstage();
+                    if (_calendar is not { } calendar) return;
+                    PrintCalendar(calendar, action["print.calendar.".Length..] switch
+                    {
+                        "weekly" => Mailbox.Rendering.CalendarPrintStyle.Weekly,
+                        "monthly" => Mailbox.Rendering.CalendarPrintStyle.Monthly,
+                        "details" => Mailbox.Rendering.CalendarPrintStyle.Details,
+                        _ => Mailbox.Rendering.CalendarPrintStyle.Daily,
+                    });
+                    return;
+                }
                 case "print.list": CloseBackstage(); RunCommand(MailCommands.PrintList.Id); return;
                 case "print.pdf": CloseBackstage(); RunCommand(MailCommands.PrintToPdf.Id); return;
 

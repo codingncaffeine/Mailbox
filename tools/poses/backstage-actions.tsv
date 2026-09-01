@@ -1,6 +1,10 @@
 # Every Backstage action, generated from the page builders and the two Info menus.
 # Regenerate: tools/poses/generate-backstage.py
-# 16 section buttons, 9 menu entries.
+# 20 section buttons, 9 menu entries.
+act-print.calendar.daily	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=print:print.calendar.daily
+act-print.calendar.weekly	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=print:print.calendar.weekly
+act-print.calendar.monthly	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=print:print.calendar.monthly
+act-print.calendar.details	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=print:print.calendar.details
 act-print.message	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=print:print.message
 act-print.list	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=print:print.list
 act-print.pdf	MAILBOX_PEEK=backstage MAILBOX_BACKSTAGE=print:print.pdf
