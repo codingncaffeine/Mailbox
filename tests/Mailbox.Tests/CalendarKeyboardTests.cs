@@ -44,7 +44,8 @@ public class CalendarKeyboardTests
         return args;
     }
 
-    private static CalendarEntry Entry(DateTime start, DateTime end, string summary = "Review", long collectionId = 1)
+    /// <summary>Shared with <see cref="CalendarSweepTests"/>, which needs the same zone-matched entry.</summary>
+    internal static CalendarEntry Entry(DateTime start, DateTime end, string summary = "Review", long collectionId = 1)
     {
         var appointment = new CalendarEvent
         {
@@ -274,14 +275,15 @@ public class CalendarKeyboardTests
     {
         var grid = Grid();
 
-        (DateOnly Day, TimeOnly At)? asked = null;
+        SlotRange? asked = null;
         grid.SlotActivated += (_, slot) => asked = slot;
 
         Press(grid, Key.Down);
         Press(grid, Key.Down);                      // 08:30
         Press(grid, Key.Enter);
 
-        Assert.Equal((Monday, new TimeOnly(8, 30)), asked);
+        // One slot, because nothing extended it: the half hour this has always made.
+        Assert.Equal(new SlotRange(Monday, new TimeOnly(8, 30), new TimeOnly(9, 0)), asked);
     }
 
     /// <summary>
@@ -632,13 +634,13 @@ public class CalendarKeyboardTests
         schedule.Entries = [Entry(new DateTime(2026, 8, 17, 9, 0, 0), new DateTime(2026, 8, 17, 10, 0, 0))];
 
         CalendarEntry? activated = null;
-        (DateOnly Day, TimeOnly At)? asked = null;
+        SlotRange? asked = null;
         schedule.EntryActivated += (_, entry) => activated = entry;
         schedule.SlotActivated += (_, slot) => asked = slot;
 
         Press(schedule, Key.Right);                     // 08:00, empty
         Press(schedule, Key.Enter);
-        Assert.Equal((Monday, new TimeOnly(8, 0)), asked);
+        Assert.Equal(new SlotRange(Monday, new TimeOnly(8, 0), new TimeOnly(8, 30)), asked);
         Assert.Null(activated);
 
         Press(schedule, Key.Right);

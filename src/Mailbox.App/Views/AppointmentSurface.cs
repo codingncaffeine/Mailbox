@@ -2,6 +2,7 @@ using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
@@ -70,6 +71,18 @@ public sealed class AppointmentSurface : UserControl
     /// nothing, which is the least a form can promise.
     /// </remarks>
     private readonly List<TimeOnly> _slots;
+
+    /// <summary>
+    /// What the two time boxes stand for, held rather than read back off their selection.
+    /// </summary>
+    /// <remarks>
+    /// An editable box loses its selection the moment text matching no row is typed into it, and
+    /// a lost selection read as the first row — midnight. So a typo in the Start box moved the
+    /// appointment to the start of the day instead of being put back. These are what was last
+    /// actually chosen, by a pick or by a typed time that read as one.
+    /// </remarks>
+    private TimeOnly _startAt;
+    private TimeOnly _endAt;
 
     /// <summary>What the Reminder picker offers, in the reference's own order.</summary>
     public static readonly (string Label, int? Minutes)[] Reminders =
@@ -167,13 +180,17 @@ public sealed class AppointmentSurface : UserControl
         _optional.Text = string.Join("; ", appointment.Attendees.Where(a => a.Role == "OPT-PARTICIPANT").Select(a => a.Address));
 
         _slots = Slots(appointment);
-        var labels = _slots.Select(t => t.ToString("h:mm tt", CultureInfo.CurrentCulture)).ToList();
-        _startTime.ItemsSource = labels;
-        _endTime.ItemsSource = labels;
+        RefillTimes();
         _startDate.SelectedDate = appointment.Start.Wall.Date;
         _endDate.SelectedDate = (appointment.AllDay ? appointment.End.Wall.AddDays(-1) : appointment.End.Wall).Date;
-        _startTime.SelectedIndex = Slot(appointment.Start.Wall);
-        _endTime.SelectedIndex = Slot(appointment.End.Wall);
+        Choose(_startTime, Slot(appointment.Start.Wall));
+        Choose(_endTime, Slot(appointment.End.Wall));
+
+        // Typed as well as picked. The list is every half hour, which is no use for a stand-up at
+        // 9:15 or a train at 07:42 — and until now an odd time could only get into this window by
+        // already being on the appointment, so a new one could not be given one at all.
+        WireTyping(_startTime);
+        WireTyping(_endTime);
         _allDay.IsChecked = appointment.AllDay;
 
         // The zone pickers carry the appointment's own zones, and the tick starts on for an
@@ -593,6 +610,83 @@ public sealed class AppointmentSurface : UserControl
         return [.. slots];
     }
 
+    /// <summary>Puts the slot list into both boxes, keeping what each has selected.</summary>
+    private void RefillTimes()
+    {
+        var labels = _slots.Select(TypedTime.Write).ToList();
+
+        _startTime.ItemsSource = labels;
+        _endTime.ItemsSource = labels;
+
+        // Re-picked by time rather than by the index each box had: a typed time is inserted into
+        // the middle of the list, so every row below it has moved down by one.
+        _startTime.SelectedIndex = _slots.IndexOf(_startAt);
+        _endTime.SelectedIndex = _slots.IndexOf(_endAt);
+    }
+
+    /// <summary>
+    /// Lets a time be typed into one of the two boxes as well as picked from it.
+    /// </summary>
+    /// <remarks>
+    /// A typed time is folded into the list rather than held beside it, so the box goes on being
+    /// a list of times this appointment can have and the reader can pick their own odd time back
+    /// again after wandering off it. What will not read as a time puts the old one back: a box
+    /// that cleared itself, or quietly became midnight, would write an appointment nobody asked
+    /// for out of a typo.
+    /// </remarks>
+    private void WireTyping(ComboBox box)
+    {
+        box.IsEditable = true;
+
+        // Picking a row is the other way of saying a time, and the held value has to follow it.
+        // Only a real row: an editable box drops to -1 while text that matches nothing is being
+        // typed, and that is not a choice, it is a half-typed word.
+        box.SelectionChanged += (_, _) =>
+        {
+            if (box.SelectedIndex >= 0 && box.SelectedIndex < _slots.Count)
+            {
+                Commit(box, _slots[box.SelectedIndex]);
+            }
+        };
+
+        void Accept()
+        {
+            var typed = box.Text ?? string.Empty;
+            var current = Chosen(box);
+
+            // Unchanged, or the label of the time it already stands for: nothing to do, and
+            // nothing to report — this runs on every focus change, most of which touched nothing.
+            if (typed.Trim().Length == 0
+                || string.Equals(typed.Trim(), TypedTime.Write(current), StringComparison.OrdinalIgnoreCase)
+                || TypedTime.Read(typed) is not { } wanted)
+            {
+                box.Text = TypedTime.Write(current);
+                Commit(box, current);
+                return;
+            }
+
+            var at = _slots.BinarySearch(wanted);
+            if (at < 0)
+            {
+                at = ~at;
+                _slots.Insert(at, wanted);
+                RefillTimes();
+            }
+
+            Choose(box, at);
+            box.Text = TypedTime.Write(wanted);
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+
+        box.LostFocus += (_, _) => Accept();
+        box.KeyDown += (_, e) =>
+        {
+            if (e.Key is not (Key.Enter or Key.Return)) return;
+            Accept();
+            e.Handled = true;
+        };
+    }
+
     /// <summary>Which row of the list a time is, or the latest row before it.</summary>
     private int Slot(DateTime when)
     {
@@ -601,7 +695,32 @@ public sealed class AppointmentSurface : UserControl
         return at >= 0 ? at : Math.Clamp(~at - 1, 0, _slots.Count - 1);
     }
 
-    private TimeOnly Chosen(ComboBox box) => _slots[Math.Clamp(box.SelectedIndex, 0, _slots.Count - 1)];
+    /// <summary>
+    /// The time a box stands for.
+    /// </summary>
+    /// <remarks>
+    /// Held rather than read back off the selection, because an editable box loses its selection
+    /// the moment text that matches no row is typed into it — and a clamped <c>-1</c> is the first
+    /// row, which is midnight. So typing a word into the Start box moved the appointment to the
+    /// start of the day, and the box that was supposed to put back what was there put back
+    /// midnight instead. The field is what was last actually chosen, by a pick or by a typed time
+    /// that read.
+    /// </remarks>
+    private TimeOnly Chosen(ComboBox box) => ReferenceEquals(box, _startTime) ? _startAt : _endAt;
+
+    /// <summary>Remembers what a box now stands for, whichever way it was said.</summary>
+    private void Commit(ComboBox box, TimeOnly time)
+    {
+        if (ReferenceEquals(box, _startTime)) _startAt = time;
+        else _endAt = time;
+    }
+
+    /// <summary>Puts a row's time into a box and remembers it, which every setter here wants.</summary>
+    private void Choose(ComboBox box, int index)
+    {
+        box.SelectedIndex = Math.Clamp(index, 0, Math.Max(0, _slots.Count - 1));
+        Commit(box, _slots[Math.Clamp(index, 0, Math.Max(0, _slots.Count - 1))]);
+    }
 
     /// <summary>A date box written the reference's way: "Sun 8/16/2026", weekday and all.</summary>
     private static CalendarDatePicker DatePicker() => new()
@@ -791,13 +910,13 @@ public sealed class AppointmentSurface : UserControl
         // there moves the form, exactly as the reference's dialog does.
         var wasLong = EndWall() - start;
         if (dialog.EditedStartDate is { } day) _startDate.SelectedDate = day.ToDateTime(TimeOnly.MinValue);
-        if (dialog.EditedStartTime is { } at) _startTime.SelectedIndex = Slot((_startDate.SelectedDate ?? DateTime.Today).Date + at.ToTimeSpan());
+        if (dialog.EditedStartTime is { } at) Choose(_startTime, Slot((_startDate.SelectedDate ?? DateTime.Today).Date + at.ToTimeSpan()));
         if (dialog.EditedStartTime is not null || dialog.EditedDuration is not null || dialog.EditedStartDate is not null)
         {
             var moved = StartWall();
             var end = moved + (dialog.EditedDuration ?? (wasLong > TimeSpan.Zero ? wasLong : TimeSpan.FromMinutes(30)));
             _endDate.SelectedDate = end.Date;
-            _endTime.SelectedIndex = Slot(end);
+            Choose(_endTime, Slot(end));
         }
 
         if (_recurringCaption is { } caption) RefreshRecurrence(caption);
@@ -920,9 +1039,9 @@ public sealed class AppointmentSurface : UserControl
     public void MoveTo(DateTime start, DateTime end)
     {
         _startDate.SelectedDate = start.Date;
-        _startTime.SelectedIndex = Slot(start);
+        Choose(_startTime, Slot(start));
         _endDate.SelectedDate = end.Date;
-        _endTime.SelectedIndex = Slot(end);
+        Choose(_endTime, Slot(end));
     }
 
     public void Pose(string title, string location, string notes = "")
@@ -948,18 +1067,33 @@ public sealed class AppointmentSurface : UserControl
 
             case "start" when DateTime.TryParse(value, CultureInfo.InvariantCulture, out var start):
                 _startDate.SelectedDate = start.Date;
-                _startTime.SelectedIndex = Slot(start);
+                Choose(_startTime, Slot(start));
                 break;
 
             case "end" when DateTime.TryParse(value, CultureInfo.InvariantCulture, out var end):
                 _endDate.SelectedDate = end.Date;
-                _endTime.SelectedIndex = Slot(end);
+                Choose(_endTime, Slot(end));
                 break;
+
+            // Typed, not picked. The two above snap to the nearest earlier row of the list, which
+            // is the whole reason an odd time could not be stated: they cannot say 9:15 even when
+            // asked to. These go through the box and its Enter, so what a pose proves is the
+            // typing path a reader uses.
+            case "starttime": PoseTypedTime(_startTime, value); break;
+            case "endtime": PoseTypedTime(_endTime, value); break;
 
             default:
                 Log.Info($"Harness: the appointment form has no field called “{field}”, or “{value}” is not a time.");
                 break;
         }
+    }
+
+    /// <summary>Types a time into one of the two boxes and presses Enter, as a reader would.</summary>
+    private static void PoseTypedTime(ComboBox box, string value)
+    {
+        box.Text = value;
+        box.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });
+        Log.Info($"Harness: typed “{value}” into a time box; it now reads “{box.Text}”.");
     }
 
     /// <summary>Ticks or clears All day, which is a checkbox and so out of a pose's reach.</summary>

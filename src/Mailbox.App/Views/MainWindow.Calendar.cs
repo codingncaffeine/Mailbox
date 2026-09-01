@@ -195,7 +195,8 @@ public partial class MainWindow
             // list's does.
             RefreshCommandEnablement();
         };
-        workspace.NewRequested += (_, when) => _ = NewAppointmentAsync(shell, when.Start, when.AllDay);
+        workspace.NewRequested += (_, when) =>
+            _ = NewAppointmentAsync(shell, when.Start, when.AllDay, minutes: when.Minutes);
         workspace.EntryOpened += (_, entry) => _ = OpenAppointmentAsync(shell, entry);
         workspace.EntryMoved += (_, move) => MoveAppointment(shell, move);
         _calendar = workspace;
@@ -1035,14 +1036,18 @@ public partial class MainWindow
         bool allDay,
         bool meeting = false,
         IReadOnlyList<string>? asked = null,
-        string subject = "")
+        string subject = "",
+        int minutes = 30)
     {
         var zone = TimeZoneInfo.Local.Id;
         var fresh = new CalendarEvent
         {
             Uid = CalendarEvent.NewUid(),
             Start = allDay ? EventTime.Date(DateOnly.FromDateTime(start)) : EventTime.At(start, zone),
-            End = allDay ? EventTime.Date(DateOnly.FromDateTime(start).AddDays(1)) : EventTime.At(start.AddMinutes(30), zone),
+            // As long as was asked for. A sweep across the grid and a shifted arrow both say how
+            // long, and a half-hour appointment where somebody drew two hours is the slow path
+            // this exists to remove.
+            End = allDay ? EventTime.Date(DateOnly.FromDateTime(start).AddDays(1)) : EventTime.At(start.AddMinutes(minutes), zone),
             Summary = subject,
             Busy = BusyStatus.Busy,
             ReminderMinutes = App.CalendarOptions.DefaultReminderMinutes,

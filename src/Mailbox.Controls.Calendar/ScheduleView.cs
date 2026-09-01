@@ -83,6 +83,12 @@ public sealed class ScheduleView : CalendarSurface, ISpokenRows
     private CalendarEntry? _selectedEntry;
     private TimeOnly? _caret;
     private int _caretRow;
+
+    /// <summary>The far end of the caret's range, or null when the caret is one slot.</summary>
+    private TimeOnly? _rangeAnchor;
+
+    /// <summary>A press on an empty lane, before it is known whether it is a click or a sweep.</summary>
+    private (Point Origin, TimeOnly At, int Row, bool Live)? _sweep;
     private double _startHour = 7;
     private double _hoursShown = 12;
     private TimeOnly _workStart = new(8, 0);
@@ -192,8 +198,15 @@ public sealed class ScheduleView : CalendarSurface, ISpokenRows
     public event EventHandler<CalendarEntry>? EntrySelected;
     public event EventHandler<CalendarEntry>? EntryActivated;
 
-    /// <summary>An empty time asked to become an appointment, as the time grid's Enter asks.</summary>
-    public event EventHandler<(DateOnly Day, TimeOnly At)>? SlotActivated;
+    /// <summary>
+    /// Empty time somebody asked for an appointment over: a double click, a sweep along a row, or
+    /// <c>Enter</c> on the caret.
+    /// </summary>
+    /// <remarks>
+    /// The same range the time grid raises. Time runs sideways here, so a sweep is horizontal —
+    /// but it is the same two ends, and the host cannot tell which view asked.
+    /// </remarks>
+    public event EventHandler<SlotRange>? SlotActivated;
 
     /// <summary>
     /// A day either side asked for. This view shows one day and the host owns which, so paging
@@ -367,8 +380,11 @@ public sealed class ScheduleView : CalendarSurface, ISpokenRows
     {
         if (_caret is not { } caret) return;
 
-        var left = lane.X + ((caret.ToTimeSpan().TotalHours - StartHour) * perHour);
-        var right = left + ((CaretStepMinutes / 60.0) * perHour);
+        // The whole range, not the caret alone: a sweep and a shifted arrow both grow this box
+        // sideways, and one ring around the stretch says "this long".
+        var range = SlotRange.Between(Day, _rangeAnchor ?? caret, caret, CaretStepMinutes);
+        var left = lane.X + ((range.From.ToTimeSpan().TotalHours - StartHour) * perHour);
+        var right = left + ((range.Minutes / 60.0) * perHour);
         if (right < lane.X || left > lane.Right) return;
 
         var box = new Rect(
@@ -444,11 +460,66 @@ public sealed class ScheduleView : CalendarSurface, ISpokenRows
             e.Handled = true;
             return;
         }
+
+        // Empty lane. This used to fall through and do nothing at all — a press on a row's free
+        // time neither moved the caret nor opened anything, so the only way to make an
+        // appointment here was the keyboard.
+        for (var r = 0; r < _rowHits.Count; r++)
+        {
+            var (lane, _) = _rowHits[r];
+            if (point.Y < lane.Y || point.Y >= lane.Bottom) continue;
+            if (point.X < lane.X || point.X >= lane.Right) continue;
+
+            var at = StepAt(point.X);
+            SelectedEntry = null;
+            CaretRow = r;
+            Caret = at;
+            _rangeAnchor = null;
+
+            if (e.ClickCount >= 2)
+            {
+                SlotActivated?.Invoke(
+                    this, new SlotRange(Day, at, at.Add(TimeSpan.FromMinutes(CaretStepMinutes))));
+            }
+            else if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            {
+                _sweep = (point, at, r, false);
+                e.Pointer.Capture(this);
+            }
+
+            e.Handled = true;
+            return;
+        }
     }
 
     protected override void OnPointerMoved(PointerEventArgs e)
     {
         base.OnPointerMoved(e);
+
+        if (_sweep is { } sweep)
+        {
+            var point = e.GetPosition(this);
+            if (!sweep.Live)
+            {
+                if (Math.Abs(point.X - sweep.Origin.X) <= ChipDrag.Threshold
+                    && Math.Abs(point.Y - sweep.Origin.Y) <= ChipDrag.Threshold)
+                {
+                    return;
+                }
+
+                _sweep = sweep with { Live = true };
+                _rangeAnchor = sweep.At;
+            }
+
+            // Along the row it started on. Time runs sideways, so the row a sweep wanders onto is
+            // a different calendar rather than a different time — and an appointment made on a
+            // calendar the pointer happened to pass over is not what was swept for.
+            Caret = StepAt(point.X);
+            InvalidateVisual();
+            e.Handled = true;
+            return;
+        }
+
         if (_drag is not { } drag) return;
 
         if (!drag.Live)
@@ -468,6 +539,22 @@ public sealed class ScheduleView : CalendarSurface, ISpokenRows
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
+
+        if (_sweep is { } sweep)
+        {
+            _sweep = null;
+            e.Pointer.Capture(null);
+
+            if (sweep.Live && Caret is { } end)
+            {
+                var range = SlotRange.Between(Day, sweep.At, end, CaretStepMinutes);
+                if (!range.IsSingle(CaretStepMinutes)) SlotActivated?.Invoke(this, range);
+            }
+
+            e.Handled = true;
+            return;
+        }
+
         var drag = _drag;
         _drag = null;
         Cursor = Cursor.Default;
@@ -505,17 +592,32 @@ public sealed class ScheduleView : CalendarSurface, ISpokenRows
             return;
         }
 
+        // A range let go of. The caret stays where it is and only the stretch behind it goes.
+        if (e.Key == Key.Escape && _rangeAnchor is not null)
+        {
+            _rangeAnchor = null;
+            InvalidateVisual();
+            e.Handled = true;
+            return;
+        }
+
         // A drag owns the keyboard while it runs, as it does in the other two views.
         if (_drag is not null) return;
         if (Rows.Count == 0) return;
 
+        // Shift extends the range, as it does in the time grid — along the day here, because
+        // that is the direction time runs in this view.
+        var extending = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+
         switch (e.Key)
         {
             case Key.Left:
-                MoveCaret(-CaretStepMinutes, 0);
+                if (extending) Extend(-CaretStepMinutes);
+                else MoveCaret(-CaretStepMinutes, 0);
                 break;
             case Key.Right:
-                MoveCaret(CaretStepMinutes, 0);
+                if (extending) Extend(CaretStepMinutes);
+                else MoveCaret(CaretStepMinutes, 0);
                 break;
             case Key.Up:
                 MoveCaret(0, -1);
@@ -524,10 +626,12 @@ public sealed class ScheduleView : CalendarSurface, ISpokenRows
                 MoveCaret(0, 1);
                 break;
             case Key.Home:
-                MoveCaretTo(new TimeOnly(0, 0), CaretRow);
+                if (extending) ExtendTo(new TimeOnly(0, 0));
+                else MoveCaretTo(new TimeOnly(0, 0), CaretRow);
                 break;
             case Key.End:
-                MoveCaretTo(LastSlotOfDay, CaretRow);
+                if (extending) ExtendTo(LastSlotOfDay);
+                else MoveCaretTo(LastSlotOfDay, CaretRow);
                 break;
             case Key.PageUp:
                 // The whole run here is one day, so a page is the day either side of it.
@@ -587,8 +691,60 @@ public sealed class ScheduleView : CalendarSurface, ISpokenRows
         MoveCaretTo(TimeOnly.FromTimeSpan(TimeSpan.FromMinutes(moved)), CaretRow + rows);
     }
 
+    /// <summary>
+    /// The step a distance along the lanes is <em>inside</em>, which is what a sweep is over.
+    /// </summary>
+    /// <remarks>
+    /// Floored off the raw position rather than taken from <see cref="TimeAt"/>, which rounds to
+    /// the nearest boundary because a drag proposes an edge. A pointer in the middle of the
+    /// nine-o'clock step rounds up to half past, and the sweep would end a step beyond where it
+    /// was let go of.
+    /// </remarks>
+    private TimeOnly StepAt(double x)
+    {
+        var hours = StartHour + ((x - _lanes.X) / _perHour);
+        var minutes = Math.Floor(hours * 60 / CaretStepMinutes) * CaretStepMinutes;
+        return TimeOnly.FromTimeSpan(TimeSpan.FromMinutes(Math.Clamp(minutes, 0, (24 * 60) - CaretStepMinutes)));
+    }
+
+    /// <summary>The slot boundary at or before a time, so the caret always sits on a drawn step.</summary>
+    private static TimeOnly SnapToStep(TimeOnly time)
+    {
+        var minutes = (time.Hour * 60) + time.Minute;
+        return TimeOnly.FromTimeSpan(TimeSpan.FromMinutes(minutes - (minutes % CaretStepMinutes)));
+    }
+
+    /// <summary>Stretches the range by a step, starting one where there was none.</summary>
+    private void Extend(int minutes)
+    {
+        var time = CaretTime();
+        _rangeAnchor ??= time;
+
+        var moved = (time.Hour * 60) + time.Minute + minutes;
+        var last = (24 * 60) - CaretStepMinutes;
+        if (moved < 0 || moved > last) return;
+
+        Caret = TimeOnly.FromTimeSpan(TimeSpan.FromMinutes(moved));
+        EnsureCaretVisible(Caret.Value);
+    }
+
+    /// <summary>Stretches the range to one end of the day, for a shifted Home or End.</summary>
+    private void ExtendTo(TimeOnly time)
+    {
+        _rangeAnchor ??= CaretTime();
+        Caret = time;
+        EnsureCaretVisible(time);
+    }
+
+    /// <summary>The caret's range, which is one step unless something extended it.</summary>
+    private SlotRange CaretRange()
+        => SlotRange.Between(Day, _rangeAnchor ?? CaretTime(), CaretTime(), CaretStepMinutes);
+
     private void MoveCaretTo(TimeOnly time, int row)
     {
+        // A plain move ends whatever was being extended, as in the time grid.
+        _rangeAnchor = null;
+
         CaretRow = Math.Clamp(row, 0, Math.Max(0, Rows.Count - 1));
         Caret = time;
         EnsureCaretVisible(time);
@@ -690,14 +846,16 @@ public sealed class ScheduleView : CalendarSurface, ISpokenRows
     /// </summary>
     private void Activate()
     {
-        if (EntryAt(CaretTime(), CaretRow) is { } entry)
+        // An extended range means "an appointment this long", so it opens one even where an
+        // appointment sits under one end — the reader asked for a stretch of time.
+        if (_rangeAnchor is null && EntryAt(CaretTime(), CaretRow) is { } entry)
         {
             SelectedEntry = entry;
             EntryActivated?.Invoke(this, entry);
             return;
         }
 
-        SlotActivated?.Invoke(this, (Day, CaretTime()));
+        SlotActivated?.Invoke(this, CaretRange());
     }
 
     /// <summary>

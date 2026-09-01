@@ -45,6 +45,16 @@ public sealed class CalendarWorkspace : Border
     private const double ButtonTop = 20;
     private const double ButtonHeight = 24;
 
+    /// <summary>
+    /// How long a new appointment is when nobody said: the half-hour every calendar starts one at.
+    /// </summary>
+    /// <remarks>
+    /// Only for the ways of asking that name a moment rather than a stretch — the month grid's
+    /// double click and the New Appointment command. A sweep and a shifted arrow say how long
+    /// themselves, which is the whole point of them.
+    /// </remarks>
+    private const int DefaultMinutes = 30;
+
     private readonly PimRepository _repository;
     private readonly CalendarOptions _options;
     private readonly CalendarSource _source;
@@ -261,8 +271,15 @@ public sealed class CalendarWorkspace : Border
 
     public event EventHandler? Changed;
 
-    /// <summary>A double click on empty time, or the New Appointment command with a day chosen.</summary>
-    public event EventHandler<(DateTime Start, bool AllDay)>? NewRequested;
+    /// <summary>
+    /// A double click on empty time, a sweep across it, or the New Appointment command with a day
+    /// chosen.
+    /// </summary>
+    /// <remarks>
+    /// <c>Minutes</c> is how long the reader asked for — a sweep or a shifted arrow says so, and
+    /// everything else sends the half-hour this always made.
+    /// </remarks>
+    public event EventHandler<(DateTime Start, int Minutes, bool AllDay)>? NewRequested;
 
     public event EventHandler<CalendarEntry>? EntryOpened;
 
@@ -544,18 +561,19 @@ public sealed class CalendarWorkspace : Border
         _month.MoreRequested += (_, day) => GoToRange(day, day);
         // At the working day's start, which Options names and AddFocusTime already reads — not a
         // nine o'clock of this file's own invention.
-        _month.DayActivated += (_, day) => NewRequested?.Invoke(this, (day.ToDateTime(App.CalendarOptions.WorkDayStart), false));
+        _month.DayActivated += (_, day) => NewRequested?.Invoke(
+            this, (day.ToDateTime(App.CalendarOptions.WorkDayStart), DefaultMinutes, false));
         _month.EntrySelected += (_, entry) => SelectedEntry = entry;
         _month.EntryActivated += (_, entry) => EntryOpened?.Invoke(this, entry);
 
         _timeGrid.DaySelected += (_, day) => Select(day);
-        _timeGrid.SlotActivated += (_, slot) => NewRequested?.Invoke(this, (slot.Day.ToDateTime(slot.At), false));
+        _timeGrid.SlotActivated += (_, slot) => NewRequested?.Invoke(this, (slot.Start, slot.Minutes, false));
         _timeGrid.EntrySelected += (_, entry) => SelectedEntry = entry;
         _timeGrid.EntryActivated += (_, entry) => EntryOpened?.Invoke(this, entry);
 
         _schedule.EntrySelected += (_, entry) => SelectedEntry = entry;
         _schedule.EntryActivated += (_, entry) => EntryOpened?.Invoke(this, entry);
-        _schedule.SlotActivated += (_, slot) => NewRequested?.Invoke(this, (slot.Day.ToDateTime(slot.At), false));
+        _schedule.SlotActivated += (_, slot) => NewRequested?.Invoke(this, (slot.Start, slot.Minutes, false));
 
         // Schedule View shows one day, so its own page keys ask for the day either side — the
         // same move the toolbar's arrows make, through the same door.

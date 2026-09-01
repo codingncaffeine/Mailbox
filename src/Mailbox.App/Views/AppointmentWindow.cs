@@ -298,8 +298,9 @@ public sealed class AppointmentWindow : Window
     /// <em>filled in and kept</em> — the form is typed into and the big button is clicked, neither
     /// of which a pose can do, so no appointment had ever been created through the real path.
     /// Steps: <c>title:…</c>, <c>location:…</c>, <c>notes:…</c>, <c>allday</c>, <c>timed</c>,
-    /// <c>start:yyyy-MM-ddTHH:mm</c>, <c>end:…</c>, then <c>save</c>, <c>delete</c> or
-    /// <c>cancel</c>.
+    /// <c>start:yyyy-MM-ddTHH:mm</c>, <c>end:…</c>, <c>starttime:9:15</c>, <c>endtime:…</c>, then
+    /// <c>save</c>, <c>delete</c> or <c>cancel</c>. The two <c>…time</c> steps type into the box
+    /// rather than picking a row, which is the only way an odd time can be said.
     /// </remarks>
     private bool RunStep(string step)
     {
@@ -314,6 +315,8 @@ public sealed class AppointmentWindow : Window
             case "notes": _surface.PoseField("notes", value); break;
             case "start": _surface.PoseField("start", value); break;
             case "end": _surface.PoseField("end", value); break;
+            case "starttime": _surface.PoseField("starttime", value); break;
+            case "endtime": _surface.PoseField("endtime", value); break;
             case "allday": _surface.PoseAllDay(true); break;
             case "timed": _surface.PoseAllDay(false); break;
 

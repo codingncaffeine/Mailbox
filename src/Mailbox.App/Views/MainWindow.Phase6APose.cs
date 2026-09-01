@@ -116,7 +116,8 @@ public partial class MainWindow
     /// <c>entry:&lt;match&gt;</c> and <c>entry2:&lt;match&gt;</c> press once and twice on the chip
     /// whose summary contains the match (<c>match#2</c> takes the second such chip);
     /// <c>slot:&lt;yyyy-MM-dd&gt;[@HH:mm]</c> and <c>slot2:</c> press empty grid, which is where a
-    /// new appointment comes from; <c>nav:&lt;yyyy-MM-dd&gt;</c>, <c>nav:prev</c> and
+    /// new appointment comes from; <c>sweep:&lt;yyyy-MM-dd&gt;@HH:mm..HH:mm</c> drags across it,
+    /// which is how a length is asked for; <c>nav:&lt;yyyy-MM-dd&gt;</c>, <c>nav:prev</c> and
     /// <c>nav:next</c> press the date navigator.
     /// </remarks>
     private void PoseCalendarPress(string spec)
@@ -144,12 +145,16 @@ public partial class MainWindow
                     PressSlot(calendar, argument, verb == "slot2" ? 2 : 1);
                     break;
 
+                case "sweep":
+                    SweepSlots(calendar, argument);
+                    break;
+
                 case "nav":
                     PressNavigator(calendar, argument);
                     break;
 
                 default:
-                    Log.Info($"Harness: “{step}” is not a calendar press — say entry:, entry2:, slot:, slot2: or nav:.");
+                    Log.Info($"Harness: “{step}” is not a calendar press — say entry:, entry2:, slot:, slot2:, sweep: or nav:.");
                     break;
             }
 
@@ -225,6 +230,71 @@ public partial class MainWindow
 
         Log.Info($"Harness: pressing empty time on {day:yyyy-MM-dd} at {at:hh\\:mm} — ({point.X:0},{point.Y:0}), {clicks} click(s).");
         Click(ViewOf(calendar)!, point, clicks);
+    }
+
+    /// <summary>
+    /// Sweeps across empty time, which is how a length is asked for with a pointer.
+    /// </summary>
+    /// <remarks>
+    /// <c>sweep:&lt;yyyy-MM-dd&gt;@HH:mm..HH:mm</c>. Press, move, release — three real events at
+    /// coordinates the view really drew at, because a sweep is a gesture and the thing worth
+    /// proving is that the gesture reaches the handler. One intermediate move is enough: the
+    /// threshold is crossed by the first and the range is read off the pointer each time rather
+    /// than accumulated, so a hundred moves would prove the same thing a hundred times.
+    /// </remarks>
+    private void SweepSlots(CalendarWorkspace calendar, string argument)
+    {
+        var parts = argument.Split('@', StringSplitOptions.TrimEntries);
+        var ends = parts.Length > 1
+            ? parts[1].Split("..", StringSplitOptions.TrimEntries)
+            : [];
+
+        if (!DateOnly.TryParseExact(parts[0], "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day)
+            || ends.Length != 2
+            || !TimeOnly.TryParse(ends[0], CultureInfo.InvariantCulture, out var from)
+            || !TimeOnly.TryParse(ends[1], CultureInfo.InvariantCulture, out var to))
+        {
+            Log.Info($"Harness: “{argument}” is not a sweep — say sweep:2026-08-17@09:00..11:00.");
+            return;
+        }
+
+        // Half a row in, for the reason the single press is: a point on a row's top edge is also
+        // the row above's bottom edge, and the sweep would read as starting half an hour early.
+        Point? Middle(TimeOnly at)
+            => calendar.TimeGrid is { } grid
+                ? grid.PointAt(day, at.ToTimeSpan()) is { } top ? new Point(top.X, top.Y + (grid.SlotHeight / 2)) : null
+                : calendar.Schedule is { } schedule
+                    ? schedule.PointAt(at.ToTimeSpan(), schedule.DrawnRows.Count > 0 ? schedule.DrawnRows[0].CollectionId : 0)
+                    : null;
+
+        if (Middle(from) is not { } start || Middle(to) is not { } end)
+        {
+            Log.Info($"Harness: {day:yyyy-MM-dd} {from:HH\\:mm}..{to:HH\\:mm} is not on show in the {calendar.Kind} view.");
+            return;
+        }
+
+        Log.Info($"Harness: sweeping {day:yyyy-MM-dd} {from:HH\\:mm}..{to:HH\\:mm} — "
+                 + $"({start.X:0},{start.Y:0}) to ({end.X:0},{end.Y:0}).");
+
+        Sweep(ViewOf(calendar)!, start, end);
+    }
+
+    /// <summary>Press, move, release: the three events a sweep really is.</summary>
+    private static void Sweep(Control view, Point from, Point to)
+    {
+        var root = TopLevel.GetTopLevel(view) as Visual ?? view;
+        var start = view.TranslatePoint(from, root) ?? from;
+        var end = view.TranslatePoint(to, root) ?? to;
+
+        var pointer = new Pointer(3, PointerType.Mouse, isPrimary: true);
+        var down = new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.LeftButtonPressed);
+        var held = new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.Other);
+        var up = new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.LeftButtonReleased);
+
+        view.RaiseEvent(new PointerPressedEventArgs(view, pointer, root, start, 0, down, KeyModifiers.None, 1));
+        view.RaiseEvent(new PointerEventArgs(
+            InputElement.PointerMovedEvent, view, pointer, root, end, 1, held, KeyModifiers.None));
+        view.RaiseEvent(new PointerReleasedEventArgs(view, pointer, root, end, 2, up, KeyModifiers.None, MouseButton.Left));
     }
 
     private void PressNavigator(CalendarWorkspace calendar, string argument)
