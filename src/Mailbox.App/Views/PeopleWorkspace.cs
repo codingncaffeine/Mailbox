@@ -95,6 +95,12 @@ public sealed class PeopleWorkspace : Border
     }
 
     /// <summary>What the status bar says: the reference counts what the view is showing.</summary>
+    /// <summary>
+    /// Puts the keyboard on the contact list, so the arrow keys reach it without a Tab or a click
+    /// first — the rail button that switched to the module keeps the focus otherwise.
+    /// </summary>
+    public bool FocusSurface() => _list.Focus();
+
     public string Status => Search.Length == 0
         ? $"Items: {_rows.Count}"
         : $"Items: {_list.Rows.Count} of {_rows.Count}";

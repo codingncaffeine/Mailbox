@@ -79,6 +79,12 @@ public sealed class JournalWorkspace : Border
     }
 
     /// <summary>What the status bar says: the reference counts what the view is showing.</summary>
+    /// <summary>
+    /// Puts the keyboard on the journal, so the arrow keys reach it without a Tab or a click
+    /// first — the rail button that switched to the module keeps the focus otherwise.
+    /// </summary>
+    public bool FocusSurface() => _view.Focus();
+
     public string Status => Search.Length == 0 ? $"Items: {_view.Count}" : $"Items: {_view.Count} found";
 
     public IReadOnlyList<JournalRow> Rows => _view.Rows;

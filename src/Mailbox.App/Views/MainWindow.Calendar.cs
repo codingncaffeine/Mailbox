@@ -74,6 +74,9 @@ public partial class MainWindow
 
         var host = this.FindControl<ContentControl>("ModuleHost")!;
 
+        // What the module's own surface is, so the keyboard can be put on it below.
+        Func<bool>? focusSurface = null;
+
         switch (module)
         {
             case MailboxModule.Calendar:
@@ -82,6 +85,7 @@ public partial class MainWindow
                 host.Content = workspace;
                 _ribbon.Layout = CalendarRibbon();
                 shell.ModuleStatusLeft = workspace.Status;
+                focusSurface = workspace.FocusSurface;
                 break;
             }
 
@@ -91,6 +95,7 @@ public partial class MainWindow
                 host.Content = workspace;
                 _ribbon.Layout = PeopleRibbon();
                 shell.ModuleStatusLeft = workspace.Status;
+                focusSurface = workspace.FocusSurface;
                 break;
             }
 
@@ -100,6 +105,7 @@ public partial class MainWindow
                 host.Content = workspace;
                 _ribbon.Layout = TasksRibbon();
                 shell.ModuleStatusLeft = workspace.Status;
+                focusSurface = workspace.FocusSurface;
                 break;
             }
 
@@ -109,6 +115,7 @@ public partial class MainWindow
                 host.Content = workspace;
                 _ribbon.Layout = NotesRibbon();
                 shell.ModuleStatusLeft = workspace.Status;
+                focusSurface = workspace.FocusSurface;
                 break;
             }
 
@@ -118,6 +125,7 @@ public partial class MainWindow
                 host.Content = workspace;
                 _ribbon.Layout = JournalRibbon();
                 shell.ModuleStatusLeft = workspace.Status;
+                focusSurface = workspace.FocusSurface;
                 break;
             }
 
@@ -129,18 +137,41 @@ public partial class MainWindow
                 // the reader was in Mail is what they came here to see.
                 workspace.Reload();
                 host.Content = workspace;
-
-                // Focused so the single-key bindings work without a click first, which is the
-                // whole point of having them.
-                Dispatcher.UIThread.Post(() => workspace.Focus());
                 _ribbon.Layout = FeedsRibbon();
                 shell.ModuleStatusLeft = workspace.Status;
+                focusSurface = workspace.FocusSurface;
                 break;
             }
 
             default:
                 _ribbon.Layout = App.MailRibbon();
+
+                // Mail's surface is not in the host — its panes live in the window's own markup
+                // and take turns with it — so it is named rather than handed over. And a ListBox
+                // is not focusable itself, its rows are: the keyboard goes to the selected row,
+                // or the first one when nothing is selected.
+                focusSurface = () =>
+                {
+                    if (this.FindControl<ListBox>("MessageList") is not { } list) return false;
+                    var row = list.ContainerFromIndex(Math.Max(0, list.SelectedIndex));
+                    return (row ?? (Control)list).Focus();
+                };
                 break;
+        }
+
+        // The module's own surface takes the keyboard. Every one of the seven answers the arrow
+        // keys and none of them was ever given the focus to answer them with: switching to a
+        // module left it on the rail button that switched, so a keyboard user had to Tab their
+        // way in and a reader was told about a list nothing had moved to. Feeds was the one
+        // exception and this is that same call, made for all seven.
+        //
+        // Posted rather than called: the workspace has only just become the host's content, and
+        // a control that is not in the tree yet cannot take focus.
+        if (focusSurface is { } focus)
+        {
+            Dispatcher.UIThread.Post(
+                () => Log.Debug($"Module surface {(focus() ? "has" : "did not take")} the keyboard."),
+                DispatcherPriority.Background);
         }
 
         Log.Info($"Module: {module}.");

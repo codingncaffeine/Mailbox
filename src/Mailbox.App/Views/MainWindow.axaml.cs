@@ -613,17 +613,36 @@ public partial class MainWindow : Window
         // by their Oem names here, the comma being the separator.
         if (Environment.GetEnvironmentVariable("MAILBOX_KEY") is { Length: > 0 } keys)
         {
-            // One post per chord, so each is pressed on its own pass of the loop as a person's
-            // would be — the list rebuilds itself between keystrokes, and a run that pressed
-            // them all in one pass would be testing something nobody can do.
-            Opened += (_, _) =>
-            {
-                foreach (var key in keys.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            // One pass of the loop per chord, so each is pressed as a person's would be — the
+            // list rebuilds itself between keystrokes, and a run that pressed them all in one
+            // pass would be testing something nobody can do. The yield between presses is what
+            // makes that true, and it also lets whatever the last press *queued* run before the
+            // next one: switching module posts the focus onto the module's own surface, so a
+            // pose that pressed Ctrl+2 and then Down in one pass arrowed at the rail button.
+            //
+            // `wait-<ms>` between two chords holds the next press that long, as MAILBOX_RUN's
+            // list does, for anything that has to settle first. The capture is held across the
+            // whole list for the same reason it is there: render-and-exit fires at the first
+            // idle moment, and a wait hands it one.
+            Opened += (_, _) => Dispatcher.UIThread.Post(
+                async () =>
                 {
-                    var one = key;
-                    Dispatcher.UIThread.Post(() => PressChord(one), DispatcherPriority.Background);
-                }
-            };
+                    using var hold = WindowCapture.Hold();
+
+                    foreach (var key in keys.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    {
+                        if (key.StartsWith("wait-", StringComparison.OrdinalIgnoreCase)
+                            && int.TryParse(key["wait-".Length..], out var pause))
+                        {
+                            await System.Threading.Tasks.Task.Delay(pause);
+                            continue;
+                        }
+
+                        PressChord(key);
+                        await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
+                    }
+                },
+                DispatcherPriority.Background);
         }
 
         // A folder operation over the posed folder, for reading the store back:

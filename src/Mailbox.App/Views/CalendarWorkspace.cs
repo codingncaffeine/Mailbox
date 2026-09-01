@@ -158,6 +158,22 @@ public sealed class CalendarWorkspace : Border
     /// <summary>The schedule, when it is the one on show.</summary>
     internal ScheduleView? Schedule => _kind == CalendarViewKind.Schedule ? _schedule : null;
 
+    /// <summary>
+    /// Puts the keyboard on the arrangement that is up, so the arrow keys reach the grid rather
+    /// than the rail button that switched to it.
+    /// </summary>
+    public bool FocusSurface()
+    {
+        Control surface = _kind switch
+        {
+            CalendarViewKind.Month => _month,
+            CalendarViewKind.Schedule => _schedule,
+            _ => _timeGrid,
+        };
+
+        return surface.Focus();
+    }
+
     /// <summary>The date navigator down the left, for a pose that presses a day in it.</summary>
     internal DateNavigator Navigator => _navigator;
 

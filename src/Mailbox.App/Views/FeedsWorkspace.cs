@@ -273,6 +273,12 @@ internal sealed class FeedsWorkspace : Border
         Reload();
     }
 
+    /// <summary>
+    /// Puts the keyboard on the reader itself. This module's surface is the workspace — it takes
+    /// the single-key bindings rather than handing them to a list inside it.
+    /// </summary>
+    public bool FocusSurface() => Focus();
+
     /// <summary>What the status bar says while this module is showing.</summary>
     public string Status { get; private set; } = string.Empty;
 
