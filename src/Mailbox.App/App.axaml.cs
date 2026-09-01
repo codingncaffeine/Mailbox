@@ -740,18 +740,7 @@ public partial class App : Application
 
         // The catalogue before the pipeline, because the plugin host joins both: its commands
         // enter the catalogue and its arrival stage ends the pipeline.
-        Commands = new CommandCatalog();
-        Commands.RegisterRange(MailCommands.All);
-        Commands.RegisterRange(ViewCommands.All);
-        Commands.RegisterRange(ComposeCommands.All);
-        Commands.RegisterRange(CalendarCommands.All);
-        Commands.RegisterRange(AppointmentCommands.All);
-        Commands.RegisterRange(ContactCommands.All);
-        Commands.RegisterRange(PeopleCommands.All);
-        Commands.RegisterRange(TaskCommands.All);
-        Commands.RegisterRange(NoteCommands.All);
-        Commands.RegisterRange(JournalCommands.All);
-        Commands.RegisterRange(FeedCommands.All);
+        Commands = BuiltInCommands();
         Keys = new Mailbox.Core.Keyboard.KeyMap(Settings, Commands);
         Mailbox.Controls.Ribbon.RibbonView.GestureLookup = command => Keys.GestureFor(command.Id)?.Display;
 
@@ -1021,5 +1010,31 @@ public partial class App : Application
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    /// <summary>
+    /// Every built-in command, in one catalogue.
+    /// </summary>
+    /// <remarks>
+    /// A method rather than eleven lines inside start-up because <c>--export-shortcuts</c> needs
+    /// the same catalogue without starting an application, and a shortcut page generated from a
+    /// second list of registrations would drift from the one the keys resolve through — which is
+    /// the whole reason the page is generated rather than written.
+    /// </remarks>
+    internal static CommandCatalog BuiltInCommands()
+    {
+        var catalog = new CommandCatalog();
+        catalog.RegisterRange(MailCommands.All);
+        catalog.RegisterRange(ViewCommands.All);
+        catalog.RegisterRange(ComposeCommands.All);
+        catalog.RegisterRange(CalendarCommands.All);
+        catalog.RegisterRange(AppointmentCommands.All);
+        catalog.RegisterRange(ContactCommands.All);
+        catalog.RegisterRange(PeopleCommands.All);
+        catalog.RegisterRange(TaskCommands.All);
+        catalog.RegisterRange(NoteCommands.All);
+        catalog.RegisterRange(JournalCommands.All);
+        catalog.RegisterRange(FeedCommands.All);
+        return catalog;
     }
 }

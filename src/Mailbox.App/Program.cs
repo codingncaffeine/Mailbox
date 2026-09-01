@@ -28,6 +28,14 @@ internal static class Program
             return ExportTheme(args[1], args.Length > 2 ? args[2] : null);
         }
 
+        // `mailbox --export-shortcuts [path]` writes the shipped keyboard shortcuts out as
+        // Markdown and exits — the wiki's Keyboard shortcuts page, generated from the command
+        // catalogue rather than transcribed from it.
+        if (args.Length >= 1 && string.Equals(args[0], "--export-shortcuts", StringComparison.OrdinalIgnoreCase))
+        {
+            return ShortcutsExport.Write(args.Length > 1 ? args[1] : null);
+        }
+
         // `mailbox --import-theme <file>` reads a browser theme — an .xpi, a zip, an unpacked
         // directory or a bare manifest.json — writes it into the themes directory, and exits;
         // the watcher of a running instance picks it up live.
