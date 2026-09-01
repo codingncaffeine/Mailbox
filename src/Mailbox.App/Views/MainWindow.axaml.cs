@@ -9100,6 +9100,31 @@ public partial class MainWindow : Window
     /// a text box keeps to itself — and not only the map's answer. What it did is read back from
     /// the store and the focus rather than assumed.
     /// </remarks>
+    /// <summary>
+    /// The first visible control whose type is named, searched breadth-first so the one nearest the
+    /// window wins when a surface appears more than once. Harness only: a pose names a type, not an
+    /// instance, and the shallowest instance is the one on screen.
+    /// </summary>
+    private static Control? FirstOfType(Visual root, string typeName)
+    {
+        var queue = new Queue<Visual>();
+        queue.Enqueue(root);
+        while (queue.Count > 0)
+        {
+            var visual = queue.Dequeue();
+            if (visual is Control control
+                && string.Equals(control.GetType().Name, typeName, StringComparison.OrdinalIgnoreCase)
+                && control.IsVisible)
+            {
+                return control;
+            }
+
+            foreach (var child in visual.GetVisualChildren()) queue.Enqueue(child);
+        }
+
+        return null;
+    }
+
     private void PressChord(string key)
     {
         // "focus:<control name or ribbon command id>" puts the focus somewhere first, a keystroke
@@ -9110,7 +9135,20 @@ public partial class MainWindow : Window
             var what = key["focus:".Length..].Trim();
             _ribbon.UpdateLayout();
 
-            var target = this.FindControl<Control>(what) ?? _ribbon.ControlFor(new CommandId(what));
+            // Named control, then the type's own name down the visual tree, then a ribbon command.
+            // The second is for the surfaces built in code rather than markup — the calendar's
+            // grids, the drawn lists — which are in no namescope for FindControl to search and so
+            // could not be aimed at at all, which made every keyboard pose over them impossible.
+            //
+            // The command id comes last and only when the name is shaped like one: CommandId
+            // validates in its constructor, so building one out of a type name threw before any
+            // fallback could run.
+            var target = this.FindControl<Control>(what) ?? FirstOfType(this, what);
+            if (target is null && what.Contains('.') && what == what.ToLowerInvariant())
+            {
+                target = _ribbon.ControlFor(new CommandId(what));
+            }
+
             if (target is not null)
             {
                 target.Focusable = true;

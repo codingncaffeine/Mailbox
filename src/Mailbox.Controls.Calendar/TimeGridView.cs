@@ -83,6 +83,7 @@ public sealed class TimeGridView : CalendarSurface, ISpokenRows
     private IReadOnlyList<CalendarEntry> _entries = [];
     private CalendarEntry? _selectedEntry;
     private DateOnly? _selected;
+    private TimeOnly? _caret;
     private double _scrollMinutes = 8 * 60;
     private int _slotMinutes = 30;
     private double _slotHeight = 21;
@@ -150,6 +151,21 @@ public sealed class TimeGridView : CalendarSurface, ISpokenRows
     {
         get => _selected;
         set => Set(ref _selected, value);
+    }
+
+    /// <summary>
+    /// Where the keyboard is in the grid: the slot the arrow keys move and <c>Enter</c> acts on.
+    /// Null until a key is pressed, so a view driven only by the pointer draws exactly as it did.
+    /// </summary>
+    /// <remarks>
+    /// Kept apart from <see cref="SelectedEntry"/> on purpose. The caret is a position and an
+    /// appointment is a thing; arrowing onto an appointment selects it, but arrowing off it leaves
+    /// the caret somewhere real rather than nowhere.
+    /// </remarks>
+    public TimeOnly? Caret
+    {
+        get => _caret;
+        set => Set(ref _caret, value);
     }
 
     /// <summary>Minutes past midnight at the top of the grid.</summary>
@@ -459,6 +475,8 @@ public sealed class TimeGridView : CalendarSurface, ISpokenRows
             Fill(context, new Rect(columnX[c] + columns[c], top, 1, height), gridLine);
         }
 
+        DrawCaret(context, days, columns, columnX, top);
+
         DrawRuler(context, top, height, firstSlot, slots, gridLine);
         Fill(context, new Rect(RulerSpan, top, 1, height), gridLine);
 
@@ -468,6 +486,40 @@ public sealed class TimeGridView : CalendarSurface, ISpokenRows
         }
 
         DrawNowLine(context, days, columns, columnX, top, height);
+    }
+
+    /// <summary>
+    /// The keyboard's slot, drawn as a ring rather than a fill so an appointment under it still
+    /// reads as itself. Under the chips deliberately: the caret says where the keyboard is, and an
+    /// appointment sitting there is the more important of the two to be able to see.
+    /// </summary>
+    private void DrawCaret(DrawingContext context, IReadOnlyList<DateOnly> days, int[] columns, double[] columnX, double top)
+    {
+        if (_caret is not { } caret || _selected is not { } day) return;
+
+        var column = -1;
+        for (var i = 0; i < days.Count; i++)
+        {
+            if (days[i] != day) continue;
+            column = i;
+            break;
+        }
+
+        if (column < 0) return;
+
+        var minutes = caret.Hour * 60 + caret.Minute;
+        var y = top + (((minutes - ScrollMinutes) / SlotMinutes) * SlotHeight);
+        var box = new Rect(columnX[column], y, columns[column], SlotHeight);
+
+        Fill(context, box, Palette.Colour(TokenKeys.Calendar.SelectedFill));
+
+        // A ring in the shell's own focus colour, so the calendar's caret and every other
+        // focused thing in the application are recognisably the same mark.
+        var ring = Palette.Colour(TokenKeys.Border.Focus);
+        Fill(context, new Rect(box.X, box.Y, box.Width, 1), ring);
+        Fill(context, new Rect(box.X, box.Bottom - 1, box.Width, 1), ring);
+        Fill(context, new Rect(box.X, box.Y, 1, box.Height), ring);
+        Fill(context, new Rect(box.Right - 1, box.Y, 1, box.Height), ring);
     }
 
     /// <summary>
@@ -859,13 +911,213 @@ public sealed class TimeGridView : CalendarSurface, ISpokenRows
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
-        if (e.Key != Key.Escape || _drag is null) return;
+        if (e.Handled) return;
 
-        // A drag let go of: nothing is written and the chip is where it was.
-        _drag = null;
-        Cursor = Cursor.Default;
-        InvalidateVisual();
+        if (e.Key == Key.Escape && _drag is not null)
+        {
+            // A drag let go of: nothing is written and the chip is where it was.
+            _drag = null;
+            Cursor = Cursor.Default;
+            InvalidateVisual();
+            e.Handled = true;
+            return;
+        }
+
+        // A drag owns the keyboard while it runs: moving the caret under a chip being carried
+        // would leave the two describing different times.
+        if (_drag is not null) return;
+
+        var step = SlotMinutes;
+        switch (e.Key)
+        {
+            case Key.Up:
+                MoveCaret(0, -step);
+                break;
+            case Key.Down:
+                MoveCaret(0, step);
+                break;
+            case Key.Left:
+                MoveCaret(-1, 0);
+                break;
+            case Key.Right:
+                MoveCaret(1, 0);
+                break;
+            case Key.Home:
+                MoveCaretTo(CaretDay(), new TimeOnly(0, 0));
+                break;
+            case Key.End:
+                MoveCaretTo(CaretDay(), LastSlotOfDay());
+                break;
+            case Key.PageUp:
+                PageBy(-1);
+                break;
+            case Key.PageDown:
+                PageBy(1);
+                break;
+            case Key.Enter:
+                Activate();
+                break;
+            default:
+                return;
+        }
+
         e.Handled = true;
+    }
+
+    /// <summary>The day the caret is on, settling on something real the first time it is asked.</summary>
+    private DateOnly CaretDay()
+    {
+        if (_selected is { } day && Days().Contains(day)) return day;
+        var days = Days();
+        return days.Contains(Anchor) ? Anchor : days[0];
+    }
+
+    /// <summary>
+    /// The caret's time, defaulting to the top of the working day rather than midnight — the first
+    /// arrow press should land where the day's appointments are, not eight hours above them.
+    /// </summary>
+    private TimeOnly CaretTime()
+        => _caret ?? (WorkDayStart < LastSlotOfDay() ? SnapToSlot(WorkDayStart) : new TimeOnly(0, 0));
+
+    private TimeOnly LastSlotOfDay()
+        => TimeOnly.FromTimeSpan(TimeSpan.FromMinutes((24 * 60) - SlotMinutes));
+
+    /// <summary>The slot boundary at or before a time, so the caret always sits on a drawn row.</summary>
+    private TimeOnly SnapToSlot(TimeOnly time)
+    {
+        var minutes = (time.Hour * 60) + time.Minute;
+        return TimeOnly.FromTimeSpan(TimeSpan.FromMinutes(minutes - (minutes % SlotMinutes)));
+    }
+
+    /// <summary>
+    /// Moves the caret by whole days and whole slots. A move off either end of the run pages the
+    /// view rather than stopping, which is what makes the arrow keys a way to travel and not just
+    /// a way to look around one week.
+    /// </summary>
+    private void MoveCaret(int days, int minutes)
+    {
+        // The first press places the caret rather than moving it. Arrowing into a grid that has no
+        // caret yet should land somewhere sensible, the way the first arrow into a list picks its
+        // first row instead of its second.
+        if (_caret is null)
+        {
+            MoveCaretTo(CaretDay(), CaretTime());
+            return;
+        }
+
+        var day = CaretDay();
+        var time = CaretTime();
+
+        if (minutes != 0)
+        {
+            var moved = (time.Hour * 60) + time.Minute + minutes;
+            var last = (24 * 60) - SlotMinutes;
+
+            // Off the top or the bottom of a day is the day either side of it, at the far end —
+            // the same journey the pointer makes by scrolling and clicking.
+            if (moved < 0)
+            {
+                day = day.AddDays(-1);
+                time = LastSlotOfDay();
+            }
+            else if (moved > last)
+            {
+                day = day.AddDays(1);
+                time = new TimeOnly(0, 0);
+            }
+            else
+            {
+                time = TimeOnly.FromTimeSpan(TimeSpan.FromMinutes(moved));
+            }
+        }
+
+        if (days != 0) day = day.AddDays(days);
+
+        MoveCaretTo(day, time);
+    }
+
+    private void MoveCaretTo(DateOnly day, TimeOnly time)
+    {
+        // The run follows the caret. Anchor drives Days(), so a day outside the current run simply
+        // becomes the anchor and the week redraws around it.
+        if (!Days().Contains(day)) Anchor = day;
+
+        var changedDay = _selected != day;
+        Selected = day;
+        Caret = time;
+        EnsureCaretVisible(time);
+
+        if (changedDay) DaySelected?.Invoke(this, day);
+
+        // Arrowing onto an appointment selects it, which is also what puts it on the accessibility
+        // bus: the setter raises SpokenSelectionChanged, so a reader hears the move without the
+        // keyboard path knowing anything about the bridge.
+        var entry = EntryAt(day, time);
+        if (!ReferenceEquals(entry, SelectedEntry))
+        {
+            SelectedEntry = entry;
+            if (entry is not null) EntrySelected?.Invoke(this, entry);
+        }
+    }
+
+    /// <summary>Pages by the whole run: a day for the day view, a week for the others.</summary>
+    private void PageBy(int direction)
+    {
+        var stride = Span == TimeGridSpan.Day ? 1 : 7;
+        MoveCaretTo(CaretDay().AddDays(direction * stride), CaretTime());
+    }
+
+    /// <summary>
+    /// Scrolls only as far as it must to bring the caret into view, so arrowing down a day keeps
+    /// the rows either side of it rather than recentring on every press.
+    /// </summary>
+    private void EnsureCaretVisible(TimeOnly time)
+    {
+        var height = Bounds.Height - _gridTop;
+        if (height <= 0 || SlotHeight <= 0) return;
+
+        var visible = height / SlotHeight * SlotMinutes;
+        var minutes = (time.Hour * 60) + time.Minute;
+
+        if (minutes < ScrollMinutes) ScrollMinutes = minutes;
+        else if (minutes + SlotMinutes > ScrollMinutes + visible) ScrollMinutes = minutes + SlotMinutes - visible;
+    }
+
+    /// <summary>
+    /// The timed appointment the caret is inside, shortest first so a half-hour meeting inside a
+    /// morning-long block is what gets selected rather than the block that encloses it.
+    /// </summary>
+    private CalendarEntry? EntryAt(DateOnly day, TimeOnly time)
+    {
+        var moment = day.ToDateTime(time);
+        CalendarEntry? best = null;
+        foreach (var entry in _entries)
+        {
+            if (entry.AllDay) continue;
+            if (entry.StartWall > moment || entry.EndWall <= moment) continue;
+            if (best is null || entry.EndWall - entry.StartWall < best.EndWall - best.StartWall) best = entry;
+        }
+
+        return best;
+    }
+
+    /// <summary>
+    /// <c>Enter</c> means "open what I am on": the selected appointment if the caret is inside one,
+    /// and otherwise a new appointment at the caret — the keyboard's answer to a double click.
+    /// </summary>
+    private void Activate()
+    {
+        var day = CaretDay();
+        var time = CaretTime();
+
+        if (EntryAt(day, time) is { } entry)
+        {
+            SelectedEntry = entry;
+            EntryActivated?.Invoke(this, entry);
+            return;
+        }
+
+        SlotActivated?.Invoke(this, (day, time));
     }
 
     /// <summary>

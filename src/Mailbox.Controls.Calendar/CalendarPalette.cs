@@ -69,6 +69,7 @@ public sealed class CalendarPalette
         .. TokenKeys.Peek.All,
         TokenKeys.Nav.Background, TokenKeys.Nav.ItemSelected, TokenKeys.Nav.ItemText,
         TokenKeys.List.Background, TokenKeys.Border.Subtle, TokenKeys.Border.Strong,
+        TokenKeys.Border.Focus,
         TokenKeys.Surface.Sunken, TokenKeys.State.Hover, TokenKeys.Accent.Rest,
         TokenKeys.Text.Primary, TokenKeys.Text.Secondary,
     ];
