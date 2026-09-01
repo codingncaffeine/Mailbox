@@ -164,7 +164,12 @@ public sealed class TaskListView : DrawnSurface, ISpokenRows
     // ---- What is drawn, line by line -----------------------------------------------------------
 
     /// <summary>A heading or a task: the list is one run of both, which is what scrolls.</summary>
-    private readonly record struct Entry(TaskBand Band, TaskRow? Row)
+    /// <remarks>
+    /// The band is a <see cref="TaskGroup"/> rather than the due-date enum it used to be, which
+    /// is the whole of what let the list be arranged by anything else: a category and a task list
+    /// are names, not members of a fixed set, and an enum could hold neither.
+    /// </remarks>
+    private readonly record struct Entry(TaskGroup Group, TaskRow? Row)
     {
         public bool IsHeading => Row is null;
     }
@@ -177,20 +182,23 @@ public sealed class TaskListView : DrawnSurface, ISpokenRows
         // and the bands belong to the two views that have no columns to say the same thing.
         if (ShowColumns)
         {
-            foreach (var row in _rows) lines.Add(new Entry(row.Band, row));
+            foreach (var row in _rows) lines.Add(new Entry(row.Group, row));
             return lines;
         }
 
-        TaskBand? band = null;
+        // Compared by key rather than by heading: two bands can only share a key by being the
+        // same band, where an empty heading is a real band ("None") and would fold every unheaded
+        // row together.
+        string? key = null;
         foreach (var row in _rows)
         {
-            if (band != row.Band)
+            if (key != row.Group.Key)
             {
-                band = row.Band;
-                lines.Add(new Entry(row.Band, null));
+                key = row.Group.Key;
+                lines.Add(new Entry(row.Group, null));
             }
 
-            lines.Add(new Entry(row.Band, row));
+            lines.Add(new Entry(row.Group, row));
         }
 
         return lines;
@@ -241,7 +249,7 @@ public sealed class TaskListView : DrawnSurface, ISpokenRows
 
         foreach (var (line, box) in Placed())
         {
-            if (line.IsHeading) DrawHeading(context, box, line.Band);
+            if (line.IsHeading) DrawHeading(context, box, line.Group);
             else if (ShowColumns) DrawDetailedRow(context, box, line.Row!);
             else DrawRow(context, box, line.Row!);
         }
@@ -430,7 +438,7 @@ public sealed class TaskListView : DrawnSurface, ISpokenRows
         Fill(context, new Rect(6 + width2 + 1, box.Y + 4, 1, 12), Colour(TokenKeys.List.ReadText));
     }
 
-    private void DrawHeading(DrawingContext context, Rect box, TaskBand band)
+    private void DrawHeading(DrawingContext context, Rect box, TaskGroup group)
     {
         Fill(context, box, Colour(TokenKeys.List.GroupHeaderBackground));
 
@@ -449,7 +457,7 @@ public sealed class TaskListView : DrawnSurface, ISpokenRows
         context.DrawLine(pen, centre, new Point(centre.X + 4, centre.Y - 2));
 
         DrawFlag(context, new Rect(box.X + 22, box.Y + 7, 11, 12));
-        DrawAt(context, Ink(TaskBook.Heading(band), TextSize, ink, SemiBoldFace), box.X + 40, box.Y + 17);
+        DrawAt(context, Ink(group.Heading, TextSize, ink, SemiBoldFace), box.X + 40, box.Y + 17);
     }
 
     private void DrawRow(DrawingContext context, Rect box, TaskRow row)
@@ -753,8 +761,10 @@ public sealed class TaskListView : DrawnSurface, ISpokenRows
     {
         var line = Lines()[index];
         if (line.Row is not { } row)
-            return $"{TaskBook.Heading(line.Band)}, {_rows.Count(r => r.Band == line.Band)} " +
-                   (_rows.Count(r => r.Band == line.Band) == 1 ? "task" : "tasks");
+        {
+            var under = _rows.Count(r => r.Group.Key == line.Group.Key);
+            return $"{line.Group.Heading}, {under} " + (under == 1 ? "task" : "tasks");
+        }
 
         var said = new System.Text.StringBuilder();
         if (row.IsComplete) said.Append("Complete. ");

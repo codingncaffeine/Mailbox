@@ -613,6 +613,17 @@ public partial class MainWindow
 
         if (MailArrangementFor(id) is { } arrangement) return shell.Arrangement == arrangement;
 
+        // The Tasks gallery boxes its own. Read off the workspace rather than off a copy on the
+        // shell: the module owns what it is grouped by, and a second copy is a second thing to
+        // keep in step. Only when the module is up, so the box follows the list a reader is
+        // looking at rather than one built and left behind.
+        if (TaskArrangementFor(id) is { } taskArrangement)
+        {
+            return shell.Module == MailboxModule.Tasks
+                   && _taskModule is { } tasks
+                   && tasks.Arrangement == taskArrangement;
+        }
+
         return false;
     }
 

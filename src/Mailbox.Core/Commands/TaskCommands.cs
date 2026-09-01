@@ -261,6 +261,46 @@ public static class TaskCommands
         KeyTip = "VD",
     };
 
+    /// <summary>
+    /// One entry of the View tab's Arrangement gallery.
+    /// </summary>
+    /// <remarks>
+    /// The module's own rather than the mail list's: those carry <c>ModuleScope.Mail</c>, and a
+    /// command whose scope says where it works must not be pressed somewhere it does not. The
+    /// labels match because the reference uses the same words in both galleries.
+    /// </remarks>
+    private static MailboxCommand ArrangeBy(string id, string label, string icon, string keyTip) => new()
+    {
+        Id = new($"tasks.arrange.{id}"),
+        Label = label,
+        Description = $"Group the task list by {label.ToLowerInvariant()}.",
+        Icon = icon,
+        IconTint = "ribbon.icon.blue",
+        Category = "Arrangement",
+        Scope = ModuleScope.Tasks,
+        KeyTip = keyTip,
+
+        // The gallery boxes whichever arrangement the list is under.
+        IsToggle = true,
+    };
+
+    public static readonly MailboxCommand ArrangeByCategories =
+        ArrangeBy("categories", "Categories", "categorize", "RC") with { IconArtwork = "categorize", IconTint = null };
+
+    public static readonly MailboxCommand ArrangeByStartDate = ArrangeBy("startdate", "Start Date", "arrange-date", "RA");
+    public static readonly MailboxCommand ArrangeByDueDate = ArrangeBy("duedate", "Due Date", "arrange-date", "RD");
+    public static readonly MailboxCommand ArrangeByFolder = ArrangeBy("folder", "Folder", "folder", "RF");
+    public static readonly MailboxCommand ArrangeByType = ArrangeBy("type", "Type", "task-simple-list", "RT");
+    public static readonly MailboxCommand ArrangeByImportance = ArrangeBy("importance", "Importance", "importance", "RI");
+    public static readonly MailboxCommand ArrangeByModified = ArrangeBy("modified", "Modified Date", "arrange-date", "RM");
+
+    /// <summary>The gallery in the order the reference lists it.</summary>
+    public static IReadOnlyList<MailboxCommand> Arrangements =>
+    [
+        ArrangeByCategories, ArrangeByStartDate, ArrangeByDueDate, ArrangeByFolder,
+        ArrangeByType, ArrangeByImportance, ArrangeByModified,
+    ];
+
     /// <summary>Every command this module owns, which is what the catalogue registers.</summary>
     public static IReadOnlyList<MailboxCommand> All { get; } =
     [
@@ -269,5 +309,6 @@ public static class TaskCommands
         FollowUp, Categorize, Private, HighImportance, LowImportance,
         Reply, ReplyAll, Forward, MoveTo,
         TodoListView, SimpleListView, DetailedView,
+        .. Arrangements,
     ];
 }

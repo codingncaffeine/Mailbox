@@ -5939,7 +5939,17 @@ public partial class MainWindow : Window
 
         if (id == ViewCommands.ChangeView.Id) { ShowChangeViewMenu(shell); return; }
         if (id == ViewCommands.ViewSettings.Id) { ShowCurrentViewMenu(shell); return; }
-        if (id == ViewCommands.ArrangeBy.Id) { MenuProbe.Show("the arrange-by menu", ArrangeFlyout(shell), _ribbon ?? (Control)this, atPointer: true); return; }
+        if (id == ViewCommands.ArrangeBy.Id)
+        {
+            // The menu belongs to whichever list is up. Arrange By over the Tasks module used to
+            // offer the mail arrangements — Date, From, Size — none of which a task has, and
+            // pressing one silently rearranged a message list nobody was looking at.
+            var flyout = shell.Module == MailboxModule.Tasks
+                ? TaskArrangeFlyout(shell)
+                : ArrangeFlyout(shell);
+            MenuProbe.Show("the arrange-by menu", flyout, _ribbon ?? (Control)this, atPointer: true);
+            return;
+        }
         if (id == ViewCommands.LayoutMenu.Id) { ShowLayoutMenu(shell); return; }
         if (id == ViewCommands.ChangeViewCompact.Id) { shell.ChangeView(Mailbox.Core.Views.MailView.CompactName); return; }
         if (id == ViewCommands.ChangeViewSingle.Id) { shell.ChangeView(Mailbox.Core.Views.MailView.SingleName); return; }

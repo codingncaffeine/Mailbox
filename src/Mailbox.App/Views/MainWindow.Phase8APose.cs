@@ -289,11 +289,21 @@ public partial class MainWindow
                     _ => "task",
                 };
 
+                // The band and the group are two different facts once the list can be arranged by
+                // something other than the due date: the band is when it is owed, the group is
+                // the heading it is drawn under. A probe that said only one of them could not
+                // tell a working arrangement from a list that had ignored the press.
                 Log.Info($"Harness: probe row — {kind}, key {row.Key}, list {row.CollectionId}, "
-                    + $"band {TaskBook.Heading(row.Band)}, overdue {row.IsOverdue}, done {row.IsComplete}, "
+                    + $"band {TaskBook.Heading(row.Band)}, group “{row.Group.Heading}”, "
+                    + $"overdue {row.IsOverdue}, done {row.IsComplete}, "
                     + $"due {(row.Task.Due is { } d ? d.Wall.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) : "—")}, "
                     + $"“{row.Summary}”.");
             }
+
+            // The headings the list actually draws, in order — which is the arrangement's own
+            // claim, and the one thing the row lines above cannot make on their own.
+            Log.Info("Harness: probe headings — "
+                + string.Join(" | ", tasks.Rows.Select(r => r.Group.Heading).Distinct(StringComparer.Ordinal)));
 
             Log.Info($"Harness: probe rows — {tasks.Rows.Count(r => !r.IsBorrowed)} task(s), "
                 + $"{tasks.Rows.Count(r => r.IsMessage)} flagged message(s), "

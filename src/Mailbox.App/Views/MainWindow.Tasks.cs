@@ -1,5 +1,6 @@
 using System.Globalization;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives.PopupPositioning;
 using Mailbox.App.ViewModels;
 using Mailbox.Controls.Tasks;
 using Mailbox.Core.Commands;
@@ -366,6 +367,65 @@ public partial class MainWindow
     /// The Tasks module's commands. Returns false for anything it does not own, so the shell's
     /// own list carries on.
     /// </summary>
+    /// <summary>
+    /// Which arrangement a gallery command asks for, or null when the id names none.
+    /// </summary>
+    /// <remarks>
+    /// Matched against the command the arrangement declares rather than against a second list of
+    /// strings here: the ids are built from the enum's own names in <c>TaskCommands</c>, and two
+    /// lists of them would be two places to keep in step.
+    /// </remarks>
+    internal static TaskArrangement? TaskArrangementFor(CommandId id)
+    {
+        for (var at = 0; at < TaskCommands.Arrangements.Count; at++)
+        {
+            if (TaskCommands.Arrangements[at].Id == id) return TaskArrangements.All[at];
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The Arrange By menu over the Tasks module: the gallery as a list, with the one in force
+    /// ticked, and Reverse Sort under it as the mail menu has it.
+    /// </summary>
+    private MenuFlyout TaskArrangeFlyout(ShellViewModel shell)
+    {
+        var flyout = new MenuFlyout { Placement = PlacementMode.BottomEdgeAlignedRight };
+        var tasks = EnsureTasks(shell);
+
+        void Build()
+        {
+            var items = new List<MenuItem>();
+
+            for (var at = 0; at < TaskArrangements.All.Count; at++)
+            {
+                var chosen = TaskArrangements.All[at];
+                var command = TaskCommands.Arrangements[at].Id;
+                var item = new MenuItem
+                {
+                    Header = TaskArrangements.Label(chosen),
+                    Icon = chosen == tasks.Arrangement ? new TextBlock { Text = "✓" } : null,
+                };
+
+                // Through the command rather than straight at the workspace, so the menu and the
+                // gallery take the same path and the status line says the same thing either way.
+                item.Click += (_, _) => { RunCommand(command); Build(); };
+                items.Add(item);
+            }
+
+            var reverse = new MenuItem { Header = tasks.Reversed ? "Reverse Sort ✓" : "Reverse Sort" };
+            reverse.Click += (_, _) => { tasks.Reversed = !tasks.Reversed; Build(); };
+
+            items.Add(new MenuItem { Header = "-" });
+            items.Add(reverse);
+            flyout.ItemsSource = items;
+        }
+
+        Build();
+        return flyout;
+    }
+
     private bool RunTaskCommand(ShellViewModel shell, CommandId id)
     {
         if (shell.Module != MailboxModule.Tasks) return false;
@@ -415,6 +475,18 @@ public partial class MainWindow
             case "tasks.view.detailed":
                 tasks.SetView(TaskViewKind.Detailed);
                 shell.ModuleStatusLeft = tasks.Status;
+                return true;
+
+            // The View tab's Arrangement gallery. One case for all seven: the id carries which,
+            // so a new arrangement is an entry in the gallery and a case in TaskArrangements —
+            // not a branch here that somebody has to remember to add.
+            case { } arranging when arranging.StartsWith("tasks.arrange.", StringComparison.Ordinal):
+                if (TaskArrangementFor(id) is not { } wanted) return false;
+                tasks.Arrangement = wanted;
+                shell.ModuleStatusLeft = tasks.Status;
+                shell.StatusRight = $"Arranged by {TaskArrangements.Label(wanted)}.";
+                Log.Info($"Tasks: arranged by {wanted}.");
+                RefreshCommandEnablement();
                 return true;
 
             case "tasks.categorize":

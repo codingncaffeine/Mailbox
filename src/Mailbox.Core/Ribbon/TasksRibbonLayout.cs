@@ -93,6 +93,7 @@ public static class TasksRibbonLayout
                     RibbonItem.Sheddable(TaskCommands.TodoListView.Id),
                     RibbonItem.Sheddable(TaskCommands.SimpleListView.Id),
                     RibbonItem.Sheddable(TaskCommands.DetailedView.Id),
+                    RibbonItem.Small(ViewCommands.ArrangeBy.Id, RibbonItemKind.DropDown),
                     RibbonItem.Small(ViewCommands.ReverseSort.Id)),
 
                 Cluster("layout", "Layout",
@@ -273,6 +274,14 @@ public static class TasksRibbonLayout
                         [
                             RibbonItem.Large(ViewCommands.ChangeView.Id, RibbonItemKind.DropDown),
                             RibbonItem.Large(ViewCommands.ViewSettings.Id, RibbonItemKind.DropDown),
+
+                            // The three views moved here off the Arrangement group, where they had
+                            // been standing in for a gallery that did not exist. A view and an
+                            // arrangement are different questions — which columns, and grouped by
+                            // what — and the reference asks them in these two groups.
+                            RibbonItem.Large(TaskCommands.TodoListView.Id),
+                            RibbonItem.Large(TaskCommands.SimpleListView.Id),
+                            RibbonItem.Large(TaskCommands.DetailedView.Id),
                         ],
                     },
 
@@ -282,12 +291,12 @@ public static class TasksRibbonLayout
                         Label = "Arrangement",
                         KeyTip = "ZR",
                         CollapsePriority = 1,
+                        GalleryColumns = 4,
+                        GalleryMore = ViewCommands.ArrangeBy.Id,
                         Items =
                         [
-                            RibbonItem.Large(TaskCommands.TodoListView.Id),
-                            RibbonItem.Large(TaskCommands.SimpleListView.Id),
-                            RibbonItem.Large(TaskCommands.DetailedView.Id),
-                            RibbonItem.Large(ViewCommands.ReverseSort.Id),
+                            .. TaskCommands.Arrangements.Select(c => RibbonItem.Gallery(c.Id)),
+                            RibbonItem.Small(ViewCommands.ReverseSort.Id),
                         ],
                     },
 

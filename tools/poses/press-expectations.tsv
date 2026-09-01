@@ -357,6 +357,13 @@ people.view.card	ACTED
 people.view.list	ACTED
 people.view.people	ACTED
 people.view.phone	ACTED
+tasks.arrange.categories	ACTED
+tasks.arrange.duedate	ACTED
+tasks.arrange.folder	ACTED
+tasks.arrange.importance	ACTED
+tasks.arrange.modified	ACTED
+tasks.arrange.startdate	ACTED
+tasks.arrange.type	ACTED
 tasks.categorize	SILENT	opens its flyout; the run log carries the menu read-back
 tasks.complete	ACTED
 tasks.delete	ACTED

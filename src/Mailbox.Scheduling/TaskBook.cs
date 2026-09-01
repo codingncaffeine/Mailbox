@@ -59,6 +59,28 @@ public sealed record TaskRow
     public required TaskItem Task { get; init; }
     public required TaskBand Band { get; init; }
 
+    /// <summary>
+    /// The band this row is drawn under, for the arrangement the list is in.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="Band"/>, which is the due-date banding and stays what it is: the
+    /// To-Do Bar and the overdue red are about when a thing is owed however the list happens to
+    /// be grouped. Stamped by <see cref="TaskArrangements.Arrange"/>; a row nobody arranged
+    /// carries its due-date band, which is what the list has always shown.
+    /// </remarks>
+    /// <remarks>
+    /// The backing field is nullable so that "nobody said" and "the first band" are different
+    /// things: a default <see cref="TaskGroup"/> is a real value, and without the distinction
+    /// every unarranged row would draw an empty heading rather than the one it has always had.
+    /// </remarks>
+    private readonly TaskGroup? _group;
+
+    public TaskGroup Group
+    {
+        get => _group ?? TaskArrangements.Band(Band);
+        init => _group = value;
+    }
+
     /// <summary>Late and not done, which the reference draws in red.</summary>
     public required bool IsOverdue { get; init; }
 

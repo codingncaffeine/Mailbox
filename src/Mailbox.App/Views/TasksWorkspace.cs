@@ -141,6 +141,24 @@ public sealed class TasksWorkspace : Border
         set { field = value; Reload(); }
     }
 
+    /// <summary>
+    /// What the list is grouped by, which the View tab's Arrangement gallery sets.
+    /// </summary>
+    /// <remarks>
+    /// Due date is the default and was for a long time the only thing this could be — the bands
+    /// were an enum, so there was nowhere for a category or a task list to go.
+    /// </remarks>
+    public TaskArrangement Arrangement
+    {
+        get;
+        set
+        {
+            if (field == value) return;
+            field = value;
+            Reload();
+        }
+    } = TaskArrangement.DueDate;
+
     /// <summary>The drawn list, which the harness presses.</summary>
     internal TaskListView List => _list;
 
@@ -467,11 +485,24 @@ public sealed class TasksWorkspace : Border
         // column rather than banded, so what is finished stays on the date it was due.
         // After the view's own ordering, so Detailed's date sort is what gets reversed.
         var shown = _kind == TaskViewKind.Detailed ? TaskBook.ByDueDate(rows) : rows;
+
+        // Stamped with the band each row is drawn under, and put in band order. The rows arrive
+        // already sorted by due date and then by name, and the arrangement is stable within a
+        // band, so what changes is which headings appear and in what order — not the order of
+        // the tasks under any one of them.
+        shown = TaskArrangements.Arrange(shown, Arrangement, Today, ListName);
+
         if (Reversed) shown = [.. shown.Reverse()];
 
         _list.ShowColumns = _kind == TaskViewKind.Detailed;
         _list.Rows = shown;
-        _list.ArrangedBy = _kind == TaskViewKind.Todo ? "Flag: Due Date" : "Due Date";
+
+        // What the column header writes, and what the ribbon's gallery boxes. The To-Do List
+        // says "Flag: " because its rows are flagged mail as much as tasks, which is the
+        // reference's own wording for the same list.
+        _list.ArrangedBy = _kind == TaskViewKind.Todo && Arrangement == TaskArrangement.DueDate
+            ? "Flag: Due Date"
+            : TaskArrangements.Label(Arrangement);
         Selected = _list.Selected;
 
         // The pane follows the list. A row that a reload has taken away — ticked off in the
@@ -481,6 +512,17 @@ public sealed class TasksWorkspace : Border
         _navPane.Refresh();
         Changed?.Invoke(this, EventArgs.Empty);
     }
+
+    /// <summary>
+    /// What a task list is called, for the Folder arrangement.
+    /// </summary>
+    /// <remarks>
+    /// Looked up through the book rather than the pane: the pane shows the lists that are ticked
+    /// and a row can be on one that has just been unticked mid-reload, which would leave its band
+    /// unnamed.
+    /// </remarks>
+    private string ListName(long collectionId)
+        => _book.Lists().FirstOrDefault(l => l.Id == collectionId)?.DisplayName ?? string.Empty;
 
     /// <summary>Selects the nth row, as a click does, for a harness run.</summary>
     public string PoseSelect(int at)
