@@ -706,8 +706,16 @@ public static class ViewCommands
     {
         public const string Repository = "https://github.com/codingncaffeine/Mailbox";
 
-        /// <summary>The manual. The README until there is a longer one, which is where it will go.</summary>
-        public const string Manual = Repository + "#readme";
+        /// <summary>
+        /// The manual: the wiki, which is a guide per module over four reference pages.
+        /// </summary>
+        /// <remarks>
+        /// This was the README for a long time, and said so, because the wiki was four reference
+        /// pages and a reader who pressed F1 wanting to know what the Journal module is for would
+        /// not have found out. The module guides are what changed that. The README is still the
+        /// better answer to "what is this and how do I install it", and Home links to it first.
+        /// </remarks>
+        public const string Manual = Repository + "/wiki";
 
         /// <summary>Where a fault or an idea goes. Both Feedback and Suggest a Feature open it.</summary>
         public const string Issues = Repository + "/issues/new";
