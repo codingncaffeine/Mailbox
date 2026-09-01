@@ -13,22 +13,12 @@ OUT/
 tools/Mailbox.Fidelity/output/
 tools/Mailbox.Fidelity/diffs/
 
-# Reference captures live outside the repo; docs/ holds only our own screenshots.
-
-# Internal working documents — the plan and the session handoff stay local. Globbed rather
-# than named: an archived HANDOFF-2026-08-25.md is the same document with a date on it, and
-# the one that gets committed by accident is always the copy somebody made before a rewrite.
-docs/PLAN*.md
-docs/HANDOFF*.md
-
-# The audits are internal working documents too: one lists what is missing or broken, the
-# other what a user would ask for next. Both are written against the reference and neither
-# is ours to publish.
-docs/MISSING-BROKEN*.md
-docs/USER-REQUESTS*.md
-docs/FEEDS-PLAN*.md
-docs/AUDIT*.md
-docs/THEMES-PLAN*.md
+# docs/ is local-only, whole. It began as a place for our own screenshots and grew into the
+# working desk: the plans, the handoffs, the audits, the request queue. Enumerating the
+# internal names was the old rule, and it worked right up until a file arrived that no glob
+# had been written for yet — so the directory is ignored entirely rather than file by file.
+# Anything meant for a reader goes in README.md, the wiki, or assets/screenshots/.
+docs/
 
 # Downloaded format specifications — reference material, not ours to redistribute.
 specs/

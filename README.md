@@ -1,4 +1,4 @@
-![Mailbox — the modern, open source email client](docs/banner.jpg)
+![Mailbox — the modern, open source email client](assets/screenshots/banner.jpg)
 
 # Mailbox
 
@@ -14,7 +14,7 @@ tasks, notes, journal and feed modules run against that same store, and the Add 
 also takes a CalDAV or CardDAV server — it finds the calendars and address books the server
 offers and keeps the ones you pick in sync on every send/receive.
 
-![The Mailbox shell: folder pane, message list and reading pane](docs/ribbon-simplified.png)
+![The Mailbox shell: folder pane, message list and reading pane](assets/screenshots/shell.png)
 
 ---
 
@@ -201,10 +201,12 @@ filter and the plugin host.
 
 ## Design notes
 
-**Subpixel antialiasing works on Linux.** Widely reported not to, and it was the biggest risk
-to how the application would feel. Measured at 91.3% channel disagreement on glyph edges
-against 0.0% for grayscale — it is honoured. See
-[`docs/text-rendering.md`](docs/text-rendering.md).
+**Subpixel antialiasing works on Linux.** Widely reported not to, and it is most of what makes
+an application feel wrong before you can say why. Mailbox asks for `SubpixelAntialias` with
+strong hinting and, where the stack honours it, gets the coloured glyph fringing Windows draws
+rather than the thinner grayscale one. Where it does not — the reports upstream are real for
+someone, and look to be compositor, driver or fontconfig specific — `MAILBOX_TEXT_MODE` and
+`MAILBOX_TEXT_HINTING` override both, and the startup log names the mode that came up.
 
 **Themes cover every surface.** Four built-in themes, each authored as a complete explicit
 token set rather than derived from one another, with a coverage gate that refuses to load a

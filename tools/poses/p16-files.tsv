@@ -1,3 +1,5 @@
+# The desktop hands the application a file: an invite, a card, or a bare new-item flag.
+# Fixtures are staged under /tmp/mailbox-audit — see the note in p15-sanitizer.tsv.
 open-ics	MAILBOX_OPEN_FILE=/tmp/mailbox-audit/invite.ics	MAILBOX_TODAY=2026-08-16
 open-vcf	MAILBOX_OPEN_FILE=/tmp/mailbox-audit/card.vcf	MAILBOX_TODAY=2026-08-16
 new-appt	MAILBOX_OPEN_FILE=--new-appointment	MAILBOX_TODAY=2026-08-16

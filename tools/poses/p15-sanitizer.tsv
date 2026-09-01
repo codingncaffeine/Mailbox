@@ -1,1 +1,4 @@
+# The sanitizer sweep: a corpus of hostile messages in, a report out.
+# Fixtures are staged under /tmp/mailbox-audit — the runner passes these to env(1) verbatim,
+# so the path is literal and absolute on purpose. Stage the corpus there first.
 sanitizer-run	MAILBOX_SANITIZER=/tmp/mailbox-audit/corpus	MAILBOX_SANITIZER_OUT=/tmp/mailbox-audit/corpus-out	MAILBOX_TODAY=2026-08-16
