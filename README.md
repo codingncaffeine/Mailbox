@@ -104,25 +104,38 @@ dotnet run --project src/Mailbox.App
 
 ### Packaging
 
-One script publishes a self-contained build and packs it two ways: a tarball that runs from
-wherever it is extracted, and a `.deb` for Debian 13 and its relatives. `packaging/aur/PKGBUILD`
-repackages the tarball for Arch.
+One script publishes a self-contained build and packs it three ways: a tarball that runs from
+wherever it is extracted, a `.deb` for Debian 13 and its relatives, and an `.rpm` for Fedora and
+its relatives. `packaging/aur/PKGBUILD` repackages the tarball for Arch. Both `x86_64` and
+`aarch64` are built from the same script — cross-publishing is a second run of it, since the
+runtime and every native library come out of the NuGet runtime pack for the target.
 
 ```sh
-bash packaging/build-release.sh     # packaging/out/Mailbox-<ver>-linux-x64.tar.gz and Mailbox.deb
+bash packaging/build-release.sh          # x86_64: tarball, Mailbox.deb, Mailbox.rpm
+bash packaging/build-release.sh arm64    # aarch64: tarball, Mailbox-arm64.deb, Mailbox-aarch64.rpm
+bash packaging/build-release.sh all      # both
+
 bash packaging/test-deb.sh          # installs the .deb in a clean debian:trixie container (podman) and probes it
+bash packaging/test-rpm.sh          # the same in a clean fedora:42 container
 ```
 
-The test is part of every build: the reading pane's engine (WPE WebKit), the keyring tool and
+The tests are part of every build: the reading pane's engine (WPE WebKit), the keyring tool and
 the notification tool are exactly the dependencies that are present on a development machine and
-missing on a clean one. It passes when the install resolves, no bundled library wants anything
-the package did not bring, and the binary gets as far as looking for a display.
+missing on a clean one. They pass when the install resolves, no bundled library wants anything
+the package did not bring, and the binary gets as far as looking for a display. `rpmbuild` is
+borrowed from a container where the build machine has none, which is the ordinary case on Arch.
 
-Runtime dependencies on the target: WPE WebKit (`libwpewebkit-2.0-1` / `wpewebkit`), libwpe and
-WPEBackend-fdo, X11 or Wayland, fontconfig; and, recommended, `secret-tool` (libsecret) for the
-keyring, `notify-send` (libnotify) for notifications, Hunspell dictionaries for spelling, a
-desktop portal (with GTK 3 as the fallback) for the file dialogs, and the metric-compatible
-fonts below.
+Runtime dependencies on the target: X11 or Wayland, fontconfig, ICU; WPE WebKit
+(`libwpewebkit-2.0-1` / `wpewebkit`), libwpe and WPEBackend-fdo for the reading pane; and,
+recommended, `secret-tool` (libsecret) for the keyring, `notify-send` (libnotify) for
+notifications, Hunspell dictionaries for spelling, a desktop portal (with GTK 3 as the fallback)
+for the file dialogs, and the metric-compatible fonts below.
+
+**On a distribution that does not package WPE WebKit — Fedora is one — the reading pane renders
+each message as text.** That is a deliberate answer rather than a degraded one: the only other
+engine the library can reach draws into a native child window, which this pane cannot composite,
+so it would report every message loaded and display nothing. The pane refuses it and says which
+library is missing in the log. Install WPE WebKit and the pane picks it up on the next start.
 
 ### Fonts
 
