@@ -46,7 +46,7 @@ public class OptionsRowWiringTests
         // Down four: the automatic-download pair and the two message-authentication rows now
         // reach the reading pane. Each of the four was the behaviour unconditionally, which is
         // the actively deceptive shape the lookalike-domain row was fixed out of.
-        ["trust"] = 2,
+        ["trust"] = 1,
     };
 
     [Fact]

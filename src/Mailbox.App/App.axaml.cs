@@ -721,6 +721,89 @@ public partial class App : Application
         }
     }
 
+    /// <summary>
+    /// Makes the profile's databases match what the reader asked for, and takes the key.
+    /// </summary>
+    /// <remarks>
+    /// Idempotent and self-healing, which is what makes it safe to do at every start: it looks at
+    /// what the setting says, what the keyring holds and what the files actually are, and moves
+    /// whatever disagrees. A run interrupted half way through leaves a profile part encrypted,
+    /// and the next start finishes it.
+    /// <para>
+    /// <b>Nothing is encrypted where the key cannot be kept.</b> With no Secret Service the
+    /// credential store is the in-memory one, and a key kept there is gone when the process ends
+    /// — which would leave every database on this machine unreadable by anything, for ever. That
+    /// is the one failure this feature could produce that no backup would fix, so it is refused
+    /// outright and said in the log.
+    /// </para>
+    /// </remarks>
+    private static void SettleStoreEncryption(string profileDirectory, SecurityOptions security)
+    {
+        // A capture run works on a throwaway store and an in-memory keyring; encrypting it would
+        // be a rewrite of somebody else's temporary files for no benefit.
+        if (WindowCapture.IsRequested && !RealKeyringRequested) return;
+
+        var wanted = security.EncryptStore;
+        var keyring = Secrets as SecretServiceStore;
+
+        if (wanted && keyring is null)
+        {
+            Log.Warn(
+                "The local store cannot be encrypted: there is no desktop keyring to keep the key "
+                + "in, and a key this application forgot would leave the mail unreadable. "
+                + "Install libsecret and a running keyring, or turn the setting off.");
+            return;
+        }
+
+        var stored = keyring?.LoadAtStartup(StoreKey.Account, StoreKey.Purpose);
+        var key = StoreKey.Parse(stored);
+
+        if (wanted)
+        {
+            if (key is null)
+            {
+                key = StoreKey.Make();
+                if (keyring!.SaveAtStartup(StoreKey.Account, StoreKey.Purpose, StoreKey.Format(key)))
+                {
+                    Log.Info("Store: a key was made and put in the desktop keyring.");
+                }
+                else
+                {
+                    // Never encrypt with a key that was not written down.
+                    Log.Warn("Store: the key could not be saved to the keyring, so nothing was encrypted.");
+                    return;
+                }
+            }
+
+            var done = StoreEncryption.Encrypt(profileDirectory, key);
+            if (!done.Worked)
+            {
+                Log.Warn($"Store: {done.Problem}");
+                return;
+            }
+
+            if (done.Changed.Count > 0) Log.Info($"Store: encrypted {done.Changed.Count} database(s).");
+            StoreKey.Use(key);
+            return;
+        }
+
+        // Switched off, or never on. A key in the keyring means the profile is encrypted and the
+        // reader has asked for it not to be.
+        if (key is null) return;
+
+        var back = StoreEncryption.Decrypt(profileDirectory, key);
+        if (!back.Worked)
+        {
+            // The files are still encrypted, so the key is still needed and must not be dropped.
+            Log.Warn($"Store: {back.Problem}");
+            StoreKey.Use(key);
+            return;
+        }
+
+        if (back.Changed.Count > 0) Log.Info($"Store: decrypted {back.Changed.Count} database(s).");
+        keyring?.DeleteAtStartup(StoreKey.Account, StoreKey.Purpose);
+    }
+
     private void StartUp()
     {
         // Composition root. Bundled typefaces register before the resolver is built, and font
@@ -795,6 +878,18 @@ public partial class App : Application
                     System.IO.Path.GetTempPath(), $"mailbox-store-{Environment.ProcessId}", "accounts")).FullName
                 : AccountStores.DefaultDirectory();
         }
+        Secrets = WindowCapture.IsRequested && !RealKeyringRequested
+            ? new InMemoryCredentialStore()
+            : Credentials.Best();
+
+        // Before a single database is opened: the key has to be in hand for the first page read,
+        // and making the profile match what the reader asked for is only safe while nothing has
+        // it open. Its own SecurityOptions rather than the shared one, which is built later — the
+        // settings file is already loaded, and the ordering here is decided by the stores.
+        SettleStoreEncryption(
+            System.IO.Path.GetDirectoryName(accountsDirectory) ?? accountsDirectory,
+            new SecurityOptions(Settings));
+
         Accounts = new AccountStores(accountsDirectory, AccountOrder);
 
         // feeds.db sits beside the accounts directory, for the same reason pim.db does — and
@@ -829,9 +924,6 @@ public partial class App : Application
         // this process, and that needs the write to have gone there. A run that asks for it is
         // asking to leave an entry behind, so it names its own account and clears up after
         // itself.
-        Secrets = WindowCapture.IsRequested && !RealKeyringRequested
-            ? new InMemoryCredentialStore()
-            : Credentials.Best();
         OAuth = new OAuthAccounts(Secrets);
         Trust = new CertificateTrust(Settings);
 

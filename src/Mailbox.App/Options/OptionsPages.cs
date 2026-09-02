@@ -643,7 +643,20 @@ public static class OptionsPages
                 {
                     Key = SecurityOptions.OpenPgpThroughGnuPgKey,
                 },
-                new CheckRow("Encrypt the local store with a master password"),
+                // Not "with a master password", which is what this row used to promise and what
+                // it will not do: a passphrase typed at every start is one people turn off, and
+                // one cached to avoid that is cached in this same keyring — so the password would
+                // be ceremony rather than protection. The key is random and the keyring holds it,
+                // which is the bargain the browsers make with saved passwords and is worth
+                // stating rather than dressing up.
+                new CheckRow("Encrypt the mail, calendar and contacts kept on this computer")
+                {
+                    Key = SecurityOptions.EncryptStoreKey,
+                },
+                new NoteRow(
+                    "The key is kept in your desktop keyring. This protects the files if the disk "
+                    + "is read without your login — a lost machine, a copied backup — and not "
+                    + "against anything running as you. Takes effect when Mailbox next starts."),
             ]),
 
             // The keys themselves. Until this page existed the ring was whatever another tool had

@@ -32,9 +32,10 @@ public static class StoreBackup
             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
             if (File.Exists(destination)) File.Delete(destination);
 
-            using var target = new SqliteConnection(
-                new SqliteConnectionStringBuilder { DataSource = destination }.ToString());
-            target.Open();
+            // Keyed like every other connection, so a backup of an encrypted store is itself
+            // encrypted — a copy of somebody's mail in the clear beside the original would
+            // undo the whole point of the setting.
+            using var target = SqliteStore.Connect(destination);
 
             store.BackupTo(target);
 

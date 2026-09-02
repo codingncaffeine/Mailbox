@@ -41,6 +41,9 @@ public sealed class SecurityOptions(SettingsStore settings)
     /// <summary>"Use GnuPG and its agent for OpenPGP."</summary>
     public const string OpenPgpThroughGnuPgKey = "security.openpgp.gnupg";
 
+    /// <summary>"Encrypt the mail, calendar and contacts kept on this computer."</summary>
+    public const string EncryptStoreKey = "security.store.encrypt";
+
     private readonly SettingsStore _settings = settings ?? throw new ArgumentNullException(nameof(settings));
 
     /// <summary>Whether S/MIME signatures are checked and encrypted mail is opened at all.</summary>
@@ -76,6 +79,25 @@ public sealed class SecurityOptions(SettingsStore settings)
     {
         get => _settings.GetBool(OpenPgpThroughGnuPgKey, false);
         set => _settings.Set(OpenPgpThroughGnuPgKey, value);
+    }
+
+    /// <summary>
+    /// Whether the databases on this computer are encrypted.
+    /// </summary>
+    /// <remarks>
+    /// Off by default. Taking effect means rewriting every page of every database, which happens
+    /// on the next start with nothing open rather than underneath a running interface — so this
+    /// setting records what the reader asked for and the start-up makes it true.
+    /// <para>
+    /// What it protects and what it does not is written where the key lives, and it is worth
+    /// reading before promising anybody anything: the key is in the desktop keyring, so this
+    /// defends a disk without a login and not a login without a password.
+    /// </para>
+    /// </remarks>
+    public bool EncryptStore
+    {
+        get => _settings.GetBool(EncryptStoreKey, false);
+        set => _settings.Set(EncryptStoreKey, value);
     }
 
     /// <summary>

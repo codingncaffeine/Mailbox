@@ -84,10 +84,18 @@ public abstract class SqliteStore : IDisposable
             // preview beside the real thing — would silently be one.
             Cache = SqliteCacheMode.Private,
             ForeignKeys = true,
+
+            // Off, and it has to be. A pooled connection comes back already open and already
+            // keyed, so the key this store hands it is applied to a database that has long since
+            // been unlocked — which does nothing, and would make a wrong key look like a right
+            // one. Measured: with pooling on, a store opened with no key at all read back
+            // perfectly. The cost is a file handle per open rather than a shared one.
+            Pooling = false,
         }.ToString();
 
         _connection = new SqliteConnection(_connectionString);
         _connection.Open();
+        Unlock(_connection);
         Configure();
         Migrate();
 
@@ -106,6 +114,53 @@ public abstract class SqliteStore : IDisposable
 
     /// <summary>The newest schema this build writes.</summary>
     public int LatestVersion => _steps.Count;
+
+    /// <summary>
+    /// Hands a freshly opened connection the key, when the stores on this machine are encrypted.
+    /// </summary>
+    /// <remarks>
+    /// Every connection, and before anything else touches the file: the key has to be given
+    /// before the first page is read, and a reader opened without it would fail on its first
+    /// query rather than at its open. With no key set this does nothing at all and the file is an
+    /// ordinary SQLite database — which is what every profile is until somebody turns encryption
+    /// on, and what they go back to if they turn it off.
+    /// <para>
+    /// The bytes as bytes, in hexadecimal: the alternative spelling runs the text through a key
+    /// derivation, and what is stored is already random.
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// Opens any connection to a store file the way the stores themselves do: pooling off, and
+    /// keyed where the profile is encrypted.
+    /// </summary>
+    /// <remarks>
+    /// Here because the stores are not the only thing that opens these files — the probe that
+    /// decides whether a file is a mail store, and the backup's target — and every one of them
+    /// has to agree about the key. A connection built somewhere else is a connection that opens
+    /// an encrypted store and reports it as "not a mail store", which is what happened.
+    /// </remarks>
+    public static SqliteConnection Connect(string path, SqliteOpenMode mode = SqliteOpenMode.ReadWriteCreate)
+    {
+        var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = path,
+            Mode = mode,
+            Pooling = false,
+        }.ToString());
+
+        connection.Open();
+        Unlock(connection);
+        return connection;
+    }
+
+    internal static void Unlock(SqliteConnection connection)
+    {
+        if (StoreKey.Hex is not { Length: > 0 } hex) return;
+
+        using var key = connection.CreateCommand();
+        key.CommandText = $"PRAGMA key = \"x'{hex}'\"";
+        key.ExecuteNonQuery();
+    }
 
     private void Configure()
     {
@@ -234,6 +289,7 @@ public abstract class SqliteStore : IDisposable
     {
         var reader = new SqliteConnection(_connectionString);
         reader.Open();
+        Unlock(reader);
 
         // The pragmas that are the connection's rather than the file's. WAL is the file's and is
         // already set; a reader that met a checkpoint would otherwise fail instead of waiting.

@@ -41,13 +41,9 @@ public sealed class MailStore : SqliteStore
 
         try
         {
-            using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
-            {
-                DataSource = path,
-                Mode = SqliteOpenMode.ReadOnly,
-            }.ToString());
-
-            connection.Open();
+            // Through the shared opener, so an encrypted store is opened with its key rather
+            // than reported as somebody else's file.
+            using var connection = SqliteStore.Connect(path, SqliteOpenMode.ReadOnly);
 
             using var version = connection.CreateCommand();
             version.CommandText = "PRAGMA user_version";

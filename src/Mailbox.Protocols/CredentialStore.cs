@@ -87,6 +87,89 @@ public sealed class SecretServiceStore : ICredentialStore
         return result.Ok;
     }
 
+    /// <summary>
+    /// The same lookup, done synchronously, for the one caller that is legitimately synchronous.
+    /// </summary>
+    /// <remarks>
+    /// The store's key has to be in hand before the first database is opened, and that happens in
+    /// a start-up that runs before there is a dispatcher to await on. Written as its own
+    /// synchronous call rather than by blocking on the asynchronous one: running a program and
+    /// reading its output is synchronous by nature, the task was the wrapper, and unwrapping a
+    /// task by waiting on it is the shape this codebase has a sweep test against.
+    /// <para>
+    /// Nothing else should use these. Everything that runs once the interface is up has a
+    /// dispatcher to await on and should.
+    /// </para>
+    /// </remarks>
+    public string? LoadAtStartup(string account, string purpose)
+    {
+        var result = Run(
+            ["lookup", "service", ServiceAttribute, "account", account, "purpose", purpose],
+            input: null);
+
+        return result.Ok && result.Output.Length > 0 ? result.Output.TrimEnd('\n') : null;
+    }
+
+    /// <summary>The same save, synchronously, for the same one caller.</summary>
+    public bool SaveAtStartup(string account, string purpose, string secret)
+        => Run(
+            ["store", "--label", $"Mailbox — {purpose} — {account}",
+             "service", ServiceAttribute, "account", account, "purpose", purpose],
+            input: secret).Ok;
+
+    /// <summary>The same clear, synchronously, for the same one caller.</summary>
+    public bool DeleteAtStartup(string account, string purpose)
+        => Run(
+            ["clear", "service", ServiceAttribute, "account", account, "purpose", purpose],
+            input: null).Ok;
+
+    /// <summary>Runs secret-tool and waits for it. No tasks anywhere in here.</summary>
+    private static (bool Ok, string Output, string Error) Run(IReadOnlyList<string> arguments, string? input)
+    {
+        try
+        {
+            var start = new ProcessStartInfo(Tool)
+            {
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            };
+
+            foreach (var argument in arguments) start.ArgumentList.Add(argument);
+
+            using var process = Process.Start(start);
+            if (process is null) return (false, string.Empty, "secret-tool would not start");
+
+            if (input is not null) process.StandardInput.Write(input);
+            process.StandardInput.Close();
+
+            var output = process.StandardOutput.ReadToEnd();
+            var error = process.StandardError.ReadToEnd();
+
+            if (!process.WaitForExit((int)Patience.TotalMilliseconds))
+            {
+                // A keyring that never answers must not be able to stop the application.
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+                catch (InvalidOperationException)
+                {
+                    // It finished between the wait and the kill.
+                }
+
+                return (false, string.Empty, "the keyring did not answer");
+            }
+
+            return (process.ExitCode == 0, output, error);
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or IOException or InvalidOperationException)
+        {
+            return (false, string.Empty, ex.Message);
+        }
+    }
+
     private bool Probe()
     {
         try

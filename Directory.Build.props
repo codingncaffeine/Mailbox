@@ -41,6 +41,16 @@
     <AvaloniaWebViewVersion>12.1.0</AvaloniaWebViewVersion>
     <MailKitVersion>4.17.0</MailKitVersion>
     <SqliteVersion>10.0.11</SqliteVersion>
+    <!--
+      The native SQLite the stores actually run on. Microsoft.Data.Sqlite is the managed half
+      and brings its own build; this replaces it with SQLite3 Multiple Ciphers, which is the same
+      SQLite plus page-level encryption. Deliberately not SQLCipher's own bundle: that ships
+      SQLite 3.39, fourteen releases behind, and encrypting the store is no reason to give every
+      reader who never turns it on a four-year-old database engine. This one is 3.53.4 — a patch
+      ahead of the bundle it replaces — and carries linux-x64 and linux-arm64 natives, which the
+      aarch64 packaging needs.
+    -->
+    <SqliteCiphersVersion>2.4.0</SqliteCiphersVersion>
     <!-- The LDAP client for the directory address book; Microsoft's, on the runtime's own
          servicing band. -->
     <LdapVersion>10.0.11</LdapVersion>

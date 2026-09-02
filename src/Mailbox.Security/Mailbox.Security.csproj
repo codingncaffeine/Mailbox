@@ -12,7 +12,8 @@
     <!-- The certificate store is a SQLite file, and MimeKit's own file-name constructor can only
          find System.Data.SQLite. The same provider the mail store already uses is handed to
          MimeKit as a connection instead, so nothing new is shipped — see CertificateStore. -->
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="$(SqliteVersion)" />
+    <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="$(SqliteVersion)" />
+    <PackageReference Include="SQLite3MC.PCLRaw.bundle" Version="$(SqliteCiphersVersion)" />
   </ItemGroup>
 
   <ItemGroup>

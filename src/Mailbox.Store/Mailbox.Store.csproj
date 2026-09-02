@@ -6,7 +6,8 @@
   -->
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="$(SqliteVersion)" />
+    <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="$(SqliteVersion)" />
+    <PackageReference Include="SQLite3MC.PCLRaw.bundle" Version="$(SqliteCiphersVersion)" />
   </ItemGroup>
 
   <ItemGroup>
