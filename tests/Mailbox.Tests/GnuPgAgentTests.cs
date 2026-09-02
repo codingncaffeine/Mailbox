@@ -285,29 +285,40 @@ public class GnuPgAgentTests
     }
 
     /// <summary>
-    /// The claim this whole path has to make: a packet with no modification detection releases
-    /// no plaintext.
+    /// The invariant this whole path has to hold: no plaintext leaves a decryption whose
+    /// integrity GnuPG did not prove.
     /// </summary>
     /// <remarks>
-    /// Current GnuPG refuses such a packet by itself — "decryption forced to fail" — so this
-    /// passes today on GnuPG's own account rather than on ours. It is still the test worth
-    /// having: it is a claim about the behaviour rather than about who enforces it, and the
-    /// check here is what holds if that default is ever relaxed or the packet is one GnuPG
-    /// treats more leniently. What is asserted is the outcome — no bytes, and a sentence saying
-    /// why.
+    /// Asserted as the invariant rather than as one fixture's outcome, because what a given
+    /// GnuPG will <em>make</em> when asked for a legacy packet is not stable across versions —
+    /// current builds refuse to decrypt one at all ("decryption forced to fail"), and some will
+    /// not produce one in the first place. Either answer is correct and the test must accept
+    /// both; what must never happen is bytes coming back with nothing vouching for them. So the
+    /// packet is built the old way, decrypted, and the two allowed outcomes are checked: refused
+    /// with nothing released, or opened with the integrity actually proven.
     /// </remarks>
     [Fact]
-    public async Task APacketWithNoModificationDetectionIsNotShown()
+    public async Task NoPlaintextIsReleasedWithoutProofOfIntegrity()
     {
         Assert.SkipUnless(GnuPgAgent.IsAvailable, "GnuPG is not installed on this machine.");
         using var keyring = new Keyring();
 
-        var without = keyring.WithoutIntegrityProtection(Content);
-        Assert.NotEmpty(without);
+        var legacy = keyring.WithoutIntegrityProtection(Content);
+        Assert.NotEmpty(legacy);
 
-        var opened = await keyring.Agent.DecryptAsync(without, TestContext.Current.CancellationToken);
+        var opened = await keyring.Agent.DecryptAsync(legacy, TestContext.Current.CancellationToken);
 
-        Assert.False(opened.Worked);
+        if (opened.Worked)
+        {
+            // It came back, so this GnuPG made a packet that does carry integrity protection —
+            // and the proof has to be there, or the rule leaked.
+            Assert.True(
+                GnuPgAgent.IsIntegrityProven(opened),
+                "plaintext was released from a packet whose integrity was not proven");
+            return;
+        }
+
+        // Refused, and nothing came out with it.
         Assert.Empty(opened.Output);
         Assert.NotNull(opened.Problem);
     }
