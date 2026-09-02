@@ -67,8 +67,9 @@ nothing cryptographic happens until you ask.
 
 **Calendar.** Recurring events with real time-zone and DST handling, a second time-zone
 column, iMIP invitations (send, receive, answer), reminders, a scheduling assistant, and
-read-only `.ics` subscriptions. **People:** vCard address books, autocomplete, Select Names,
-business-card and list views, categories shared across every module. **Tasks:** the To-Do
+read-only `.ics` subscriptions. **People:** vCard address books, read-only LDAP
+directories, autocomplete, Select Names, business-card and list views, categories shared across
+every module. **Tasks:** the To-Do
 List, task folders, recurring chores that regenerate on completion, reminders, and Google
 Tasks sync. **Notes and Journal:** a notes wall and a six-view journal timeline. **Feeds:**
 a built-in RSS/Atom reader as a module of its own, with its own store.
@@ -198,7 +199,7 @@ src/Mailbox.Store            SQLite store, migrations, search index, backup and 
 src/Mailbox.Protocols        IMAP, POP3, SMTP, autoconfig, OAuth, feeds, credentials
 src/Mailbox.Dav              CalDAV and CardDAV sync
 src/Mailbox.Scheduling       iCalendar, recurrence, time zones, invitations
-src/Mailbox.Contacts         vCard, the address book and name parsing
+src/Mailbox.Contacts         vCard, the address book, LDAP directories and name parsing
 src/Mailbox.Editor           the rich text editor and its HTML
 src/Mailbox.Rendering        the sanitizer and the offscreen engine the reading pane draws with
 src/Mailbox.Security         S/MIME and OpenPGP

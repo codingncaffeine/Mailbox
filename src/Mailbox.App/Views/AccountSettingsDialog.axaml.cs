@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using Mailbox.Contacts.Directory;
 using Mailbox.Core.Calendars;
 using Mailbox.Core.Feeds;
 using Mailbox.Protocols;
@@ -39,9 +40,10 @@ namespace Mailbox.App.Views;
 /// RSS Feeds, Internet Calendars, Published Calendars and Address Books all act: each lists what
 /// this machine holds, and changes or removes an entry. Published Calendars has no New… because
 /// the reference has none — a calendar is published from the calendar itself, which is where the
-/// reader knows which one they mean. What is left is Address Books' Change…, which wants an LDAP
-/// directory to change the settings of; it is live and says so rather than being greyed with no
-/// explanation or left off the toolbar the reference shows.
+/// reader knows which one they mean. Address Books lists two kinds of thing, so its New… asks
+/// which: an address book on this machine, or an LDAP directory to look people up in. Change…
+/// belongs to the directories — a local book is renamed in the People module and a CardDAV one is
+/// the server's to name — so it stands for those rows and is greyed for the rest.
 /// </para>
 /// </remarks>
 public sealed class AccountSettingsDialog : Window
@@ -81,6 +83,12 @@ public sealed class AccountSettingsDialog : Window
     private readonly Button _calendarNew;
     private readonly Button _calendarChange;
     private readonly Button _calendarRemove;
+
+    // Address Books — the toolbar is held so the harness can press it, as the other tabs' are.
+    private ClassicListView _books = null!;
+    private Button _bookNew = null!;
+    private Button _bookChange = null!;
+    private Button _bookRemove = null!;
 
     // Data Files
     private readonly ClassicListView _files = Named(new ClassicListView(), "Data files");
@@ -1155,10 +1163,13 @@ public sealed class AccountSettingsDialog : Window
             Columns = [new ClassicColumn("Name", 282), new ClassicColumn("Type", 281)],
         }, "Address books");
 
+        _books = list;
         _refreshOnSelect[5] = Fill;
 
-        // What the People module has: the local address books, and the ones a CardDAV account
-        // brought. The type column says which, as the reference's does for its own kinds.
+        // What the People module has, and where else this application looks people up: the local
+        // address books, the ones a CardDAV account brought, and the LDAP directories. The type
+        // column says which, as the reference's does for its own kinds. A directory's row carries
+        // its name rather than a collection id, because a directory is a setting and has none.
         void Fill()
         {
             list.SetRows(
@@ -1166,48 +1177,195 @@ public sealed class AccountSettingsDialog : Window
                 .. App.Contacts.AddressBooks().Select(book => new ClassicRow(
                     [book.DisplayName, book.DavUrl is { Length: > 0 } ? "CardDAV" : "Mailbox Address Book"],
                     Tag: book.Id)),
+                .. App.Directories.All().Select(directory => new ClassicRow(
+                    [directory.Name, directory.IsEnabled ? directory.Kind : $"{directory.Kind} (off)"],
+                    Tag: directory.Name)),
             ]);
         }
 
         Fill();
+        _refillBooks = Fill;
 
-        var change = ToolButton("change", "Change...", () => Task.CompletedTask);
-        var remove = ToolButton("remove", "Remove", () =>
+        var change = ToolButton("change", "Change...", ChangeAddressBookAsync);
+        var remove = ToolButton("remove", "Remove", RemoveAddressBookAsync);
+
+        // Change… acts on a directory and on nothing else: a local address book is renamed in the
+        // People module and a CardDAV one is the server's to name.
+        void Enable()
         {
-            if (list.SelectedRow?.Tag is not long id || App.Contacts.AddressBooks().Count <= 1) return;
-            App.Contacts.Repository.RemoveCollection(id);
-            Changed = true;
-            Fill();
-        });
-
-        change.IsEnabled = false;
-        list.SelectionChanged += (_, _) => remove.IsEnabled = list.SelectedRow is not null && App.Contacts.AddressBooks().Count > 1;
-        remove.IsEnabled = false;
-
-        var toolbar = Toolbar(
-            ToolButton("book", "New...", async () =>
+            change.IsEnabled = list.SelectedRow?.Tag is string;
+            remove.IsEnabled = list.SelectedRow?.Tag switch
             {
-                var name = await Prompt.AskAsync(this, "New Address Book", "Name:", "Contacts");
-                if (string.IsNullOrWhiteSpace(name)) return;
+                string => true,
+                long => App.Contacts.AddressBooks().Count > 1,
+                _ => false,
+            };
+        }
 
-                // A second book under an existing name would be indistinguishable from the
-                // first in every picker that lists them — and the prompt's own prefill invites
-                // exactly that with one press of Enter.
-                if (App.Contacts.AddressBooks().Any(
-                        b => string.Equals(b.DisplayName, name.Trim(), StringComparison.OrdinalIgnoreCase)))
-                {
-                    await Later("New Address Book",
-                        $"There is already an address book called “{name.Trim()}”. Choose another name.");
-                    return;
-                }
+        list.SelectionChanged += (_, _) => Enable();
+        Enable();
 
-                App.Contacts.Repository.AddCollection(Mailbox.Store.Pim.CollectionKind.Contacts, name.Trim());
-                Changed = true;
-                Fill();
-            }),
-            change, remove);
+        var toolbar = Toolbar(ToolButton("book", "New...", NewAddressBookAsync), change, remove);
+
+        _bookNew = (Button)toolbar.Children[0];
+        _bookChange = change;
+        _bookRemove = remove;
 
         return Page(toolbar, list, null);
+    }
+
+    /// <summary>Re-reads the Address Books list, once the tab that owns it has been built.</summary>
+    private Action _refillBooks = () => { };
+
+    /// <summary>
+    /// New… — which of the two kinds, and then the window for it.
+    /// </summary>
+    /// <remarks>
+    /// A method rather than a lambda on the button, so the harness can await it: it opens a
+    /// window and everything read back afterwards is about what that window did.
+    /// </remarks>
+    private async Task NewAddressBookAsync()
+    {
+        // Two kinds of thing live on this tab now, so New… asks which. The reference's own
+        // New… asks the same question for the same reason.
+        var kind = await Chooser.AskAsync(
+            this,
+            "New Address Book",
+            "What kind of address book?",
+            [
+                new Choice("Mailbox Address Book", "local", "Contacts kept on this machine"),
+                new Choice("Internet Directory Service (LDAP)", "ldap",
+                    "Look people up in a company or university directory"),
+            ],
+            "local");
+
+        if (kind is null) return;
+        if (string.Equals(kind, "ldap", StringComparison.Ordinal))
+        {
+            await EditDirectoryAsync(new LdapDirectory(), _refillBooks);
+            return;
+        }
+
+        var name = await Prompt.AskAsync(this, "New Address Book", "Name:", "Contacts");
+        if (string.IsNullOrWhiteSpace(name)) return;
+
+        // A second book under an existing name would be indistinguishable from the first in
+        // every picker that lists them — and the prompt's own prefill invites exactly that with
+        // one press of Enter.
+        if (App.Contacts.AddressBooks().Any(
+                b => string.Equals(b.DisplayName, name.Trim(), StringComparison.OrdinalIgnoreCase)))
+        {
+            await Later("New Address Book",
+                $"There is already an address book called “{name.Trim()}”. Choose another name.");
+            return;
+        }
+
+        App.Contacts.Repository.AddCollection(Mailbox.Store.Pim.CollectionKind.Contacts, name.Trim());
+        Changed = true;
+        _refillBooks();
+    }
+
+    /// <summary>Change… — a directory's settings, which is the only row this stands for.</summary>
+    private async Task ChangeAddressBookAsync()
+    {
+        if (_books.SelectedRow?.Tag is not string name || App.Directories.Find(name) is not { } directory) return;
+        await EditDirectoryAsync(directory, _refillBooks);
+    }
+
+    /// <summary>Remove — a local book, or a directory and the password it left behind.</summary>
+    private async Task RemoveAddressBookAsync()
+    {
+        switch (_books.SelectedRow?.Tag)
+        {
+            case long id when App.Contacts.AddressBooks().Count > 1:
+                App.Contacts.Repository.RemoveCollection(id);
+                Changed = true;
+                _refillBooks();
+                break;
+
+            case string name when App.Directories.Find(name) is { } directory:
+                App.Directories.Remove(name);
+                App.ForgetDirectoryPasswords();
+
+                // The password goes with it. A credential left in the keyring for a directory
+                // nobody can see is one nothing will ever clear.
+                if (directory.BindDn.Length > 0)
+                {
+                    await App.Secrets.DeleteAsync(directory.PasswordKey, Directories.PasswordPurpose);
+                }
+
+                Changed = true;
+                _refillBooks();
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Opens the directory window over this one, and files what comes back.
+    /// </summary>
+    /// <remarks>
+    /// The password goes to the keyring rather than beside the rest of the settings, so a
+    /// settings file that is copied or backed up carries no credential — the same arrangement
+    /// every other password in this application is under. Under a key naming the user and the
+    /// server, so two directories on one machine cannot overwrite each other's.
+    /// </remarks>
+    private async Task EditDirectoryAsync(LdapDirectory directory, Action done)
+    {
+        var stored = directory.BindDn.Length > 0
+            ? await App.Secrets.LoadAsync(directory.PasswordKey, Directories.PasswordPurpose)
+            : null;
+
+        var was = directory.Name.Length > 0 ? directory.Name : null;
+        var dialog = new DirectoryDialog(
+            directory,
+            stored,
+            name => App.Directories.IsTaken(name, except: was));
+
+        PoseDirectoryDialog(dialog);
+        await dialog.ShowDialog(this);
+        if (dialog.Result is not { } saved) return;
+
+        App.Directories.Save(saved, replacing: was);
+        App.ForgetDirectoryPasswords();
+
+        if (saved.BindDn.Length > 0 && dialog.Password is { Length: > 0 } password)
+        {
+            await App.Secrets.SaveAsync(saved.PasswordKey, Directories.PasswordPurpose, password);
+        }
+        else if (saved.BindDn.Length == 0 && was is not null && directory.BindDn.Length > 0)
+        {
+            // The user name was cleared, so the directory is anonymous now and the password it
+            // used to need is a credential nothing will ask for again.
+            await App.Secrets.DeleteAsync(directory.PasswordKey, Directories.PasswordPurpose);
+        }
+
+        Changed = true;
+        done();
+    }
+
+    /// <summary>
+    /// Drives the directory window for the harness, which cannot type into a modal.
+    /// <c>MAILBOX_DIRECTORY=name=Example;host=127.0.0.1;port=1389;tls=off;base=dc=example,dc=org;check;ok</c>
+    /// — each step logged with what it did, so a step that named nothing is not read as one that
+    /// worked.
+    /// </summary>
+    private static void PoseDirectoryDialog(DirectoryDialog dialog)
+    {
+        if (Environment.GetEnvironmentVariable("MAILBOX_DIRECTORY") is not { Length: > 0 } steps) return;
+
+        dialog.Opened += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(
+            async () =>
+            {
+                using var hold = Mailbox.App.Theming.WindowCapture.Hold();
+
+                // Semicolons, because a distinguished name is full of commas.
+                foreach (var step in steps.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    Mailbox.Core.Diagnostics.Log.Info(
+                        $"Harness: directory step “{step}” — {await dialog.PoseAsync(step)}.");
+                }
+            },
+            Avalonia.Threading.DispatcherPriority.Background);
     }
 
     /// <summary>
@@ -1228,8 +1386,13 @@ public sealed class AccountSettingsDialog : Window
     /// first are answered here rather than through their dialog, because a modal question is
     /// what a harness cannot press.
     /// </summary>
-    internal void Harness(string actions)
+    internal async Task HarnessAsync(string actions)
     {
+        // Held across the whole list: several of these open a window and wait for it, and a
+        // capture that exited between a press and its read-back would report the press as
+        // having done nothing.
+        using var hold = Mailbox.App.Theming.WindowCapture.Hold();
+
         foreach (var raw in actions.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             var (action, argument) = raw.Split(':', 2) is [var a, var b] ? (a, b) : (raw, string.Empty);
@@ -1278,6 +1441,61 @@ public sealed class AccountSettingsDialog : Window
                 case "removecalendar":
                     if (_calendars.SelectedRow?.Tag is long toRemove) RemoveSubscription(toRemove);
                     break;
+
+                // The Address Books tab. The buttons themselves rather than the methods behind
+                // them, so whether each is wired — and whether Change… is greyed on the row that
+                // is selected — is half of what the pose proves.
+                case "book":
+                    _books.SelectedIndex = int.Parse(argument, CultureInfo.InvariantCulture);
+                    Mailbox.Core.Diagnostics.Log.Info(
+                        $"Harness: book row {_books.SelectedIndex} is “{string.Join(" | ", _books.SelectedRow?.Cells ?? [])}”; "
+                        + $"Change… {(_bookChange.IsEnabled ? "stands" : "greyed")}, "
+                        + $"Remove {(_bookRemove.IsEnabled ? "stands" : "greyed")}");
+                    break;
+                // Awaited rather than pressed: each opens a window and the steps after it are
+                // about what that window did, so a fire-and-forget press would read them back
+                // before anything had happened.
+                case "booknew": await NewAddressBookAsync(); break;
+                case "bookchange":
+                    if (_bookChange.IsEnabled) await ChangeAddressBookAsync();
+                    else Mailbox.Core.Diagnostics.Log.Info("Harness: Change… is greyed for this row.");
+                    break;
+                case "bookremove":
+                    if (_bookRemove.IsEnabled) await RemoveAddressBookAsync();
+                    else Mailbox.Core.Diagnostics.Log.Info("Harness: Remove is greyed for this row.");
+                    break;
+                case "books":
+                    Mailbox.Core.Diagnostics.Log.Info(
+                        $"Harness: address books are {string.Join(", ", _books.Rows.Select(r => $"“{r.Cells[0]}” ({r.Cells[1]})"))}.");
+                    break;
+                case "directories":
+                    Mailbox.Core.Diagnostics.Log.Info(
+                        App.Directories.All().Count == 0
+                            ? "Harness: no directories are stored."
+                            : "Harness: directories are "
+                              + string.Join(
+                                  ", ",
+                                  App.Directories.All().Select(
+                                      d => $"“{d.Name}” {d.Where()} as “{(d.BindDn.Length > 0 ? d.BindDn : "anonymous")}”, "
+                                           + $"{(d.UseTls ? "encrypted" : "in the clear")}, "
+                                           + $"{d.Scope.ToString().ToLowerInvariant()}, at most {d.MaxResults}"))
+                              + ".");
+                    break;
+                case "search":
+                {
+                    // What the directories actually answer, which is the claim a stored
+                    // directory makes and the only one worth reading back.
+                    var found = await App.SearchDirectoriesAsync(argument);
+                    Mailbox.Core.Diagnostics.Log.Info(
+                        $"Harness: directory search for “{argument}” — {found.People.Count} found"
+                        + (found.Worked ? string.Empty : $"; refused: {found.Refusal}")
+                        + (found.People.Count == 0
+                            ? "."
+                            : ": " + string.Join(
+                                " | ",
+                                found.People.Select(p => $"{p.Named()} <{p.PrimaryEmail}>")) + "."));
+                    break;
+                }
             }
         }
 

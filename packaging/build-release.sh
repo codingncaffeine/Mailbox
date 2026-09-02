@@ -112,6 +112,10 @@ build_one() {
     mkdir -p "$deb/DEBIAN"
     local installed_kb
     installed_kb=$(du -sk "$deb/usr" | cut -f1)
+    # libldap is a Recommends rather than a Depends: it is what the LDAP address book opens by
+    # name at run time, nobody without a company directory needs one, and the directory says so
+    # rather than the application failing to start.
+    #
     # Depends are Debian 13 (trixie) names, the primary .deb target; the ICU alternates reach
     # back to older releases. WPE WebKit is what renders mail; without it the reading pane
     # renders the message as text, which the pane now decides for itself rather than building an
@@ -125,7 +129,7 @@ Priority: optional
 Architecture: $debarch
 Installed-Size: $installed_kb
 Depends: libc6, libgcc-s1, libstdc++6, libicu76 | libicu74 | libicu72, zlib1g, libx11-6, libxext6, libxi6, libxrandr2, libxcursor1, libice6, libsm6, libfontconfig1, libfreetype6, libegl1, libgl1, libglib2.0-0t64 | libglib2.0-0, libsoup-3.0-0, libwayland-client0, libwayland-egl1, libwayland-server0, libwayland-cursor0, libxkbcommon0, libgbm1, libdrm2, libwpewebkit-2.0-1, libwpe-1.0-1, libwpebackend-fdo-1.0-1
-Recommends: libsecret-tools, libnotify-bin, hunspell-en-us, fonts-crosextra-carlito, fonts-crosextra-caladea, libgtk-3-0t64 | libgtk-3-0, xdg-desktop-portal
+Recommends: libsecret-tools, libnotify-bin, hunspell-en-us, fonts-crosextra-carlito, fonts-crosextra-caladea, libgtk-3-0t64 | libgtk-3-0, xdg-desktop-portal, libldap2 | libldap-2.5-0
 Suggests: hunspell-en-gb, fonts-liberation, fonts-noto-core
 Maintainer: Mailbox <codingncaffeine@users.noreply.github.com>
 Homepage: https://github.com/codingncaffeine/Mailbox

@@ -111,6 +111,10 @@ Recommends:     libWPEBackend-fdo-1.0.so.1()(64bit)
 Recommends:     /usr/bin/secret-tool
 Recommends:     /usr/bin/notify-send
 
+# The LDAP library, for looking people up in a company directory. By soname again: Fedora calls
+# the package openldap and Debian calls it libldap2, and both provide this.
+Recommends:     libldap.so.2()(64bit)
+
 # Integrations the application does without: the portal answers the file dialogs, GTK is the
 # fallback where none does.
 Recommends:     xdg-desktop-portal

@@ -1775,7 +1775,7 @@ public partial class MainWindow : Window
                     var accounts = new AccountSettingsDialog(Environment.GetEnvironmentVariable("MAILBOX_ACCOUNTS_TAB"));
                     if (Environment.GetEnvironmentVariable("MAILBOX_ACCOUNTS_ACTION") is { Length: > 0 } actions)
                     {
-                        accounts.Opened += (_, _) => accounts.Harness(actions);
+                        accounts.Opened += (_, _) => _ = accounts.HarnessAsync(actions);
                     }
                     await accounts.ShowDialog(this);
                 };

@@ -41,6 +41,9 @@
     <AvaloniaWebViewVersion>12.1.0</AvaloniaWebViewVersion>
     <MailKitVersion>4.17.0</MailKitVersion>
     <SqliteVersion>10.0.11</SqliteVersion>
+    <!-- The LDAP client for the directory address book; Microsoft's, on the runtime's own
+         servicing band. -->
+    <LdapVersion>10.0.11</LdapVersion>
     <IcalNetVersion>5.2.3</IcalNetVersion>
     <VCardsVersion>8.1.2</VCardsVersion>
     <RichEditorVersion>1.1.0</RichEditorVersion>

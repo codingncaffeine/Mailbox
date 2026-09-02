@@ -1266,6 +1266,20 @@ public sealed partial class ComposeSurface : UserControl
     private readonly List<RecipientAutocomplete> _completions = [];
 
     /// <summary>
+    /// Re-asks whichever completion list is open, for an answer that arrived after it was drawn.
+    /// </summary>
+    /// <remarks>
+    /// A directory answers in its own time, and the list the reader is looking at was built
+    /// before it did. Refreshing a list that is not open does nothing — the guard inside it
+    /// closes on a line that has stopped wanting suggestions — so this is safe to call whenever
+    /// an answer lands.
+    /// </remarks>
+    private void RefreshCompletions()
+    {
+        foreach (var completion in _completions) completion.Refresh();
+    }
+
+    /// <summary>
     /// What the Auto-Complete List offers for what has been typed: the addresses written to
     /// before, merged across every account, and then the address book.
     /// </summary>
@@ -1295,6 +1309,13 @@ public sealed partial class ComposeSurface : UserControl
                         entry.Address, entry.DisplayName, entry.Address, entry.Formatted,
                         Weight: entry.Weight, LastUsed: entry.LastUsed);
             }
+        }
+
+        // The directories, if any answered a prefix already asked for. Never waited on: what is
+        // here is here, and an answer that lands later re-opens the list through the callback.
+        foreach (var suggestion in App.DirectorySuggestions.Offer(typed, RefreshCompletions))
+        {
+            merged.TryAdd(suggestion.Key, suggestion);
         }
 
         foreach (var suggestion in _contacts is { } book ? ContactSuggestions.For(book, typed) : [])

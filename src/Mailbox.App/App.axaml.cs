@@ -114,6 +114,80 @@ public partial class App : Application
     /// <summary>The address books, and what reads and writes a contact in them.</summary>
     public static Mailbox.Contacts.ContactBook Contacts { get; private set; } = null!;
 
+    /// <summary>
+    /// The LDAP directories people are looked up in — a company or a university's own book,
+    /// which is read and never written.
+    /// </summary>
+    public static Mailbox.Contacts.Directory.Directories Directories { get; private set; } = null!;
+
+    /// <summary>
+    /// The bind passwords, read from the keyring once each and then remembered.
+    /// </summary>
+    /// <remarks>
+    /// Cached because this is asked on the way into a search that runs while somebody is typing:
+    /// the keyring is a D-Bus round trip and, on a locked keyring, a prompt — neither of which
+    /// belongs between two keystrokes. Cleared when a directory is saved, which is the only
+    /// moment a password can have changed.
+    /// </remarks>
+    private static readonly Dictionary<string, string?> DirectoryPasswords = [];
+
+    /// <summary>Forgets the remembered bind passwords, for a directory whose settings changed.</summary>
+    public static void ForgetDirectoryPasswords()
+    {
+        lock (DirectoryPasswords) DirectoryPasswords.Clear();
+        DirectorySuggestions.Forget();
+    }
+
+    /// <summary>
+    /// The directories' contribution to the Auto-Complete List, fetched beside the typing rather
+    /// than in it.
+    /// </summary>
+    public static Mailbox.Contacts.Directory.DirectorySuggestions DirectorySuggestions { get; } =
+        new(
+            typed => SearchDirectoriesAsync(typed, onlyAddressable: true),
+            work => Avalonia.Threading.Dispatcher.UIThread.Post(work));
+
+    /// <summary>
+    /// Everyone in every directory matching what was typed.
+    /// </summary>
+    /// <remarks>
+    /// The passwords are gathered first and awaited, and only then is the search handed to a
+    /// worker: the keyring is asynchronous and the LDAP client is not, and waiting on the first
+    /// from wherever this was called would be the block this arrangement exists to avoid.
+    /// </remarks>
+    public static async Task<Mailbox.Contacts.Directory.DirectoryResult> SearchDirectoriesAsync(
+        string? typed, bool onlyAddressable = false)
+    {
+        var directories = Directories.Searchable();
+        var passwords = new Dictionary<string, string?>(StringComparer.Ordinal);
+
+        foreach (var directory in directories)
+        {
+            if (directory.BindDn.Length == 0 || passwords.ContainsKey(directory.PasswordKey)) continue;
+            passwords[directory.PasswordKey] = await DirectoryPasswordAsync(directory);
+        }
+
+        return await Task.Run(() => Mailbox.Contacts.Directory.DirectoryLookup.Search(
+            directories,
+            directory => passwords.GetValueOrDefault(directory.PasswordKey),
+            typed,
+            onlyAddressable));
+    }
+
+    private static async Task<string?> DirectoryPasswordAsync(Mailbox.Contacts.Directory.LdapDirectory directory)
+    {
+        lock (DirectoryPasswords)
+        {
+            if (DirectoryPasswords.TryGetValue(directory.PasswordKey, out var held)) return held;
+        }
+
+        var password = await Secrets.LoadAsync(
+            directory.PasswordKey, Mailbox.Contacts.Directory.Directories.PasswordPurpose);
+
+        lock (DirectoryPasswords) DirectoryPasswords[directory.PasswordKey] = password;
+        return password;
+    }
+
     /// <summary>Options › Advanced › AutoArchive Settings…, as the archiver reads them.</summary>
     public static Mailbox.Core.Archive.AutoArchiveOptions AutoArchive { get; private set; } = null!;
 
@@ -721,6 +795,7 @@ public partial class App : Application
         CalendarOptions = new CalendarOptions(Settings);
         PeopleOptions = new PeopleOptions(Settings);
         Contacts = new Mailbox.Contacts.ContactBook(Pim);
+        Directories = new Mailbox.Contacts.Directory.Directories(Settings);
 
         // One set of categories over every module. The mail accounts keep a mirror of it so
         // their own join tables have rows to point at; adopting on first run is what keeps mail

@@ -5,6 +5,7 @@ using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Mailbox.Contacts;
+using Mailbox.Contacts.Directory;
 using Mailbox.Core.Diagnostics;
 using Mailbox.Store.Pim;
 
@@ -67,6 +68,19 @@ public sealed class AddressBookDialog : Window
 
     private IReadOnlyList<Collection> _collections = [];
     private IReadOnlyList<ContactRow> _rows = [];
+
+    /// <summary>
+    /// The directories, listed in the book picker after the books that are kept here.
+    /// </summary>
+    /// <remarks>
+    /// After, and never mixed in: a directory is somebody else's record, it is searched rather
+    /// than browsed, and a reader who has just added a contact should not have to wonder which
+    /// of the entries in front of them is theirs to edit.
+    /// </remarks>
+    private IReadOnlyList<LdapDirectory> _directories = [];
+
+    /// <summary>The directory search in flight, or a finished task. For the harness to await.</summary>
+    private Task _refreshing = Task.CompletedTask;
 
     /// <summary>An advanced find, or null while the list is showing everything.</summary>
     private AdvancedFind? _find;
@@ -188,8 +202,10 @@ public sealed class AddressBookDialog : Window
         // so it means the same thing with nothing selected — which is how the capture draws it.
         // Properties is not either: the reference draws it black over an empty list, and
         // pressing it with nothing chosen simply answers nothing, which greying also said.
-        var chosen = Selected() is not null;
-        _delete.IsEnabled = chosen;
+        // Delete never stands over a directory entry. It is somebody else's record of who works
+        // there, read-only by design, and a Delete that looked live would either do nothing or
+        // promise something this application has no business doing.
+        _delete.IsEnabled = Selected() is { IsReadOnly: false };
     }
 
     // ---- The search row ------------------------------------------------------------------
@@ -314,13 +330,27 @@ public sealed class AddressBookDialog : Window
     private void FillBooks()
     {
         _collections = _book.AddressBooks();
+        _directories = App.Directories.Searchable();
 
-        // Named as the reference names them: the book, then the account it belongs to.
-        _books.ItemsSource = _collections
-            .Select(c => c.Account is { Length: > 0 } account ? $"{c.DisplayName} - {account}" : c.DisplayName)
-            .ToList();
+        // Named as the reference names them: the book, then the account it belongs to. A
+        // directory says what it is, because searching one behaves differently from reading a
+        // book — nothing is listed until something is typed.
+        List<string> named =
+        [
+            .. _collections.Select(
+                c => c.Account is { Length: > 0 } account ? $"{c.DisplayName} - {account}" : c.DisplayName),
+            .. _directories.Select(d => $"{d.Name} - directory"),
+        ];
+        _books.ItemsSource = named;
 
-        if (_collections.Count > 0) _books.SelectedIndex = 0;
+        if (_collections.Count + _directories.Count > 0) _books.SelectedIndex = 0;
+    }
+
+    /// <summary>The directory on show, or null when the picker is on a book kept here.</summary>
+    private LdapDirectory? Directory()
+    {
+        var at = _books.SelectedIndex - _collections.Count;
+        return at >= 0 && at < _directories.Count ? _directories[at] : null;
     }
 
     /// <summary>The book on show, or null when the account has none.</summary>
@@ -335,6 +365,16 @@ public sealed class AddressBookDialog : Window
     /// <summary>Re-reads the book, filtered by whatever the search row is asking for.</summary>
     private void Refresh()
     {
+        if (Directory() is { } directory)
+        {
+            // Kept, so the harness can wait for it: a directory answers in its own time and a
+            // read-back taken before it did would report an empty list as the finding.
+            _refreshing = RefreshDirectoryAsync(directory);
+            return;
+        }
+
+        _refreshing = Task.CompletedTask;
+
         var book = Book();
         var rows = book is null ? _book.Rows() : _book.Rows([book.Id]);
 
@@ -344,6 +384,70 @@ public sealed class AddressBookDialog : Window
         _rows = rows;
         _list.SetRows([.. rows.Select(row => new ClassicRow(
             [row.Named(), DisplayName(row), row.Contact.PrimaryEmail ?? string.Empty], Tag: row.Id))]);
+
+        UpdateMenus();
+    }
+
+    /// <summary>
+    /// Searches a directory and shows what it found.
+    /// </summary>
+    /// <remarks>
+    /// Nothing is listed until something is typed. A directory is not a book to be browsed: a
+    /// company's holds everyone who works there and a university's holds everyone who studies
+    /// there, and "show me all of them" is a question no server will answer and no reader wants
+    /// the answer to. The row says so rather than looking like an empty address book.
+    /// <para>
+    /// Off the interface thread, and the window says it is working while it waits: a directory
+    /// that has stopped answering takes its timeout to say so, and a modal frozen for that long
+    /// is one somebody force-quits.
+    /// </para>
+    /// </remarks>
+    private async Task RefreshDirectoryAsync(LdapDirectory directory)
+    {
+        var typed = (_search.Text ?? string.Empty).Trim();
+        if (typed.Length == 0)
+        {
+            _rows = [];
+            _list.SetRows([new ClassicRow([$"Type a name and press Search to look in {directory.Name}.", string.Empty, string.Empty])]);
+            UpdateMenus();
+            return;
+        }
+
+        _list.SetRows([new ClassicRow([$"Searching {directory.Name}…", string.Empty, string.Empty])]);
+
+        var found = await App.SearchDirectoriesAsync(typed);
+
+        // A row id of its own, negative, so nothing can mistake a directory entry for a card in
+        // the store: every path that writes one asks the store for it by id, and a negative id
+        // matches nothing there.
+        var at = -1;
+        var rows = new List<ContactRow>();
+        foreach (var person in found.People)
+        {
+            rows.Add(new ContactRow(at--, 0, directory.Name, person, IsReadOnly: true));
+        }
+
+        _rows = rows;
+
+        if (!found.Worked && rows.Count == 0)
+        {
+            _list.SetRows([new ClassicRow([found.Refusal, string.Empty, string.Empty])]);
+            UpdateMenus();
+            return;
+        }
+
+        _list.SetRows([.. rows.Select(row => new ClassicRow(
+            [row.Named(), DisplayName(row), row.Contact.PrimaryEmail ?? string.Empty], Tag: row.Id))]);
+
+        if (found.Truncated)
+        {
+            Log.Info($"Harness: the directory had more than {directory.MaxResults} to say.");
+        }
+
+        Log.Info(
+            $"Harness: address book directory “{directory.Name}” for “{typed}” — {rows.Count} row(s)"
+            + (found.Worked ? string.Empty : $"; refused: {found.Refusal}")
+            + (found.Truncated ? "; truncated" : string.Empty) + ".");
 
         UpdateMenus();
     }
@@ -612,9 +716,12 @@ public sealed class AddressBookDialog : Window
                 default: Log.Warn($"Harness: the Address Book has no action '{action}'."); continue;
             }
 
+            // A directory answers in its own time; the read-back is about what it said.
+            await _refreshing;
+
             Log.Info($"Harness: address book {raw} → {_rows.Count} row(s), "
                      + $"selected \u201c{Selected()?.Named() ?? "nothing"}\u201d, "
-                     + $"book \u201c{Book()?.DisplayName ?? "none"}\u201d, "
+                     + $"book \u201c{Book()?.DisplayName ?? Directory()?.Name ?? "none"}\u201d, "
                      + $"menus delete={_delete.IsEnabled} properties={_properties.IsEnabled} write={_newMessage.IsEnabled}.");
 
             // What the three lines now hold, which is the whole claim of the picking half: a name

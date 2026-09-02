@@ -10,6 +10,14 @@
 
   <ItemGroup>
     <PackageReference Include="FolkerKinzel.VCards" Version="$(VCardsVersion)" />
+    <!--
+      The LDAP client, for looking people up in a company or university directory. Microsoft's
+      own, and on Linux it is a thin layer over the platform's OpenLDAP: it opens libldap by name
+      on first use, so a machine without one throws at the first search rather than at start-up.
+      The packages ask for libldap weakly and the directory says so when it is missing, which is
+      the same arrangement the reading pane's engine is under.
+    -->
+    <PackageReference Include="System.DirectoryServices.Protocols" Version="$(LdapVersion)" />
   </ItemGroup>
 
   <ItemGroup>
