@@ -84,6 +84,14 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
     private readonly ScrollViewer _fallbackHost;
 
     private NativeWebView? _web;
+
+    /// <summary>
+    /// Which engine <see cref="ChooseEngine"/> settled on, for the environment event to pass on.
+    /// The library takes the preference on the way up, so it has to be decided before the view is
+    /// built rather than read out of the environment when it is asked for.
+    /// </summary>
+    private bool _preferWebKitGtk;
+
     private MimeMessage? _message;
     private DkimResult? _verified;
     private string _fallbackText = string.Empty;
@@ -529,8 +537,23 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
 
     private Control BuildSurface()
     {
+        var choice = ChooseEngine();
+        if (!choice.UseWebView)
+        {
+            // Not an error and not a crash: this machine has no engine that can paint into the
+            // pane, so the pane renders the message itself. Said once, at Info, because it
+            // changes what the reader sees and is the first thing to check when a body looks
+            // plainer than it should.
+            Log.Info($"Reading pane engine: {choice.Reason}");
+            _web = null;
+            return _fallbackHost;
+        }
+
+        _preferWebKitGtk = choice.PreferWebKitGtk;
+
         try
         {
+            Log.Info($"Reading pane engine: {choice.Reason}");
             _web = new NativeWebView();
             _web.EnvironmentRequested += OnEnvironmentRequested;
             _web.NavigationStarted += OnNavigationStarted;
@@ -637,6 +660,40 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
         => ReferenceEquals(_web, web) && _loads.Started == generation;
 
     /// <summary>
+    /// Asks the platform which engines are here, and puts the answer to the pane's own rule.
+    /// </summary>
+    /// <remarks>
+    /// <c>MAILBOX_WEBVIEW=webkitgtk</c> is still the escape that reorders the two, so the
+    /// backends can be compared on a machine that has both; it no longer forces an engine that
+    /// would draw nothing, and the log says so when it is refused.
+    /// </remarks>
+    private static ReadingPaneEngines.Choice ChooseEngine()
+        => ReadingPaneEngines.Choose(
+            Probe(WebViewAdapterType.WpeWebKit, "WPE WebKit"),
+            Probe(WebViewAdapterType.WebKitGtk, "WebKitGTK"),
+            string.Equals(
+                Environment.GetEnvironmentVariable("MAILBOX_WEBVIEW"),
+                "webkitgtk",
+                StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// One engine as the platform describes it. An adapter the platform will not describe at all
+    /// is one that is not there.
+    /// </summary>
+    private static ReadingPaneEngines.Candidate Probe(WebViewAdapterType type, string name)
+    {
+        var info = WebViewAdapterInfo.GetAdapterInfo(type);
+        if (info is null) return new ReadingPaneEngines.Candidate(name, false, false, false, null);
+
+        return new ReadingPaneEngines.Candidate(
+            name,
+            info.IsInstalled,
+            info.IsSupported,
+            info.SupportedScenarios.HasFlag(WebViewEmbeddingScenario.OffscreenRenderer),
+            info.UnavailableReason);
+    }
+
+    /// <summary>
     /// What the engine reports itself as, for the log.
     /// </summary>
     /// <remarks>
@@ -663,17 +720,14 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
     /// Both are told to keep nothing: there is no session to persist and no cache worth keeping
     /// for documents that are already in the store.
     /// </remarks>
-    private static void OnEnvironmentRequested(object? sender, WebViewEnvironmentRequestedEventArgs e)
+    private void OnEnvironmentRequested(object? sender, WebViewEnvironmentRequestedEventArgs e)
     {
         var scratch = Path.Combine(Path.GetTempPath(), "mailbox-webview");
 
         switch (e)
         {
             case LinuxWpeWebViewEnvironmentRequestedEventArgs wpe:
-                wpe.PreferWebKitGtkInstead = string.Equals(
-                    Environment.GetEnvironmentVariable("MAILBOX_WEBVIEW"),
-                    "webkitgtk",
-                    StringComparison.OrdinalIgnoreCase);
+                wpe.PreferWebKitGtkInstead = _preferWebKitGtk;
 
                 wpe.CacheDirectory = Path.Combine(scratch, "cache");
                 wpe.DataDirectory = Path.Combine(scratch, "data");
