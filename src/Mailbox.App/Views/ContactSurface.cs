@@ -858,6 +858,7 @@ public sealed class ContactSurface : UserControl
         }
 
         if (id == ContactCommands.General.Id || id == ContactCommands.Details.Id
+            || id == ContactCommands.Activities.Id
             || id == ContactCommands.Certificates.Id || id == ContactCommands.AllFields.Id)
         {
             PageRequested?.Invoke(this, id.Value);

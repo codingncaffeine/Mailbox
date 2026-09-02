@@ -343,12 +343,45 @@ public sealed class JournalEntryWindow : Window
             IsPrivate = _private.IsChecked == true,
             When = EventTime.At(date.Add(time.ToTimeSpan()), TimeZoneInfo.Local.Id),
             Duration = duration > TimeSpan.Zero ? duration : null,
-            Contacts = (_contacts.Text ?? string.Empty)
-                .Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+            Contacts = Named(),
+            Links = Resolved(Named()),
             Categories = (_categories.Text ?? string.Empty)
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
             LastModified = PosedClock.UtcNow,
         };
+    }
+
+    /// <summary>The names in the Contacts box, as somebody wrote them.</summary>
+    private IReadOnlyList<string> Named()
+        => (_contacts.Text ?? string.Empty)
+            .Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    /// <summary>
+    /// Which of those names are people this application can follow back to a card.
+    /// </summary>
+    /// <remarks>
+    /// Resolved here, on the way to being saved, rather than remembered from whichever press put
+    /// a name in the box — so a name typed straight into it links exactly as well as one picked
+    /// out of the address book, and a name deleted from the box takes its link with it. A name
+    /// that matches no card, or matches two, stays a name: an entry with a contact it cannot
+    /// resolve is an ordinary entry, and it is the reference's own field either way.
+    /// </remarks>
+    private IReadOnlyList<string> Resolved(IReadOnlyList<string> names)
+    {
+        if (names.Count == 0) return [];
+
+        var uids = new List<string>();
+        foreach (var name in names)
+        {
+            if (App.Contacts.NamedExactly(name) is { } row
+                && row.Contact.Uid is { Length: > 0 } uid
+                && !uids.Contains(uid, StringComparer.Ordinal))
+            {
+                uids.Add(uid);
+            }
+        }
+
+        return uids;
     }
 
     // ---- The door onto this form -----------------------------------------------------------
@@ -485,7 +518,11 @@ public sealed class JournalEntryWindow : Window
                + $"→ would save: duration {(would.Duration is { } d ? JournalCodec.DurationText(d, CultureInfo.InvariantCulture) + $" ({d})" : "none")}, "
                + $"starts {would.When?.Wall:yyyy-MM-dd HH:mm}, type “{would.EntryType}”, company “{would.Company}”, "
                + $"{(would.IsPrivate ? "private, " : string.Empty)}"
-               + $"contacts [{string.Join(" | ", would.Contacts)}], categories [{string.Join(" | ", would.Categories)}]";
+               + $"contacts [{string.Join(" | ", would.Contacts)}], "
+               // Which of those names resolved to a card, which is the half a name alone cannot
+               // show: a box reading the same before and after can still have gained a link.
+               + $"linked [{string.Join(" | ", would.Links)}], "
+               + $"categories [{string.Join(" | ", would.Categories)}]";
     }
 
     private static void Place(Grid grid, int row, int column, string label, Control control, int span = 1)

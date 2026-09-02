@@ -27,6 +27,13 @@ public static class JournalCodec
     private const string DurationProperty = "X-MAILBOX-ENTRY-DURATION";
     private const string CompanyProperty = "X-MAILBOX-COMPANY";
     private const string ContactProperty = "CONTACT";
+
+    /// <summary>
+    /// The card an entry is about, by UID. The same property name the address book writes on a
+    /// vCard for one card linked to another, deliberately: a link means one thing in this store
+    /// however it was made, and one column mirrors both.
+    /// </summary>
+    private const string LinkProperty = "X-MAILBOX-LINK";
     private const string PrivateClass = "PRIVATE";
 
     /// <summary>One VJOURNAL block, as the store keeps a row.</summary>
@@ -97,6 +104,7 @@ public static class JournalCodec
         if (entry.When is { } when) ical.DtStart = ICalendarCodec.ToCal(when);
         foreach (var category in entry.Categories) ical.Categories.Add(category);
         foreach (var contact in entry.Contacts) ical.Properties.Add(new CalendarProperty(ContactProperty, contact));
+        foreach (var link in entry.Links) ical.Properties.Add(new CalendarProperty(LinkProperty, link));
 
         // A note is the default, so only an entry that is something else says what it is — which
         // keeps a note's text to what any other client would have written.
@@ -138,6 +146,11 @@ public static class JournalCodec
             Categories = ical.Categories.Where(c => !string.IsNullOrWhiteSpace(c)).ToList(),
             Contacts = ical.Properties
                 .AllOf(ContactProperty)
+                .Select(p => p.Value?.ToString() ?? string.Empty)
+                .Where(v => v.Length > 0)
+                .ToList(),
+            Links = ical.Properties
+                .AllOf(LinkProperty)
                 .Select(p => p.Value?.ToString() ?? string.Empty)
                 .Where(v => v.Length > 0)
                 .ToList(),

@@ -43,7 +43,32 @@ public sealed record JournalEntry
     public IReadOnlyList<string> Categories { get; init; } = [];
 
     /// <summary>Whoever the entry is about, which the reference's journal keeps beside it.</summary>
+    /// <remarks>
+    /// The names as somebody wrote them, and the names are all a server or another client is ever
+    /// told: RFC 5545's CONTACT is free text by design. <see cref="Links"/> is the same people
+    /// said again in a way this application can follow.
+    /// </remarks>
     public IReadOnlyList<string> Contacts { get; init; } = [];
+
+    /// <summary>
+    /// The UIDs of the cards this entry is about — the half of <see cref="Contacts"/> that can be
+    /// followed back to a person.
+    /// </summary>
+    /// <remarks>
+    /// A journal is kept to answer "what have I had to do with this person", and a list of names
+    /// cannot answer it: two people share a name, one person is written three ways, and a card
+    /// renamed leaves every entry about them pointing at who they used to be. So an entry records
+    /// the card as well as the name, under the same <c>X-MAILBOX-LINK</c> the address book uses
+    /// for one card linked to another — one spelling of a link everywhere, and one column
+    /// mirroring it.
+    /// <para>
+    /// The names stay, and stay first: they are what other clients show, what a server round trip
+    /// preserves, and what an entry written elsewhere arrives with. A link is an addition to the
+    /// name rather than a replacement for it, which is why an entry with neither, or with a name
+    /// and no card, is still an ordinary entry.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<string> Links { get; init; } = [];
 
     /// <summary>The company the entry concerns — the reference's own field, and what its Entry List groups by.</summary>
     public string Company { get; init; } = string.Empty;
@@ -85,6 +110,7 @@ public sealed record JournalEntry
            && When == other.When && Duration == other.Duration && EntryType == other.EntryType
            && Categories.SequenceEqual(other.Categories, StringComparer.Ordinal)
            && Contacts.SequenceEqual(other.Contacts, StringComparer.Ordinal)
+           && Links.SequenceEqual(other.Links, StringComparer.Ordinal)
            && Company == other.Company && IsPrivate == other.IsPrivate
            && Sequence == other.Sequence && LastModified == other.LastModified;
 

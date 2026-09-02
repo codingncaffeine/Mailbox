@@ -36,6 +36,11 @@ public static class PimJournalCodec
             Sequence = entry.Sequence,
             Categories = string.Join(",", entry.Categories),
             Organizer = string.Join(",", entry.Contacts),
+            // The cards the entry names, mirrored from its own X-MAILBOX-LINK lines exactly as a
+            // vCard's are: the question "what has this person had to do with me" is asked from a
+            // contact and answered over the whole journal, and it should not parse every entry in
+            // it to find out. The text is still the truth; the column is what a lookup may read.
+            Links = entry.Links,
             // The company goes in the column the contact rows already use, for the reason the
             // type rides in Status: the Entry List groups by it, and a list reads columns.
             Company = entry.Company,
@@ -79,6 +84,7 @@ public static class PimJournalCodec
             EntryType = item.Status.Length > 0 ? item.Status : JournalEntry.NoteType,
             Categories = item.Categories.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
             Contacts = item.Organizer.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+            Links = item.Links,
             Company = item.Company,
             IsPrivate = item.IsPrivate,
             Sequence = item.Sequence,

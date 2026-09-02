@@ -5,7 +5,7 @@ namespace Mailbox.Core.Commands;
 /// </summary>
 /// <remarks>
 /// Transcribed from the reference's own Contact window: Save &amp; Close | Delete | Save &amp; New |
-/// Forward | Send to OneNote | General · Details · Certificates · All Fields | E-mail | Address
+/// Forward | Send to OneNote | General · Details · Activities · Certificates · All Fields | E-mail | Address
 /// Book | Check Names | Business Card | Picture. Its own class for the reason the appointment
 /// window's is: these act on the window in front of the reader and never on the module behind it,
 /// and the key map picks between two commands of the same name by which window is open.
@@ -88,6 +88,27 @@ public static class ContactCommands
         Category = "Show",
         Surface = CommandSurface.Contact,
         KeyTip = "DE",
+    };
+
+    /// <summary>
+    /// A page of our own: what the journal has recorded about this person.
+    /// </summary>
+    /// <remarks>
+    /// A deliberate divergence. The reference's Show group is four — General, Details,
+    /// Certificates, All Fields — and the page that answered this question was dropped from it
+    /// several versions before the one being cloned. It is added back because the module it reads
+    /// is here and is otherwise write-only: entries record who they were about and nothing could
+    /// ever ask. Four buttons become five rather than one being replaced.
+    /// </remarks>
+    public static readonly MailboxCommand Activities = new()
+    {
+        Id = new("contact.show.activities"),
+        Label = "Activities",
+        Description = "What the journal has recorded about this person.",
+        Icon = "journal-entry",
+        Category = "Show",
+        Surface = CommandSurface.Contact,
+        KeyTip = "AC",
     };
 
     public static readonly MailboxCommand Certificates = new()
@@ -202,7 +223,7 @@ public static class ContactCommands
     public static IReadOnlyList<MailboxCommand> All { get; } =
     [
         SaveAndClose, Delete, SaveAndNew, Forward,
-        General, Details, Certificates, AllFields,
+        General, Details, Activities, Certificates, AllFields,
         Email, Meeting, More, AddressBook, CheckNames,
         BusinessCard, Picture,
     ];

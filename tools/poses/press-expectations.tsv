@@ -116,6 +116,7 @@ contact.more	SILENT	answers on the shell — the run log carries the shell press
 contact.picture	ACTED
 contact.save	ACTED
 contact.save.new	ACTED
+contact.show.activities	ACTED
 contact.show.allfields	ACTED
 contact.show.certificates	ACTED
 contact.show.details	ACTED

@@ -174,6 +174,77 @@ public sealed class JournalBook(PimRepository repository)
         return rows;
     }
 
+    /// <summary>
+    /// Every entry about one person, newest first — the question a journal is kept to answer.
+    /// </summary>
+    /// <remarks>
+    /// Two ways an entry is about somebody, and both count. The first is a link: the card's UID
+    /// on the entry, put there by picking a person rather than typing one, which survives the
+    /// card being renamed and tells two people with the same name apart. The second is the name
+    /// itself, matched against every way this card is known — because an entry typed by hand, or
+    /// written by another client, or made before there was anything to link to, is still about
+    /// them, and a page that showed only the linked ones would look empty and be wrong.
+    /// <para>
+    /// Every journal is searched, not only the ones the navigation pane is showing: what is
+    /// ticked there is about what the module draws, and this is a question asked from somewhere
+    /// else entirely. Deleted entries stay out, as they do everywhere.
+    /// </para>
+    /// </remarks>
+    /// <param name="contactUid">The card's UID, or empty for a card that has none.</param>
+    /// <param name="names">Every way the card is named — display name, file-as, whatever else.</param>
+    public IReadOnlyList<JournalRow> About(string? contactUid, IEnumerable<string>? names = null)
+    {
+        var uid = contactUid?.Trim() ?? string.Empty;
+        var named = new HashSet<string>(StringComparer.CurrentCultureIgnoreCase);
+        foreach (var name in names ?? [])
+        {
+            if (!string.IsNullOrWhiteSpace(name)) named.Add(name.Trim());
+        }
+
+        if (uid.Length == 0 && named.Count == 0) return [];
+
+        var rows = new List<JournalRow>();
+        foreach (var list in Lists())
+        {
+            foreach (var item in _repository.Items(list.Id))
+            {
+                if (item.SyncState == PimSyncState.Deleted) continue;
+
+                // The columns answer both halves without parsing the entry: links is the mirror
+                // of its own X-MAILBOX-LINK lines, organizer the mirror of its CONTACT ones.
+                var linked = uid.Length > 0 && item.Links.Contains(uid, StringComparer.Ordinal);
+                if (!linked && !NamesOne(item.Organizer, named)) continue;
+
+                var entry = PimJournalCodec.FromColumns(item);
+                if (entry.IsNote) continue;
+
+                rows.Add(new JournalRow
+                {
+                    ItemId = item.Id,
+                    CollectionId = list.Id,
+                    Entry = entry,
+                    Start = NoteBook.Made(entry, item),
+                });
+            }
+        }
+
+        rows.Sort(Compare);
+        return rows;
+    }
+
+    /// <summary>Whether a comma-joined contact column names anybody in the set.</summary>
+    private static bool NamesOne(string column, HashSet<string> named)
+    {
+        if (named.Count == 0 || column.Length == 0) return false;
+
+        foreach (var written in column.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (named.Contains(written)) return true;
+        }
+
+        return false;
+    }
+
     /// <summary>The whole entry, parsed, which is what opening one wants.</summary>
     public JournalEntry? Open(long itemId)
         => _repository.Item(itemId) is { } item ? PimJournalCodec.FromItem(item) : null;

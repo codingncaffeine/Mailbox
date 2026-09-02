@@ -169,6 +169,44 @@ public sealed class ContactBook(PimRepository repository)
         return _repository.ContactsWithAddress(address).Select(item => Row(item, books)).ToList();
     }
 
+    /// <summary>
+    /// The one card known by exactly this name, or nothing when no card is or several are.
+    /// </summary>
+    /// <remarks>
+    /// What turns a name somebody typed into a person this application can follow — the journal's
+    /// Contacts field resolves through here on the way to being saved. Deliberately strict in
+    /// both directions: an unknown name is left as a name, and an <em>ambiguous</em> one is left
+    /// as a name too, because two people called the same thing is exactly the case a link is
+    /// supposed to tell apart and guessing between them would file somebody's calls under the
+    /// wrong person silently. Every way a card is known counts as its name, since File As is
+    /// what one part of the interface shows and the display name is what another does.
+    /// </remarks>
+    public ContactRow? NamedExactly(string name)
+    {
+        var wanted = name?.Trim() ?? string.Empty;
+        if (wanted.Length == 0) return null;
+
+        ContactRow? found = null;
+        foreach (var row in Rows())
+        {
+            var card = row.Contact;
+            var matches = Same(card.DisplayName, wanted)
+                          || Same(card.FileAs, wanted)
+                          || Same(row.Named(), wanted)
+                          || row.AlsoNamed.Any(also => Same(also, wanted));
+            if (!matches) continue;
+
+            // A second card by the same name: ambiguous, so neither.
+            if (found is not null) return null;
+            found = row;
+        }
+
+        return found;
+    }
+
+    private static bool Same(string a, string b)
+        => a.Length > 0 && string.Equals(a.Trim(), b, StringComparison.CurrentCultureIgnoreCase);
+
     /// <summary>Contacts whose name, company or address begins with what has been typed.</summary>
     public IReadOnlyList<ContactRow> Matching(string prefix, int limit = 20)
     {

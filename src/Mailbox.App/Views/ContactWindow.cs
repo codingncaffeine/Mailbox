@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
@@ -10,6 +11,7 @@ using Mailbox.Controls.Ribbon;
 using Mailbox.Core.Commands;
 using Mailbox.Core.Diagnostics;
 using Mailbox.Core.Ribbon;
+using Mailbox.Scheduling;
 using Mailbox.Store.Pim;
 using Mailbox.Theming.Icons;
 
@@ -212,6 +214,7 @@ public sealed class ContactWindow : Window
         Control body = page switch
         {
             "contact.show.details" => DetailsPage(),
+            "contact.show.activities" => ActivitiesPage(),
             "contact.show.allfields" => AllFieldsPage(),
             "contact.show.certificates" => Waiting(
                 "A contact's own S/MIME certificates are not kept on the card yet, so there is "
@@ -253,6 +256,160 @@ public sealed class ContactWindow : Window
         Line("Follow up", contact.FollowUpDue is { } due ? due.LocalDateTime.ToString("d") : string.Empty);
 
         return Page(rows);
+    }
+
+    /// <summary>
+    /// Activities: what the journal has recorded about this person, newest first.
+    /// </summary>
+    /// <remarks>
+    /// The answer to the question a journal is kept to answer, asked from the person rather than
+    /// from the journal. An entry counts when it carries this card's UID — a link, made by naming
+    /// somebody the address book knows — or when its Contacts field spells one of this card's
+    /// names, which is how an entry typed by hand or written by another client still turns up.
+    /// Double-clicking one opens it, as double-clicking a row does everywhere.
+    /// <para>
+    /// The page reads the journal every time it is opened rather than holding a list: an entry
+    /// made in another window while this one stood open would otherwise be missing from the
+    /// answer, and the page is cheap — the two halves are both columns, so nothing is parsed to
+    /// decide what belongs here.
+    /// </para>
+    /// </remarks>
+    private Control ActivitiesPage()
+    {
+        var contact = _surface.Current();
+        var journal = new JournalBook(App.Contacts.Repository);
+        var rows = journal.About(contact.Uid, [contact.DisplayName, contact.FileAs, contact.Named()]);
+
+        // The page's own read-back. What it holds is the claim — a page that opened is not a page
+        // that found anything, and the two halves of the lookup are worth telling apart: a linked
+        // entry carries this card's uid, a matched one only its name.
+        var described = rows.Select(row =>
+        {
+            var how = row.Entry.Links.Contains(contact.Uid, StringComparer.Ordinal) ? "linked" : "by name";
+            return $"“{row.Subject}” {row.EntryType} {how}";
+        });
+
+        var uid = contact.Uid.Length > 0 ? contact.Uid : "no uid";
+        var found = rows.Count == 0 ? "." : ": " + string.Join(" | ", described);
+        Log.Info($"Harness: contact activities — {contact.Named()} ({uid}), {rows.Count} entry(ies){found}");
+
+        if (rows.Count == 0)
+        {
+            return Waiting(
+                $"The journal has recorded nothing about {contact.Named()}. An entry naming them "
+                + "in its Contacts field will appear here.");
+        }
+
+        // The four columns, headed. Without a heading row "45 minutes" at the right-hand end of a
+        // line is a number with nothing saying what it measures, and the type column reads as a
+        // second subject.
+        var headings = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("150,140,*,90"),
+            Margin = new Thickness(35, 16, 22, 4),
+        };
+
+        foreach (var (column, heading) in new[] { (0, "Start"), (1, "Entry Type"), (2, "Subject"), (3, "Duration") })
+        {
+            var text = new TextBlock { Text = heading, FontSize = 12, FontWeight = FontWeight.SemiBold };
+            text[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("compose.header.text.brush");
+            Grid.SetColumn(text, column);
+            headings.Children.Add(text);
+        }
+
+        var list = new ListBox { Margin = new Thickness(29, 0, 16, 16) };
+        AutomationProperties.SetName(list, "Activities");
+
+        foreach (var row in rows)
+        {
+            var line = new Grid { ColumnDefinitions = new ColumnDefinitions("150,140,*,90") };
+
+            void Cell(int column, string text, bool quiet = false)
+            {
+                var block = new TextBlock
+                {
+                    Text = text,
+                    FontSize = 12,
+                    Opacity = quiet ? 0.75 : 1,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                };
+                block[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("compose.header.text.brush");
+                Grid.SetColumn(block, column);
+                line.Children.Add(block);
+            }
+
+            Cell(0, row.StartText(), quiet: true);
+            Cell(1, row.EntryType, quiet: true);
+            Cell(2, row.Subject);
+            Cell(3, row.DurationText(), quiet: true);
+
+            var item = new ListBoxItem { Content = line, Tag = row };
+
+            // The whole row as one sentence, because a reader hearing this page needs the four
+            // cells in the order they are drawn rather than four separate readings of a grid.
+            AutomationProperties.SetName(
+                item,
+                string.Join(", ", new[] { row.Subject, row.EntryType, row.StartText(), row.DurationText() }
+                    .Where(part => part.Length > 0)));
+
+            item.DoubleTapped += async (_, _) => await OpenEntryAsync(row);
+            list.Items.Add(item);
+        }
+
+        var body = new DockPanel { LastChildFill = true };
+        DockPanel.SetDock(headings, Dock.Top);
+        body.Children.Add(headings);
+        body.Children.Add(new ScrollViewer { Content = list });
+        return Page(body);
+    }
+
+    /// <summary>
+    /// Opens one of this person's entries over the contact window.
+    /// </summary>
+    /// <remarks>
+    /// Saved back through the same repository the shell writes through, so an edit made from here
+    /// is an edit to the entry rather than to a copy of it. The page is rebuilt afterwards
+    /// because the edit may have taken the entry off it — a contact removed from the Contacts
+    /// field is an entry that is no longer about this person, and a list still showing it would
+    /// be stating something the store has stopped saying.
+    /// </remarks>
+    private async Task OpenEntryAsync(JournalRow row)
+    {
+        if (App.Pim.Item(row.ItemId) is not { } item) return;
+
+        var window = new JournalEntryWindow(PimJournalCodec.FromItem(item));
+        await window.ShowDialog(this);
+        if (window.Result is not { } edited) return;
+
+        // Through the shell where there is one: it is what queues the change for the server and
+        // tells the Journal module to redraw, and an entry saved past it would be right in the
+        // store and stale in the timeline. A window opened with no shell behind it — a harness
+        // pose — writes to the store and there is nothing else to tell.
+        if (Shell() is { } shell) shell.SaveJournalEntry(edited, item, item.CollectionId);
+        else App.Pim.UpdateItem(PimJournalCodec.ToItem(edited, item.CollectionId, item));
+
+        if (_page == "contact.show.activities") ShowPage(_page);
+    }
+
+    /// <summary>
+    /// The shell this window was opened from, however many windows back it stands.
+    /// </summary>
+    /// <remarks>
+    /// The chain is walked rather than the owner read, because a contact window opens from the
+    /// People list, from a flagged-contact peek and from inside the Address Book — and in the
+    /// last of those the owner is the Address Book, not the shell.
+    /// </remarks>
+    private MainWindow? Shell()
+    {
+        for (Window? window = this; window is not null; window = window.Owner as Window)
+        {
+            if (window is MainWindow shell) return shell;
+        }
+
+        return Application.Current?.ApplicationLifetime
+            is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime { MainWindow: MainWindow main }
+            ? main
+            : null;
     }
 
     /// <summary>All Fields: every property the card carries, including what no page shows.</summary>

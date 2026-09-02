@@ -44,6 +44,7 @@ public static class ContactRibbonLayout
                 Cluster("show", "Show",
                     RibbonItem.Small(ContactCommands.General.Id),
                     RibbonItem.Small(ContactCommands.Details.Id),
+                    RibbonItem.Small(ContactCommands.Activities.Id),
                     RibbonItem.Small(ContactCommands.Certificates.Id),
                     RibbonItem.Small(ContactCommands.AllFields.Id)),
 
@@ -135,8 +136,10 @@ public static class ContactRibbonLayout
                         ],
                     },
 
-                    // General leads, and the other three pages stack beside it — the one place
-                    // on this tab the reference uses small buttons.
+                    // General leads, and the other pages stack beside it — the one place on this
+                    // tab the reference uses small buttons. Four of them rather than the
+                    // capture's three: Activities is ours, and it belongs where the other pages
+                    // are rather than in a group of its own.
                     new RibbonGroup
                     {
                         Id = "show",
@@ -147,6 +150,7 @@ public static class ContactRibbonLayout
                         [
                             RibbonItem.Large(ContactCommands.General.Id),
                             RibbonItem.Small(ContactCommands.Details.Id),
+                            RibbonItem.Small(ContactCommands.Activities.Id),
                             RibbonItem.Small(ContactCommands.Certificates.Id),
                             RibbonItem.Small(ContactCommands.AllFields.Id),
                         ],
