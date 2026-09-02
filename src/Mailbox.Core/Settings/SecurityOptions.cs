@@ -38,6 +38,9 @@ public sealed class SecurityOptions(SettingsStore settings)
     /// <summary>"Warn me when a display name disagrees with the sending address."</summary>
     public const string WarnDisplayNameMismatchKey = "security.displayname.warn";
 
+    /// <summary>"Use GnuPG and its agent for OpenPGP."</summary>
+    public const string OpenPgpThroughGnuPgKey = "security.openpgp.gnupg";
+
     private readonly SettingsStore _settings = settings ?? throw new ArgumentNullException(nameof(settings));
 
     /// <summary>Whether S/MIME signatures are checked and encrypted mail is opened at all.</summary>
@@ -51,6 +54,28 @@ public sealed class SecurityOptions(SettingsStore settings)
     {
         get => _settings.GetBool(OpenPgpKey, false);
         set => _settings.Set(OpenPgpKey, value);
+    }
+
+    /// <summary>
+    /// Whether OpenPGP's private-key work is handed to the reader's own GnuPG.
+    /// </summary>
+    /// <remarks>
+    /// Off means the keyring kept beside the mail stores, which is the right answer for somebody
+    /// who does not already use PGP: it is one place they can find, back up and delete, and it
+    /// needs nothing installed. On means <c>gpg</c> signs, encrypts, decrypts and verifies —
+    /// so <c>gpg-agent</c> holds the passphrase and asks for it through their own pinentry, the
+    /// keyring is the one the rest of their system uses, and a revocation published anywhere else
+    /// reaches this application because it is the same keyring.
+    /// <para>
+    /// Off by default, and deliberately: turning it on for somebody with no GnuPG would replace a
+    /// working keyring with an error message. The switch says what it needs, and the reading pane
+    /// says so again if the tool goes away.
+    /// </para>
+    /// </remarks>
+    public bool OpenPgpThroughGnuPg
+    {
+        get => _settings.GetBool(OpenPgpThroughGnuPgKey, false);
+        set => _settings.Set(OpenPgpThroughGnuPgKey, value);
     }
 
     /// <summary>

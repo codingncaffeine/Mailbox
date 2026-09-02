@@ -591,6 +591,10 @@ public static class OptionsPages
                 // loses its value the day the label is reworded.
                 new CheckRow("Enable S/MIME") { Key = SecurityOptions.SmimeKey },
                 new CheckRow("Enable OpenPGP") { Key = SecurityOptions.OpenPgpKey },
+                new CheckRow("Use GnuPG and its agent for OpenPGP")
+                {
+                    Key = SecurityOptions.OpenPgpThroughGnuPgKey,
+                },
                 new CheckRow("Encrypt the local store with a master password"),
             ]),
 
@@ -601,7 +605,10 @@ public static class OptionsPages
             [
                 new SubHeadingRow("Mailbox keeps its own keyring, beside your data rather than in "
                                   + "GnuPG's — the library cannot read GnuPG's own format. Import "
-                                  + "brings a copy across; nothing is moved or changed there."),
+                                  + "brings a copy across; nothing is moved or changed there. "
+                                  + "With GnuPG switched on above, this ring is not used at all: "
+                                  + "gpg signs and decrypts, its agent holds your passphrase, and "
+                                  + "the keyring is the one the rest of your system uses."),
                 new SlotRow("keys"),
             ]),
 

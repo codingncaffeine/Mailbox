@@ -71,7 +71,7 @@ public partial class MainWindow
         if (Environment.GetEnvironmentVariable("MAILBOX_PGPMAIL") is { Length: > 0 } pgp)
         {
             Opened += (_, _) => Dispatcher.UIThread.Post(
-                () => DeliverPgp(pgp), DispatcherPriority.Send);
+                () => _ = DeliverPgpAsync(pgp), DispatcherPriority.Send);
         }
 
         if (Environment.GetEnvironmentVariable("MAILBOX_KEYRING") is { Length: > 0 } keyring)
@@ -361,7 +361,7 @@ public partial class MainWindow
     /// a key rather than about a message — a key that had run out when it signed, one whose owner
     /// has since withdrawn it, and one this machine has never seen.
     /// </remarks>
-    private void DeliverPgp(string states)
+    private async Task DeliverPgpAsync(string states)
     {
         if (Inbox() is not { } box) return;
 
@@ -388,6 +388,16 @@ public partial class MainWindow
                         ring.Import(pair.Public);
                         FileMessage(box, PgpTampered(
                             PgpSigned("OpenPGP: changed after signing", pair, "tampered@example.com")));
+                        break;
+                    }
+
+                    case "gnupg":
+                    {
+                        // A message made by the reader's own GnuPG rather than by the ring kept
+                        // here — the one shape that proves the delegation end to end, because it
+                        // is built and read by two different implementations of the same RFC.
+                        // Signed and sealed to whoever the ambient GNUPGHOME holds a key for.
+                        FileMessage(box, await ThroughGnuPgAsync(box.Address));
                         break;
                     }
 
@@ -752,6 +762,40 @@ public partial class MainWindow
     }
 
     /// <summary>Files a message into the Inbox with its real bytes beside the row.</summary>
+    /// <summary>
+    /// A message signed and encrypted by the reader's own GnuPG, addressed to themselves.
+    /// </summary>
+    /// <remarks>
+    /// Built through the same <see cref="Mailbox.Security.OpenPgp.GnuPgProtection"/> the compose
+    /// window uses, so what the pane is asked to open is what this application actually sends —
+    /// and the keyring is whichever <c>GNUPGHOME</c> the run was given, never the machine's own
+    /// unless a person deliberately points it there.
+    /// </remarks>
+    private static async Task<MimeMessage> ThroughGnuPgAsync(string address)
+    {
+        var who = new MailboxAddress("A. Person", address);
+        var message = new MimeMessage { Subject = "OpenPGP: made by GnuPG" };
+        message.From.Add(who);
+        message.To.Add(who);
+        message.Date = DateTimeOffset.UtcNow;
+        message.MessageId = MimeKit.Utils.MimeUtils.GenerateMessageId();
+        message.Body = new TextPart("plain")
+        {
+            Text = "This message was signed and sealed by GnuPG, and opened by its agent.\n",
+        };
+
+        var report = await Mailbox.Security.OpenPgp.GnuPgProtection.ApplyAsync(
+            message.Body,
+            who,
+            [who],
+            Mailbox.Security.Protection.Sign | Mailbox.Security.Protection.Encrypt,
+            new Mailbox.Security.OpenPgp.GnuPgAgent());
+
+        Log.Info($"Harness: pgp — GnuPG built the posed message: {report.State}. {report.Detail}");
+        if (report.Body is { } sealedBody) message.Body = sealedBody;
+        return message;
+    }
+
     private static void FileMessage(InboxTarget box, MimeMessage message)
     {
         using var buffer = new MemoryStream();

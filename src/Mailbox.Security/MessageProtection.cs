@@ -233,22 +233,183 @@ public static class MessageProtection
         }
     }
 
+    /// <summary>
+    /// Applies what the writer asked for, with the reader's own GnuPG doing the OpenPGP half.
+    /// </summary>
+    /// <remarks>
+    /// A sibling of <see cref="Apply"/> rather than a replacement for it. With no agent it is
+    /// that method exactly — same candidates, same order, same words — so the path almost every
+    /// message takes is unchanged and untouched. With one, <b>GnuPG <em>is</em> OpenPGP</b>: it
+    /// replaces the keyring kept here rather than standing beside it as a third choice, because
+    /// two rings that each hold half of somebody's keys is the parallel world this delegation
+    /// exists to end. The caller passes one or the other, never both.
+    /// <para>
+    /// Asynchronous for one reason: GnuPG may stop and ask the reader for a passphrase through
+    /// their own pinentry, which is a wait on a person and not a computation.
+    /// </para>
+    /// </remarks>
+    /// <param name="gnupg">The reader's GnuPG, or null to use the keyring kept here.</param>
+    public static async Task<ProtectionReport> ApplyAsync(
+        MimeMessage message,
+        Protection want,
+        SecureMimeContext? smime,
+        PgpContext? openpgp,
+        GnuPgAgent? gnupg,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+
+        if (gnupg is null) return Apply(message, want, smime, openpgp, cancellationToken);
+        if (want == Protection.None) return ProtectionReport.Unprotected;
+
+        return await ProtectThroughGnuPgAsync(
+            message, want, Recipients(message), smime, gnupg, cancellationToken);
+    }
+
+    /// <summary>
+    /// S/MIME first where it can carry the whole ask, then GnuPG — the order and the tie-break
+    /// <see cref="Protect"/> uses, with the agent standing where the local keyring stood.
+    /// </summary>
+    private static async Task<ProtectionReport> ProtectThroughGnuPgAsync(
+        MimeMessage message,
+        Protection want,
+        IReadOnlyList<MailboxAddress> recipients,
+        SecureMimeContext? smime,
+        GnuPgAgent gnupg,
+        CancellationToken cancellationToken)
+    {
+        if (SenderOf(message) is not { } sender) return NoSender();
+        if (message.Body is not { } body)
+        {
+            return new ProtectionReport(
+                ProtectionState.Failed, null, "This message has nothing in it to protect.");
+        }
+
+        if (smime is not null
+            && Missing(smime, want, sender, recipients, cancellationToken) is { Count: 0 })
+        {
+            return Run(
+                message, new Candidate("S/MIME", smime, []), body, sender, recipients, want,
+                cancellationToken);
+        }
+
+        // Asked before anything is built, so a writer who cannot encrypt to somebody is told who
+        // rather than watching a send fail — and so pinentry is never raised for a message that
+        // was going to be refused anyway.
+        var absent = await MissingFromGnuPgAsync(gnupg, want, sender, recipients, cancellationToken);
+        if (absent.Count > 0)
+        {
+            return new ProtectionReport(ProtectionState.NoKey, null, Sentence("OpenPGP", absent, want));
+        }
+
+        // Header protection goes on first, because the whole of it is that the header fields are
+        // inside what gets signed and encrypted; what the outer header becomes is applied last,
+        // since this can still refuse and a message reduced by a failed attempt is one whose
+        // subject has been replaced with nothing to make up for it.
+        var plan = HeaderProtection.Cover(message, body, want.HasFlag(Protection.Encrypt));
+        var report = await GnuPgProtection.ApplyAsync(
+            plan.Payload, sender, recipients, want, gnupg, cancellationToken);
+
+        if (report is { State: ProtectionState.Applied, Body: { } protectedBody })
+        {
+            message.Body = protectedBody;
+            plan.ApplyTo(message);
+        }
+
+        return report;
+    }
+
+    /// <summary>
+    /// The draft rules, with the reader's own GnuPG doing the OpenPGP half.
+    /// </summary>
+    /// <remarks>
+    /// The same two rules <see cref="ApplyToDraft"/> is under and for the same reasons: never
+    /// signed, and encrypted to the author alone rather than to the recipients a <c>mailto:</c>
+    /// link may have chosen. With no agent it is that method exactly.
+    /// </remarks>
+    public static async Task<ProtectionReport> ApplyToDraftAsync(
+        MimeMessage message,
+        Protection want,
+        SecureMimeContext? smime,
+        PgpContext? openpgp,
+        GnuPgAgent? gnupg,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+
+        if (gnupg is null) return ApplyToDraft(message, want, smime, openpgp, cancellationToken);
+
+        var draft = want & ~Protection.Sign;
+        if (draft == Protection.None) return ProtectionReport.Unprotected;
+        if (SenderOf(message) is not { } author) return NoSender();
+
+        return await ProtectThroughGnuPgAsync(
+            message, draft, [author], smime, gnupg, cancellationToken);
+    }
+
+    /// <summary>
+    /// Everybody GnuPG has no usable key for — asked once, rather than per person.
+    /// </summary>
+    /// <remarks>
+    /// One listing each way and then set arithmetic, because every question here is a subprocess
+    /// and asking per recipient would spawn one for each. Checked before anything is built, so a
+    /// writer who cannot encrypt to somebody is told who rather than watching a send fail.
+    /// </remarks>
+    private static async Task<IReadOnlyList<string>> MissingFromGnuPgAsync(
+        GnuPgAgent gnupg,
+        Protection want,
+        MailboxAddress sender,
+        IReadOnlyList<MailboxAddress> recipients,
+        CancellationToken cancellationToken)
+    {
+        var missing = new List<string>();
+
+        if (want.HasFlag(Protection.Sign))
+        {
+            var signers = await gnupg.SignersAsync(cancellationToken);
+            if (!signers.Contains(sender.Address, StringComparer.OrdinalIgnoreCase))
+            {
+                missing.Add(sender.Address);
+            }
+        }
+
+        if (want.HasFlag(Protection.Encrypt))
+        {
+            var known = await gnupg.RecipientsAsync(cancellationToken);
+            foreach (var recipient in recipients)
+            {
+                if (!known.Contains(recipient.Address, StringComparer.OrdinalIgnoreCase)
+                    && !missing.Contains(recipient.Address, StringComparer.OrdinalIgnoreCase))
+                {
+                    missing.Add(recipient.Address);
+                }
+            }
+        }
+
+        return missing;
+    }
+
     /// <summary>One sentence naming who is missing, which is the only part a writer can act on.</summary>
     private static string Sentence(Candidate candidate, Protection want)
+        => Sentence(candidate.Name, candidate.Missing, want);
+
+    /// <param name="name">Which algorithm has no key — the word the writer is told.</param>
+    /// <param name="absent">Who it has no key for.</param>
+    private static string Sentence(string name, IReadOnlyList<string> absent, Protection want)
     {
-        var people = string.Join(", ", candidate.Missing);
+        var people = string.Join(", ", absent);
 
         // Signing fails for one person and encryption for a list, and the two read differently
         // enough to be worth separate sentences.
         if (want == Protection.Sign)
         {
-            return $"There is no {candidate.Name} key for {people} on this computer, "
+            return $"There is no {name} key for {people} on this computer, "
                 + "so this message cannot be signed.";
         }
 
-        return candidate.Missing.Count == 1
-            ? $"There is no {candidate.Name} key for {people}, so this message cannot be encrypted."
-            : $"There are no {candidate.Name} keys for {people}, so this message cannot be encrypted.";
+        return absent.Count == 1
+            ? $"There is no {name} key for {people}, so this message cannot be encrypted."
+            : $"There are no {name} keys for {people}, so this message cannot be encrypted.";
     }
 
     private static ProtectionReport NoSender() => new(

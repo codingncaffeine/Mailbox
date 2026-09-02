@@ -2866,11 +2866,11 @@ public sealed partial class ComposeSurface : UserControl
         ProtectionReport report;
         try
         {
-            report = await Task.Run(() => Protect(message, draft: false));
+            report = await ApplyProtectionAsync(message, draft: false);
 
             if (report.State == ProtectionState.Locked && await UnlockAsync())
             {
-                report = await Task.Run(() => Protect(message, draft: false));
+                report = await ApplyProtectionAsync(message, draft: false);
             }
         }
         catch (Exception ex)
@@ -2907,14 +2907,18 @@ public sealed partial class ComposeSurface : UserControl
     /// the attachments go through it. A null store is an algorithm the reader has not turned on,
     /// which is a different answer from one that has no keys.
     /// </remarks>
-    private ProtectionReport Protect(MimeMessage message, bool draft)
+    private async Task<ProtectionReport> ApplyProtectionAsync(MimeMessage message, bool draft)
     {
         using var certificates = CryptoStores.CertificatesIfEnabled();
         using var keys = CryptoStores.KeyRingIfEnabled();
 
+        // Null unless the reader has handed OpenPGP to their own GnuPG, in which case the ring
+        // above is null instead: one or the other, never both.
+        var agent = CryptoStores.AgentIfEnabled();
+
         return draft
-            ? MessageProtection.ApplyToDraft(message, _protection, certificates, keys)
-            : MessageProtection.Apply(message, _protection, certificates, keys);
+            ? await MessageProtection.ApplyToDraftAsync(message, _protection, certificates, keys, agent)
+            : await MessageProtection.ApplyAsync(message, _protection, certificates, keys, agent);
     }
 
     /// <summary>
@@ -3156,7 +3160,7 @@ public sealed partial class ComposeSurface : UserControl
             // when somebody decides to send something, not every few minutes by an autosave. A draft
             // that cannot be encrypted is not saved in the clear instead: the writer is told, and
             // what they typed stays in the window where they can still see it.
-            var report = Protect(message, draft: true);
+            var report = await ApplyProtectionAsync(message, draft: true);
             if (!report.MaySend)
             {
                 Report(report.Detail);

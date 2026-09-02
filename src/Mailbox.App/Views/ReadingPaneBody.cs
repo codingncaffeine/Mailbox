@@ -161,6 +161,11 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
         _verified = verified;
         _suspectedJunk = suspectedJunk;
 
+        // A new message's cryptography has not been settled, and the generation moves so that a
+        // resolution still in flight for the last one is dropped when it lands.
+        _crypto = null;
+        _cryptoGeneration++;
+
         // A decision belongs to the message it was made about. Carrying "show images" from one
         // message to the next would allow a sender the reader never agreed to.
         _policy = RemoteImagePolicy.Block;
@@ -284,26 +289,42 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
                      + $", display-name mismatch {(App.Security.WarnDisplayNameMismatch ? "warned" : "not warned")}.");
         }
 
+        // GnuPG is a subprocess that may stop and ask the reader for a passphrase, so it is
+        // settled off the dispatcher — and nothing is drawn until it has, because the header's
+        // own warnings are among the things the answer decides. Every other kind of crypto stays
+        // synchronous: see SignatureOf for why that is the better trade where the wait is bounded.
+        if (_crypto is null && NeedsGnuPg(_message))
+        {
+            ShowOpening();
+            _ = ResolveThroughGnuPgAsync(_message, _cryptoGeneration);
+            return;
+        }
+
         // An encrypted message is opened before anything else is decided, because what gets checked
         // and what gets rendered both depend on what was inside. The channel CVE-2026-0818
         // used was the cascade, so a decrypted part spliced into the outer document is readable by
         // the outer document's own stylesheet — what comes out is rendered *instead of* the message
         // it arrived in, never inside it.
-        var opened = Decrypted(_message);
+        var opened = _crypto?.Opened ?? Decrypted(_message);
 
         // The header fields a protected message carries a copy of inside itself (RFC 9788). Read
         // before anything is drawn, because what the pane's header says is one of the things they
         // decide — and what is rendered too, the payload being where the body is as well.
-        Protected = Covered(_message, opened);
+        Protected = _crypto is { } byAgent ? byAgent.Protected : Covered(_message, opened);
 
         // RFC 9788 §4.5.3, a MUST: the copy of the hidden fields that an encrypted message writes into its
         // own body, for a client that could not read them anywhere else, is not drawn by a client
         // that can. The HTML half's is dropped by the sanitizer; this is the text half's.
-        if (opened.Opened && Protected is not null) HeaderProtection.HideLegacyDisplay(Protected.Rendered);
+        // Already done for a message GnuPG settled, and doing it twice hides nothing more.
+        if (_crypto is null && opened.Opened && Protected is not null)
+        {
+            HeaderProtection.HideLegacyDisplay(Protected.Rendered);
+        }
 
-        var carrier = opened.Opened
-            ? AsMessage(_message, Protected?.Rendered ?? opened.Content!, Protected)
-            : _message;
+        var carrier = _crypto?.Carrier
+            ?? (opened.Opened
+                ? AsMessage(_message, Protected?.Rendered ?? opened.Content!, Protected)
+                : _message);
 
         Carried = carrier;
 
@@ -312,9 +333,10 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
         // bar. A signature carried *inside* an encrypted packet is the packet's own — OpenPGP's
         // ordinary shape — and one carried as a MIME layer is read off whichever message the reader
         // is actually being shown.
-        var signature = opened.Signature is { State: not SignatureState.None } enclosed
-            ? enclosed
-            : SignatureOf(carrier);
+        var signature = _crypto?.Signature
+            ?? (opened.Signature is { State: not SignatureState.None } enclosed
+                ? enclosed
+                : SignatureOf(carrier));
 
         if (signature.State != SignatureState.None) _bars.Children.Add(SignatureBar(signature));
 

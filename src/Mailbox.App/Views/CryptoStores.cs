@@ -59,9 +59,32 @@ public static class CryptoStores
     public static SecureMimeContext? CertificatesIfEnabled()
         => App.Security.Smime ? Certificates() : null;
 
-    /// <summary>The keyring, or null when the reader has not switched OpenPGP on.</summary>
+    /// <summary>
+    /// The keyring, or null when the reader has not switched OpenPGP on — or when GnuPG is doing
+    /// the OpenPGP work, in which case the ring kept here is not the one to use.
+    /// </summary>
+    /// <remarks>
+    /// Null rather than "both", deliberately. Two rings each holding half of somebody's keys is
+    /// the parallel world the delegation exists to end, and a caller handed both would have to
+    /// decide which one a message belongs to — a question with no right answer.
+    /// </remarks>
     public static PgpContext? KeyRingIfEnabled()
-        => App.Security.OpenPgp ? KeyRing() : null;
+        => App.Security.OpenPgp && !UsingGnuPg ? KeyRing() : null;
+
+    /// <summary>
+    /// The reader's own GnuPG, or null when the delegation is off or the tool is not installed.
+    /// </summary>
+    /// <remarks>
+    /// A missing <c>gpg</c> answers null rather than throwing, so a reader who switched this on
+    /// and then removed GnuPG gets the keyring kept here back instead of an application that
+    /// cannot send. The switch's own row says what it needs.
+    /// </remarks>
+    public static GnuPgAgent? AgentIfEnabled()
+        => UsingGnuPg ? new GnuPgAgent() : null;
+
+    /// <summary>Whether OpenPGP means the reader's own GnuPG on this machine, right now.</summary>
+    public static bool UsingGnuPg
+        => App.Security.OpenPgp && App.Security.OpenPgpThroughGnuPg && GnuPgAgent.IsAvailable;
 
     /// <summary>
     /// Whether this run must not go near the reader's own key material.
