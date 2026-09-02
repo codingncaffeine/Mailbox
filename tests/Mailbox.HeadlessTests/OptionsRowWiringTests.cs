@@ -36,7 +36,7 @@ public class OptionsRowWiringTests
         ["calendar"] = 8,
         ["tasks"] = 7,
         ["search"] = 4,
-        ["language"] = 2,
+        ["language"] = 1,
         ["accessibility"] = 7,
 
         // Down one: "Prompt for confirmation before permanently deleting items" now gates the

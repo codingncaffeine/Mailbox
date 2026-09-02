@@ -1,3 +1,4 @@
+using Mailbox.Core.Localization;
 using Mailbox.Core.Search;
 using Mailbox.Core.Views;
 using Mailbox.Store;
@@ -289,7 +290,14 @@ public sealed partial class ShellViewModel
             count++;
         }
 
-        StatusRight = $"View “{CurrentView.Name}” applied to {count} folder{(count == 1 ? "" : "s")}.";
+        StatusRight = string.Format(
+            System.Globalization.CultureInfo.CurrentCulture,
+            Strings.Plural(
+                "View “{1}” applied to {0} folder.",
+                "View “{1}” applied to {0} folders.",
+                count),
+            count.ToString("N0", System.Globalization.CultureInfo.CurrentCulture),
+            CurrentView.Name);
         return count;
     }
 

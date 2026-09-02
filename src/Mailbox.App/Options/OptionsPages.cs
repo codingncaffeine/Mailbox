@@ -74,6 +74,54 @@ public static class OptionsPages
 
     // ------------------------------------------------------------------------------------
 
+    /// <summary>
+    /// The languages this build can be read in: the desktop's own, and whatever catalogues ship.
+    /// </summary>
+    /// <remarks>
+    /// Read off the locales directory rather than listed here, so a translation somebody drops in
+    /// appears without a code change — and so a build with no catalogues offers the one honest
+    /// choice rather than a menu of languages it cannot show. Each is named in itself, because a
+    /// reader looking for their own language is looking for the word they call it by.
+    /// </remarks>
+    private static ComboRow InterfaceLanguage()
+    {
+        var labels = new List<string> { "Use the desktop's language" };
+        var values = new List<string> { string.Empty };
+
+        var directory = Path.Combine(AppContext.BaseDirectory, "locales");
+        if (Directory.Exists(directory))
+        {
+            foreach (var file in Directory.EnumerateFiles(directory, "*.po").OrderBy(f => f, StringComparer.Ordinal))
+            {
+                var culture = Path.GetFileNameWithoutExtension(file);
+                if (values.Contains(culture, StringComparer.OrdinalIgnoreCase)) continue;
+
+                labels.Add(NameOf(culture));
+                values.Add(culture);
+            }
+        }
+
+        return new ComboRow("Language:", labels)
+        {
+            Key = App.LanguageSetting,
+            Values = values,
+        };
+    }
+
+    /// <summary>What a language calls itself, or its tag when the runtime has never heard of it.</summary>
+    private static string NameOf(string culture)
+    {
+        try
+        {
+            var info = System.Globalization.CultureInfo.GetCultureInfo(culture);
+            return info.NativeName.Length > 0 ? info.NativeName : culture;
+        }
+        catch (System.Globalization.CultureNotFoundException)
+        {
+            return culture;
+        }
+    }
+
     private static OptionsPage General() => new(
         "general", "General", "settings",
         "General options for working with Mailbox.",
@@ -428,7 +476,7 @@ public static class OptionsPages
             new OptionSection("Display language",
             [
                 new NoteRow("Choose the language used for buttons, tabs and Help."),
-                new ComboRow("Interface language:", ["Match system language", "English"], 0, 260, 200),
+                InterfaceLanguage(),
             ]),
 
             new OptionSection("Editing languages",

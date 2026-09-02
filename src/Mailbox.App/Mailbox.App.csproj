@@ -60,6 +60,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The translations, beside the binary rather than under assets/ for the reason the sound
+         is: the .deb keeps this directory and drops that one. A build with no catalogues is the
+         ordinary case and the glob matching nothing is how it stays harmless. -->
+    <Content Include="..\..\assets\locales\*.po" Link="locales\%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Mailbox.Core\Mailbox.Core.csproj" />
     <ProjectReference Include="..\Mailbox.Dav\Mailbox.Dav.csproj" />
     <ProjectReference Include="..\Mailbox.Google\Mailbox.Google.csproj" />

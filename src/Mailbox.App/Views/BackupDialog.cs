@@ -1,3 +1,4 @@
+using Mailbox.Core.Localization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -337,9 +338,11 @@ public sealed class BackupDialog : Window
         await Confirm.TellAsync(
             this,
             "Restore from a Backup",
-            $"Restored. {result.Displaced.Count} thing{(result.Displaced.Count == 1 ? " was" : "s were")} "
-            + "moved aside with a dated name.\n\nMailbox will close now — start it again to open "
-            + "the restored data.");
+            Strings.Counted(
+                "Restored. {0} thing was moved aside with a dated name.",
+                "Restored. {0} things were moved aside with a dated name.",
+                result.Displaced.Count)
+            + Strings.T("\n\nMailbox will close now — start it again to open the restored data."));
 
         (Avalonia.Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Shutdown();
     }

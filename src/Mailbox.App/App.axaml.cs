@@ -396,6 +396,52 @@ public partial class App : Application
     public const string ThemeSetting = "appearance.theme";
     public const string DensitySetting = "appearance.density";
 
+    /// <summary>
+    /// Which language the interface is in, or empty for the one the desktop is set to.
+    /// </summary>
+    /// <remarks>
+    /// Empty by default and empty for almost everybody: a mail client that ignores the language
+    /// its desktop is running in is one somebody has to configure twice. The setting exists for
+    /// the reader whose desktop is in one language and who wants their mail in another, which is
+    /// commoner than it sounds among people who work in a second language.
+    /// </remarks>
+    public const string LanguageSetting = "ui.language";
+
+    /// <summary>Where the shipped translations are, beside the binary.</summary>
+    private static string LocalesDirectory => Path.Combine(AppContext.BaseDirectory, "locales");
+
+    /// <summary>
+    /// Loads the interface's language, so everything drawn after this is in it.
+    /// </summary>
+    /// <remarks>
+    /// Before the first window, because a surface reads its strings as it is built and one built
+    /// earlier would keep the English. Absence is harmless at every step — no setting, no
+    /// catalogue for that language, or no locales directory at all each leave the interface in
+    /// the English it is written in.
+    /// </remarks>
+    private static void LoadLanguage()
+    {
+        var chosen = Settings.GetString(LanguageSetting).Trim();
+        var culture = chosen.Length > 0
+            ? chosen
+            : System.Globalization.CultureInfo.CurrentUICulture.Name;
+
+        if (culture.Length == 0 || culture.StartsWith("en", StringComparison.OrdinalIgnoreCase))
+        {
+            // The strings are written in English, so English needs no catalogue and loading one
+            // would only be a way to get it wrong.
+            Log.Info("Language: English, as written.");
+            return;
+        }
+
+        var strings = Mailbox.Core.Localization.Localizer.Load(LocalesDirectory, culture);
+        Mailbox.Core.Localization.Strings.Current = strings;
+
+        Log.Info(strings.Count == 0
+            ? $"Language: {culture} has no translations here, so the interface stays in English."
+            : $"Language: {culture}, {strings.Count} string(s), {strings.Plurals.Forms} plural form(s).");
+    }
+
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
     private TrayIcon? _tray;
@@ -723,6 +769,10 @@ public partial class App : Application
         // edit to the theme in use shows without a restart (the hot reload).
         var themesDirectory = Mailbox.Theming.Files.ThemeLibrary.DefaultDirectory();
         // The import and palette doors run before the library loads, so a pose can import — or
+        // The interface's language, before any surface is built: a window built earlier would
+        // have read its strings in English and kept them.
+        LoadLanguage();
+
         // write a palette's theme — and apply it in one run.
         Theming.ThemeImportDoor.RunIfAsked(themesDirectory);
         Theming.PaletteDoor.RunIfAsked(themesDirectory);

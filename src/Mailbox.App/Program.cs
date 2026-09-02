@@ -36,6 +36,14 @@ internal static class Program
             return ShortcutsExport.Write(args.Length > 1 ? args[1] : null);
         }
 
+        // `mailbox --export-strings [path]` writes the translation template — every string the
+        // interface asks to have translated, with where each was found — and exits. Extracted
+        // from the calls themselves, because a hand-kept list is wrong within a week.
+        if (args.Length >= 1 && string.Equals(args[0], "--export-strings", StringComparison.OrdinalIgnoreCase))
+        {
+            return StringsExport.Write(args.Length > 1 ? args[1] : null);
+        }
+
         // `mailbox --import-theme <file>` reads a browser theme — an .xpi, a zip, an unpacked
         // directory or a bare manifest.json — writes it into the themes directory, and exits;
         // the watcher of a running instance picks it up live.

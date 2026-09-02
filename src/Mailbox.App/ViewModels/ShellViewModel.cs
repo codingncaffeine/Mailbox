@@ -1,3 +1,4 @@
+using Mailbox.Core.Localization;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -4392,10 +4393,25 @@ public sealed partial class ShellViewModel : ObservableObject
     /// messages went missing without a word. A filtered or conversation-arranged list still
     /// counts what it shows, which is what the reference's bar does.
     /// </remarks>
+    /// <summary>
+    /// The bar's two counts, in the interface's language and its own digits.
+    /// </summary>
+    /// <remarks>
+    /// The labels are the reference's own words, and they are labels rather than sentences —
+    /// "Items" does not become "Item" for one. The numbers are grouped for the culture, which is
+    /// what makes 4,500 read as a count rather than as an identifier.
+    /// </remarks>
+    private static string Counts(int total, int unread)
+        => string.Format(
+            System.Globalization.CultureInfo.CurrentCulture,
+            Strings.T("Items: {0}   Unread: {1}"),
+            total.ToString("N0", System.Globalization.CultureInfo.CurrentCulture),
+            unread.ToString("N0", System.Globalization.CultureInfo.CurrentCulture));
+
     public string StatusLeft => Module == MailboxModule.Mail && !IsTodayShowing
         ? _folderBeyondList is { } beyond && Filter == ListFilter.None
-            ? $"Items: {beyond.Total}   Unread: {beyond.Unread}"
-            : $"Items: {VisibleCount}   Unread: {Messages.Count(m => m.IsUnread)}"
+            ? Counts(beyond.Total, beyond.Unread)
+            : Counts(VisibleCount, Messages.Count(m => m.IsUnread))
         : ModuleStatusLeft;
 
     /// <summary>

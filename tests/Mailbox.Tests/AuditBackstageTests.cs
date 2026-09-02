@@ -324,13 +324,21 @@ public class AuditBackstageTests
     public void TheStatusBarCountsTheRowsOnScreen()
     {
         var shell = Read("src/Mailbox.App/ViewModels/ShellViewModel.cs");
+
+        // What the bar counts: the rows on screen, and how many of them are unread.
         var statusLeft = shell[shell.IndexOf("public string StatusLeft", StringComparison.Ordinal)..];
         statusLeft = statusLeft[..statusLeft.IndexOf(';')];
 
         Assert.Contains("VisibleCount", statusLeft, StringComparison.Ordinal);
         Assert.Contains("IsUnread", statusLeft, StringComparison.Ordinal);
-        Assert.Contains("Items:", statusLeft, StringComparison.Ordinal);
-        Assert.Contains("Unread:", statusLeft, StringComparison.Ordinal);
+
+        // And what it says about them, which is one method along now that the words are
+        // translatable: the reference's own two labels, in one string a translator answers once.
+        var counts = shell[shell.IndexOf("private static string Counts(", StringComparison.Ordinal)..];
+        counts = counts[..counts.IndexOf(';')];
+
+        Assert.Contains("Items: {0}", counts, StringComparison.Ordinal);
+        Assert.Contains("Unread: {1}", counts, StringComparison.Ordinal);
     }
 
     // ---- The title search box ----------------------------------------------------------------
