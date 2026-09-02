@@ -550,11 +550,21 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
                 if (e.IsSuccess) Log.Debug("The reading pane loaded a message.");
                 else Log.Warn("The reading pane could not load the message.");
 
-                if (e.IsSuccess) _ = NudgeFrameOutAsync(_web);
+                var generation = _loads.InFlight;
+                _loads.Finished();
+                _everAnswered = true;
+
+                if (e.IsSuccess && _web is { } loaded) _ = NudgeFrameOutAsync(loaded, generation);
 
                 // Under the dump gate only: the engine has finished loading, so it can be asked
                 // what it drew — which a capture cannot answer, racing the offscreen frame.
-                _ = ReportEngineWordsAsync(e.IsSuccess);
+                _ = ReportEngineWordsAsync(e.IsSuccess, generation);
+
+                // The document that arrived while this one was loading, if any. Posted rather
+                // than started here: this runs inside the engine's own completion callback, and
+                // handing it a fresh navigation from inside that is the shape being avoided.
+                Avalonia.Threading.Dispatcher.UIThread.Post(
+                    StartQueued, Avalonia.Threading.DispatcherPriority.Background);
             };
 
             return _web;
@@ -584,7 +594,15 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
     /// becomes visible at the first flick after the text is rasterised, so the cadence is the
     /// worst case a small message waits.
     /// </remarks>
-    private static async Task NudgeFrameOutAsync(NativeWebView web)
+    /// <param name="web">The view to nudge.</param>
+    /// <param name="generation">
+    /// The load these nudges belong to. Half a second of them outlives a reader moving to the
+    /// next message, and a script run against a document that is being replaced — or against an
+    /// engine a closing window has already let go — is a call into something that may no longer
+    /// be there. So each pass asks whether its own load is still the one on show, and a nudge
+    /// for a superseded one simply stops: the load that replaced it brings its own.
+    /// </param>
+    private async Task NudgeFrameOutAsync(NativeWebView web, long generation)
     {
         const string nudge =
             "requestAnimationFrame(function(){"
@@ -595,8 +613,13 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
         {
             for (var i = 0; i < 5; i++)
             {
+                if (!IsCurrent(web, generation)) return;
+
                 await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(
-                    async () => await web.InvokeScript(nudge));
+                    async () =>
+                    {
+                        if (IsCurrent(web, generation)) await web.InvokeScript(nudge);
+                    });
                 await Task.Delay(120);
             }
         }
@@ -605,6 +628,13 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
             // A pane torn down mid-nudge is a pane that no longer needs one.
         }
     }
+
+    /// <summary>
+    /// Whether work started for one load may still touch the engine: the same view, still ours,
+    /// and no later load started since.
+    /// </summary>
+    private bool IsCurrent(NativeWebView web, long generation)
+        => ReferenceEquals(_web, web) && _loads.Started == generation;
 
     /// <summary>
     /// What the engine reports itself as, for the log.
@@ -718,6 +748,11 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
 
         _web = null;
 
+        // Nothing more is owed to an engine that is going: the nudges and the read-backs still
+        // running for the last load see this and stop, rather than scripting a view whose engine
+        // is being torn down underneath them.
+        _loads.Forget();
+
         try
         {
             web.Stop();
@@ -735,6 +770,37 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
         if (ReferenceEquals(_surface.Content, web)) _surface.Content = null;
     }
 
+    /// <summary>The pane's load discipline: one at a time, and only the newest one waiting.</summary>
+    private readonly ReadingPaneLoads _loads = new();
+
+    /// <summary>Whether this pane's engine has ever answered for a load, however it answered.</summary>
+    private bool _everAnswered;
+
+    /// <summary>
+    /// Whether an engine could be running behind this pane at all.
+    /// </summary>
+    /// <remarks>
+    /// Attached and not on screen is the reading pane switched off, and the engine of a pane
+    /// nobody is looking at never initialises — the same test <see cref="HoldForEngine"/> makes
+    /// for the same reason. Not attached yet is a message window still being built, and that one
+    /// is about to be shown: its load is real and is answered for.
+    /// </remarks>
+    private bool CouldBeRunning => TopLevel.GetTopLevel(this) is null || IsEffectivelyVisible;
+
+    /// <summary>Whether the load in flight was started while an engine could be running.</summary>
+    private bool _flightCouldRun = true;
+
+    /// <summary>Loads asked for and loads actually run, for a harness run to read back.</summary>
+    internal (int Asked, int Ran) LoadCount => (_loads.Asked, _loads.Ran);
+
+    /// <summary>
+    /// Hands the engine a document, waiting for whatever it is already loading.
+    /// </summary>
+    /// <remarks>
+    /// Why the wait is there at all is <see cref="ReadingPaneLoads"/>'s own remarks. What is here
+    /// is the machinery around it: the surface swap, the dump run's hold, and the watchdog that
+    /// keeps a wait from becoming a hang when an engine never answers for a navigation.
+    /// </remarks>
     private void Load(string html)
     {
         if (_web is null)
@@ -755,6 +821,65 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
                 Log.Info("Harness: reading surface — the web view takes the pane back.");
         }
 
+        // Nothing to wait for: either there is no engine running behind this pane now, or the
+        // load in flight was started when there was not one and will never be answered for.
+        // Both are the reading pane switched off, which is an ordinary way to read mail.
+        if (!CouldBeRunning || !_flightCouldRun)
+        {
+            Start(_loads.Now(html));
+            return;
+        }
+
+        if (_loads.Ask(html) is { } now)
+        {
+            Start(now);
+            return;
+        }
+
+        // Left waiting. Every navigation is answered for by NavigationCompleted, and the one time
+        // it is not, the document waiting behind it would wait forever — so the wait gets a
+        // deadline of its own. Three seconds is a deadline for an engine that has stopped
+        // answering rather than a limit on a load: a message parses in tens of milliseconds, and
+        // what is behind this one is a reader waiting to see it.
+        var waited = _loads.InFlight;
+        _ = Task.Delay(3_000).ContinueWith(
+            _ => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (!_loads.StillWaitingOn(waited)) return;
+
+                // A pane nobody is looking at never starts an engine at all — the shell's own
+                // pane refreshes with the reading pane switched off, and none of those loads is
+                // ever answered for. That is the ordinary course of events and says nothing.
+                // An engine that has answered before and has now stopped answering is the one
+                // worth saying out loud.
+                var message = "The reading pane's engine never finished a load; starting the next anyway.";
+                if (_everAnswered) Log.Warn(message);
+                else Log.Debug(message);
+                _loads.Finished();
+                StartQueued();
+            }),
+            TaskScheduler.Default);
+    }
+
+    /// <summary>Starts the document that was waiting, if the engine is free and it is still wanted.</summary>
+    private void StartQueued()
+    {
+        if (_web is null) return;
+        if (_loads.Next() is { } html) Start(html);
+    }
+
+    private void Start(string html)
+    {
+        // The engine went between the load being taken and being started — a window closing
+        // while its pane was still queueing. Nothing to navigate, and nothing left in flight.
+        if (_web is not { } web)
+        {
+            _loads.Forget();
+            return;
+        }
+
+        _flightCouldRun = CouldBeRunning;
+
         try
         {
             // The dump run's hold, taken before the navigation so the capture cannot fire
@@ -763,7 +888,7 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
 
             // A base of about:blank, so a relative reference the sanitizer let through has
             // nowhere to resolve to.
-            _web.NavigateToString(html, new Uri("about:blank"));
+            web.NavigateToString(html, new Uri("about:blank"));
         }
         catch (Exception ex)
         {

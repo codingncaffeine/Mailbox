@@ -198,7 +198,7 @@ public sealed partial class ReadingPaneBody
     /// says one thing and whose engine says nothing is exactly the failure nothing else here
     /// can catch.
     /// </remarks>
-    private async Task ReportEngineWordsAsync(bool loaded)
+    private async Task ReportEngineWordsAsync(bool loaded, long generation)
     {
         if (!DumpRequested || !Mailbox.App.Theming.WindowCapture.IsRequested) return;
 
@@ -211,6 +211,15 @@ public sealed partial class ReadingPaneBody
             }
 
             if (_web is not { } web) return;
+
+            // A read-back for a load that has already been replaced would report the document
+            // that replaced it — which is how a superseded load used to be recorded as holding
+            // nothing at all. The load on show answers for what the pane holds.
+            if (!IsCurrent(web, generation))
+            {
+                Log.Info("Harness: reading engine — that load was superseded before it could be read.");
+                return;
+            }
 
             // On the dispatcher, which is where the engine's bridge lives; bounded, because a
             // hold with no timeout turns an engine that never answers into a run that never ends.
@@ -240,6 +249,8 @@ public sealed partial class ReadingPaneBody
             // between a page that is being painted and one that merely parsed: zero after half
             // a second means no frame has been produced, and the reader's pane is blank however
             // healthy everything else looks.
+            if (!IsCurrent(web, generation)) return;
+
             await Dispatcher.UIThread.InvokeAsync(
                 async () => await web.InvokeScript(
                     "(function(){ window.__mbxFrames = 0;"
@@ -247,6 +258,8 @@ public sealed partial class ReadingPaneBody
                     + " requestAnimationFrame(f); return 'armed'; })()"));
 
             await Task.Delay(600);
+
+            if (!IsCurrent(web, generation)) return;
 
             object? frames = null;
             await Dispatcher.UIThread.InvokeAsync(
@@ -283,6 +296,40 @@ public sealed partial class ReadingPaneBody
             _engineHold?.Dispose();
             _engineHold = null;
         }
+    }
+
+    /// <summary>
+    /// The words the engine is holding now, for a pose that has to say what the pane settled on.
+    /// </summary>
+    /// <remarks>
+    /// The pane's own read-back answers once per load, which is the wrong moment for a pose about
+    /// several loads in a row: what that one wants is the state after the last of them, and the
+    /// question it is really asking is whether the message the reader stopped on is the one on
+    /// screen. Falls back to the text surface's own words, since a machine with no engine is
+    /// still owed the right answer.
+    /// </remarks>
+    internal async Task<string> EngineWordsAsync()
+    {
+        if (_web is not { } web) return Words(_fallback.Text ?? string.Empty);
+
+        try
+        {
+            object? answer = null;
+            var read = Dispatcher.UIThread.InvokeAsync(
+                async () => answer = await web.InvokeScript("document.body.innerText"));
+
+            if (await Task.WhenAny(read, Task.Delay(10_000)) != read) return "(no answer)";
+
+            await read;
+            return Words(answer?.ToString() ?? string.Empty);
+        }
+        catch (Exception ex)
+        {
+            return $"(the engine would not answer: {ex.Message})";
+        }
+
+        static string Words(string raw)
+            => System.Text.RegularExpressions.Regex.Replace(raw, @"\s+", " ").Trim();
     }
 
     /// <summary>What a run asked to be pressed on the pane's bars, or null.</summary>

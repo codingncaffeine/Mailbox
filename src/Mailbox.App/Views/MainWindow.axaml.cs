@@ -4710,7 +4710,32 @@ public partial class MainWindow : Window
     /// <summary>What MAILBOX_SELECT asked for, re-asserted once the list has laid out.</summary>
     private static ViewModels.MessageRow? _pendingSelection;
 
-    private static void ApplyHarnessState(ShellViewModel shell)
+    /// <summary>How many messages the reading-thrash pose walks, and how fast.</summary>
+    /// <remarks>
+    /// Both are adjustable — <c>MAILBOX_THRASH=rows:12,gap:40</c> — because the fault this pose
+    /// exists for was intermittent, and hunting an intermittent fault means being able to make
+    /// the window narrower than any reader ever will.
+    /// </remarks>
+    private static int ThrashRows => ThrashSetting("rows", 8);
+
+    private static int ThrashGap => ThrashSetting("gap", 80);
+
+    private static int ThrashSetting(string name, int fallback)
+    {
+        var asked = Environment.GetEnvironmentVariable("MAILBOX_THRASH") ?? string.Empty;
+        foreach (var part in asked.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (part.StartsWith(name + ":", StringComparison.OrdinalIgnoreCase)
+                && int.TryParse(part[(name.Length + 1)..], out var value))
+            {
+                return value;
+            }
+        }
+
+        return fallback;
+    }
+
+    private void ApplyHarnessState(ShellViewModel shell)
     {
         var wanted = Environment.GetEnvironmentVariable("MAILBOX_STATE") ?? string.Empty;
 
@@ -4747,6 +4772,50 @@ public partial class MainWindow : Window
                         shell.ReadingPaneAtBottom = false;
                         shell.ReadingPaneVisible = true;
                         Log.Info("Harness: the reading pane was turned on late.");
+                    }, DispatcherPriority.Background);
+                    break;
+                // Several messages selected inside one load's settle window: the journey a reader
+                // makes holding the down arrow, and the only one that has ever crashed the
+                // offscreen engine. Each selection asks the pane for a load while the load before
+                // it is still in flight, so what this poses is the pane's own queueing — the log
+                // says how many loads were asked for and how many the engine actually ran.
+                case "reading-thrash":
+                    shell.ReadingPaneAtBottom = false;
+                    shell.ReadingPaneVisible = true;
+                    Dispatcher.UIThread.Post(async () =>
+                    {
+                        using var hold = WindowCapture.Hold();
+                        await System.Threading.Tasks.Task.Delay(600);
+
+                        var rows = shell.Messages.Take(ThrashRows).ToList();
+
+                        // Walked down and then back to the first row, so the message the walk ends
+                        // on is one whose words are known and are not the last document the engine
+                        // was handed by accident: what is being checked is that the pane holds the
+                        // row the reader stopped on, and the row they stopped on is this one.
+                        if (rows.Count > 0) rows.Add(rows[0]);
+
+                        Log.Info($"Harness: thrashing the reading pane over {rows.Count} message(s).");
+
+                        foreach (var row in rows)
+                        {
+                            shell.SelectedMessage = row;
+                            await System.Threading.Tasks.Task.Delay(ThrashGap);
+                        }
+
+                        // Long enough for the last load to finish and for every nudge behind the
+                        // ones it superseded to have run — the window the crash lived in.
+                        await System.Threading.Tasks.Task.Delay(2000);
+
+                        // What the pane came to rest on, asked of the engine itself. The claim is
+                        // not that nothing crashed — it is that the message the reader stopped on
+                        // is the one on screen, which a load landing on top of another loses.
+                        var words = _reading is { } pane ? await pane.EngineWordsAsync() : "(no pane)";
+                        var counted = _reading?.LoadCount;
+
+                        Log.Info($"Harness: the reading pane thrash is done — {counted?.Asked ?? 0} load(s) asked "
+                                 + $"for, {counted?.Ran ?? 0} run; selected “{shell.SelectedMessage?.Subject}”; "
+                                 + $"the engine holds “{words}”.");
                     }, DispatcherPriority.Background);
                     break;
                 case "zoom-in": shell.ZoomIn.Execute(null); break;
