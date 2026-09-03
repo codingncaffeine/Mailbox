@@ -654,7 +654,12 @@ public sealed class OptionsWindow : Window
 
         var backend = new ComboBox
         {
-            ItemsSource = new[] { "Automatic (currently X11)", "X11", "Wayland (experimental)" },
+            ItemsSource = new[]
+            {
+                "Automatic (Wayland where the session is Wayland)",
+                "X11",
+                "Wayland",
+            },
             SelectedIndex = settings.Backend switch
             {
                 Mailbox.Core.Platform.DisplayBackend.X11 => 1,
@@ -690,7 +695,11 @@ public sealed class OptionsWindow : Window
 
         var note = new TextBlock
         {
-            Text = "These take effect the next time Mailbox starts. Automatic scale follows the desktop; on X11 that is Xft.dpi.",
+            Text = "These take effect the next time Mailbox starts. Automatic uses the native "
+                   + "Wayland backend on a Wayland session, which lets Mailbox draw at the "
+                   + "monitor's own scale instead of being scaled by the compositor; it takes X11 "
+                   + "if that backend cannot open a window. Automatic scale follows the desktop; "
+                   + "on X11 that is Xft.dpi.",
             TextWrapping = TextWrapping.Wrap,
         };
         Bind(note, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");

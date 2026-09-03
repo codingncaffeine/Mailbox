@@ -31,8 +31,9 @@
     <PackageReference Include="Avalonia.Controls.WebView" Version="$(AvaloniaWebViewVersion)" />
     <PackageReference Include="Avalonia.Desktop" Version="$(AvaloniaVersion)" />
     <!-- The native Wayland backend is not part of Avalonia.Desktop's platform detection; it is
-         its own package (MIT, over the MIT NWayland bindings) and is opted into at startup by
-         MAILBOX_WAYLAND=1. X11 through XWayland stays the default until it settles. -->
+         its own package (MIT, over the MIT NWayland bindings) and is selected at startup. It is
+         the default on a Wayland session, because it is what speaks wp_fractional_scale_v1;
+         MAILBOX_WAYLAND=0 pins X11 through XWayland. See WindowingBackend. -->
     <PackageReference Include="Avalonia.Wayland" Version="$(AvaloniaVersion)" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="$(AvaloniaVersion)" />
     <!-- Structural only. Simple provides bare control templates so ListBox, ComboBox and

@@ -6,7 +6,10 @@ namespace Mailbox.Core.Platform;
 /// <summary>Which windowing backend to start on.</summary>
 public enum DisplayBackend
 {
-    /// <summary>What Mailbox currently defaults to — X11, through XWayland on a Wayland session — until the native backend's trial promotes it.</summary>
+    /// <summary>
+    /// What Mailbox defaults to: the native Wayland backend on a Wayland session, X11 anywhere
+    /// else, and X11 underneath if that backend cannot open a window.
+    /// </summary>
     Auto,
 
     /// <summary>X11, always.</summary>

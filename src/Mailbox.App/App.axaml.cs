@@ -1175,6 +1175,10 @@ public partial class App : Application
             // and got another is recorded as what it is.
             Log.Info(WindowingBackend.Describe(window));
 
+            // A window on screen is the only proof the backend chosen actually works, so it is
+            // what clears the note the next run would otherwise read as a failure.
+            WindowingBackend.WindowOpened();
+
             // The scale a window opens at is not always the one it settles at: on X11 the
             // screen's Xft.dpi is applied once the window is mapped, and 100 there means 1.0417 —
             // everything four percent larger than a 100% reference, and worth knowing before

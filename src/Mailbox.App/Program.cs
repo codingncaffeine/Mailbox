@@ -198,9 +198,11 @@ internal static class Program
     /// Called by the Avalonia designer and by <see cref="Main"/>.
     /// </summary>
     /// <remarks>
-    /// Platform detection selects X11. The native Wayland backend replaces it only when
-    /// <c>MAILBOX_WAYLAND=1</c> asks for it — see <see cref="WindowingBackend"/> for why X11
-    /// stays the default and why the flag is strict.
+    /// Platform detection selects X11; on a Wayland session the native Wayland backend replaces
+    /// it, which is what lets the application draw at the monitor's scale rather than be scaled by
+    /// the compositor. See <see cref="WindowingBackend"/> for the override in both directions and
+    /// for the guard that keeps a session the backend cannot handle from costing more than one
+    /// launch.
     /// </remarks>
     public static AppBuilder BuildAvaloniaApp()
     {
