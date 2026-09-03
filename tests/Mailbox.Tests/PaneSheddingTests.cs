@@ -57,6 +57,28 @@ public class PaneSheddingTests
     }
 
     /// <summary>
+    /// A width nobody knows yet sheds nothing.
+    /// </summary>
+    /// <remarks>
+    /// The shape of the defect this pins: a window reports zero until it is laid out, that was
+    /// read as "narrower than 600", and the folder pane minimized itself for the instant before
+    /// the real width arrived. Long enough — the message list was fitted against a 48-wide nav
+    /// column, kept the room that gave it, and the reading pane spent the rest of the run at half
+    /// its own floor. The symptom was in the panes and the cause was arithmetic on a number that
+    /// did not exist yet, which is why the guard is here and not only at the one caller.
+    /// </remarks>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(double.NaN)]
+    public void AWidthThatIsNotAWidthShedsNothing(double width)
+    {
+        Assert.False(PaneShedding.IsMeasured(width));
+        Assert.False(PaneShedding.HidesReadingPane(width));
+        Assert.False(PaneShedding.MinimizesFolderPane(width));
+    }
+
+    /// <summary>
     /// The floor leaves a message list worth having: the rail and the minimized strip come off it
     /// first, and what is left is what the reader reads.
     /// </summary>

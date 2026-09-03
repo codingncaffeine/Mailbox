@@ -4220,6 +4220,13 @@ public sealed partial class ShellViewModel : ObservableObject
         get;
         set
         {
+            // Nothing is not narrow. A window reports a width of zero until it has been laid out,
+            // and reading that as "too narrow for the folder pane" minimised the pane for the
+            // instant before the real width arrived — long enough for the list to be fitted
+            // against a 48-wide nav column and keep the room that gave it, which left the reading
+            // pane at half its own floor for the rest of the run.
+            if (value <= 0 || double.IsNaN(value)) return;
+
             if (Math.Abs(field - value) < 0.5) return;
             field = value;
 

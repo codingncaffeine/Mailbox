@@ -41,9 +41,28 @@ public static class PaneShedding
     /// </summary>
     public const double ShellFloor = 350;
 
+    /// <summary>
+    /// Whether a width is one at all. A window reports zero until it has been laid out, and NaN
+    /// before it has been given a size.
+    /// </summary>
+    /// <remarks>
+    /// <b>Nothing is not narrow.</b> Reading an unmeasured width as a very small one minimized the
+    /// folder pane for the instant before the real width arrived — long enough for the message
+    /// list to be fitted against a 48-wide nav column and keep the room that gave it, which left
+    /// the reading pane at half its own floor for the rest of the run. It looked like a layout
+    /// bug in the panes and was arithmetic on a number that did not exist yet.
+    /// <para>
+    /// Guarded here rather than only at the caller, because the answer to "should this shed?" for
+    /// a width nobody knows yet is "no" wherever it is asked from.
+    /// </para>
+    /// </remarks>
+    public static bool IsMeasured(double width) => width > 0 && !double.IsNaN(width);
+
     /// <summary>Whether the reading pane has to give up its room at this width.</summary>
-    public static bool HidesReadingPane(double width) => width < ReadingPaneFloor;
+    public static bool HidesReadingPane(double width) =>
+        IsMeasured(width) && width < ReadingPaneFloor;
 
     /// <summary>Whether the folder pane is down to its strip at this width.</summary>
-    public static bool MinimizesFolderPane(double width) => width < FolderPaneFloor;
+    public static bool MinimizesFolderPane(double width) =>
+        IsMeasured(width) && width < FolderPaneFloor;
 }
