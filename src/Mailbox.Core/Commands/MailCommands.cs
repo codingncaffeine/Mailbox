@@ -474,7 +474,7 @@ public static class MailCommands
     {
         Id = new("item.categorize"),
         Label = "Categorize",
-        Description = "Assign a colour category to the selected items.",
+        Description = "Assign a color category to the selected items.",
         Icon = "categorize",
         IconArtwork = "categorize",
         Category = "Tags",

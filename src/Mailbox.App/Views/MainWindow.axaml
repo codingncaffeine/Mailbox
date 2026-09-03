@@ -453,8 +453,8 @@
                             IsVisible="{Binding IsTodayShowing}" />
 
             <!--
-                The folder pane minimised. The reference does not hide the pane when it is
-                minimised — it turns it into a strip that keeps the favourites' names on their
+                The folder pane minimized. The reference does not hide the pane when it is
+                minimized — it turns it into a strip that keeps the favorites' names on their
                 sides and the chevron that brings the pane back — and a pane that vanished with
                 no way back is what this used to be. Measured 48 across, the names turned
                 counter-clockwise so they read bottom to top, each with its unread count above
@@ -477,7 +477,7 @@
                     </Border>
 
                     <ItemsControl ItemsSource="{Binding CollapsedFolders}"
-                                  AutomationProperties.Name="Folder pane, minimised"
+                                  AutomationProperties.Name="Folder pane, minimized"
                                   Margin="0,6,0,0">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:FolderNode">

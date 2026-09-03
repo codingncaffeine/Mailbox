@@ -8,7 +8,7 @@ namespace Mailbox.Core.Settings;
 /// <summary>What a message is written in when nothing in it says otherwise: a face, a size, a weight, a slant, a colour.</summary>
 /// <param name="Family">The family as it goes on the wire — "Calibri", never the substitute that draws it here.</param>
 /// <param name="Points">The size in points, as mail measures.</param>
-/// <param name="Colour"><c>#RRGGBB</c>, or null for automatic — the reader's own text colour.</param>
+/// <param name="Color"><c>#RRGGBB</c>, or null for automatic — the reader's own text colour.</param>
 public sealed record MessageFont(string Family, double Points, bool Bold = false, bool Italic = false, string? Colour = null)
 {
     /// <summary>The reference's own default for new mail and replies: Calibri 11.</summary>

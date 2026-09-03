@@ -303,8 +303,8 @@ public static class CalendarCommands
     public static readonly MailboxCommand CalendarColour = new()
     {
         Id = new("calendar.colour"),
-        Label = "Colour",
-        Description = "Choose the colour this calendar's appointments are drawn in.",
+        Label = "Color",
+        Description = "Choose the color this calendar's appointments are drawn in.",
         Icon = "calendar-color",
         Category = "Manage Calendars",
         Scope = ModuleScope.Calendar,
@@ -390,7 +390,7 @@ public static class CalendarCommands
     {
         Id = new("calendar.item.categorize"),
         Label = "Categorize",
-        Description = "Put the selected appointment in a colour category.",
+        Description = "Put the selected appointment in a color category.",
         Icon = "categorize",
         IconArtwork = "categorize",
         Category = "Actions",

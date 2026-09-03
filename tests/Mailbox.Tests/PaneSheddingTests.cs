@@ -26,7 +26,7 @@ public class PaneSheddingTests
                 PaneShedding.HidesReadingPane(width),
                 $"the reading pane must survive {width}, which was always reachable.");
             Assert.False(
-                PaneShedding.MinimisesFolderPane(width),
+                PaneShedding.MinimizesFolderPane(width),
                 $"the folder pane must survive {width}, which was always reachable.");
         }
     }
@@ -45,7 +45,7 @@ public class PaneSheddingTests
         // A width between the two: reading pane gone, folder pane still whole.
         const double between = 700;
         Assert.True(PaneShedding.HidesReadingPane(between));
-        Assert.False(PaneShedding.MinimisesFolderPane(between));
+        Assert.False(PaneShedding.MinimizesFolderPane(between));
     }
 
     /// <summary>At the window's own floor both have given way, which is what makes it usable.</summary>
@@ -53,11 +53,11 @@ public class PaneSheddingTests
     public void AtTheFloorBothHaveGivenWay()
     {
         Assert.True(PaneShedding.HidesReadingPane(PaneShedding.ShellFloor));
-        Assert.True(PaneShedding.MinimisesFolderPane(PaneShedding.ShellFloor));
+        Assert.True(PaneShedding.MinimizesFolderPane(PaneShedding.ShellFloor));
     }
 
     /// <summary>
-    /// The floor leaves a message list worth having: the rail and the minimised strip come off it
+    /// The floor leaves a message list worth having: the rail and the minimized strip come off it
     /// first, and what is left is what the reader reads.
     /// </summary>
     [Fact]

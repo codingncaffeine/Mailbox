@@ -192,7 +192,7 @@ public static class FeedCommands
     {
         Id = new("feeds.categorize"),
         Label = "Categorize",
-        Description = "Put a colour category on the selected article.",
+        Description = "Put a color category on the selected article.",
         Icon = "categorize",
         Category = "Tags",
         Scope = ModuleScope.Feeds,

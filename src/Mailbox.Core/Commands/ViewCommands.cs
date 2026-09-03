@@ -569,7 +569,7 @@ public static class ViewCommands
     {
         Id = new("view.folderpane"),
         Label = "Folder Pane",
-        Description = "Show the folder pane in full, minimised to its icons, or not at all.",
+        Description = "Show the folder pane in full, minimized to its icons, or not at all.",
         Icon = "folder-pane",
         IconTint = "ribbon.icon.blue",
         Category = "Layout",

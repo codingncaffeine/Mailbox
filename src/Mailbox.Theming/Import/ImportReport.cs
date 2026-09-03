@@ -22,7 +22,7 @@ public static class ImportReport
         // An images-only theme is the common case and a good result: a few tokens plus a
         // backdrop inheriting the rest from the base — said in those words, not as a ratio.
         lines.Add(result.TokensWritten.Count == 0
-            ? "It brings no colours of its own; the base stands whole."
+            ? "It brings no colors of its own; the base stands whole."
             : result.Origin == "pack"
                 ? $"It carries {result.TokensWritten.Count} token(s) of its own; everything else is its base's."
                 : $"It sets {result.TokensWritten.Count} token(s) — the caption strip and left chrome — and the base carries every content surface.");

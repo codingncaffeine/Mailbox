@@ -133,7 +133,7 @@ public static class AppointmentCommands
     {
         Id = new("appointment.categorize"),
         Label = "Categorize",
-        Description = "Put this appointment in a colour category.",
+        Description = "Put this appointment in a color category.",
         Icon = "categorize",
         IconArtwork = "categorize",
         Category = "Tags",

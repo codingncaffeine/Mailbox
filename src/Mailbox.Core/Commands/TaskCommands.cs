@@ -130,7 +130,7 @@ public static class TaskCommands
     {
         Id = new("tasks.categorize"),
         Label = "Categorize",
-        Description = "Tag the task with a colour category.",
+        Description = "Tag the task with a color category.",
         Icon = "categorize",
         Category = "Tags",
         Scope = ModuleScope.Tasks,

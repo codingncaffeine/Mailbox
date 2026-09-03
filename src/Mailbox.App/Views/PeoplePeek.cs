@@ -18,8 +18,8 @@ namespace Mailbox.App.Views;
 /// Measured off the reference's own: <b>249 wide inside a 1px black hairline, and grey all
 /// through</b> — there is no lighter content panel inside it, which is what separates it from the
 /// calendar peek's #F0F0F0 page in a #BDBDBD frame. It holds a Search People box, the pop-out
-/// button in its top corner, a <b>Favourites</b> heading, and — with nobody in the list — two
-/// centred lines saying how somebody gets there.
+/// button in its top corner, a <b>Favorites</b> heading, and — with nobody in the list — two
+/// centered lines saying how somebody gets there.
 /// <para>
 /// Those two lines are the reference's own, less the name of a product this application does not
 /// mention: it says to right-click a person to add them, and so does this, because that is where
@@ -27,11 +27,12 @@ namespace Mailbox.App.Views;
 /// </para>
 /// <para>
 /// The heading is spelt the way this application spells it, which is the way the menu that fills
-/// the list spells it — People's own verb is "Add to Favourites". It read "Favorites" over a
-/// sentence ending "…to your favourites.", two spellings twenty pixels apart in one photograph.
+/// the list spells it — People's own verb is "Add to Favorites". It once read "Favorites" over a
+/// sentence ending "…to your favourites.", two spellings twenty pixels apart in one photograph;
+/// the interface speaks the reference's American English, so both are American now.
 /// </para>
 /// <para>
-/// It is a desktop popup, so it keeps the desktop's light colours in every theme — the
+/// It is a desktop popup, so it keeps the desktop's light colors in every theme — the
 /// <c>peek.pop.*</c> family, exactly as the calendar peek's floating half does.
 /// </para>
 /// </remarks>
@@ -78,7 +79,7 @@ internal sealed class PeoplePeek : Border
         _body.Spacing = 6;
         _body.Children.Add(Corner());
         _body.Children.Add(SearchBox());
-        _body.Children.Add(Heading("Favourites"));
+        _body.Children.Add(Heading("Favorites"));
         _body.Children.Add(favourites.Count == 0 ? Empty() : Favourites());
 
         Child = _body;
@@ -200,7 +201,7 @@ internal sealed class PeoplePeek : Border
     {
         var text = new TextBlock
         {
-            Text = "Right-click a person to add them to your favourites.",
+            Text = "Right-click a person to add them to your favorites.",
             TextWrapping = TextWrapping.Wrap,
             TextAlignment = TextAlignment.Center,
             FontSize = 12,

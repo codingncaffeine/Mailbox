@@ -3642,7 +3642,7 @@ public partial class MainWindow : Window
         }
 
         flyout.Items.Add(new Separator());
-        Entry(shell.IsFavourite(account, folder) ? "Remove from Favourites" : "Show in Favourites", () =>
+        Entry(shell.IsFavourite(account, folder) ? "Remove from Favorites" : "Show in Favorites", () =>
         {
             shell.ToggleFavourite(account, folder);
             return Task.CompletedTask;

@@ -20,7 +20,7 @@ public sealed class CalendarSource(PimRepository repository)
 
     /// <summary>
     /// One colour for every calendar, whatever each says about itself — the Options page's
-    /// "Use this colour on all calendars".
+    /// "Use this color on all calendars".
     /// </summary>
     /// <remarks>
     /// Applied here rather than written into the collections, because the setting is a way of

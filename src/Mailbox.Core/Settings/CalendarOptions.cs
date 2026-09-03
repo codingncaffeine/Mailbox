@@ -107,7 +107,7 @@ public sealed class CalendarOptions(SettingsStore settings)
     public static IReadOnlyList<(string Name, string Hex)> Palette { get; } =
     [
         ("Blue", ""), ("Green", "#107C10"), ("Orange", "#CA5010"), ("Purple", "#8764B8"),
-        ("Red", "#D13438"), ("Grey", "#69797E"), ("Yellow", "#C19C00"), ("Teal", "#038387"),
+        ("Red", "#D13438"), ("Gray", "#69797E"), ("Yellow", "#C19C00"), ("Teal", "#038387"),
     ];
 
     /// <summary>The colour a calendar with none of its own is drawn in — the combo's order.</summary>

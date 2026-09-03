@@ -60,7 +60,7 @@ public sealed class ColorCategoriesDialog : Window
         _categories = categories ?? throw new ArgumentNullException(nameof(categories));
         _rewrite = rewrite;
 
-        Title = "Colour Categories";
+        Title = "Color Categories";
         Width = 460;
         SizeToContent = SizeToContent.Height;
         CanResize = false;
@@ -76,7 +76,7 @@ public sealed class ColorCategoriesDialog : Window
 
         var newButton = Action("New…", NewCategory);
         var rename = Action("Rename…", RenameSelected);
-        var colour = Action("Colour…", RecolourSelected);
+        var colour = Action("Color…", RecolourSelected);
         var shortcut = Action("Shortcut…", ShortcutSelected);
         var delete = Action("Delete", DeleteSelected);
 
@@ -96,7 +96,7 @@ public sealed class ColorCategoriesDialog : Window
             Spacing = 14,
             Children =
             {
-                Heading("Colour categories let you group items across mail, calendar and contacts."),
+                Heading("Color categories let you group items across mail, calendar and contacts."),
                 new StackPanel
                 {
                     Orientation = Orientation.Horizontal,
@@ -167,7 +167,7 @@ public sealed class ColorCategoriesDialog : Window
     private async Task NewCategory()
     {
         if (await Prompt.AskAsync(this, "New Category", "Name:") is not { Length: > 0 } name) return;
-        if (await PickColour("Colour for " + name) is not { } token) return;
+        if (await PickColour("Color for " + name) is not { } token) return;
 
         _categories.Add(name.Trim(), token);
         Reload();
@@ -186,7 +186,7 @@ public sealed class ColorCategoriesDialog : Window
     private async Task RecolourSelected()
     {
         if (Selected is not { } category) return;
-        if (await PickColour("Colour for " + category.Name) is not { } token) return;
+        if (await PickColour("Color for " + category.Name) is not { } token) return;
 
         _categories.Recolour(category.Id, token);
         Reload();
@@ -226,6 +226,6 @@ public sealed class ColorCategoriesDialog : Window
     private async Task<string?> PickColour(string title)
     {
         var choices = Palette.Select(p => new Choice(p.Name, p.Token)).ToList();
-        return await Chooser.AskAsync(this, title, "Colour:", choices);
+        return await Chooser.AskAsync(this, title, "Color:", choices);
     }
 }

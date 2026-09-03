@@ -285,7 +285,7 @@ internal sealed class EditorCommands(
                 new Choice("Yellow", "#FFFF00"), new Choice("Bright green", "#00FF00"),
                 new Choice("Turquoise", "#00FFFF"), new Choice("Pink", "#FF00FF"),
                 new Choice("Blue", "#0000FF"), new Choice("Red", "#FF0000"),
-                new Choice("Grey", "#C0C0C0"),
+                new Choice("Gray", "#C0C0C0"),
             }
             : new[]
             {
@@ -294,12 +294,12 @@ internal sealed class EditorCommands(
                 new Choice("Red", "#FF0000"), new Choice("Orange", "#FFC000"),
                 new Choice("Green", "#008000"), new Choice("Blue", "#0070C0"),
                 new Choice("Dark blue", "#002060"), new Choice("Purple", "#7030A0"),
-                new Choice("Grey", "#808080"),
+                new Choice("Gray", "#808080"),
             };
 
-        var title = highlight ? "Text Highlight Colour" : "Font Colour";
+        var title = highlight ? "Text Highlight Color" : "Font Color";
 
-        if (await Chooser.AskAsync(_host(), title, "Colour:", colours) is not { } value) return;
+        if (await Chooser.AskAsync(_host(), title, "Color:", colours) is not { } value) return;
 
         var brush = string.Equals(value, "none", StringComparison.Ordinal)
             ? null
@@ -317,7 +317,7 @@ internal sealed class EditorCommands(
     {
         var choices = new[]
         {
-            new Choice("Left", "left"), new Choice("Centre", "center"),
+            new Choice("Left", "left"), new Choice("Center", "center"),
             new Choice("Right", "right"), new Choice("Justified", "justify"),
         };
 

@@ -90,12 +90,12 @@ public static class ComposeAvailability
         new(ComposeCommands.Subscript.Id, ComposeCommandState.Blocked, EditorGap),
         new(ComposeCommands.Superscript.Id, ComposeCommandState.Blocked, EditorGap),
         new(ComposeCommands.Highlight.Id, ComposeCommandState.Working,
-            "Highlights the selection in one of the reference's own colours."),
+            "Highlights the selection in one of the reference's own colors."),
         new(ComposeCommands.FontColor.Id, ComposeCommandState.Working,
-            "Colours the selection. Automatic writes no colour and lets the reader's client decide."),
+            "Colors the selection. Automatic writes no color and lets the reader's client decide."),
         new(ComposeCommands.ClearFormatting.Id, ComposeCommandState.Blocked, EditorGap),
         new(ComposeCommands.FontDialog.Id, ComposeCommandState.Blocked,
-            "Not planned as a dialog. Family, size, colour and highlight each have their own " +
+            "Not planned as a dialog. Family, size, color and highlight each have their own " +
             "button on this tab, and all four work."),
 
         // ---- Paragraph ----------------------------------------------------------------
@@ -106,7 +106,7 @@ public static class ComposeAvailability
         new(ComposeCommands.DecreaseIndent.Id, ComposeCommandState.Working, "Outdents the paragraph."),
         new(ComposeCommands.IncreaseIndent.Id, ComposeCommandState.Working, "Indents it."),
         new(ComposeCommands.Align.Id, ComposeCommandState.Working,
-            "Left, centre, right or justified."),
+            "Left, center, right or justified."),
         new(ComposeCommands.LineSpacing.Id, ComposeCommandState.Working,
             "Single, 1.15, 1.5 or double."),
         new(ComposeCommands.ShowParagraphMarks.Id, ComposeCommandState.Blocked, EditorGap),

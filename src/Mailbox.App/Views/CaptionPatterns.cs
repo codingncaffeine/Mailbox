@@ -6,7 +6,7 @@ namespace Mailbox.App.Views;
 /// <summary>
 /// The shipped caption backdrop patterns — six invented textures, each drawn in the caption's
 /// own ink so no theme ever meets a colour this file chose. Geometry only: the paint sweep
-/// holds every file outside the theming project to "names no colour", and this one obeys by
+/// holds every file outside the theming project to "names no color", and this one obeys by
 /// construction. Names are provisional until the owner names them.
 /// </summary>
 internal static class CaptionPatterns

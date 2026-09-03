@@ -42,7 +42,7 @@ public sealed class AmoThemeSource : IThemeSource, IDisposable
     [
         ("Red", "#C0392B"), ("Orange", "#D9822B"), ("Yellow", "#D4B106"), ("Green", "#3D8B4F"),
         ("Teal", "#2A8F8F"), ("Blue", "#2E6DA4"), ("Purple", "#7D5BA6"), ("Pink", "#C2589C"),
-        ("Grey", "#7F8C8D"), ("Black", "#20232A"),
+        ("Gray", "#7F8C8D"), ("Black", "#20232A"),
     ];
 
     /// <summary>

@@ -1501,7 +1501,7 @@ public partial class MainWindow
         }
         catch (HttpRequestException ex)
         {
-            Log.Warn("The calendars could not be synchronised.", ex);
+            Log.Warn("The calendars could not be synchronized.", ex);
             shell.StatusRight = "The calendars could not be reached.";
         }
     }

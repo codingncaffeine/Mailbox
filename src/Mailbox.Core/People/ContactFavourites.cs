@@ -16,7 +16,7 @@ namespace Mailbox.Core.People;
 /// same UID and a new id, and a list of ids would quietly point at strangers.
 /// <para>
 /// It is a preference rather than a property of the card. A vCard has no standard way to say
-/// "this person is a favourite of mine", and inventing an X- property would write one reader's
+/// "this person is a favorite of mine", and inventing an X- property would write one reader's
 /// short list into everybody else's address book. This is the same call the folder pane's
 /// Favourites section makes, and it is why neither travels.
 /// </para>

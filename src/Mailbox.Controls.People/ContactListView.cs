@@ -175,7 +175,7 @@ public sealed class ContactListView : DrawnSurface, ISpokenRows
             field = value;
             InvalidateVisual();
         }
-    } = "Right-click a person to add them to your favourites.";
+    } = "Right-click a person to add them to your favorites.";
 
     /// <summary>The token for a part of the list, in whichever palette it is drawing in.</summary>
     private Color Ink(string themed, string popup) => Colour(OnPopup ? popup : themed);

@@ -373,8 +373,8 @@ public static class OptionsPages
 
             new OptionSection("Display options",
             [
-                new ComboRow("Default calendar colour:", Colours, 0, 150, 240) { Key = CalendarOptions.DefaultColourKey },
-                new CheckRow("Use this colour on all calendars") { Key = CalendarOptions.ColourEveryCalendarKey },
+                new ComboRow("Default calendar color:", Colours, 0, 150, 240) { Key = CalendarOptions.DefaultColourKey },
+                new CheckRow("Use this color on all calendars") { Key = CalendarOptions.ColourEveryCalendarKey },
                 new CheckRow("Show week numbers in the month view and in the Date Navigator")
                     { Key = Keys.ShowWeekNumbers },
                 new CheckRow("Show a Weather bar on the calendar"),
@@ -435,8 +435,8 @@ public static class OptionsPages
                 new ComboRow("Default reminder time:", Times, 18, 130, 240),
                 new CheckRow("Keep my task list updated with copies of tasks I assign to other people", true),
                 new CheckRow("Send status report when I complete an assigned task", true),
-                new ComboRow("Overdue task colour:", Colours, 4, 150, 240),
-                new ComboRow("Completed task colour:", Colours, 5, 150, 240),
+                new ComboRow("Overdue task color:", Colours, 4, 150, 240),
+                new ComboRow("Completed task color:", Colours, 5, 150, 240),
                 new CheckRow("Set Quick Click flag to:", true),
             ]),
 
@@ -465,7 +465,7 @@ public static class OptionsPages
             [
                 new CheckRow("Improve search speed by limiting the number of results shown", true),
                 new CheckRow("Highlight the words in the search results", true),
-                new ComboRow("Highlight colour:", Colours, 2, 150, 200),
+                new ComboRow("Highlight color:", Colours, 2, 150, 200),
             ]),
         ]);
 
@@ -500,7 +500,7 @@ public static class OptionsPages
             new OptionSection("Application display options",
             [
                 new CheckRow("Show shortcut keys in ScreenTips", true),
-                new CheckRow("Always use high-contrast-safe colours"),
+                new CheckRow("Always use high-contrast-safe colors"),
                 new CheckRow("Always expand alt text for pictures in messages"),
             ]),
 

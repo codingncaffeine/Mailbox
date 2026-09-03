@@ -131,7 +131,7 @@ public partial class MainWindow
     /// </summary>
     /// <remarks>
     /// Kept by the card's UID rather than by its row, and in this reader's settings rather than in
-    /// the card — a vCard has no way to say "a favourite of mine", and an invented property would
+    /// the card — a vCard has no way to say "a favorite of mine", and an invented property would
     /// write one reader's short list into everybody else's address book.
     /// </remarks>
     private void FavouriteContact(ShellViewModel shell)
@@ -427,7 +427,7 @@ public partial class MainWindow
     /// </summary>
     /// <remarks>
     /// This is where Add to Favourites belongs: the reference's own People peek says so in so
-    /// many words — "right-click a person anywhere to add them to your favourites" — which is why
+    /// many words — "right-click a person anywhere to add them to your favorites" — which is why
     /// the button is not on its bar and is not on ours.
     /// </remarks>
     private void ShowContactMenu(ShellViewModel shell, ContactRow row, Control? anchor = null)
@@ -463,7 +463,7 @@ public partial class MainWindow
         flyout.Items.Add(new Separator());
 
         Entry(
-            App.ContactFavourites.Contains(row.Contact.Uid) ? "Remove from Favourites" : "Add to Favourites",
+            App.ContactFavourites.Contains(row.Contact.Uid) ? "Remove from Favorites" : "Add to Favorites",
             () => FavouriteContact(shell));
 
         flyout.Items.Add(new Separator());

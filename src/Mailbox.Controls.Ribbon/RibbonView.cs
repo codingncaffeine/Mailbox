@@ -501,7 +501,7 @@ public sealed class RibbonView : ContentControl
     /// <summary>
     /// One of the strip's two scroll chevrons, shown only when even the squeezed tabs will not
     /// fit. Measured 24 × 28 off the reference's own least width, drawn in the ribbon body's
-    /// colour with a thin edge — it reads as a block sitting on the strip rather than a button
+    /// color with a thin edge — it reads as a block sitting on the strip rather than a button
     /// floating over it, which is how the reference draws it.
     /// </summary>
     private Control TabScrollButton(bool forward, TabStripPanel strip)

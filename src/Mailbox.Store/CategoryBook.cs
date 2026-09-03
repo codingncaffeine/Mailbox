@@ -6,7 +6,7 @@ namespace Mailbox.Store;
 /// The one set of colour categories, and what keeps every store in step with it.
 /// </summary>
 /// <remarks>
-/// The design's "one colour category set applying to every item type in every module". The set itself
+/// The design's "one color category set applying to every item type in every module". The set itself
 /// lives in the PIM store, which is the file every module shares; each mail account keeps a
 /// mirror of it, because a message's categories are a join table pointing at rows in that
 /// account's own file and the join needs something local to point at. The mirror is matched by

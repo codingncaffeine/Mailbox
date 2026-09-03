@@ -215,11 +215,16 @@ public class AuditPeekTests
     /// </summary>
     /// <remarks>
     /// The sweep photographed it reading <b>Favorites</b> over "Right-click a person to add them
-    /// to your <b>favourites</b>." — two spellings twenty pixels apart in one picture. The
-    /// heading came from the reference and the sentence had been rewritten to drop the name of a
-    /// product this application does not mention; the rewrite changed the spelling and the
-    /// heading did not follow. Fixed to the spelling People's own menu uses ("Add to Favourites"),
-    /// and held here because nothing else in the tree would notice it drifting back.
+    /// to your <b>favourites</b>." — two spellings twenty pixels apart in one picture. The heading
+    /// came from the reference and the sentence had been rewritten; the rewrite changed the
+    /// spelling and the heading did not follow.
+    /// <para>
+    /// This held them together in British while that was the answer. The answer is now American —
+    /// the interface speaks the reference's English, which is what its cloned labels were always
+    /// in — so the check is the same check with the spellings the other way round. What it is for
+    /// has not changed: one surface, one spelling, and nothing else in the tree would notice it
+    /// drifting back.
+    /// </para>
     /// </remarks>
     [Fact]
     public void ThePeoplePeekSpellsItsHeadingTheWayItsOwnSentenceDoes()
@@ -237,12 +242,12 @@ public class AuditPeekTests
 
         Assert.NotEmpty(strings);
 
-        var american = strings.Where(s => s.Contains("favorite", StringComparison.OrdinalIgnoreCase)).ToList();
+        var british = strings.Where(s => s.Contains("favourite", StringComparison.OrdinalIgnoreCase)).ToList();
         Assert.True(
-            american.Count == 0,
-            "The People peek writes " + string.Join(" and ", american.Select(s => $"“{s}”"))
-            + ", but its own empty-list sentence and the People menu that fills it both write "
-            + "“favourites”. One surface, one spelling.");
+            british.Count == 0,
+            "The People peek writes " + string.Join(" and ", british.Select(s => $"“{s}”"))
+            + ", but its heading and the People menu that fills it both write "
+            + "“Favorites”. One surface, one spelling.");
     }
 
     /// <summary>

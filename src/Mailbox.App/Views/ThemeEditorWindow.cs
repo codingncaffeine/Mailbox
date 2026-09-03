@@ -97,7 +97,7 @@ public sealed class ThemeEditorWindow : Window
     {
         var caption = new TextBlock
         {
-            Text = "Every colour, size and family the theme is made of. Changes apply to the running "
+            Text = "Every color, size and family the theme is made of. Changes apply to the running "
                  + "application as you make them; Save As Theme writes them into a theme of your own.",
             TextWrapping = TextWrapping.Wrap,
         };

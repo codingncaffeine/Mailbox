@@ -85,7 +85,7 @@ public static class JournalCommands
     {
         Id = new("journal.categorize"),
         Label = "Categorize",
-        Description = "Tag the entry with a colour category.",
+        Description = "Tag the entry with a color category.",
         Icon = "categorize",
         Category = "Tags",
         Scope = ModuleScope.Journal,
@@ -189,7 +189,7 @@ public static class JournalCommands
     {
         Id = new("journal.view.bycategory"),
         Label = "By Category",
-        Description = "The timeline, its bands one per colour category.",
+        Description = "The timeline, its bands one per color category.",
         Icon = "categorize",
         Category = "Current View",
         Scope = ModuleScope.Journal,

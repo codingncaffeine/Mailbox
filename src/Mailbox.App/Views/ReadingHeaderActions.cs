@@ -138,12 +138,12 @@ public sealed class ReadingHeaderActions : Panel
             ? double.MaxValue
             : Math.Max(0, availableSize.Width - SenderLeastWidth);
 
-        var (labelled, shown) = Fit(full, labels, _overflow?.DesiredSize.Width ?? 0, budget);
+        var (labeled, shown) = Fit(full, labels, _overflow?.DesiredSize.Width ?? 0, budget);
         var overflowed = shown.Any(s => !s);
 
         for (var i = 0; i < _entries.Count; i++)
         {
-            Show(_entries[i].Label, labelled[i], _entries[i].Button);
+            Show(_entries[i].Label, labeled[i], _entries[i].Button);
             _entries[i].Button.IsVisible = shown[i];
         }
 
@@ -203,7 +203,7 @@ public sealed class ReadingHeaderActions : Panel
     /// Hiding a child invalidates that child, not the panel holding it, and a panel whose measure
     /// is still thought valid hands back the width it had when the child was showing. So a hidden
     /// label went on taking its room: the three buttons drew as glyphs and still sat at the pitch
-    /// of their labelled selves, spread across the header with the sender squeezed out from under
+    /// of their labeled selves, spread across the header with the sender squeezed out from under
     /// them — the same trap <c>SimplifiedRowPanel</c> records, in the same shape.
     /// </remarks>
     private static void Show(Control label, bool visible, Control until)
@@ -232,7 +232,7 @@ public sealed class ReadingHeaderActions : Panel
     /// the sender keeps: fitting them into the whole pane is what drew them over it.
     /// </para>
     /// </remarks>
-    public static (bool[] Labelled, bool[] Shown) Fit(
+    public static (bool[] Labeled, bool[] Shown) Fit(
         IReadOnlyList<double> full, IReadOnlyList<double> labels, double overflowWidth, double budget)
     {
         ArgumentNullException.ThrowIfNull(full);
@@ -240,14 +240,14 @@ public sealed class ReadingHeaderActions : Panel
 
         var shown = new bool[full.Count];
         Array.Fill(shown, true);
-        var labelled = new bool[full.Count];
-        Array.Fill(labelled, true);
+        var labeled = new bool[full.Count];
+        Array.Fill(labeled, true);
 
         // Labels first, from the right: a button becomes its glyph before any button leaves, so
         // three reachable glyphs beat two names and a menu.
-        for (var i = full.Count - 1; i >= 0 && Total(full, labels, shown, labelled) > budget; i--)
+        for (var i = full.Count - 1; i >= 0 && Total(full, labels, shown, labeled) > budget; i--)
         {
-            labelled[i] = false;
+            labeled[i] = false;
         }
 
         // Then whole buttons, from the right, into the "…". The menu costs its width only once
@@ -256,7 +256,7 @@ public sealed class ReadingHeaderActions : Panel
         while (true)
         {
             var anyOverflowed = Array.IndexOf(shown, false) >= 0;
-            if (Total(full, labels, shown, labelled) + (anyOverflowed ? overflowWidth : 0) <= budget)
+            if (Total(full, labels, shown, labeled) + (anyOverflowed ? overflowWidth : 0) <= budget)
             {
                 break;
             }
@@ -267,19 +267,19 @@ public sealed class ReadingHeaderActions : Panel
             shown[last] = false;
         }
 
-        return (labelled, shown);
+        return (labeled, shown);
     }
 
     /// <summary>What the row costs with these labels showing and these buttons on it.</summary>
     private static double Total(
-        IReadOnlyList<double> full, IReadOnlyList<double> labels, bool[] shown, bool[] labelled)
+        IReadOnlyList<double> full, IReadOnlyList<double> labels, bool[] shown, bool[] labeled)
     {
         var total = 0.0;
 
         for (var i = 0; i < full.Count; i++)
         {
             if (!shown[i]) continue;
-            total += full[i] - (labelled[i] ? 0 : labels[i]) + Spacing;
+            total += full[i] - (labeled[i] ? 0 : labels[i]) + Spacing;
         }
 
         return total > 0 ? total - Spacing : 0;

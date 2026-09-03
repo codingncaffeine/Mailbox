@@ -1142,7 +1142,7 @@ public partial class App : Application
                     desktop.MainWindow = window;
                     desktop.ShutdownMode = ShutdownMode.OnMainWindowClose;
                 };
-                Log.Info("Started minimised to the notification area.");
+                Log.Info("Started minimized to the notification area.");
             }
             else
             {

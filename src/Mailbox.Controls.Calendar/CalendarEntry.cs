@@ -10,7 +10,7 @@ namespace Mailbox.Controls.Calendar;
 /// The views take these rather than <see cref="Occurrence"/> because a chip is drawn in its
 /// calendar's colour, and an occurrence does not know which calendar it came from — several
 /// overlaid calendars is the case that matters, and it is the only thing that tells two
-/// identical-looking appointments apart. A null <see cref="Colour"/> means the collection has
+/// identical-looking appointments apart. A null <see cref="Color"/> means the collection has
 /// none of its own and the view falls back to <c>calendar.chip.default</c>.
 /// </remarks>
 public sealed record CalendarEntry

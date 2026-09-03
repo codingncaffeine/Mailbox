@@ -117,7 +117,7 @@ public static class ColourSchemes
         colours.TryGetValue("Colors:Window/ForegroundNormal", out var ink);
         colours.TryGetValue("Colors:Selection/BackgroundNormal", out var accent);
 
-        return new ColourScheme("desktop", "Desktop colours", "the desktop's colour scheme",
+        return new ColourScheme("desktop", "Desktop colors", "the desktop's color scheme",
             Recolour.ReadsDark(ground),
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {

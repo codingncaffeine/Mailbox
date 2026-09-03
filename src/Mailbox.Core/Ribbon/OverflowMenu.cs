@@ -116,7 +116,7 @@ public static class OverflowMenu
             .Select(c => c.Id)
             .ToList();
 
-        // The commands that are in the catalogue and on no tab. A submenu rather than a heading
+        // The commands that are in the catalog and on no tab. A submenu rather than a heading
         // with sixty-odd rows under it: the reference's menu has no such section at all, and
         // inlining this one buried its groups — the part that is the reference's shape — under a
         // list of everything the application can do.

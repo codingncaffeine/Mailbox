@@ -402,7 +402,7 @@ internal sealed class ThemeBrowserDialog : Window
             : $"by {listing.Author}";
         _metaLicence.Text = listing.LicenceName is { Length: > 0 }
             ? $"Licence: {listing.LicenceName}" + (listing.LicenceUrl is { Length: > 0 } u ? $" — {u}" : "")
-            : "Licence: not stated by its author.";
+            : "License: not stated by its author.";
         _status.Text = "Fetching the theme…";
 
         try
@@ -478,10 +478,10 @@ internal sealed class ThemeBrowserDialog : Window
 
         // The owner's ask, in honest words: community files, what Mailbox actually does with
         // them, and the terms — while declining is still a button.
-        var licence = listing.LicenceName is { Length: > 0 } name ? name : "no licence stated";
+        var licence = listing.LicenceName is { Length: > 0 } name ? name : "no license stated";
         var confirmed = await Confirm.AskAsync(this, "Install Theme",
             $"“{listing.Name}” was made and uploaded by its author ({listing.Author}), not by Mailbox. "
-            + "Mailbox reads only the theme's colours and re-encodes its images, but anything downloaded "
+            + "Mailbox reads only the theme's colors and re-encodes its images, but anything downloaded "
             + "from the internet deserves a moment's doubt — install only what you trust.\n\n"
             + $"Offered under: {licence}.",
             "Install", destructive: false);

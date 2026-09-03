@@ -24,9 +24,9 @@ public class ReadingHeaderFitTests
     [Fact]
     public void EverythingKeepsItsNameWhileThereIsRoom()
     {
-        var (labelled, shown) = ReadingHeaderActions.Fit(Full, Labels, Overflow, 400);
+        var (labeled, shown) = ReadingHeaderActions.Fit(Full, Labels, Overflow, 400);
 
-        Assert.All(labelled, Assert.True);
+        Assert.All(labeled, Assert.True);
         Assert.All(shown, Assert.True);
     }
 
@@ -38,12 +38,12 @@ public class ReadingHeaderFitTests
     public void NamesGoFirstAndFromTheRight()
     {
         // 254 with names, 100 without. At 200 some names must go and no button need.
-        var (labelled, shown) = ReadingHeaderActions.Fit(Full, Labels, Overflow, 200);
+        var (labeled, shown) = ReadingHeaderActions.Fit(Full, Labels, Overflow, 200);
 
         Assert.All(shown, Assert.True);
-        Assert.Contains(false, labelled);
-        Assert.False(labelled[2], "the rightmost name goes first.");
-        Assert.True(labelled[0], "Reply keeps its name longest.");
+        Assert.Contains(false, labeled);
+        Assert.False(labeled[2], "the rightmost name goes first.");
+        Assert.True(labeled[0], "Reply keeps its name longest.");
     }
 
     /// <summary>
@@ -55,7 +55,7 @@ public class ReadingHeaderFitTests
     {
         // Glyph-only the row costs 100, so the width has to be under that before a button goes —
         // which is itself the point of the previous test: names buy a lot of room.
-        var (labelled, shown) = ReadingHeaderActions.Fit(Full, Labels, Overflow, 90);
+        var (labeled, shown) = ReadingHeaderActions.Fit(Full, Labels, Overflow, 90);
 
         Assert.Contains(false, shown);
         Assert.False(shown[2], "the rightmost button goes first.");
@@ -64,7 +64,7 @@ public class ReadingHeaderFitTests
         var kept = 0.0;
         for (var i = 0; i < Full.Length; i++)
         {
-            if (shown[i]) kept += Full[i] - (labelled[i] ? 0 : Labels[i]);
+            if (shown[i]) kept += Full[i] - (labeled[i] ? 0 : Labels[i]);
         }
 
         Assert.True(kept + Overflow <= 90, $"what is kept plus the menu must fit; it was {kept}.");

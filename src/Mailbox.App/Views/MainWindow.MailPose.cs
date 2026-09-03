@@ -237,7 +237,7 @@ public partial class MainWindow
             var against = where is { } target
                 ? $"store {target.Account.Mail.GetFolder(target.Folder.Id)?.Unread ?? -1} unread of "
                   + $"{target.Account.Mail.GetFolder(target.Folder.Id)?.Total ?? -1}"
-                  + (shell.IsFavourite(target.Account, target.Folder) ? ", favourite" : string.Empty)
+                  + (shell.IsFavourite(target.Account, target.Folder) ? ", favorite" : string.Empty)
                   + $", {target.Account.Account.Address}"
                 : node.Kind == FolderNodeKind.Folder ? "no store folder — a heading" : $"no store folder — {node.Kind}";
 

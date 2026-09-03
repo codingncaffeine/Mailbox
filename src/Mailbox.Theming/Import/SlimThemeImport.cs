@@ -187,6 +187,6 @@ public static class SlimThemeImport
         }
 
         var dark = frame is not null && Recolour.ReadsDark(Recolour.Flatten(frame, "#FFFFFF") ?? frame);
-        return (dark, dark ? "the frame is darker than mid grey" : "the frame is lighter than mid grey (or absent)");
+        return (dark, dark ? "the frame is darker than mid gray" : "the frame is lighter than mid gray (or absent)");
     }
 }

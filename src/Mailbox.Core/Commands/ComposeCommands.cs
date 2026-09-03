@@ -267,7 +267,7 @@ public static class ComposeCommands
     {
         Id = new("format.fontcolor"),
         Label = "Font Color",
-        Description = "Change the colour of the selected text.",
+        Description = "Change the color of the selected text.",
         Icon = "font-color",
         NeutralIcon = true,
         Category = "Font",
@@ -365,7 +365,7 @@ public static class ComposeCommands
     {
         Id = new("format.align"),
         Label = "Align",
-        Description = "Align the paragraph left, centre, right or justified.",
+        Description = "Align the paragraph left, center, right or justified.",
         Icon = "align",
         NeutralIcon = true,
         Category = "Paragraph",
@@ -413,7 +413,7 @@ public static class ComposeCommands
     {
         Id = new("format.shading"),
         Label = "Shading",
-        Description = "Colour the background behind the selection.",
+        Description = "Color the background behind the selection.",
         Icon = "page-color",
         NeutralIcon = true,
         Category = "Paragraph",
@@ -462,7 +462,7 @@ public static class ComposeCommands
     {
         Id = new("format.changestyles"),
         Label = "Change Styles",
-        Description = "Change the style set, colours and fonts used by this message.",
+        Description = "Change the style set, colors and fonts used by this message.",
         Icon = "change-styles",
         Category = "Styles",
         Scope = ModuleScope.Mail,
@@ -951,7 +951,7 @@ public static class ComposeCommands
     {
         Id = new("options.colors"),
         Label = "Colors",
-        Description = "Change the theme's colour set.",
+        Description = "Change the theme's color set.",
         Icon = "theme-colors",
         Category = "Themes",
         Scope = ModuleScope.Mail,
@@ -984,7 +984,7 @@ public static class ComposeCommands
     {
         Id = new("options.pagecolor"),
         Label = "Page Color",
-        Description = "Colour the background of the message body.",
+        Description = "Color the background of the message body.",
         Icon = "page-color",
         Category = "Themes",
         Scope = ModuleScope.Mail,

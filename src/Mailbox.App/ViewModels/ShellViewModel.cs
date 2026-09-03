@@ -48,7 +48,7 @@ public enum FolderNodeKind
     /// <summary>One search folder — a saved query, listed under the heading.</summary>
     SearchFolder,
 
-    /// <summary>The "Favourites" heading at the top of the pane.</summary>
+    /// <summary>The "Favorites" heading at the top of the pane.</summary>
     FavouritesHeading,
 
     /// <summary>A folder listed under Favourites — the same folder as its row in the tree below.</summary>
@@ -948,7 +948,7 @@ public sealed partial class ShellViewModel : ObservableObject
             }
         }
 
-        Folders.Add(new FolderNode("Favourites", 0, 0, bold: true, kind: FolderNodeKind.FavouritesHeading));
+        Folders.Add(new FolderNode("Favorites", 0, 0, bold: true, kind: FolderNodeKind.FavouritesHeading));
         foreach (var favourite in favourites.All)
         {
             var account = accounts.FirstOrDefault(a => string.Equals(a.Account.Address, favourite.Address, StringComparison.OrdinalIgnoreCase));
@@ -4200,7 +4200,7 @@ public sealed partial class ShellViewModel : ObservableObject
 
     // ---- Pane layout ----------------------------------------------------------------------
 
-    /// <summary>The folder pane is minimised to its strip, by the reader or by the width.</summary>
+    /// <summary>The folder pane is minimized to its strip, by the reader or by the width.</summary>
     public bool NavCollapsed
     {
         get;
@@ -4231,7 +4231,7 @@ public sealed partial class ShellViewModel : ObservableObject
     } = double.PositiveInfinity;
 
     /// <summary>
-    /// Set when the reader expands the pane at a width that had minimised it for them. Their ask
+    /// Set when the reader expands the pane at a width that had minimized it for them. Their ask
     /// wins over the width until the window is resized, because a chevron that does nothing when
     /// pressed is worse than a folder pane that is wide for the window it is in.
     /// </summary>
@@ -4239,10 +4239,10 @@ public sealed partial class ShellViewModel : ObservableObject
 
     /// <summary>The folder pane at its full width \u2014 neither minimised nor crowded out.</summary>
     public bool NavVisible => !NavCollapsed
-        && (_navExpandedAtWidth || !PaneShedding.MinimisesFolderPane(ShellWidth));
+        && (_navExpandedAtWidth || !PaneShedding.MinimizesFolderPane(ShellWidth));
 
     /// <summary>
-    /// The strip the pane becomes. Minimised is not hidden: the reference keeps the favourites
+    /// The strip the pane becomes. Minimized is not hidden: the reference keeps the favorites
     /// on their sides and the chevron that brings the pane back, and a pane that vanished with no
     /// way back is what this used to be.
     /// </summary>
@@ -4257,8 +4257,8 @@ public sealed partial class ShellViewModel : ObservableObject
         ReadingPaneVisible && !PaneShedding.HidesReadingPane(ShellWidth);
 
     /// <summary>
-    /// The chevron, from either side. Minimising is the reader's setting; expanding a pane the
-    /// width minimised is an override that lasts until the window is resized.
+    /// The chevron, from either side. Minimizing is the reader's setting; expanding a pane the
+    /// width minimized is an override that lasts until the window is resized.
     /// </summary>
     private void ToggleFolderPane()
     {
@@ -4284,14 +4284,14 @@ public sealed partial class ShellViewModel : ObservableObject
     public string CollapseGlyph => NavVisible ? "\u2039" : "\u203A";
 
     /// <summary>
-    /// The favourites, drawn on their sides down the minimised pane. The same rows the pane's
-    /// own Favourites section holds, so picking one here and picking one there are one thing.
+    /// The favorites, drawn on their sides down the minimized pane. The same rows the pane's
+    /// own Favorites section holds, so picking one here and picking one there are one thing.
     /// </summary>
     public IEnumerable<FolderNode> CollapsedFolders =>
         Folders.Where(f => f.Kind == FolderNodeKind.Favourite);
 
     /// <summary>
-    /// Opens a folder named on the minimised strip. The strip is not a selection control of its
+    /// Opens a folder named on the minimized strip. The strip is not a selection control of its
     /// own — the pane's list still holds the selection — so this sets the same property the list
     /// binds, and the two agree by construction.
     /// </summary>

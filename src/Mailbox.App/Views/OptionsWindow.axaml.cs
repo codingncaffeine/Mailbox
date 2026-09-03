@@ -1308,7 +1308,7 @@ public sealed class OptionsWindow : Window
 
         var minimised = new CheckBox
         {
-            Content = "Start minimised to the notification area",
+            Content = "Start minimized to the notification area",
             IsChecked = autostart.StartsMinimized,
             IsEnabled = autostart.IsEnabled,
             Margin = new Thickness(24, 0, 0, 0),
@@ -1702,7 +1702,7 @@ public sealed class OptionsWindow : Window
         var curated = Mailbox.Theming.Palettes.ColourSchemes.Curated;
         var entries = new List<string> { "(Pick a palette…)" };
         entries.AddRange(curated.Select(s => s.Name));
-        entries.Add("(Desktop colours)");
+        entries.Add("(Desktop colors)");
         entries.Add("(From your background image)");
 
         var combo = new ComboBox
@@ -1729,7 +1729,7 @@ public sealed class OptionsWindow : Window
                 if (scheme is null)
                 {
                     await Confirm.TellAsync(this, "Palette",
-                        "The desktop's colour scheme could not be read here.");
+                        "The desktop's color scheme could not be read here.");
                 }
             }
             else

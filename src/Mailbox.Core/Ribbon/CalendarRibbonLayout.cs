@@ -90,7 +90,7 @@ public static class CalendarRibbonLayout
                     RibbonItem.Sheddable(CalendarCommands.MonthView.Id),
                     RibbonItem.Small(CalendarCommands.TimeScale.Id, RibbonItemKind.DropDown)),
 
-                Cluster("colour", "Colour",
+                Cluster("colour", "Color",
                     RibbonItem.Small(CalendarCommands.CalendarColour.Id, RibbonItemKind.DropDown),
                     RibbonItem.Small(CalendarCommands.Overlay.Id)),
 
@@ -293,7 +293,7 @@ public static class CalendarRibbonLayout
                     new RibbonGroup
                     {
                         Id = "colour",
-                        Label = "Colour",
+                        Label = "Color",
                         KeyTip = "ZO",
                         CollapsePriority = 3,
                         Items =

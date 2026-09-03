@@ -38,7 +38,7 @@ internal static class ShortcutsExport
         page.AppendLine("# Keyboard shortcuts");
         page.AppendLine();
         page.AppendLine("Every shortcut Mailbox ships with. **This page is generated** from the command");
-        page.AppendLine("catalogue by `tools/export-shortcuts.sh`, so it says what the application does rather");
+        page.AppendLine("catalog by `tools/export-shortcuts.sh`, so it says what the application does rather");
         page.AppendLine("than what somebody remembered it doing — edit the commands, not the page.");
         page.AppendLine();
         page.AppendLine("All of these can be changed: **Options › Customize Ribbon › Keyboard shortcuts:");

@@ -117,7 +117,7 @@ internal static class ViewDialogKit
         ("Orange", "category.orange"),
         ("Purple", "category.purple"),
         ("Yellow", "category.yellow"),
-        ("Grey", "text.secondary"),
+        ("Gray", "text.secondary"),
     ];
 }
 
@@ -913,7 +913,7 @@ public sealed class ConditionalFormattingDialog : Window
         body.Children.Add(ViewDialogKit.Label("Font style", bold: true));
         body.Children.Add(bold);
         body.Children.Add(italic);
-        body.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { ViewDialogKit.Label("Colour:"), colour } });
+        body.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { ViewDialogKit.Label("Color:"), colour } });
         body.Children.Add(ViewDialogKit.Buttons(ok, ViewDialogKit.Cancel(window)));
         await window.ShowDialog(this);
         Refresh(index);

@@ -106,7 +106,7 @@ public static class NoteCommands
     {
         Id = new("notes.categorize"),
         Label = "Categorize",
-        Description = "Tag the note with a colour category, which is what colours it.",
+        Description = "Tag the note with a color category, which is what colors it.",
         Icon = "categorize",
         Category = "Tags",
         Scope = ModuleScope.Notes,

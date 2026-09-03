@@ -30,14 +30,14 @@ public static class PaneShedding
     public const double ReadingPaneFloor = 760;
 
     /// <summary>
-    /// Below this the folder pane minimises to its strip. Chosen so that when it happens there is
+    /// Below this the folder pane minimizes to its strip. Chosen so that when it happens there is
     /// still a list worth reading beside it: the strip is 48 and the rail 56, which leaves a
     /// message list of about 500 at this width and about 250 at the window's own floor.
     /// </summary>
     public const double FolderPaneFloor = 600;
 
     /// <summary>
-    /// The narrowest the shell goes, matching the reference: rail, minimised folder pane, list.
+    /// The narrowest the shell goes, matching the reference: rail, minimized folder pane, list.
     /// </summary>
     public const double ShellFloor = 350;
 
@@ -45,5 +45,5 @@ public static class PaneShedding
     public static bool HidesReadingPane(double width) => width < ReadingPaneFloor;
 
     /// <summary>Whether the folder pane is down to its strip at this width.</summary>
-    public static bool MinimisesFolderPane(double width) => width < FolderPaneFloor;
+    public static bool MinimizesFolderPane(double width) => width < FolderPaneFloor;
 }

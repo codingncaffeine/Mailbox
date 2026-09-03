@@ -282,7 +282,7 @@ public static class PeopleCommands
     {
         Id = new("people.categorize"),
         Label = "Categorize",
-        Description = "Give the selected contact a colour category.",
+        Description = "Give the selected contact a color category.",
         Icon = "categorize",
         IconArtwork = "categorize",
         Category = "Tags",
@@ -327,7 +327,7 @@ public static class PeopleCommands
     public static readonly MailboxCommand Favourite = new()
     {
         Id = new("people.favourite"),
-        Label = "Add to Favourites",
+        Label = "Add to Favorites",
         Description = "Keep the contact in the To-Do Bar's People section.",
         Icon = "star",
         Category = "Tags",
