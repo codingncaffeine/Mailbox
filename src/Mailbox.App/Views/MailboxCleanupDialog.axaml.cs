@@ -4,6 +4,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Mailbox.Core.Localization;
 using Mailbox.Store;
 
 namespace Mailbox.App.Views;
@@ -106,9 +107,12 @@ public sealed class MailboxCleanupDialog : Window
         empty.Click += async (_, _) =>
         {
             var deleted = App.Accounts.All.Select(a => a.Mail.FolderWithRole(a.Account.Id, FolderRole.Deleted)).Sum(f => f?.Total ?? 0);
-            if (deleted == 0) { Report = "Deleted Items is already empty."; return; }
+            if (deleted == 0) { Report = Strings.T("Deleted Items is already empty."); return; }
             var go = await Confirm.AskBeforePermanentDeleteAsync(this, "Empty Deleted Items",
-                $"Permanently delete {deleted:N0} item{(deleted == 1 ? "" : "s")} from Deleted Items?");
+                Strings.Counted(
+                    "Permanently delete {0} item from Deleted Items?",
+                    "Permanently delete {0} items from Deleted Items?",
+                    deleted));
             if (!go) return;
             var count = 0;
             foreach (var account in App.Accounts.All)
@@ -118,7 +122,8 @@ public sealed class MailboxCleanupDialog : Window
                 if (ids.Count > 0) count += account.Mail.DeleteMessages(ids);
             }
 
-            Report = $"Deleted Items emptied: {count:N0} item{(count == 1 ? "" : "s")}.";
+            Report = Strings.Counted(
+                "Deleted Items emptied: {0} item.", "Deleted Items emptied: {0} items.", count);
             _body.Children.Clear();
             Populate();
         };

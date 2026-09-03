@@ -1,3 +1,5 @@
+using Mailbox.Core.Localization;
+
 namespace Mailbox.Protocols;
 
 /// <summary>Where one task in a send/receive run has got to.</summary>
@@ -81,7 +83,13 @@ public sealed class SendReceiveTasks
 
     /// <summary>The line above the bar, worded as the reference words it.</summary>
     public string Headline =>
-        $"{Succeeded} of {Total} Task{(Total == 1 ? "" : "s")} have completed successfully";
+        string.Format(
+            Strings.Plural(
+                "{0} of {1} Task have completed successfully",
+                "{0} of {1} Tasks have completed successfully",
+                Total),
+            Succeeded,
+            Total);
 
     /// <summary>0 to 1, for the bar. Counts anything finished, failures included.</summary>
     public double Fraction => Total == 0 ? 0 : (double)(Succeeded + Failed) / Total;

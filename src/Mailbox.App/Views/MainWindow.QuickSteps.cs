@@ -1,3 +1,4 @@
+using Mailbox.Core.Localization;
 using Avalonia.Controls;
 using Mailbox.App.ViewModels;
 using Mailbox.Core.Commands;
@@ -181,7 +182,13 @@ public partial class MainWindow
 
         if (acted > 0 && respond.Count == 0)
         {
-            shell.StatusRight = $"Quick Step “{step.Name}” applied to {rows.Count} message{(rows.Count == 1 ? "" : "s")}.";
+            shell.StatusRight = string.Format(
+                Strings.Plural(
+                    "Quick Step “{1}” applied to {0} message.",
+                    "Quick Step “{1}” applied to {0} messages.",
+                    rows.Count),
+                rows.Count,
+                step.Name);
         }
     }
 

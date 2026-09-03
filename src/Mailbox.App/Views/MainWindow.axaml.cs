@@ -1,3 +1,4 @@
+using Mailbox.Core.Localization;
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
@@ -3618,7 +3619,15 @@ public partial class MainWindow : Window
         Entry("Mark All as Read", () =>
         {
             var count = shell.MarkFolderRead(account, folder.Id);
-            shell.StatusRight = count == 0 ? $"Nothing unread in {folder.Name}." : $"{count} message{(count == 1 ? "" : "s")} in {folder.Name} marked read.";
+            shell.StatusRight = count == 0
+                ? string.Format(Strings.T("Nothing unread in {0}."), folder.Name)
+                : string.Format(
+                    Strings.Plural(
+                        "{0} message in {1} marked read.",
+                        "{0} messages in {1} marked read.",
+                        count),
+                    count,
+                    folder.Name);
             return Task.CompletedTask;
         });
         Entry("Clean Up Folder", () =>
@@ -3961,10 +3970,19 @@ public partial class MainWindow : Window
         var total = account.Mail.Messages(folder.Id, int.MaxValue).Count;
         if (total == 0) { shell.StatusRight = $"{folder.Name} is already empty."; return; }
         var go = await Confirm.AskBeforePermanentDeleteAsync(this, "Empty Folder",
-            $"Permanently delete {total:N0} item{(total == 1 ? "" : "s")} from {folder.Name}?");
+            string.Format(
+                Strings.Plural(
+                    "Permanently delete {0} item from {1}?",
+                    "Permanently delete {0} items from {1}?",
+                    total),
+                total,
+                folder.Name));
         if (!go) return;
         var count = shell.EmptyFolder(account, folder.Id);
-        shell.StatusRight = $"{folder.Name} emptied: {count:N0} item{(count == 1 ? "" : "s")}.";
+        shell.StatusRight = string.Format(
+            Strings.Plural("{1} emptied: {0} item.", "{1} emptied: {0} items.", count),
+            count,
+            folder.Name);
     }
 
     private async Task FolderPropertiesAsync(ShellViewModel shell, OpenAccount account, Folder folder, int tab = 0)
@@ -7375,8 +7393,15 @@ public partial class MainWindow : Window
         var count = App.Rules.RunNow(account.Mail, folder, [rule]);
         shell.Refresh();
         shell.StatusRight = count == 0
-            ? $"Rule “{rule.Name}” created; nothing in {folder.Name} matched it."
-            : $"Rule “{rule.Name}” created and applied to {count} message{(count == 1 ? "" : "s")}.";
+            ? string.Format(
+                Strings.T("Rule “{0}” created; nothing in {1} matched it."), rule.Name, folder.Name)
+            : string.Format(
+                Strings.Plural(
+                    "Rule “{1}” created and applied to {0} message.",
+                    "Rule “{1}” created and applied to {0} messages.",
+                    count),
+                count,
+                rule.Name);
     }
 
     /// <summary>The Move menu: every folder of the account the selection is in.</summary>

@@ -21,6 +21,37 @@ msgstr[1] ""
 msgid "Items: {0}   Unread: {1}"
 msgstr ""
 
+#: src/Mailbox.App/Views/AccountSettingsDialog.axaml.cs:513
+msgid "{0} message will be deleted with it."
+msgid_plural "{0} messages will be deleted with it."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.App/Views/AccountSettingsDialog.axaml.cs:518
+msgid "Where mail was downloaded and removed from the server, this is the only copy."
+msgstr ""
+
+#: src/Mailbox.App/Views/AccountSettingsDialog.axaml.cs:522
+msgid "The file {0} will be deleted."
+msgstr ""
+
+#: src/Mailbox.App/Views/BackstageActions.cs:246
+#: src/Mailbox.App/Views/MailboxCleanupDialog.axaml.cs:112
+msgid "Permanently delete {0} item from Deleted Items?"
+msgid_plural "Permanently delete {0} items from Deleted Items?"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.App/Views/BackstageActions.cs:251
+msgid "This cannot be undone, and where mail was removed from the server this is the only copy."
+msgstr ""
+
+#: src/Mailbox.App/Views/BackstageActions.cs:259
+msgid "{0} item deleted."
+msgid_plural "{0} items deleted."
+msgstr[0] ""
+msgstr[1] ""
+
 #: src/Mailbox.App/Views/BackupDialog.cs:341
 msgid "Restored. {0} thing was moved aside with a dated name."
 msgid_plural "Restored. {0} things were moved aside with a dated name."
@@ -30,3 +61,247 @@ msgstr[1] ""
 #: src/Mailbox.App/Views/BackupDialog.cs:345
 msgid "\n\nMailbox will close now — start it again to open the restored data."
 msgstr ""
+
+#: src/Mailbox.App/Views/EditorOptionsDialog.cs:230
+msgid "No words have been added yet."
+msgstr ""
+
+#: src/Mailbox.App/Views/EditorOptionsDialog.cs:231
+msgid "{0} word, kept beside your mail."
+msgid_plural "{0} words, kept beside your mail."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.App/Views/FolderDialogs.cs:276
+msgid "{0} item, {1} unread, {2}"
+msgid_plural "{0} items, {1} unread, {2}"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.App/Views/MailboxCleanupDialog.axaml.cs:110
+msgid "Deleted Items is already empty."
+msgstr ""
+
+#: src/Mailbox.App/Views/MailboxCleanupDialog.axaml.cs:125
+msgid "Deleted Items emptied: {0} item."
+msgid_plural "Deleted Items emptied: {0} items."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.App/Views/MainWindow.QuickSteps.cs:186
+msgid "Quick Step “{1}” applied to {0} message."
+msgid_plural "Quick Step “{1}” applied to {0} messages."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.App/Views/MainWindow.Tabs.cs:236
+msgid "Message preview off."
+msgstr ""
+
+#: src/Mailbox.App/Views/MainWindow.Tabs.cs:237
+msgid "Message preview: {0} line."
+msgid_plural "Message preview: {0} lines."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.App/Views/MainWindow.Tabs.cs:280
+msgid "{0} column shown."
+msgid_plural "{0} columns shown."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.App/Views/MainWindow.Tabs.cs:400
+msgid "Nothing is open."
+msgstr ""
+
+#: src/Mailbox.App/Views/MainWindow.Tabs.cs:401
+msgid "{0} window closed."
+msgid_plural "{0} windows closed."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.App/Views/MainWindow.Tabs.cs:433
+msgid "Nothing selected here is a header waiting for its message."
+msgstr ""
+
+#: src/Mailbox.App/Views/MainWindow.Tabs.cs:435
+msgid "{0} header marked for download."
+msgid_plural "{0} headers marked for download."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.App/Views/MainWindow.Tabs.cs:437
+msgid "{0} header unmarked."
+msgid_plural "{0} headers unmarked."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.App/Views/MainWindow.Tabs.cs:469
+msgid "Nothing new in {0}."
+msgstr ""
+
+#: src/Mailbox.App/Views/MainWindow.Tabs.cs:471
+msgid "{0} header downloaded into {1}."
+msgid_plural "{0} headers downloaded into {1}."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.App/Views/MainWindow.Tabs.cs:507
+msgid "Fetching {0} message…"
+msgid_plural "Fetching {0} messages…"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.App/Views/MainWindow.Tabs.cs:515
+msgid "Nothing came back: those headers are no longer on the server."
+msgstr ""
+
+#: src/Mailbox.App/Views/MainWindow.Tabs.cs:516
+msgid "{0} message downloaded."
+msgid_plural "{0} messages downloaded."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.App/Views/MainWindow.Tabs.cs:65
+#: src/Mailbox.App/Views/MainWindow.axaml.cs:3623
+msgid "Nothing unread in {0}."
+msgstr ""
+
+#: src/Mailbox.App/Views/MainWindow.Tabs.cs:67
+#: src/Mailbox.App/Views/MainWindow.axaml.cs:3625
+msgid "{0} message in {1} marked read."
+msgid_plural "{0} messages in {1} marked read."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.App/Views/MainWindow.axaml.cs:3974
+msgid "Permanently delete {0} item from {1}?"
+msgid_plural "Permanently delete {0} items from {1}?"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.App/Views/MainWindow.axaml.cs:3983
+msgid "{1} emptied: {0} item."
+msgid_plural "{1} emptied: {0} items."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.App/Views/MainWindow.axaml.cs:7397
+msgid "Rule “{0}” created; nothing in {1} matched it."
+msgstr ""
+
+#: src/Mailbox.App/Views/MainWindow.axaml.cs:7399
+msgid "Rule “{1}” created and applied to {0} message."
+msgid_plural "Rule “{1}” created and applied to {0} messages."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.App/Views/RecoverDeletedItemsDialog.cs:194
+msgid "{0} item restored to where it was."
+msgid_plural "{0} items restored to where they were."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.App/Views/RecoverDeletedItemsDialog.cs:207
+msgid "Permanently delete {0} item? Once purged, it cannot be recovered."
+msgid_plural "Permanently delete {0} items? Once purged, they cannot be recovered."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.App/Views/RecoverDeletedItemsDialog.cs:216
+msgid "{0} item purged."
+msgid_plural "{0} items purged."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.App/Views/RulesAndAlertsDialog.axaml.cs:356
+msgid "{0} rule written to {1}."
+msgid_plural "{0} rules written to {1}."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.App/Views/RulesAndAlertsDialog.axaml.cs:398
+msgid "{0} rule added. Apply to keep them."
+msgid_plural "{0} rules added. Apply to keep them."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.App/Views/RulesAndAlertsDialog.axaml.cs:572
+msgid "{0} rule on the server, updated {1:d MMM HH:mm}."
+msgid_plural "{0} rules on the server, updated {1:d MMM HH:mm}."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.App/Views/RulesAndAlertsDialog.axaml.cs:752
+msgid "The rule matched no messages in the Inbox."
+msgstr ""
+
+#: src/Mailbox.App/Views/RulesAndAlertsDialog.axaml.cs:753
+msgid "The rule was applied to {0} message in the Inbox."
+msgid_plural "The rule was applied to {0} messages in the Inbox."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.App/Views/RulesAndAlertsDialog.axaml.cs:872
+msgid "No message in {0} matched."
+msgstr ""
+
+#: src/Mailbox.App/Views/RulesAndAlertsDialog.axaml.cs:874
+msgid "{0} message in {1} acted on."
+msgid_plural "{0} messages in {1} acted on."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.App/Views/ThemeBrowserDialog.cs:334
+msgid "Nothing matched."
+msgstr ""
+
+#: src/Mailbox.App/Views/ThemeBrowserDialog.cs:336
+msgid "{0} of {1} theme."
+msgid_plural "{0} of {1} themes."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.App/Views/ThemeEditorWindow.cs:278
+msgid "{0} token changed"
+msgid_plural "{0} tokens changed"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.Protocols/SendReceive.cs:63
+msgid "{0} new"
+msgid_plural "{0} new"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.Protocols/SendReceive.cs:64
+msgid "{0} sent"
+msgid_plural "{0} sent"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.Protocols/SendReceive.cs:65
+msgid "No new mail"
+msgstr ""
+
+#: src/Mailbox.Protocols/SendReceive.cs:68
+msgid "{0} account failed"
+msgid_plural "{0} accounts failed"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.Protocols/SendReceiveTasks.cs:87
+msgid "{0} of {1} Task have completed successfully"
+msgid_plural "{0} of {1} Tasks have completed successfully"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.Protocols/SievePublisher.cs:149
+msgid "Your automatic reply is on the server."
+msgstr ""
+
+#: src/Mailbox.Protocols/SievePublisher.cs:150
+msgid "{0} rule on the server."
+msgid_plural "{0} rules on the server."
+msgstr[0] ""
+msgstr[1] ""

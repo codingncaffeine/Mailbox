@@ -1,3 +1,4 @@
+using Mailbox.Core.Localization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -351,7 +352,10 @@ public sealed class RulesAndAlertsDialog : Window
         try
         {
             await File.WriteAllTextAsync(path, document);
-            _serverStatus.Text = $"{_rows.Count} rule{(_rows.Count == 1 ? "" : "s")} written to {Path.GetFileName(path)}.";
+            _serverStatus.Text = string.Format(
+                Strings.Plural("{0} rule written to {1}.", "{0} rules written to {1}.", _rows.Count),
+                _rows.Count,
+                Path.GetFileName(path));
         }
         catch (Exception ex)
         {
@@ -391,7 +395,8 @@ public sealed class RulesAndAlertsDialog : Window
 
         foreach (var rule in read) _rows.Add(new RuleRow(rule with { Id = 0 }, _nextTemporaryId--));
         Redraw(_rows[^1].Key);
-        _serverStatus.Text = $"{read.Count} rule{(read.Count == 1 ? "" : "s")} added. Apply to keep them.";
+        _serverStatus.Text = Strings.Counted(
+            "{0} rule added. Apply to keep them.", "{0} rules added. Apply to keep them.", read.Count);
     }
 
     private static readonly FilePickerFileType RuleFiles = new("Mailbox rules") { Patterns = ["*.json"] };
@@ -563,7 +568,13 @@ public sealed class RulesAndAlertsDialog : Window
         }
         else
         {
-            _serverStatus.Text = $"{onServer} rule{(onServer == 1 ? "" : "s")} on the server, updated {state.Published.ToLocalTime():d MMM HH:mm}.";
+            _serverStatus.Text = string.Format(
+                Strings.Plural(
+                    "{0} rule on the server, updated {1:d MMM HH:mm}.",
+                    "{0} rules on the server, updated {1:d MMM HH:mm}.",
+                    onServer),
+                onServer,
+                state.Published.ToLocalTime());
             _retry.IsVisible = false;
         }
     }
@@ -737,7 +748,12 @@ public sealed class RulesAndAlertsDialog : Window
 
         var count = App.Rules.RunNow(_current.Mail, inbox, [rule]);
         await Confirm.SayAsync(this, "Rules and Alerts",
-            count == 0 ? "The rule matched no messages in the Inbox." : $"The rule was applied to {count} message{(count == 1 ? "" : "s")} in the Inbox.");
+            count == 0
+                ? Strings.T("The rule matched no messages in the Inbox.")
+                : Strings.Counted(
+                    "The rule was applied to {0} message in the Inbox.",
+                    "The rule was applied to {0} messages in the Inbox.",
+                    count));
     }
 
     /// <summary>A click on an underlined value in the description edits it in place and saves the rule.</summary>
@@ -853,8 +869,14 @@ public sealed class RunRulesNowDialog : Window
 
             var count = App.Rules.RunNow(account.Mail, target, selected, filter);
             status.Text = count == 0
-                ? $"No message in {target.Name} matched."
-                : $"{count} message{(count == 1 ? "" : "s")} in {target.Name} acted on.";
+                ? string.Format(Strings.T("No message in {0} matched."), target.Name)
+                : string.Format(
+                    Strings.Plural(
+                        "{0} message in {1} acted on.",
+                        "{0} messages in {1} acted on.",
+                        count),
+                    count,
+                    target.Name);
         };
 
         var close = new Button { Content = "Close", Width = 74, IsCancel = true };

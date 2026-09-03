@@ -5,6 +5,7 @@ using Avalonia.Controls.Templates;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Mailbox.Core.Localization;
 using Mailbox.Store;
 
 namespace Mailbox.App.Views;
@@ -190,7 +191,10 @@ public sealed class RecoverDeletedItemsDialog : Window
 
         var restored = _current.Mail.Restore(ids, fallback.Id);
         Reload();
-        _status.Text = $"{restored} item{(restored == 1 ? "" : "s")} restored to where {(restored == 1 ? "it was" : "they were")}.";
+        _status.Text = Strings.Counted(
+            "{0} item restored to where it was.",
+            "{0} items restored to where they were.",
+            restored);
     }
 
     private async Task PurgeAsync()
@@ -200,12 +204,15 @@ public sealed class RecoverDeletedItemsDialog : Window
         if (ids.Count == 0) { _status.Text = "Select the items to purge."; return; }
 
         var go = await Confirm.AskAsync(this, "Purge Selected Items",
-            $"Permanently delete {ids.Count} item{(ids.Count == 1 ? "" : "s")}? Once purged, {(ids.Count == 1 ? "it" : "they")} cannot be recovered.",
+            Strings.Counted(
+                "Permanently delete {0} item? Once purged, it cannot be recovered.",
+                "Permanently delete {0} items? Once purged, they cannot be recovered.",
+                ids.Count),
             "Purge");
         if (!go) return;
 
         var purged = _current.Mail.Purge(ids);
         Reload();
-        _status.Text = $"{purged} item{(purged == 1 ? "" : "s")} purged.";
+        _status.Text = Strings.Counted("{0} item purged.", "{0} items purged.", purged);
     }
 }

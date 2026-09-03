@@ -1,3 +1,4 @@
+using Mailbox.Core.Localization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
@@ -330,8 +331,11 @@ internal sealed class ThemeBrowserDialog : Window
             foreach (var listing in results) _rows.Add(Row(listing));
             _more.IsEnabled = _listings.Count < _total;
             _status.Text = _total == 0
-                ? "Nothing matched."
-                : $"{_listings.Count} of {_total:N0} theme{(_total == 1 ? "" : "s")}.";
+                ? Strings.T("Nothing matched.")
+                : string.Format(
+                    Strings.Plural("{0} of {1} theme.", "{0} of {1} themes.", _total),
+                    _listings.Count,
+                    _total);
         }
         catch (ThemeSourceException ex)
         {

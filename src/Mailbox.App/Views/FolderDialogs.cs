@@ -1,3 +1,4 @@
+using Mailbox.Core.Localization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
@@ -271,7 +272,14 @@ public sealed class FolderPropertiesDialog : Window
                 Row("Name:", name),
                 Row("Type:", ViewDialogKit.Label("Folder containing Mail and Post Items")),
                 Row("Location:", ViewDialogKit.Label(location)),
-                Row("Contents:", ViewDialogKit.Label($"{folder.Total:N0} item{(folder.Total == 1 ? "" : "s")}, {unread:N0} unread, {MailboxCleanupDialog.Size(bytes)}")),
+                Row("Contents:", ViewDialogKit.Label(string.Format(
+                    Strings.Plural(
+                        "{0} item, {1} unread, {2}",
+                        "{0} items, {1} unread, {2}",
+                        folder.Total),
+                    folder.Total,
+                    unread,
+                    MailboxCleanupDialog.Size(bytes)))),
                 Row("On the server:", ViewDialogKit.Label(folder.ImapPath ?? "no — this folder is on this computer only")),
             },
         };

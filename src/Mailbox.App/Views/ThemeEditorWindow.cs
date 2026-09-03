@@ -1,3 +1,4 @@
+using Mailbox.Core.Localization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
@@ -274,7 +275,7 @@ public sealed class ThemeEditorWindow : Window
         _list.ItemsSource = _keys.Select(Row).ToList();
         _modifiedCount.Text = _overrides.Count == 0
             ? "No changes"
-            : $"{_overrides.Count} token{(_overrides.Count == 1 ? "" : "s")} changed";
+            : Strings.Counted("{0} token changed", "{0} tokens changed", _overrides.Count);
 
         if (selected is not null && _keys.IndexOf(selected) is var index && index >= 0)
             _list.SelectedIndex = index;

@@ -1,3 +1,4 @@
+using Mailbox.Core.Localization;
 using Mailbox.Core.Diagnostics;
 using Mailbox.Store;
 
@@ -55,10 +56,17 @@ public sealed record SendReceiveResult(IReadOnlyList<AccountRunResult> Accounts)
         var failures = Accounts.Count(a => !a.Succeeded);
         var parts = new List<string>();
 
-        if (Received > 0) parts.Add($"{Received} new");
-        if (Sent > 0) parts.Add($"{Sent} sent");
-        if (parts.Count == 0 && failures == 0) parts.Add("No new mail");
-        if (failures > 0) parts.Add($"{failures} account{(failures == 1 ? "" : "s")} failed");
+        // Assembled from pieces rather than written whole, because the reference words it that
+        // way: a comma-separated list of what happened, in a fixed order. Each piece is its own
+        // string so a translator answers "3 new" and "1 account failed" as sentences of their own,
+        // which is what they are — the comma between them is punctuation, not grammar.
+        if (Received > 0) parts.Add(Strings.Counted("{0} new", "{0} new", Received));
+        if (Sent > 0) parts.Add(Strings.Counted("{0} sent", "{0} sent", Sent));
+        if (parts.Count == 0 && failures == 0) parts.Add(Strings.T("No new mail"));
+        if (failures > 0)
+        {
+            parts.Add(Strings.Counted("{0} account failed", "{0} accounts failed", failures));
+        }
 
         return string.Join(", ", parts) + ".";
     }

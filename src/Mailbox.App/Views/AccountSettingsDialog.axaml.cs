@@ -1,3 +1,4 @@
+using Mailbox.Core.Localization;
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
@@ -509,9 +510,16 @@ public sealed class AccountSettingsDialog : Window
             "Remove account",
             $"Remove {row.Account.Address}?\n\n" +
             (messages > 0
-                ? $"{messages:N0} message{(messages == 1 ? "" : "s")} will be deleted with it. " +
-                  "Where mail was downloaded and removed from the server, this is the only " +
-                  $"copy.\n\nThe file {Path.GetFileName(row.Path)} will be deleted."
+                ? Strings.Counted(
+                      "{0} message will be deleted with it.",
+                      "{0} messages will be deleted with it.",
+                      messages)
+                  + " "
+                  + Strings.T(
+                      "Where mail was downloaded and removed from the server, this is the only copy.")
+                  + "\n\n"
+                  + string.Format(
+                      Strings.T("The file {0} will be deleted."), Path.GetFileName(row.Path))
                 : $"No mail is filed under this account. The file " +
                   $"{Path.GetFileName(row.Path)} will be deleted."),
             "Remove");

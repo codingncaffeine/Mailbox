@@ -1,3 +1,4 @@
+using Mailbox.Core.Localization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
@@ -225,7 +226,10 @@ public sealed class CustomDictionariesDialog : Window
         {
             var words = spelling?.PersonalWords ?? [];
             list.ItemsSource = words.Cast<object>().ToList();
-            count.Text = words.Count == 0 ? "No words have been added yet." : $"{words.Count} word{(words.Count == 1 ? "" : "s")}, kept beside your mail.";
+            count.Text = words.Count == 0
+                ? Strings.T("No words have been added yet.")
+                : Strings.Counted(
+                    "{0} word, kept beside your mail.", "{0} words, kept beside your mail.", words.Count);
         }
 
         list.SelectionChanged += (_, _) => remove.IsEnabled = list.SelectedItem is string;

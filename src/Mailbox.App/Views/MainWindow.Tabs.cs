@@ -5,6 +5,7 @@ using Avalonia.Layout;
 using Mailbox.App.ViewModels;
 using Mailbox.Core.Commands;
 using Mailbox.Core.Diagnostics;
+using Mailbox.Core.Localization;
 using Mailbox.Protocols;
 using Mailbox.Store;
 
@@ -61,8 +62,14 @@ public partial class MainWindow
         {
             var count = shell.MarkFolderRead(account, folder.Id);
             shell.StatusRight = count == 0
-                ? $"Nothing unread in {folder.Name}."
-                : $"{count} message{(count == 1 ? "" : "s")} in {folder.Name} marked read.";
+                ? string.Format(Strings.T("Nothing unread in {0}."), folder.Name)
+                : string.Format(
+                    Strings.Plural(
+                        "{0} message in {1} marked read.",
+                        "{0} messages in {1} marked read.",
+                        count),
+                    count,
+                    folder.Name);
             return true;
         }
 
@@ -226,8 +233,8 @@ public partial class MainWindow
             {
                 shell.PreviewLines = lines;
                 shell.StatusRight = lines == 0
-                    ? "Message preview off."
-                    : $"Message preview: {lines} line{(lines == 1 ? "" : "s")}.";
+                    ? Strings.T("Message preview off.")
+                    : Strings.Counted("Message preview: {0} line.", "Message preview: {0} lines.", lines);
             };
             flyout.Items.Add(item);
         }
@@ -270,7 +277,7 @@ public partial class MainWindow
         if (dialog.Result is not { } columns) return;
 
         shell.UpdateView(shell.CurrentView with { Columns = columns });
-        shell.StatusRight = $"{columns.Count} column{(columns.Count == 1 ? "" : "s")} shown.";
+        shell.StatusRight = Strings.Counted("{0} column shown.", "{0} columns shown.", columns.Count);
     }
 
     /// <summary>One of the Layout menu's three submenus, opened from its own ribbon button.</summary>
@@ -390,8 +397,8 @@ public partial class MainWindow
         foreach (var window in items) window.Close();
 
         shell.StatusRight = items.Count == 0
-            ? "Nothing is open."
-            : $"{items.Count} window{(items.Count == 1 ? "" : "s")} closed.";
+            ? Strings.T("Nothing is open.")
+            : Strings.Counted("{0} window closed.", "{0} windows closed.", items.Count);
     }
 
     // ---- The Send/Receive tab's Server group ---------------------------------------------
@@ -423,8 +430,11 @@ public partial class MainWindow
 
             var changed = account.Mail.MarkForDownload([.. rows.Select(r => r.Id)], mark);
             shell.StatusRight = changed == 0
-                ? "Nothing selected here is a header waiting for its message."
-                : $"{changed} header{(changed == 1 ? "" : "s")} {(mark ? "marked for download" : "unmarked")}.";
+                ? Strings.T("Nothing selected here is a header waiting for its message.")
+                : mark
+                    ? Strings.Counted(
+                        "{0} header marked for download.", "{0} headers marked for download.", changed)
+                    : Strings.Counted("{0} header unmarked.", "{0} headers unmarked.", changed);
 
             shell.Refresh();
             return true;
@@ -456,8 +466,14 @@ public partial class MainWindow
 
             shell.Refresh();
             shell.StatusRight = written == 0
-                ? $"Nothing new in {folder.Name}."
-                : $"{written} header{(written == 1 ? "" : "s")} downloaded into {folder.Name}.";
+                ? string.Format(Strings.T("Nothing new in {0}."), folder.Name)
+                : string.Format(
+                    Strings.Plural(
+                        "{0} header downloaded into {1}.",
+                        "{0} headers downloaded into {1}.",
+                        written),
+                    written,
+                    folder.Name);
         }
         catch (Exception ex)
         {
@@ -488,7 +504,7 @@ public partial class MainWindow
             return;
         }
 
-        shell.StatusRight = $"Fetching {waiting} message{(waiting == 1 ? "" : "s")}…";
+        shell.StatusRight = Strings.Counted("Fetching {0} message…", "Fetching {0} messages…", waiting);
 
         try
         {
@@ -496,8 +512,8 @@ public partial class MainWindow
 
             shell.Refresh();
             shell.StatusRight = filled == 0
-                ? "Nothing came back: those headers are no longer on the server."
-                : $"{filled} message{(filled == 1 ? "" : "s")} downloaded.";
+                ? Strings.T("Nothing came back: those headers are no longer on the server.")
+                : Strings.Counted("{0} message downloaded.", "{0} messages downloaded.", filled);
         }
         catch (Exception ex)
         {

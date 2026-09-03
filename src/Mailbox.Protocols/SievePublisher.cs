@@ -1,3 +1,4 @@
+using Mailbox.Core.Localization;
 using System.Net.Sockets;
 using System.Security.Authentication;
 using Mailbox.Core.Diagnostics;
@@ -145,8 +146,8 @@ public static class SievePublisher
                 + (vacation is { Compiles: true } ? ", with an automatic reply." : "."));
 
             var message = count == 0 && replying
-                ? "Your automatic reply is on the server."
-                : $"{count} rule{(count == 1 ? "" : "s")} on the server.";
+                ? Strings.T("Your automatic reply is on the server.")
+                : Strings.Counted("{0} rule on the server.", "{0} rules on the server.", count);
             if (count > 0 && replying && vacation is { Compiles: true }) message += " Your automatic reply is there too.";
             if (vacation is { Compiles: false } refused) message += $" The automatic reply is not: {string.Join("; ", refused.Reasons)}.";
             else if (vacation is { Reasons.Count: > 0 } caveat) message += $" {char.ToUpperInvariant(caveat.Reasons[0][0])}{caveat.Reasons[0][1..]}.";

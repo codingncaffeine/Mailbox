@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Mailbox.Core.Localization;
 using Mailbox.Store;
 
 namespace Mailbox.App.Views;
@@ -242,16 +243,20 @@ internal static class BackstageActions
         var confirmed = await Confirm.AskBeforePermanentDeleteAsync(
             host.Owner,
             "Empty Deleted Items",
-            $"Permanently delete {total:N0} item{(total == 1 ? "" : "s")} from Deleted Items?\n\n"
-            + "This cannot be undone, and where mail was removed from the server this is the "
-            + "only copy.");
+            Strings.Counted(
+                "Permanently delete {0} item from Deleted Items?",
+                "Permanently delete {0} items from Deleted Items?",
+                total)
+            + "\n\n"
+            + Strings.T(
+                "This cannot be undone, and where mail was removed from the server this is the only copy."));
 
         if (!confirmed) return;
 
         var deleted = EmptyDeletedItems();
 
         host.Refresh();
-        host.Report($"{deleted:N0} item{(deleted == 1 ? "" : "s")} deleted.");
+        host.Report(Strings.Counted("{0} item deleted.", "{0} items deleted.", deleted));
     }
 
     /// <summary>
