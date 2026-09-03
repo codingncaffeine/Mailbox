@@ -245,6 +245,15 @@ public static class TokenKeys
         public const string TabUnderline = "ribbon.tab.underline";
         public const string TabText = "ribbon.tab.text";
         public const string TabTextSelected = "ribbon.tab.text.selected";
+
+        /// <summary>
+        /// The rule between two tabs, drawn only while the strip is squeezing them. Its own token
+        /// rather than the group separator's, because the two sit on different grounds: the group
+        /// rule is on the ribbon's body, this one is on the tab strip, and in Dark Gray those are
+        /// #BDBDBD and #535154.
+        /// </summary>
+        public const string TabSeparator = "ribbon.tab.separator";
+
         public const string GroupLabel = "ribbon.group.label";
         public const string GroupSeparator = "ribbon.group.separator";
 
@@ -970,7 +979,8 @@ public static class TokenKeys
         Backstage.Rail, Backstage.RailText, Backstage.RailDisabled,
         Backstage.RailRule, Backstage.Field,
         Ribbon.Background, Ribbon.TabStripBackground, Ribbon.TabRest, Ribbon.TabHover,
-        Ribbon.TabSelected, Ribbon.TabUnderline, Ribbon.TabText, Ribbon.TabTextSelected, Ribbon.GroupLabel,
+        Ribbon.TabSelected, Ribbon.TabUnderline, Ribbon.TabText, Ribbon.TabTextSelected,
+        Ribbon.TabSeparator, Ribbon.GroupLabel,
         Ribbon.GroupSeparator, Ribbon.GalleryBackground, Ribbon.GalleryBorder,
         Ribbon.ButtonOpen, Ribbon.ButtonOpenBorder, Ribbon.ButtonHover, Ribbon.ButtonSplitBorder,
         Ribbon.TickBorder,

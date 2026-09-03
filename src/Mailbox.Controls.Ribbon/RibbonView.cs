@@ -434,16 +434,17 @@ public sealed class RibbonView : ContentControl
 
     private Control BuildTabStrip()
     {
-        var strip = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Height = RibbonMetrics.TabStripHeight,
-        };
+        // Squeezes and then scrolls rather than stacking, which is what the reference does when
+        // the window is too narrow for the tabs. TabStripPanel carries the measurements.
+        var strip = new TabStripPanel { Height = RibbonMetrics.TabStripHeight };
+        Bind(strip, TabStripPanel.SeparatorBrushProperty, "ribbon.tab.separator.brush");
 
         foreach (var tab in VisibleTabs)
         {
-            strip.Children.Add(BuildTabButton(tab));
+            strip.AddTab(BuildTabButton(tab));
         }
+
+        strip.SetScrollButtons(TabScrollButton(false, strip), TabScrollButton(true, strip));
 
         // "Tell me what you want to do" sits after the last tab on the compose window. The
         // shell's captures show none, so it is a property of the layout rather than of the bar.
@@ -472,15 +473,58 @@ public sealed class RibbonView : ContentControl
             Bind(label, TextBlock.FontSizeProperty, "type.ui.size.value");
             hint.Children.Add(label);
 
-            strip.Children.Add(hint);
+            strip.SetTrailing(hint);
         }
 
         // No fill of its own: every window that hosts a ribbon already paints
         // ribbon.tabstrip.background as its chrome behind this strip, and an opaque copy
         // here was covering the caption backdrop's lower slice — the band a browser theme's
         // image reaches through. The tabs themselves carry their own grounds.
-        var host = new Border { Height = RibbonMetrics.TabStripHeight, Child = strip };
+        // Clipped, because a scrolled strip has a tab hanging off its left edge and an unclipped
+        // one paints that tab over whatever the window draws beside it.
+        var host = new Border
+        {
+            Height = RibbonMetrics.TabStripHeight,
+            ClipToBounds = true,
+            Child = strip,
+        };
         return host;
+    }
+
+    /// <summary>
+    /// One of the strip's two scroll chevrons, shown only when even the squeezed tabs will not
+    /// fit. Measured 24 × 28 off the reference's own least width, drawn in the ribbon body's
+    /// colour with a thin edge — it reads as a block sitting on the strip rather than a button
+    /// floating over it, which is how the reference draws it.
+    /// </summary>
+    private Control TabScrollButton(bool forward, TabStripPanel strip)
+    {
+        var glyph = new TextBlock
+        {
+            Text = forward ? "›" : "‹",
+            FontSize = 13,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Bind(glyph, TextBlock.ForegroundProperty, "text.primary.brush");
+
+        var button = new Button
+        {
+            Content = glyph,
+            Padding = default,
+            BorderThickness = new Thickness(1),
+            CornerRadius = default,
+            Width = RibbonMetrics.TabScrollButtonWidth,
+            Height = RibbonMetrics.TabScrollButtonHeight,
+            MinWidth = 0,
+            Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Arrow),
+        };
+        Bind(button, Button.BackgroundProperty, "ribbon.background.brush");
+        Bind(button, Button.BorderBrushProperty, "ribbon.tab.separator.brush");
+        ToolTip.SetTip(button, forward ? "Show the later tabs" : "Show the earlier tabs");
+
+        button.Click += (_, _) => strip.Scroll(forward ? 1 : -1);
+        return button;
     }
 
     private Control BuildTabButton(RibbonTab tab)

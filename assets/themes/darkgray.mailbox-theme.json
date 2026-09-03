@@ -276,6 +276,7 @@
     "ribbon.tab.hover": "#1AFFFFFF",
     "ribbon.tab.rest": "#00000000",
     "ribbon.tab.selected": "#00000000",
+    "ribbon.tab.separator": "#6B6B6B",
     "ribbon.tab.text": "{palette.neutral.white}",
     "ribbon.tab.text.selected": "{palette.neutral.white}",
     "ribbon.tab.underline": "{palette.brand.underline}",

@@ -265,6 +265,7 @@
     "ribbon.tab.hover": "#14000000",
     "ribbon.tab.rest": "#00000000",
     "ribbon.tab.selected": "#00000000",
+    "ribbon.tab.separator": "#CDD4DA",
     "ribbon.tab.text": "#242424",
     "ribbon.tab.text.selected": "#242424",
     "ribbon.tab.underline": "{palette.brand.underline}",

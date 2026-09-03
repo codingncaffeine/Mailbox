@@ -143,6 +143,33 @@ public static class RibbonMetrics
     /// </summary>
     public const double TabUnderlineTop =
         TabStripHeight - TabUnderlineGap - TabUnderlineThickness;
+
+    // ---- The strip when it is short of room ----------------------------------------------------
+    //
+    // Measured off the reference squeezed to its own least width — the shell capture at 347
+    // across: the tabs read "Hom", "Send", "View", "Help" and a cut promotional one, with a
+    // rule between each pair, and the rules land on x = 145, 183, 221, 259 — a cell of exactly 38.
+
+    /// <summary>A tab's padding once the strip is squeezing: measured 6, from 11.</summary>
+    public const double TabSqueezedPaddingH = 6;
+
+    /// <summary>
+    /// The narrowest a tab is squeezed to before the strip scrolls instead. Measured 38, which is
+    /// the padding either side and about three characters between them — "Hom".
+    /// </summary>
+    public const double TabSqueezedWidth = 38;
+
+    /// <summary>The rule drawn between squeezed tabs: 1px, measured #6B6B6B on the #535154 strip.</summary>
+    public const double TabSeparatorThickness = 1;
+
+    /// <summary>How far that rule stops short of the strip, top and bottom: measured 51..75 of 46..79.</summary>
+    public const double TabSeparatorInsetV = 4;
+
+    /// <summary>The scroll button that appears when even squeezed tabs do not fit: measured 24 × 28.</summary>
+    public const double TabScrollButtonWidth = 24;
+
+    public const double TabScrollButtonHeight = 28;
+
     public const double GroupPaddingH = 6;
     public const double GroupMinWidth = 32;
 

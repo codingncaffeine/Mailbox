@@ -209,6 +209,10 @@ public static class OfficeThemes
         t.Set(TokenKeys.Ribbon.TabUnderline, "{palette.brand.underline}");
         t.Set(TokenKeys.Ribbon.TabText, "#242424");
         t.Set(TokenKeys.Ribbon.TabTextSelected, "#242424");
+        // The squeezed strip's rule. Dark Gray is the theme the reference was measured squeezed
+        // in, and there it lifts the rule off the strip by about a third of the strip's own value
+        // (#535154 → #6B6B6B); on a light strip the same separation is a step down from it.
+        t.Set(TokenKeys.Ribbon.TabSeparator, "#CDD4DA");
 
         return t;
     }
@@ -288,6 +292,10 @@ public static class OfficeThemes
         t.Set(TokenKeys.Ribbon.TabUnderline, "{palette.brand.underline}");
         t.Set(TokenKeys.Ribbon.TabText, "#242424");
         t.Set(TokenKeys.Ribbon.TabTextSelected, "#242424");
+        // The squeezed strip's rule. Dark Gray is the theme the reference was measured squeezed
+        // in, and there it lifts the rule off the strip by about a third of the strip's own value
+        // (#535154 → #6B6B6B); on a light strip the same separation is a step down from it.
+        t.Set(TokenKeys.Ribbon.TabSeparator, "#CDD4DA");
 
         return t;
     }
@@ -490,6 +498,9 @@ public static class OfficeThemes
         t.Set(TokenKeys.Ribbon.TabUnderline, "{palette.brand.underline}");
         t.Set(TokenKeys.Ribbon.TabText, "{palette.neutral.white}");
         t.Set(TokenKeys.Ribbon.TabTextSelected, "{palette.neutral.white}");
+        // Measured off the squeezed capture: the rules between the squeezed tabs are #6B6B6B on
+        // the strip's #535154.
+        t.Set(TokenKeys.Ribbon.TabSeparator, "#6B6B6B");
         // Measured off the classic capture: the rules between groups and the Quick Steps box's
         // line are both #858585 on the panel's #BDBDBD.
         t.Set(TokenKeys.Ribbon.GroupSeparator, "#858585");
@@ -689,6 +700,8 @@ public static class OfficeThemes
         t.Set(TokenKeys.Ribbon.TabUnderline, "{palette.brand.underline}");
         t.Set(TokenKeys.Ribbon.TabText, "#FFFFFF");
         t.Set(TokenKeys.Ribbon.TabTextSelected, "#FFFFFF");
+        // The same separation Dark Gray's measured rule has, off this theme's darker strip.
+        t.Set(TokenKeys.Ribbon.TabSeparator, "#333B41");
         t.Set(TokenKeys.Ribbon.GroupLabel, "{palette.neutral.secondary}");
         t.Set(TokenKeys.Ribbon.GroupSeparator, "{palette.neutral.quaternary}");
         t.Set(TokenKeys.Ribbon.GalleryBackground, "{ribbon.background}");

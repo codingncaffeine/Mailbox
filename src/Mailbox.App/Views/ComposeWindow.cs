@@ -62,7 +62,10 @@ public sealed partial class ComposeWindow : Window
         Title = _surface.Title;
         Width = 1000;
         Height = 760;
-        MinWidth = 620;
+        // Measured off the reference's own message window squeezed as far as it goes: 499 across,
+        // its tabs clipped to three or four letters apiece and its bar down to Paste, the font
+        // boxes, Bold and its two "…"s.
+        MinWidth = 500;
         MinHeight = 420;
         Icon = new WindowIcon(AssetLoaderIcon());
 

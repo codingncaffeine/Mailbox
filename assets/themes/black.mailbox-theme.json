@@ -268,6 +268,7 @@
     "ribbon.tab.hover": "#1AFFFFFF",
     "ribbon.tab.rest": "#00000000",
     "ribbon.tab.selected": "#00000000",
+    "ribbon.tab.separator": "#333B41",
     "ribbon.tab.text": "#FFFFFF",
     "ribbon.tab.text.selected": "#FFFFFF",
     "ribbon.tab.underline": "{palette.brand.underline}",
