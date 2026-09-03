@@ -34,8 +34,7 @@ public static class FlyoutProbe
 
         var described = entries.Select(e => e switch
         {
-            MenuItem { Header: { } header } item =>
-                $"{header}{(item.IsEnabled ? string.Empty : " (greyed)")}",
+            MenuItem item => $"{Named(item)}{(item.IsEnabled ? string.Empty : " (greyed)")}",
             Separator => "—",
             _ => e.GetType().Name,
         });
@@ -52,6 +51,29 @@ public static class FlyoutProbe
         return $"{what}: open={flyout.IsOpen}, {entries.Count} entries "
                + $"[{string.Join(" | ", described)}], popup {size}";
     }
+
+    /// <summary>
+    /// What a menu row says. Its header when that is text; otherwise the name it states for a
+    /// screen reader.
+    /// </summary>
+    /// <remarks>
+    /// A row whose header is a control — the bar's "…" draws its group headings that way, so that
+    /// a heading is not greyed out like a disabled command — stringifies to the control's class
+    /// name. The log then read "Avalonia.Controls.TextBlock" where the menu says "Respond", which
+    /// makes the one instrument that can see inside a popup useless for checking what is in it.
+    /// </remarks>
+    private static string Named(MenuItem item)
+        => item.Header switch
+        {
+            string text => text,
+            null => Automation(item) ?? "(unnamed)",
+            var other => Automation(item) ?? other.ToString() ?? "(unnamed)",
+        };
+
+    private static string? Automation(MenuItem item)
+        => Avalonia.Automation.AutomationProperties.GetName(item) is { Length: > 0 } name
+            ? name
+            : null;
 
     /// <summary>
     /// Describes a content flyout — a picker, a calendar — the same way: what it holds and the

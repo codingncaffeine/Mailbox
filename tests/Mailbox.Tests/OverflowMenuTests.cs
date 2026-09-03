@@ -8,9 +8,11 @@ namespace Mailbox.Tests;
 /// </summary>
 /// <remarks>
 /// The bug this pins: flat, the menu ran to fifty-odd alphabetical entries — taller than the
-/// screen, and with no scrollbar it opened with its head cut off. The pushed-off commands were
-/// in the menu and could not be found in it. So two things are checked here: that everything the
-/// bar took away is offered, and that the menu stays short enough to be read.
+/// screen, and with no scrollbar it opened with its head cut off. The pushed-off commands were in
+/// the menu and could not be found in it. The shape that answers it is the reference's: each of
+/// the tab's groups as a heading with that group's commands under it, in ribbon order, and
+/// nothing repeated from the bar. So what is checked here is that everything the bar is not
+/// showing is offered, exactly once, under a heading that names where it came from.
 /// </remarks>
 public class OverflowMenuTests
 {
@@ -28,37 +30,66 @@ public class OverflowMenuTests
     private static IReadOnlyList<RibbonItem> HomeBar =>
         [.. DefaultRibbonLayouts.Mail.SimplifiedRows["home"]];
 
-    private static IReadOnlyList<OverflowEntry> Plan(params CommandId[] pushedOff)
-        => OverflowMenu.Plan(
-            HomeTab, HomeBar, pushedOff, [.. Catalog.BeyondDefaultLayout], id => Catalog.TryGet(id, out _));
+    private static List<OverflowEntry> Plan(params CommandId[] pushedOff)
+        => [.. OverflowMenu.Plan(
+            HomeTab, HomeBar, pushedOff, [.. Catalog.BeyondDefaultLayout], id => Catalog.TryGet(id, out _))];
 
+    /// <summary>
+    /// Everything the bar pushed off is offered, under the heading of the group it belongs to
+    /// rather than in a block of its own.
+    /// </summary>
+    /// <remarks>
+    /// A command that moves between two places in the menu depending on the window's width is
+    /// harder to find again than one that is always under its own group, and the reference's own
+    /// squeezed capture starts straight at its first heading rather than at what just left.
+    /// </remarks>
     [Fact]
-    public void EverythingTheBarPushedOffIsOfferedFirstAndInOrder()
+    public void WhatThePushedOffCommandsAreOfferedUnderIsTheirOwnGroup()
     {
         var plan = Plan(MailCommands.FollowUp.Id, ViewCommands.Apps.Id, MailCommands.SendReceiveAll.Id);
 
-        Assert.Equal(MailCommands.FollowUp.Id, plan[0].Command);
-        Assert.Equal(ViewCommands.Apps.Id, plan[1].Command);
-        Assert.Equal(MailCommands.SendReceiveAll.Id, plan[2].Command);
-        Assert.True(plan[3].IsRule);
+        foreach (var id in new[]
+                 { MailCommands.FollowUp.Id, ViewCommands.Apps.Id, MailCommands.SendReceiveAll.Id })
+        {
+            var at = plan.FindIndex(e => e.Command == id);
+            Assert.True(at > 0, $"{id.Value} was pushed off and is not in the menu");
+
+            // Everything sits under a heading: walking back from a row always reaches one.
+            Assert.Contains(plan.Take(at), e => e.IsHeader);
+        }
     }
 
-    /// <summary>Nothing pushed off means no rule hanging at the top of the menu.</summary>
+    /// <summary>The menu is headings and rows, and every heading has something under it.</summary>
     [Fact]
-    public void WithNothingPushedOffTheMenuStartsAtTheGroups()
+    public void TheMenuIsHeadingsWithCommandsUnderThem()
     {
         var plan = Plan();
 
-        Assert.DoesNotContain(plan, e => e.IsRule);
-        Assert.All(plan, e => Assert.True(e.IsSubmenu));
+        Assert.True(plan[0].IsHeader, "the menu starts at a heading.");
+
+        // Headings and rows, and one submenu at the end for the commands on no tab.
+        Assert.All(plan, e => Assert.True(e.IsHeader || e.Command is not null || e.IsSubmenu));
+
+        for (var i = 0; i < plan.Count; i++)
+        {
+            if (!plan[i].IsHeader) continue;
+            Assert.True(
+                i + 1 < plan.Count && !plan[i + 1].IsHeader,
+                $"“{plan[i].Label}” is a heading with nothing under it.");
+        }
     }
 
     /// <summary>
-    /// The reason for the grouping: a menu taller than the screen loses its head, and its head
-    /// is the part that matters.
+    /// Pushing the whole bar off adds its commands to the menu rather than replacing what was
+    /// already there — the worst case is every command the tab has, once each.
     /// </summary>
+    /// <remarks>
+    /// The menu is long by nature and the reference's is too: squeezed right down, its own runs
+    /// past the bottom of the screen. Length is the presenter's problem — it is bounded and
+    /// scrolls — not a reason to leave a command out.
+    /// </remarks>
     [Fact]
-    public void TheMenuStaysShortEnoughToRead()
+    public void PushingTheWholeBarOffOffersTheWholeBar()
     {
         var everything = HomeBar
             .Where(i => i.Kind != RibbonItemKind.Separator)
@@ -66,10 +97,14 @@ public class OverflowMenuTests
             .ToArray();
 
         var plan = Plan(everything);
+        var offered = plan.Where(e => e.Command is { } c && Catalog.TryGet(c, out _)).Select(e => e.Command).ToList();
 
-        // Worst case — the whole bar in the menu — and still a screenful.
-        Assert.True(plan.Count <= 24, $"the menu came to {plan.Count} rows");
-        Assert.True(Plan().Count <= 12, "the menu is long before anything is even pushed off");
+        foreach (var id in everything.Where(id => Catalog.TryGet(id, out _)))
+        {
+            Assert.Contains(id, offered);
+        }
+
+        Assert.True(plan.Count > Plan().Count, "the menu grows as the bar sheds.");
     }
 
     /// <summary>A command is offered once: pushed off, or under its group, never both.</summary>
@@ -79,7 +114,7 @@ public class OverflowMenuTests
         var plan = Plan(MailCommands.FollowUp.Id, MailCommands.SendReceiveAll.Id, MailCommands.FollowUp.Id);
 
         var offered = plan
-            .SelectMany(e => e.Command is { } c ? [c] : e.Children)
+            .SelectMany(e => e.Command is { } c ? new[] { c } : [.. e.Children])
             .ToList();
 
         Assert.Equal(offered.Count, offered.Distinct().Count());
@@ -94,10 +129,10 @@ public class OverflowMenuTests
             .Select(i => i.Command)
             .ToHashSet();
 
-        var underGroups = Plan().SelectMany(e => e.Children).ToList();
+        var offered = Plan().Where(e => e.Command is not null).Select(e => e.Command!.Value).ToList();
 
-        Assert.DoesNotContain(underGroups, id => onTheBar.Contains(id));
-        Assert.NotEmpty(underGroups);
+        Assert.DoesNotContain(offered, id => onTheBar.Contains(id));
+        Assert.NotEmpty(offered);
     }
 
     /// <summary>
@@ -112,11 +147,19 @@ public class OverflowMenuTests
         Assert.Contains(plan, e => e.Command == MailCommands.FollowUp.Id);
     }
 
-    /// <summary>Snooze and the rest are in the catalogue and on no tab; the last submenu has them.</summary>
+    /// <summary>
+    /// Snooze and the rest are in the catalogue and on no tab; the last row is a submenu holding
+    /// them.
+    /// </summary>
+    /// <remarks>
+    /// A submenu rather than a heading with sixty-odd rows under it. Inlined, this one section
+    /// took the menu from twenty-nine rows to ninety-four and buried the groups — the part that
+    /// is the reference's shape — under a list of everything the application can do.
+    /// </remarks>
     [Fact]
     public void TheCommandsOnNoTabAreReachableFromHere()
     {
-        var beyond = Plan().SingleOrDefault(e => e.Label == OverflowMenu.BeyondLabel);
+        var beyond = Plan().SingleOrDefault(e => e.IsSubmenu && e.Label == OverflowMenu.BeyondLabel);
 
         Assert.NotNull(beyond);
         Assert.Contains(MailCommands.Snooze.Id, beyond!.Children);
@@ -127,7 +170,7 @@ public class OverflowMenuTests
     public void EveryOfferedCommandIsInTheCatalogue()
     {
         foreach (var id in Plan(MailCommands.SendReceiveAll.Id)
-                     .SelectMany(e => e.Command is { } c ? [c] : e.Children))
+                     .SelectMany(e => e.Command is { } c ? new[] { c } : [.. e.Children]))
         {
             Assert.True(Catalog.TryGet(id, out _), $"{id.Value} is offered and is not a command");
         }

@@ -296,6 +296,13 @@
         <Setter Property="Background" Value="{DynamicResource surface.overlay.brush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource border.subtle.brush}" />
         <Setter Property="BorderThickness" Value="1" />
+        <!--
+            The bar's "…" lists the tab's groups with their commands under them, which is what the
+            reference lists and is long by nature: squeezed right down, its own menu runs past the
+            bottom of the screen. A menu taller than what it is given opens with its head cut off
+            and no way to reach the rest, so it is bounded here and scrolls instead.
+        -->
+        <Setter Property="MaxHeight" Value="620" />
     </Style>
 
     <Style Selector="FlyoutPresenter">

@@ -180,7 +180,14 @@ public sealed class RibbonView : ContentControl
             .OfType<object>()
             .Select(item => item switch
             {
-                MenuItem menu => menu.Header as string ?? "?",
+                // A group heading's header is a control, not a string — it is drawn that way so a
+                // heading is not greyed out like a disabled command — so its stated name is what
+                // it says. Without this every heading read "?" and the menu's shape, which is
+                // headings, could not be checked from a log at all.
+                MenuItem menu => menu.Header as string
+                    ?? (Avalonia.Automation.AutomationProperties.GetName(menu) is { Length: > 0 } named
+                        ? named
+                        : "?"),
                 Separator => "—",
                 _ => item.GetType().Name,
             })];
@@ -1700,6 +1707,10 @@ public sealed class RibbonView : ContentControl
             {
                 flyout.Items.Add(new Separator());
             }
+            else if (entry.IsHeader)
+            {
+                flyout.Items.Add(SectionHeader(entry.Label));
+            }
             else if (entry.IsSubmenu)
             {
                 var submenu = new MenuItem { Header = entry.Label };
@@ -1799,8 +1810,12 @@ public sealed class RibbonView : ContentControl
         };
         Bind(label, TextBlock.ForegroundProperty, "text.primary.brush");
 
-        // A header rather than a command: not clickable, not highlighted on hover.
-        return new MenuItem { Header = label, IsEnabled = false };
+        // A header rather than a command: not clickable, not highlighted on hover. Named all the
+        // same — a menu item whose header is a control has no name of its own, and an unnamed
+        // row is announced by its class.
+        var item = new MenuItem { Header = label, IsEnabled = false };
+        Avalonia.Automation.AutomationProperties.SetName(item, text);
+        return item;
     }
 
     private Control BuildInlineSeparator()

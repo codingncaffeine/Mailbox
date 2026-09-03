@@ -15,7 +15,13 @@ public sealed record OverflowEntry(string Label, CommandId? Command, IReadOnlyLi
     public static OverflowEntry Submenu(string label, IReadOnlyList<CommandId> children)
         => new(label, null, children);
 
-    public bool IsRule => Command is null && Children.Count == 0;
+    /// <summary>A group's name, with that group's commands listed under it.</summary>
+    public static OverflowEntry Header(string label) => new(label, null, []);
+
+    public bool IsRule => Command is null && Children.Count == 0 && Label.Length == 0;
+
+    /// <summary>A heading rather than a row: not pickable, and names what follows it.</summary>
+    public bool IsHeader => Command is null && Children.Count == 0 && Label.Length > 0;
 
     public bool IsSubmenu => Children.Count > 0;
 }
@@ -25,16 +31,24 @@ public sealed record OverflowEntry(string Label, CommandId? Command, IReadOnlyLi
 /// the rest of the tab.
 /// </summary>
 /// <remarks>
-/// The pushed-off controls come first and flat, because they are what somebody who has just
-/// watched a button leave the bar is looking for. Everything else the tab has goes under its own
-/// group, one submenu each, and the commands that are in the catalogue but on no tab go under a
-/// last one.
+/// Grouped the way the reference groups it: each of the tab's groups as a heading, with that
+/// group's commands listed under it, in ribbon order — Move &amp; Delete, Respond, Quick Steps,
+/// Tags, Find, and so on. What the bar is still showing is not repeated here; everything else the
+/// tab has is, whether it was pushed off a moment ago or was never on the bar.
 /// <para>
 /// Grouped rather than one flat list, and this is the load-bearing part: flat, this menu ran to
 /// fifty-odd alphabetical entries — taller than the screen, with no scrollbar, so it opened with
 /// its head cut off and the pushed-off commands were the part that got cut. The buttons the bar
 /// had taken away were in the menu and could not be found in it, which is the same as not being
-/// there.
+/// there. Headings with their commands under them is what the reference does with the same
+/// problem, and its own menu is long: the flyout scrolls rather than the list being shortened.
+/// </para>
+/// <para>
+/// The pushed-off commands used to come first and flat, on the reasoning that they are what
+/// somebody who has just watched a button leave the bar is looking for. The reference does not do
+/// that — its squeezed capture starts straight at the first group heading — and a command that
+/// moves between two places in the menu depending on the window's width is harder to find again
+/// than one that is always under its own group.
 /// </para>
 /// <para>
 /// A plan rather than a menu so it can be checked without a window: what belongs in this list is
@@ -65,19 +79,15 @@ public static class OverflowMenu
         var plan = new List<OverflowEntry>();
         var listed = new HashSet<CommandId>();
 
-        foreach (var id in pushedOff)
-        {
-            if (!known(id) || !listed.Add(id)) continue;
-            plan.Add(OverflowEntry.For(id));
-        }
-
-        if (plan.Count > 0) plan.Add(OverflowEntry.Rule);
-
-        // What the bar carries at all, pushed off or not: those are on the bar, and do not
-        // belong in a list of what is not.
-        var onTheBar = barItems
+        // What the bar is actually showing at this width. Everything else the tab has belongs in
+        // the menu, whether it was pushed off a moment ago or was never on the bar at all —
+        // the reference draws no line between the two, and its own squeezed capture starts
+        // straight at the first group heading rather than at a flat block of what just left.
+        var pushed = pushedOff.ToHashSet();
+        var showing = barItems
             .Where(i => i.Kind != RibbonItemKind.Separator)
             .Select(i => i.Command)
+            .Where(id => !pushed.Contains(id))
             .ToHashSet();
 
         foreach (var group in tab.Groups)
@@ -86,13 +96,18 @@ public static class OverflowMenu
                 .Where(i => i.Kind != RibbonItemKind.Separator)
                 .Select(i => i.Command)
                 .Distinct()
-                .Where(id => !onTheBar.Contains(id) && !listed.Contains(id) && known(id))
+                .Where(id => !showing.Contains(id) && !listed.Contains(id) && known(id))
                 .ToList();
 
             if (commands.Count == 0) continue;
 
-            foreach (var id in commands) listed.Add(id);
-            plan.Add(OverflowEntry.Submenu(group.Label, commands));
+            plan.Add(OverflowEntry.Header(group.Label));
+
+            foreach (var id in commands)
+            {
+                listed.Add(id);
+                plan.Add(OverflowEntry.For(id));
+            }
         }
 
         var beyond = beyondDefaultLayout
@@ -101,6 +116,10 @@ public static class OverflowMenu
             .Select(c => c.Id)
             .ToList();
 
+        // The commands that are in the catalogue and on no tab. A submenu rather than a heading
+        // with sixty-odd rows under it: the reference's menu has no such section at all, and
+        // inlining this one buried its groups — the part that is the reference's shape — under a
+        // list of everything the application can do.
         if (beyond.Count > 0) plan.Add(OverflowEntry.Submenu(BeyondLabel, beyond));
 
         return plan;
