@@ -162,6 +162,7 @@
     "list.separator": "{palette.neutral.light}",
     "list.width": "436",
     "nav.background": "#F5F5F5",
+    "nav.collapsed.width": "48",
     "nav.item.hover": "{palette.neutral.light}",
     "nav.item.selected": "{palette.neutral.quaternary}",
     "nav.item.text": "{palette.neutral.primary}",

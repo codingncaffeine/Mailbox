@@ -165,6 +165,7 @@
     "list.separator": "{palette.neutral.light}",
     "list.width": "436",
     "nav.background": "#141414",
+    "nav.collapsed.width": "48",
     "nav.item.hover": "{state.hover}",
     "nav.item.selected": "{state.selected}",
     "nav.item.text": "{palette.neutral.primary}",

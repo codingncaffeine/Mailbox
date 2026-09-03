@@ -173,6 +173,7 @@
     "list.separator": "{palette.neutral.quaternary}",
     "list.width": "436",
     "nav.background": "{palette.chrome.nav}",
+    "nav.collapsed.width": "48",
     "nav.item.hover": "#1AFFFFFF",
     "nav.item.selected": "{palette.chrome.navselected}",
     "nav.item.text": "{palette.neutral.white}",

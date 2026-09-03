@@ -17,7 +17,7 @@ msgid_plural "View “{1}” applied to {0} folders."
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/Mailbox.App/ViewModels/ShellViewModel.cs:4407
+#: src/Mailbox.App/ViewModels/ShellViewModel.cs:4490
 msgid "Items: {0}   Unread: {1}"
 msgstr ""
 

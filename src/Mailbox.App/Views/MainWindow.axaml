@@ -10,7 +10,7 @@
         x:DataType="vm:ShellViewModel"
         Title="{Binding WindowTitle}"
         Width="1280" Height="820"
-        MinWidth="760" MinHeight="480"
+        MinWidth="350" MinHeight="480"
         Background="Transparent"
         TransparencyLevelHint="Transparent,None"
         FontFamily="{DynamicResource ui.fontfamily}"
@@ -451,6 +451,67 @@
                             Name="TodayHost"
                             ZIndex="5"
                             IsVisible="{Binding IsTodayShowing}" />
+
+            <!--
+                The folder pane minimised. The reference does not hide the pane when it is
+                minimised — it turns it into a strip that keeps the favourites' names on their
+                sides and the chevron that brings the pane back — and a pane that vanished with
+                no way back is what this used to be. Measured 48 across, the names turned
+                counter-clockwise so they read bottom to top, each with its unread count above
+                it in the accent.
+            -->
+            <Border Grid.Column="1" Grid.RowSpan="3"
+                    Name="NavStrip"
+                    IsVisible="{Binding NavStripVisible}"
+                    Width="{DynamicResource nav.collapsed.width.value}"
+                    Background="{DynamicResource nav.background.brush}">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Padding="4,2">
+                        <Button Classes="flat"
+                                HorizontalAlignment="Center"
+                                Command="{Binding ToggleNav}"
+                                Content="{Binding CollapseGlyph}"
+                                FontSize="12"
+                                Foreground="{DynamicResource nav.item.text.brush}"
+                                ToolTip.Tip="Expand the Folder Pane" />
+                    </Border>
+
+                    <ItemsControl ItemsSource="{Binding CollapsedFolders}"
+                                  AutomationProperties.Name="Folder pane, minimised"
+                                  Margin="0,6,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:FolderNode">
+                                <!--
+                                    LayoutTransformControl rather than RenderTransform: a render
+                                    transform turns the drawing and leaves the layout the shape it
+                                    was, so the strip would reserve each name's full width and be
+                                    236 across again while looking 48.
+                                -->
+                                <Button Classes="flat"
+                                        HorizontalAlignment="Center"
+                                        Padding="2,8"
+                                        Command="{Binding $parent[ItemsControl].((vm:ShellViewModel)DataContext).SelectFolderRow}"
+                                        CommandParameter="{Binding}"
+                                        AutomationProperties.Name="{Binding Spoken}"
+                                        ToolTip.Tip="{Binding Spoken}">
+                                    <LayoutTransformControl>
+                                        <LayoutTransformControl.LayoutTransform>
+                                            <RotateTransform Angle="-90" />
+                                        </LayoutTransformControl.LayoutTransform>
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Text="{Binding Name}"
+                                                       FontWeight="{Binding Weight}"
+                                                       Foreground="{DynamicResource nav.item.text.brush}" />
+                                            <TextBlock Text="{Binding UnreadDisplay}"
+                                                       Foreground="{DynamicResource nav.unreadcount.brush}" />
+                                        </StackPanel>
+                                    </LayoutTransformControl>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </DockPanel>
+            </Border>
 
             <!-- Navigation pane -->
             <Border Grid.Column="1" Grid.RowSpan="3"
@@ -1058,7 +1119,7 @@
                  Bottom. FitListPane shows the one the placement wants. -->
             <GridSplitter Grid.Column="4"
                           Name="ReadingSplitter"
-                          IsVisible="{Binding ReadingPaneVisible}"
+                          IsVisible="{Binding ReadingPaneShown}"
                           ResizeDirection="Columns" />
             <GridSplitter Grid.Row="1" Grid.Column="3" Grid.ColumnSpan="3"
                           Name="ReadingSplitterBottom"
@@ -1081,7 +1142,7 @@
             <Border Grid.Column="5"
                     Name="ReadingPane"
                     ClipToBounds="True"
-                    IsVisible="{Binding ReadingPaneVisible}"
+                    IsVisible="{Binding ReadingPaneShown}"
                     Background="{DynamicResource reading.background.brush}">
               <Grid>
                 <!-- The read view. Covered by the inline compose host when a reply is open. -->

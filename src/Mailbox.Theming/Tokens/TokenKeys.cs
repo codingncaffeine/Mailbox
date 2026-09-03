@@ -455,6 +455,12 @@ public static class TokenKeys
         public const string ItemSelected = "nav.item.selected";
         public const string UnreadCount = "nav.unreadcount";
         public const string Width = "nav.width";
+
+        /// <summary>
+        /// The strip the pane becomes when it is minimised: measured 48 across, holding the
+        /// expand chevron and the favourites' names turned on their sides.
+        /// </summary>
+        public const string CollapsedWidth = "nav.collapsed.width";
     }
 
     public static class List
@@ -990,6 +996,7 @@ public static class TokenKeys
         Compose.BodyBackground, Compose.BodyText,
         Compose.HeaderBackground, Compose.FieldRule,
         Nav.Background, Nav.ItemText, Nav.ItemHover, Nav.ItemSelected, Nav.UnreadCount, Nav.Width,
+        Nav.CollapsedWidth,
         List.Background, List.RowBackground, List.HeaderBackground, List.HeaderText,
         List.RowHeight, List.RowHeightCompact, List.RowHover, List.RowSelected,
         List.UnreadBar, List.UnreadBarWidth, List.UnreadText, List.ReadText, List.PreviewText,

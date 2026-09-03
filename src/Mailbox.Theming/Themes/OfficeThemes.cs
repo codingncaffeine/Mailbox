@@ -92,6 +92,9 @@ public static class OfficeThemes
         t.Set(TokenKeys.Ribbon.TabStripHeight, "29");
         t.Set(TokenKeys.Ribbon.Height, "100");
         t.Set(TokenKeys.Nav.Width, "236");
+        // Minimised: measured 48 across on the reference squeezed to its least width, between the
+        // 56-wide module rail and the message list.
+        t.Set(TokenKeys.Nav.CollapsedWidth, "48");
 
         // The caption backdrop, empty in every built-in: the reference's stock look carries no
         // background, and an empty default is what lets "no backdrop" be a state a theme can

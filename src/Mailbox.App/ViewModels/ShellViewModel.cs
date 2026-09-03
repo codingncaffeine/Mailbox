@@ -657,7 +657,8 @@ public sealed partial class ShellViewModel : ObservableObject
         ShowAll = new RelayCommand(() => UnreadOnly = false);
         ShowUnread = new RelayCommand(() => UnreadOnly = true);
         ToggleSort = new RelayCommand(() => SortDescending = !SortDescending);
-        ToggleNav = new RelayCommand(() => NavCollapsed = !NavCollapsed);
+        ToggleNav = new RelayCommand(ToggleFolderPane);
+        SelectFolderRow = new RelayCommand<FolderNode>(node => SelectedFolder = node);
 
         ClearSearchCommand = new RelayCommand(ClearSearch);
         ShowReadingPane = new RelayCommand(() => ReadingPaneVisible = true);
@@ -4199,20 +4200,102 @@ public sealed partial class ShellViewModel : ObservableObject
 
     // ---- Pane layout ----------------------------------------------------------------------
 
-    /// <summary>The folder pane collapses to nothing, leaving the rail.</summary>
+    /// <summary>The folder pane is minimised to its strip, by the reader or by the width.</summary>
     public bool NavCollapsed
     {
         get;
         set
         {
             if (!Set(ref field, value)) return;
-            Raise(nameof(NavVisible));
-            Raise(nameof(CollapseGlyph));
+            RaisePaneLayout();
         }
     }
 
-    public bool NavVisible => !NavCollapsed;
-    public string CollapseGlyph => NavCollapsed ? "\u203A" : "\u2039";
+    /// <summary>
+    /// How wide the window is, as the shell last saw it. What sheds below which width is
+    /// <see cref="PaneShedding"/>'s to say.
+    /// </summary>
+    public double ShellWidth
+    {
+        get;
+        set
+        {
+            if (Math.Abs(field - value) < 0.5) return;
+            field = value;
+
+            // A reader who asked for the pane back at a narrow width keeps it until they change
+            // the window again; resizing is what puts the width back in charge.
+            _navExpandedAtWidth = false;
+            RaisePaneLayout();
+        }
+    } = double.PositiveInfinity;
+
+    /// <summary>
+    /// Set when the reader expands the pane at a width that had minimised it for them. Their ask
+    /// wins over the width until the window is resized, because a chevron that does nothing when
+    /// pressed is worse than a folder pane that is wide for the window it is in.
+    /// </summary>
+    private bool _navExpandedAtWidth;
+
+    /// <summary>The folder pane at its full width \u2014 neither minimised nor crowded out.</summary>
+    public bool NavVisible => !NavCollapsed
+        && (_navExpandedAtWidth || !PaneShedding.MinimisesFolderPane(ShellWidth));
+
+    /// <summary>
+    /// The strip the pane becomes. Minimised is not hidden: the reference keeps the favourites
+    /// on their sides and the chevron that brings the pane back, and a pane that vanished with no
+    /// way back is what this used to be.
+    /// </summary>
+    public bool NavStripVisible => !NavVisible;
+
+    /// <summary>
+    /// The reading pane as drawn, which is the reader's setting until the window is too narrow to
+    /// hold one. Kept apart from <see cref="ReadingPaneVisible"/> so that widening the window
+    /// gives back the pane the reader asked for rather than one they have to ask for again.
+    /// </summary>
+    public bool ReadingPaneShown =>
+        ReadingPaneVisible && !PaneShedding.HidesReadingPane(ShellWidth);
+
+    /// <summary>
+    /// The chevron, from either side. Minimising is the reader's setting; expanding a pane the
+    /// width minimised is an override that lasts until the window is resized.
+    /// </summary>
+    private void ToggleFolderPane()
+    {
+        if (NavVisible)
+        {
+            NavCollapsed = true;
+            return;
+        }
+
+        NavCollapsed = false;
+        _navExpandedAtWidth = true;
+        RaisePaneLayout();
+    }
+
+    private void RaisePaneLayout()
+    {
+        Raise(nameof(NavVisible));
+        Raise(nameof(NavStripVisible));
+        Raise(nameof(ReadingPaneShown));
+        Raise(nameof(CollapseGlyph));
+    }
+
+    public string CollapseGlyph => NavVisible ? "\u2039" : "\u203A";
+
+    /// <summary>
+    /// The favourites, drawn on their sides down the minimised pane. The same rows the pane's
+    /// own Favourites section holds, so picking one here and picking one there are one thing.
+    /// </summary>
+    public IEnumerable<FolderNode> CollapsedFolders =>
+        Folders.Where(f => f.Kind == FolderNodeKind.Favourite);
+
+    /// <summary>
+    /// Opens a folder named on the minimised strip. The strip is not a selection control of its
+    /// own — the pane's list still holds the selection — so this sets the same property the list
+    /// binds, and the two agree by construction.
+    /// </summary>
+    public RelayCommand<FolderNode> SelectFolderRow { get; }
 
     /// <summary>Reading pane shown, or off entirely — the two the status bar offers.</summary>
     public bool ReadingPaneVisible
@@ -4539,6 +4622,30 @@ public sealed class RelayCommand(Action execute, Func<bool>? canExecute = null)
     public bool CanExecute(object? parameter) => canExecute?.Invoke() ?? true;
 
     public void Execute(object? parameter) => execute();
+
+    public void RaiseCanExecuteChanged()
+        => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+}
+
+/// <summary>
+/// The same, for a button in a template that acts on the row it was drawn for.
+/// </summary>
+/// <remarks>
+/// A row of the wrong kind is ignored rather than thrown at: the parameter comes from a binding,
+/// and a binding that has not resolved yet hands over null on the way to handing over the row.
+/// </remarks>
+public sealed class RelayCommand<T>(Action<T> execute, Func<T, bool>? canExecute = null)
+    : System.Windows.Input.ICommand
+{
+    public event EventHandler? CanExecuteChanged;
+
+    public bool CanExecute(object? parameter)
+        => parameter is T value && (canExecute?.Invoke(value) ?? true);
+
+    public void Execute(object? parameter)
+    {
+        if (parameter is T value) execute(value);
+    }
 
     public void RaiseCanExecuteChanged()
         => CanExecuteChanged?.Invoke(this, EventArgs.Empty);

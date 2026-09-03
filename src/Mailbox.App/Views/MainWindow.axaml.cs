@@ -9575,8 +9575,17 @@ public partial class MainWindow : Window
         FitListPane(shell);
         shell.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName is nameof(ShellViewModel.ReadingPaneVisible) or nameof(ShellViewModel.ReadingPaneAtBottom)) FitListPane(shell);
+            if (e.PropertyName is nameof(ShellViewModel.ReadingPaneShown)
+                or nameof(ShellViewModel.ReadingPaneVisible)
+                or nameof(ShellViewModel.ReadingPaneAtBottom)
+                or nameof(ShellViewModel.NavVisible)) FitListPane(shell);
         };
+
+        // What the panes do below the width the window used to stop at. The shell reads its own
+        // width rather than the pane grid's: the grid is what the panes have already been given,
+        // so deciding off it would be deciding off the answer.
+        shell.ShellWidth = Bounds.Width;
+        SizeChanged += (_, e) => shell.ShellWidth = e.NewSize.Width;
 
         // And again whenever the panes have a different amount of room: how wide the list may be
         // depends on how much is left for the reading pane beside it, and that is a fact about
