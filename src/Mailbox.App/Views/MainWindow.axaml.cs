@@ -9587,6 +9587,11 @@ public partial class MainWindow : Window
         shell.ShellWidth = Bounds.Width;
         SizeChanged += (_, e) => shell.ShellWidth = e.NewSize.Width;
 
+        // The pane's Reply / Reply All / Forward. Built from the shell's list rather than bound
+        // through a template, because the panel owns the labels it hides and the "…" it hides
+        // them into, and a template hands it controls it did not make.
+        this.FindControl<ReadingHeaderActions>("ReadingActions")?.Fill(shell.ReadingPaneActions);
+
         // And again whenever the panes have a different amount of room: how wide the list may be
         // depends on how much is left for the reading pane beside it, and that is a fact about
         // the window's width. Without this the fit is whatever it was when the window opened.

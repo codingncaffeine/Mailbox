@@ -1162,44 +1162,35 @@
                                        Margin="0,0,0,8"
                                        TextWrapping="Wrap" />
 
-                            <!-- Trimmed with an ellipsis rather than hard-cut by the pane's clip:
-                                 beside the docked To-Do Bar this column is squeezed to a sliver,
-                                 and the sender is the one thing the header exists to say — so it
-                                 keeps a least width instead of vanishing under the buttons. -->
-                            <StackPanel Grid.Row="1" Grid.Column="0" Spacing="2" MinWidth="90">
-                                <TextBlock Text="{Binding ReadingFrom}"
-                                           FontWeight="SemiBold"
-                                           TextTrimming="CharacterEllipsis" />
-                                <TextBlock Text="{Binding ReadingTo}"
-                                           Classes="small secondary"
-                                           TextTrimming="CharacterEllipsis" />
-                            </StackPanel>
+                            <!--
+                                The reference puts Reply / Reply All / Forward at the top right of
+                                the reading pane, mirroring the Respond ribbon group — and gives
+                                them away into a "…" as the pane narrows, which is the rule the
+                                bar and the tab strip both follow.
 
-                            <!-- the reference application puts Reply / Reply All / Forward at the top right of
-                                 the reading pane, mirroring the Respond ribbon group. -->
-                            <ItemsControl Grid.Row="1" Grid.Column="1"
-                                          VerticalAlignment="Top"
-                                          ItemsSource="{Binding ReadingPaneActions}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <StackPanel Orientation="Horizontal" Spacing="2" />
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:QuickAccessButton">
-                                        <Button Padding="7,4" Command="{Binding Invoke}" ToolTip.Tip="{Binding Tip}">
-                                            <StackPanel Orientation="Horizontal" Spacing="5">
-                                                <TextBlock Text="{Binding Glyph}"
-                                                           FontFamily="{Binding IconFamily}"
-                                                           FontSize="15"
-                                                           Foreground="{DynamicResource accent.rest.brush}" />
-                                                <TextBlock Text="{Binding Label}"
-                                                           Classes="small" />
-                                            </StackPanel>
-                                        </Button>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                                Docked rather than a second grid column, and this is the whole
+                                fix: a grid measures an Auto column's child with infinity, so the
+                                buttons could never discover that they did not fit. A minimum on
+                                the sender's column did not make them give way — it only decided
+                                which of the two was drawn on top of the other, and the answer was
+                                that the sender went underneath. ReadingHeaderActions is offered
+                                what the pane actually has and fits itself into what is left of it
+                                once the sender has kept its least width.
+                            -->
+                            <DockPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2">
+                                <views:ReadingHeaderActions Name="ReadingActions"
+                                                            DockPanel.Dock="Right"
+                                                            VerticalAlignment="Top" />
+
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="{Binding ReadingFrom}"
+                                               FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding ReadingTo}"
+                                               Classes="small secondary"
+                                               TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </DockPanel>
                         </Grid>
                     </Border>
 
