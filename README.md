@@ -48,8 +48,9 @@ application rather than a web page in a window.
 
 ## Features
 
-**Mail.** IMAP, POP3 and SMTP with autoconfig and OAuth2; a rolling offline window per folder,
-or everything. Full-text search (FTS5) with a keyword grammar (`from:`, `subject:`, dates),
+**Mail.** IMAP, POP3 and SMTP with autoconfig and OAuth2; mail is checked when the application
+opens and every thirty minutes after, on a schedule you can change; a rolling offline window
+per folder, or everything. Full-text search (FTS5) with a keyword grammar (`from:`, `subject:`, dates),
 search folders, and All Mailboxes. Conversations with eleven arrangements, Focused Inbox,
 an opt-in unified inbox. Rules run client-side, and compile to Sieve for servers that speak
 ManageSieve, so they keep working while your machine is off. A Bayesian junk filter trained

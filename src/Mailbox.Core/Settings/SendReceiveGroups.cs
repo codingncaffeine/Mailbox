@@ -19,8 +19,12 @@ public sealed record SendReceiveGroup
     /// <summary>Whether pressing F9 includes this group. The reference's own wording.</summary>
     public bool IncludeInSendReceiveAll { get; init; } = true;
 
-    /// <summary>Check this group on a timer as well as on request.</summary>
-    public bool ScheduleEnabled { get; init; }
+    /// <summary>
+    /// Check this group on a timer as well as on request. On, every thirty minutes, as the
+    /// reference ships its own group: a client that only checks mail when asked is one whose
+    /// reader learns to press F9.
+    /// </summary>
+    public bool ScheduleEnabled { get; init; } = true;
 
     public int ScheduleMinutes { get; init; } = 30;
 
@@ -51,21 +55,45 @@ public sealed class SendReceiveGroups
 {
     public const string Key = "sendreceive.groups";
 
-    /// <summary>What ships: everything, on request, as the reference's own default group does.</summary>
+    /// <summary>
+    /// What ships: everything, every thirty minutes and on request, as the reference's own
+    /// default group does.
+    /// </summary>
     public static SendReceiveGroup AllAccounts { get; } = new() { Name = "All Accounts" };
 
     private readonly SettingsStore _settings;
     private readonly List<SendReceiveGroup> _groups;
 
+    /// <summary>True while this class is writing the store, so its own write is not read back.</summary>
+    private bool _saving;
+
     public SendReceiveGroups(SettingsStore settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
         _settings = settings;
+        _groups = Load();
 
-        _groups = settings.Has(Key) ? Parse(settings.GetString(Key)) : [AllAccounts];
+        // Read once and kept, so the store has to be watched: the Options dialog's Cancel puts
+        // the store back the way it found it, and groups that held the cancelled edit until the
+        // next launch would be a Cancel that did not cancel. A change this class wrote itself is
+        // already in hand and is not read back.
+        settings.Changed += (_, key) =>
+        {
+            if (_saving) return;
+            if (key.Length > 0 && !string.Equals(key, Key, StringComparison.Ordinal)) return;
+
+            _groups.Clear();
+            _groups.AddRange(Load());
+        };
+    }
+
+    private List<SendReceiveGroup> Load()
+    {
+        List<SendReceiveGroup> groups = _settings.Has(Key) ? Parse(_settings.GetString(Key)) : [AllAccounts];
 
         // A file edited down to nothing still needs a group to press F9 on.
-        if (_groups.Count == 0) _groups.Add(AllAccounts);
+        if (groups.Count == 0) groups.Add(AllAccounts);
+        return groups;
     }
 
     public IReadOnlyList<SendReceiveGroup> All => _groups;
@@ -105,8 +133,13 @@ public sealed class SendReceiveGroups
     {
         ArgumentNullException.ThrowIfNull(groups);
 
+        // Read in full before anything is cleared. The Options page hands in a projection of
+        // All — the live list — and a projection read after the clear reads an empty list,
+        // which turned every edit on that page into a reset to the shipped group.
+        var replacement = groups.ToList();
+
         _groups.Clear();
-        _groups.AddRange(groups);
+        _groups.AddRange(replacement);
         if (_groups.Count == 0) _groups.Add(AllAccounts);
 
         Save();
@@ -141,7 +174,15 @@ public sealed class SendReceiveGroups
             });
         }
 
-        _settings.Set(Key, array.ToJsonString(new JsonSerializerOptions { WriteIndented = false }));
+        _saving = true;
+        try
+        {
+            _settings.Set(Key, array.ToJsonString(new JsonSerializerOptions { WriteIndented = false }));
+        }
+        finally
+        {
+            _saving = false;
+        }
     }
 
     /// <summary>
@@ -167,7 +208,8 @@ public sealed class SendReceiveGroups
                 {
                     Name = name,
                     IncludeInSendReceiveAll = Flag(entry, "includeInAll", fallback: true),
-                    ScheduleEnabled = Flag(entry, "schedule", fallback: false),
+                    // The shipped group's own schedule for an entry written by hand without one.
+                    ScheduleEnabled = Flag(entry, "schedule", fallback: true),
                     ScheduleMinutes = Math.Clamp(Number(entry, "minutes", 30), 1, 1440),
                     Accounts =
                     [

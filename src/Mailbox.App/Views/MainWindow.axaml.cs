@@ -8125,21 +8125,9 @@ public partial class MainWindow : Window
         FontSize = 12,
     };
 
-    private readonly Dictionary<string, DateTimeOffset> _lastRun = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Which scheduled group is due, and when each was last started.</summary>
+    private readonly SendReceiveSchedule _schedule = new();
 
-    /// <summary>
-    /// Runs the groups that asked to be checked on a timer.
-    /// </summary>
-    /// <remarks>
-    /// A minute is the resolution: the shortest schedule anyone sets is measured in minutes, and
-    /// a timer that wakes more often than the thing it is waiting for is a laptop battery spent
-    /// on nothing.
-    /// <para>
-    /// A group whose turn comes while a run is in flight waits for the next tick rather than
-    /// queueing. Two send/receives at once would open two sessions to the same server, and the
-    /// second would find nothing the first had not already taken.
-    /// </para>
-    /// </remarks>
     /// <summary>
     /// The daily backup, hung off the same minute timer the send/receive schedule uses: once a
     /// day, when the Backup &amp; Restore window asked for one, written and pruned off the UI
@@ -8200,30 +8188,72 @@ public partial class MainWindow : Window
             WakeSnoozed(shell);
             CheckReminders(shell);
             RunDailyBackupIfDue(shell);
-
-            if (_transferring || App.Transfer.WorkOffline) return;
-
-            var now = DateTimeOffset.UtcNow;
-
-            foreach (var group in App.Groups.All.Where(g => g.ScheduleEnabled))
-            {
-                var due = !_lastRun.TryGetValue(group.Name, out var last)
-                          || now - last >= TimeSpan.FromMinutes(group.ScheduleMinutes);
-
-                if (!due) continue;
-
-                _lastRun[group.Name] = now;
-                _ = SendReceiveAsync(shell, group);
-                return;
-            }
+            RunScheduledGroup(shell);
         };
 
-        // Started rather than run: a client that polls the instant it opens is one that
-        // reconnects on every restart, which is a way to get an account rate-limited.
-        Opened += (_, _) => timer.Start();
+        // Run at open and then on the minute. The reference checks every scheduled group when
+        // it starts, and a client that opens onto stale mail and says nothing for half an hour
+        // reads as one that is not checking at all.
+        Opened += (_, _) =>
+        {
+            RunScheduledGroup(shell, atStartup: true);
+            timer.Start();
+        };
         Closed += (_, _) => timer.Stop();
 
         WireIdleWatchers(shell);
+    }
+
+    /// <summary>
+    /// Runs the first group whose schedule has come round, if any has.
+    /// </summary>
+    /// <remarks>
+    /// A minute is the resolution: the shortest schedule anyone sets is measured in minutes, and
+    /// a timer that wakes more often than the thing it is waiting for is a laptop battery spent
+    /// on nothing.
+    /// <para>
+    /// A group whose turn comes while a run is in flight waits for the next tick rather than
+    /// queueing. Two send/receives at once would open two sessions to the same server, and the
+    /// second would find nothing the first had not already taken.
+    /// </para>
+    /// <para>
+    /// The run at startup is the one automatic run that is not like a press of F9: it opens no
+    /// progress dialog. The reader has just opened the window and asked for nothing, and the
+    /// status bar's own bar says a send/receive is under way. Every later run on the timer is
+    /// announced as the reference announces its own — the dialog, unless it has been told to
+    /// stay away.
+    /// </para>
+    /// </remarks>
+    private void RunScheduledGroup(ShellViewModel shell, bool atStartup = false)
+    {
+        // A capture run poses accounts; none of them has a server to check.
+        if (WindowCapture.IsRequested) return;
+        if (_transferring) return;
+
+        if (App.Transfer.WorkOffline)
+        {
+            if (atStartup) Log.Info("Scheduled send/receive: working offline, so nothing is checked at startup.");
+            return;
+        }
+
+        // Nothing to check. Said once, at startup, and not on every tick: a manual press gets
+        // "No account is set up yet" on the status bar, and a timer that repeated it would be
+        // nagging.
+        if (App.Accounts.All.Count == 0)
+        {
+            if (atStartup) Log.Info("Scheduled send/receive: nothing to check at startup, no account is set up.");
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (_schedule.Due(App.Groups.All, now) is not { } group) return;
+
+        _schedule.Started(group, now);
+        Log.Info(atStartup
+            ? $"Scheduled send/receive: “{group.Name}” at startup, then every {group.ScheduleMinutes} minute(s)."
+            : $"Scheduled send/receive: “{group.Name}”, every {group.ScheduleMinutes} minute(s).");
+
+        _ = SendReceiveAsync(shell, group, quietly: atStartup);
     }
 
     /// <summary>
@@ -8637,9 +8667,14 @@ public partial class MainWindow : Window
     /// True on the second run of a pair, after the reader has agreed to a certificate the first
     /// was refused. It stops a server that refuses whatever it is shown from asking forever.
     /// </param>
+    /// <param name="quietly">
+    /// True for the run at startup, which opens no progress dialog: the reader pressed nothing.
+    /// Show Progress on the Send/Receive tab still opens it for the run in flight, and a run
+    /// that failed is still on the status bar.
+    /// </param>
     private async Task SendReceiveAsync(
         ShellViewModel shell, SendReceiveGroup? group = null, bool retrying = false,
-        TransferMode mode = TransferMode.SendAndReceive, string? folder = null)
+        TransferMode mode = TransferMode.SendAndReceive, string? folder = null, bool quietly = false)
     {
         if (_transferring) return;
 
@@ -8675,7 +8710,7 @@ public partial class MainWindow : Window
 
         _tasks = new SendReceiveTasks(accounts.Select(a => a.Connection.Address));
         _cancellation = new CancellationTokenSource();
-        ShowProgressDialog();
+        if (!quietly) ShowProgressDialog();
 
         shell.IsTransferring = true;
         shell.TransferProgress = 0;

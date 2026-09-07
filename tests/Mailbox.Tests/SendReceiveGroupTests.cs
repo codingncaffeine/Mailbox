@@ -172,4 +172,82 @@ public class SendReceiveGroupTests
         Assert.NotNull(groups.Find("all accounts"));
         Assert.Null(groups.Find("nothing"));
     }
+
+    /// <summary>
+    /// The shipped group is checked every thirty minutes, as the reference's own is. A client
+    /// that only checks mail when asked is one whose reader learns to press F9, which is not
+    /// what a mail client is for.
+    /// </summary>
+    [Fact]
+    public void TheShippedGroupIsCheckedEveryThirtyMinutes()
+    {
+        var only = Assert.Single(Fresh().All);
+
+        Assert.True(only.ScheduleEnabled);
+        Assert.Equal(30, only.ScheduleMinutes);
+    }
+
+    /// <summary>A hand-written group that says nothing about a schedule gets the shipped one.</summary>
+    [Fact]
+    public void AGroupWrittenWithoutAScheduleIsCheckedLikeTheShippedOne()
+    {
+        var settings = SettingsStore.Transient();
+        settings.Set(SendReceiveGroups.Key, """[{"name":"A"}]""");
+
+        var only = Assert.Single(Fresh(settings).All);
+        Assert.True(only.ScheduleEnabled);
+        Assert.Equal(30, only.ScheduleMinutes);
+    }
+
+    /// <summary>
+    /// The Options page edits one group by projecting the live list. Replace clears that list
+    /// before it reads what it was handed, so a projection evaluated late reads an empty list —
+    /// and the edit became a reset to the shipped group.
+    /// </summary>
+    [Fact]
+    public void ReplacingFromTheLiveListKeepsTheEdit()
+    {
+        var groups = Fresh();
+        var current = groups.Find("All Accounts")!;
+        var updated = current with { ScheduleMinutes = 5 };
+
+        groups.Replace(groups.All.Select(g => ReferenceEquals(g, current) ? updated : g));
+
+        Assert.Equal(5, Assert.Single(groups.All).ScheduleMinutes);
+    }
+
+    /// <summary>
+    /// Cancel on the Options page puts the store back. The groups are read once and kept, so
+    /// they have to follow the store rather than hold the cancelled edit until the next launch.
+    /// </summary>
+    [Fact]
+    public void ARevertedStorePutsTheGroupsBack()
+    {
+        var settings = SettingsStore.Transient();
+        var groups = Fresh(settings);
+        var before = settings.Snapshot();
+
+        groups.Replace([new SendReceiveGroup { Name = "Work", ScheduleMinutes = 5 }]);
+        settings.Revert(before);
+
+        var only = Assert.Single(groups.All);
+        Assert.Equal("All Accounts", only.Name);
+        Assert.Equal(30, only.ScheduleMinutes);
+    }
+
+    [Fact]
+    public void ARevertedStorePutsAnEarlierEditBack()
+    {
+        var settings = SettingsStore.Transient();
+        var groups = Fresh(settings);
+        groups.Replace([new SendReceiveGroup { Name = "Work", ScheduleMinutes = 10 }]);
+        var before = settings.Snapshot();
+
+        groups.Replace([new SendReceiveGroup { Name = "Work", ScheduleMinutes = 5 }]);
+        settings.Revert(before);
+
+        var only = Assert.Single(groups.All);
+        Assert.Equal("Work", only.Name);
+        Assert.Equal(10, only.ScheduleMinutes);
+    }
 }
