@@ -64,7 +64,7 @@ internal static class WindowingBackend
             // Pinned to Wayland: strict, because this is the setting a comparison is made under
             // and a comparison that could quietly become an X11 one is not a comparison.
             case true:
-                return builder.UseWayland();
+                return OnItsOwnTerms(builder).UseWayland();
 
             // Pinned to X11: platform detection already chose it, so there is nothing to do.
             case false:
@@ -83,7 +83,30 @@ internal static class WindowingBackend
         }
 
         MarkAttempt();
-        return builder.UseWaylandWithFallback();
+        return OnItsOwnTerms(builder).UseWaylandWithFallback();
+    }
+
+    /// <summary>
+    /// The native backend told never to ask the compositor for a frame.
+    /// </summary>
+    /// <remarks>
+    /// Every window here draws its own caption, so the only thing the xdg-decoration protocol was
+    /// ever used for was to decline. The backend declines it in a way that does not survive a
+    /// hide: it asks for a server-side frame on every toplevel it creates and withdraws the
+    /// request when a window turns decorations off — once, with a flag that is never reset. A
+    /// window hidden and shown again gets a new toplevel and a new request, no second withdrawal,
+    /// and KWin, asked, obliges: the re-shown window wore the desktop's title bar above its own.
+    /// The one window Mailbox hides and shows again is the warm message window, which is why
+    /// opening a message showed two frames and nothing else did. With the protocol never bound
+    /// the compositor is never asked; KWin, unasked, draws nothing, and GNOME never drew anything
+    /// anyway. The option is marked experimental in 12.1 and is the only switch that keeps the
+    /// protocol unbound, hence the pragma.
+    /// </remarks>
+    private static AppBuilder OnItsOwnTerms(AppBuilder builder)
+    {
+#pragma warning disable AVALONIA_WAYLAND_FORCE_CSD
+        return builder.With(new WaylandPlatformOptions { ForceDrawnDecorations = true });
+#pragma warning restore AVALONIA_WAYLAND_FORCE_CSD
     }
 
     // ---- The guard --------------------------------------------------------------------------
