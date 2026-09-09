@@ -177,7 +177,12 @@ public sealed class AttachmentStrip : Border
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            // The runtime directory is the one place the launcher's unit always leaves writable,
+            // so this is never the confinement's doing and is not explained as if it were.
             Log.Warn("Could not write an attachment for opening.", ex);
+            await Confirm.TellAsync(owner, "Open attachment",
+                "Cannot open the attachment." + Environment.NewLine
+                + Confinement.DescribeWriteFailure(attachment.SafeName, ex));
         }
     }
 
@@ -195,9 +200,9 @@ public sealed class AttachmentStrip : Border
     /// </remarks>
     internal async Task SaveAsAsync(Attachment attachment)
     {
-        if (TopLevel.GetTopLevel(this) is not { } top) return;
+        if (TopLevel.GetTopLevel(this) is not Window owner) return;
 
-        var file = await top.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        var file = await owner.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
             Title = "Save attachment",
             SuggestedFileName = attachment.SafeName,
@@ -216,16 +221,22 @@ public sealed class AttachmentStrip : Border
         }
         catch (Exception ex)
         {
+            // Said, not only logged. The picker is the desktop's and reports nothing about what
+            // happens after it closes, so a save that failed here used to look exactly like a
+            // save that worked — the file was simply never where the reader had put it.
             Log.Warn("Could not save an attachment.", ex);
+            await Confirm.TellAsync(owner, "Save attachment",
+                "Cannot save the attachment." + Environment.NewLine
+                + Confinement.ExplainWriteFailure(path, ex));
         }
     }
 
     /// <summary>Save All: every attachment into one chosen directory, one dialog for the lot.</summary>
     private async Task SaveAllAsync()
     {
-        if (TopLevel.GetTopLevel(this) is not { } top) return;
+        if (TopLevel.GetTopLevel(this) is not Window owner) return;
 
-        var picked = await top.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        var picked = await owner.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
             Title = "Save All Attachments",
             AllowMultiple = false,
@@ -233,13 +244,24 @@ public sealed class AttachmentStrip : Border
 
         if (picked.Count == 0 || picked[0].TryGetLocalPath() is not { } directory) return;
 
-        SaveAllTo(directory);
+        if (SaveAllTo(directory) is { } stopped)
+        {
+            var heading = stopped.Written == 0
+                ? "Cannot save the attachments."
+                : $"Cannot save all the attachments: {stopped.Written} of {_attachments.Count} were saved.";
+            await Confirm.TellAsync(owner, "Save All Attachments",
+                heading + Environment.NewLine + Confinement.ExplainWriteFailure(stopped.Path, stopped.Error));
+        }
     }
 
-    /// <summary>The write half of Save All, shared with the harness door — no picker in it.</summary>
-    private void SaveAllTo(string directory)
+    /// <summary>
+    /// The write half of Save All, shared with the harness door — no picker in it. Returns where
+    /// and why it stopped, with how many files were already written; null when every file landed.
+    /// </summary>
+    private (string Path, Exception Error, int Written)? SaveAllTo(string directory)
     {
         var written = 0;
+        var path = directory;
 
         try
         {
@@ -247,7 +269,7 @@ public sealed class AttachmentStrip : Border
             {
                 // Two attachments may carry one name; the second becomes "name (2).ext" rather
                 // than winning by arriving later.
-                var path = Path.Combine(directory, attachment.SafeName);
+                path = Path.Combine(directory, attachment.SafeName);
                 for (var n = 2; File.Exists(path); n++)
                 {
                     path = Path.Combine(
@@ -262,10 +284,12 @@ public sealed class AttachmentStrip : Border
             }
 
             Log.Info($"Saved {written} attachment(s) to {directory}.");
+            return null;
         }
         catch (Exception ex)
         {
             Log.Warn($"Save All stopped after {written} attachment(s).", ex);
+            return (path, ex, written);
         }
     }
 

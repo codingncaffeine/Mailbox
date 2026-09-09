@@ -44,10 +44,43 @@ WEBKIT_RUNTIME="${XDG_RUNTIME_DIR:-/tmp}/.flatpak"
 # missing is skipped (the "-" prefix), and the application could then never create it.
 mkdir -p "$DATA" "$CONFIG" "$STATE" "$CACHE" "$RUNTIME" "$WPE_RUNTIME" "$WEBKIT_RUNTIME"
 
-# Where a saved attachment or an export lands by default. Everything else under $HOME is
-# read-only to the unit; a save elsewhere fails with the picker's own error, which is the
-# trade the confinement makes.
-DOWNLOADS="$(command -v xdg-user-dir >/dev/null 2>&1 && xdg-user-dir DOWNLOAD || echo "$HOME/Downloads")"
+# Where a saved attachment, an export or a backup may land: the reader's own folders — the
+# eight the desktop names (Desktop, Documents, Downloads, Music, Pictures, Videos, Public,
+# Templates) — are writable, and everything else under $HOME stays read-only to the unit, which
+# is the trade the confinement makes. It used to be Downloads alone, and a save to the Desktop
+# failed with nothing said: the picker is the desktop's and knows nothing of the unit, so it is
+# the application that meets the read-only file system — and it is told below exactly what was
+# opened, so that it can say so and name the folders that would have worked.
+#
+# xdg-user-dir answers with $HOME itself for a folder it has no entry for, and $HOME is the one
+# thing that must not be opened, so that answer is dropped. A folder that does not exist is
+# left out rather than created, and skipped ("-" prefix) should it vanish before the unit starts.
+user_dir() {
+    case "$1" in
+        DESKTOP) fallback="$HOME/Desktop" ;;
+        DOCUMENTS) fallback="$HOME/Documents" ;;
+        DOWNLOAD) fallback="$HOME/Downloads" ;;
+        MUSIC) fallback="$HOME/Music" ;;
+        PICTURES) fallback="$HOME/Pictures" ;;
+        VIDEOS) fallback="$HOME/Videos" ;;
+        PUBLICSHARE) fallback="$HOME/Public" ;;
+        TEMPLATES) fallback="$HOME/Templates" ;;
+        *) fallback="" ;;
+    esac
+    dir="$(command -v xdg-user-dir >/dev/null 2>&1 && xdg-user-dir "$1")"
+    case "$dir" in ""|"$HOME"|"$HOME/") dir="$fallback" ;; esac
+    printf '%s' "$dir"
+}
+
+DOWNLOADS="$(user_dir DOWNLOAD)"
+PLACES=""
+for name in DESKTOP DOCUMENTS DOWNLOAD MUSIC PICTURES VIDEOS PUBLICSHARE TEMPLATES; do
+    dir="$(user_dir "$name")"
+    case "$dir" in ""|"$HOME"|"$HOME/") continue ;; esac
+    [ -d "$dir" ] || continue
+    PLACES="${PLACES}${dir}
+"
+done
 
 # The folder the Backup & Restore window was told to write to, read out of the settings so
 # the wall opens exactly where the reader pointed and nowhere else. The naive extraction is
@@ -71,6 +104,23 @@ done
 for var in $(env | sed -n 's/^\(MAILBOX_[A-Z0-9_]*\)=.*/\1/p'); do
     set -- "--setenv=$var" "$@"
 done
+
+# The reader's folders, one ReadWritePaths each — and the same list handed to the application
+# (colon-separated, as PATH is), with the backup folder, so that a save the unit refused can be
+# explained with the folders it would have allowed. Globbing is off for the walk: a folder name
+# is a name, not a pattern.
+WRITABLE=""
+IFS_SAVED="$IFS"
+IFS='
+'
+set -f
+for dir in $PLACES; do
+    set -- "--property=ReadWritePaths=-\"$dir\"" "$@"
+    WRITABLE="${WRITABLE:+$WRITABLE:}$dir"
+done
+set +f
+IFS="$IFS_SAVED"
+set -- "--setenv=MAILBOX_SANDBOX=1" "--setenv=MAILBOX_SANDBOX_WRITABLE=${WRITABLE:+$WRITABLE:}$BACKUP_DIR" "$@"
 
 # MemoryDenyWriteExecute stays off: the .NET JIT needs W^X mappings and the runtime aborts
 # without them. RestrictNamespaces stays off: the web engine builds its own sandbox out of
@@ -123,7 +173,6 @@ exec systemd-run --user --quiet --collect --wait "$IO" \
     --property=ReadWritePaths="$RUNTIME" \
     --property=ReadWritePaths="$WPE_RUNTIME" \
     --property=ReadWritePaths="$WEBKIT_RUNTIME" \
-    --property=ReadWritePaths="-\"$DOWNLOADS\"" \
     --property=ReadWritePaths="-\"$BACKUP_DIR\"" \
     --property=PrivateTmp=yes \
     --property=CapabilityBoundingSet= \
