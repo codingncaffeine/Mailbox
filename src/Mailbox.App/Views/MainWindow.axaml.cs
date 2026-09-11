@@ -8909,20 +8909,41 @@ public partial class MainWindow : Window
     /// The RSS feeds, read on the same press the mail is.
     /// </summary>
     /// <remarks>
-    /// Into the default account's tree, under RSS Feeds, one folder per subscription — where the
-    /// reference keeps them. What arrives is mail as far as everything downstream is concerned.
+    /// Into the feed reader's own store, where the Feeds module reads — the same place its own
+    /// Update Feeds files into (<see cref="FeedAccount"/>). This pass was left pointed at the
+    /// first mail account when feeds moved into a store of their own, and nobody noticed while
+    /// Send/Receive only ran when pressed. Once it ran at startup and on the half hour, every
+    /// launch's one-off move carried a fresh tree of articles out of the reader's mailbox and the
+    /// next run put another one back: an RSS Feeds folder in the mail that no amount of moving
+    /// could keep empty, and every article fetched twice, once for each store.
     /// </remarks>
     private async Task PollFeedsAsync(ShellViewModel shell, CancellationToken cancellation)
     {
         if (App.Feeds.All.Count == 0) return;
-        if (App.Accounts.All.FirstOrDefault() is not { } account) return;
+        if (FeedAccount() is not { } account) return;
 
-        var report = await App.FeedReader.PollAsync(account, DateTimeOffset.UtcNow, cancellation);
-        if (report.Delivered == 0 && report.Failed.Count == 0) return;
+        // One pass at a time over the one store. The module's Update Feeds files into it too, and
+        // two passes filing the same feed at once would each count what the other had delivered.
+        if (_feedsUpdating) return;
+        _feedsUpdating = true;
 
-        shell.Refresh();
-        shell.StatusRight = "Feeds: " + report.Summary;
-        Log.Info($"Feeds: {report.Summary}.");
+        try
+        {
+            var report = await App.FeedReader.PollAsync(account, DateTimeOffset.UtcNow, cancellation);
+            if (report.Delivered == 0 && report.Failed.Count == 0) return;
+
+            shell.Refresh();
+            shell.StatusRight = "Feeds: " + report.Summary;
+            Log.Info($"Feeds: {report.Summary}.");
+
+            // Announced rather than inserted, as the module's own update does: new articles pushed
+            // into the list under a reader move the one they are reading down the screen.
+            if (report.Delivered > 0) _feedModule?.Announce(report.Delivered);
+        }
+        finally
+        {
+            _feedsUpdating = false;
+        }
     }
 
     /// <summary>
