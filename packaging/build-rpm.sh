@@ -96,6 +96,11 @@ Recommends:     libgbm.so.1()(64bit)
 Recommends:     libdrm.so.2()(64bit)
 Recommends:     libsoup-3.0.so.0()(64bit)
 
+# XWayland, by the path both families install it at: the send/receive progress window is shown
+# through it on a Wayland session, the one way it can come up without taking the keyboard, and
+# without it those runs keep to the status bar.
+Recommends:     /usr/bin/Xwayland
+
 # The reading pane's engine. Weak deliberately, and by soname rather than by package name: WPE
 # WebKit is not packaged by every distribution — Fedora packages none of it, openSUSE calls it
 # libWPEWebKit-2_0-1 — and the pane renders the message as text where no engine can draw into it

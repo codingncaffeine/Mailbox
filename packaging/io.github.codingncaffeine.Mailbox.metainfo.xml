@@ -67,6 +67,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.6.3" date="2026-09-11">
+      <description>
+        <p>The send/receive progress window comes up as it always has without taking the keyboard, so a check on the half hour no longer pulls you out of a full-screen game; RSS articles stay in the Feeds module instead of appearing in a mail account.</p>
+      </description>
+    </release>
     <release version="0.6.2" date="2026-09-09">
       <description>
         <p>Attachments save to the Desktop, Documents and the other standard folders, and a save that cannot be made says why; a message opened again on Wayland no longer wears the desktop's title bar above its own.</p>

@@ -120,7 +120,9 @@ build_one() {
     # back to older releases. WPE WebKit is what renders mail; without it the reading pane
     # renders the message as text, which the pane now decides for itself rather than building an
     # engine that would draw nothing. GTK is only for the file dialogs where no desktop portal
-    # answers.
+    # answers. XWayland is what the send/receive progress window is shown through on a Wayland
+    # session, the one way it can come up without taking the keyboard; without it those runs
+    # keep to the status bar.
     cat > "$deb/DEBIAN/control" <<CTRL
 Package: mailbox
 Version: $VER
@@ -129,7 +131,7 @@ Priority: optional
 Architecture: $debarch
 Installed-Size: $installed_kb
 Depends: libc6, libgcc-s1, libstdc++6, libicu76 | libicu74 | libicu72, zlib1g, libx11-6, libxext6, libxi6, libxrandr2, libxcursor1, libice6, libsm6, libfontconfig1, libfreetype6, libegl1, libgl1, libglib2.0-0t64 | libglib2.0-0, libsoup-3.0-0, libwayland-client0, libwayland-egl1, libwayland-server0, libwayland-cursor0, libxkbcommon0, libgbm1, libdrm2, libwpewebkit-2.0-1, libwpe-1.0-1, libwpebackend-fdo-1.0-1
-Recommends: libsecret-tools, libnotify-bin, hunspell-en-us, fonts-crosextra-carlito, fonts-crosextra-caladea, libgtk-3-0t64 | libgtk-3-0, xdg-desktop-portal, libldap2 | libldap-2.5-0
+Recommends: libsecret-tools, libnotify-bin, hunspell-en-us, fonts-crosextra-carlito, fonts-crosextra-caladea, libgtk-3-0t64 | libgtk-3-0, xdg-desktop-portal, libldap2 | libldap-2.5-0, xwayland
 Suggests: hunspell-en-gb, fonts-liberation, fonts-noto-core
 Maintainer: Mailbox <codingncaffeine@users.noreply.github.com>
 Homepage: https://github.com/codingncaffeine/Mailbox
