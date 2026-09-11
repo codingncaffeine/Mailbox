@@ -998,6 +998,10 @@ public partial class MainWindow : Window
             transferBar.Click += (_, _) => ShowProgressDialog(force: true);
         }
 
+        // The toaster is another process's window, so nothing takes it down with the shell unless
+        // something here does. It would go anyway when its input closed; this is the tidy way.
+        Closed += (_, _) => _toaster?.Close();
+
         // The People module's own doors: the favourites, the menu a right-click opens, and what
         // the list and the card beside it are actually holding. Before the peeks, because two of
         // them draw the favourites and do it in their own Opened handler: a list filled after
@@ -2372,6 +2376,7 @@ public partial class MainWindow : Window
             // a capture can be taken. The addresses are invented, as all sample data is.
             case "progress":
             case "transferbar":
+            case "toaster":
                 Opened += (_, _) =>
                 {
                     var first = Environment.GetEnvironmentVariable("MAILBOX_PROGRESS_ACCOUNT") ?? "you@example.com";
@@ -2431,6 +2436,26 @@ public partial class MainWindow : Window
                             "transferbar",
                             StringComparison.OrdinalIgnoreCase))
                     {
+                        return;
+                    }
+
+                    // The toaster, for real: the posed run handed to the same method a run nobody
+                    // pressed for uses, so on native Wayland the second process starts and puts the
+                    // dialog up without the keyboard. Four seconds after the window opens, because
+                    // the case it exists for is a run that starts while the reader has gone to
+                    // something else, and a door that fired at once would only ever show it over
+                    // the shell. A mid-flight run then finishes cleanly and the toaster leaves with
+                    // it; =failed leaves it up with its error, as a real failure does.
+                    if (string.Equals(
+                            Environment.GetEnvironmentVariable("MAILBOX_PEEK"),
+                            "toaster",
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        // A capture run photographs the shell a moment after it opens and exits,
+                        // which would be long before the pose — a door whose own path never ran,
+                        // reported as opened. Held until the pose has finished instead.
+                        var hold = WindowCapture.IsRequested ? WindowCapture.Hold() : null;
+                        DispatcherTimer.RunOnce(() => PoseToaster(tasks, first, hold), TimeSpan.FromSeconds(4));
                         return;
                     }
 
@@ -8721,6 +8746,7 @@ public partial class MainWindow : Window
             shell.StatusRight = $"{p.Stage} {p.Account}…";
             _tasks?.Report(p);
             _progress?.Refresh();
+            _toaster?.Report(p);
 
             // The status bar's own bar, which is all a reader sees once the dialog has been told
             // not to appear.
@@ -8740,7 +8766,11 @@ public partial class MainWindow : Window
             var result = await Task.Run(() =>
                 App.Transfer.RunAsync(accounts, DateTimeOffset.UtcNow, _cancellation.Token, mode, folder));
 
+            // Both views of the run take its end now, together, rather than the dialog waiting for
+            // the calendars and the feeds to finish while the toaster already says it is done.
             _tasks.Finish(result);
+            _progress?.Refresh();
+            _toaster?.Finish(result);
             shell.StatusRight = result.Summary();
             shell.Refresh();
             ReportStuckOperations(shell);
@@ -8799,12 +8829,14 @@ public partial class MainWindow : Window
         catch (OperationCanceledException)
         {
             _tasks.Finish(new SendReceiveResult([]));
+            _toaster?.Finish(new SendReceiveResult([]));
             shell.StatusRight = "Send/receive cancelled.";
         }
         catch (Exception ex)
         {
             Log.Crash("send/receive", ex);
             _tasks.Finish(new SendReceiveResult([]));
+            _toaster?.Finish(new SendReceiveResult([]));
             shell.StatusRight = "Send/receive could not finish. See the log.";
         }
         finally
@@ -8968,6 +9000,7 @@ public partial class MainWindow : Window
     private bool _transferring;
     private SendReceiveTasks? _tasks;
     private SendReceiveProgressDialog? _progress;
+    private ProgressToaster? _toaster;
     private CancellationTokenSource? _cancellation;
 
     /// <summary>
@@ -8976,22 +9009,190 @@ public partial class MainWindow : Window
     /// <remarks>
     /// Shown rather than shown modally: a send/receive that blocks the window until it finishes
     /// is a mail client that stops being a mail client every time it checks for mail.
+    /// <para>
+    /// A run that opens the dialog by itself opens it as the toaster, which never takes the
+    /// keyboard: the schedule and a server's IDLE fire while the reader is in something else, and
+    /// even F9 is pressed by somebody who carries on using the keyboard in the window they pressed
+    /// it in. <paramref name="force"/> is the reader asking for the dialog by name — Show
+    /// Progress, or the status bar's bar — and gets the dialog in front of them, which is what
+    /// they asked for.
+    /// </para>
     /// </remarks>
     private void ShowProgressDialog(bool force = false)
     {
         if (_tasks is null) return;
         if (!force && App.Settings.GetBool(SendReceiveProgressDialog.HideSetting)) return;
-        if (_progress is not null) return;
 
-        _progress = new SendReceiveProgressDialog(_tasks, App.Settings, CancelTransfer);
-        _progress.Closed += (_, _) => _progress = null;
-        _progress.Show(this);
+        if (!force)
+        {
+            ShowProgressToaster();
+            return;
+        }
+
+        // Asked for by name while a toaster is up: the reader wants the dialog in front of them,
+        // and two copies of one run on screen would be one too many.
+        _toaster?.Close();
+        _toaster = null;
+
+        // One already up without the keyboard — the X11 toaster — is brought forward instead:
+        // this time the reader asked for it.
+        if (_progress is not null)
+        {
+            _progress.Activate();
+            return;
+        }
+
+        OpenProgressDialog(unactivated: false);
+    }
+
+    /// <summary>The dialog in this process, owned by the shell.</summary>
+    private void OpenProgressDialog(bool unactivated)
+    {
+        if (_tasks is null || _progress is not null) return;
+
+        var dialog = new SendReceiveProgressDialog(_tasks, App.Settings, CancelTransfer);
+        if (unactivated)
+        {
+            dialog.ShowActivated = false;
+            dialog.Topmost = true;
+
+            // A capture run photographs the shell, and a toaster over the owner's desktop while a
+            // batch runs would be in nobody's interest; off-screen, as every window a pose opens.
+            WindowCapture.HideWhileCapturing(dialog);
+        }
+
+        dialog.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_progress, dialog)) _progress = null;
+        };
+
+        _progress = dialog;
+        dialog.Show(this);
+    }
+
+    /// <summary>
+    /// The dialog for a run that opened it by itself: up, and without the keyboard.
+    /// </summary>
+    /// <remarks>
+    /// On X11 the toolkit can ask for that itself — the window is mapped with a user time of zero —
+    /// so the dialog is shown here, unactivated. On native Wayland no window can ask it, and the
+    /// dialog is shown by the toaster process instead; see <see cref="ProgressToaster"/>. Kept above
+    /// either way: it comes up over the windows the reader is working in, as it always has, and
+    /// stays under a full-screen game, whose layer is above that one.
+    /// </remarks>
+    private void ShowProgressToaster()
+    {
+        if (_tasks is null || _progress is not null || _toaster is not null) return;
+
+        // Said and survived. This is called before the run's own try, so anything it threw would
+        // leave the run marked as in flight for the rest of the session — no more checking mail at
+        // all, because a progress window could not be put up.
+        try
+        {
+            if (!WindowingBackend.IsNativeWayland(this))
+            {
+                OpenProgressDialog(unactivated: true);
+                return;
+            }
+
+            var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+            var toaster = ProgressToaster.Start(_tasks, screen?.Bounds.Center ?? default);
+
+            if (toaster is null)
+            {
+                // No toaster to be had: no X display, or one that failed to start this session. A
+                // run started from this window while it has the keyboard still gets its dialog —
+                // there is no one else's keyboard to take. One that fired while the reader was in
+                // something else keeps to the status bar, which is the point of all this.
+                if (IsActive) OpenProgressDialog(unactivated: false);
+                return;
+            }
+
+            // Only this toaster's own words count: a closing one's Cancel All must not cancel the
+            // next run, and its leaving must not take the next run's toaster off the books.
+            toaster.CancelRequested += (_, _) =>
+            {
+                if (ReferenceEquals(_toaster, toaster)) CancelTransfer();
+            };
+            toaster.HideChanged += (_, hidden) => App.Settings.Set(SendReceiveProgressDialog.HideSetting, hidden);
+            toaster.Closed += (_, _) =>
+            {
+                if (ReferenceEquals(_toaster, toaster)) _toaster = null;
+            };
+
+            _toaster = toaster;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn("The send/receive progress could not be shown; the run carries on without it.", ex);
+        }
     }
 
     private void CloseProgressDialog()
     {
         _progress?.Close();
         _progress = null;
+
+        _toaster?.Close();
+        _toaster = null;
+    }
+
+    /// <summary>
+    /// The harness's toaster: a posed run through the path a run nobody pressed for takes, fed a
+    /// report and then its end on the clock a real run keeps.
+    /// </summary>
+    private void PoseToaster(SendReceiveTasks tasks, string first, IDisposable? hold)
+    {
+        // The pose borrows the shell's run state, so it stands aside for a real run.
+        if (_transferring)
+        {
+            Log.Info("Harness: a real send/receive is in flight, so the toaster pose stands aside.");
+            hold?.Dispose();
+            return;
+        }
+
+        _tasks = tasks;
+        ShowProgressToaster();
+
+        var how = WindowingBackend.IsNativeWayland(this) ? "a second process" : "this process, unactivated";
+        var got = _toaster is not null || _progress is not null ? "starting" : "none to be had";
+        Log.Info($"Harness: toaster asked for — {how}; {got}.");
+
+        if (tasks.IsFinished)
+        {
+            // Released after the toaster has had its moment to come up — or, for a run that
+            // finished cleanly, to decide not to.
+            DispatcherTimer.RunOnce(() => hold?.Dispose(), TimeSpan.FromSeconds(3));
+            return;
+        }
+
+        DispatcherTimer.RunOnce(
+            () =>
+            {
+                var report = new PollProgress(first, 5, 9, "Downloading");
+                tasks.Report(report);
+                _progress?.Refresh();
+                _toaster?.Report(report);
+                Log.Info("Harness: toaster fed a report.");
+            },
+            TimeSpan.FromSeconds(2));
+
+        DispatcherTimer.RunOnce(
+            () =>
+            {
+                var result = new SendReceiveResult(
+                [
+                    new AccountRunResult(first, 9, 1),
+                    new AccountRunResult("other@example.com", 2, 0),
+                ]);
+                tasks.Finish(result);
+                _progress?.Refresh();
+                _toaster?.Finish(result);
+                CloseProgressDialog();
+                Log.Info("Harness: toaster's run finished cleanly, and the toaster was asked to leave.");
+                hold?.Dispose();
+            },
+            TimeSpan.FromSeconds(5));
     }
 
     /// <summary>Cancel All, from the progress dialog or the Send/Receive tab.</summary>

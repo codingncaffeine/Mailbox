@@ -37,6 +37,6 @@ public static class HarnessDoors
         "viewsort", "viewfilter", "othersettings", "conditionalformatting", "formatcolumns", "manageviews",
         "applyview", "quicksteps", "quickstepedit", "categories", "server", "away", "identities", "rules",
         "rulewizard", "createrule", "runrules", "junk", "message", "groups",
-        "printlist", "source", "progress", "transferbar",
+        "printlist", "source", "progress", "transferbar", "toaster",
     ];
 }

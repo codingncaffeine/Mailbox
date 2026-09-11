@@ -18,6 +18,15 @@ internal static class Program
             return 0;
         }
 
+        // Also before the log opens, and before the instance check: the progress toaster is a
+        // second process of this one, started by it. Opening the log would roll the running
+        // application's logs along, and the instance check would hand the toaster straight back
+        // to the application that started it.
+        if (args.Length > 0 && string.Equals(args[0], ProgressToasterCompanion.Switch, StringComparison.Ordinal))
+        {
+            return ProgressToasterCompanion.Run(args);
+        }
+
         Log.Initialize(ThisAssembly.Stamp);
         CrashHandler.Install();
 

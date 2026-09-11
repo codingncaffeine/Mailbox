@@ -208,4 +208,12 @@ internal static class WindowingBackend
             _ => $"Windowing: {backend}",
         };
     }
+
+    /// <summary>
+    /// True when the window is on the native Wayland backend, read from the window as
+    /// <see cref="Describe"/> reads it. What decides whether a window the application opens by
+    /// itself can decline the keyboard: on X11 it can ask to, on native Wayland it cannot.
+    /// </summary>
+    public static bool IsNativeWayland(TopLevel window)
+        => window.PlatformImpl?.GetType().Namespace?.StartsWith("Avalonia.Wayland", StringComparison.Ordinal) == true;
 }

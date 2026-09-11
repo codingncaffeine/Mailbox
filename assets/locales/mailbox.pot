@@ -163,34 +163,34 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: src/Mailbox.App/Views/MainWindow.Tabs.cs:65
-#: src/Mailbox.App/Views/MainWindow.axaml.cs:3623
+#: src/Mailbox.App/Views/MainWindow.axaml.cs:3648
 msgid "Nothing unread in {0}."
 msgstr ""
 
 #: src/Mailbox.App/Views/MainWindow.Tabs.cs:67
-#: src/Mailbox.App/Views/MainWindow.axaml.cs:3625
+#: src/Mailbox.App/Views/MainWindow.axaml.cs:3650
 msgid "{0} message in {1} marked read."
 msgid_plural "{0} messages in {1} marked read."
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/Mailbox.App/Views/MainWindow.axaml.cs:3974
+#: src/Mailbox.App/Views/MainWindow.axaml.cs:3999
 msgid "Permanently delete {0} item from {1}?"
 msgid_plural "Permanently delete {0} items from {1}?"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/Mailbox.App/Views/MainWindow.axaml.cs:3983
+#: src/Mailbox.App/Views/MainWindow.axaml.cs:4008
 msgid "{1} emptied: {0} item."
 msgid_plural "{1} emptied: {0} items."
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/Mailbox.App/Views/MainWindow.axaml.cs:7397
+#: src/Mailbox.App/Views/MainWindow.axaml.cs:7422
 msgid "Rule “{0}” created; nothing in {1} matched it."
 msgstr ""
 
-#: src/Mailbox.App/Views/MainWindow.axaml.cs:7399
+#: src/Mailbox.App/Views/MainWindow.axaml.cs:7424
 msgid "Rule “{1}” created and applied to {0} message."
 msgid_plural "Rule “{1}” created and applied to {0} messages."
 msgstr[0] ""
@@ -290,7 +290,7 @@ msgid_plural "{0} accounts failed"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/Mailbox.Protocols/SendReceiveTasks.cs:87
+#: src/Mailbox.Protocols/SendReceiveTasks.cs:127
 msgid "{0} of {1} Task have completed successfully"
 msgid_plural "{0} of {1} Tasks have completed successfully"
 msgstr[0] ""

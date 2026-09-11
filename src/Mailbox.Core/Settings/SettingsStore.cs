@@ -98,6 +98,36 @@ public sealed class SettingsStore
         return new SettingsStore(scratch);
     }
 
+    /// <summary>
+    /// The real settings read once into memory, for a process that must see them and may not
+    /// change them.
+    /// </summary>
+    /// <remarks>
+    /// The progress toaster's process draws with the reader's theme and has no business writing
+    /// anything, so it gets what <see cref="ScratchCopy"/> gives a photograph — everything in,
+    /// nothing out — without the temporary file, which a process started every half hour would
+    /// otherwise leave behind every half hour. And without the recovery either: a file that will
+    /// not parse is the owning process's to move aside, never a reader's.
+    /// </remarks>
+    public static SettingsStore InMemoryCopy()
+    {
+        JsonObject values;
+
+        try
+        {
+            var real = DefaultPath();
+            values = File.Exists(real)
+                ? JsonNode.Parse(File.ReadAllText(real)) as JsonObject ?? new JsonObject()
+                : new JsonObject();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            values = new JsonObject();
+        }
+
+        return new SettingsStore(path: null, values: values);
+    }
+
     public static string DefaultPath()
     {
         var config = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");

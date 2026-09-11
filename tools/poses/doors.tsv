@@ -1,6 +1,6 @@
 # Every MAILBOX_PEEK key, generated from HarnessDoors.All — never transcribed.
 # Regenerate: tools/poses/generate-doors.py
-# 91 keys.
+# 92 keys.
 peek-calendar	MAILBOX_PEEK=calendar
 peek-peoplepeek	MAILBOX_PEEK=peoplepeek
 peek-addmenu	MAILBOX_PEEK=addmenu
@@ -92,3 +92,4 @@ peek-printlist	MAILBOX_PEEK=printlist
 peek-source	MAILBOX_PEEK=source
 peek-progress	MAILBOX_PEEK=progress
 peek-transferbar	MAILBOX_PEEK=transferbar
+peek-toaster	MAILBOX_PEEK=toaster

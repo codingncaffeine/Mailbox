@@ -61,6 +61,46 @@ public sealed class SendReceiveTasks
         }
     }
 
+    /// <summary>The accounts the run covers, in its order.</summary>
+    public IReadOnlyList<string> Addresses => _addresses;
+
+    /// <summary>
+    /// A table that picks up where another stands: the same accounts, every row in the state the
+    /// other has it in, and the errors it has recorded.
+    /// </summary>
+    /// <remarks>
+    /// For the progress toaster's process, which can start after a run has begun reporting — and
+    /// a table started from the account list alone would show every report it missed as a row
+    /// still waiting, and a run that had already failed as one that had not started. From here on
+    /// the two tables are fed the same reports and stay the same, because they are the same class.
+    /// </remarks>
+    /// <param name="addresses">The accounts, in the run's order.</param>
+    /// <param name="rows">The other table's <see cref="Tasks"/>: sending then receiving, per account.</param>
+    /// <param name="errors">The other table's <see cref="Errors"/>.</param>
+    public static SendReceiveTasks From(
+        IReadOnlyList<string> addresses, IReadOnlyList<TransferTask> rows, IReadOnlyList<string> errors)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+        ArgumentNullException.ThrowIfNull(errors);
+
+        var tasks = new SendReceiveTasks(addresses);
+        if (rows.Count != tasks._addresses.Count * 2)
+        {
+            throw new ArgumentException(
+                $"{rows.Count} row(s) for {tasks._addresses.Count} account(s); a table has two per account.",
+                nameof(rows));
+        }
+
+        for (var i = 0; i < tasks._addresses.Count; i++)
+        {
+            tasks._tasks[(tasks._addresses[i], Sending)] = rows[2 * i];
+            tasks._tasks[(tasks._addresses[i], Receiving)] = rows[(2 * i) + 1];
+        }
+
+        tasks._errors.AddRange(errors);
+        return tasks;
+    }
+
     /// <summary>The table, in the order the run works through it.</summary>
     public IReadOnlyList<TransferTask> Tasks =>
     [

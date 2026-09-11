@@ -674,6 +674,13 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        // The progress toaster's process starts the theme and its one window, and nothing else.
+        if (ProgressToasterCompanion.IsRunning)
+        {
+            StartToaster();
+            return;
+        }
+
         try
         {
             StartUp();
