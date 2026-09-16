@@ -124,6 +124,14 @@ public partial class MainWindow
         using var stream = new MemoryStream(raw);
         new MessageWindow(App.Themes, () => account.Mail, MimeKit.MimeMessage.Load(stream), raw).Show(this);
         Log.Info($"Flagged mail: opened message {messageId} in {address}.");
+
+        // Opened is read, here as from the list. Asked first, because a store write marks the
+        // flag for the server as well, and a message already read has nothing to tell it.
+        if (account.Mail.GetMessage(messageId) is { IsRead: false })
+        {
+            account.Mail.SetRead([messageId], read: true);
+            shell.Refresh();
+        }
     }
 
     /// <summary>

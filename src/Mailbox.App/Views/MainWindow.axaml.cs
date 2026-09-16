@@ -2312,7 +2312,15 @@ public partial class MainWindow : Window
                     if (DataContext is not ShellViewModel shell) return;
 
                     CaptureNextWindow();
+                    var opened = shell.SelectedMessage;
+                    var before = opened is null ? "nothing" : StoredRead([opened]);
                     OpenMessageWindow(shell);
+
+                    // Opening is reading, whatever the pane is doing; the store says whether it was.
+                    if (opened is not null)
+                    {
+                        Log.Info($"Harness: opened {before}; now {StoredRead([opened])} in the store.");
+                    }
 
                     if (Environment.GetEnvironmentVariable("MAILBOX_MESSAGE_RUN") is { Length: > 0 } presses)
                     {
@@ -3345,6 +3353,13 @@ public partial class MainWindow : Window
                 case nameof(ShellViewModel.ReadingFontSize):
                     _reading.MessageFontSize = shell.ReadingFontSize;
                     break;
+
+                // The pane turned on or off, or shed and given back by the window's width: what
+                // the reader is looking at changes with it.
+                case nameof(ShellViewModel.ReadingPaneShown):
+                case nameof(ShellViewModel.ReadingPaneVisible):
+                    ReadingPaneShownChanged(shell);
+                    break;
             }
         };
 
@@ -3354,8 +3369,12 @@ public partial class MainWindow : Window
 
     // ---- Read by looking: the Reading Pane options ---------------------------------------------
 
+    /// <summary>The message the reading pane is showing, or null while it shows none.</summary>
     private ViewModels.MessageRow? _viewed;
     private DispatcherTimer? _markReadTimer;
+
+    /// <summary>Whether the pane was on screen when last looked at, so that a change can be told from a repeat.</summary>
+    private bool? _paneShown;
 
     /// <summary>
     /// The Reading Pane options at work: the message the pane showed until now is marked read
@@ -3363,33 +3382,77 @@ public partial class MainWindow : Window
     /// read after the wait when "mark items as read when viewed" is on — if it is still the one
     /// on show when the wait is up.
     /// </summary>
+    /// <remarks>
+    /// Both options are about the pane, and the pane is all they apply to. With the pane off, or
+    /// shed by a window too narrow to hold it, a click on a row shows the reader nothing, and
+    /// clicking down the list to find a message is not reading every message passed on the way.
+    /// The selection-change rule used to fire whatever the pane was doing, so with the pane off
+    /// every row clicked through was marked read the moment the next one was clicked. There a
+    /// message is read by opening it, or by Mark as Read.
+    /// </remarks>
     private void MarkReadByLooking(ShellViewModel shell)
     {
-        var options = App.MailOptions;
         var next = shell.SelectedMessage;
+        _paneShown = shell.ReadingPaneShown;
 
-        if (_viewed is { } previous && !ReferenceEquals(previous, next) && previous.IsUnread && options.ReadingPaneMarkOnChange && shell.IsListed(previous))
+        if (_viewed is { } previous && !ReferenceEquals(previous, next) && previous.IsUnread
+            && App.MailOptions.ReadingPaneMarkOnChange && shell.ReadingPaneShown && shell.IsListed(previous))
         {
             shell.SetRead([previous], read: true, quiet: true);
         }
 
-        _viewed = next;
+        View(shell, shell.ReadingPaneShown ? next : null);
+    }
+
+    /// <summary>
+    /// The pane coming on or going off. Neither is the selection changing, so neither marks the
+    /// message it was showing; what changes is whether the selected message is being looked at.
+    /// </summary>
+    private void ReadingPaneShownChanged(ShellViewModel shell)
+    {
+        if (_paneShown == shell.ReadingPaneShown) return;
+        _paneShown = shell.ReadingPaneShown;
+
+        View(shell, shell.ReadingPaneShown ? shell.SelectedMessage : null);
+    }
+
+    /// <summary>
+    /// The pane showing <paramref name="row"/>, or nothing, from now on — and the wait "mark items
+    /// as read when viewed" asks for before the row counts as read.
+    /// </summary>
+    private void View(ShellViewModel shell, ViewModels.MessageRow? row)
+    {
+        _viewed = row;
         _markReadTimer?.Stop();
         _markReadTimer = null;
 
-        if (next is not { IsUnread: true } || !options.ReadingPaneMarkOnView || !shell.ReadingPaneVisible) return;
+        var options = App.MailOptions;
+        if (row is not { IsUnread: true } || !options.ReadingPaneMarkOnView) return;
 
         var wait = TimeSpan.FromSeconds(Math.Max(0, options.ReadingPaneMarkSeconds));
-        if (wait == TimeSpan.Zero) { shell.SetRead([next], read: true, quiet: true); return; }
+        if (wait == TimeSpan.Zero) { shell.SetRead([row], read: true, quiet: true); return; }
 
         _markReadTimer = new DispatcherTimer { Interval = wait };
         _markReadTimer.Tick += (_, _) =>
         {
             _markReadTimer?.Stop();
             _markReadTimer = null;
-            if (ReferenceEquals(shell.SelectedMessage, next) && next.IsUnread && shell.IsListed(next)) shell.SetRead([next], read: true, quiet: true);
+            if (ReferenceEquals(_viewed, row) && ReferenceEquals(shell.SelectedMessage, row) && row.IsUnread && shell.IsListed(row))
+            {
+                shell.SetRead([row], read: true, quiet: true);
+            }
         };
         _markReadTimer.Start();
+    }
+
+    /// <summary>
+    /// A message opened in a window of its own has been read. The Reading Pane options have no say:
+    /// they are about the pane, and a window is the reader asking for the message by name — the one
+    /// way, with the pane off, that a message is read without Mark as Read.
+    /// </summary>
+    private static void ReadByOpening(ShellViewModel shell, ViewModels.MessageRow? row)
+    {
+        if (row is { IsUnread: true } && shell.IsListed(row)) shell.SetRead([row], read: true, quiet: true);
     }
 
     private void ShowSelectedMessage(ShellViewModel shell)
@@ -4152,6 +4215,8 @@ public partial class MainWindow : Window
             ? new OpenedMessageContext(row.Address, row.Id, row.FolderId)
             : null;
 
+        ReadByOpening(shell, shell.SelectedMessage);
+
         // The window is this message being displayed — the read-receipt trigger for the
         // pane-off layout, and settled bookkeeping makes it free when the pane already asked.
         if (context is { } shown && App.Accounts.Find(shown.Address) is { } shownIn)
@@ -4307,7 +4372,8 @@ public partial class MainWindow : Window
                         ? new OpenedMessageContext(row.Address, row.Id, row.FolderId)
                         : null);
 
-                // Stepping displays the next message the way opening it would.
+                // Stepping displays the next message the way opening it would, and reads it too.
+                ReadByOpening(shell, shell.SelectedMessage);
                 if (shell.SelectedMessage is { } steppedTo
                     && App.Accounts.Find(steppedTo.Address) is { } steppedIn)
                 {
@@ -4350,6 +4416,7 @@ public partial class MainWindow : Window
                         ? new OpenedMessageContext(now.Address, now.Id, now.FolderId)
                         : null);
 
+                ReadByOpening(shell, shell.SelectedMessage);
                 if (shell.SelectedMessage is { } tookOver
                     && App.Accounts.Find(tookOver.Address) is { } tookOverIn)
                 {
@@ -4753,6 +4820,16 @@ public partial class MainWindow : Window
     /// <summary>What MAILBOX_SELECT asked for, re-asserted once the list has laid out.</summary>
     private static ViewModels.MessageRow? _pendingSelection;
 
+    /// <summary>
+    /// Each row as the store has it, in order — "read" or "unread" — for a pose that has to say
+    /// what a walk did to the mail rather than what the rows on screen think.
+    /// </summary>
+    private static string StoredRead(IEnumerable<ViewModels.MessageRow> rows)
+        => string.Join(", ", rows.Select(row =>
+            App.Accounts.Find(row.Address)?.Mail.GetMessage(row.Id) is { } stored
+                ? $"“{row.Subject}” {(stored.IsRead ? "read" : "unread")}"
+                : $"“{row.Subject}” gone"));
+
     /// <summary>How many messages the reading-thrash pose walks, and how fast.</summary>
     /// <remarks>
     /// Both are adjustable — <c>MAILBOX_THRASH=rows:12,gap:40</c> — because the fault this pose
@@ -4815,6 +4892,33 @@ public partial class MainWindow : Window
                         shell.ReadingPaneAtBottom = false;
                         shell.ReadingPaneVisible = true;
                         Log.Info("Harness: the reading pane was turned on late.");
+                    }, DispatcherPriority.Background);
+                    break;
+                // Clicking down the list the way a reader looks for a message: each row selected in
+                // turn, the pane however the run left it — on, or off with no-reading. What comes
+                // back is which of the rows walked the store now holds as read, which is the whole
+                // effect of the Reading Pane options and nothing a photograph shows: a read row is
+                // a few pixels lighter, and with the pane off the pane shows nothing at all.
+                case "read-walk":
+                    Dispatcher.UIThread.Post(async () =>
+                    {
+                        using var hold = WindowCapture.Hold();
+
+                        // After MAILBOX_FOLDER, which switches folders once the window has opened.
+                        await System.Threading.Tasks.Task.Delay(1500);
+
+                        var rows = shell.Messages.Take(ThrashRows).ToList();
+                        Log.Info($"Harness: walking {rows.Count} message(s) with the reading pane "
+                                 + $"{(shell.ReadingPaneShown ? "on" : "off")}; read in the store before: {StoredRead(rows)}.");
+
+                        foreach (var row in rows)
+                        {
+                            shell.SelectedRow = row;
+                            await System.Threading.Tasks.Task.Delay(ThrashGap);
+                        }
+
+                        await System.Threading.Tasks.Task.Delay(600);
+                        Log.Info($"Harness: walked; read in the store after: {StoredRead(rows)}.");
                     }, DispatcherPriority.Background);
                     break;
                 // Several messages selected inside one load's settle window: the journey a reader
