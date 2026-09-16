@@ -22,7 +22,7 @@ namespace Mailbox.App.Views;
 internal static class DialogChrome
 {
     /// <summary>Measured off the Options capture: the caption band is 33px.</summary>
-    private const double TitleBarHeight = 33;
+    internal const double TitleBarHeight = 33;
 
     /// <summary>
     /// Wraps <paramref name="content"/> in a caption bar and the rounded, clipping surface, and

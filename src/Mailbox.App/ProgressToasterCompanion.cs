@@ -148,23 +148,31 @@ internal static class ProgressToasterCompanion
 
         var dialog = new SendReceiveProgressDialog(_tasks, App.Settings, () => Send(new ToasterMessage.CancelAll()))
         {
-            // The two properties the whole process exists for. Not activated: the X11 backend maps
-            // the window with a user time of zero, and KWin will not give it the keyboard. Kept
-            // above: it comes up over the windows the reader is working in, as it always has — and
-            // still under a full-screen game, whose layer is above this one.
+            // The property the whole process exists for: the X11 backend maps the window with a
+            // user time of zero, and KWin will not give it the keyboard. Not kept above — it is
+            // raised once it is up (below), and from then on it is an ordinary window, which the
+            // next window the reader clicks goes over.
             ShowActivated = false,
-            Topmost = true,
-
-            // Over the middle of the screen the application is on. Nothing here can see the
-            // application's window, which is on another display connection; its screen is the
-            // nearest thing, and for a window that fills it, the same place.
-            WindowStartupLocation = WindowStartupLocation.CenterScreen,
-            Position = _anchor,
         };
 
+        // Where the reader last put it. Failing that, over the middle of the screen the
+        // application is on: nothing here can see the application's window, which is on another
+        // display connection, so its screen is the nearest thing — and for a window that fills
+        // it, the same place.
+        if (!ProgressPlacement.Restore(dialog, App.Settings))
+        {
+            dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            dialog.Position = _anchor;
+        }
+
+        // This process's settings are a copy that goes nowhere, so the place goes to the
+        // application, which keeps it for the next toaster. Before the handler below that ends
+        // the process, so a move the window closed on is still sent.
+        ProgressPlacement.Remember(dialog, place => Send(new ToasterMessage.Moved(place.X, place.Y)));
+
         // A capture run the application was started for puts its windows off-screen, and the
-        // toaster it starts is one of them: a batch on the owner's desktop must not stack a
-        // kept-above window over their work. Nothing here changes what the harness photographs.
+        // toaster it starts is one of them: a batch on the owner's desktop must not put a window
+        // over their work. Nothing here changes what the harness photographs.
         Theming.WindowCapture.HideWhileCapturing(dialog);
 
         dialog.Opened += (_, _) =>
@@ -180,6 +188,11 @@ internal static class ProgressToasterCompanion
 
         _dialog = dialog;
         dialog.Show();
+
+        // In front of the windows the reader is working in, as it has always come up — and still
+        // under a full-screen game, whose layer is above the one this is raised to the top of.
+        // Not in a capture run, whose windows are off-screen and have no business on top.
+        if (!Theming.WindowCapture.IsRequested) X11Stacking.RaiseOnce(dialog);
     }
 
     /// <summary>

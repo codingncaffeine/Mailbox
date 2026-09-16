@@ -9045,16 +9045,35 @@ public partial class MainWindow : Window
         OpenProgressDialog(unactivated: false);
     }
 
-    /// <summary>The dialog in this process, owned by the shell.</summary>
+    /// <summary>
+    /// The dialog in this process: owned by the shell when the reader asked for it, and on its own
+    /// when it came up by itself.
+    /// </summary>
+    /// <remarks>
+    /// On its own because an owned window is raised with its owner. The unactivated dialog is
+    /// raised once as it appears, and on X11 raising a window raises the window it belongs to
+    /// first — which would bring the whole shell up over whatever the reader was working in,
+    /// the very thing an unactivated dialog is for not doing. The toaster process's dialog has no
+    /// owner either, so the two behave alike.
+    /// </remarks>
     private void OpenProgressDialog(bool unactivated)
     {
         if (_tasks is null || _progress is not null) return;
 
         var dialog = new SendReceiveProgressDialog(_tasks, App.Settings, CancelTransfer);
+
+        // Where the reader last put it, on X11, where a window can be put anywhere and is told
+        // where it went. A native Wayland dialog is placed by the compositor, as it always was.
+        if (!WindowingBackend.IsNativeWayland(this))
+        {
+            ProgressPlacement.Restore(dialog, App.Settings);
+            ProgressPlacement.Remember(dialog, place =>
+                App.Settings.Set(SendReceiveProgressDialog.PlaceSetting, WindowPlace.Format(place.X, place.Y)));
+        }
+
         if (unactivated)
         {
             dialog.ShowActivated = false;
-            dialog.Topmost = true;
 
             // A capture run photographs the shell, and a toaster over the owner's desktop while a
             // batch runs would be in nobody's interest; off-screen, as every window a pose opens.
@@ -9067,7 +9086,15 @@ public partial class MainWindow : Window
         };
 
         _progress = dialog;
-        dialog.Show(this);
+
+        if (!unactivated)
+        {
+            dialog.Show(this);
+            return;
+        }
+
+        dialog.Show();
+        if (!WindowCapture.IsRequested) X11Stacking.RaiseOnce(dialog);
     }
 
     /// <summary>
@@ -9076,9 +9103,10 @@ public partial class MainWindow : Window
     /// <remarks>
     /// On X11 the toolkit can ask for that itself — the window is mapped with a user time of zero —
     /// so the dialog is shown here, unactivated. On native Wayland no window can ask it, and the
-    /// dialog is shown by the toaster process instead; see <see cref="ProgressToaster"/>. Kept above
-    /// either way: it comes up over the windows the reader is working in, as it always has, and
-    /// stays under a full-screen game, whose layer is above that one.
+    /// dialog is shown by the toaster process instead; see <see cref="ProgressToaster"/>. Raised
+    /// once either way: it comes up over the windows the reader is working in, as it always has,
+    /// under a full-screen game, whose layer is above that one — and then it is an ordinary window,
+    /// which the next window the reader clicks goes over.
     /// </remarks>
     private void ShowProgressToaster()
     {
@@ -9115,6 +9143,10 @@ public partial class MainWindow : Window
                 if (ReferenceEquals(_toaster, toaster)) CancelTransfer();
             };
             toaster.HideChanged += (_, hidden) => App.Settings.Set(SendReceiveProgressDialog.HideSetting, hidden);
+
+            // Kept for the next toaster, which reads it from the settings as it starts.
+            toaster.Moved += (_, place) =>
+                App.Settings.Set(SendReceiveProgressDialog.PlaceSetting, WindowPlace.Format(place.X, place.Y));
             toaster.Closed += (_, _) =>
             {
                 if (ReferenceEquals(_toaster, toaster)) _toaster = null;

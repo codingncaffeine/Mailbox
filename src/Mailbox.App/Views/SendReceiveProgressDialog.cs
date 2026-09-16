@@ -28,6 +28,9 @@ public sealed class SendReceiveProgressDialog : Window
     /// <summary>Set from the checkbox, so the next run does not open this at all.</summary>
     public const string HideSetting = "sendreceive.hideprogress";
 
+    /// <summary>Where the reader last moved the dialog to, as <see cref="WindowPlace"/> writes it.</summary>
+    public const string PlaceSetting = "sendreceive.progressplace";
+
     private const double TableHeight = 118;
 
     private readonly SendReceiveTasks _tasks;

@@ -16,9 +16,9 @@ namespace Mailbox.Protocols;
 /// in one class and both ends run it over the same inputs. The table goes whole rather than as the
 /// account list, because a toaster that starts after the first report would otherwise show every
 /// report it missed as a row still waiting — which the pixel comparison against the in-process
-/// dialog caught, one row out of four. Back the other way come the three things the dialog can do — Cancel All,
-/// the "don't show" box, being closed — and the two things the application waits to hear: that the
-/// process is ready, and that the window is up.
+/// dialog caught, one row out of four. Back the other way come the things the dialog can do — Cancel All,
+/// the "don't show" box, being moved, being closed — and the two things the application waits to hear:
+/// that the process is ready, and that the window is up.
 /// </remarks>
 public abstract record ToasterMessage
 {
@@ -75,6 +75,9 @@ public abstract record ToasterMessage
 
     /// <summary>"Don't show this dialog box during Send/Receive" was ticked or cleared.</summary>
     public sealed record HideChanged(bool Hidden) : ToasterMessage;
+
+    /// <summary>The reader moved the window, and it came to rest with its top-left corner here.</summary>
+    public sealed record Moved(int X, int Y) : ToasterMessage;
 
     /// <summary>The window has gone, whoever closed it; the process is ending.</summary>
     public sealed record Closed : ToasterMessage;
@@ -138,6 +141,7 @@ public static class ToasterWire
             ToasterMessage.Shown shown => new JsonObject { ["op"] = "shown", ["backend"] = shown.Backend },
             ToasterMessage.CancelAll => new JsonObject { ["op"] = "cancel" },
             ToasterMessage.HideChanged hide => new JsonObject { ["op"] = "hide", ["hidden"] = hide.Hidden },
+            ToasterMessage.Moved moved => new JsonObject { ["op"] = "moved", ["x"] = moved.X, ["y"] = moved.Y },
             ToasterMessage.Closed => new JsonObject { ["op"] = "closed" },
             _ => throw new ArgumentException($"No wire form for {message.GetType().Name}.", nameof(message)),
         };
@@ -176,6 +180,8 @@ public static class ToasterWire
                 "cancel" => new ToasterMessage.CancelAll(),
                 "hide" when o["hidden"] is JsonValue v && v.TryGetValue<bool>(out var hidden)
                     => new ToasterMessage.HideChanged(hidden),
+                "moved" when Number(o, "x") is { } movedX && Number(o, "y") is { } movedY
+                    => new ToasterMessage.Moved(movedX, movedY),
                 "closed" => new ToasterMessage.Closed(),
                 _ => null,
             };

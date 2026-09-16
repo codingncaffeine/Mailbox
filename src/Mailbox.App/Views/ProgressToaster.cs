@@ -28,9 +28,14 @@ namespace Mailbox.App.Views;
 /// So the dialog is shown by a second <c>mailbox</c> process that is an X11 client
 /// (<see cref="ProgressToasterCompanion"/>), which a Wayland process cannot be — the toolkit runs
 /// one windowing backend per process. It is the same class drawn with the same theme, fed the same
-/// reports; this end starts it, feeds it, and hears back Cancel All, the "don't show" box and the
-/// window closing. When the shell itself is on X11 none of this is needed and the dialog is shown
-/// in-process, unactivated, by the caller.
+/// reports; this end starts it, feeds it, and hears back Cancel All, the "don't show" box, where
+/// the reader moved it and the window closing. When the shell itself is on X11 none of this is
+/// needed and the dialog is shown in-process, unactivated, by the caller.
+/// </para>
+/// <para>
+/// Up without the keyboard is half of it; the other half is not staying up. The toaster was kept
+/// above every other window, which kept it over whatever the reader clicked next. It is now raised
+/// once, when it appears, and is an ordinary window after that — see <see cref="X11Stacking"/>.
 /// </para>
 /// </remarks>
 internal sealed class ProgressToaster
@@ -75,6 +80,9 @@ internal sealed class ProgressToaster
 
     /// <summary>The "don't show this dialog box" box, ticked or cleared on the toaster.</summary>
     public event EventHandler<bool>? HideChanged;
+
+    /// <summary>The reader moved the toaster, and it came to rest with its top-left corner here.</summary>
+    public event EventHandler<PixelPoint>? Moved;
 
     /// <summary>The toaster has gone: closed by the reader, closed by this end, or failed.</summary>
     public event EventHandler? Closed;
@@ -283,7 +291,7 @@ internal sealed class ProgressToaster
                 break;
 
             case ToasterMessage.Shown shown:
-                Log.Info($"Progress toaster: shown on {shown.Backend}, unactivated and kept above.");
+                Log.Info($"Progress toaster: shown on {shown.Backend}, unactivated.");
                 break;
 
             case ToasterMessage.CancelAll:
@@ -292,6 +300,12 @@ internal sealed class ProgressToaster
 
             case ToasterMessage.HideChanged hide:
                 HideChanged?.Invoke(this, hide.Hidden);
+                break;
+
+            // Heard even from a toaster this end has already asked to leave: a window moved and
+            // then closed straight away says where it was put on its way out.
+            case ToasterMessage.Moved moved:
+                Moved?.Invoke(this, new PixelPoint(moved.X, moved.Y));
                 break;
 
             case ToasterMessage.Closed:
