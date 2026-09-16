@@ -27,6 +27,14 @@ internal static class Program
             return ProgressToasterCompanion.Run(args);
         }
 
+        // The taskbar icon's helper, for the same reason: systemd starts it outside the launcher's
+        // sandbox every time the application asks for the other mailbox, and a log opened each
+        // time would roll the application's own along with it.
+        if (args.Length > 0 && string.Equals(args[0], PanelIconHelper.Switch, StringComparison.Ordinal))
+        {
+            return PanelIconHelper.Run(args);
+        }
+
         Log.Initialize(ThisAssembly.Stamp);
         CrashHandler.Install();
 

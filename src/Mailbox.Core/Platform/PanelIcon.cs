@@ -31,11 +31,33 @@ namespace Mailbox.Core.Platform;
 /// own, a read-only home, a session that is not Plasma: none of those are worth a word to
 /// somebody who is reading their mail, and the tray icon says the same thing regardless.
 /// </para>
+/// <para>
+/// <b>Asked for, under the launcher's sandbox.</b> Neither half can be done from inside it: the
+/// icon theme is read-only there, and so is the cache directory the service database is rebuilt
+/// into — both on purpose, since both are every application's. So a sandboxed run does not draw
+/// the icon at all. It writes the state it wants, one word, to the file
+/// <see cref="RequestVariable"/> names, and the launcher has set up a watcher outside the wall
+/// that runs <c>mailbox --panel-icon</c> on it, which is this class again, drawing.
+/// </para>
 /// </remarks>
 public sealed class PanelIcon
 {
     /// <summary>The icon name the desktop entries carry, and so the files this rewrites.</summary>
     public const string IconName = "mailbox";
+
+    /// <summary>
+    /// Where the launcher wants the state written instead of drawn, when it is running the
+    /// application in its sandbox.
+    /// </summary>
+    public const string RequestVariable = "MAILBOX_PANEL_ICON";
+
+    /// <summary>The words a request holds.</summary>
+    public const string FullWord = "full";
+
+    public const string EmptyWord = "empty";
+
+    /// <summary>The longest file a request can be; anything longer is not one.</summary>
+    private const int RequestLimit = 16;
 
     /// <summary>
     /// The sizes an icon theme is given. The same ladder <c>packaging/install-local.sh</c>
@@ -46,6 +68,8 @@ public sealed class PanelIcon
 
     private readonly string _theme;
     private readonly Func<string, int, Stream?> _artwork;
+    private readonly string? _request;
+    private readonly Func<string, string[], bool> _tool;
     private bool? _full;
 
     /// <param name="artwork">
@@ -54,11 +78,27 @@ public sealed class PanelIcon
     /// assets; a test hands over whatever it likes.
     /// </param>
     /// <param name="theme">The hicolor directory to write into. Defaults to the user's own.</param>
-    public PanelIcon(Func<string, int, Stream?> artwork, string? theme = null)
+    /// <param name="request">
+    /// The file to write the state to instead of drawing it — what <see cref="RequestVariable"/>
+    /// names under the sandbox. Null draws.
+    /// </param>
+    /// <param name="tool">
+    /// Runs one of the desktop's housekeeping tools and says whether it ran. The real ones by
+    /// default; a test hands over a recorder, because the real ones tell the desktop the test is
+    /// running on, rebuilding its service database every time.
+    /// </param>
+    public PanelIcon(
+        Func<string, int, Stream?> artwork, string? theme = null, string? request = null,
+        Func<string, string[], bool>? tool = null)
     {
         _artwork = artwork ?? throw new ArgumentNullException(nameof(artwork));
         _theme = theme ?? DefaultTheme();
+        _request = string.IsNullOrWhiteSpace(request) ? null : request;
+        _tool = tool ?? Run;
     }
+
+    /// <summary>True when this asks for the icon rather than drawing it.</summary>
+    public bool Asks => _request is not null;
 
     /// <summary><c>$XDG_DATA_HOME/icons/hicolor</c>, or <c>~/.local/share/icons/hicolor</c>.</summary>
     public static string DefaultTheme()
@@ -76,7 +116,10 @@ public sealed class PanelIcon
     /// <summary>
     /// Puts the drawing for this unread count on the panel, if it is not the one already there.
     /// </summary>
-    /// <returns>True when the files were rewritten, which is when the desktop was told.</returns>
+    /// <returns>
+    /// True when the files were rewritten, which is when the desktop was told — or, asking, when
+    /// the request was written.
+    /// </returns>
     /// <remarks>
     /// Only on a crossing. The count changes with every message read and the drawing has only
     /// two states, so comparing the state rather than the count is what keeps this off the path
@@ -92,6 +135,8 @@ public sealed class PanelIcon
         // not going to become writable on the next message, and retrying on every count change
         // would put a failing file write on the reading path for the rest of the session.
         _full = full;
+
+        if (_request is not null) return Ask(_request, full);
 
         var art = full ? Notifications.TrayArtwork.Full : Notifications.TrayArtwork.Empty;
         var written = 0;
@@ -140,6 +185,65 @@ public sealed class PanelIcon
         }
     }
 
+    /// <summary>Writes the state to the request file, whole, for the watcher to pick up.</summary>
+    /// <remarks>
+    /// Beside it first and then moved over it, so the watcher — which fires when the name is
+    /// replaced — never reads a file that is still being written.
+    /// </remarks>
+    private static bool Ask(string request, bool full)
+    {
+        var temporary = request + $".{Environment.ProcessId}.tmp";
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(request))!);
+            File.WriteAllText(temporary, full ? FullWord : EmptyWord);
+            File.Move(temporary, request, overwrite: true);
+            return true;
+        }
+        catch (Exception)
+        {
+            try { File.Delete(temporary); } catch (Exception) { /* nothing left to do about it */ }
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// What a request file asks for: true for the full mailbox, false for the empty one, null when
+    /// it asks for nothing this can do.
+    /// </summary>
+    /// <remarks>
+    /// Read by the process outside the sandbox, from a file the process inside it wrote, so it is
+    /// read as something that may have been made to lie. A link is not followed, a file of no
+    /// length is not opened — a named pipe has none, and opening one would wait for a writer that
+    /// never comes — and anything longer than the longer word, or other than the two words, is
+    /// nothing. The worst a request can do is choose between the two drawings.
+    /// </remarks>
+    public static bool? ReadRequest(string path)
+    {
+        try
+        {
+            var file = new FileInfo(path);
+            if (!file.Exists || file.LinkTarget is not null) return null;
+            if (file.Length is 0 or > RequestLimit) return null;
+
+            using var stream = file.OpenRead();
+            var buffer = new byte[RequestLimit];
+            var read = stream.ReadAtLeast(buffer, buffer.Length, throwOnEndOfStream: false);
+
+            return System.Text.Encoding.ASCII.GetString(buffer, 0, read).Trim() switch
+            {
+                FullWord => true,
+                EmptyWord => false,
+                _ => null,
+            };
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>Tells the desktop the icon files have changed.</summary>
     /// <remarks>
     /// Three announcements, in this order, because three caches are in play and no one of them
@@ -163,15 +267,15 @@ public sealed class PanelIcon
     /// </remarks>
     private void Refresh()
     {
-        Run("gtk-update-icon-cache", ["-q", "-t", "-f", _theme]);
+        _tool("gtk-update-icon-cache", ["-q", "-t", "-f", _theme]);
 
-        Run("dbus-send", [
+        _tool("dbus-send", [
             "--session", "--type=signal",
             "/KIconLoader", "org.kde.KIconLoader.iconChanged", "int32:0",
         ]);
 
         // KDE 6 first, then 5. Whichever is installed answers; the other is simply not there.
-        if (!Run("kbuildsycoca6", ["--noincremental"])) Run("kbuildsycoca5", ["--noincremental"]);
+        if (!_tool("kbuildsycoca6", ["--noincremental"])) _tool("kbuildsycoca5", ["--noincremental"]);
     }
 
     /// <summary>Runs one housekeeping tool and waits a moment for it. True when it ran.</summary>

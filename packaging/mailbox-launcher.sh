@@ -91,6 +91,44 @@ BACKUP_DIR="$(sed -n 's/.*"backup\.directory"[[:space:]]*:[[:space:]]*"\([^"]*\)
 [ -n "$BACKUP_DIR" ] || BACKUP_DIR="$DOWNLOADS/Mailbox Backups"
 mkdir -p "$BACKUP_DIR" 2>/dev/null || true
 
+# The taskbar icon: the full mailbox while there is unread mail, the empty one once it has been
+# read. Plasma's task manager and GNOME's dock draw the icon the desktop entry names, through the
+# icon theme, so the drawing changes by rewriting the application's icon in the reader's own theme
+# and telling the desktop. Both halves are outside the wall, and should be: the theme is every
+# application's, and the service database the task manager reads again lives in ~/.cache with
+# everybody else's. So the application only asks. It writes one word, full or empty, to a file in
+# its runtime directory, and a path unit set up here, outside the wall, runs this same binary with
+# --panel-icon whenever that file is replaced. That process reads the word and nothing else, writes
+# the mailbox icon and nothing else, and is stopped if it takes a minute.
+#
+# One unit per login, per binary and per icon theme: a second launch finds it waiting, and a
+# development build beside the installed one does not share it. It carries the variables that say
+# where the theme and the database are and which language the database is named for, because the
+# user manager's environment is not this shell's.
+PANEL_REQUEST="$RUNTIME/panel-icon"
+PANEL_UNIT="mailbox-panel-icon-$(printf '%s\n' "$MAILBOX" "${XDG_DATA_HOME:-}" | cksum | cut -d ' ' -f 1)"
+if ! systemctl --user --quiet is-active "$PANEL_UNIT.path" 2>/dev/null; then
+    PANEL_ENV=""
+    for var in DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR XDG_CURRENT_DESKTOP XDG_DATA_HOME XDG_DATA_DIRS \
+        XDG_CONFIG_HOME XDG_CONFIG_DIRS XDG_CACHE_HOME LANG LANGUAGE LC_ALL LC_MESSAGES; do
+        eval "value=\${$var+x}"
+        [ -n "$value" ] && PANEL_ENV="$PANEL_ENV --setenv=$var"
+    done
+    # The names are split into words on purpose; none of them has a space or a pattern in it.
+    # shellcheck disable=SC2086
+    systemd-run --user --quiet --unit="$PANEL_UNIT" \
+        --property=Description="Mailbox taskbar icon" \
+        --property=RuntimeMaxSec=60 \
+        --path-property=PathChanged="$PANEL_REQUEST" \
+        $PANEL_ENV \
+        "$MAILBOX" --panel-icon "$PANEL_REQUEST" >/dev/null 2>&1 || true
+fi
+
+# Asked for only when something is listening. Without the unit — a systemd too old for path
+# units, say — the application tries the icon itself and says in its log that it could not.
+PANEL_ASK=""
+systemctl --user --quiet is-active "$PANEL_UNIT.path" 2>/dev/null && PANEL_ASK="$PANEL_REQUEST"
+
 # The transient unit inherits the user manager's environment, not this shell's — so the
 # variables that matter travel explicitly: the session's own, and every MAILBOX_* the harness
 # or a terminal set.
@@ -121,6 +159,7 @@ done
 set +f
 IFS="$IFS_SAVED"
 set -- "--setenv=MAILBOX_SANDBOX=1" "--setenv=MAILBOX_SANDBOX_WRITABLE=${WRITABLE:+$WRITABLE:}$BACKUP_DIR" "$@"
+[ -n "$PANEL_ASK" ] && set -- "--setenv=MAILBOX_PANEL_ICON=$PANEL_ASK" "$@"
 
 # MemoryDenyWriteExecute stays off: the .NET JIT needs W^X mappings and the runtime aborts
 # without them. RestrictNamespaces stays off: the web engine builds its own sandbox out of

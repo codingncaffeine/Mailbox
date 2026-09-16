@@ -8501,11 +8501,13 @@ public partial class MainWindow : Window
     /// </summary>
     /// <remarks>
     /// Handed the application's own embedded drawings; see <see cref="Mailbox.Core.Platform.PanelIcon"/>
-    /// for why the taskbar cannot be reached any other way.
+    /// for why the taskbar cannot be reached any other way. Under the launcher's sandbox it asks
+    /// for the icon instead, through the file the launcher names, and the launcher's watcher draws it.
     /// </remarks>
     private readonly Mailbox.Core.Platform.PanelIcon _panelIcon = new(
         (art, size) => Avalonia.Platform.AssetLoader.Open(
-            new Uri($"avares://mailbox/Assets/Icons/{art}-{size}.png")));
+            new Uri($"avares://mailbox/Assets/Icons/{art}-{size}.png")),
+        request: Environment.GetEnvironmentVariable(Mailbox.Core.Platform.PanelIcon.RequestVariable));
 
     /// <summary>
     /// Puts the full or the empty mailbox on the window and on the panel.
@@ -8556,9 +8558,13 @@ public partial class MainWindow : Window
             try
             {
                 var told = _panelIcon.Show(unread);
-                Log.Info(told
-                    ? $"Panel icon: the desktop entry's icon is now the {art} mailbox."
-                    : $"Panel icon: unchanged ({art}).");
+                Log.Info((told, _panelIcon.Asks) switch
+                {
+                    (true, true) => $"Panel icon: the {art} mailbox asked of the launcher's watcher.",
+                    (true, false) => $"Panel icon: the desktop entry's icon is now the {art} mailbox.",
+                    (false, true) => $"Panel icon: unchanged ({art}); the request could not be written.",
+                    (false, false) => $"Panel icon: unchanged ({art}).",
+                });
             }
             catch (Exception ex)
             {
