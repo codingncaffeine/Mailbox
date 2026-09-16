@@ -4312,6 +4312,11 @@ public sealed partial class ShellViewModel : ObservableObject
         {
             if (!Set(ref field, value)) return;
             App.Settings.Set(OptionsPages.Keys.ShowReadingPane, value);
+
+            // The pane as drawn is worked out from this, and the pane binds that rather than this;
+            // unannounced, turning the pane on narrowed the list beside an empty space where the
+            // pane should have been, until the window was next resized.
+            Raise(nameof(ReadingPaneShown));
         }
     } = App.Settings.GetBool(OptionsPages.Keys.ShowReadingPane, true);
 
