@@ -66,9 +66,9 @@ public class CertificateTrustTests
         var mismatch = CertificateTrust.Classify(SslPolicyErrors.RemoteCertificateNameMismatch, null, facts);
         Assert.Equal(CertificateFault.NameMismatch, mismatch);
 
-        var refusal = new CertificateRefusal("mail.emutastic.com", 993, facts, mismatch);
+        var refusal = new CertificateRefusal("mail.example.com", 993, facts, mismatch);
         Assert.True(refusal.NameOnly);
-        Assert.Contains("is for d8.my-control-panel.com, not for mail.emutastic.com", Assert.Single(refusal.Problems));
+        Assert.Contains("is for d8.my-control-panel.com, not for mail.example.com", Assert.Single(refusal.Problems));
     }
 
     [Fact]
@@ -142,15 +142,15 @@ public class CertificateTrustTests
         using var certificate = Certificate("d8.my-control-panel.com");
 
         var allowed = trust.Allows(
-            "mail.emutastic.com", 993, certificate, null, SslPolicyErrors.RemoteCertificateNameMismatch);
+            "mail.example.com", 993, certificate, null, SslPolicyErrors.RemoteCertificateNameMismatch);
 
         Assert.False(allowed);
 
         var refusal = Assert.Single(trust.Refused);
-        Assert.Equal("mail.emutastic.com", refusal.Host);
+        Assert.Equal("mail.example.com", refusal.Host);
         Assert.Equal(993, refusal.Port);
         Assert.Equal(CertificateFacts.Read(certificate).Fingerprint, refusal.Certificate.Fingerprint);
-        Assert.NotNull(trust.RefusalFor("mail.emutastic.com", 993));
+        Assert.NotNull(trust.RefusalFor("mail.example.com", 993));
     }
 
     [Fact]
@@ -159,11 +159,11 @@ public class CertificateTrustTests
         var trust = new CertificateTrust();
         using var certificate = Certificate("d8.my-control-panel.com");
 
-        Assert.False(trust.Allows("mail.emutastic.com", 993, certificate, null, SslPolicyErrors.RemoteCertificateNameMismatch));
+        Assert.False(trust.Allows("mail.example.com", 993, certificate, null, SslPolicyErrors.RemoteCertificateNameMismatch));
 
-        trust.Pin(trust.RefusalFor("mail.emutastic.com", 993)!);
+        trust.Pin(trust.RefusalFor("mail.example.com", 993)!);
 
-        Assert.True(trust.Allows("mail.emutastic.com", 993, certificate, null, SslPolicyErrors.RemoteCertificateNameMismatch));
+        Assert.True(trust.Allows("mail.example.com", 993, certificate, null, SslPolicyErrors.RemoteCertificateNameMismatch));
         Assert.Empty(trust.Refused);
     }
 
@@ -179,15 +179,15 @@ public class CertificateTrustTests
         using var agreed = Certificate("d8.my-control-panel.com");
         using var somebodyElse = Certificate("d8.my-control-panel.com");
 
-        Assert.False(trust.Allows("mail.emutastic.com", 993, agreed, null, SslPolicyErrors.RemoteCertificateNameMismatch));
-        trust.Pin(trust.RefusalFor("mail.emutastic.com", 993)!);
-        Assert.True(trust.Allows("mail.emutastic.com", 993, agreed, null, SslPolicyErrors.RemoteCertificateNameMismatch));
+        Assert.False(trust.Allows("mail.example.com", 993, agreed, null, SslPolicyErrors.RemoteCertificateNameMismatch));
+        trust.Pin(trust.RefusalFor("mail.example.com", 993)!);
+        Assert.True(trust.Allows("mail.example.com", 993, agreed, null, SslPolicyErrors.RemoteCertificateNameMismatch));
 
         // Same subject, same name, different key — which is exactly what an attacker's would be.
-        Assert.False(trust.Allows("mail.emutastic.com", 993, somebodyElse, null, SslPolicyErrors.RemoteCertificateNameMismatch));
+        Assert.False(trust.Allows("mail.example.com", 993, somebodyElse, null, SslPolicyErrors.RemoteCertificateNameMismatch));
         Assert.Equal(
             CertificateFacts.Read(somebodyElse).Fingerprint,
-            trust.RefusalFor("mail.emutastic.com", 993)!.Certificate.Fingerprint);
+            trust.RefusalFor("mail.example.com", 993)!.Certificate.Fingerprint);
     }
 
     /// <summary>A decision about one host is not a decision about another, nor about another port.</summary>
@@ -233,15 +233,15 @@ public class CertificateTrustTests
         var fingerprint = CertificateFacts.Read(certificate).Fingerprint;
 
         var first = new CertificateTrust(settings);
-        Assert.False(first.Allows("mail.emutastic.com", 993, certificate, null, SslPolicyErrors.RemoteCertificateNameMismatch));
-        first.Pin(first.RefusalFor("mail.emutastic.com", 993)!);
+        Assert.False(first.Allows("mail.example.com", 993, certificate, null, SslPolicyErrors.RemoteCertificateNameMismatch));
+        first.Pin(first.RefusalFor("mail.example.com", 993)!);
 
         // A second run of the application, reading the same settings.
         var later = new CertificateTrust(settings);
-        Assert.True(later.Allows("mail.emutastic.com", 993, certificate, null, SslPolicyErrors.RemoteCertificateNameMismatch));
+        Assert.True(later.Allows("mail.example.com", 993, certificate, null, SslPolicyErrors.RemoteCertificateNameMismatch));
 
         var (host, pinned) = Assert.Single(later.Pins);
-        Assert.Equal("mail.emutastic.com:993", host);
+        Assert.Equal("mail.example.com:993", host);
         Assert.Equal(fingerprint, pinned);
     }
 
