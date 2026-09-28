@@ -264,7 +264,12 @@ async function fetchMap(legend) {
 
 async function fetchOrRead(file, url) {
   if (from) return fs.readFileSync(path.join(from, file));
-  const response = await fetch(url, { headers: { "User-Agent": AGENT }, signal: AbortSignal.timeout(60_000) });
+  let response;
+  try {
+    response = await fetch(url, { headers: { "User-Agent": AGENT }, signal: AbortSignal.timeout(60_000) });
+  } catch (error) {
+    throw new Error(`${error.name === "TimeoutError" ? "no answer within a minute" : error.message} from ${url}`);
+  }
   if (!response.ok) throw new Error(`HTTP ${response.status} from ${url}`);
   const bytes = Buffer.from(await response.arrayBuffer());
   if (save) {
