@@ -68,6 +68,8 @@ public sealed record MapLayer
 /// <para>
 /// Each GeoMet layer names its style rather than taking the service's default, because the map
 /// draws its legends itself, from the colours of those styles (see <see cref="MapLegend"/>).
+/// <c>tools/weather-legends.mjs</c> reads the stops off the services' legends and checks them
+/// against the pictures the services send for the map.
 /// </para>
 /// </remarks>
 public static class MapLayers
@@ -80,25 +82,47 @@ public static class MapLayers
 
     /// <summary>
     /// nowCOAST's base reflectivity, from its own legend's colour map — a ramp from 1 to 80 dBZ,
-    /// read here every 2.5 dBZ from 5 to 75. The faint grey of the lowest returns is the service's.
+    /// read here at every dBZ, where each of its entries falls. The faint grey of the lowest
+    /// returns is the service's.
     /// </summary>
     private static readonly MapLegend ReflectivityLegend = new(MapQuantity.Reflectivity,
     [
-        new(5, 0x66777777), new(7.5, 0xFF43AAAA), new(10, 0xFF00ECEC), new(12.5, 0xFF00CBF0), new(15, 0xFF01A0F6),
-        new(17.5, 0xFF005AF6), new(20, 0xFF0000F6), new(22.5, 0xFF006F8A), new(25, 0xFF00FF00), new(27.5, 0xFF00E700),
-        new(30, 0xFF00C800), new(32.5, 0xFF00B000), new(35, 0xFF009000), new(37.5, 0xFF6FC000), new(40, 0xFFFFFF00),
-        new(42.5, 0xFFF5E300), new(45, 0xFFE7C000), new(47.5, 0xFFF2AB00), new(50, 0xFFFF9000), new(52.5, 0xFFFF5100),
-        new(55, 0xFFFF0000), new(57.5, 0xFFEF0000), new(60, 0xFFDC0000), new(62.5, 0xFFD00000), new(65, 0xFFC00000),
-        new(67.5, 0xFFDB006F), new(70, 0xFFFF00FF), new(72.5, 0xFFD225E7), new(75, 0xFF9955C9),
+        new(1, 0x669C9B7B), new(2, 0x66908F7A), new(3, 0x66838378), new(4, 0x667D7D78), new(5, 0x66777777),
+        new(6, 0xFF599494), new(7, 0xFF4AA3A3), new(8, 0xFF3BB1B1), new(9, 0xFF1DCECE), new(10, 0xFF00ECEC),
+        new(11, 0xFF00D9EE), new(12, 0xFF00D0F0), new(13, 0xFF00C6F1), new(14, 0xFF00B3F3), new(15, 0xFF01A0F6),
+        new(16, 0xFF0078F6), new(17, 0xFF0064F6), new(18, 0xFF0050F6), new(19, 0xFF0028F6), new(20, 0xFF0000F6),
+        new(21, 0xFF003FB8), new(22, 0xFF005F9A), new(23, 0xFF007F7B), new(24, 0xFF00BF3D), new(25, 0xFF00FF00),
+        new(26, 0xFF00F100), new(27, 0xFF00EA00), new(28, 0xFF00E300), new(29, 0xFF00D500), new(30, 0xFF00C800),
+        new(31, 0xFF00BA00), new(32, 0xFF00B300), new(33, 0xFF00AC00), new(34, 0xFF009E00), new(35, 0xFF009000),
+        new(36, 0xFF3FAB00), new(37, 0xFF5FB900), new(38, 0xFF7FC700), new(39, 0xFFBFE300), new(40, 0xFFFFFF00),
+        new(41, 0xFFF9EF00), new(42, 0xFFF6E700), new(43, 0xFFF3DF00), new(44, 0xFFEDCF00), new(45, 0xFFE7C000),
+        new(46, 0xFFEDB400), new(47, 0xFFF0AE00), new(48, 0xFFF3A800), new(49, 0xFFF99C00), new(50, 0xFFFF9000),
+        new(51, 0xFFFF6C00), new(52, 0xFFFF5A00), new(53, 0xFFFF4800), new(54, 0xFFFF2400), new(55, 0xFFFF0000),
+        new(56, 0xFFF60000), new(57, 0xFFF20000), new(58, 0xFFED0000), new(59, 0xFFE40000), new(60, 0xFFDC0000),
+        new(61, 0xFFD50000), new(62, 0xFFD20000), new(63, 0xFFCE0000), new(64, 0xFFC70000), new(65, 0xFFC00000),
+        new(66, 0xFFCF003F), new(67, 0xFFD7005F), new(68, 0xFFDF007F), new(69, 0xFFEF00BF), new(70, 0xFFFF00FF),
+        new(71, 0xFFE515F1), new(72, 0xFFD920EB), new(73, 0xFFCC2AE4), new(74, 0xFFB23FD6), new(75, 0xFF9955C9),
+        new(76, 0xFF747BCE), new(77, 0xFF628ED1), new(78, 0xFF4FA1D4), new(79, 0xFF2AC7DA), new(80, 0xFF05EDE0),
     ]);
 
-    /// <summary>GeoMet's <c>Radar-Rain_14colors</c>: fourteen blocks of rain rate, from 0.1 mm an hour.</summary>
+    /// <summary>
+    /// GeoMet's <c>Radar-Rain_14colors</c>: rain rate from 0.1 to 200 mm an hour, blending
+    /// through a colour between each pair of the legend's ticks, so each span is read in four steps.
+    /// </summary>
     private static readonly MapLegend RainRateLegend = new(MapQuantity.PrecipitationRate,
     [
-        new(0.1, 0xFF53B4FE), new(1, 0xFF00D4A5), new(2, 0xFF00DC22), new(4, 0xFF00A700), new(8, 0xFF007000),
-        new(12, 0xFFE9F100), new(16, 0xFFFECB00), new(24, 0xFFFE9800), new(32, 0xFFFE5D00), new(50, 0xFFFE0019),
-        new(64, 0xFFE010A7), new(100, 0xFF8520B8), new(125, 0xFF500079), new(200, 0xFF350050),
-    ], Stepped: true);
+        new(0.1, 0xFF92C9FE), new(0.325, 0xFF7FC3FE), new(0.55, 0xFF53B4FE), new(0.775, 0xFF20A3FE), new(1, 0xFF0098FE),
+        new(1.25, 0xFF00B6D2), new(1.5, 0xFF00D4A5), new(1.75, 0xFF00ED7F), new(2, 0xFF00FA5D), new(2.5, 0xFF00EB40),
+        new(3, 0xFF00DC22), new(3.5, 0xFF00CF08), new(4, 0xFF00C300), new(5, 0xFF00B400), new(6, 0xFF00A700),
+        new(7, 0xFF009800), new(8, 0xFF008C00), new(9, 0xFF007F00), new(10, 0xFF007000), new(11, 0xFF157200),
+        new(12, 0xFF559800), new(13, 0xFF9FC500), new(14, 0xFFE9F100), new(15, 0xFFFEF600), new(16, 0xFFFEE900),
+        new(18, 0xFFFEDA00), new(20, 0xFFFECB00), new(22, 0xFFFEC100), new(24, 0xFFFEB200), new(26, 0xFFFEA300),
+        new(28, 0xFFFE9800), new(30, 0xFFFE8A00), new(32, 0xFFFE7B00), new(36.5, 0xFFFE6C00), new(41, 0xFFFE5D00),
+        new(45.5, 0xFFFE4000), new(50, 0xFFFE2200), new(53.5, 0xFFFE0800), new(57, 0xFFFE0019), new(60.5, 0xFFFE014C),
+        new(64, 0xFFFE0172), new(73, 0xFFFE0298), new(82, 0xFFE010A7), new(91, 0xFFC31EB6), new(100, 0xFFA92BC3),
+        new(106.25, 0xFF942FC7), new(112.5, 0xFF8520B8), new(118.75, 0xFF7913AB), new(125, 0xFF6A049D), new(143.75, 0xFF5D008C),
+        new(162.5, 0xFF500079), new(181.25, 0xFF420063), new(200, 0xFF350050),
+    ]);
 
     /// <summary>GeoMet's <c>TEMPERATURE-LINEAR</c>, −40 to 40 °C; it blends near enough straight between these.</summary>
     private static readonly MapLegend TemperatureLegend = new(MapQuantity.Temperature,
@@ -109,14 +133,18 @@ public static class MapLayers
         new(35, 0xFF7F0000), new(40, 0xFF580000),
     ]);
 
-    /// <summary>GeoMet's <c>WINDSPEEDKNOTS-LINEAR</c>, 0 to 55 knots.</summary>
+    /// <summary>GeoMet's <c>WINDSPEEDKNOTS-LINEAR</c>, 0 to 55 knots, read every 1.25 knots for the bends in its blend.</summary>
     private static readonly MapLegend WindLegend = new(MapQuantity.WindSpeed,
     [
-        new(0, 0xFF000082), new(2.5, 0xFF0000A4), new(5, 0xFF0002CC), new(7.5, 0xFF0017E8), new(10, 0xFF0036FD),
-        new(12.5, 0xFF0074FD), new(15, 0xFF03AFFA), new(17.5, 0xFF0AE8F3), new(20, 0xFF2CFCD1), new(22.5, 0xFF5EFC9F),
-        new(25, 0xFF90FC6D), new(27.5, 0xFFC2FD3B), new(30, 0xFFE2EB1B), new(32.5, 0xFFFDD400), new(35, 0xFFFD9F00),
-        new(37.5, 0xFFFD7100), new(40, 0xFFFD3B00), new(42.5, 0xFFF21900), new(45, 0xFFD50700), new(47.5, 0xFFB10000),
-        new(50, 0xFF850000), new(52.5, 0xFF6D0000), new(55, 0xFF560000),
+        new(0, 0xFF000082), new(1.25, 0xFF00008B), new(2.5, 0xFF0000A4), new(3.75, 0xFF0000B7), new(5, 0xFF0002CC),
+        new(6.25, 0xFF000CD9), new(7.5, 0xFF0017E8), new(8.75, 0xFF0023F7), new(10, 0xFF0036FD), new(11.25, 0xFF0053FD),
+        new(12.5, 0xFF0074FD), new(13.75, 0xFF0096FD), new(15, 0xFF03AFFA), new(16.25, 0xFF06C7F7), new(17.5, 0xFF0AE8F3),
+        new(18.75, 0xFF0DFCF0), new(20, 0xFF2CFCD1), new(21.25, 0xFF43FCBA), new(22.5, 0xFF5EFC9F), new(23.75, 0xFF75FC88),
+        new(25, 0xFF90FC6D), new(26.25, 0xFFA7FD56), new(27.5, 0xFFC2FD3B), new(28.75, 0xFFD2F52B), new(30, 0xFFE2EB1B),
+        new(31.25, 0xFFEFE10E), new(32.5, 0xFFFDD400), new(33.75, 0xFFFDBD00), new(35, 0xFFFD9F00), new(36.25, 0xFFFD8800),
+        new(37.5, 0xFFFD7100), new(38.75, 0xFFFD5600), new(40, 0xFFFD3B00), new(41.25, 0xFFFD2400), new(42.5, 0xFFF21900),
+        new(43.75, 0xFFE41000), new(45, 0xFFD50700), new(46.25, 0xFFC70000), new(47.5, 0xFFB10000), new(48.75, 0xFF9E0000),
+        new(50, 0xFF850000), new(51.25, 0xFF790000), new(52.5, 0xFF6D0000), new(53.75, 0xFF610000), new(55, 0xFF560000),
     ]);
 
     /// <summary>GeoMet's <c>PRECIPPRTMMH-LINEAR</c>: 0.01 to 50 mm an hour, each class blending straight to the next.</summary>
@@ -126,12 +154,10 @@ public static class MapLayers
         new(5, 0xFFFDE400), new(10, 0xFFFD6500), new(20, 0xFFE70000), new(50, 0xFF7F0000),
     ]);
 
-    /// <summary>GeoMet's <c>CLOUD</c>, grey from 0 to 100 %; the map redraws it as cloud in the theme's colour.</summary>
+    /// <summary>GeoMet's <c>CLOUD</c>, one straight blend of grey from 0 to 100 %; the map redraws it as cloud in the theme's colour.</summary>
     private static readonly MapLegend CloudLegend = new(MapQuantity.CloudCover,
     [
-        new(0, 0xFF202020), new(10, 0xFF292929), new(20, 0xFF454545), new(30, 0xFF575757), new(40, 0xFF737373),
-        new(50, 0xFF868686), new(60, 0xFFA1A1A1), new(70, 0xFFBDBDBD), new(80, 0xFFD0D0D0), new(90, 0xFFEBEBEB),
-        new(100, 0xFFFEFEFE),
+        new(0, 0xFF202020), new(100, 0xFFFEFEFE),
     ]);
 
     public static readonly MapLayer RadarUnitedStates = new()

@@ -239,8 +239,9 @@ public class WeatherMapLegendTests
 
         MapPixels.Tint(pixels, legend, tint: 0xD98A949F);
 
+        // #868686 is 102/222 of the way up the service's grey, so 46 % cover: 217 × 0.46.
         Assert.Equal(217, pixels[3]);
-        Assert.InRange(pixels[7], 105, 112);
+        Assert.Equal(100, pixels[7]);
         Assert.Equal(0, pixels[11]);
         Assert.Equal((byte)Math.Round(0x8A * 217 / 255.0), pixels[2]);
     }

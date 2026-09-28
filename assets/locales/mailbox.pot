@@ -410,7 +410,7 @@ msgstr ""
 
 #: src/Mailbox.App/Views/WeatherPage.cs:241
 #: src/Mailbox.App/Views/WeatherPage.cs:495
-#: src/Mailbox.Core/Weather/MapLayers.cs:230
+#: src/Mailbox.Core/Weather/MapLayers.cs:256
 msgid "Wind"
 msgstr ""
 
@@ -522,7 +522,7 @@ msgid "Visibility"
 msgstr ""
 
 #: src/Mailbox.App/Views/WeatherPage.cs:535
-#: src/Mailbox.Core/Weather/MapLayers.cs:235
+#: src/Mailbox.Core/Weather/MapLayers.cs:261
 msgid "Pressure"
 msgstr ""
 
@@ -659,32 +659,32 @@ msgstr ""
 msgid "Back to the place"
 msgstr ""
 
-#: src/Mailbox.Core/Weather/MapLayers.cs:227
+#: src/Mailbox.Core/Weather/MapLayers.cs:253
 msgid "Radar"
 msgstr ""
 
-#: src/Mailbox.Core/Weather/MapLayers.cs:228
+#: src/Mailbox.Core/Weather/MapLayers.cs:254
 msgid "Satellite"
 msgstr ""
 
-#: src/Mailbox.Core/Weather/MapLayers.cs:229
+#: src/Mailbox.Core/Weather/MapLayers.cs:255
 #: src/Mailbox.Core/Weather/MapLegend.cs:116
 msgid "Temperature"
 msgstr ""
 
-#: src/Mailbox.Core/Weather/MapLayers.cs:231
+#: src/Mailbox.Core/Weather/MapLayers.cs:257
 msgid "Precipitation"
 msgstr ""
 
-#: src/Mailbox.Core/Weather/MapLayers.cs:232
+#: src/Mailbox.Core/Weather/MapLayers.cs:258
 msgid "Clouds"
 msgstr ""
 
-#: src/Mailbox.Core/Weather/MapLayers.cs:233
+#: src/Mailbox.Core/Weather/MapLayers.cs:259
 msgid "Warnings"
 msgstr ""
 
-#: src/Mailbox.Core/Weather/MapLayers.cs:234
+#: src/Mailbox.Core/Weather/MapLayers.cs:260
 msgid "Lightning"
 msgstr ""
 
