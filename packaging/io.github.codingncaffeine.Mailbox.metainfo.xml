@@ -67,6 +67,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.6.5" date="2026-09-28">
+      <description>
+        <p>A Weather module on the rail: forecasts by city or zip code, current conditions on the rail, warnings and the forecasters' discussion for the United States, air quality, and a map with radar, satellite, temperature, wind, precipitation and clouds. The calendar shows the next three days beside the date, and the weather's units are set in Options under Calendar.</p>
+      </description>
+    </release>
     <release version="0.6.4" date="2026-09-16">
       <description>
         <p>The send/receive progress window goes behind whatever you click next and opens where you last put it; clicking through messages with the reading pane off no longer marks them read, and opening one does; the taskbar shows the full mailbox again when mail arrives; turning the reading pane on shows it straight away.</p>
