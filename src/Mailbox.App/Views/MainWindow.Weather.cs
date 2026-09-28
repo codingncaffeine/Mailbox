@@ -21,6 +21,10 @@ public partial class MainWindow
 {
     private WeatherWorkspace? _weatherModule;
     private DispatcherTimer? _weatherTicker;
+    private CalendarWeatherBar? _calendarWeather;
+
+    /// <summary>What the calendar's weather was last drawn from, so a tick that changes nothing draws nothing.</summary>
+    private string? _calendarWeatherShown;
 
     /// <summary>The Weather ribbon: the shipped layout with the reader's edits over it.</summary>
     private static RibbonLayout WeatherRibbon() => App.RibbonEdits.Apply(App.Plugins.InjectRibbon(WeatherRibbonLayout.Build()));
@@ -78,6 +82,24 @@ public partial class MainWindow
             });
         };
 
+        // The calendar's weather follows its place's forecast, the list of places, the units, and
+        // its own two settings.
+        App.Weather.Changed += (_, id) => Dispatcher.UIThread.Post(() =>
+        {
+            if (CalendarWeatherPlace()?.Id == id) RefreshCalendarWeather();
+        });
+        App.WeatherPlaces.Changed += (_, _) => Dispatcher.UIThread.Post(RefreshCalendarWeather);
+        App.Settings.Changed += (_, key) =>
+        {
+            if (key.Length > 0 && !key.StartsWith("weather.units.", StringComparison.Ordinal)
+                && !key.StartsWith("calendar.weather.", StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            Dispatcher.UIThread.Post(RefreshCalendarWeather);
+        };
+
         _ = ShowRailWeatherAsync(shell);
 
         if (Mailbox.App.Theming.WindowCapture.IsRequested) return;
@@ -89,10 +111,20 @@ public partial class MainWindow
 
     private void TickWeather(ShellViewModel shell)
     {
+        // Past midnight, Tomorrow is Today: the calendar's days move on whether or not anything
+        // new has arrived.
+        RefreshCalendarWeather();
         if (App.Transfer.WorkOffline) return;
 
         var home = App.WeatherPlaces.Home;
         if (home is not null) _ = Task.Run(() => App.Weather.RefreshAsync(home));
+
+        // The calendar's place is kept as current as home is, when it is another: the calendar
+        // shows it whether or not the Weather module has been opened.
+        if (App.CalendarOptions.ShowWeather && CalendarWeatherPlace() is { } shown && shown.Id != home?.Id)
+        {
+            _ = Task.Run(() => App.Weather.RefreshAsync(shown));
+        }
 
         if (shell.Module != MailboxModule.Weather) return;
         foreach (var place in App.WeatherPlaces.All.ToList())
@@ -154,7 +186,95 @@ public partial class MainWindow
         });
     }
 
-    private async Task AddWeatherPlaceAsync(ShellViewModel shell)
+    /// <summary>
+    /// The weather on the calendar's toolbar, built with the calendar: the place chosen on it, or
+    /// home, and its next three days. A day, or Open Weather, opens the place in the Weather module.
+    /// </summary>
+    private CalendarWeatherBar CalendarWeather(ShellViewModel shell)
+    {
+        var bar = new CalendarWeatherBar();
+        bar.PlaceChosen += (_, id) =>
+        {
+            App.CalendarOptions.WeatherPlace = id;
+            if (App.WeatherPlaces.Find(id) is { } place) UpdateWeather(shell, place, force: false);
+        };
+        bar.WeatherRequested += (_, id) =>
+        {
+            SwitchModule(shell, MailboxModule.Weather);
+            EnsureWeather(shell).Select(id);
+        };
+        bar.AddRequested += async (_, _) =>
+        {
+            // A place added from the calendar is the one the calendar then shows, as the
+            // reference's location list does.
+            if (await AddWeatherPlaceAsync(shell) is { } added) App.CalendarOptions.WeatherPlace = added.Id;
+        };
+
+        _calendarWeather = bar;
+        _calendarWeatherShown = null;
+        RefreshCalendarWeather();
+
+        // A photograph of the calendar is of its weather too: the shot waits for the place's
+        // refresh and the pictures that follow it, and the harness reads back what the bar says.
+        if (Mailbox.App.Theming.WindowCapture.IsRequested && App.CalendarOptions.ShowWeather && CalendarWeatherPlace() is { } posed)
+        {
+            var hold = Mailbox.App.Theming.WindowCapture.Hold();
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await App.Weather.RefreshAsync(posed);
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        RefreshCalendarWeather();
+                        Log.Info($"Harness: calendar weather — {bar.Said}.");
+                    });
+                    await Task.Delay(500);
+                }
+                finally
+                {
+                    hold.Dispose();
+                }
+            });
+        }
+
+        return bar;
+    }
+
+    /// <summary>The place the calendar shows the weather for: the one chosen on its toolbar, or home.</summary>
+    private static WeatherPlace? CalendarWeatherPlace()
+        => App.WeatherPlaces.Find(App.CalendarOptions.WeatherPlace) ?? App.WeatherPlaces.Home;
+
+    /// <summary>Draws the calendar's weather again, when anything it shows has changed.</summary>
+    /// <remarks>
+    /// Drawn again only on a change, because drawing makes new buttons: a tick that redrew
+    /// regardless would close the list of places, or a day's tip, under the reader's pointer.
+    /// </remarks>
+    private void RefreshCalendarWeather()
+    {
+        if (_calendarWeather is not { } bar) return;
+
+        var place = App.CalendarOptions.ShowWeather ? CalendarWeatherPlace() : null;
+        bar.IsVisible = place is not null;
+        if (place is null)
+        {
+            _calendarWeatherShown = null;
+            return;
+        }
+
+        var forecast = App.Weather.Get(place.Id).Forecast;
+        var places = App.WeatherPlaces.All.ToList();
+        var units = App.WeatherUnits;
+        var now = Mailbox.Core.PosedClock.UtcNow;
+        var day = forecast is null ? default : DateOnly.FromDateTime(forecast.LocalTime(now));
+        var shown = $"{place.Id}|{forecast?.Fetched:O}|{day}|{units}|{string.Join(",", places.Select(p => $"{p.Id}={p.Label}"))}";
+        if (shown == _calendarWeatherShown) return;
+
+        _calendarWeatherShown = shown;
+        bar.Show(place, forecast, places, units, now);
+    }
+
+    private async Task<WeatherPlace?> AddWeatherPlaceAsync(ShellViewModel shell)
     {
         var dialog = new AddLocationDialog(App.Weather);
 
@@ -168,7 +288,7 @@ public partial class MainWindow
         }
 
         await dialog.ShowDialog(this);
-        if (dialog.Chosen is not { } chosen) return;
+        if (dialog.Chosen is not { } chosen) return null;
 
         var kept = App.WeatherPlaces.Add(chosen);
         shell.StatusRight = ReferenceEquals(kept, chosen)
@@ -189,10 +309,11 @@ public partial class MainWindow
                 await Task.Delay(600);
             }
 
-            return;
+            return kept;
         }
 
         UpdateWeather(shell, kept, force: false);
+        return kept;
     }
 
     private void RemoveWeatherPlace(ShellViewModel shell, WeatherPlace place)

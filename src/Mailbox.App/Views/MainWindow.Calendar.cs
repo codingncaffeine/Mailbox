@@ -216,6 +216,7 @@ public partial class MainWindow
             _ = NewAppointmentAsync(shell, when.Start, when.AllDay, minutes: when.Minutes);
         workspace.EntryOpened += (_, entry) => _ = OpenAppointmentAsync(shell, entry);
         workspace.EntryMoved += (_, move) => MoveAppointment(shell, move);
+        workspace.Weather = CalendarWeather(shell);
         _calendar = workspace;
         return workspace;
     }

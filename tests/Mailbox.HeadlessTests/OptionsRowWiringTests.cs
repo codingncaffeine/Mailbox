@@ -33,7 +33,8 @@ public class OptionsRowWiringTests
         // Up one, deliberately: "Show suggested replies" joined greyed — the AI exclusion's
         // greyed-rather-than-removed convention, drawn because the capture draws it.
         ["mail"] = 14,
-        ["calendar"] = 8,
+        // Down one: "Show a Weather bar on the calendar" now shows the weather on the toolbar.
+        ["calendar"] = 7,
         ["tasks"] = 7,
         ["search"] = 4,
         ["language"] = 1,

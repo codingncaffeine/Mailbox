@@ -66,6 +66,12 @@ public sealed class CalendarWorkspace : Border
     private readonly DockPanel _timeGridWithTasks = new();
     private readonly Panel _viewHost = new();
     private readonly TextBlock _title = new();
+
+    /// <summary>
+    /// Beside the date: the weather, which the window builds and hands over. Clipped, so a narrow
+    /// window loses the last of the days rather than drawing them over the view picker.
+    /// </summary>
+    private readonly Border _weatherHost = new() { ClipToBounds = true };
     private readonly TextBlock _pickerLabel = new();
     private readonly TextBlock _pickerGlyph = new();
     private readonly StackPanel _calendarList = new();
@@ -191,6 +197,13 @@ public sealed class CalendarWorkspace : Border
 
     /// <summary>What the toolbar's date reads, which a capture can show and a log cannot.</summary>
     internal string TitleForHarness => _title.Text ?? string.Empty;
+
+    /// <summary>What the toolbar shows beside the date — the weather bar — or nothing.</summary>
+    public Control? Weather
+    {
+        get => _weatherHost.Child;
+        set => _weatherHost.Child = value;
+    }
 
     /// <summary>
     /// The print style the arrangement on screen asks for: printing what is showing is what
@@ -429,6 +442,9 @@ public sealed class CalendarWorkspace : Border
         _title[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("calendar.toolbar.text.brush");
         left.Children.Add(_title);
         bar.Children.Add(left);
+
+        Grid.SetColumn(_weatherHost, 1);
+        bar.Children.Add(_weatherHost);
 
         var picker = BuildPicker();
         Grid.SetColumn(picker, 2);

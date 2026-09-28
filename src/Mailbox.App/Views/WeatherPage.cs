@@ -449,7 +449,7 @@ internal sealed class WeatherPage : Border
         return Card(string.Format(CultureInfo.CurrentCulture, Strings.T("{0}-day forecast"), days.Count), rows);
     }
 
-    private static string DayTip(DailyWeather day, WeatherCondition condition, WeatherUnits units)
+    internal static string DayTip(DailyWeather day, WeatherCondition condition, WeatherUnits units)
     {
         var culture = CultureInfo.CurrentCulture;
         var lines = new List<string>

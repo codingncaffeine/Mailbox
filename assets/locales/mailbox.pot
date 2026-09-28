@@ -208,55 +208,55 @@ msgid_plural "{0} messages in {1} marked read."
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/Mailbox.App/Views/MainWindow.Weather.cs:116
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:148
 msgid "Weather — add a place to see its weather here"
 msgstr ""
 
-#: src/Mailbox.App/Views/MainWindow.Weather.cs:123
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:155
 msgid "Weather — {0}"
 msgstr ""
 
-#: src/Mailbox.App/Views/MainWindow.Weather.cs:130
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:162
 msgid "Weather — {0}, {1} in {2}"
 msgstr ""
 
-#: src/Mailbox.App/Views/MainWindow.Weather.cs:138
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:170
 msgid "Working offline: the weather updates when you go back online."
 msgstr ""
 
-#: src/Mailbox.App/Views/MainWindow.Weather.cs:175
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:295
 msgid "Added {0}."
 msgstr ""
 
-#: src/Mailbox.App/Views/MainWindow.Weather.cs:176
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:296
 msgid "{0} is already in the list."
 msgstr ""
 
-#: src/Mailbox.App/Views/MainWindow.Weather.cs:202
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:323
 msgid "Removed {0}."
 msgstr ""
 
-#: src/Mailbox.App/Views/MainWindow.Weather.cs:208
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:329
 msgid "{0} is home now: its weather shows on the rail."
 msgstr ""
 
-#: src/Mailbox.App/Views/MainWindow.Weather.cs:227
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:348
 msgid "Opened {0}."
 msgstr ""
 
-#: src/Mailbox.App/Views/MainWindow.Weather.cs:230
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:351
 msgid "The desktop could not open that address."
 msgstr ""
 
-#: src/Mailbox.App/Views/MainWindow.Weather.cs:251
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:372
 msgid "Temperatures in Celsius."
 msgstr ""
 
-#: src/Mailbox.App/Views/MainWindow.Weather.cs:251
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:372
 msgid "Temperatures in Fahrenheit."
 msgstr ""
 
-#: src/Mailbox.App/Views/MainWindow.Weather.cs:263
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:384
 msgid "Choose a place first."
 msgstr ""
 
@@ -460,6 +460,7 @@ msgid "Daily forecast"
 msgstr ""
 
 #: src/Mailbox.App/Views/WeatherPage.cs:404
+#: src/Mailbox.App/Weather/CalendarWeatherBar.cs:132
 msgid "Today"
 msgstr ""
 
@@ -624,6 +625,26 @@ msgstr ""
 
 #: src/Mailbox.App/Views/WeatherWorkspace.cs:85
 msgid "Locations: {0}"
+msgstr ""
+
+#: src/Mailbox.App/Weather/CalendarWeatherBar.cs:117
+msgid "Add Location…"
+msgstr ""
+
+#: src/Mailbox.App/Weather/CalendarWeatherBar.cs:120
+msgid "Open Weather"
+msgstr ""
+
+#: src/Mailbox.App/Weather/CalendarWeatherBar.cs:133
+msgid "Tomorrow"
+msgstr ""
+
+#: src/Mailbox.App/Weather/CalendarWeatherBar.cs:43
+msgid "Weather"
+msgstr ""
+
+#: src/Mailbox.App/Weather/CalendarWeatherBar.cs:96
+msgid "Choose the place the calendar shows the weather for"
 msgstr ""
 
 #: src/Mailbox.App/Weather/MapWeatherLayers.cs:229

@@ -30,6 +30,8 @@ public sealed class CalendarOptions(SettingsStore settings)
     public const string SecondTimeZoneShownKey = "calendar.timezone.second.shown";
     public const string SecondTimeZoneLabelKey = "calendar.timezone.second.label";
     public const string SecondTimeZoneIdKey = "calendar.timezone.second.id";
+    public const string ShowWeatherKey = "calendar.weather.show";
+    public const string WeatherPlaceKey = "calendar.weather.place";
 
     /// <summary>One per weekday, so the work week is exactly the days that are ticked.</summary>
     public static string WorkDayKey(DayOfWeek day) => "calendar.workweek." + day.ToString().ToLowerInvariant();
@@ -122,6 +124,22 @@ public sealed class CalendarOptions(SettingsStore settings)
 
     /// <summary>Whether that colour is forced on every calendar rather than only the new ones.</summary>
     public bool ColourEveryCalendar => _settings.GetBool(ColourEveryCalendarKey, false);
+
+    /// <summary>
+    /// Whether the toolbar shows the weather beside the date, as the reference's calendar does
+    /// until it is turned off. There is nothing to show until the reader has a weather place.
+    /// </summary>
+    public bool ShowWeather => _settings.GetBool(ShowWeatherKey, true);
+
+    /// <summary>
+    /// Which of the reader's weather places the calendar shows, by id — chosen from the toolbar's
+    /// own list. Empty, or a place since removed, means home: the first of them.
+    /// </summary>
+    public string WeatherPlace
+    {
+        get => _settings.GetString(WeatherPlaceKey, string.Empty);
+        set => _settings.Set(WeatherPlaceKey, value ?? string.Empty);
+    }
 
     /// <summary>
     /// Whether the day's tasks are drawn in a band under the day and week grids, and how much

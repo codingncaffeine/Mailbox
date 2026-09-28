@@ -379,7 +379,7 @@ public static class OptionsPages
                 new CheckRow("Use this color on all calendars") { Key = CalendarOptions.ColourEveryCalendarKey },
                 new CheckRow("Show week numbers in the month view and in the Date Navigator")
                     { Key = Keys.ShowWeekNumbers },
-                new CheckRow("Show a Weather bar on the calendar"),
+                new CheckRow("Show a Weather bar on the calendar", true) { Key = CalendarOptions.ShowWeatherKey },
             ]),
 
             // The reference's Time zone dropdown sets the operating system's zone. That belongs
