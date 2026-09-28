@@ -142,7 +142,8 @@ public sealed class AddLocationDialog : Window
         try
         {
             var language = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
-            var (places, error) = await _weather.SearchAsync(query, language, searching.Token);
+            var region = System.Globalization.RegionInfo.CurrentRegion.TwoLetterISORegionName;
+            var (places, error) = await _weather.SearchAsync(query, language, region, searching.Token);
             if (searching.IsCancellationRequested) return;
 
             _matches.Items.Clear();
@@ -164,7 +165,7 @@ public sealed class AddLocationDialog : Window
     private static Control Row(WeatherPlace place)
     {
         var name = Label(place.Name, bold: true, size: 13);
-        var where = Label(string.Join(", ", new[] { place.Region, place.Country }.Where(s => s.Length > 0 && s != place.Name)));
+        var where = Label(string.Join(", ", new[] { place.Postcode, place.Region, place.Country }.Where(s => s.Length > 0 && s != place.Name)));
         Bind(where, TextBlock.ForegroundProperty, "dialog.foreground.subtle.brush");
         var stack = new StackPanel { Margin = new Thickness(2, 3), Children = { name, where }, Tag = place };
         Avalonia.Automation.AutomationProperties.SetName(stack, place.FullName);

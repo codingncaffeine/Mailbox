@@ -14,6 +14,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The United States ZIP codes the place search finds itself, built by tools/weather-zipcodes.mjs. -->
+    <EmbeddedResource Include="..\..\assets\weather\places\us-zip.tsv.gz" LogicalName="Mailbox.Protocols.us-zip.tsv.gz" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Mailbox.Core\Mailbox.Core.csproj" />
     <ProjectReference Include="..\Mailbox.Store\Mailbox.Store.csproj" />
     <ProjectReference Include="..\Mailbox.Security\Mailbox.Security.csproj" />

@@ -160,8 +160,10 @@ public partial class MainWindow
 
         // MAILBOX_WEATHER_ADD types a search and, with "|add", takes the first match — so the
         // whole flow, searching through to the first forecast, is provable rather than only the box.
+        // Without it, the photograph is of the dialog and the matches it found.
         if (Environment.GetEnvironmentVariable("MAILBOX_WEATHER_ADD") is { Length: > 0 } typed)
         {
+            if (!typed.Contains("|add", StringComparison.OrdinalIgnoreCase)) CaptureNextWindow();
             dialog.Opened += (_, _) => dialog.Pose(typed);
         }
 

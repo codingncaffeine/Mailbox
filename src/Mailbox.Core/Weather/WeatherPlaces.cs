@@ -8,8 +8,9 @@ namespace Mailbox.Core.Weather;
 /// <summary>A place a reader keeps the weather for.</summary>
 /// <remarks>
 /// The coordinates are what the forecast is asked for; the rest is how the place is named back
-/// to the reader. A zip code is kept only as what was typed, because a code is an area and the
-/// forecast is for a point — the point the geocoder chose for it.
+/// to the reader. A United States ZIP code is placed at the code's own point, from the list the
+/// application carries (see <see cref="ZipCodes"/>); any other postal code is kept only as what
+/// was typed, at the point the service chose for the place it belongs to.
 /// </remarks>
 public sealed record WeatherPlace
 {
@@ -114,7 +115,8 @@ public sealed class WeatherPlaces
 
     /// <summary>
     /// Adds a place at the end, or hands back the one already kept within a kilometre of it —
-    /// the same town found once by name and once by zip code is one place.
+    /// one point found twice, by name and by a code at its centre or by two codes that share it,
+    /// is one place.
     /// </summary>
     public WeatherPlace Add(WeatherPlace place)
     {

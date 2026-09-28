@@ -39,7 +39,7 @@ msgstr ""
 msgid "Searching…"
 msgstr ""
 
-#: src/Mailbox.App/Views/AddLocationDialog.cs:155
+#: src/Mailbox.App/Views/AddLocationDialog.cs:156
 msgid "Nothing was found for “{0}”."
 msgstr ""
 
@@ -224,39 +224,39 @@ msgstr ""
 msgid "Working offline: the weather updates when you go back online."
 msgstr ""
 
-#: src/Mailbox.App/Views/MainWindow.Weather.cs:173
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:175
 msgid "Added {0}."
 msgstr ""
 
-#: src/Mailbox.App/Views/MainWindow.Weather.cs:174
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:176
 msgid "{0} is already in the list."
 msgstr ""
 
-#: src/Mailbox.App/Views/MainWindow.Weather.cs:200
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:202
 msgid "Removed {0}."
 msgstr ""
 
-#: src/Mailbox.App/Views/MainWindow.Weather.cs:206
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:208
 msgid "{0} is home now: its weather shows on the rail."
 msgstr ""
 
-#: src/Mailbox.App/Views/MainWindow.Weather.cs:225
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:227
 msgid "Opened {0}."
 msgstr ""
 
-#: src/Mailbox.App/Views/MainWindow.Weather.cs:228
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:230
 msgid "The desktop could not open that address."
 msgstr ""
 
-#: src/Mailbox.App/Views/MainWindow.Weather.cs:249
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:251
 msgid "Temperatures in Celsius."
 msgstr ""
 
-#: src/Mailbox.App/Views/MainWindow.Weather.cs:249
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:251
 msgid "Temperatures in Fahrenheit."
 msgstr ""
 
-#: src/Mailbox.App/Views/MainWindow.Weather.cs:261
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:263
 msgid "Choose a place first."
 msgstr ""
 
@@ -1137,6 +1137,10 @@ msgstr ""
 
 #: src/Mailbox.Core/Weather/WeatherReadings.cs:93
 msgid "Oppressively humid."
+msgstr ""
+
+#: src/Mailbox.Core/Weather/ZipCodes.cs:53
+msgid "United States"
 msgstr ""
 
 #: src/Mailbox.Protocols/SendReceive.cs:63

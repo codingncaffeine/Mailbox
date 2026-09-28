@@ -12,8 +12,8 @@ Fluent UI System Icons (FluentSystemIcons-Regular.ttf, FluentSystemIcons-Filled.
 Inter — Copyright (c) 2016 The Inter Project Authors. SIL Open Font License, Version 1.1.
   Bundled by Avalonia.Fonts.Inter as the framework's fallback face.
 
-Weather map data
-----------------
+Weather data
+------------
 Natural Earth (land, lakes, borders, states and provinces, places, roads in the Weather map) —
   public domain. https://www.naturalearthdata.com
 us-atlas (the US county lines in the Weather map, drawn from the US Census Bureau's cartographic
@@ -26,6 +26,8 @@ us-atlas (the US county lines in the Weather map, drawn from the US Census Burea
   CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,
   WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
   CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+GeoNames postal codes (the United States ZIP codes the Weather module's place search finds) —
+  Creative Commons Attribution 4.0 License. https://www.geonames.org
 Forecasts and air quality are fetched at run time from Open-Meteo (data CC BY 4.0; the air quality
   from the Copernicus Atmosphere Monitoring Service), warnings and discussions from the US National
   Weather Service (public domain), and the map's weather from NOAA nowCOAST (public domain) and

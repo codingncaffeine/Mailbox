@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.IO.Compression;
 using System.Net;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Mailbox.Core.Diagnostics;
@@ -104,23 +106,75 @@ public sealed class WeatherReceiver : IDisposable
     public PlaceWeather Get(string placeId) => _state.TryGetValue(placeId, out var known) ? known : new PlaceWeather { PlaceId = placeId };
 
     /// <summary>Searches for places by name or postal code.</summary>
+    /// <param name="region">
+    /// The reader's own country, ISO 3166 alpha-2, which decides the order when five digits are a
+    /// postcode in their country as well as a ZIP code in the United States.
+    /// </param>
     /// <returns>The places found, or an empty list and the reason the search could not be made.</returns>
-    public async Task<(IReadOnlyList<WeatherPlace> Places, string Error)> SearchAsync(string query, string language, CancellationToken cancellation = default)
+    /// <remarks>
+    /// A United States ZIP code is also looked up in the list the application carries, which puts
+    /// it at its own point: the service knows most codes only as the city they belong to, and a
+    /// few not at all. The service is still asked, for the other countries whose codes are five
+    /// digits, but its record of the code's own city is dropped as the same place found less
+    /// exactly — and a ZIP code found in the list needs nothing from the service to be offered.
+    /// </remarks>
+    public async Task<(IReadOnlyList<WeatherPlace> Places, string Error)> SearchAsync(
+        string query, string language, string region = "", CancellationToken cancellation = default)
     {
         if (string.IsNullOrWhiteSpace(query)) return ([], string.Empty);
 
-        var result = await _fetch.GetAsync(OpenMeteo.SearchUrl(query, language), "application/json", cancellation).ConfigureAwait(false);
-        if (!result.Ok) return ([], OpenMeteo.ErrorReason(result.Text) ?? result.Error);
+        // Read on the pool: the list is half a megabyte to unpack, and a search starts on the
+        // interface's thread.
+        var code = ZipCodes.Parse(query);
+        var zip = code is not null
+            ? await Task.Run(() => FindZip(code), cancellation).ConfigureAwait(false)
+            : null;
 
-        try
+        // A ZIP+4 is asked for as its five digits, which are all the service knows of it.
+        var asked = code ?? query;
+        var result = await _fetch.GetAsync(OpenMeteo.SearchUrl(asked, language), "application/json", cancellation).ConfigureAwait(false);
+        IReadOnlyList<WeatherPlace> found = [];
+        var error = string.Empty;
+        if (!result.Ok)
         {
-            return (OpenMeteo.ParsePlaces(result.Text, query), string.Empty);
+            error = OpenMeteo.ErrorReason(result.Text) ?? result.Error;
         }
-        catch (FormatException ex)
+        else
         {
-            Log.Warn("A place search answer could not be read.", ex);
-            return ([], "The answer from the weather service could not be read.");
+            try
+            {
+                found = OpenMeteo.ParsePlaces(result.Text, asked);
+            }
+            catch (FormatException ex)
+            {
+                Log.Warn("A place search answer could not be read.", ex);
+                error = "The answer from the weather service could not be read.";
+            }
         }
+
+        if (zip is null) return (found, error);
+
+        var others = found.Where(p => !(p.CountryCode == "US" && p.Postcode == zip.Postcode)).ToList();
+        List<WeatherPlace> theirs = region.Length == 2 && !region.Equals("US", StringComparison.OrdinalIgnoreCase)
+            ? [.. others.Where(p => p.CountryCode.Equals(region, StringComparison.OrdinalIgnoreCase))]
+            : [];
+        return ([.. theirs, zip, .. others.Except(theirs)], string.Empty);
+    }
+
+    private const string ZipList = "Mailbox.Protocols.us-zip.tsv.gz";
+
+    /// <summary>A code from the ZIP code list the build carries, unpacked as it is read.</summary>
+    private static WeatherPlace? FindZip(string zip)
+    {
+        using var stream = typeof(WeatherReceiver).Assembly.GetManifestResourceStream(ZipList);
+        if (stream is null)
+        {
+            Log.Warn("The ZIP code list is missing from this build; ZIP codes are searched with the weather service alone.");
+            return null;
+        }
+
+        using var reader = new StreamReader(new GZipStream(stream, CompressionMode.Decompress), Encoding.UTF8);
+        return ZipCodes.Find(reader, zip);
     }
 
     /// <summary>

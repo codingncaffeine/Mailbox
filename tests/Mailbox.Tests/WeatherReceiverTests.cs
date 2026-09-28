@@ -52,6 +52,8 @@ public sealed class WeatherReceiverTests : IDisposable
                 "forecast" => Answer(url.Contains("latitude=59", StringComparison.Ordinal)
                     ? "open-meteo-forecast-oslo.json"
                     : "open-meteo-forecast-beverly-hills.json"),
+                "search" when url.Contains("name=85083", StringComparison.Ordinal) => Answer("open-meteo-geocoding-zzqxv.json"),
+                "search" when url.Contains("name=75001", StringComparison.Ordinal) => Answer("open-meteo-geocoding-75001.json"),
                 "search" => Answer("open-meteo-geocoding-90210.json"),
                 "air" when AirStatus != HttpStatusCode.OK => new HttpResponseMessage(AirStatus),
                 "air" => Answer(url.Contains("latitude=59", StringComparison.Ordinal)
@@ -352,14 +354,71 @@ public sealed class WeatherReceiverTests : IDisposable
         var services = new Services();
         using var receiver = Receiver(services);
 
-        var (found, error) = await receiver.SearchAsync("90210", "en", TestContext.Current.CancellationToken);
+        var (found, error) = await receiver.SearchAsync("Beverly Hills", "en", cancellation: TestContext.Current.CancellationToken);
         Assert.Empty(error);
-        Assert.Equal("Beverly Hills", Assert.Single(found).Name);
+        Assert.Equal("geonames:5328041", Assert.Single(found).Id);
 
         using var offline = new WeatherReceiver(_cache, "Mailbox/0.0", new FailingNetwork(), () => _now);
-        var (none, why) = await offline.SearchAsync("90210", "en", TestContext.Current.CancellationToken);
+        var (none, why) = await offline.SearchAsync("Beverly Hills", "en", cancellation: TestContext.Current.CancellationToken);
         Assert.Empty(none);
         Assert.Equal("Could not reach the weather service.", why);
+    }
+
+    /// <summary>The service has no record of 85083; the application's own list puts it in north Phoenix.</summary>
+    [Fact]
+    public async Task AZipCodeTheServiceDoesNotKnowIsFoundInTheList()
+    {
+        using var receiver = Receiver(new Services());
+
+        var (found, error) = await receiver.SearchAsync("85083", "en", "US", TestContext.Current.CancellationToken);
+
+        Assert.Empty(error);
+        var place = Assert.Single(found);
+        Assert.Equal(("zip:US:85083", "Phoenix", "Arizona", "US", "85083"), (place.Id, place.Name, place.Region, place.CountryCode, place.Postcode));
+        Assert.Equal((33.7352, -112.1294), (place.Latitude, place.Longitude));
+        Assert.True(place.HasWeatherService);
+    }
+
+    /// <summary>The service finds 90210 as Beverly Hills' own record; the code's point replaces it rather than joining it.</summary>
+    [Fact]
+    public async Task AZipCodeIsPlacedAtItsOwnPointRatherThanItsCitys()
+    {
+        using var receiver = Receiver(new Services());
+
+        var (found, _) = await receiver.SearchAsync("90210-1234", "en", "US", TestContext.Current.CancellationToken);
+
+        var place = Assert.Single(found);
+        Assert.Equal("zip:US:90210", place.Id);
+        Assert.Equal((34.0901, -118.4065), (place.Latitude, place.Longitude));
+    }
+
+    [Fact]
+    public async Task AZipCodeIsFoundWithoutTheNetwork()
+    {
+        using var offline = new WeatherReceiver(_cache, "Mailbox/0.0", new FailingNetwork(), () => _now);
+
+        var (found, error) = await offline.SearchAsync("85083", "en", "US", TestContext.Current.CancellationToken);
+
+        Assert.Empty(error);
+        Assert.Equal("zip:US:85083", Assert.Single(found).Id);
+    }
+
+    /// <summary>
+    /// 75001 is the first arrondissement of Paris as well as Addison, Texas: a reader in France
+    /// has Paris first, a reader in the United States — or one whose country the search cannot
+    /// tell — the ZIP code, and either way Addison is found once, at its code's own point.
+    /// </summary>
+    [Theory]
+    [InlineData("FR", new[] { "geonames:2988507", "geonames:6269531", "zip:US:75001" })]
+    [InlineData("US", new[] { "zip:US:75001", "geonames:2988507", "geonames:6269531" })]
+    [InlineData("", new[] { "zip:US:75001", "geonames:2988507", "geonames:6269531" })]
+    public async Task FiveDigitsPutTheReadersOwnCountryFirst(string region, string[] expected)
+    {
+        using var receiver = Receiver(new Services());
+
+        var (found, _) = await receiver.SearchAsync("75001", "en", region, TestContext.Current.CancellationToken);
+
+        Assert.Equal(expected, found.Select(p => p.Id));
     }
 
     private sealed class FailingNetwork : HttpMessageHandler
