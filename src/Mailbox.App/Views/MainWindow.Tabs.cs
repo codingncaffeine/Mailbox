@@ -621,6 +621,7 @@ public partial class MainWindow
         if (DataContext is not ShellViewModel shell) return false;
 
         if (id == MailCommands.WorkOffline.Id) return App.Transfer.WorkOffline;
+        if (id == WeatherCommands.Celsius.Id) return App.WeatherUnits.Temperature == Mailbox.Core.Weather.TemperatureUnit.Celsius;
         if (id == ViewCommands.ShowAsConversations.Id) return shell.ShowAsConversations;
         if (id == ViewCommands.TighterSpacing.Id) return shell.CompactRows;
         if (id == ViewCommands.ShowFocusedInbox.Id) return shell.FocusedInboxOn;

@@ -938,6 +938,63 @@ public static class TokenKeys
         ];
     }
 
+    /// <summary>
+    /// The Weather module: the forecast page, its cards and charts, and the colours that carry
+    /// meaning in it.
+    /// </summary>
+    /// <remarks>
+    /// Content rather than chrome, as the calendar grid is, so the page is light in Dark Gray and
+    /// dark only in Black. Most of it follows the theme like any surface does; the chart and scale
+    /// colours are data, not decoration — rain is blue and heat is warm in every theme, because a
+    /// reader reads the colour before the number — so a theme can tune their shade for its ground
+    /// but should not change what they mean.
+    /// </remarks>
+    public static class Weather
+    {
+        /// <summary>The page the cards sit on.</summary>
+        public const string Background = "weather.background";
+        /// <summary>A card: the hourly strip, the ten days, a detail tile.</summary>
+        public const string Card = "weather.card";
+        public const string CardBorder = "weather.card.border";
+        public const string CardText = "weather.card.text";
+        /// <summary>A card's labels and the secondary line under a value.</summary>
+        public const string CardTextDim = "weather.card.text.dim";
+        /// <summary>The current conditions at the top, tinted toward the accent.</summary>
+        public const string Hero = "weather.hero";
+        public const string HeroText = "weather.hero.text";
+        /// <summary>The temperature line through the hours, and the wash under it.</summary>
+        public const string ChartTemperature = "weather.chart.temperature";
+        public const string ChartTemperatureFill = "weather.chart.temperature.fill";
+        /// <summary>Precipitation: its chance, its bars, its amounts.</summary>
+        public const string ChartRain = "weather.chart.rain";
+        public const string ChartGrid = "weather.chart.grid";
+        /// <summary>The track a day's low-to-high bar is drawn along.</summary>
+        public const string RangeTrack = "weather.range.track";
+        /// <summary>
+        /// The temperature scale a range bar is coloured from, cold to hot: diverging, a cool arm
+        /// and a warm arm stepping away from a neutral at the mild middle — never a rainbow.
+        /// </summary>
+        public const string ScaleCold = "weather.scale.cold";
+        public const string ScaleCool = "weather.scale.cool";
+        public const string ScaleMild = "weather.scale.mild";
+        public const string ScaleWarm = "weather.scale.warm";
+        public const string ScaleHot = "weather.scale.hot";
+        /// <summary>A warning's colour by its severity: severe and extreme, moderate, and the rest.</summary>
+        public const string AlertSevere = "weather.alert.severe";
+        public const string AlertModerate = "weather.alert.moderate";
+        public const string AlertMinor = "weather.alert.minor";
+        /// <summary>How far a warning's colour is tinted toward the card for its ground: 0 is the colour, 1 the card.</summary>
+        public const string AlertTint = "weather.alert.tint";
+
+        public static readonly IReadOnlyList<string> All =
+        [
+            Background, Card, CardBorder, CardText, CardTextDim, Hero, HeroText,
+            ChartTemperature, ChartTemperatureFill, ChartRain, ChartGrid, RangeTrack,
+            ScaleCold, ScaleCool, ScaleMild, ScaleWarm, ScaleHot,
+            AlertSevere, AlertModerate, AlertMinor, AlertTint,
+        ];
+    }
+
     /// <summary>The icon set the theme draws with — the design's "optional icon set reference" as a token.</summary>
     public static class Icons
     {
@@ -1025,6 +1082,7 @@ public static class TokenKeys
         .. Peek.All,
         .. Notes.All,
         .. Journal.All,
+        .. Weather.All,
         .. Pictogram.All,
         Typography.UiFamily, Typography.UiSize, Typography.UiSizeSmall, Typography.UiSizeLarge,
         Typography.ContentFamily, Typography.ContentSize, Typography.MonoFamily,

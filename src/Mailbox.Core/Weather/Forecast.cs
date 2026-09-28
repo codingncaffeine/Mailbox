@@ -151,6 +151,33 @@ public sealed record Forecast
         return Daily.FirstOrDefault(d => d.Date == today);
     }
 
+    /// <summary>
+    /// What a day is shown as: its daylight hours read together, rather than the one code the
+    /// service picks for the day.
+    /// </summary>
+    /// <remarks>
+    /// The service's daily code is the day's most severe, which is right for rain and wrong for
+    /// fog: a coast whose morning marine layer burns off by nine is a sunny day, and a list that
+    /// drew it as fog would be telling the reader about the hour they slept through. So the day's
+    /// own hours between sunrise and sunset are read: precipitation or storms in two or more of
+    /// them decide it — the worst of those, since that is what a reader plans around — and
+    /// otherwise the sky most of the day has. A day beyond the hourly forecast keeps the
+    /// service's code.
+    /// </remarks>
+    public WeatherCondition ConditionFor(DailyWeather day)
+    {
+        ArgumentNullException.ThrowIfNull(day);
+        var daylight = Hourly.Where(h => DateOnly.FromDateTime(h.Time) == day.Date && h.IsDay).ToList();
+        if (daylight.Count == 0) return day.Condition;
+
+        var wet = daylight.Where(h => h.Code >= 51).ToList();
+        var code = wet.Count >= 2
+            ? wet.Max(h => h.Code)
+            : daylight.GroupBy(h => h.Code).OrderByDescending(g => g.Count()).ThenBy(g => g.Key).First().Key;
+
+        return WeatherConditions.Classify(code, isDay: true, day.WindMax, day.GustMax);
+    }
+
     /// <summary>The days from today on, up to <paramref name="count"/> of them.</summary>
     public IReadOnlyList<DailyWeather> DaysFrom(DateTime localNow, int count)
     {

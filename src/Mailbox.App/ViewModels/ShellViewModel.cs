@@ -100,7 +100,35 @@ public sealed class ModuleTab(MailboxModule module, string icon, bool isActive) 
     public string Glyph { get; } = IconGlyphs.GetOrEmpty(icon, 20);
     public string RailGlyph { get; } = IconGlyphs.GetOrEmpty(icon, 24);
     public FontFamily IconFamily { get; } = IconFont.Family;
-    public string Tip { get; } = $"{module} (Ctrl+{(int)module})";
+
+    /// <summary>
+    /// What hovering says: the module and its accelerator. Settable, because the Weather tab's
+    /// says what the weather is.
+    /// </summary>
+    public string Tip
+    {
+        get;
+        set => Set(ref field, value);
+    } = $"{module} ({module.Accelerator()})";
+
+    /// <summary>
+    /// A picture drawn in place of the glyph — the Weather tab's, which is the weather at home
+    /// right now. Null draws the glyph, as every other module does.
+    /// </summary>
+    public Avalonia.Media.IImage? Picture
+    {
+        get;
+        set
+        {
+            if (!Set(ref field, value)) return;
+            Raise(nameof(ShowsPicture));
+            Raise(nameof(ShowsGlyph));
+        }
+    }
+
+    public bool ShowsPicture => Picture is not null;
+
+    public bool ShowsGlyph => Picture is null;
 
     /// <summary>
     /// Drives a style selector rather than a brush property. Colour stays in XAML so it
@@ -1983,7 +2011,11 @@ public sealed partial class ShellViewModel : ObservableObject
         new(MailboxModule.Notes, "notes", isActive: false),
         new(MailboxModule.Journal, "journal", isActive: false),
         new(MailboxModule.Feeds, "rss", isActive: false),
+        new(MailboxModule.Weather, "location", isActive: false),
     ];
+
+    /// <summary>The Weather tab, whose picture and tip follow the weather at home.</summary>
+    public ModuleTab WeatherTab => Modules.First(m => m.Module == MailboxModule.Weather);
 
     /// <summary>
     /// The window's own title — the folder, the account, the application, as the reference's is.

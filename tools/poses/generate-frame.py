@@ -117,7 +117,7 @@ def main() -> int:
     for name, number in enum_modules():
         # Every accelerator in the enum, including the two the rail does not carry: a key that
         # reaches nothing is a result, and only pressing it says so.
-        rows.append((f"rail-key-ctrl{number}", f"{COMMON} MAILBOX_KEY=Ctrl+{number}"))
+        rows.append((f"rail-key-ctrl{number % 10}", f"{COMMON} MAILBOX_KEY=Ctrl+{number % 10}"))
     for name in rail:
         rows.append((f"rail-module-{name.lower()}", f"{COMMON} MAILBOX_MODULE={name.lower()}"))
     for name in rail:

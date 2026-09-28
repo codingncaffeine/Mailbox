@@ -34,6 +34,7 @@ public class PressSweepList
         ("notes", NoteCommands.All, nameof(NoteCommands)),
         ("journal", JournalCommands.All, nameof(JournalCommands)),
         ("feeds", FeedCommands.All, nameof(FeedCommands)),
+        ("weather", WeatherCommands.All, nameof(WeatherCommands)),
     ];
 
     /// <summary>The item windows' sets, each swept through its window's own door rather than the shell's.</summary>

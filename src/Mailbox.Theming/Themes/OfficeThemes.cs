@@ -466,6 +466,19 @@ public static class OfficeThemes
         t.Set(TokenKeys.Journal.EntryText, "#000000");
         t.Set(TokenKeys.Journal.EntryBorder, "#A19F9D");
 
+        // The Weather page is content, so it stays light here as the reading pane does: the
+        // reading pane's own grey for the page, the journal's entry ground for the cards.
+        t.Set(TokenKeys.Weather.Background, "#D4D4D4");
+        t.Set(TokenKeys.Weather.Card, "#F4F4F4");
+        t.Set(TokenKeys.Weather.CardBorder, "#A19F9D");
+        t.Set(TokenKeys.Weather.CardText, "#262626");
+        t.Set(TokenKeys.Weather.CardTextDim, "#505050");
+        t.Set(TokenKeys.Weather.Hero, "#DCE9F5");
+        t.Set(TokenKeys.Weather.HeroText, "#262626");
+        t.Set(TokenKeys.Weather.ChartGrid, "#D2D0CE");
+        t.Set(TokenKeys.Weather.RangeTrack, "#D2D0CE");
+        t.Set(TokenKeys.Weather.AlertTint, "0.88");
+
         t.Set(TokenKeys.WindowShape.Border, "#808080");
         t.Set(TokenKeys.TitleBar.Background, "{palette.chrome.titlebar}");
         t.Set(TokenKeys.TitleBar.Foreground, "{palette.neutral.white}");
@@ -895,6 +908,31 @@ public static class OfficeThemes
         t.Set(TokenKeys.Journal.EntryText, "#FAF9F8");
         t.Set(TokenKeys.Journal.EntryBorder, "#5A5A5A");
 
+        // The Weather page on black: cards a step up from the ground, the current conditions on
+        // the accent's own deep tint, and every meaningful colour lifted a shade so it holds its
+        // contrast against the dark rather than sinking into it.
+        t.Set(TokenKeys.Weather.Background, "{palette.ground}");
+        t.Set(TokenKeys.Weather.Card, "#2A2A2A");
+        t.Set(TokenKeys.Weather.CardBorder, "#3F3F3F");
+        t.Set(TokenKeys.Weather.CardText, "#E6E6E6");
+        t.Set(TokenKeys.Weather.CardTextDim, "#A6A6A6");
+        t.Set(TokenKeys.Weather.Hero, "#12283A");
+        t.Set(TokenKeys.Weather.HeroText, "#FAF9F8");
+        t.Set(TokenKeys.Weather.ChartTemperature, "#F7894A");
+        t.Set(TokenKeys.Weather.ChartTemperatureFill, "#1FF7894A");
+        t.Set(TokenKeys.Weather.ChartRain, "#4DA3F0");
+        t.Set(TokenKeys.Weather.ChartGrid, "#3A3A3A");
+        t.Set(TokenKeys.Weather.RangeTrack, "#3A3A3A");
+        t.Set(TokenKeys.Weather.ScaleCold, "#86BDF5");
+        t.Set(TokenKeys.Weather.ScaleCool, "#3F7CC0");
+        t.Set(TokenKeys.Weather.ScaleMild, "#5E5B56");
+        t.Set(TokenKeys.Weather.ScaleWarm, "#B96A36");
+        t.Set(TokenKeys.Weather.ScaleHot, "#F59460");
+        t.Set(TokenKeys.Weather.AlertSevere, "{status.danger}");
+        t.Set(TokenKeys.Weather.AlertModerate, "#F7894A");
+        t.Set(TokenKeys.Weather.AlertMinor, "{status.info}");
+        t.Set(TokenKeys.Weather.AlertTint, "0.82");
+
         return t;
     }
 
@@ -1322,5 +1360,32 @@ public static class OfficeThemes
         t.Set(TokenKeys.Journal.EntryTint, "0.8");
         t.Set(TokenKeys.Journal.EntryText, "{palette.neutral.primary}");
         t.Set(TokenKeys.Journal.EntryBorder, "#C8C6C4");
+
+        // The Weather page: cards on a whisper of grey, so they lift without a shadow, and the
+        // current conditions tinted toward the accent. The chart and scale colours are the
+        // meaningful ones — warm for heat, blue for rain — in the shades that read on white. The
+        // temperature scale diverges: a blue arm and an orange arm, each stepping evenly darker
+        // away from a neutral grey at the mild middle, which still clears 2:1 on the card.
+        t.Set(TokenKeys.Weather.Background, "{surface.sunken}");
+        t.Set(TokenKeys.Weather.Card, "{palette.neutral.white}");
+        t.Set(TokenKeys.Weather.CardBorder, "{palette.neutral.quaternary}");
+        t.Set(TokenKeys.Weather.CardText, "{palette.neutral.primary}");
+        t.Set(TokenKeys.Weather.CardTextDim, "{palette.neutral.secondary}");
+        t.Set(TokenKeys.Weather.Hero, "{palette.brand.light}");
+        t.Set(TokenKeys.Weather.HeroText, "{palette.neutral.primary}");
+        t.Set(TokenKeys.Weather.ChartTemperature, "#CA5010");
+        t.Set(TokenKeys.Weather.ChartTemperatureFill, "#1ACA5010");
+        t.Set(TokenKeys.Weather.ChartRain, "#2B88D8");
+        t.Set(TokenKeys.Weather.ChartGrid, "{palette.neutral.light}");
+        t.Set(TokenKeys.Weather.RangeTrack, "{palette.neutral.light}");
+        t.Set(TokenKeys.Weather.ScaleCold, "#1E5AA6");
+        t.Set(TokenKeys.Weather.ScaleCool, "#5A93D4");
+        t.Set(TokenKeys.Weather.ScaleMild, "#B2ADA7");
+        t.Set(TokenKeys.Weather.ScaleWarm, "#DA7E3C");
+        t.Set(TokenKeys.Weather.ScaleHot, "#B53E14");
+        t.Set(TokenKeys.Weather.AlertSevere, "{status.danger}");
+        t.Set(TokenKeys.Weather.AlertModerate, "#CA5010");
+        t.Set(TokenKeys.Weather.AlertMinor, "{status.info}");
+        t.Set(TokenKeys.Weather.AlertTint, "0.9");
     }
 }

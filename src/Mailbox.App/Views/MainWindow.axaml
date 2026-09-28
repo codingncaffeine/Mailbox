@@ -421,12 +421,25 @@
                                     PointerEntered="RailPointerEntered"
                                     PointerExited="RailPointerExited"
                                     ToolTip.Tip="{Binding Tip}">
-                                <TextBlock Text="{Binding RailGlyph}"
-                                           FontFamily="{Binding IconFamily}"
-                                           FontSize="19"
+                                <Panel>
+                                    <TextBlock Text="{Binding RailGlyph}"
+                                               IsVisible="{Binding ShowsGlyph}"
+                                               FontFamily="{Binding IconFamily}"
+                                               FontSize="19"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"
+                                               Foreground="{DynamicResource rail.item.text.brush}" />
+                                    <!-- The Weather tab draws the weather at home instead of a glyph:
+                                         a picture with its own glow, so it is set a little larger
+                                         than the glyphs to carry the same weight beside them. -->
+                                    <Image Source="{Binding Picture}"
+                                           IsVisible="{Binding ShowsPicture}"
+                                           Width="30"
+                                           Height="30"
+                                           RenderOptions.BitmapInterpolationMode="HighQuality"
                                            HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"
-                                           Foreground="{DynamicResource rail.item.text.brush}" />
+                                           VerticalAlignment="Center" />
+                                </Panel>
                             </Button>
                         </Grid>
                     </DataTemplate>
@@ -543,10 +556,18 @@
                                             Command="{Binding Activate}"
                                             Classes.active="{Binding IsActive}"
                                             ToolTip.Tip="{Binding Tip}">
-                                        <TextBlock Text="{Binding Glyph}"
-                                                   FontFamily="{Binding IconFamily}"
-                                                   FontSize="15"
-                                                   Foreground="{DynamicResource text.secondary.brush}" />
+                                        <Panel>
+                                            <TextBlock Text="{Binding Glyph}"
+                                                       IsVisible="{Binding ShowsGlyph}"
+                                                       FontFamily="{Binding IconFamily}"
+                                                       FontSize="15"
+                                                       Foreground="{DynamicResource text.secondary.brush}" />
+                                            <Image Source="{Binding Picture}"
+                                                   IsVisible="{Binding ShowsPicture}"
+                                                   Width="22"
+                                                   Height="22"
+                                                   RenderOptions.BitmapInterpolationMode="HighQuality" />
+                                        </Panel>
                                     </Button>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>

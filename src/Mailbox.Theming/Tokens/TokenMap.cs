@@ -144,6 +144,7 @@ public static class TokenMap
         Add("calendar", "Calendar", Prefixed("calendar."), content: true);
         Add("notes", "Notes", Prefixed("notes."), content: true);
         Add("journal", "Journal", Prefixed("journal."), content: true);
+        Add("weather", "Weather", Prefixed("weather."), content: true);
         Add("people", "People", Prefixed("people."), content: true);
 
         // The families with no single place on screen.

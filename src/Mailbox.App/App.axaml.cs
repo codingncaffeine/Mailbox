@@ -87,6 +87,18 @@ public partial class App : Application
 
     public static Mailbox.Protocols.FeedReceiver FeedReader { get; private set; } = null!;
 
+    /// <summary>The places the reader keeps the weather for, the first of them home.</summary>
+    public static Mailbox.Core.Weather.WeatherPlaces WeatherPlaces { get; private set; } = null!;
+
+    /// <summary>
+    /// Fetches, caches and schedules the weather for those places — from the reader's own
+    /// connection, with no key and no account, so every reader has their own allowance.
+    /// </summary>
+    public static Mailbox.Protocols.WeatherReceiver Weather { get; private set; } = null!;
+
+    /// <summary>The units the weather is shown in: the reader's choices, their region's where they made none.</summary>
+    public static Mailbox.Core.Weather.WeatherUnits WeatherUnits => Mailbox.Core.Weather.WeatherUnits.Load(Settings);
+
     /// <summary>Personal Stationery: the fonts new mail, replies and plain text are written in.</summary>
     public static StationeryFonts Stationery { get; private set; } = null!;
 
@@ -1073,6 +1085,17 @@ public partial class App : Application
         };
         Stationery = new StationeryFonts(Settings);
         Groups = new SendReceiveGroups(Settings);
+
+        // The weather, beside the other settings-backed services. What the cache holds is read on
+        // the pool — a snapshot of the list, taken here, so a place added meanwhile cannot move
+        // it underneath the read — and each place announces itself as it comes in, so the rail
+        // shows the home place's last weather without waiting for a request.
+        WeatherPlaces = new Mailbox.Core.Weather.WeatherPlaces(Settings);
+        Weather = new Mailbox.Protocols.WeatherReceiver(
+            WeatherCacheDirectory(),
+            $"Mailbox/{UpdateCheck.Current} (+https://github.com/codingncaffeine/Mailbox)");
+        var cachedPlaces = WeatherPlaces.All.ToList();
+        _ = Task.Run(() => Weather.LoadCache(cachedPlaces));
         Signatures = new Signatures(Settings);
         Identities = new Identities(Settings);
         UndoSend = new UndoSend(Settings);
@@ -1253,6 +1276,21 @@ public partial class App : Application
     /// second list of registrations would drift from the one the keys resolve through — which is
     /// the whole reason the page is generated rather than written.
     /// </remarks>
+    /// <summary>
+    /// Where fetched weather is kept between runs: the application's own cache directory, which
+    /// the packaged launcher's sandbox leaves writable.
+    /// </summary>
+    private static string WeatherCacheDirectory()
+    {
+        var cache = Environment.GetEnvironmentVariable("XDG_CACHE_HOME");
+        if (string.IsNullOrWhiteSpace(cache))
+        {
+            cache = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cache");
+        }
+
+        return Path.Combine(cache, "mailbox", "weather");
+    }
+
     internal static CommandCatalog BuiltInCommands()
     {
         var catalog = new CommandCatalog();
@@ -1267,6 +1305,7 @@ public partial class App : Application
         catalog.RegisterRange(NoteCommands.All);
         catalog.RegisterRange(JournalCommands.All);
         catalog.RegisterRange(FeedCommands.All);
+        catalog.RegisterRange(WeatherCommands.All);
         return catalog;
     }
 }

@@ -406,8 +406,8 @@ public static class ViewCommands
     /// The rail's modules as commands, one per accelerator.
     /// </summary>
     /// <remarks>
-    /// The reference's own module switches are Ctrl+1 to Ctrl+8 and Ctrl+9 is Feeds; the
-    /// enum's values are those numbers, so the gesture falls out of the module. Folders and
+    /// The reference's own module switches are Ctrl+1 to Ctrl+8, Ctrl+9 is Feeds and Ctrl+0 is
+    /// Weather; the enum's values are those numbers, so the gesture falls out of the module. Folders and
     /// Shortcuts have no command here because neither is a module of its own. They are commands
     /// rather than a special case in the key handler so they can
     /// be rebound, searched for and placed like everything else — and unplaced on the default
@@ -420,7 +420,7 @@ public static class ViewCommands
         Description = $"Switch to {module}.",
         Icon = icon,
         Category = "Go To",
-        DefaultGesture = $"Ctrl+{(int)module}",
+        DefaultGesture = module.Accelerator(),
         InDefaultLayout = false,
     };
 
@@ -432,6 +432,9 @@ public static class ViewCommands
     public static readonly MailboxCommand GoToJournal = Module(MailboxModule.Journal, "journal");
     public static readonly MailboxCommand GoToFeeds = Module(MailboxModule.Feeds, "rss");
 
+    /// <summary>Weather comes after Feeds, on the key after 9: Ctrl+0.</summary>
+    public static readonly MailboxCommand GoToWeather = Module(MailboxModule.Weather, "location");
+
     /// <summary>The module a switch command names, or null when it is not one.</summary>
     public static MailboxModule? ModuleOf(CommandId id)
     {
@@ -440,7 +443,7 @@ public static class ViewCommands
                      (GoToMail, MailboxModule.Mail), (GoToCalendar, MailboxModule.Calendar),
                      (GoToPeople, MailboxModule.People), (GoToTasks, MailboxModule.Tasks),
                      (GoToNotes, MailboxModule.Notes), (GoToJournal, MailboxModule.Journal),
-                     (GoToFeeds, MailboxModule.Feeds),
+                     (GoToFeeds, MailboxModule.Feeds), (GoToWeather, MailboxModule.Weather),
                  ])
         {
             if (command.Id == id) return module;
@@ -809,7 +812,7 @@ public static class ViewCommands
 
     public static IEnumerable<MailboxCommand> All =>
     [
-        GoToMail, GoToCalendar, GoToPeople, GoToTasks, GoToNotes, GoToJournal, GoToFeeds,
+        GoToMail, GoToCalendar, GoToPeople, GoToTasks, GoToNotes, GoToJournal, GoToFeeds, GoToWeather,
         SendAll, UpdateFolder, SendReceiveGroups, ShowProgress, CancelAll,
         ChangeView, ViewSettings, ArrangeBy, ReverseSort, TighterSpacing, LayoutMenu,
         ChangeViewCompact, ChangeViewSingle, ChangeViewPreview, ManageViews, SaveViewAs, ApplyViewToFolders,

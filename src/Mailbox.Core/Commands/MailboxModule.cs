@@ -1,14 +1,18 @@
 namespace Mailbox.Core.Commands;
 
 /// <summary>
-/// The modules in the navigation pane, in the reference's own order. The numeric values match
-/// the Ctrl+1..Ctrl+9 accelerators.
+/// The modules in the navigation pane, in the reference's own order. The numeric values are the
+/// accelerators: Ctrl+1..Ctrl+9, and Ctrl+0 for the tenth, as the number row runs.
 /// </summary>
 /// <remarks>
 /// Feeds is the one the reference does not have: it keeps subscriptions as folders under Mail
 /// and nothing else. A reader with fifty of them wants what a feed reader gives them — their
 /// own headings, their own counts, and a list built for articles rather than for correspondence
 /// — so it is a module here, and the ninth accelerator.
+/// <para>
+/// Weather is the other: the reference shows a few days of it along the top of its calendar and
+/// nothing more. It comes after Feeds, on the key after 9 — Ctrl+0.
+/// </para>
 /// </remarks>
 public enum MailboxModule
 {
@@ -21,6 +25,7 @@ public enum MailboxModule
     Shortcuts = 7,
     Journal = 8,
     Feeds = 9,
+    Weather = 10,
 }
 
 /// <summary>
@@ -38,11 +43,17 @@ public enum ModuleScope
     Notes = 1 << 4,
     Journal = 1 << 5,
     Feeds = 1 << 6,
-    Any = Mail | Calendar | People | Tasks | Notes | Journal | Feeds,
+    Weather = 1 << 7,
+    Any = Mail | Calendar | People | Tasks | Notes | Journal | Feeds | Weather,
 }
 
 public static class ModuleScopeExtensions
 {
+    /// <summary>
+    /// The module's accelerator: its number on the number row, where the tenth key is 0.
+    /// </summary>
+    public static string Accelerator(this MailboxModule module) => $"Ctrl+{(int)module % 10}";
+
     public static ModuleScope AsScope(this MailboxModule module) => module switch
     {
         MailboxModule.Mail => ModuleScope.Mail,
@@ -52,6 +63,7 @@ public static class ModuleScopeExtensions
         MailboxModule.Notes => ModuleScope.Notes,
         MailboxModule.Journal => ModuleScope.Journal,
         MailboxModule.Feeds => ModuleScope.Feeds,
+        MailboxModule.Weather => ModuleScope.Weather,
         _ => ModuleScope.None,
     };
 }

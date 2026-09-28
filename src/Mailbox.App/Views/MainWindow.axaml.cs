@@ -106,6 +106,7 @@ public partial class MainWindow : Window
                 MailboxModule.Notes => NotesRibbon(),
                 MailboxModule.Journal => JournalRibbon(),
                 MailboxModule.Feeds => FeedsRibbon(),
+                MailboxModule.Weather => WeatherRibbon(),
                 _ => App.MailRibbon(),
             };
         });
@@ -172,6 +173,7 @@ public partial class MainWindow : Window
         };
         this.FindControl<ContentControl>("UndoSendHost")!.Content = _undoSend;
         WireSchedule(shell);
+        WireWeather(shell);
 
         // Instant Search over the module on screen: the box searches what is in front of the
         // reader, which is what the reference's own does.
@@ -6198,6 +6200,7 @@ public partial class MainWindow : Window
         if (RunNoteCommand(shell, id)) return;
         if (RunJournalCommand(shell, id)) return;
         if (RunFeedCommand(shell, id)) return;
+        if (RunWeatherCommand(shell, id)) return;
         if (RunOverSelection(shell, id)) return;
         if (RunViewCommand(shell, id)) return;
         if (RunViewTabCommand(shell, id)) return;
@@ -8672,6 +8675,7 @@ public partial class MainWindow : Window
         MailboxModule.Notes => _noteModule?.Selected is null ? 0 : 1,
         MailboxModule.Journal => _journalModule?.Selected is null ? 0 : 1,
         MailboxModule.Feeds => _feedModule?.SelectedArticle is null ? 0 : 1,
+        MailboxModule.Weather => _weatherModule?.Selected is null ? 0 : 1,
         _ => 0,
     };
 

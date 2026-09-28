@@ -60,7 +60,8 @@ public partial class MainWindow
     private void SwitchModule(ShellViewModel shell, MailboxModule module)
     {
         if (module is not (MailboxModule.Mail or MailboxModule.Calendar or MailboxModule.People
-            or MailboxModule.Tasks or MailboxModule.Notes or MailboxModule.Journal or MailboxModule.Feeds))
+            or MailboxModule.Tasks or MailboxModule.Notes or MailboxModule.Journal or MailboxModule.Feeds
+            or MailboxModule.Weather))
         {
             // Folders and Shortcuts are the rest of the navigation pane rather than modules of
             // their own. Nothing on the rail or in the key map reaches them today; this guard is
@@ -140,6 +141,22 @@ public partial class MainWindow
                 _ribbon.Layout = FeedsRibbon();
                 shell.ModuleStatusLeft = workspace.Status;
                 focusSurface = workspace.FocusSurface;
+                break;
+            }
+
+            case MailboxModule.Weather:
+            {
+                var workspace = EnsureWeather(shell);
+                workspace.Reload();
+                host.Content = workspace;
+                _ribbon.Layout = WeatherRibbon();
+                shell.ModuleStatusLeft = workspace.Status;
+                focusSurface = workspace.FocusSurface;
+
+                // What is due for every place is asked for as the module comes up, so a reader
+                // arriving after an hour away sees the hour's weather in the whole list, not the
+                // last one's — nothing that is still fresh is asked for again.
+                foreach (var place in App.WeatherPlaces.All.ToList()) UpdateWeather(shell, place, force: false);
                 break;
             }
 
@@ -1963,13 +1980,14 @@ public partial class MainWindow
                     "notes" => MailboxModule.Notes,
                     "journal" => MailboxModule.Journal,
                     "feeds" or "rss" => MailboxModule.Feeds,
+                    "weather" => MailboxModule.Weather,
                     _ => (MailboxModule?)null,
                 };
 
                 if (wanted is null)
                 {
                     Log.Info($"Harness: “{module}” is not a module this window has — showing Mail. "
-                             + "Say mail, calendar, people, tasks, notes, journal or feeds.");
+                             + "Say mail, calendar, people, tasks, notes, journal, feeds or weather.");
                 }
 
                 SwitchModule(shell, wanted ?? MailboxModule.Mail);
@@ -1977,6 +1995,7 @@ public partial class MainWindow
                 if (shell.Module == MailboxModule.Tasks) PoseTasks(shell);
                 if (shell.Module == MailboxModule.Notes) PoseNotes(shell);
                 if (shell.Module == MailboxModule.Journal) PoseJournal(shell);
+                if (shell.Module == MailboxModule.Weather) PoseWeather(shell);
 
                 if (shell.Module == MailboxModule.Feeds)
                 {

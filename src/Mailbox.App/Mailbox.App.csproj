@@ -51,6 +51,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The weather pictures: a day set and a night set, one file per condition, named by what
+         they show. Embedded, as the app icon is, because they are drawn by the interface and
+         nothing outside it needs a path to them. -->
+    <AvaloniaResource Include="..\..\assets\weather\day\*.png" Link="Assets/Weather/day/%(Filename)%(Extension)" />
+    <AvaloniaResource Include="..\..\assets\weather\night\*.png" Link="Assets/Weather/night/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- The arrival sound, if this build ships one. A file rather than an embedded resource
          because it is handed to an external player, which needs a path; beside the binary rather
          than under assets/ because the .deb keeps this directory and drops that one. The glob

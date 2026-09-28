@@ -91,6 +91,7 @@ internal static class ShortcutsExport
                  [
                      ModuleScope.Mail, ModuleScope.Calendar, ModuleScope.People,
                      ModuleScope.Tasks, ModuleScope.Notes, ModuleScope.Journal, ModuleScope.Feeds,
+                     ModuleScope.Weather,
                  ])
         {
             var mine = commands

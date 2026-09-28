@@ -17,7 +17,7 @@ msgid_plural "View “{1}” applied to {0} folders."
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/Mailbox.App/ViewModels/ShellViewModel.cs:4502
+#: src/Mailbox.App/ViewModels/ShellViewModel.cs:4534
 msgid "Items: {0}   Unread: {1}"
 msgstr ""
 
@@ -33,6 +33,40 @@ msgstr ""
 
 #: src/Mailbox.App/Views/AccountSettingsDialog.axaml.cs:522
 msgid "The file {0} will be deleted."
+msgstr ""
+
+#: src/Mailbox.App/Views/AddLocationDialog.cs:140
+msgid "Searching…"
+msgstr ""
+
+#: src/Mailbox.App/Views/AddLocationDialog.cs:155
+msgid "Nothing was found for “{0}”."
+msgstr ""
+
+#: src/Mailbox.App/Views/AddLocationDialog.cs:52
+#: src/Mailbox.App/Views/WeatherPage.cs:82
+#: src/Mailbox.App/Views/WeatherWorkspace.cs:228
+msgid "Add Location"
+msgstr ""
+
+#: src/Mailbox.App/Views/AddLocationDialog.cs:59
+msgid "Add"
+msgstr ""
+
+#: src/Mailbox.App/Views/AddLocationDialog.cs:62
+msgid "Cancel"
+msgstr ""
+
+#: src/Mailbox.App/Views/AddLocationDialog.cs:77
+msgid "Find a place"
+msgstr ""
+
+#: src/Mailbox.App/Views/AddLocationDialog.cs:78
+msgid "Type a city or a zip code — Beverly Hills, 90210, Oslo — and choose the right one from what is found."
+msgstr ""
+
+#: src/Mailbox.App/Views/AddLocationDialog.cs:82
+msgid "City or zip code"
 msgstr ""
 
 #: src/Mailbox.App/Views/BackstageActions.cs:246
@@ -163,34 +197,86 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: src/Mailbox.App/Views/MainWindow.Tabs.cs:65
-#: src/Mailbox.App/Views/MainWindow.axaml.cs:3711
+#: src/Mailbox.App/Views/MainWindow.axaml.cs:3713
 msgid "Nothing unread in {0}."
 msgstr ""
 
 #: src/Mailbox.App/Views/MainWindow.Tabs.cs:67
-#: src/Mailbox.App/Views/MainWindow.axaml.cs:3713
+#: src/Mailbox.App/Views/MainWindow.axaml.cs:3715
 msgid "{0} message in {1} marked read."
 msgid_plural "{0} messages in {1} marked read."
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/Mailbox.App/Views/MainWindow.axaml.cs:4062
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:116
+msgid "Weather — add a place to see its weather here"
+msgstr ""
+
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:123
+msgid "Weather — {0}"
+msgstr ""
+
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:130
+msgid "Weather — {0}, {1} in {2}"
+msgstr ""
+
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:138
+msgid "Working offline: the weather updates when you go back online."
+msgstr ""
+
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:173
+msgid "Added {0}."
+msgstr ""
+
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:174
+msgid "{0} is already in the list."
+msgstr ""
+
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:200
+msgid "Removed {0}."
+msgstr ""
+
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:206
+msgid "{0} is home now: its weather shows on the rail."
+msgstr ""
+
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:225
+msgid "Opened {0}."
+msgstr ""
+
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:228
+msgid "The desktop could not open that address."
+msgstr ""
+
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:249
+msgid "Temperatures in Celsius."
+msgstr ""
+
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:249
+msgid "Temperatures in Fahrenheit."
+msgstr ""
+
+#: src/Mailbox.App/Views/MainWindow.Weather.cs:261
+msgid "Choose a place first."
+msgstr ""
+
+#: src/Mailbox.App/Views/MainWindow.axaml.cs:4064
 msgid "Permanently delete {0} item from {1}?"
 msgid_plural "Permanently delete {0} items from {1}?"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/Mailbox.App/Views/MainWindow.axaml.cs:4071
+#: src/Mailbox.App/Views/MainWindow.axaml.cs:4073
 msgid "{1} emptied: {0} item."
 msgid_plural "{1} emptied: {0} items."
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/Mailbox.App/Views/MainWindow.axaml.cs:7526
+#: src/Mailbox.App/Views/MainWindow.axaml.cs:7529
 msgid "Rule “{0}” created; nothing in {1} matched it."
 msgstr ""
 
-#: src/Mailbox.App/Views/MainWindow.axaml.cs:7528
+#: src/Mailbox.App/Views/MainWindow.axaml.cs:7531
 msgid "Rule “{1}” created and applied to {0} message."
 msgid_plural "Rule “{1}” created and applied to {0} messages."
 msgstr[0] ""
@@ -267,6 +353,276 @@ msgid "{0} token changed"
 msgid_plural "{0} tokens changed"
 msgstr[0] ""
 msgstr[1] ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:150
+#: src/Mailbox.App/Views/WeatherWorkspace.cs:344
+msgid "Updating…"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:153
+msgid "Updated {0}"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:156
+#: src/Mailbox.App/Views/WeatherPage.cs:156
+msgid "Working offline"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:159
+msgid "Could not update ({0}) · {1}"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:170
+msgid "Working offline: the weather is fetched when you go back online."
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:174
+msgid "The weather could not be fetched."
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:176
+msgid "{0} It will be tried again on its own."
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:178
+msgid "Try Again"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:184
+msgid "Fetching the weather…"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:204
+msgid "H {0}  L {1}"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:205
+msgid "Feels like {0}"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:218
+#: src/Mailbox.App/Views/WeatherPage.cs:472
+msgid "Wind"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:219
+#: src/Mailbox.App/Views/WeatherPage.cs:463
+msgid "Humidity"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:220
+#: src/Mailbox.App/Views/WeatherPage.cs:480
+msgid "UV index"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:261
+msgid "Sunrise"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:262
+#: src/Mailbox.App/Views/WeatherPage.cs:265
+msgid "Sunset"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:281
+msgid "Until {0}"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:284
+msgid "From {0}"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:286
+msgid "and {0} more like it"
+msgid_plural "and {0} more like it"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:294
+msgid "Details"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:350
+msgid "Hourly forecast"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:358
+msgid "Daily forecast"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:375
+msgid "Today"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:420
+msgid "{0}-day forecast"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:429
+msgid "High {0}, low {1}"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:431
+#: src/Mailbox.App/Weather/WeatherCharts.cs:133
+msgid "Chance of precipitation {0}%"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:432
+#: src/Mailbox.App/Weather/WeatherCharts.cs:136
+msgid "Precipitation {0}"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:433
+msgid "Wind up to {0}, gusts {1}"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:434
+msgid "UV index up to {0}"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:435
+msgid "Sunrise {0}, sunset {1}"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:455
+msgid "Feels like"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:461
+msgid "The dew point is {0}. {1}"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:470
+msgid "Gusts {0}, from the {1}."
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:493
+msgid "{0} in {1} h {2} min."
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:498
+msgid "{0} h {1} min of daylight."
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:501
+msgid "Sunrise and sunset"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:506
+msgid "Visibility"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:512
+msgid "Pressure"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:513
+msgid "{0} over the next three hours."
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:523
+msgid "None expected."
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:526
+msgid "Over {0} hour."
+msgid_plural "Over {0} hours."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:527
+msgid "Including {0} cm of snow."
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:529
+msgid "Next 24 hours"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:592
+msgid "What the forecasters wrote"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:599
+msgid "Forecast discussion"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:632
+msgid "Weather data by"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:637
+msgid "· Warnings and discussion from the"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:638
+msgid "National Weather Service"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:88
+msgid "Add a place to see its weather"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherPage.cs:90
+msgid "Search by city or by zip code. The first place you add is home: its weather shows on the rail."
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherWorkspace.cs:207
+msgid "Collapse the Folder Pane"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherWorkspace.cs:210
+#: src/Mailbox.App/Views/WeatherWorkspace.cs:216
+msgid "Locations"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherWorkspace.cs:320
+msgid "Update Now"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherWorkspace.cs:321
+msgid "Set as Home"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherWorkspace.cs:322
+msgid "Move Up"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherWorkspace.cs:323
+msgid "Move Down"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherWorkspace.cs:325
+msgid "Remove Location"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherWorkspace.cs:345
+#: src/Mailbox.App/Views/WeatherWorkspace.cs:345
+msgid "Home"
+msgstr ""
+
+#: src/Mailbox.App/Views/WeatherWorkspace.cs:85
+msgid "Locations: {0}"
+msgstr ""
+
+#: src/Mailbox.App/Weather/WeatherCharts.cs:128
+msgid "Temperature {0}, feels like {1}"
+msgstr ""
+
+#: src/Mailbox.App/Weather/WeatherCharts.cs:139
+msgid "Wind {0} {1}, gusts {2}"
+msgstr ""
+
+#: src/Mailbox.App/Weather/WeatherCharts.cs:143
+msgid "Humidity {0}%"
+msgstr ""
+
+#: src/Mailbox.App/Weather/WeatherCharts.cs:144
+msgid "UV index {0}"
+msgstr ""
+
+#: src/Mailbox.App/Weather/WeatherCharts.cs:171
+msgid "Now"
+msgstr ""
 
 #: src/Mailbox.Core/Weather/WeatherConditions.cs:100
 msgid "Light freezing drizzle"
@@ -407,6 +763,154 @@ msgstr ""
 
 #: src/Mailbox.Core/Weather/WeatherConditions.cs:99
 msgid "Heavy drizzle"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:102
+msgid "Similar to the actual temperature."
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:105
+msgid "The wind is making it feel colder."
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:105
+msgid "It feels colder than it is."
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:108
+msgid "Humidity is making it feel warmer."
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:132
+msgid "Rising"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:133
+msgid "Falling"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:134
+msgid "Steady"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:170
+msgid "A {0}% chance of snow in the next two hours."
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:170
+msgid "A {0}% chance of rain in the next two hours."
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:173
+msgid "No snow expected in the next two hours."
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:173
+msgid "No rain expected in the next two hours."
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:175
+msgid "Snow starting around {0}."
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:175
+msgid "Rain starting around {0}."
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:179
+msgid "Snow for the next two hours."
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:179
+msgid "Rain for the next two hours."
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:180
+msgid "Snow stopping around {0}."
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:180
+msgid "Rain stopping around {0}."
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:59
+msgid "Low"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:60
+msgid "Moderate"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:61
+msgid "High"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:62
+msgid "Very high"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:63
+msgid "Extreme"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:69
+msgid "No protection needed."
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:70
+msgid "Sunscreen and a hat around midday."
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:71
+msgid "Protection needed; seek shade at midday."
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:72
+msgid "Extra protection; avoid the midday sun."
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:73
+msgid "Take every precaution; stay out of the midday sun."
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:79
+msgid "Fog: very poor visibility."
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:80
+msgid "Poor visibility."
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:81
+msgid "Moderate visibility."
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:82
+msgid "Good visibility."
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:83
+msgid "A perfectly clear view."
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:89
+msgid "The air is dry."
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:90
+msgid "Comfortable."
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:91
+msgid "Slightly humid."
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:92
+msgid "Humid and sticky."
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherReadings.cs:93
+msgid "Oppressively humid."
 msgstr ""
 
 #: src/Mailbox.Protocols/SendReceive.cs:63

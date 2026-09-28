@@ -68,7 +68,7 @@ public class AuditFrameTests
 
         foreach (var module in RailModules())
         {
-            var chord = Chord.Parse($"Ctrl+{(int)module}");
+            var chord = Chord.Parse(module.Accelerator());
             Assert.NotNull(chord);
 
             foreach (var from in RailModules())
@@ -76,7 +76,7 @@ public class AuditFrameTests
                 var answered = keys.CommandFor(chord!, from);
                 if (answered is not { } id || ViewCommands.ModuleOf(id) != module)
                 {
-                    wrong.Add($"Ctrl+{(int)module} in {from} answers {answered?.Value ?? "nothing"}, "
+                    wrong.Add($"{module.Accelerator()} in {from} answers {answered?.Value ?? "nothing"}, "
                               + $"which is not {module}.");
                 }
             }
@@ -98,7 +98,7 @@ public class AuditFrameTests
 
         foreach (var module in NotModulesHere)
         {
-            var chord = Chord.Parse($"Ctrl+{(int)module}");
+            var chord = Chord.Parse(module.Accelerator());
             Assert.NotNull(chord);
 
             foreach (var from in RailModules())
@@ -289,9 +289,9 @@ public class AuditFrameTests
         var rail = Read("tools/poses/frame-rail.tsv");
         foreach (var module in Enum.GetValues<MailboxModule>())
         {
-            if (!rail.Contains($"MAILBOX_KEY=Ctrl+{(int)module}", StringComparison.Ordinal))
+            if (!rail.Contains($"MAILBOX_KEY={module.Accelerator()}", StringComparison.Ordinal))
             {
-                missing.Add($"no accelerator pose for {module} (Ctrl+{(int)module}).");
+                missing.Add($"no accelerator pose for {module} ({module.Accelerator()}).");
             }
         }
 

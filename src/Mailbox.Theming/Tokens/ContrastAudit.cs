@@ -83,6 +83,14 @@ public static class ContrastAudit
         (TokenKeys.Notes.TextDim, TokenKeys.Notes.Ground),
         (TokenKeys.Journal.HeaderText, TokenKeys.Journal.HeaderBackground),
         (TokenKeys.Journal.EntryText, TokenKeys.Journal.EntryGround),
+
+        // The Weather page: a card's ink and labels on the card, the headings drawn on the page
+        // itself, and the current conditions on their tinted ground.
+        (TokenKeys.Weather.CardText, TokenKeys.Weather.Card),
+        (TokenKeys.Weather.CardTextDim, TokenKeys.Weather.Card),
+        (TokenKeys.Weather.CardText, TokenKeys.Weather.Background),
+        (TokenKeys.Weather.CardTextDim, TokenKeys.Weather.Background),
+        (TokenKeys.Weather.HeroText, TokenKeys.Weather.Hero),
     ];
 
     /// <summary>Every pair below the ratio, in the order of <see cref="Pairs"/>. Empty is a pass.</summary>

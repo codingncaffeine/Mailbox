@@ -223,3 +223,65 @@ public class WeatherPlaceSearchTests
         Assert.EndsWith("&language=en&format=json", OpenMeteo.SearchUrl("Oslo", string.Empty));
     }
 }
+
+public class WeatherDayConditionTests
+{
+    private static HourlyWeather Hour(int hour, int code, bool day = true)
+        => new() { Time = new DateTime(2026, 9, 27, hour, 0, 0), Temperature = 20, Code = code, IsDay = day };
+
+    private static Forecast With(params HourlyWeather[] hours)
+        => WeatherFixtures.BeverlyHills() with { Hourly = hours };
+
+    private static readonly DailyWeather Day = new() { Date = new DateOnly(2026, 9, 27), Code = 45, High = 30, Low = 20 };
+
+    /// <summary>A morning of fog and a sunny afternoon is a sunny day, not a foggy one.</summary>
+    [Fact]
+    public void AMorningsFogDoesNotMakeTheDayFoggy()
+    {
+        var forecast = With(Hour(7, 45), Hour(8, 45), Hour(9, 0), Hour(10, 0), Hour(11, 0), Hour(12, 1), Hour(13, 0), Hour(3, 45, day: false), Hour(4, 45, day: false));
+
+        Assert.Equal("day/sunny-day", forecast.ConditionFor(Day).Icon);
+    }
+
+    /// <summary>Two wet hours are enough to plan around, and the worst of them is what is shown.</summary>
+    [Fact]
+    public void RainInTwoHoursDecidesTheDay()
+    {
+        var forecast = With(Hour(9, 0), Hour(10, 0), Hour(11, 61), Hour(12, 63), Hour(13, 0), Hour(14, 0));
+
+        Assert.Equal("Rain", forecast.ConditionFor(Day).Description);
+    }
+
+    [Fact]
+    public void OneWetHourIsNotARainyDay()
+    {
+        var forecast = With(Hour(9, 2), Hour(10, 2), Hour(11, 61), Hour(12, 2), Hour(13, 3));
+
+        Assert.Equal("Partly cloudy", forecast.ConditionFor(Day).Description);
+    }
+
+    [Fact]
+    public void ADayPastTheHoursKeepsTheServicesCode()
+    {
+        var forecast = With(Hour(9, 0));
+        var later = Day with { Date = new DateOnly(2026, 10, 20), Code = 3 };
+
+        Assert.Equal("Cloudy", forecast.ConditionFor(later).Description);
+    }
+
+    /// <summary>The recorded Beverly Hills forecast: every day it covers comes out as a sky a reader would recognise.</summary>
+    [Fact]
+    public void TheRecordedDaysReadAsTheirDaylight()
+    {
+        var forecast = WeatherFixtures.BeverlyHills();
+        var today = forecast.Daily[0];
+        var daylight = forecast.Hourly.Where(h => DateOnly.FromDateTime(h.Time) == today.Date && h.IsDay).Select(h => h.Code).ToList();
+
+        Assert.Equal(45, today.Code);
+        Assert.NotEmpty(daylight);
+        var expected = daylight.Count(c => c >= 51) >= 2
+            ? daylight.Where(c => c >= 51).Max()
+            : daylight.GroupBy(c => c).OrderByDescending(g => g.Count()).ThenBy(g => g.Key).First().Key;
+        Assert.Equal(WeatherConditions.Sky(expected, isDay: true).Icon, forecast.ConditionFor(today).Icon);
+    }
+}
