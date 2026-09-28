@@ -356,7 +356,7 @@
     "weather.hero": "{palette.brand.light}",
     "weather.hero.text": "{palette.neutral.primary}",
     "weather.map.border": "#8F8A84",
-    "weather.map.cloud": "#8C98A6",
+    "weather.map.cloud": "#D98C98A6",
     "weather.map.county": "#DDD8D2",
     "weather.map.halo": "#F3F1ED",
     "weather.map.label": "#3B3A39",

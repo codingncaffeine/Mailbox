@@ -996,7 +996,11 @@ public static class TokenKeys
         /// <summary>A town's name, and the halo that keeps it readable over any weather.</summary>
         public const string MapLabel = "weather.map.label";
         public const string MapHalo = "weather.map.halo";
-        /// <summary>Cloud on the map: the colour cloud cover is drawn in, its amount as transparency.</summary>
+        /// <summary>
+        /// Cloud on the map: a fully covered sky, alpha and all; less cover is drawn more
+        /// transparent. Light cloud on a dark map takes a lower alpha than dark cloud on a light
+        /// one, so an overcast sky changes the map's lightness by about as much in every theme.
+        /// </summary>
         public const string MapCloud = "weather.map.cloud";
 
         public static readonly IReadOnlyList<string> All =

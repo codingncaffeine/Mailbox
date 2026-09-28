@@ -486,7 +486,7 @@ public static class OfficeThemes
         t.Set(TokenKeys.Weather.MapRoad, "#D8BD95");
         t.Set(TokenKeys.Weather.MapLabel, "#262626");
         t.Set(TokenKeys.Weather.MapHalo, "#E9E7E3");
-        t.Set(TokenKeys.Weather.MapCloud, "#8A949F");
+        t.Set(TokenKeys.Weather.MapCloud, "#D98A949F");
 
         t.Set(TokenKeys.WindowShape.Border, "#808080");
         t.Set(TokenKeys.TitleBar.Background, "{palette.chrome.titlebar}");
@@ -949,7 +949,7 @@ public static class OfficeThemes
         t.Set(TokenKeys.Weather.MapRoad, "#5E4D36");
         t.Set(TokenKeys.Weather.MapLabel, "#D8D8D8");
         t.Set(TokenKeys.Weather.MapHalo, "#141414");
-        t.Set(TokenKeys.Weather.MapCloud, "#E6EAEE");
+        t.Set(TokenKeys.Weather.MapCloud, "#55E6EAEE");
 
         return t;
     }
@@ -1413,6 +1413,6 @@ public static class OfficeThemes
         t.Set(TokenKeys.Weather.MapRoad, "#E5C9A0");
         t.Set(TokenKeys.Weather.MapLabel, "#3B3A39");
         t.Set(TokenKeys.Weather.MapHalo, "#F3F1ED");
-        t.Set(TokenKeys.Weather.MapCloud, "#8C98A6");
+        t.Set(TokenKeys.Weather.MapCloud, "#D98C98A6");
     }
 }

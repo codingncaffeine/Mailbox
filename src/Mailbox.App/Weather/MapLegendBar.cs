@@ -132,8 +132,8 @@ internal sealed class MapLegendBar : Control
             {
                 var cloud = this.TryFindResource(TokenKeys.Weather.MapCloud + ".color", out var found) && found is Color c ? c : Colors.Magenta;
                 var (lowest, highest) = (legend.Stops[0].Value, legend.Stops[^1].Value);
-                var share = Math.Clamp((stop.Value - lowest) / (highest - lowest), 0, 1) * MapPixels.CloudStrength;
-                return Color.FromArgb((byte)Math.Round(255 * share), cloud.R, cloud.G, cloud.B);
+                var share = Math.Clamp((stop.Value - lowest) / (highest - lowest), 0, 1);
+                return Color.FromArgb((byte)Math.Round(cloud.A * share), cloud.R, cloud.G, cloud.B);
             }
 
             default:

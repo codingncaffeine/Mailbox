@@ -237,7 +237,7 @@ public class WeatherMapLegendTests
         var legend = MapLayers.Clouds.Legend!;
         var pixels = Picture(3, 1, (x, _) => x switch { 0 => 0xFFFEFEFE, 1 => 0xFF868686, _ => 0xFF202020 });
 
-        MapPixels.Tint(pixels, legend, tint: 0xFF8A949F, strength: 0.85);
+        MapPixels.Tint(pixels, legend, tint: 0xD98A949F);
 
         Assert.Equal(217, pixels[3]);
         Assert.InRange(pixels[7], 105, 112);

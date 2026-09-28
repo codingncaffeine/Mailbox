@@ -18,7 +18,10 @@ public enum MapLook
     Inked,
 }
 
-/// <summary>The theme's colours the looks draw in, as 0xAARRGGBB: the map's ink and halo, and its cloud.</summary>
+/// <summary>
+/// The theme's colours the looks draw in, as 0xAARRGGBB: the map's ink and halo, and its cloud —
+/// whose alpha is how much of the map a fully covered sky takes.
+/// </summary>
 public readonly record struct MapInks(uint Ink, uint Halo, uint Cloud);
 
 /// <summary>
@@ -27,9 +30,6 @@ public readonly record struct MapInks(uint Ink, uint Halo, uint Cloud);
 /// </summary>
 public static class MapPixels
 {
-    /// <summary>How much of a fully covered sky the cloud colour takes.</summary>
-    public const double CloudStrength = 0.85;
-
     /// <summary>How much of a warning's colour its inside keeps.</summary>
     public const double OutlineWash = 0.2;
 
@@ -48,7 +48,7 @@ public static class MapPixels
                 Fade(pixels, legend, FadeFull, FadeFloor);
                 break;
             case MapLook.Tinted when layer.Legend is { } legend:
-                Tint(pixels, legend, inks.Cloud, CloudStrength);
+                Tint(pixels, legend, inks.Cloud);
                 break;
             case MapLook.Outlined:
                 Outline(pixels, width, height, Math.Max(1, (int)Math.Round(1.5 * pixelsPerViewPixel)), OutlineWash);
@@ -97,15 +97,16 @@ public static class MapPixels
     }
 
     /// <summary>
-    /// Turns a scale's value into transparency: nothing at its lowest, <paramref name="strength"/>
-    /// at its highest, all in <paramref name="tint"/> (0xAARRGGBB; its alpha is not used).
+    /// Turns a scale's value into transparency: nothing at its lowest and <paramref name="tint"/>
+    /// (0xAARRGGBB) as it is at its highest, its alpha included.
     /// </summary>
-    public static void Tint(Span<byte> pixels, MapLegend legend, uint tint, double strength)
+    public static void Tint(Span<byte> pixels, MapLegend legend, uint tint)
     {
         ArgumentNullException.ThrowIfNull(legend);
         var (lowest, highest) = (legend.Stops[0].Value, legend.Stops[^1].Value);
         if (highest <= lowest) return;
         var (tr, tg, tb) = ((byte)(tint >> 16), (byte)(tint >> 8), (byte)tint);
+        var strength = (tint >> 24) / 255.0;
         var known = new Dictionary<int, double>();
 
         for (var i = 0; i + 3 < pixels.Length; i += 4)
