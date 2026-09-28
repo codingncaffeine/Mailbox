@@ -307,7 +307,9 @@ public partial class MainWindow
                     // MAILBOX_WEATHER_SCROLL=map photographs the map, once it has painted.
                     if (Environment.GetEnvironmentVariable("MAILBOX_WEATHER_SCROLL") == "map")
                     {
-                        var map = await Dispatcher.UIThread.InvokeAsync(workspace.PoseMapAsync);
+                        var map = await Dispatcher.UIThread.InvokeAsync(() => workspace.PoseMapAsync(
+                            Environment.GetEnvironmentVariable("MAILBOX_WEATHER_LAYER"),
+                            Environment.GetEnvironmentVariable("MAILBOX_WEATHER_OVERLAYS")));
                         Log.Info($"Harness: weather page {map}.");
                         await Task.Delay(300);
                     }

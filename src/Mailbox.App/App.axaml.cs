@@ -96,6 +96,9 @@ public partial class App : Application
     /// </summary>
     public static Mailbox.Protocols.WeatherReceiver Weather { get; private set; } = null!;
 
+    /// <summary>The map's weather layers: their times and their pictures, asked for as the map needs them.</summary>
+    public static Mailbox.Protocols.WeatherMapSource WeatherMap { get; private set; } = null!;
+
     /// <summary>The units the weather is shown in: the reader's choices, their region's where they made none.</summary>
     public static Mailbox.Core.Weather.WeatherUnits WeatherUnits => Mailbox.Core.Weather.WeatherUnits.Load(Settings);
 
@@ -1094,6 +1097,7 @@ public partial class App : Application
         Weather = new Mailbox.Protocols.WeatherReceiver(
             WeatherCacheDirectory(),
             $"Mailbox/{UpdateCheck.Current} (+https://github.com/codingncaffeine/Mailbox)");
+        WeatherMap = new Mailbox.Protocols.WeatherMapSource($"Mailbox/{UpdateCheck.Current} (+https://github.com/codingncaffeine/Mailbox)");
         var cachedPlaces = WeatherPlaces.All.ToList();
         _ = Task.Run(() => Weather.LoadCache(cachedPlaces));
         Signatures = new Signatures(Settings);

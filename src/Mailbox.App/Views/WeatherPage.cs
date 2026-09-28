@@ -132,10 +132,11 @@ internal sealed class WeatherPage : Border
             _column.Children.Add(Alert(kind.First(), kind.Count() - 1, local, forecast));
         }
         _column.Children.Add(Hourly(forecast, local, units));
+        _map.Units = units;
         if (_mapPlace != place.Id)
         {
             _mapPlace = place.Id;
-            _map.Show(place.Latitude, place.Longitude);
+            _map.Show(place.Latitude, place.Longitude, place.HasWeatherService, forecast.LocalTime);
         }
 
         _column.Children.Add(_mapCard);

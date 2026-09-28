@@ -996,6 +996,8 @@ public static class TokenKeys
         /// <summary>A town's name, and the halo that keeps it readable over any weather.</summary>
         public const string MapLabel = "weather.map.label";
         public const string MapHalo = "weather.map.halo";
+        /// <summary>Cloud on the map: the colour cloud cover is drawn in, its amount as transparency.</summary>
+        public const string MapCloud = "weather.map.cloud";
 
         public static readonly IReadOnlyList<string> All =
         [
@@ -1003,7 +1005,7 @@ public static class TokenKeys
             ChartTemperature, ChartTemperatureFill, ChartRain, ChartGrid, RangeTrack,
             ScaleCold, ScaleCool, ScaleMild, ScaleWarm, ScaleHot,
             AlertSevere, AlertModerate, AlertMinor, AlertTint,
-            MapWater, MapLand, MapBorder, MapState, MapCounty, MapRoad, MapLabel, MapHalo,
+            MapWater, MapLand, MapBorder, MapState, MapCounty, MapRoad, MapLabel, MapHalo, MapCloud,
         ];
     }
 

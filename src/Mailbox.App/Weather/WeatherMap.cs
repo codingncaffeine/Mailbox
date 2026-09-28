@@ -1,6 +1,7 @@
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
@@ -8,6 +9,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using Mailbox.Core.Diagnostics;
 using Mailbox.Core.Localization;
+using Mailbox.Core.Weather;
 using Mailbox.Theming.Icons;
 using Mailbox.Theming.Tokens;
 using SkiaSharp;
@@ -29,11 +31,45 @@ namespace Mailbox.App.Weather;
 internal sealed class WeatherMap : Panel
 {
     private readonly MapSurface _surface = new();
+    private readonly MapWeatherLayers _layers = new();
+    private readonly WrapPanel _chips = new() { Margin = new Thickness(10, 10, 60, 0), HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
+    private readonly Dictionary<string, Button> _chipButtons = new(StringComparer.Ordinal);
+    private readonly TextBlock _note = new() { FontSize = 12, TextWrapping = TextWrapping.Wrap, MaxWidth = 420, TextAlignment = TextAlignment.Center };
+    private readonly Border _noteCard;
+    private readonly Button _play;
+    private readonly Avalonia.Controls.Shapes.Path _playGlyph = new() { Width = 12, Height = 12, Stretch = Stretch.Uniform };
+    private readonly Slider _slider = new() { Minimum = 0, Maximum = 0, IsSnapToTickEnabled = true, TickFrequency = 1, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0) };
+    private readonly TextBlock _time = new() { FontSize = 12, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center, MinWidth = 88 };
+    private readonly TextBlock _credit = new() { FontSize = 10, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 0, 0), Opacity = 0.85 };
+    private readonly Border _timeBar;
+    private readonly MapLegendBar _legend = new();
+    private readonly Border _legendCard;
+    private Func<DateTimeOffset, DateTime> _local = moment => moment.LocalDateTime;
+    private WeatherUnits _units = WeatherUnits.Metric;
+    private bool _inUnitedStates;
+    private bool _sliding;
+
+    private static readonly Geometry PlayShape = Geometry.Parse("M 0,0 L 10,6 L 0,12 Z");
+    private static readonly Geometry PauseShape = Geometry.Parse("M 0,0 H 3.5 V 12 H 0 Z M 6.5,0 H 10 V 12 H 6.5 Z");
 
     public WeatherMap()
     {
         ClipToBounds = true;
         Children.Add(_surface);
+        _surface.DrawOverlays = _layers.Draw;
+        _surface.CameraChanged += (_, _) => _layers.ViewChanged(_surface.Camera, TopLevel.GetTopLevel(this)?.RenderScaling ?? 1, _inUnitedStates);
+        _layers.Changed += (_, _) =>
+        {
+            _surface.InvalidateVisual();
+            Refresh();
+        };
+        ResourcesChanged += (_, _) => _layers.Recolour(Inks());
+
+        // The weather to show, one at a time, and the overlays over it.
+        foreach (var choice in MapLayers.Choices) _chips.Children.Add(Chip(choice, () => _layers.Choose(_layers.Choice == choice ? null : choice)));
+        _chips.Children.Add(new Border { Width = 1, Height = 20, Margin = new Thickness(4, 0, 8, 4), [!Border.BackgroundProperty] = Brush(TokenKeys.Weather.CardBorder) });
+        foreach (var overlay in MapLayers.Overlays) _chips.Children.Add(Chip(overlay.Id, () => _layers.Toggle(overlay.Id)));
+        Children.Add(_chips);
 
         var controls = new StackPanel
         {
@@ -47,23 +83,153 @@ internal sealed class WeatherMap : Panel
         controls.Children.Add(MapButton("location", Strings.T("Back to the place"), () => _surface.Recenter()));
         Children.Add(controls);
 
-        var credit = new TextBlock
+        _note[!TextBlock.ForegroundProperty] = Brush(TokenKeys.Weather.CardText);
+        _noteCard = Card(_note);
+        _noteCard.HorizontalAlignment = HorizontalAlignment.Center;
+        _noteCard.VerticalAlignment = VerticalAlignment.Center;
+        _noteCard.IsVisible = false;
+        Children.Add(_noteCard);
+
+        _legendCard = Card(_legend);
+        _legendCard.HorizontalAlignment = HorizontalAlignment.Left;
+        _legendCard.VerticalAlignment = VerticalAlignment.Bottom;
+        _legendCard.Margin = new Thickness(10, 0, 0, 60);
+        _legendCard.Padding = new Thickness(12, 8);
+        _legendCard.IsVisible = false;
+        Children.Add(_legendCard);
+
+        _playGlyph[!Avalonia.Controls.Shapes.Shape.FillProperty] = Brush(TokenKeys.Weather.CardText);
+        _playGlyph.Data = PlayShape;
+        _play = new Button { Width = 30, Height = 30, Padding = new Thickness(0), Classes = { "weatherchip" }, Content = _playGlyph, HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
+        ToolTip.SetTip(_play, Strings.T("Play or pause"));
+        _play.Click += (_, _) =>
         {
-            Text = Strings.T("Map: Natural Earth · US Census via us-atlas"),
-            FontSize = 10,
-            Margin = new Thickness(8, 4),
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Bottom,
-            Opacity = 0.8,
+            if (_layers.Playing) _layers.Pause();
+            else _layers.Play();
         };
-        credit[!TextBlock.ForegroundProperty] = new DynamicResourceExtension(TokenKeys.Weather.MapLabel + ".brush");
-        Children.Add(credit);
+        _slider.PropertyChanged += (_, e) =>
+        {
+            if (e.Property != RangeBase.ValueProperty || _sliding) return;
+            _layers.Pause();
+            _layers.Show((int)Math.Round(_slider.Value));
+        };
+        _time[!TextBlock.ForegroundProperty] = Brush(TokenKeys.Weather.CardText);
+        _credit[!TextBlock.ForegroundProperty] = Brush(TokenKeys.Weather.CardTextDim);
+
+        var bar = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto") };
+        bar.Children.Add(_play);
+        Grid.SetColumn(_slider, 1);
+        bar.Children.Add(_slider);
+        Grid.SetColumn(_time, 2);
+        bar.Children.Add(_time);
+        Grid.SetColumn(_credit, 3);
+        bar.Children.Add(_credit);
+        _timeBar = Card(bar);
+        _timeBar.VerticalAlignment = VerticalAlignment.Bottom;
+        _timeBar.Margin = new Thickness(10);
+        _timeBar.Padding = new Thickness(8, 6);
+        Children.Add(_timeBar);
+
+        Refresh();
     }
 
-    /// <summary>Centres the map on a place and marks it.</summary>
-    public void Show(double latitude, double longitude, double zoom = 7) => _surface.CenterOn(latitude, longitude, zoom);
-
     internal MapSurface Surface => _surface;
+
+    internal MapWeatherLayers Layers => _layers;
+
+    /// <summary>The reader's units, which the legend is labelled in.</summary>
+    public WeatherUnits Units
+    {
+        get => _units;
+        set
+        {
+            if (value == _units) return;
+            _units = value;
+            Refresh();
+        }
+    }
+
+    /// <summary>
+    /// Centres the map on a place and marks it, and chooses what to show there: radar where there
+    /// is radar, precipitation where there is not, and the Weather Service's warnings in its own
+    /// country.
+    /// </summary>
+    public void Show(double latitude, double longitude, bool inUnitedStates, Func<DateTimeOffset, DateTime> local, double zoom = 7)
+    {
+        _inUnitedStates = inUnitedStates;
+        _local = local;
+        _layers.Recolour(Inks());
+        _surface.CenterOn(latitude, longitude, zoom);
+        _layers.Choose(MapLayers.RadarCovers(latitude, longitude) ? "radar" : "precipitation");
+        if (inUnitedStates != _layers.OverlaysOn.Contains("warnings")) _layers.Toggle("warnings");
+        _layers.ViewChanged(_surface.Camera, TopLevel.GetTopLevel(this)?.RenderScaling ?? 1, inUnitedStates);
+    }
+
+    private void Refresh()
+    {
+        foreach (var (id, button) in _chipButtons)
+        {
+            button.Classes.Set("selected", id == _layers.Choice || _layers.OverlaysOn.Contains(id));
+        }
+
+        _noteCard.IsVisible = _layers.Note.Length > 0;
+        _note.Text = _layers.Note;
+
+        var frames = _layers.Frames;
+        _timeBar.IsVisible = _layers.Layer is not null && _layers.Note.Length == 0;
+        _play.IsEnabled = frames.Count > 1;
+        _playGlyph.Data = _layers.Playing ? PauseShape : PlayShape;
+        _sliding = true;
+        _slider.Maximum = Math.Max(0, frames.Count - 1);
+        _slider.Value = _layers.FrameIndex;
+        _slider.IsEnabled = frames.Count > 1;
+        _sliding = false;
+
+        if (_layers.Layer is { } layer && frames.Count > 0)
+        {
+            var at = _local(frames[Math.Clamp(_layers.FrameIndex, 0, frames.Count - 1)]);
+            var culture = System.Globalization.CultureInfo.CurrentCulture;
+            _time.Text = layer.Kind == MapLayerKind.Forecast
+                ? $"{at.ToString("ddd", culture)} {at.ToString("t", culture)}"
+                : at.ToString("t", culture);
+            var loading = _layers.Loaded < frames.Count ? $" · {Strings.T("loading")} {_layers.Loaded}/{frames.Count}" : string.Empty;
+            _credit.Text = $"{MapLayers.Name(layer.Id)}: {layer.Credit}{loading} · {Strings.T("Map: Natural Earth, us-atlas")}";
+        }
+        else
+        {
+            _time.Text = string.Empty;
+            _credit.Text = Strings.T("Map: Natural Earth, us-atlas");
+        }
+
+        _legendCard.IsVisible = _layers.Layer is { Legend: not null } && _layers.Note.Length == 0;
+        if (_layers.Layer is { Legend: not null } legendFor) _legend.Show(legendFor, _units);
+    }
+
+    /// <summary>The theme's colours the layers' looks are drawn in, read here on the interface's thread.</summary>
+    private MapInks Inks()
+    {
+        uint Of(string token) => this.TryFindResource(token + ".color", out var found) && found is Color c ? c.ToUInt32() : 0xFFFF00FF;
+        return new MapInks(Of(TokenKeys.Weather.MapLabel), Of(TokenKeys.Weather.MapHalo), Of(TokenKeys.Weather.MapCloud));
+    }
+
+    private Button Chip(string id, Action press)
+    {
+        var button = new Button { Content = MapLayers.Name(id), Classes = { "weatherchip" }, Margin = new Thickness(0, 0, 6, 6) };
+        Avalonia.Automation.AutomationProperties.SetName(button, MapLayers.Name(id));
+        button.Click += (_, _) => press();
+        _chipButtons[id] = button;
+        return button;
+    }
+
+    private static Border Card(Control content)
+    {
+        var card = new Border { CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(1), Padding = new Thickness(10, 6), Child = content };
+        card[!Border.BackgroundProperty] = Brush(TokenKeys.Weather.Card);
+        card[!Border.BorderBrushProperty] = Brush(TokenKeys.Weather.CardBorder);
+        return card;
+    }
+
+    private static DynamicResourceExtension Brush(string token) => new(token + ".brush");
 
     private static Control MapButton(string glyph, string tip, Action press)
     {
@@ -85,9 +251,9 @@ internal sealed class WeatherMap : Panel
                 VerticalAlignment = VerticalAlignment.Center,
             },
         };
-        button[!BackgroundProperty] = new DynamicResourceExtension(TokenKeys.Weather.Card + ".brush");
-        button[!Button.BorderBrushProperty] = new DynamicResourceExtension(TokenKeys.Weather.CardBorder + ".brush");
-        button[!Button.ForegroundProperty] = new DynamicResourceExtension(TokenKeys.Weather.CardText + ".brush");
+        button[!BackgroundProperty] = Brush(TokenKeys.Weather.Card);
+        button[!Button.BorderBrushProperty] = Brush(TokenKeys.Weather.CardBorder);
+        button[!Button.ForegroundProperty] = Brush(TokenKeys.Weather.CardText);
         ToolTip.SetTip(button, tip);
         Avalonia.Automation.AutomationProperties.SetName(button, tip);
         button.Click += (_, _) => press();

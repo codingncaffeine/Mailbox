@@ -122,11 +122,22 @@ public sealed class WeatherWorkspace : Border
     public string PoseScroll(double offset) => _page.ScrollTo(offset);
 
     /// <summary>Scrolls to the map and waits for its first sharp frame, for a harness run.</summary>
-    public async Task<string> PoseMapAsync()
+    public async Task<string> PoseMapAsync(string? layer, string? overlays)
     {
         var said = _page.ScrollToMap();
+        var weather = _page.Map.Layers;
+        if (layer is { Length: > 0 }) weather.Choose(layer == "none" ? null : layer);
+        foreach (var overlay in (overlays ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (!weather.OverlaysOn.Contains(overlay)) weather.Toggle(overlay);
+        }
+
         for (var i = 0; i < 60 && !_page.Map.Surface.HasFrame; i++) await Task.Delay(100);
-        return $"{said}; map {(_page.Map.Surface.HasFrame ? "painted" : "not painted")} at zoom {_page.Map.Surface.Camera.Zoom:0.#}";
+        await Task.Delay(500);
+        for (var i = 0; i < 300 && !weather.Settled; i++) await Task.Delay(100);
+        return $"{said}; map {(_page.Map.Surface.HasFrame ? "painted" : "not painted")} at zoom {_page.Map.Surface.Camera.Zoom:0.#}; "
+               + $"layer {weather.Choice ?? "none"} ({weather.Layer?.Layer ?? "-"}), {weather.Loaded}/{weather.Frames.Count} frame(s), "
+               + $"overlays [{string.Join(",", weather.OverlaysOn)}]{(weather.Note.Length > 0 ? $", note “{weather.Note}”" : string.Empty)}";
     }
 
     /// <summary>Opens the page's expanders, for a harness run photographing them.</summary>
@@ -282,6 +293,40 @@ public sealed class WeatherWorkspace : Border
             new Style(x => x.OfType<Button>().Class("weatheraccent").Class(":pressed"))
             {
                 Setters = { Resource(BackgroundProperty, "accent.pressed.brush") },
+            },
+
+            // The map's layer chips: a card's ground at rest, the accent when chosen.
+            new Style(x => x.OfType<Button>().Class("weatherchip"))
+            {
+                Setters =
+                {
+                    Resource(BackgroundProperty, "weather.card.brush"),
+                    Resource(Button.BorderBrushProperty, "weather.card.border.brush"),
+                    Resource(Button.ForegroundProperty, "weather.card.text.brush"),
+                    new Setter(Button.BorderThicknessProperty, new Thickness(1)),
+                    new Setter(Button.CornerRadiusProperty, new CornerRadius(14)),
+                    new Setter(Button.PaddingProperty, new Thickness(11, 4)),
+                    new Setter(Button.FontSizeProperty, 12.0),
+                    new Setter(Button.MinHeightProperty, 0.0),
+                    new Setter(Button.CursorProperty, new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand)),
+                },
+            },
+            new Style(x => x.OfType<Button>().Class("weatherchip").Class(":pointerover"))
+            {
+                Setters = { Resource(BackgroundProperty, "state.hover.brush") },
+            },
+            new Style(x => x.OfType<Button>().Class("weatherchip").Class("selected"))
+            {
+                Setters =
+                {
+                    Resource(BackgroundProperty, "accent.rest.brush"),
+                    Resource(Button.BorderBrushProperty, "accent.rest.brush"),
+                    Resource(Button.ForegroundProperty, "text.onaccent.brush"),
+                },
+            },
+            new Style(x => x.OfType<Button>().Class("weatherchip").Class("selected").Class(":pointerover"))
+            {
+                Setters = { Resource(BackgroundProperty, "accent.hover.brush") },
             },
         ];
     }
