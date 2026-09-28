@@ -1,6 +1,8 @@
+using System.Globalization;
 using Mailbox.Theming.Themes;
 
 using Mailbox.Core.Settings;
+using Mailbox.Core.Weather;
 
 namespace Mailbox.App.Options;
 
@@ -396,7 +398,34 @@ public static class OptionsPages
                 new ComboRow("Time zone:", ZoneNames, HomeZone, 300, 200)
                     { Indent = 1, Key = CalendarOptions.SecondTimeZoneIdKey, Values = ZoneIds },
             ]),
+
+            Weather(),
         ]);
+
+    /// <summary>
+    /// The reference's Weather section, whose one choice is "Show temperature in", with the
+    /// Weather module's other units beside it. A row the reader has not changed shows the unit
+    /// their region reads, which is what the module uses until they choose.
+    /// </summary>
+    private static OptionSection Weather()
+    {
+        var region = WeatherUnits.ForCulture(CultureInfo.CurrentCulture);
+        return new OptionSection("Weather",
+        [
+            new ComboRow("Show temperature in:", ["Fahrenheit °F", "Celsius °C"], (int)region.Temperature, 220, 200)
+                { Key = WeatherUnits.TemperatureKey, Values = WeatherUnits.TemperatureValues },
+            new ComboRow("Show wind speed in:",
+                ["Miles per hour (mph)", "Kilometers per hour (km/h)", "Meters per second (m/s)", "Knots (kn)"],
+                (int)region.Speed, 220, 200)
+                { Key = WeatherUnits.SpeedKey, Values = WeatherUnits.SpeedValues },
+            new ComboRow("Show rain and snow in:", ["Inches (in)", "Millimeters (mm)"], (int)region.Precipitation, 220, 200)
+                { Key = WeatherUnits.PrecipitationKey, Values = WeatherUnits.PrecipitationValues },
+            new ComboRow("Show pressure in:", ["Inches of mercury (inHg)", "Hectopascals (hPa)"], (int)region.Pressure, 220, 200)
+                { Key = WeatherUnits.PressureKey, Values = WeatherUnits.PressureValues },
+            new ComboRow("Show visibility in:", ["Miles (mi)", "Kilometers (km)"], (int)region.Distance, 220, 200)
+                { Key = WeatherUnits.DistanceKey, Values = WeatherUnits.DistanceValues },
+        ]);
+    }
 
     private static OptionsPage People() => new(
         "people", "People", "people",

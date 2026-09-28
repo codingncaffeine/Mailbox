@@ -67,6 +67,17 @@ public sealed record WeatherUnits(
     public const string PressureKey = "weather.units.pressure";
     public const string DistanceKey = "weather.units.distance";
 
+    /// <summary>
+    /// How each choice is written in the settings, in the order of its enum — read and written
+    /// here, and offered by the Options page, from these lists alone.
+    /// </summary>
+    public static IReadOnlyList<string> TemperatureValues { get; } = ["fahrenheit", "celsius"];
+
+    public static IReadOnlyList<string> SpeedValues { get; } = ["mph", "kmh", "ms", "kn"];
+    public static IReadOnlyList<string> PrecipitationValues { get; } = ["in", "mm"];
+    public static IReadOnlyList<string> PressureValues { get; } = ["inhg", "hpa"];
+    public static IReadOnlyList<string> DistanceValues { get; } = ["mi", "km"];
+
     public static WeatherUnits Metric { get; } = new(
         TemperatureUnit.Celsius, SpeedUnit.KilometresPerHour, PrecipitationUnit.Millimetres,
         PressureUnit.Hectopascals, DistanceUnit.Kilometres);
@@ -119,57 +130,34 @@ public sealed record WeatherUnits(
     {
         ArgumentNullException.ThrowIfNull(settings);
         var region = ForCulture(culture ?? CultureInfo.CurrentCulture);
+        int Read(string key, IReadOnlyList<string> values, int otherwise)
+        {
+            var stored = settings.GetString(key);
+            for (var i = 0; i < values.Count; i++)
+            {
+                if (values[i] == stored) return i;
+            }
+
+            return otherwise;
+        }
 
         return new WeatherUnits(
-            settings.GetString(TemperatureKey) switch
-            {
-                "fahrenheit" => TemperatureUnit.Fahrenheit,
-                "celsius" => TemperatureUnit.Celsius,
-                _ => region.Temperature,
-            },
-            settings.GetString(SpeedKey) switch
-            {
-                "mph" => SpeedUnit.MilesPerHour,
-                "kmh" => SpeedUnit.KilometresPerHour,
-                "ms" => SpeedUnit.MetresPerSecond,
-                "kn" => SpeedUnit.Knots,
-                _ => region.Speed,
-            },
-            settings.GetString(PrecipitationKey) switch
-            {
-                "in" => PrecipitationUnit.Inches,
-                "mm" => PrecipitationUnit.Millimetres,
-                _ => region.Precipitation,
-            },
-            settings.GetString(PressureKey) switch
-            {
-                "inhg" => PressureUnit.InchesOfMercury,
-                "hpa" => PressureUnit.Hectopascals,
-                _ => region.Pressure,
-            },
-            settings.GetString(DistanceKey) switch
-            {
-                "mi" => DistanceUnit.Miles,
-                "km" => DistanceUnit.Kilometres,
-                _ => region.Distance,
-            });
+            (TemperatureUnit)Read(TemperatureKey, TemperatureValues, (int)region.Temperature),
+            (SpeedUnit)Read(SpeedKey, SpeedValues, (int)region.Speed),
+            (PrecipitationUnit)Read(PrecipitationKey, PrecipitationValues, (int)region.Precipitation),
+            (PressureUnit)Read(PressureKey, PressureValues, (int)region.Pressure),
+            (DistanceUnit)Read(DistanceKey, DistanceValues, (int)region.Distance));
     }
 
     /// <summary>Writes every choice, so a later change of region does not move them.</summary>
     public void Save(SettingsStore settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        settings.Set(TemperatureKey, Temperature == TemperatureUnit.Fahrenheit ? "fahrenheit" : "celsius");
-        settings.Set(SpeedKey, Speed switch
-        {
-            SpeedUnit.MilesPerHour => "mph",
-            SpeedUnit.MetresPerSecond => "ms",
-            SpeedUnit.Knots => "kn",
-            _ => "kmh",
-        });
-        settings.Set(PrecipitationKey, Precipitation == PrecipitationUnit.Inches ? "in" : "mm");
-        settings.Set(PressureKey, Pressure == PressureUnit.InchesOfMercury ? "inhg" : "hpa");
-        settings.Set(DistanceKey, Distance == DistanceUnit.Miles ? "mi" : "km");
+        settings.Set(TemperatureKey, TemperatureValues[(int)Temperature]);
+        settings.Set(SpeedKey, SpeedValues[(int)Speed]);
+        settings.Set(PrecipitationKey, PrecipitationValues[(int)Precipitation]);
+        settings.Set(PressureKey, PressureValues[(int)Pressure]);
+        settings.Set(DistanceKey, DistanceValues[(int)Distance]);
     }
 
     public double TemperatureFrom(double celsius)
