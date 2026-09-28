@@ -478,6 +478,14 @@ public static class OfficeThemes
         t.Set(TokenKeys.Weather.ChartGrid, "#D2D0CE");
         t.Set(TokenKeys.Weather.RangeTrack, "#D2D0CE");
         t.Set(TokenKeys.Weather.AlertTint, "0.88");
+        t.Set(TokenKeys.Weather.MapWater, "#C4D6E4");
+        t.Set(TokenKeys.Weather.MapLand, "#E9E7E3");
+        t.Set(TokenKeys.Weather.MapBorder, "#86817B");
+        t.Set(TokenKeys.Weather.MapState, "#ADA7A0");
+        t.Set(TokenKeys.Weather.MapCounty, "#D2CDC7");
+        t.Set(TokenKeys.Weather.MapRoad, "#D8BD95");
+        t.Set(TokenKeys.Weather.MapLabel, "#262626");
+        t.Set(TokenKeys.Weather.MapHalo, "#E9E7E3");
 
         t.Set(TokenKeys.WindowShape.Border, "#808080");
         t.Set(TokenKeys.TitleBar.Background, "{palette.chrome.titlebar}");
@@ -932,6 +940,14 @@ public static class OfficeThemes
         t.Set(TokenKeys.Weather.AlertModerate, "#F7894A");
         t.Set(TokenKeys.Weather.AlertMinor, "{status.info}");
         t.Set(TokenKeys.Weather.AlertTint, "0.82");
+        t.Set(TokenKeys.Weather.MapWater, "#0F1822");
+        t.Set(TokenKeys.Weather.MapLand, "#242424");
+        t.Set(TokenKeys.Weather.MapBorder, "#767676");
+        t.Set(TokenKeys.Weather.MapState, "#505050");
+        t.Set(TokenKeys.Weather.MapCounty, "#363636");
+        t.Set(TokenKeys.Weather.MapRoad, "#5E4D36");
+        t.Set(TokenKeys.Weather.MapLabel, "#D8D8D8");
+        t.Set(TokenKeys.Weather.MapHalo, "#141414");
 
         return t;
     }
@@ -1387,5 +1403,13 @@ public static class OfficeThemes
         t.Set(TokenKeys.Weather.AlertModerate, "#CA5010");
         t.Set(TokenKeys.Weather.AlertMinor, "{status.info}");
         t.Set(TokenKeys.Weather.AlertTint, "0.9");
+        t.Set(TokenKeys.Weather.MapWater, "#CFE0EE");
+        t.Set(TokenKeys.Weather.MapLand, "#F3F1ED");
+        t.Set(TokenKeys.Weather.MapBorder, "#8F8A84");
+        t.Set(TokenKeys.Weather.MapState, "#B7B1AA");
+        t.Set(TokenKeys.Weather.MapCounty, "#DDD8D2");
+        t.Set(TokenKeys.Weather.MapRoad, "#E5C9A0");
+        t.Set(TokenKeys.Weather.MapLabel, "#3B3A39");
+        t.Set(TokenKeys.Weather.MapHalo, "#F3F1ED");
     }
 }

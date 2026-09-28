@@ -304,6 +304,14 @@ public partial class MainWindow
                         await Task.Delay(400);
                     }
 
+                    // MAILBOX_WEATHER_SCROLL=map photographs the map, once it has painted.
+                    if (Environment.GetEnvironmentVariable("MAILBOX_WEATHER_SCROLL") == "map")
+                    {
+                        var map = await Dispatcher.UIThread.InvokeAsync(workspace.PoseMapAsync);
+                        Log.Info($"Harness: weather page {map}.");
+                        await Task.Delay(300);
+                    }
+
                     // MAILBOX_WEATHER_SCROLL=<pixels> photographs what is below the fold.
                     if (double.TryParse(Environment.GetEnvironmentVariable("MAILBOX_WEATHER_SCROLL"),
                             System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var offset))

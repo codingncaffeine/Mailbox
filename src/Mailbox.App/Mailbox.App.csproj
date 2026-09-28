@@ -56,6 +56,8 @@
          nothing outside it needs a path to them. -->
     <AvaloniaResource Include="..\..\assets\weather\day\*.png" Link="Assets/Weather/day/%(Filename)%(Extension)" />
     <AvaloniaResource Include="..\..\assets\weather\night\*.png" Link="Assets/Weather/night/%(Filename)%(Extension)" />
+    <!-- The map's own base map, built by tools/weather-basemap.mjs from Natural Earth and us-atlas. -->
+    <AvaloniaResource Include="..\..\assets\weather\map\basemap.bin" Link="Assets/Weather/map/basemap.bin" />
   </ItemGroup>
 
   <ItemGroup>

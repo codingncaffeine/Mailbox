@@ -91,6 +91,8 @@ public static class ContrastAudit
         (TokenKeys.Weather.CardText, TokenKeys.Weather.Background),
         (TokenKeys.Weather.CardTextDim, TokenKeys.Weather.Background),
         (TokenKeys.Weather.HeroText, TokenKeys.Weather.Hero),
+        (TokenKeys.Weather.MapLabel, TokenKeys.Weather.MapLand),
+        (TokenKeys.Weather.MapLabel, TokenKeys.Weather.MapHalo),
     ];
 
     /// <summary>Every pair below the ratio, in the order of <see cref="Pairs"/>. Empty is a pass.</summary>

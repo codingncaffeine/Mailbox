@@ -985,6 +985,17 @@ public static class TokenKeys
         public const string AlertMinor = "weather.alert.minor";
         /// <summary>How far a warning's colour is tinted toward the card for its ground: 0 is the colour, 1 the card.</summary>
         public const string AlertTint = "weather.alert.tint";
+        /// <summary>The map's sea and lakes, and its land: quiet grounds the weather is drawn over.</summary>
+        public const string MapWater = "weather.map.water";
+        public const string MapLand = "weather.map.land";
+        /// <summary>The lines drawn over the weather: countries, states and provinces, counties, highways.</summary>
+        public const string MapBorder = "weather.map.border";
+        public const string MapState = "weather.map.state";
+        public const string MapCounty = "weather.map.county";
+        public const string MapRoad = "weather.map.road";
+        /// <summary>A town's name, and the halo that keeps it readable over any weather.</summary>
+        public const string MapLabel = "weather.map.label";
+        public const string MapHalo = "weather.map.halo";
 
         public static readonly IReadOnlyList<string> All =
         [
@@ -992,6 +1003,7 @@ public static class TokenKeys
             ChartTemperature, ChartTemperatureFill, ChartRain, ChartGrid, RangeTrack,
             ScaleCold, ScaleCool, ScaleMild, ScaleWarm, ScaleHot,
             AlertSevere, AlertModerate, AlertMinor, AlertTint,
+            MapWater, MapLand, MapBorder, MapState, MapCounty, MapRoad, MapLabel, MapHalo,
         ];
     }
 

@@ -36,6 +36,15 @@ internal sealed class WeatherPage : Border
 
     /// <summary>The page's expanders, so a harness run can photograph them open.</summary>
     private readonly List<Expander> _expanders = [];
+
+    /// <summary>
+    /// The map, made once and kept: the page is rebuilt whenever new weather arrives — warnings
+    /// every few minutes — and a map made afresh each time would throw away where the reader had
+    /// dragged and zoomed it. It is centred again only when the place changes.
+    /// </summary>
+    private readonly WeatherMap _map = new() { Height = 460 };
+    private readonly Border _mapCard;
+    private string? _mapPlace;
     private readonly ScrollViewer _scroller = new()
     {
         HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
@@ -46,7 +55,13 @@ internal sealed class WeatherPage : Border
     {
         _scroller.Content = _column;
         Child = _scroller;
+        _mapCard = Card(Strings.T("Map"), _map);
     }
+
+    internal WeatherMap Map => _map;
+
+    /// <summary>Scrolls the map to the top of the page, for a harness run photographing it.</summary>
+    public string ScrollToMap() => ScrollTo(Math.Max(0, _mapCard.Bounds.Y - 12));
 
     /// <summary>Opens every expander on the page, for a harness run.</summary>
     public int ExpandAll()
@@ -117,6 +132,13 @@ internal sealed class WeatherPage : Border
             _column.Children.Add(Alert(kind.First(), kind.Count() - 1, local, forecast));
         }
         _column.Children.Add(Hourly(forecast, local, units));
+        if (_mapPlace != place.Id)
+        {
+            _mapPlace = place.Id;
+            _map.Show(place.Latitude, place.Longitude);
+        }
+
+        _column.Children.Add(_mapCard);
         _column.Children.Add(Daily(forecast, local, units));
         _column.Children.Add(Details(forecast, local, units));
         if (weather.Discussion is { Sections.Count: > 0 } discussion) _column.Children.Add(Discussion(discussion));
