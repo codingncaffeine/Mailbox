@@ -35,6 +35,7 @@ public sealed class WeatherReceiverTests : IDisposable
         public List<string> Asked { get; } = [];
         public HttpStatusCode ForecastStatus { get; set; } = HttpStatusCode.OK;
         public HttpStatusCode AirStatus { get; set; } = HttpStatusCode.OK;
+        public HttpStatusCode WeatherServiceStatus { get; set; } = HttpStatusCode.OK;
         public bool PointOutsideCoverage { get; set; }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -56,6 +57,7 @@ public sealed class WeatherReceiverTests : IDisposable
                 "air" => Answer(url.Contains("latitude=59", StringComparison.Ordinal)
                     ? "open-meteo-air-oslo.json"
                     : "open-meteo-air-beverly-hills.json"),
+                "point" or "alerts" or "discussion" when WeatherServiceStatus != HttpStatusCode.OK => new HttpResponseMessage(WeatherServiceStatus),
                 "point" when PointOutsideCoverage => Answer("nws-points-outside-us.json", HttpStatusCode.NotFound),
                 "point" => Answer("nws-points-beverly-hills.json"),
                 "alerts" => Answer("nws-alerts-colorado.json"),
@@ -215,6 +217,46 @@ public sealed class WeatherReceiverTests : IDisposable
         Assert.Null(recovered.RetryAt);
         Assert.Empty(recovered.Error);
         Assert.NotNull(recovered.Forecast);
+    }
+
+    /// <summary>
+    /// A Weather Service that fails is left alone for a minute, then two, rather than asked on
+    /// every tick — the rest of that round's requests to it are not made either — and Update Now
+    /// asks it all the same.
+    /// </summary>
+    [Fact]
+    public async Task AFailingWeatherServiceBacksOffOnItsOwn()
+    {
+        var services = new Services { WeatherServiceStatus = HttpStatusCode.Forbidden };
+        using var receiver = Receiver(services);
+
+        await receiver.RefreshAsync(BeverlyHills, cancellation: TestContext.Current.CancellationToken);
+        var failed = receiver.Get(BeverlyHills.Id);
+        Assert.Equal(["forecast", "point", "air"], services.Asked);
+        Assert.NotNull(failed.Forecast);
+        Assert.Empty(failed.Error);
+        Assert.Equal(1, failed.WeatherServiceFailures);
+        Assert.Equal(_now + TimeSpan.FromMinutes(1), failed.WeatherServiceRetryAt);
+
+        services.Asked.Clear();
+        _now += TimeSpan.FromSeconds(30);
+        await receiver.RefreshAsync(BeverlyHills, cancellation: TestContext.Current.CancellationToken);
+        Assert.Empty(services.Asked);
+
+        _now += TimeSpan.FromSeconds(31);
+        await receiver.RefreshAsync(BeverlyHills, cancellation: TestContext.Current.CancellationToken);
+        Assert.Equal(["point"], services.Asked);
+        Assert.Equal(_now + TimeSpan.FromMinutes(2), receiver.Get(BeverlyHills.Id).WeatherServiceRetryAt);
+
+        services.WeatherServiceStatus = HttpStatusCode.OK;
+        services.Asked.Clear();
+        _now += TimeSpan.FromSeconds(10);
+        await receiver.RefreshAsync(BeverlyHills, force: true, cancellation: TestContext.Current.CancellationToken);
+        Assert.Equal(["forecast", "point", "alerts", "discussion", "air"], services.Asked);
+        var recovered = receiver.Get(BeverlyHills.Id);
+        Assert.Equal(0, recovered.WeatherServiceFailures);
+        Assert.Null(recovered.WeatherServiceRetryAt);
+        Assert.Equal("PUB", recovered.Discussion?.Office);
     }
 
     /// <summary>

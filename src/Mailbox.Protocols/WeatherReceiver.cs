@@ -35,6 +35,11 @@ public sealed record PlaceWeather
     public DateTimeOffset? AlertsFetched { get; init; }
     public DateTimeOffset? DiscussionFetched { get; init; }
 
+    /// <summary>Weather Service failures in a row, and nothing asked of it before <see cref="WeatherServiceRetryAt"/>.</summary>
+    public int WeatherServiceFailures { get; init; }
+
+    public DateTimeOffset? WeatherServiceRetryAt { get; init; }
+
     /// <summary>Why the last forecast request failed, or empty. Cleared by the next success.</summary>
     public string Error { get; init; } = string.Empty;
 
@@ -65,7 +70,10 @@ public sealed record PlaceWeather
 /// <para>
 /// The Weather Service is asked only for places it covers. Its answers are extras over the
 /// forecast: when one fails, the place keeps what it had and carries on, and the forecast's own
-/// error and back-off are unaffected.
+/// error and back-off are unaffected. The service backs off on its own clock: a failure stops
+/// that round's requests to it and holds the next ones off, one minute, two, four, as the
+/// forecast does — a service that is down, or one that has begun to want a key, is not asked
+/// every minute for every place.
 /// </para>
 /// <para>
 /// Air quality is an extra too, asked for everywhere, on the index of the place's own region. It
@@ -286,6 +294,9 @@ public sealed class WeatherReceiver : IDisposable
         var known = Get(place.Id);
         var now = _clock();
 
+        // Update Now asks anyway, as it does of the forecast.
+        if (!force && known.WeatherServiceRetryAt is { } hold && now < hold) return;
+
         if (known.Point is null || WeatherSchedule.IsDue(known.PointFetched, WeatherSchedule.Point, now))
         {
             var result = await _fetch.GetAsync(Nws.PointUrl(place.Latitude, place.Longitude), "application/geo+json", cancellation)
@@ -302,8 +313,13 @@ public sealed class WeatherReceiver : IDisposable
 
             if (result.Ok && TryParse(() => Nws.ParsePoint(result.Text), "Weather Service's point", place) is { } point)
             {
-                Update(place.Id, w => w with { Point = point, PointFetched = now });
+                Update(place.Id, w => w with { Point = point, PointFetched = now, WeatherServiceFailures = 0, WeatherServiceRetryAt = null });
                 Save(place.Id, "point.json", result.Text, "point", now);
+            }
+            else
+            {
+                WeatherServiceFailed(place, now, result);
+                return;
             }
         }
 
@@ -313,8 +329,13 @@ public sealed class WeatherReceiver : IDisposable
                 .ConfigureAwait(false);
             if (result.Ok && TryParse(() => Nws.ParseAlerts(result.Text), "Weather Service's alerts", place) is { } alerts)
             {
-                Update(place.Id, w => w with { Alerts = alerts, AlertsFetched = now });
+                Update(place.Id, w => w with { Alerts = alerts, AlertsFetched = now, WeatherServiceFailures = 0, WeatherServiceRetryAt = null });
                 Save(place.Id, "alerts.json", result.Text, "alerts", now);
+            }
+            else
+            {
+                WeatherServiceFailed(place, now, result);
+                return;
             }
         }
 
@@ -325,10 +346,27 @@ public sealed class WeatherReceiver : IDisposable
                 .ConfigureAwait(false);
             if (result.Ok && TryParse(() => Nws.ParseDiscussion(result.Text), "Weather Service's discussion", place) is { } discussion)
             {
-                Update(place.Id, w => w with { Discussion = discussion, DiscussionFetched = now });
+                Update(place.Id, w => w with { Discussion = discussion, DiscussionFetched = now, WeatherServiceFailures = 0, WeatherServiceRetryAt = null });
                 Save(place.Id, "discussion.json", result.Text, "discussion", now);
             }
+            else
+            {
+                WeatherServiceFailed(place, now, result);
+            }
         }
+    }
+
+    /// <summary>
+    /// The Weather Service did not answer, or sent what could not be read: nothing more is asked of
+    /// it for the place until its back-off has passed.
+    /// </summary>
+    private void WeatherServiceFailed(WeatherPlace place, DateTimeOffset now, WeatherFetchResult result)
+    {
+        var failures = Get(place.Id).WeatherServiceFailures + 1;
+        var retry = WeatherSchedule.RetryAt(failures, now, result.RetryAfter);
+        var reason = result.Ok ? "an answer that could not be read" : result.Error;
+        Log.Info($"The Weather Service did not answer for {place.Label} ({reason}); next try {retry:HH:mm:ss}.");
+        Update(place.Id, w => w with { WeatherServiceFailures = failures, WeatherServiceRetryAt = retry });
     }
 
     private static T? TryParse<T>(Func<T> parse, string what, WeatherPlace place) where T : class
