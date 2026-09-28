@@ -421,26 +421,28 @@
                                     PointerEntered="RailPointerEntered"
                                     PointerExited="RailPointerExited"
                                     ToolTip.Tip="{Binding Tip}">
-                                <Panel>
-                                    <TextBlock Text="{Binding RailGlyph}"
-                                               IsVisible="{Binding ShowsGlyph}"
-                                               FontFamily="{Binding IconFamily}"
-                                               FontSize="19"
-                                               HorizontalAlignment="Center"
-                                               VerticalAlignment="Center"
-                                               Foreground="{DynamicResource rail.item.text.brush}" />
-                                    <!-- The Weather tab draws the weather at home instead of a glyph:
-                                         a picture with its own glow, so it is set a little larger
-                                         than the glyphs to carry the same weight beside them. -->
-                                    <Image Source="{Binding Picture}"
-                                           IsVisible="{Binding ShowsPicture}"
-                                           Width="30"
-                                           Height="30"
-                                           RenderOptions.BitmapInterpolationMode="HighQuality"
+                                <TextBlock Text="{Binding RailGlyph}"
+                                           IsVisible="{Binding ShowsGlyph}"
+                                           FontFamily="{Binding IconFamily}"
+                                           FontSize="19"
                                            HorizontalAlignment="Center"
-                                           VerticalAlignment="Center" />
-                                </Panel>
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource rail.item.text.brush}" />
                             </Button>
+                            <!-- The Weather tab draws the weather at home instead of a glyph: a
+                                 picture with its own glow, set a little larger than the glyphs to
+                                 carry the same weight beside them. Laid over the button rather than
+                                 inside it, so the glyph stays the button's own content — the active
+                                 module's tint is a style on exactly that — and passing the pointer
+                                 through to the button beneath. -->
+                            <Image Source="{Binding Picture}"
+                                   IsVisible="{Binding ShowsPicture}"
+                                   IsHitTestVisible="False"
+                                   Width="30"
+                                   Height="30"
+                                   RenderOptions.BitmapInterpolationMode="HighQuality"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
                         </Grid>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
@@ -551,24 +553,26 @@
                                          is the pre-rail arrangement and is not shown, but a
                                          template with no command is a dead control the day
                                          somebody turns it on. -->
-                                    <Button Padding="5,2"
-                                            AutomationProperties.Name="{Binding Module}"
-                                            Command="{Binding Activate}"
-                                            Classes.active="{Binding IsActive}"
-                                            ToolTip.Tip="{Binding Tip}">
-                                        <Panel>
+                                    <Grid>
+                                        <Button Padding="5,2"
+                                                AutomationProperties.Name="{Binding Module}"
+                                                Command="{Binding Activate}"
+                                                Classes.active="{Binding IsActive}"
+                                                ToolTip.Tip="{Binding Tip}">
                                             <TextBlock Text="{Binding Glyph}"
                                                        IsVisible="{Binding ShowsGlyph}"
                                                        FontFamily="{Binding IconFamily}"
                                                        FontSize="15"
                                                        Foreground="{DynamicResource text.secondary.brush}" />
-                                            <Image Source="{Binding Picture}"
-                                                   IsVisible="{Binding ShowsPicture}"
-                                                   Width="22"
-                                                   Height="22"
-                                                   RenderOptions.BitmapInterpolationMode="HighQuality" />
-                                        </Panel>
-                                    </Button>
+                                        </Button>
+                                        <!-- Over the button, as on the rail: the glyph stays its content. -->
+                                        <Image Source="{Binding Picture}"
+                                               IsVisible="{Binding ShowsPicture}"
+                                               IsHitTestVisible="False"
+                                               Width="22"
+                                               Height="22"
+                                               RenderOptions.BitmapInterpolationMode="HighQuality" />
+                                    </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
