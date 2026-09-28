@@ -6,7 +6,8 @@ namespace Mailbox.Core.Weather;
 /// <remarks>
 /// The intervals follow how often the thing itself changes, not how often a reader might look:
 /// the models behind a forecast are rerun hourly at best, so half an hour catches every run
-/// without asking twice for the same one; warnings change by the minute when they change at all;
+/// without asking twice for the same one; the air quality models give a reading an hour, so an
+/// hour catches each; warnings change by the minute when they change at all;
 /// a discussion is written a few times a day; and an office's grid square almost never moves,
 /// though the service asks that it be looked up again now and then rather than kept for ever.
 /// <para>
@@ -18,6 +19,7 @@ namespace Mailbox.Core.Weather;
 public static class WeatherSchedule
 {
     public static readonly TimeSpan Forecast = TimeSpan.FromMinutes(30);
+    public static readonly TimeSpan AirQuality = TimeSpan.FromMinutes(60);
     public static readonly TimeSpan Alerts = TimeSpan.FromMinutes(5);
     public static readonly TimeSpan Discussion = TimeSpan.FromMinutes(60);
     public static readonly TimeSpan Point = TimeSpan.FromDays(7);

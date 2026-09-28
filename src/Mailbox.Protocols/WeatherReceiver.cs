@@ -23,6 +23,14 @@ public sealed record PlaceWeather
     public IReadOnlyList<WeatherAlert> Alerts { get; init; } = [];
     public ForecastDiscussion? Discussion { get; init; }
 
+    /// <summary>The air this hour, on the place's own index.</summary>
+    public AirQuality? AirQuality { get; init; }
+
+    /// <summary>Air quality failures in a row, and no request before <see cref="AirQualityRetryAt"/>, as for the forecast.</summary>
+    public int AirQualityFailures { get; init; }
+
+    public DateTimeOffset? AirQualityRetryAt { get; init; }
+
     public DateTimeOffset? PointFetched { get; init; }
     public DateTimeOffset? AlertsFetched { get; init; }
     public DateTimeOffset? DiscussionFetched { get; init; }
@@ -58,6 +66,11 @@ public sealed record PlaceWeather
 /// The Weather Service is asked only for places it covers. Its answers are extras over the
 /// forecast: when one fails, the place keeps what it had and carries on, and the forecast's own
 /// error and back-off are unaffected.
+/// </para>
+/// <para>
+/// Air quality is an extra too, asked for everywhere, on the index of the place's own region. It
+/// fails quietly — the page leaves its card out rather than showing an error — but it backs off
+/// the way the forecast does, so a service that is down is not asked every minute.
 /// </para>
 /// </remarks>
 public sealed class WeatherReceiver : IDisposable
@@ -139,6 +152,9 @@ public sealed class WeatherReceiver : IDisposable
                     AlertsFetched = When("alerts"),
                     Discussion = Read("discussion.json") is { } discussion ? Nws.ParseDiscussion(discussion) : null,
                     DiscussionFetched = When("discussion"),
+                    AirQuality = Read("air.json") is { } air && When("air") is { } airFetched
+                        ? OpenMeteo.ParseAirQuality(air, airFetched)
+                        : null,
                 };
 
                 _state[place.Id] = weather;
@@ -180,6 +196,12 @@ public sealed class WeatherReceiver : IDisposable
             if (place.HasWeatherService && !Get(place.Id).OutsideWeatherService)
             {
                 await RefreshWeatherServiceAsync(place, force, cancellation).ConfigureAwait(false);
+            }
+
+            var air = Get(place.Id);
+            if (force || WeatherSchedule.IsDue(air.AirQuality?.Fetched, WeatherSchedule.AirQuality, _clock(), air.AirQualityRetryAt))
+            {
+                await RefreshAirQualityAsync(place, cancellation).ConfigureAwait(false);
             }
         }
         finally
@@ -231,6 +253,26 @@ public sealed class WeatherReceiver : IDisposable
         Fail(place, now, OpenMeteo.ErrorReason(result.Text) ?? result.Error, result.RetryAfter);
     }
 
+    private async Task RefreshAirQualityAsync(WeatherPlace place, CancellationToken cancellation)
+    {
+        var scale = AirQualityIndex.For(place.CountryCode);
+        var result = await _fetch.GetAsync(OpenMeteo.AirQualityUrl(place.Latitude, place.Longitude, scale), "application/json", cancellation)
+            .ConfigureAwait(false);
+        var now = _clock();
+
+        if (result.Ok && TryParse(() => OpenMeteo.ParseAirQuality(result.Text, now), "air quality", place) is { } air)
+        {
+            Update(place.Id, w => w with { AirQuality = air, AirQualityFailures = 0, AirQualityRetryAt = null });
+            Save(place.Id, "air.json", result.Text, "air", now);
+            return;
+        }
+
+        var failures = Get(place.Id).AirQualityFailures + 1;
+        var retry = WeatherSchedule.RetryAt(failures, now, result.RetryAfter);
+        Log.Info($"Air quality for {place.Label} not updated ({OpenMeteo.ErrorReason(result.Text) ?? result.Error}); next try {retry:HH:mm:ss}.");
+        Update(place.Id, w => w with { AirQualityFailures = failures, AirQualityRetryAt = retry });
+    }
+
     private void Fail(WeatherPlace place, DateTimeOffset now, string error, TimeSpan? retryAfter)
     {
         var failures = Get(place.Id).Failures + 1;
@@ -258,7 +300,7 @@ public sealed class WeatherReceiver : IDisposable
                 return;
             }
 
-            if (result.Ok && TryParse(() => Nws.ParsePoint(result.Text), "point", place) is { } point)
+            if (result.Ok && TryParse(() => Nws.ParsePoint(result.Text), "Weather Service's point", place) is { } point)
             {
                 Update(place.Id, w => w with { Point = point, PointFetched = now });
                 Save(place.Id, "point.json", result.Text, "point", now);
@@ -269,7 +311,7 @@ public sealed class WeatherReceiver : IDisposable
         {
             var result = await _fetch.GetAsync(Nws.AlertsUrl(place.Latitude, place.Longitude), "application/geo+json", cancellation)
                 .ConfigureAwait(false);
-            if (result.Ok && TryParse(() => Nws.ParseAlerts(result.Text), "alerts", place) is { } alerts)
+            if (result.Ok && TryParse(() => Nws.ParseAlerts(result.Text), "Weather Service's alerts", place) is { } alerts)
             {
                 Update(place.Id, w => w with { Alerts = alerts, AlertsFetched = now });
                 Save(place.Id, "alerts.json", result.Text, "alerts", now);
@@ -281,7 +323,7 @@ public sealed class WeatherReceiver : IDisposable
         {
             var result = await _fetch.GetAsync(Nws.DiscussionUrl(office.Office), "application/ld+json", cancellation)
                 .ConfigureAwait(false);
-            if (result.Ok && TryParse(() => Nws.ParseDiscussion(result.Text), "discussion", place) is { } discussion)
+            if (result.Ok && TryParse(() => Nws.ParseDiscussion(result.Text), "Weather Service's discussion", place) is { } discussion)
             {
                 Update(place.Id, w => w with { Discussion = discussion, DiscussionFetched = now });
                 Save(place.Id, "discussion.json", result.Text, "discussion", now);
@@ -297,7 +339,7 @@ public sealed class WeatherReceiver : IDisposable
         }
         catch (FormatException ex)
         {
-            Log.Warn($"The Weather Service's {what} for {place.Label} could not be read.", ex);
+            Log.Warn($"The {what} for {place.Label} could not be read.", ex);
             return null;
         }
     }

@@ -23,6 +23,7 @@ public static class OpenMeteo
 {
     public const string ForecastEndpoint = "https://api.open-meteo.com/v1/forecast";
     public const string SearchEndpoint = "https://geocoding-api.open-meteo.com/v1/search";
+    public const string AirQualityEndpoint = "https://air-quality-api.open-meteo.com/v1/air-quality";
 
     /// <summary>The page the attribution the licence asks for links to.</summary>
     public const string Home = "https://open-meteo.com/";
@@ -51,6 +52,20 @@ public static class OpenMeteo
     public const int ForecastDays = 16;
 
     /// <summary>
+    /// An index and each pollutant's own index on the same scale, the highest of which is the
+    /// pollutant to name. Only the place's own index is asked for, which keeps a request within
+    /// the ten variables the service counts as one call.
+    /// </summary>
+    public const string UnitedStatesAirVariables =
+        "us_aqi,us_aqi_pm2_5,us_aqi_pm10,us_aqi_ozone,us_aqi_nitrogen_dioxide,us_aqi_sulphur_dioxide,us_aqi_carbon_monoxide";
+
+    public const string EuropeanAirVariables =
+        "european_aqi,european_aqi_pm2_5,european_aqi_pm10,european_aqi_ozone,european_aqi_nitrogen_dioxide,european_aqi_sulphur_dioxide";
+
+    /// <summary>Who the air quality comes from, which the service asks to be credited beside itself.</summary>
+    public const string AirQualitySource = "https://atmosphere.copernicus.eu/";
+
+    /// <summary>
     /// The whole forecast for a point, in the service's metric units and in the point's own
     /// time zone.
     /// </summary>
@@ -63,6 +78,11 @@ public static class OpenMeteo
     /// A search by name or postal code, answered in the reader's language where the service has
     /// the names in it.
     /// </summary>
+    /// <summary>The air at a point this hour, on one index, from the Copernicus models the service relays.</summary>
+    public static string AirQualityUrl(double latitude, double longitude, AirQualityScale scale)
+        => $"{AirQualityEndpoint}?latitude={Coordinate(latitude)}&longitude={Coordinate(longitude)}"
+           + $"&current={(scale == AirQualityScale.European ? EuropeanAirVariables : UnitedStatesAirVariables)}&timezone=auto";
+
     public static string SearchUrl(string query, string language)
     {
         ArgumentNullException.ThrowIfNull(query);
@@ -166,6 +186,65 @@ public static class OpenMeteo
                 Hourly = Hours(root),
                 Daily = Days(root),
                 NextTwoHours = Steps(root),
+            };
+        }
+    }
+
+    /// <summary>
+    /// Reads an air quality response: whichever indices it carries, each with the pollutant whose
+    /// own index is highest. An index the models had nothing for is missing, not zero.
+    /// </summary>
+    /// <exception cref="FormatException">The text is not an air quality response.</exception>
+    public static AirQuality ParseAirQuality(string json, DateTimeOffset fetched)
+    {
+        ArgumentNullException.ThrowIfNull(json);
+
+        JsonDocument document;
+        try
+        {
+            document = JsonDocument.Parse(json);
+        }
+        catch (JsonException ex)
+        {
+            throw new FormatException("The air quality is not JSON.", ex);
+        }
+
+        using (document)
+        {
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) throw new FormatException("The air quality is not an object.");
+            if (ErrorReason(json) is { } reason) throw new FormatException(reason);
+            if (!root.TryGetProperty("current", out var current) || current.ValueKind != JsonValueKind.Object)
+            {
+                throw new FormatException("The air quality has no current reading.");
+            }
+
+            AirIndex? Index(string prefix, params (string Suffix, AirPollutant Pollutant)[] parts)
+            {
+                if (Number(current, prefix) is not { } value) return null;
+                AirPollutant? leading = null;
+                var highest = double.MinValue;
+                foreach (var (suffix, pollutant) in parts)
+                {
+                    if (Number(current, $"{prefix}_{suffix}") is not { } part || part <= highest) continue;
+                    (highest, leading) = (part, pollutant);
+                }
+
+                return new AirIndex((int)Math.Round(value), leading);
+            }
+
+            (string, AirPollutant)[] particlesAndGases =
+            [
+                ("pm2_5", AirPollutant.FineParticles), ("pm10", AirPollutant.CoarseParticles), ("ozone", AirPollutant.Ozone),
+                ("nitrogen_dioxide", AirPollutant.NitrogenDioxide), ("sulphur_dioxide", AirPollutant.SulfurDioxide),
+            ];
+
+            return new AirQuality
+            {
+                Fetched = fetched,
+                Time = Time(current, "time") ?? throw new FormatException("The air quality reading has no time."),
+                UnitedStates = Index("us_aqi", [.. particlesAndGases, ("carbon_monoxide", AirPollutant.CarbonMonoxide)]),
+                European = Index("european_aqi", particlesAndGases),
             };
         }
     }

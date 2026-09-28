@@ -26,8 +26,10 @@ us-atlas (the US county lines in the Weather map, drawn from the US Census Burea
   CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,
   WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
   CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-Forecasts are fetched at run time from Open-Meteo (data CC BY 4.0, credited on the Weather page)
-  and warnings and discussions from the US National Weather Service (public domain); neither is
+Forecasts and air quality are fetched at run time from Open-Meteo (data CC BY 4.0; the air quality
+  from the Copernicus Atmosphere Monitoring Service), warnings and discussions from the US National
+  Weather Service (public domain), and the map's weather from NOAA nowCOAST (public domain) and
+  Environment and Climate Change Canada's GeoMet. Each is credited where it is shown; none is
   bundled.
 
 Libraries (bundled in the self-contained publish)

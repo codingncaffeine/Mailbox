@@ -293,7 +293,8 @@ public partial class MainWindow
                     var weather = App.Weather.Get(place.Id);
                     Log.Info($"Harness: weather for {place.Label}: "
                              + (weather.Forecast is { } f ? $"{f.Current.Temperature:0.#}°C, code {f.Current.Code}" : $"no forecast ({weather.Error})")
-                             + $", {weather.Alerts.Count} alert(s), discussion {(weather.Discussion is null ? "none" : weather.Discussion.Office)}.");
+                             + $", {weather.Alerts.Count} alert(s), discussion {(weather.Discussion is null ? "none" : weather.Discussion.Office)}"
+                             + $", air {(weather.AirQuality?.On(AirQualityIndex.For(place.CountryCode)) is { } air ? $"{AirQualityIndex.Name(AirQualityIndex.For(place.CountryCode))} {air.Value} {air.Leading}" : "none")}.");
                     await Task.Delay(600);
 
                     // MAILBOX_WEATHER_EXPAND=1 opens the warnings' details and the discussion.
@@ -312,6 +313,14 @@ public partial class MainWindow
                             Environment.GetEnvironmentVariable("MAILBOX_WEATHER_OVERLAYS")));
                         Log.Info($"Harness: weather page {map}.");
                         await Task.Delay(300);
+                    }
+
+                    // MAILBOX_WEATHER_SCROLL=air photographs the air quality card.
+                    if (Environment.GetEnvironmentVariable("MAILBOX_WEATHER_SCROLL") == "air")
+                    {
+                        var said = await Dispatcher.UIThread.InvokeAsync(workspace.PoseScrollToAir);
+                        Log.Info($"Harness: weather page {said}.");
+                        await Task.Delay(400);
                     }
 
                     // MAILBOX_WEATHER_SCROLL=<pixels> photographs what is below the fold.

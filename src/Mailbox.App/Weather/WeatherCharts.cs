@@ -363,6 +363,48 @@ internal sealed class UvMeter : DrawnSurface
 }
 
 /// <summary>
+/// An air quality index as its six bands, equally wide and in the index's own colours, with the
+/// reading as a dot along them — the UV meter's shape, so the two read alike.
+/// </summary>
+internal sealed class AirQualityBar : DrawnSurface
+{
+    private AirQualityScale _scale;
+    private int _value = -1;
+
+    public AirQualityBar()
+    {
+        Height = 16;
+    }
+
+    public void Show(AirQualityScale scale, int value)
+    {
+        (_scale, _value) = (scale, value);
+        InvalidateVisual();
+    }
+
+    public override void Render(DrawingContext context)
+    {
+        var width = Bounds.Width;
+        if (width < 40 || _value < 0) return;
+
+        const double Top = 5;
+        const double Thickness = 6;
+        const double Gap = 2;
+        var colours = AirQualityIndex.Colours(_scale);
+        for (var i = 0; i < colours.Count; i++)
+        {
+            var left = i * width / colours.Count + (i > 0 ? Gap / 2 : 0);
+            var right = (i + 1) * width / colours.Count - (i < colours.Count - 1 ? Gap / 2 : 0);
+            context.DrawRectangle(Brush(Color.FromUInt32(colours[i])), null, new RoundedRect(new Rect(left, Top, right - left, Thickness), Thickness / 2));
+        }
+
+        var at = new Point(Math.Clamp(AirQualityIndex.Position(_scale, _value) * width, 5, width - 5), Top + Thickness / 2);
+        context.DrawEllipse(Brush(Colour(TokenKeys.Weather.Card)), null, at, 7, 7);
+        context.DrawEllipse(Brush(Colour(TokenKeys.Weather.CardText)), null, at, 5, 5);
+    }
+}
+
+/// <summary>
 /// The sun's day: a hairline arc from sunrise to sunset over a horizon, the part already
 /// travelled drawn in the warm colour, and the sun where it is now.
 /// </summary>

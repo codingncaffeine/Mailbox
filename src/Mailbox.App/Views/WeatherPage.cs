@@ -44,6 +44,7 @@ internal sealed class WeatherPage : Border
     /// </summary>
     private readonly WeatherMap _map = new() { Height = 460 };
     private readonly Border _mapCard;
+    private Border? _airCard;
     private string? _mapPlace;
     private readonly ScrollViewer _scroller = new()
     {
@@ -62,6 +63,9 @@ internal sealed class WeatherPage : Border
 
     /// <summary>Scrolls the map to the top of the page, for a harness run photographing it.</summary>
     public string ScrollToMap() => ScrollTo(Math.Max(0, _mapCard.Bounds.Y - 12));
+
+    /// <summary>Scrolls to the air quality card, for a harness run.</summary>
+    public string ScrollToAir() => _airCard is { } card ? ScrollTo(Math.Max(0, card.Bounds.Y - 12)) : "has no air quality card";
 
     /// <summary>Opens every expander on the page, for a harness run.</summary>
     public int ExpandAll()
@@ -141,9 +145,11 @@ internal sealed class WeatherPage : Border
 
         _column.Children.Add(_mapCard);
         _column.Children.Add(Daily(forecast, local, units));
+        _airCard = weather.AirQuality is { } air ? Air(place, air) : null;
+        if (_airCard is not null) _column.Children.Add(_airCard);
         _column.Children.Add(Details(forecast, local, units));
         if (weather.Discussion is { Sections.Count: > 0 } discussion) _column.Children.Add(Discussion(discussion));
-        _column.Children.Add(Attribution(place));
+        _column.Children.Add(Attribution(place, weather.AirQuality is not null));
     }
 
     // ---- The parts of the page ------------------------------------------------------------------
@@ -555,6 +561,40 @@ internal sealed class WeatherPage : Border
         return tiles;
     }
 
+    /// <summary>
+    /// The air this hour on the index of the place's own region: the reading and its band's name,
+    /// the index's six bands with the reading along them, what the band asks of a reader, and the
+    /// pollutant that set it. Nothing when the models had no reading for the place.
+    /// </summary>
+    private static Border? Air(WeatherPlace place, AirQuality air)
+    {
+        var scale = AirQualityIndex.For(place.CountryCode);
+        if (air.On(scale) is not { } reading) return null;
+        var band = AirQualityIndex.Band(scale, reading.Value);
+
+        // Written as the UV index is, the reading and then its band's name.
+        var value = Text($"{reading.Value.ToString(CultureInfo.CurrentCulture)}  {band.Name}", 24, TokenKeys.Weather.CardText);
+        var index = Text(AirQualityIndex.Name(scale), 12, TokenKeys.Weather.CardTextDim);
+        index.VerticalAlignment = VerticalAlignment.Center;
+        var top = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+        top.Children.Add(value);
+        Grid.SetColumn(index, 1);
+        top.Children.Add(index);
+
+        var bar = new AirQualityBar { Margin = new Thickness(0, 2, 0, 0) };
+        bar.Show(scale, reading.Value);
+
+        var note = reading.Leading is { } leading
+            ? $"{band.Advice} {string.Format(CultureInfo.CurrentCulture, Strings.T("Mostly {0}."), AirQualityIndex.Name(leading))}"
+            : band.Advice;
+
+        var stack = new StackPanel { Spacing = 6 };
+        stack.Children.Add(top);
+        stack.Children.Add(bar);
+        stack.Children.Add(Text(note, 12, TokenKeys.Weather.CardTextDim));
+        return Card(Strings.T("Air quality"), stack);
+    }
+
     private static Control Tile(string title, string value, string note, Control? visual = null, bool beside = false)
     {
         var stack = new StackPanel { Spacing = 4 };
@@ -649,12 +689,18 @@ internal sealed class WeatherPage : Border
     /// The credit the data's licence asks for, and the Weather Service's where it spoke — linked,
     /// as the licence wants, and small, as a credit should be.
     /// </summary>
-    private Control Attribution(WeatherPlace place)
+    private Control Attribution(WeatherPlace place, bool airQuality)
     {
         var row = new WrapPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 0) };
         row.Children.Add(Text(Strings.T("Weather data by"), 11, TokenKeys.Weather.CardTextDim));
         row.Children.Add(Link("Open-Meteo.com", OpenMeteo.Home));
         row.Children.Add(Link("CC BY 4.0", OpenMeteo.Licence));
+        if (airQuality)
+        {
+            row.Children.Add(Text(Strings.T("· Air quality from the"), 11, TokenKeys.Weather.CardTextDim));
+            row.Children.Add(Link(Strings.T("Copernicus Atmosphere Monitoring Service"), OpenMeteo.AirQualitySource));
+        }
+
         if (place.HasWeatherService)
         {
             row.Children.Add(Text(Strings.T("· Warnings and discussion from the"), 11, TokenKeys.Weather.CardTextDim));

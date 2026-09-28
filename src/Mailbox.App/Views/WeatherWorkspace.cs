@@ -121,6 +121,8 @@ public sealed class WeatherWorkspace : Border
     /// <summary>Scrolls the page, for a harness run photographing what is below the fold.</summary>
     public string PoseScroll(double offset) => _page.ScrollTo(offset);
 
+    public string PoseScrollToAir() => _page.ScrollToAir();
+
     /// <summary>Scrolls to the map and waits for its first sharp frame, for a harness run.</summary>
     public async Task<string> PoseMapAsync(string? layer, string? overlays)
     {
