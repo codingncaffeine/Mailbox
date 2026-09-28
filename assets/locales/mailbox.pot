@@ -268,6 +268,147 @@ msgid_plural "{0} tokens changed"
 msgstr[0] ""
 msgstr[1] ""
 
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:100
+msgid "Light freezing drizzle"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:101
+msgid "Freezing drizzle"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:102
+msgid "Light rain"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:103
+msgid "Rain"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:104
+msgid "Heavy rain"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:105
+msgid "Light freezing rain"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:106
+msgid "Freezing rain"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:107
+msgid "Light snow"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:108
+msgid "Snow"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:109
+msgid "Heavy snow"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:110
+msgid "Snow grains"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:111
+msgid "Light showers"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:112
+msgid "Showers"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:113
+msgid "Heavy showers"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:114
+msgid "Snow showers"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:115
+msgid "Heavy snow showers"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:116
+msgid "Thunderstorms"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:117
+msgid "Thunderstorms with hail"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:118
+msgid "Severe thunderstorms with hail"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:62
+msgid "Blizzard"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:67
+msgid "Blowing snow"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:75
+msgid "Rain and wind"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:81
+msgid "Very windy"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:82
+msgid "Windy"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:91
+msgid "Sunny"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:91
+msgid "Clear"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:92
+msgid "Mostly sunny"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:92
+msgid "Mostly clear"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:93
+msgid "Partly cloudy"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:94
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:122
+msgid "Cloudy"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:95
+msgid "Fog"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:96
+msgid "Freezing fog"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:97
+msgid "Light drizzle"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:98
+msgid "Drizzle"
+msgstr ""
+
+#: src/Mailbox.Core/Weather/WeatherConditions.cs:99
+msgid "Heavy drizzle"
+msgstr ""
+
 #: src/Mailbox.Protocols/SendReceive.cs:63
 msgid "{0} new"
 msgid_plural "{0} new"

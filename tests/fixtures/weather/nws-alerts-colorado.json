@@ -1,0 +1,225 @@
+{
+    "@context": [
+        "https://geojson.org/geojson-ld/geojson-context.jsonld",
+        {
+            "@version": "1.1",
+            "wx": "https://api.weather.gov/ontology#",
+            "@vocab": "https://api.weather.gov/ontology#"
+        }
+    ],
+    "type": "FeatureCollection",
+    "features": [
+        {
+            "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.d5e7e988a3954ac1b0119ac2efc13727fdc568cd.001.1",
+            "type": "Feature",
+            "geometry": null,
+            "properties": {
+                "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.d5e7e988a3954ac1b0119ac2efc13727fdc568cd.001.1",
+                "@type": "wx:Alert",
+                "id": "urn:oid:2.49.0.1.840.0.d5e7e988a3954ac1b0119ac2efc13727fdc568cd.001.1",
+                "areaDesc": "Upper Rio Grande Valley/Eastern San Juan Mountains Below 10000 Ft; Eastern San Juan Mountains Above 10000 Ft",
+                "geocode": {
+                    "SAME": [
+                        "008021",
+                        "008079",
+                        "008105"
+                    ],
+                    "UGC": [
+                        "COZ067",
+                        "COZ068"
+                    ]
+                },
+                "affectedZones": [
+                    "https://api.weather.gov/zones/forecast/COZ067",
+                    "https://api.weather.gov/zones/forecast/COZ068"
+                ],
+                "references": [
+                    {
+                        "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.652de6e789df76f07b2675be12643ca489f102c4.001.1",
+                        "identifier": "urn:oid:2.49.0.1.840.0.652de6e789df76f07b2675be12643ca489f102c4.001.1",
+                        "sender": "w-nws.webmaster@noaa.gov",
+                        "sent": "2026-09-27T08:13:00-06:00"
+                    }
+                ],
+                "sent": "2026-09-27T15:21:00-06:00",
+                "effective": "2026-09-27T15:21:00-06:00",
+                "onset": "2026-09-28T06:00:00-06:00",
+                "expires": "2026-09-27T23:30:00-06:00",
+                "ends": "2026-09-30T06:00:00-06:00",
+                "status": "Actual",
+                "messageType": "Update",
+                "category": "Met",
+                "severity": "Severe",
+                "certainty": "Possible",
+                "urgency": "Future",
+                "event": "Flood Watch",
+                "sender": "w-nws.webmaster@noaa.gov",
+                "senderName": "NWS Pueblo CO",
+                "headline": "Flood Watch issued September 27 at 3:21PM MDT until September 30 at 6:00AM MDT by NWS Pueblo CO",
+                "description": "* WHAT...Flash flooding caused by excessive rainfall continues to be\npossible.\n\n* WHERE...The Eastern San Juan Mountains.\n\n* WHEN...From Monday morning through late Tuesday night.\n\n* IMPACTS...Excessive runoff may result in flooding of rivers,\ncreeks, streams, and other low-lying and flood-prone locations.\nCreeks and streams may rise out of their banks.\n\n* ADDITIONAL DETAILS...\n- Periods of heavy rainfall associated with a remnant tropical\nstorm system will spread across southwest Colorado beginning\nMonday.\n- Creede, South Fork and Wolf Creek Pass.\n- http://www.weather.gov/safety/flood",
+                "instruction": "You should monitor later forecasts and be prepared to take action\nshould Flash Flood Warnings be issued.",
+                "response": "Prepare",
+                "note": null,
+                "parameters": {
+                    "AWIPSidentifier": [
+                        "FFAPUB"
+                    ],
+                    "WMOidentifier": [
+                        "WGUS65 KPUB 272121"
+                    ],
+                    "NWSheadline": [
+                        "FLOOD WATCH REMAINS IN EFFECT FROM MONDAY MORNING THROUGH LATE TUESDAY NIGHT"
+                    ],
+                    "BLOCKCHANNEL": [
+                        "EAS",
+                        "NWEM",
+                        "CMAS"
+                    ],
+                    "EAS-ORG": [
+                        "WXR"
+                    ],
+                    "VTEC": [
+                        "/O.CON.KPUB.FA.A.0008.260928T1200Z-260930T1200Z/"
+                    ],
+                    "eventEndingTime": [
+                        "2026-09-30T06:00:00-06:00"
+                    ],
+                    "expiredReferences": [
+                        "w-nws.webmaster@noaa.gov,urn:oid:2.49.0.1.840.0.ed13e94394bc5add2bd3cb8c391b8366392efda9.001.1,2026-09-27T00:01:00-06:00"
+                    ]
+                },
+                "scope": "Public",
+                "code": "IPAWSv1.0",
+                "language": "en-US",
+                "web": "http://www.weather.gov",
+                "eventCode": {
+                    "SAME": [
+                        "FFA"
+                    ],
+                    "NationalWeatherService": [
+                        "FAA"
+                    ]
+                }
+            }
+        },
+        {
+            "id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.4e0b211dcd7bab58026a9cb01526038e869174d9.001.1",
+            "type": "Feature",
+            "geometry": null,
+            "properties": {
+                "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.4e0b211dcd7bab58026a9cb01526038e869174d9.001.1",
+                "@type": "wx:Alert",
+                "id": "urn:oid:2.49.0.1.840.0.4e0b211dcd7bab58026a9cb01526038e869174d9.001.1",
+                "areaDesc": "Uncompahgre Plateau/Dallas Divide; Northwestern San Juan Mountains; Southwest San Juan Mountains; Paradox Valley/Lower Dolores River; Four Corners/Upper Dolores River; Animas River Basin; San Juan River Basin; Southeast Utah; La Sal and Abajo Mountains; Canyonlands/Natural Bridges",
+                "geocode": {
+                    "SAME": [
+                        "008029",
+                        "008077",
+                        "008085",
+                        "008091",
+                        "008113",
+                        "008051",
+                        "008053",
+                        "008007",
+                        "008033",
+                        "008067",
+                        "008083",
+                        "008111",
+                        "049037",
+                        "049019"
+                    ],
+                    "UGC": [
+                        "COZ017",
+                        "COZ018",
+                        "COZ019",
+                        "COZ020",
+                        "COZ021",
+                        "COZ022",
+                        "COZ023",
+                        "UTZ022",
+                        "UTZ028",
+                        "UTZ029"
+                    ]
+                },
+                "affectedZones": [
+                    "https://api.weather.gov/zones/forecast/COZ017",
+                    "https://api.weather.gov/zones/forecast/COZ018",
+                    "https://api.weather.gov/zones/forecast/COZ019",
+                    "https://api.weather.gov/zones/forecast/COZ020",
+                    "https://api.weather.gov/zones/forecast/COZ021",
+                    "https://api.weather.gov/zones/forecast/COZ022",
+                    "https://api.weather.gov/zones/forecast/COZ023",
+                    "https://api.weather.gov/zones/forecast/UTZ022",
+                    "https://api.weather.gov/zones/forecast/UTZ028",
+                    "https://api.weather.gov/zones/forecast/UTZ029"
+                ],
+                "references": [
+                    {
+                        "@id": "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.4c2dd958580560f3aefbdfa5fe5606b541da1e5c.001.1",
+                        "identifier": "urn:oid:2.49.0.1.840.0.4c2dd958580560f3aefbdfa5fe5606b541da1e5c.001.1",
+                        "sender": "w-nws.webmaster@noaa.gov",
+                        "sent": "2026-09-27T00:45:00-06:00"
+                    }
+                ],
+                "sent": "2026-09-27T10:27:00-06:00",
+                "effective": "2026-09-27T10:27:00-06:00",
+                "onset": "2026-09-28T06:00:00-06:00",
+                "expires": "2026-09-28T07:00:00-06:00",
+                "ends": "2026-09-30T06:00:00-06:00",
+                "status": "Actual",
+                "messageType": "Update",
+                "category": "Met",
+                "severity": "Severe",
+                "certainty": "Possible",
+                "urgency": "Future",
+                "event": "Flood Watch",
+                "sender": "w-nws.webmaster@noaa.gov",
+                "senderName": "NWS Grand Junction CO",
+                "headline": "Flood Watch issued September 27 at 10:27AM MDT until September 30 at 6:00AM MDT by NWS Grand Junction CO",
+                "description": "* WHAT...Flooding caused by excessive rainfall continues to be\npossible.\n\n* WHERE...Portions of Colorado, including the following areas, Animas\nRiver Basin, Four Corners/Upper Dolores River, Northwest San Juan\nMountains, Paradox Valley/Lower Dolores River, San Juan River\nBasin, Southwest San Juan Mountains and Uncompahgre Plateau and\nDallas Divide and southeast Utah, including the following areas,\nCanyonlands/Natural Bridges, La Sal and Abajo Mountains and\nSoutheast Utah.\n\n* WHEN...From Monday morning through late Tuesday night.\n\n* IMPACTS...Flooding will be possible over burn scars, at low-water\ncrossings, and along creeks, streams, washes, arroyos and other\nflood-prone locations. Creeks and streams may rise out of their\nbanks. Unpaved roads could become muddy and impassable.\n\n* ADDITIONAL DETAILS...\n- Periods of heavy rainfall, associated with remnant moisture from\nHurricane Polo, are expected to produce numerous showers and\nembedded thunderstorms. Heavy rain falling on saturated soils and\nburn scars could lead to localized flash flooding and rises on\nlocal rivers.\n- http://www.weather.gov/safety/flood",
+                "instruction": "You should monitor later forecasts and be alert for possible Flood\nWarnings. Those living in areas prone to flooding should be prepared\nto take action should flooding develop.",
+                "response": "Prepare",
+                "note": null,
+                "parameters": {
+                    "AWIPSidentifier": [
+                        "FFAGJT"
+                    ],
+                    "WMOidentifier": [
+                        "WGUS65 KGJT 271627"
+                    ],
+                    "NWSheadline": [
+                        "FLOOD WATCH REMAINS IN EFFECT FROM MONDAY MORNING THROUGH LATE TUESDAY NIGHT"
+                    ],
+                    "BLOCKCHANNEL": [
+                        "EAS",
+                        "NWEM",
+                        "CMAS"
+                    ],
+                    "EAS-ORG": [
+                        "WXR"
+                    ],
+                    "VTEC": [
+                        "/O.CON.KGJT.FA.A.0009.260928T1200Z-260930T1200Z/"
+                    ],
+                    "eventEndingTime": [
+                        "2026-09-30T06:00:00-06:00"
+                    ]
+                },
+                "scope": "Public",
+                "code": "IPAWSv1.0",
+                "language": "en-US",
+                "web": "http://www.weather.gov",
+                "eventCode": {
+                    "SAME": [
+                        "FFA"
+                    ],
+                    "NationalWeatherService": [
+                        "FAA"
+                    ]
+                }
+            }
+        }
+    ],
+    "title": "Current watches, warnings, and advisories for Colorado",
+    "updated": "2026-09-28T02:03:16+00:00"
+}

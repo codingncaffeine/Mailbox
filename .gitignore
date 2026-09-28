@@ -23,3 +23,7 @@ docs/
 # Downloaded format specifications — reference material, not ours to redistribute.
 specs/
 packaging/out/
+
+# Local work files: probes, contact sheets, snapshots
+snapshots/
+scratch/
