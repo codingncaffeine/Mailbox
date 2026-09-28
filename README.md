@@ -4,7 +4,7 @@
 
 An email client for everyone.
 
-Mail, Calendar, People, Tasks, Notes, Journal and Feeds in one desktop application for Linux.
+Mail, Calendar, People, Tasks, Notes, Journal, Feeds and Weather in one desktop application for Linux.
 Open protocols only — IMAP, POP3, SMTP, CalDAV, CardDAV — with no cloud service behind it, no
 account required, no AI features and no telemetry.
 
@@ -25,6 +25,17 @@ link, when it recognises the address. Servers that speak plain IMAP and SMTP, se
 included, just take a password.
 
 ![The Mailbox shell: folder pane, message list and reading pane](assets/screenshots/shell.png)
+
+## Weather has been added
+
+New in 0.6.5: a Weather module on the rail. Keep places by city or zip code and see each one's
+conditions now, the next two days hour by hour and two weeks ahead; the National Weather
+Service's warnings and forecasters' discussion in the United States; air quality; and a map with
+radar, satellite, temperature, wind, precipitation and clouds, played through time. The calendar
+shows the next three days beside the date. No account and no key: every copy asks the free
+services itself.
+
+https://github.com/user-attachments/assets/db19cd24-2742-4fc2-adc2-b0ea3a394812
 
 ---
 
@@ -73,7 +84,9 @@ directories, autocomplete, Select Names, business-card and list views, categorie
 every module. **Tasks:** the To-Do
 List, task folders, recurring chores that regenerate on completion, reminders, and Google
 Tasks sync. **Notes and Journal:** a notes wall and a six-view journal timeline. **Feeds:**
-a built-in RSS/Atom reader as a module of its own, with its own store.
+a built-in RSS/Atom reader as a module of its own, with its own store. **Weather:** forecasts,
+warnings, air quality and a weather map for the places you keep, and the next three days on the
+calendar.
 
 **Import and export.** Maildir in three layouts, mbox, `.eml`, `.msg`, read-only `.pst`
 archives, and whole Thunderbird profiles including translated filters. Export is byte-exact:
