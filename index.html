@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mailbox — A complete desktop mail client for Linux</title>
+<meta name="description" content="Mail, Calendar, People, Tasks, Notes, Journal and Feeds in one desktop application for Linux. Open protocols only, everything stored locally, no account and no telemetry. GPL-3.0.">
+<link rel="icon" type="image/png" sizes="32x32" href="img/icon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="img/icon-16.png">
+<link rel="apple-touch-icon" href="img/icon-128.png">
+<meta property="og:title" content="Mailbox — A complete desktop mail client for Linux">
+<meta property="og:description" content="Mail, Calendar, People, Tasks, Notes, Journal and Feeds in one application. Open protocols only, everything stored locally, no account and no telemetry.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://codingncaffeine.github.io/Mailbox/">
+<meta property="og:image" content="https://codingncaffeine.github.io/Mailbox/img/og.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:#060e22;
+  --bg-2:#08142c;
+  --surface:#0c1a35;
+  --surface-2:#122a4e;
+  --line:rgba(126,180,232,0.12);
+  --line-2:rgba(126,180,232,0.22);
+  --text:#c6d5e8;
+  --head:#eaf3ff;
+  --muted:#8095b2;
+  --accent:#2e8bd0;
+  --accent-2:#7ec8f5;
+  --flag:#d64438;
+}
+
+html{scroll-behavior:smooth;scroll-padding-top:64px}
+
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  line-height:1.65;
+  font-size:15px;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+
+a{color:var(--accent-2);text-decoration:none}
+a:hover{color:#b9e2ff}
+
+code{
+  font-family:ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace;
+  font-size:0.88em;
+  background:rgba(126,180,232,0.10);
+  border:1px solid var(--line);
+  border-radius:4px;
+  padding:1px 5px;
+  color:#a9ddff;
+}
+
+.container{max-width:1120px;margin:0 auto;padding:0 28px}
+
+/* ── Nav ─────────────────────────────────────────────── */
+
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:11px 28px;
+  background:rgba(6,14,34,0.86);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--line);
+}
+.nav-brand{
+  display:flex;align-items:center;gap:9px;
+  color:var(--head);font-weight:600;font-size:0.95rem;letter-spacing:-0.01em;
+}
+.nav-brand img{width:24px;height:24px}
+.nav-links{display:flex;gap:24px;align-items:center}
+.nav-links a{color:var(--muted);font-size:0.82rem;font-weight:500;transition:color .15s}
+.nav-links a:hover{color:#dbe8f7}
+.nav-dl{
+  padding:6px 16px;background:var(--accent);color:#fff!important;
+  border-radius:6px;font-weight:600;font-size:0.8rem;transition:background .15s;
+}
+.nav-dl:hover{background:#3a9de4}
+.nav-toggle{
+  display:none;background:transparent;border:1px solid var(--line-2);
+  color:var(--text);border-radius:6px;padding:6px 10px;font-size:1.1rem;
+  line-height:1;cursor:pointer;
+}
+
+/* ── Hero ────────────────────────────────────────────── */
+
+header{
+  position:relative;
+  padding:104px 0 0;
+  text-align:center;
+  overflow:hidden;
+}
+header::before{
+  content:"";position:absolute;top:-260px;left:50%;transform:translateX(-50%);
+  width:1300px;height:760px;
+  background:radial-gradient(ellipse at center,rgba(30,100,160,0.34) 0%,rgba(10,40,90,0.16) 42%,transparent 70%);
+  pointer-events:none;
+}
+header>*{position:relative}
+
+.banner{
+  display:block;width:100%;height:auto;max-width:880px;margin:24px auto 0;
+  border-radius:16px;
+  border:1px solid rgba(126,180,232,0.16);
+  box-shadow:0 0 90px rgba(35,110,180,0.30),0 24px 60px rgba(0,0,0,0.5);
+}
+
+.pill{
+  display:inline-flex;align-items:center;gap:8px;
+  margin:44px 0 20px;padding:5px 14px;
+  border:1px solid var(--line-2);border-radius:999px;
+  background:rgba(126,180,232,0.06);
+  font-size:0.76rem;color:#a9c4e2;letter-spacing:0.01em;
+}
+.pill b{color:var(--accent-2);font-weight:600}
+
+h1{
+  font-size:clamp(2rem,5vw,3.05rem);
+  line-height:1.1;letter-spacing:-0.03em;font-weight:700;
+  color:var(--head);max-width:15ch;margin:0 auto;
+}
+.sub{
+  max-width:62ch;margin:22px auto 0;
+  font-size:1.02rem;color:#9db2cd;line-height:1.7;
+}
+
+.hero-buttons{display:flex;flex-wrap:wrap;gap:11px;justify-content:center;margin-top:32px}
+.btn{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:11px 22px;border-radius:8px;
+  font-weight:600;font-size:0.88rem;
+  transition:background .15s,border-color .15s,transform .15s;
+}
+.btn:hover{transform:translateY(-1px)}
+.btn-app{background:var(--accent);color:#fff!important;box-shadow:0 6px 22px rgba(46,139,208,0.28)}
+.btn-app:hover{background:#3a9de4;color:#fff!important}
+.btn-ghost{background:transparent;color:var(--text)!important;border:1px solid var(--line-2)}
+.btn-ghost:hover{border-color:rgba(126,180,232,0.45);color:var(--head)!important}
+.btn svg{width:16px;height:16px;fill:currentColor;flex:none}
+
+.hero-note{font-size:0.82rem;color:#7189a8;margin-top:16px;max-width:60ch;margin-left:auto;margin-right:auto}
+.hero-note code{background:none;border:none;padding:0;color:#9dc6e8}
+
+/* ── Screenshot frames ───────────────────────────────── */
+
+.shot{
+  margin:60px auto 0;max-width:1240px;padding:0 28px;
+}
+.shot img,.shot video{
+  display:block;width:100%;height:auto;
+  border-radius:12px;border:1px solid var(--line-2);
+  background:var(--surface);
+  box-shadow:0 30px 70px rgba(0,0,0,0.55);
+}
+
+/* ── Sections ────────────────────────────────────────── */
+
+section{padding:100px 0}
+section+section{padding-top:0}
+
+.sh{
+  font-size:0.74rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;
+  color:var(--accent);margin-bottom:14px;
+}
+h2{
+  font-size:clamp(1.5rem,3.2vw,2.05rem);
+  line-height:1.2;letter-spacing:-0.025em;font-weight:700;color:var(--head);
+}
+.lead{max-width:64ch;margin-top:14px;color:#93a9c6;font-size:1rem}
+
+hr{border:0;border-top:1px solid var(--line);margin:0}
+
+/* ── Modules ─────────────────────────────────────────── */
+
+.modules{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));
+  gap:1px;margin-top:44px;
+  background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden;
+}
+.mod{background:var(--bg-2);padding:24px 22px;transition:background .18s}
+.mod:hover{background:#0b1a38}
+.mod-top{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.mod svg{width:18px;height:18px;stroke:var(--accent-2);fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.mod h3{font-size:0.95rem;font-weight:650;color:var(--head);letter-spacing:-0.01em}
+.mod p{font-size:0.855rem;color:#8ba1bd;line-height:1.62}
+
+/* ── Tabbed showcase ─────────────────────────────────── */
+
+.tabs{display:flex;flex-wrap:wrap;gap:8px;margin-top:34px}
+.tab{
+  padding:7px 15px;border-radius:7px;cursor:pointer;
+  background:transparent;border:1px solid var(--line);
+  color:var(--muted);font-size:0.83rem;font-weight:550;
+  font-family:inherit;transition:all .15s;
+}
+.tab:hover{border-color:var(--line-2);color:#cfe0f2}
+.tab.active{background:rgba(46,139,208,0.16);border-color:rgba(46,139,208,0.5);color:#c6e5ff}
+
+.panel{display:none}
+.panel.active{display:block;animation:fade .32s ease}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.panel img,.panel video{
+  display:block;width:100%;height:auto;margin-top:22px;
+  border-radius:10px;border:1px solid var(--line-2);
+  background:var(--surface);box-shadow:0 22px 50px rgba(0,0,0,0.5);
+}
+.panel h3{font-size:1.12rem;font-weight:650;color:var(--head);margin-top:26px;letter-spacing:-0.015em}
+.panel p{margin-top:8px;color:#8ba1bd;max-width:72ch;font-size:0.94rem}
+
+/* ── Card grid ───────────────────────────────────────── */
+
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-top:40px}
+.card{
+  background:var(--bg-2);border:1px solid var(--line);border-radius:11px;
+  padding:22px 22px 24px;transition:border-color .18s,transform .18s;
+}
+.card:hover{border-color:var(--line-2);transform:translateY(-2px)}
+.card h3{font-size:0.97rem;font-weight:650;color:var(--head);margin-bottom:8px;letter-spacing:-0.01em}
+.card p{font-size:0.885rem;color:#8ba1bd;line-height:1.65}
+.card.accent{
+  background:linear-gradient(150deg,rgba(46,139,208,0.20),rgba(12,26,53,0.6));
+  border-color:rgba(46,139,208,0.34);
+}
+
+/* ── Theme trio ──────────────────────────────────────── */
+
+.trio{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-top:40px}
+.trio figure{margin:0}
+.trio img{
+  display:block;width:100%;height:auto;border-radius:9px;
+  border:1px solid var(--line-2);box-shadow:0 14px 34px rgba(0,0,0,0.45);
+}
+.trio figcaption{margin-top:10px;font-size:0.8rem;color:var(--muted);letter-spacing:0.01em}
+
+/* ── Two-up ──────────────────────────────────────────── */
+
+.twoup{display:grid;grid-template-columns:1fr 1fr;gap:34px;align-items:center;margin-top:40px}
+.twoup img,.twoup video{
+  display:block;width:100%;height:auto;border-radius:10px;
+  border:1px solid var(--line-2);box-shadow:0 22px 50px rgba(0,0,0,0.5);
+}
+.checks{margin-top:20px;list-style:none}
+.checks li{
+  position:relative;padding-left:26px;margin-bottom:11px;
+  font-size:0.9rem;color:#8ba1bd;
+}
+.checks li::before{
+  content:"";position:absolute;left:2px;top:9px;
+  width:9px;height:9px;border-radius:2px;
+  background:var(--accent);opacity:0.85;
+}
+.checks b{color:#cfe0f2;font-weight:600}
+
+/* ── Install ─────────────────────────────────────────── */
+
+.install{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:16px;margin-top:40px}
+.ins{
+  background:var(--bg-2);border:1px solid var(--line);border-radius:11px;
+  padding:22px;display:flex;flex-direction:column;
+}
+.ins h3{font-size:0.97rem;color:var(--head);font-weight:650;margin-bottom:6px}
+.ins p{font-size:0.85rem;color:#8095b2;margin-bottom:16px}
+pre{
+  background:#040a18;border:1px solid var(--line);border-radius:8px;
+  padding:13px 15px;overflow-x:auto;margin-top:auto;
+  font-family:ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace;
+  font-size:0.8rem;line-height:1.75;color:#a9ddff;
+}
+pre .c{color:#5d7796}
+
+.deps{
+  margin-top:22px;background:var(--bg-2);border:1px solid var(--line);
+  border-radius:11px;padding:24px;
+}
+.deps h3{font-size:0.95rem;color:var(--head);font-weight:650;margin-bottom:10px}
+.deps p{font-size:0.885rem;color:#8ba1bd;max-width:80ch}
+.deps pre{margin-top:16px}
+
+/* ── Footer ──────────────────────────────────────────── */
+
+footer{
+  border-top:1px solid var(--line);
+  padding:60px 0 70px;margin-top:100px;
+  background:linear-gradient(180deg,transparent,rgba(10,30,66,0.35));
+}
+footer h3{font-size:1.05rem;color:var(--head);font-weight:650;margin-bottom:10px}
+footer p{font-size:0.885rem;color:#8095b2;max-width:74ch}
+.foot-bar{
+  display:flex;flex-wrap:wrap;gap:18px;align-items:center;justify-content:space-between;
+  margin-top:36px;padding-top:26px;border-top:1px solid var(--line);
+  font-size:0.8rem;color:#61789a;
+}
+.foot-bar a{color:#8095b2}
+.foot-bar a:hover{color:#cfe0f2}
+.foot-links{display:flex;gap:20px;flex-wrap:wrap}
+
+/* ── Reveal ──────────────────────────────────────────── */
+
+.reveal{opacity:0;transform:translateY(14px);transition:opacity .6s ease,transform .6s ease}
+.reveal.in{opacity:1;transform:none}
+
+/* ── Responsive ──────────────────────────────────────── */
+
+@media (max-width:860px){
+  .nav-toggle{display:block}
+  .nav-links{
+    display:none;position:absolute;top:100%;left:0;right:0;
+    flex-direction:column;gap:0;align-items:stretch;
+    background:rgba(6,14,34,0.98);border-bottom:1px solid var(--line);
+    padding:8px 0;
+  }
+  .nav-links.open{display:flex}
+  .nav-links a{padding:11px 28px;font-size:0.9rem}
+  .nav-dl{margin:8px 28px;text-align:center}
+  .twoup{grid-template-columns:1fr;gap:24px}
+  section{padding:76px 0}
+  .shot{margin-top:44px;padding:0 20px}
+  .container{padding:0 20px}
+}
+
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .reveal{opacity:1;transform:none;transition:none}
+  .panel.active{animation:none}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-brand" href="#top"><img src="img/icon-64.png" width="24" height="24" alt="">Mailbox</a>
+  <button class="nav-toggle" id="navToggle" aria-label="Menu" aria-expanded="false">☰</button>
+  <div class="nav-links" id="navLinks">
+    <a href="#modules">Modules</a>
+    <a href="#closer">A closer look</a>
+    <a href="#private">Privacy</a>
+    <a href="#themes">Themes</a>
+    <a href="#install">Install</a>
+    <a href="https://github.com/codingncaffeine/Mailbox">GitHub</a>
+    <a class="nav-dl" href="#install">Download</a>
+  </div>
+</nav>
+
+<header id="top">
+  <div class="container">
+    <img class="banner" src="img/banner.webp" alt="Mailbox — the modern, open source email client" width="1376" height="768">
+
+    <div class="pill"><b>v0.6.0</b> · the theme engine release</div>
+
+    <h1>A complete desktop mail client for Linux.</h1>
+
+    <p class="sub">
+      Mail, Calendar, People, Tasks, Notes, Journal and Feeds in one application.
+      Open protocols only — IMAP, POP3, SMTP, CalDAV, CardDAV — with no cloud service
+      behind it, no account required, no AI features and no telemetry.
+    </p>
+
+    <div class="hero-buttons">
+      <a class="btn btn-app" href="https://github.com/codingncaffeine/Mailbox/releases/latest/download/Mailbox.deb">
+        <svg viewBox="0 0 16 16"><path d="M8 1a1 1 0 0 1 1 1v7.6l2.3-2.3a1 1 0 1 1 1.4 1.4l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 0 1 1.4-1.4L7 9.6V2a1 1 0 0 1 1-1Z"/><path d="M2 13a1 1 0 0 1 1 1h10a1 1 0 1 1 0 2H3a1 1 0 0 1-1-1v-1Z"/></svg>
+        Download .deb
+      </a>
+      <a class="btn btn-ghost" href="https://github.com/codingncaffeine/Mailbox/releases/latest">All downloads</a>
+      <a class="btn btn-ghost" href="https://github.com/codingncaffeine/Mailbox">
+        <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48l-.01 2.19c0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+        Source on GitHub
+      </a>
+    </div>
+
+    <p class="hero-note">
+      A <code>.deb</code> for Debian 13 and its relatives · Arch via the AUR
+      (<code>yay -S mailbox-bin</code>) · a self-contained tarball that runs from wherever
+      you extract it.
+    </p>
+  </div>
+
+  <div class="shot reveal">
+    <img src="img/shell-colorful.webp" alt="The Mailbox shell: the module rail, the folder pane, the message list and the reading pane" width="1280" height="820" loading="lazy">
+  </div>
+</header>
+
+<section id="modules">
+  <div class="container">
+    <div class="sh reveal">Seven modules</div>
+    <h2 class="reveal">One window, one store, one set of habits.</h2>
+    <p class="lead reveal">
+      Every module is part of the same application over the same local store, reached from
+      the rail down the left edge. Categories, search, printing and theming work the same way
+      in all of them.
+    </p>
+
+    <div class="modules reveal">
+      <div class="mod">
+        <div class="mod-top">
+          <svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+          <h3>Mail</h3>
+        </div>
+        <p>IMAP, POP3 and SMTP with autoconfig and OAuth2. Conversations, search folders,
+        rules that compile to Sieve, and a junk filter trained on your own marks.</p>
+      </div>
+      <div class="mod">
+        <div class="mod-top">
+          <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+          <h3>Calendar</h3>
+        </div>
+        <p>Recurring events with real time-zone and DST handling, a second time-zone column,
+        iMIP invitations, reminders, a scheduling assistant and read-only <code>.ics</code>
+        subscriptions.</p>
+      </div>
+      <div class="mod">
+        <div class="mod-top">
+          <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><path d="M17 11h4M17 15h4"/></svg>
+          <h3>People</h3>
+        </div>
+        <p>vCard address books over CardDAV, autocomplete and Select Names, business-card and
+        list views, and categories shared with every other module.</p>
+      </div>
+      <div class="mod">
+        <div class="mod-top">
+          <svg viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="17" rx="2"/><path d="m8 12 2.6 2.6L16 9"/></svg>
+          <h3>Tasks</h3>
+        </div>
+        <p>The To-Do List and task folders, recurring chores that regenerate on completion,
+        reminders, and Google Tasks sync.</p>
+      </div>
+      <div class="mod">
+        <div class="mod-top">
+          <svg viewBox="0 0 24 24"><path d="M5 4h9l5 5v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"/><path d="M14 4v5h5"/></svg>
+          <h3>Notes</h3>
+        </div>
+        <p>A wall of small note windows you can leave open on the desktop, categorised and
+        searched alongside everything else.</p>
+      </div>
+      <div class="mod">
+        <div class="mod-top">
+          <svg viewBox="0 0 24 24"><path d="M5 3.5h13a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1H5a2 2 0 0 1 0-4h13"/><path d="M5 3.5v12"/></svg>
+          <h3>Journal</h3>
+        </div>
+        <p>A six-view timeline of what happened and when, kept in the same store as the rest
+        of it.</p>
+      </div>
+      <div class="mod">
+        <div class="mod-top">
+          <svg viewBox="0 0 24 24"><path d="M5 19a1 1 0 1 0 0-.01"/><path d="M5 12a7 7 0 0 1 7 7"/><path d="M5 5a14 14 0 0 1 14 14"/></svg>
+          <h3>Feeds</h3>
+        </div>
+        <p>A built-in RSS and Atom reader as a module of its own, with its own store, boards,
+        Read Later and article text kept for reading offline.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="closer">
+  <div class="container">
+    <div class="sh reveal">A closer look</div>
+    <h2 class="reveal">Pulled straight from the application.</h2>
+
+    <div class="tabs reveal" role="tablist" aria-label="Feature showcase">
+      <button type="button" class="tab active" data-target="p-mail" role="tab" aria-selected="true" aria-controls="p-mail">Mail</button>
+      <button type="button" class="tab" data-target="p-feeds" role="tab" aria-selected="false" aria-controls="p-feeds">Feeds</button>
+      <button type="button" class="tab" data-target="p-peek" role="tab" aria-selected="false" aria-controls="p-peek">Calendar peek</button>
+      <button type="button" class="tab" data-target="p-anim" role="tab" aria-selected="false" aria-controls="p-anim">Themes in motion</button>
+      <button type="button" class="tab" data-target="p-browse" role="tab" aria-selected="false" aria-controls="p-browse">Community themes</button>
+      <button type="button" class="tab" data-target="p-back" role="tab" aria-selected="false" aria-controls="p-back">Account</button>
+    </div>
+
+    <div class="reveal">
+      <div class="panel active" id="p-mail" role="tabpanel">
+        <img src="img/shell-dark.webp" alt="The message list with conversations grouped under Today, across three accounts" width="1280" height="820" loading="lazy">
+        <h3>The message list is the application.</h3>
+        <p>Eleven conversation arrangements, Focused Inbox, an opt-in unified inbox, and
+        full-text search with a keyword grammar — <code>from:</code>, <code>subject:</code>,
+        dates — running against a local index whether or not you are online. Snooze, Undo Send,
+        schedule send, Archive, Ignore Conversation, Quick Steps and Conversation Clean Up are
+        all where you would reach for them.</p>
+      </div>
+
+      <div class="panel" id="p-feeds" role="tabpanel">
+        <img src="img/feeds.webp" alt="The Feeds module showing today's articles from several subscriptions" width="1333" height="854" loading="lazy">
+        <h3>A reader, not a folder full of mail.</h3>
+        <p>Feeds is its own module with its own store: subscriptions grouped into headings,
+        boards you assemble yourself, Read Later, unread-only filtering and three densities.
+        Articles come down for reading offline, and the unread count sits in the rail with
+        everything else.</p>
+      </div>
+
+      <div class="panel" id="p-peek" role="tabpanel">
+        <img src="img/peek.webp" alt="A floating calendar peek over the message list, showing the month and the day's appointments" width="1280" height="820" loading="lazy">
+        <h3>Peek without leaving the mail.</h3>
+        <p>The rail opens the calendar, people or tasks over the message list rather than
+        instead of it — docked to the side or floating where you left it, with the day's
+        appointments underneath the month.</p>
+      </div>
+
+      <div class="panel" id="p-anim" role="tabpanel">
+        <video autoplay muted loop playsinline preload="metadata" width="1348" height="882"
+               aria-label="An animated community theme playing on the Mailbox title bar">
+          <source src="img/animated-themes.webm" type="video/webm">
+          <source src="img/animated-themes.mp4" type="video/mp4">
+        </video>
+        <h3>Animated themes animate.</h3>
+        <p>GIF and APNG headers keep their animation: every frame decoded, composited and
+        freshly re-encoded, then played on the title bar at each frame's own timing — reaching
+        through the tab strip, the band those images were drawn for. A Reach option reins any
+        theme back.</p>
+      </div>
+
+      <div class="panel" id="p-browse" role="tabpanel">
+        <img src="img/theme-browser.webp" alt="Browsing community themes from inside Mailbox, each previewed as Mailbox would wear it" width="916" height="645" loading="lazy">
+        <h3>Half a million themes, previewed as Mailbox would wear them.</h3>
+        <p>Search addons.mozilla.org from inside the application by words, popularity, rating,
+        trending, colour or category. Every preview is drawn from the same mapping an install
+        produces, and the theme's licence is named while declining is still a button.
+        Installing asks first, in plain words. The browser is the one place theming touches a
+        network — only addons.mozilla.org, and only while it is open.</p>
+      </div>
+
+      <div class="panel" id="p-back" role="tabpanel">
+        <img src="img/backstage.webp" alt="The account page: account settings, mailbox settings, rules and alerts, and the update check" width="1280" height="820" loading="lazy">
+        <h3>Everything about the account in one place.</h3>
+        <p>Accounts and connections, mailbox size and archiving, rules and alerts, import and
+        export. The update check asks the release page whether a newer version exists — only
+        when you press it, or at startup if you turn that switch on. Nothing else on this page
+        touches the network.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="private">
+  <div class="container">
+    <div class="sh reveal">Yours, on your machine</div>
+    <h2 class="reveal">Nothing leaves unless you send it.</h2>
+    <p class="lead reveal">
+      There is no service behind Mailbox. Not as a policy — there is nothing to send your mail
+      to, and nothing to sign up for.
+    </p>
+
+    <div class="grid">
+      <div class="card accent reveal">
+        <h3>Everything is local</h3>
+        <p>Your mail lives in a store on your machine and stays readable when the network does
+        not. A rolling offline window per folder, or everything, as you prefer.</p>
+      </div>
+      <div class="card reveal">
+        <h3>Open protocols, no lock-in</h3>
+        <p>IMAP, POP3 and SMTP for mail; CalDAV and CardDAV for calendars, contacts, tasks and
+        notes. Self-hosted servers and any provider that speaks them, equally.</p>
+      </div>
+      <div class="card reveal">
+        <h3>Mail is untrusted input</h3>
+        <p>Every message passes an unbypassable sanitizer before the rendering engine sees it.
+        Remote images are blocked by default, and a report names the hosts that wanted to be
+        fetched.</p>
+      </div>
+      <div class="card reveal">
+        <h3>Who really sent it</h3>
+        <p>DKIM, SPF and DMARC results are shown on the message itself, with warnings for
+        lookalike domains and display-name spoofing.</p>
+      </div>
+      <div class="card reveal">
+        <h3>Encryption, off until you ask</h3>
+        <p>S/MIME and OpenPGP in both directions — signing, encryption, protected headers, key
+        generation, WKD lookup — and shipped disabled, so nothing cryptographic happens until
+        you turn it on.</p>
+      </div>
+      <div class="card reveal">
+        <h3>Passwords in the keyring</h3>
+        <p>Credentials go to the desktop keyring over Secret Service, never into a file.
+        Everything else stores under the XDG directories where you would expect to find it.</p>
+      </div>
+      <div class="card reveal">
+        <h3>Confined by its own launcher</h3>
+        <p>The packaged launcher runs the application in a hardened transient systemd user
+        unit: read-only outside its own data directories, no new privileges, an empty
+        capability set and a syscall allow-list — with every deliberate exception documented
+        beside the property it relaxes.</p>
+      </div>
+      <div class="card reveal">
+        <h3>No telemetry</h3>
+        <p>The one thing that would call home is the update check, and it is off unless you
+        turn it on.</p>
+      </div>
+    </div>
+
+    <p class="lead reveal" style="margin-top:26px">
+      The wiki's <a href="https://github.com/codingncaffeine/Mailbox/wiki/Hardening">Hardening</a>
+      page walks through each layer with pointers into the code and checks you can run yourself.
+    </p>
+  </div>
+</section>
+
+<section id="themes">
+  <div class="container">
+    <div class="sh reveal">Themes</div>
+    <h2 class="reveal">A theme that reaches every surface.</h2>
+    <p class="lead reveal">
+      The usual failure of themeable applications is holes — a compose window or a settings
+      page the theme cannot reach. Every surface in Mailbox takes its colour from a named
+      token rather than a literal, and a coverage gate refuses to load a theme that is missing
+      one.
+    </p>
+
+    <div class="trio">
+      <figure class="reveal">
+        <img src="img/shell-colorful.webp" alt="Mailbox in the Colorful theme" width="1280" height="820" loading="lazy">
+        <figcaption>Colorful</figcaption>
+      </figure>
+      <figure class="reveal">
+        <img src="img/theme-white.webp" alt="Mailbox in the White theme" width="1280" height="820" loading="lazy">
+        <figcaption>White</figcaption>
+      </figure>
+      <figure class="reveal">
+        <img src="img/theme-black.webp" alt="Mailbox in the Black theme" width="1280" height="820" loading="lazy">
+        <figcaption>Black — with Dark Gray, four built in</figcaption>
+      </figure>
+    </div>
+
+    <div class="twoup">
+      <div class="reveal">
+        <ul class="checks">
+          <li><b>Backgrounds.</b> The title bar takes a texture or a picture of your own,
+          dragged into alignment by hand and kept exactly where you put it.</li>
+          <li><b>Palettes.</b> Build a theme from a colour scheme: fourteen curated base16
+          schemes, your desktop's own colours, or a scheme sampled from your background image.
+          A palette recolours the chrome and never the content.</li>
+          <li><b>Point at it.</b> The shell dims, the region under the pointer lifts with its
+          name, and a click scopes the editor to the tokens that paint it.</li>
+          <li><b>Import a browser theme.</b> An <code>.xpi</code>, a zip or a bare
+          <code>manifest.json</code> — and everything a browser says that a mail client cannot
+          use is listed honestly rather than guessed at.</li>
+          <li><b>Share it as one file.</b> A theme is a small JSON document; a theme with
+          images travels as a pack, installed through the same door with the same checks.</li>
+        </ul>
+      </div>
+      <div class="reveal">
+        <img src="img/theme-browser.webp" alt="The community theme browser inside Mailbox" width="916" height="645" loading="lazy">
+      </div>
+    </div>
+
+    <p class="lead reveal" style="margin-top:34px">
+      And the rule underneath all of it: choosing a built-in theme is always a complete return
+      to stock. No import, palette, edit or background can leave residue on Colorful, White,
+      Dark Gray or Black — an invariant the test suite enforces.
+    </p>
+  </div>
+</section>
+
+<section id="import">
+  <div class="container">
+    <div class="sh reveal">Import and export</div>
+    <h2 class="reveal">Bring everything with you. Take it away again.</h2>
+
+    <div class="grid">
+      <div class="card reveal">
+        <h3>Coming in</h3>
+        <p>Maildir in three layouts, mbox, <code>.eml</code>, <code>.msg</code>, read-only
+        <code>.pst</code> archives, and whole Thunderbird profiles — including filters,
+        translated into rules.</p>
+      </div>
+      <div class="card reveal">
+        <h3>Going out, byte for byte</h3>
+        <p>Every message is kept as the RFC 822 bytes it arrived as, so mbox and
+        <code>.eml</code> leave with nothing lost — plus <code>.ics</code> and
+        <code>.vcf</code> for the other modules.</p>
+      </div>
+      <div class="card reveal">
+        <h3>A desktop citizen</h3>
+        <p>Notifications with Reply, Delete and Mark Read; a tray icon with an unread badge;
+        autostart and start-minimised; <code>mailto:</code> handling, single-instance
+        activation, MIME associations and Print to PDF.</p>
+      </div>
+      <div class="card reveal">
+        <h3>Yours to rearrange</h3>
+        <p>Three toolbar modes over a layout you can rearrange, every action a named rebindable
+        command with conflict detection, adjustable density, HiDPI including fractional
+        scaling, and a plugin host with a versioned API.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="container">
+    <div class="sh reveal">Install</div>
+    <h2 class="reveal">Three ways in.</h2>
+    <p class="lead reveal">
+      Every release ships a <code>.deb</code> and a self-contained tarball; the AUR package
+      repackages the tarball for Arch.
+    </p>
+
+    <div class="install">
+      <div class="ins reveal">
+        <h3>Debian, Ubuntu and relatives</h3>
+        <p>Built and tested against Debian 13 in a clean container on every release.</p>
+        <pre><span class="c"># from the release page</span>
+sudo apt install ./Mailbox.deb</pre>
+      </div>
+      <div class="ins reveal">
+        <h3>Arch Linux</h3>
+        <p>From the AUR, repackaged from the same release tarball.</p>
+        <pre>yay -S mailbox-bin</pre>
+      </div>
+      <div class="ins reveal">
+        <h3>Any distribution</h3>
+        <p>Self-contained. Runs from wherever you extract it, no installation required.</p>
+        <pre>tar -xzf Mailbox-<span class="c">&lt;ver&gt;</span>-linux-x64.tar.gz
+./Mailbox/mailbox</pre>
+      </div>
+    </div>
+
+    <div class="deps reveal">
+      <h3>What it needs on the target</h3>
+      <p>
+        WPE WebKit (<code>libwpewebkit-2.0-1</code> / <code>wpewebkit</code>), libwpe and
+        WPEBackend-fdo, X11 or Wayland, and fontconfig. Recommended:
+        <code>secret-tool</code> (libsecret) for the keyring, <code>notify-send</code>
+        (libnotify) for notifications, Hunspell dictionaries for spelling, and a desktop
+        portal — with GTK 3 as the fallback — for the file dialogs.
+      </p>
+    </div>
+
+    <div class="deps reveal">
+      <h3>Fonts</h3>
+      <p>
+        Mailbox renders received mail at the metrics the sender intended by substituting
+        metric-compatible typefaces. Install these so common business fonts lay out correctly.
+        Proprietary fonts are detected and preferred when you already have them; they are never
+        shipped, because they are not redistributable.
+      </p>
+      <pre><span class="c"># Arch</span>
+sudo pacman -S --needed ttf-carlito ttf-caladea ttf-liberation gsfonts
+
+<span class="c"># Debian / Ubuntu</span>
+sudo apt install fonts-crosextra-carlito fonts-crosextra-caladea \
+                 fonts-liberation2 fonts-urw-base35</pre>
+    </div>
+
+    <div class="deps reveal">
+      <h3>Or build it</h3>
+      <p>The .NET 10 SDK is all it takes.</p>
+      <pre>git clone https://github.com/codingncaffeine/Mailbox
+cd Mailbox
+dotnet run --project src/Mailbox.App</pre>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <h3>Early, but it moves mail.</h3>
+    <p>
+      Add an account and mail works end to end over IMAP, POP3 and SMTP against a local store.
+      The calendar, contacts, tasks, notes, journal and feed modules run against that same
+      store, and the Add Account window takes a CalDAV or CardDAV server too. It is young
+      software and the interface is still being built — bug reports and ideas are welcome on
+      GitHub.
+    </p>
+
+    <div class="foot-bar">
+      <div>GPL-3.0-or-later · Not affiliated with or endorsed by any other software vendor.</div>
+      <div class="foot-links">
+        <a href="https://github.com/codingncaffeine/Mailbox">GitHub</a>
+        <a href="https://github.com/codingncaffeine/Mailbox/wiki">Wiki</a>
+        <a href="https://github.com/codingncaffeine/Mailbox/releases">Releases</a>
+        <a href="https://github.com/codingncaffeine/Mailbox/issues">Issues</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  // Mobile nav
+  var t = document.getElementById('navToggle'), l = document.getElementById('navLinks');
+  t.addEventListener('click', function () {
+    var open = l.classList.toggle('open');
+    t.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  l.addEventListener('click', function (e) {
+    if (e.target.tagName === 'A') { l.classList.remove('open'); t.setAttribute('aria-expanded', 'false'); }
+  });
+
+  // Showcase tabs
+  var tabs = document.querySelectorAll('.tab');
+  Array.prototype.forEach.call(tabs, function (tab) {
+    tab.addEventListener('click', function () {
+      var id = tab.getAttribute('data-target');
+      Array.prototype.forEach.call(tabs, function (o) {
+        var on = o === tab;
+        o.classList.toggle('active', on);
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+      Array.prototype.forEach.call(document.querySelectorAll('.panel'), function (p) {
+        p.classList.toggle('active', p.id === id);
+      });
+      var v = document.querySelector('#' + id + ' video');
+      if (v) { var q = v.play(); if (q && q.catch) q.catch(function () {}); }
+    });
+  });
+
+  // Reveal on scroll
+  var els = document.querySelectorAll('.reveal');
+  if (!('IntersectionObserver' in window)) {
+    Array.prototype.forEach.call(els, function (e) { e.classList.add('in'); });
+    return;
+  }
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (en) {
+      if (en.isIntersecting) { en.target.classList.add('in'); io.unobserve(en.target); }
+    });
+  }, { rootMargin: '0px 0px -60px 0px', threshold: 0.05 });
+  Array.prototype.forEach.call(els, function (e) { io.observe(e); });
+})();
+</script>
+
+</body>
+</html>
