@@ -4,6 +4,8 @@
 
 An email client for everyone.
 
+**Website:** [codingncaffeine.github.io/Mailbox](https://codingncaffeine.github.io/Mailbox/)
+
 Mail, Calendar, People, Tasks, Notes, Journal, Feeds and Weather in one desktop application for Linux.
 Open protocols only — IMAP, POP3, SMTP, CalDAV, CardDAV — with no cloud service behind it, no
 account required, no AI features and no telemetry.
