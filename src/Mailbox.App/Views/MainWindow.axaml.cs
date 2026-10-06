@@ -49,6 +49,9 @@ public partial class MainWindow : Window
         WindowFrame.Apply(this);
         SetUpTitleBar();
 
+        // Open as it was left: size, place and maximised state, kept as it changes.
+        if (ShellWindowMemory.Attach(this, App.Settings)) WindowState = WindowState.Maximized;
+
         // The shipped layout with the user's edits over it, which for a first run is the
         // shipped layout unchanged.
         var layout = App.MailRibbon();
