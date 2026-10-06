@@ -17,8 +17,10 @@ namespace Mailbox.HeadlessTests;
 /// <see cref="Mailbox.App.App"/> is used as the application type because the styles under test
 /// are its own: <c>Shell.axaml</c> and the rest are merged by its XAML, and a control built under
 /// a bare <c>Application</c> would resolve none of the tokens and prove nothing about what a
-/// reader sees. Its <c>OnFrameworkInitializationCompleted</c> — which opens stores, starts
-/// watchers and shows the shell — is never reached, because no lifetime is attached.
+/// reader sees. Its <c>OnFrameworkInitializationCompleted</c> — which opens stores, settings
+/// and the log — <em>is</em> reached: <c>SetupWithoutStarting</c> calls it although no lifetime
+/// is attached. Which profile it opens is decided by <see cref="TestProfile"/>, before any of
+/// this runs, and it is never the real one.
 /// </para>
 /// </remarks>
 public static class HeadlessApp
