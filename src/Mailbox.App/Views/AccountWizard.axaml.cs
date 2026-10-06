@@ -231,6 +231,16 @@ public sealed partial class AccountWizard : Window
         _found = Autoconfig.ForAddress(
             address, wantsPop ? MailProtocolKind.Pop3 : MailProtocolKind.Imap);
 
+        // A provider with only one protocol answered with it — Proton's Bridge has no POP — so
+        // the account type follows. Changing the selection runs this again for the type it now
+        // shows, which fills the boxes; the answer is the same, so it settles in one pass.
+        var found = _found.Protocol == MailProtocolKind.Pop3 ? 0 : 1;
+        if (_protocol.SelectedIndex != found)
+        {
+            _protocol.SelectedIndex = found;
+            return;
+        }
+
         _incomingHost.Text = _found.Incoming.Host;
         _incomingPort.Text = _found.Incoming.Port.ToString();
         _outgoingHost.Text = _found.Outgoing.Host;
@@ -524,7 +534,16 @@ public sealed partial class AccountWizard : Window
                 }
             }
 
-            if (!inbound.Reached)
+            if (!inbound.Reached && inbound.NothingListening && _found?.LocalService is { } service
+                && string.Equals(settings.IncomingHost, _found.Incoming.Host, StringComparison.OrdinalIgnoreCase))
+            {
+                // The settings are right and the program behind them is not running. Sending the
+                // reader to correct them would have them change the one thing that was not wrong.
+                _status.Text = $"{service} is not running: nothing on this machine answered on port "
+                               + $"{settings.IncomingPort}. The account was added and will collect "
+                               + $"mail once {service} is started and signed in.";
+            }
+            else if (!inbound.Reached)
             {
                 _status.Text = inbound.Explanation
                                + " The account was added; correct the incoming server in Account "
@@ -605,6 +624,13 @@ public sealed partial class AccountWizard : Window
 
                     _add.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
 
+                    // The probes after the save outlive this pass, and what they conclude is the
+                    // status line the reader is left with — so wait for it to stop saying "Saving…".
+                    for (var waited = 0; waited < 8000 && _status.Text == "Saving…"; waited += 100)
+                    {
+                        await Task.Delay(100);
+                    }
+
                     // Read back out of the settings rather than off the form: what matters is
                     // what a later run will load, and the three new keys are the ones that decide
                     // whether an account collects mail at all.
@@ -679,7 +705,10 @@ public sealed partial class AccountWizard : Window
             + $"credential: {(SignsIn ? $"sign in with {_provider!.Name}" : "password")}; "
             + $"password box {(_passwordRow.IsVisible ? "shown" : "hidden")}, "
             + $"client ID box {(_clientIdRow.IsVisible ? "shown" : "hidden")}; "
-            + $"Add is {(_add.IsEnabled ? "on" : "off")}.");
+            + $"Add is {(_add.IsEnabled ? "on" : "off")}; "
+            + $"type {_protocol.SelectedItem}; incoming {_incomingHost.Text}:{_incomingPort.Text}; "
+            + $"outgoing {_outgoingHost.Text}:{_outgoingPort.Text}; "
+            + $"status “{_status.Text}”.");
     }
 
     /// <summary>

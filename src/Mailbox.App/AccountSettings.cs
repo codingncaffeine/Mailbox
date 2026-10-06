@@ -136,13 +136,15 @@ public sealed record AccountSettings(
         var host = settings.GetString(Key(accountKey, "incoming.host"));
         if (host.Length == 0) return null;
 
+        // Read through the names the setup table once gave out for servers that never existed,
+        // so an account added with one starts working without being removed and added again.
         return new AccountSettings(
-            host,
+            Autoconfig.CurrentHost(host),
             (int)settings.GetNumber(Key(accountKey, "incoming.port"), 995),
             (SecureSocketOptions)(int)settings.GetNumber(
                 Key(accountKey, "incoming.security"), (int)SecureSocketOptions.SslOnConnect),
             settings.GetString(Key(accountKey, "incoming.user")),
-            settings.GetString(Key(accountKey, "outgoing.host")),
+            Autoconfig.CurrentHost(settings.GetString(Key(accountKey, "outgoing.host"))),
             (int)settings.GetNumber(Key(accountKey, "outgoing.port"), 587),
             (SecureSocketOptions)(int)settings.GetNumber(
                 Key(accountKey, "outgoing.security"), (int)SecureSocketOptions.StartTls),

@@ -181,6 +181,9 @@ public sealed class SmtpSender(MailRepository repository)
                 "The secure connection could not be established. The server's certificate may " +
                 "not be trusted, or it may expect a different kind of encryption on this port."),
 
+        _ when ServerProbe.NothingListening(ex)
+            => SendResult.Deferred(ServerProbe.NothingListeningSentence),
+
         System.Net.Sockets.SocketException
             => SendResult.Deferred("Could not reach the server."),
 

@@ -1,3 +1,4 @@
+using System.Net.Sockets;
 using Mailbox.Core.Diagnostics;
 
 namespace Mailbox.Protocols;
@@ -7,6 +8,12 @@ public sealed record ProbeResult(bool Reached, bool CanAuthenticate, string Expl
 {
     /// <summary>True when nothing needs saying: the server is there and will take a login.</summary>
     public bool IsClear => Reached && CanAuthenticate;
+
+    /// <summary>
+    /// True when the machine answered and nothing on it was listening on the port — a program
+    /// that is not running, rather than a name or a network that is wrong.
+    /// </summary>
+    public bool NothingListening { get; init; }
 }
 
 /// <summary>
@@ -26,6 +33,24 @@ public sealed record ProbeResult(bool Reached, bool CanAuthenticate, string Expl
 public sealed class ServerProbe(Func<ISmtpSession>? session = null)
 {
     private readonly Func<ISmtpSession> _session = session ?? (() => new MailKitSmtpSession());
+
+    /// <summary>
+    /// What a refused connection is, in words: the address was right and something answered,
+    /// but nothing was there to take the connection.
+    /// </summary>
+    /// <remarks>
+    /// Its own sentence because the usual one — check the address, the port and the network —
+    /// is the wrong advice for the commonest case of it. An account that goes through a program
+    /// on this machine, as Proton's does through Bridge, is refused exactly like this whenever
+    /// that program is not running, and its settings are right.
+    /// </remarks>
+    public const string NothingListeningSentence =
+        "Nothing answered on that port: the server refused the connection. If this account goes "
+        + "through a program on this machine, such as Proton Mail Bridge, check that it is running.";
+
+    /// <summary>Whether a failure to connect was a refusal: the host is there, the port is closed.</summary>
+    public static bool NothingListening(Exception ex)
+        => ex is SocketException { SocketErrorCode: SocketError.ConnectionRefused };
 
     /// <summary>
     /// Reaches the incoming server, so whatever it is going to object to is objected to now.
@@ -71,7 +96,10 @@ public sealed class ServerProbe(Func<ISmtpSession>? session = null)
             return new ProbeResult(
                 Reached: false,
                 CanAuthenticate: false,
-                $"{server.Host} could not be reached: {ex.Message}");
+                $"{server.Host} could not be reached: {ex.Message}")
+            {
+                NothingListening = NothingListening(ex),
+            };
         }
     }
 
@@ -112,7 +140,10 @@ public sealed class ServerProbe(Func<ISmtpSession>? session = null)
             return new ProbeResult(
                 Reached: false,
                 CanAuthenticate: false,
-                $"Could not reach {server.Host} on port {server.Port}. {SmtpSender.Classify(ex).Error}");
+                $"Could not reach {server.Host} on port {server.Port}. {SmtpSender.Classify(ex).Error}")
+            {
+                NothingListening = NothingListening(ex),
+            };
         }
         finally
         {

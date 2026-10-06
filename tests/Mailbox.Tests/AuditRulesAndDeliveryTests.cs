@@ -185,6 +185,13 @@ public class AuditRulesAndDeliveryTests
             "Could not reach the server. Check the address, the port, and the network.",
             await ErrorFrom(new System.Net.Sockets.SocketException()));
 
+        // A refusal is the host answering with nothing on the port — Bridge not running — and
+        // checking the address and the network is the wrong advice for it.
+        Assert.Equal(
+            ServerProbe.NothingListeningSentence,
+            await ErrorFrom(new System.Net.Sockets.SocketException(
+                (int)System.Net.Sockets.SocketError.ConnectionRefused)));
+
         Assert.Equal("The server did not answer in time.", await ErrorFrom(new TimeoutException()));
     }
 

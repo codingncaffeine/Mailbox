@@ -259,6 +259,7 @@ public sealed class Pop3Receiver(MailRepository repository, Func<DateTimeOffset>
         MailKit.Security.SslHandshakeException =>
             "The secure connection could not be established. The server's certificate may not " +
             "be trusted, or it may expect a different kind of encryption on this port.",
+        _ when ServerProbe.NothingListening(ex) => ServerProbe.NothingListeningSentence,
         System.Net.Sockets.SocketException =>
             "Could not reach the server. Check the address, the port, and the network.",
         TimeoutException => "The server did not answer in time.",

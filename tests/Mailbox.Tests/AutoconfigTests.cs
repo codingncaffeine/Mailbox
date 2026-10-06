@@ -50,14 +50,70 @@ public class AutoconfigTests
         Assert.Contains("browser", found.Guidance);
     }
 
-    [Fact]
-    public void ProtonIsDescribedAsNeedingTheBridge()
+    /// <summary>
+    /// Proton has no public mail server: Bridge serves the mailbox on this machine. The entry
+    /// used to name <c>imap.mail.proton.me</c> and <c>smtp.mail.proton.me</c>, which have never
+    /// resolved, and a test that checked only the port and the word "Bridge" passed against them.
+    /// </summary>
+    [Theory]
+    [InlineData("someone@proton.me")]
+    [InlineData("someone@protonmail.com")]
+    [InlineData("someone@protonmail.ch")]
+    [InlineData("someone@pm.me")]
+    public void ProtonGoesThroughTheBridgeOnThisMachine(string address)
     {
-        var found = Autoconfig.ForAddress("someone@proton.me");
+        var found = Autoconfig.ForAddress(address);
 
-        Assert.Contains("Bridge", found.Guidance);
+        Assert.True(found.IsKnownProvider);
+        Assert.Equal(MailProtocolKind.Imap, found.Protocol);
+        Assert.Equal("127.0.0.1", found.Incoming.Host);
         Assert.Equal(1143, found.Incoming.Port);
+        Assert.Equal("127.0.0.1", found.Outgoing.Host);
+        Assert.Equal(1025, found.Outgoing.Port);
+        Assert.Equal(address, found.Incoming.UserName);
+        Assert.Equal(AuthKind.Password, found.Auth);
+        Assert.Equal("Proton Mail Bridge", found.LocalService);
+        Assert.Contains("password Bridge shows", found.Guidance);
     }
+
+    /// <summary>
+    /// Bridge has no POP3, and the wizard opens on POP. Guessing <c>pop.proton.me</c> — which is
+    /// what asking for POP used to produce — named another server that does not exist; the
+    /// answer is the IMAP the provider has, and the wizard follows the protocol it is given.
+    /// </summary>
+    [Fact]
+    public void AskingProtonForPopGetsTheBridgesImap()
+    {
+        var found = Autoconfig.ForAddress("someone@proton.me", MailProtocolKind.Pop3);
+
+        Assert.True(found.IsKnownProvider);
+        Assert.Equal(MailProtocolKind.Imap, found.Protocol);
+        Assert.Equal("127.0.0.1", found.Incoming.Host);
+        Assert.Equal(1143, found.Incoming.Port);
+        Assert.Contains("IMAP only", found.Guidance);
+    }
+
+    /// <summary>Only a provider reached through a program here names one.</summary>
+    [Fact]
+    public void AProviderWithItsOwnServersNamesNoLocalProgram()
+    {
+        Assert.Null(Autoconfig.ForAddress("someone@gmail.com").LocalService);
+        Assert.Null(Autoconfig.ForAddress("someone@example.org").LocalService);
+    }
+
+    /// <summary>
+    /// An account saved with one of the names that never existed is read as Bridge's address;
+    /// every other host, the conventional guesses included, is left as the reader saved it.
+    /// </summary>
+    [Theory]
+    [InlineData("imap.mail.proton.me", "127.0.0.1")]
+    [InlineData("smtp.mail.proton.me", "127.0.0.1")]
+    [InlineData("IMAP.Mail.Proton.Me", "127.0.0.1")]
+    [InlineData("imap.gmail.com", "imap.gmail.com")]
+    [InlineData("pop.proton.me", "pop.proton.me")]
+    [InlineData("", "")]
+    public void HostsThatNeverExistedAreReadAsTheBridge(string saved, string expected)
+        => Assert.Equal(expected, Autoconfig.CurrentHost(saved));
 
     [Fact]
     public void AnUnknownDomainGetsTheConventionalNames()
