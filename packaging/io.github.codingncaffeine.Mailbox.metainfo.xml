@@ -67,6 +67,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.6.6" date="2026-10-06">
+      <description>
+        <p>Proton Mail through Proton Mail Bridge, Outlook.com and Hotmail sign-in with nothing to register, and work, school and family domains on Microsoft 365, Google Workspace, Fastmail or Proton recognised by who handles their mail. The main window opens at the size and place it was left, a new-mail notification brings Mailbox to the front, Archive keeps mail on the server, and a message wearing several Gmail labels is found once.</p>
+      </description>
+    </release>
     <release version="0.6.5" date="2026-09-28">
       <description>
         <p>A Weather module on the rail: forecasts by city or zip code, current conditions on the rail, warnings and the forecasters' discussion for the United States, air quality, and a map with radar, satellite, temperature, wind, precipitation and clouds. The calendar shows the next three days beside the date, and the weather's units are set in Options under Calendar.</p>
