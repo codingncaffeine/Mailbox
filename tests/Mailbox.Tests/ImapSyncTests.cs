@@ -699,4 +699,18 @@ public class ImapSyncTests
         Assert.Equal("Trash", repo.FolderWithRole(accountId, FolderRole.Deleted)!.ImapPath);
         Assert.Equal(FolderRole.None, repo.FolderByPath(accountId, "Deleted Messages")!.Role);
     }
+
+    /// <summary>The sync records whether the server is one whose folders are labels.</summary>
+    [Fact]
+    public async Task TheSyncRecordsWhetherFoldersAreLabels()
+    {
+        var (store, repo, accountId) = Imap();
+        using var _ = store;
+
+        await Sync(repo, new FakeImap { Features = ImapFeatures.GMail }).SyncAsync(Connection(), null, Ct);
+        Assert.True(repo.UsesLabels(accountId));
+
+        await Sync(repo, new FakeImap()).SyncAsync(Connection(), null, Ct);
+        Assert.False(repo.UsesLabels(accountId));
+    }
 }

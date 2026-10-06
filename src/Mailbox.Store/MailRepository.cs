@@ -1935,7 +1935,70 @@ public sealed class MailRepository(MailStore store)
         var clause = where.Count == 0 ? string.Empty : " AND " + string.Join(" AND ", where);
         var order = match.Count > 0 ? "ORDER BY bm25(messages_fts), m.received_utc DESC" : "ORDER BY m.received_utc DESC";
 
-        return _store.Query($"{sql}{clause} {order} LIMIT $limit", ReadMessage, [.. parameters]);
+        var found = _store.Query($"{sql}{clause} {order} LIMIT $limit", ReadMessage, [.. parameters]);
+
+        // One folder cannot list a message twice; across several, a labelled message is once.
+        return folderIds is { Count: 1 } ? found : OneCopyEach(found);
+    }
+
+    /// <summary>
+    /// Whether an account's folders are labels — Gmail's — so that one message is listed in a
+    /// folder for each label it wears.
+    /// </summary>
+    public bool UsesLabels(long accountId) => _store.ScalarLong(
+        "SELECT labels FROM accounts WHERE id = $id", ("$id", accountId)) != 0;
+
+    /// <summary>Records what the sync found the server to be.</summary>
+    public void SetUsesLabels(long accountId, bool labels) => _store.Execute(
+        "UPDATE accounts SET labels = $labels WHERE id = $id", ("$labels", labels ? 1 : 0), ("$id", accountId));
+
+    /// <summary>
+    /// Results across folders with each message once, on an account whose folders are labels.
+    /// </summary>
+    /// <remarks>
+    /// Copies are the same message when they share a Message-ID and an account that uses labels.
+    /// The one kept is the Inbox's, else a label's, else the rest's — the copy a reader would go
+    /// to — and the others give way to it where they stood in the order. On any other server
+    /// two copies are two messages, a message sent to oneself in Sent and in the Inbox, and every
+    /// one is kept.
+    /// </remarks>
+    private IReadOnlyList<MessageSummary> OneCopyEach(IReadOnlyList<MessageSummary> rows)
+    {
+        if (rows.Count < 2) return rows;
+
+        var folders = new Dictionary<long, Folder?>();
+        Folder? FolderOf(long id) => folders.TryGetValue(id, out var f) ? f : folders[id] = GetFolder(id);
+
+        var labels = new Dictionary<long, bool>();
+        bool Labelled(MessageSummary row) => FolderOf(row.FolderId) is { } f
+            && (labels.TryGetValue(f.AccountId, out var on) ? on : labels[f.AccountId] = UsesLabels(f.AccountId));
+
+        static int Rank(Folder? folder) => folder?.Role switch
+        {
+            FolderRole.Inbox => 0,
+            FolderRole.None => 1,
+            _ => 2,
+        };
+
+        var kept = new Dictionary<(long Account, string MessageId), MessageSummary>();
+        foreach (var row in rows)
+        {
+            if (row.MessageId is not { Length: > 0 } mid || !Labelled(row)) continue;
+
+            var key = (FolderOf(row.FolderId)!.AccountId, mid);
+            if (!kept.TryGetValue(key, out var best)
+                || (Rank(FolderOf(row.FolderId)), row.Id).CompareTo((Rank(FolderOf(best.FolderId)), best.Id)) < 0)
+            {
+                kept[key] = row;
+            }
+        }
+
+        if (kept.Count == 0) return rows;
+
+        return [.. rows.Where(row => row.MessageId is not { Length: > 0 } mid
+            || FolderOf(row.FolderId) is not { } folder
+            || !kept.TryGetValue((folder.AccountId, mid), out var best)
+            || best.Id == row.Id)];
     }
 
     /// <summary>One word or phrase as an FTS5 literal: quoted, so a stray quote or bracket is text.</summary>
@@ -2746,7 +2809,7 @@ public sealed class MailRepository(MailStore store)
             read,
             [.. parameters, ("$limit", (object?)limit)]);
 
-        if (!custom) return rows;
+        if (!custom) return OneCopyEach(rows);
 
         // A custom folder: the SQL above narrowed by scope alone; the conditions decide here,
         // over the row's own facts. What a row cannot say — a header, the body beyond its text —
@@ -2758,7 +2821,7 @@ public sealed class MailRepository(MailStore store)
             if (Mailbox.Core.Rules.RuleEvaluator.Matches(rule, FactsFor(row, ownAddresses))) facts.Add(row);
         }
 
-        return facts;
+        return OneCopyEach(facts);
     }
 
     /// <summary>How many of a search folder's results are unread, for the folder pane's count.</summary>
@@ -2780,7 +2843,9 @@ public sealed class MailRepository(MailStore store)
         var (where, parameters) = Clause(query, ownAddresses, now);
         return (int)_store.ScalarLong(
             $"""
-             SELECT count(*) FROM messages m JOIN folders f ON f.id = m.folder_id
+             SELECT count(DISTINCT CASE WHEN a.labels = 1 AND m.message_id IS NOT NULL AND m.message_id <> ''
+                                        THEN 'id:' || m.message_id ELSE 'row:' || m.id END)
+             FROM messages m JOIN folders f ON f.id = m.folder_id JOIN accounts a ON a.id = f.account_id
              WHERE f.role NOT IN ({excluded}) AND m.is_read = 0{Awake.Replace("snooze_until", "m.snooze_until")} AND ({where})
              """,
             parameters);

@@ -808,6 +808,16 @@ public static class Migrations
         """
         ALTER TABLE messages ADD COLUMN receipt_settled INTEGER NOT NULL DEFAULT 0;
         """,
+
+        // ---- 37: an account whose folders are labels ---------------------------------------
+        //
+        // On Gmail one message wears several labels and is listed in a folder for each, so the
+        // store holds a copy per label. Searching across folders shows such a message once; this
+        // records which accounts that applies to, as the sync last found the server. Zero —
+        // every existing account — is an ordinary server, whose copies in two folders are two.
+        """
+        ALTER TABLE accounts ADD COLUMN labels INTEGER NOT NULL DEFAULT 0;
+        """,
     ];
 
     /// <summary>The version a store is brought up to.</summary>

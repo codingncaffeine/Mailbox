@@ -167,8 +167,8 @@ public class MailStoreTests : IDisposable
         // stores already migrated past it differing from a fresh one — and since the schema
         // fixtures landed, detectably: AuditStoreMigrationTests takes each step from the commit
         // that introduced it and fails on the exact step that moved. This count is the cheap
-        // tripwire in front of that; 36 is the read-receipt bookkeeping.
-        Assert.Equal(36, Migrations.Steps.Count);
+        // tripwire in front of that; 37 is the accounts whose folders are labels.
+        Assert.Equal(37, Migrations.Steps.Count);
         Assert.Equal(Migrations.Steps.Count, Migrations.Latest);
     }
 }

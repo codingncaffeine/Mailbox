@@ -75,6 +75,10 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
             await session.ConnectAsync(account.Incoming, cancellation);
             await session.AuthenticateAsync(account.Incoming, cancellation);
 
+            // Read off the server each time rather than kept from the address: a domain can move
+            // to Google, and what the store does with copies follows what the server is now.
+            _repository.SetUsesLabels(account.AccountId, session.Features.HasFlag(ImapFeatures.GMail));
+
             var mapped = await MapFoldersAsync(session, account, cancellation);
             await PlaceArchiveAsync(session, account, cancellation);
             var played = await PlayJournalAsync(session, account, cancellation);
