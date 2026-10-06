@@ -18,11 +18,11 @@ against that same store rather than placeholders, and the Add Account window als
 CalDAV or CardDAV server: it finds the calendars and address books on offer and keeps the ones
 you pick in sync on every send/receive.
 
-**One caveat before you install.** Microsoft consumer mailboxes still ask you to register a
-client application of your own and paste its id into the account wizard — the
-OAuth2 flow is built and correct, but the project has not registered a public client yet. Gmail,
-Yahoo and AOL want an app password rather than your ordinary one, and Gmail additionally wants
-two-step verification on and IMAP switched on in its own settings — the wizard says so, with the
+**Before you install.** Microsoft accounts (outlook.com, hotmail.com, live.com) sign in through
+your browser with nothing to register; Mailbox 0.6.5 and earlier asked you to register a client
+application of your own, and the next release does not. Proton Mail is reached through Proton
+Mail Bridge, running on the same machine. Gmail, Yahoo and AOL want an app password rather than
+your ordinary one, and Gmail additionally wants two-step verification on and IMAP switched on in its own settings — the wizard says so, with the
 link, when it recognises the address. Servers that speak plain IMAP and SMTP, self-hosted ones
 included, just take a password.
 

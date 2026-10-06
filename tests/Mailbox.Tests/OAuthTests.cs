@@ -139,6 +139,20 @@ public class OAuthTests
 
     // ---- The loopback listener ----
 
+    /// <summary>
+    /// Microsoft matches a loopback redirect against its registration with the port ignored and
+    /// the path compared. The project's registration is <c>http://localhost</c>, so the redirect
+    /// is the root on some port and nothing else; <c>/mailbox-oauth/</c> was refused with
+    /// invalid_request before the sign-in page appeared.
+    /// </summary>
+    [Fact]
+    public void TheMicrosoftRedirectIsLocalhostAtTheRootOnAnyPort()
+    {
+        using var redirect = LoopbackRedirect.Open("localhost");
+
+        Assert.Equal($"http://localhost:{redirect.Port}/", redirect.RedirectUri.AbsoluteUri);
+    }
+
     [Fact]
     public async Task TheListenerHandsBackWhatTheBrowserWasSentTo()
     {
@@ -688,6 +702,19 @@ public class OAuthTests
         Assert.False(OAuthProviders.Google.WorksOutOfTheBox);
         Assert.NotNull(OAuthProviders.Google.OwnClientGuidance);
         Assert.DoesNotContain("mail.google.com", OAuthProviders.Google.Scopes);
+    }
+
+    /// <summary>
+    /// The project's own registration ships, so a Microsoft account signs in without its user
+    /// registering anything — and it is a GUID, because a value with a stray character fails at
+    /// the provider with a page rather than a redirect, and the sign-in would wait for nothing.
+    /// </summary>
+    [Fact]
+    public void MicrosoftShipsTheProjectsOwnClient()
+    {
+        Assert.True(OAuthProviders.Microsoft.WorksOutOfTheBox);
+        Assert.True(Guid.TryParseExact(OAuthProviders.Microsoft.ClientId, "D", out _));
+        Assert.Same(OAuthProviders.Microsoft, OAuthProviders.ForMail("someone@outlook.com"));
     }
 
     [Fact]

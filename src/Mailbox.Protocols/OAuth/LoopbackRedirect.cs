@@ -25,7 +25,17 @@ namespace Mailbox.Protocols.OAuth;
 /// </remarks>
 public sealed class LoopbackRedirect : IDisposable
 {
-    private const string Path = "/mailbox-oauth/";
+    /// <summary>
+    /// The root, because a registration names a redirect by its path as well as its host.
+    /// </summary>
+    /// <remarks>
+    /// Microsoft ignores the port of a loopback redirect and nothing else: a registration of
+    /// <c>http://localhost</c> — the project's own, and the one the wizard tells a user to make —
+    /// refused <c>http://localhost:port/mailbox-oauth/</c> with invalid_request before the sign-in
+    /// page was ever shown. A stray request at the root (a browser's icon fetch) has no query, and
+    /// <see cref="WaitAsync"/> already turns that away and keeps waiting.
+    /// </remarks>
+    internal const string Path = "/";
 
     private readonly HttpListener _listener = new();
     private bool _stopped;

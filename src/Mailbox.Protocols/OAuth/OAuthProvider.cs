@@ -59,9 +59,9 @@ public static class OAuthProviders
     /// personal account and a work one with the same registration.
     /// <para>
     /// The registration is free, takes no security assessment and holds no secret, so Microsoft's
-    /// side of the stance is a public client and nothing more. It is a project action rather than a code
-    /// one: until an application is registered and its ID put in <see cref="ClientIds"/>, this
-    /// provider works through a client the user brings.
+    /// side of the stance is a public client and nothing more. The project's own is in
+    /// <see cref="ClientIds"/>; an account signed in with a client its user registered keeps that
+    /// one, which is what <see cref="OwnClientGuidance"/> is still here for.
     /// </para>
     /// </remarks>
     public static readonly OAuthProvider Microsoft = new(
@@ -143,9 +143,9 @@ public static class OAuthProviders
 public static class ClientIds
 {
     /// <summary>
-    /// Azure application (client) ID. Empty until the project registers one — see
-    /// <see cref="OAuthProviders.Microsoft"/> for what that involves and why nothing here can do
-    /// it for itself.
+    /// The project's Azure application (client) ID: a public client, for personal and work
+    /// accounts both, with <c>http://localhost</c> as its redirect — see
+    /// <see cref="OAuthProviders.Microsoft"/>.
     /// </summary>
-    public const string Microsoft = "";
+    public const string Microsoft = "4b9a8ff7-dba8-4325-be6a-7778ed0a7f1d";
 }
