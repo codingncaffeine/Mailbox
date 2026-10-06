@@ -3252,12 +3252,20 @@ public partial class MainWindow : Window
     /// Shows the window and brings it to the front — from the tray, a notification, or a second
     /// launch handing over. Show as well as Activate, because a window started minimised to the
     /// tray has never been shown at all.
+    /// <para>
+    /// And as a taskbar asks, not as the application asks. Every one of these is the reader's own
+    /// doing, but the window manager weighs an application's request to be activated against the
+    /// window the reader is in and refuses it — the window stayed where it was behind the other
+    /// application while its taskbar entry flashed, and a click on a new-mail notification seemed
+    /// to do nothing at all. The taskbar's request is carried out (<see cref="X11Stacking.ActivateOnce"/>).
+    /// </para>
     /// </summary>
     public void BringForward()
     {
         Show();
         if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
         Activate();
+        X11Stacking.ActivateOnce(this);
     }
 
     /// <summary>

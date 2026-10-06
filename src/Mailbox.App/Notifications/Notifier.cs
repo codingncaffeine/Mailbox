@@ -154,7 +154,17 @@ public sealed class DesktopNotifier : INotifier, IDisposable
             var chosen = (await read).Trim();
             await process.WaitForExitAsync();
 
-            if (chosen.Length > 0) notification.Activated?.Invoke(chosen);
+            if (chosen.Length > 0)
+            {
+                notification.Activated?.Invoke(chosen);
+            }
+            else
+            {
+                // Said, so a report of "I clicked it and nothing happened" can be told apart
+                // from a click that never reached here: this is the server closing the
+                // notification with no action chosen — dismissed, or closed from its history.
+                Log.Info($"Notification: “{notification.Summary}” closed with nothing chosen (exit {process.ExitCode}).");
+            }
         }
         catch (Exception ex)
         {

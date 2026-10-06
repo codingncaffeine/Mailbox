@@ -47,6 +47,26 @@ public class SingleInstanceTests : IDisposable
         Assert.Equal(["mailto:priya@example.net", "--flag"], received);
     }
 
+    /// <summary>
+    /// A plain launch from the menu carries no arguments, and is still a request to see the
+    /// running Mailbox: it reaches the primary as an empty command line rather than not at all.
+    /// </summary>
+    [Fact]
+    public async Task APlainSecondLaunchReachesThePrimaryToo()
+    {
+        using var primary = new SingleInstance(_path);
+
+        IReadOnlyList<string>? received = null;
+        primary.Listen(args => received = args);
+        await Eventually(() => File.Exists(_path), "the primary should be listening");
+
+        using var secondary = new SingleInstance(_path);
+        Assert.True(secondary.TryHandOff([]));
+
+        await Eventually(() => received is not null, "the primary should hear a launch with no arguments");
+        Assert.Empty(received!);
+    }
+
     [Fact]
     public void WithNoPrimaryTheCallerIsToldToBecomeOne()
     {

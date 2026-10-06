@@ -108,8 +108,12 @@ public sealed class SingleInstance : IDisposable
                 try
                 {
                     var text = await ReadAllAsync(connection, cancellation);
+                    // An empty command line is still a launch: the reader opened Mailbox from the
+                    // menu while it was running, and that is a request to see it. Dropping it is
+                    // how a running Mailbox — hidden in the tray, or behind another window —
+                    // came to ignore being started again.
                     var args = text.TrimEnd('\0').Split('\n', StringSplitOptions.RemoveEmptyEntries);
-                    if (args.Length > 0) onCommandLine(args);
+                    onCommandLine(args);
                 }
                 catch (Exception ex)
                 {

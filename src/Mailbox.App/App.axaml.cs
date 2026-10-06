@@ -1235,7 +1235,13 @@ public partial class App : Application
             // while Mailbox already runs — asks for nothing visible, and gets nothing.
             Instance?.Listen(commandLine => Dispatcher.UIThread.Post(() =>
             {
-                if (commandLine.All(a => a == Mailbox.Core.Platform.Autostart.MinimizedSwitch)) return;
+                // Only a command line that is nothing but the switch. All() is true of an empty
+                // one too, and a plain launch from the menu — no arguments at all — was taken for
+                // the autostart and brought nothing forward.
+                Log.Info($"A second launch handed over [{string.Join(" ", commandLine)}].");
+
+                if (commandLine.Count > 0
+                    && commandLine.All(a => a == Mailbox.Core.Platform.Autostart.MinimizedSwitch)) return;
 
                 window.BringForward();
                 window.ComposeFromCommandLine(commandLine);

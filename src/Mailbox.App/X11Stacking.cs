@@ -57,10 +57,36 @@ internal static class X11Stacking
     /// that is not an X11 one, and nothing but a line in the log when the display cannot be asked.
     /// </summary>
     public static void RaiseOnce(Window window)
+        => SendOnceManaged(window, "_NET_RESTACK_WINDOW", Above,
+            "Stacking: raised once over the windows in front, without the keyboard.", "raised");
+
+    /// <summary>
+    /// Brings <paramref name="window"/> to the front with the keyboard, as a taskbar does when its
+    /// entry is clicked, once the window manager has mapped it.
+    /// </summary>
+    /// <remarks>
+    /// For what the reader asked for themselves — a click on a notification, on the tray icon, a
+    /// second launch. The application's own request to be activated is weighed against the
+    /// window the reader was in and, coming from a process the reader has not touched lately,
+    /// refused: KWin flashes the taskbar entry instead, which is focus-stealing prevention doing
+    /// its job on a request that was not stealing anything. <c>_NET_ACTIVE_WINDOW</c> with a
+    /// pager's source is the request a taskbar sends, and both KWin and Mutter carry it out
+    /// without that weighing — the same standing the toaster's raise relies on. Nothing for a
+    /// native Wayland window, which has no such request to make.
+    /// </remarks>
+    public static void ActivateOnce(Window window)
+        => SendOnceManaged(window, "_NET_ACTIVE_WINDOW", 0,
+            "Stacking: brought to the front with the keyboard, as a taskbar does.", "activated");
+
+    private static void SendOnceManaged(Window window, string request, nint detail, string said, string verb)
     {
         ArgumentNullException.ThrowIfNull(window);
 
-        if (window.TryGetPlatformHandle() is not { HandleDescriptor: "XID", Handle: var xid } || xid == 0) return;
+        if (window.TryGetPlatformHandle() is not { HandleDescriptor: "XID", Handle: var xid } || xid == 0)
+        {
+            Log.Info($"Stacking: not an X11 window ({window.TryGetPlatformHandle()?.HandleDescriptor ?? "no handle"}), so it was not {verb}.");
+            return;
+        }
 
         nint display;
         try
@@ -80,7 +106,7 @@ internal static class X11Stacking
         }
 
         var managed = XInternAtom(display, "WM_STATE\0"u8.ToArray(), 0);
-        var restack = XInternAtom(display, "_NET_RESTACK_WINDOW\0"u8.ToArray(), 0);
+        var message = XInternAtom(display, System.Text.Encoding.ASCII.GetBytes(request + "\0"), 0);
         var started = DateTime.UtcNow;
         var timer = new DispatcherTimer { Interval = Poll };
         var done = false;
@@ -103,15 +129,15 @@ internal static class X11Stacking
 
             if (IsManaged(display, xid, managed))
             {
-                Raise(display, xid, restack);
-                Log.Info("Stacking: raised once over the windows in front, without the keyboard.");
+                Send(display, xid, message, detail);
+                Log.Info(said);
                 Finish();
                 return;
             }
 
             if (DateTime.UtcNow - started < GiveUp) return;
 
-            Log.Warn($"Stacking: the window manager had not mapped the window after {GiveUp.TotalSeconds:0} seconds, so it was not raised.");
+            Log.Warn($"Stacking: the window manager had not mapped the window after {GiveUp.TotalSeconds:0} seconds, so it was not {verb}.");
             Finish();
         };
 
@@ -128,7 +154,13 @@ internal static class X11Stacking
         return status == Success && type != 0;
     }
 
-    private static void Raise(nint display, nint window, nint restack)
+    /// <summary>
+    /// One of the two requests, from a pager. Both carry the source first; the restack's sibling
+    /// and the activation's timestamp are both zero — none, and "now" — and the third word is the
+    /// restack's direction or the activation's currently active window, which a pager may leave
+    /// unsaid.
+    /// </summary>
+    private static void Send(nint display, nint window, nint request, nint detail)
     {
         var message = new RestackMessage
         {
@@ -136,11 +168,11 @@ internal static class X11Stacking
             SendEvent = 1,
             Display = display,
             Window = window,
-            MessageType = restack,
+            MessageType = request,
             Format = 32,
             Source = FromPager,
             Sibling = 0,
-            Detail = Above,
+            Detail = detail,
             Unused3 = 0,
             Unused4 = 0,
         };
