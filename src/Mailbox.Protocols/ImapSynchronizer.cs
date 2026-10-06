@@ -76,6 +76,7 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
             await session.AuthenticateAsync(account.Incoming, cancellation);
 
             var mapped = await MapFoldersAsync(session, account, cancellation);
+            await PlaceArchiveAsync(session, account, cancellation);
             var played = await PlayJournalAsync(session, account, cancellation);
 
             // The journal is played whatever is being pulled: an operation made offline belongs
@@ -131,7 +132,7 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
     private async Task<IReadOnlyList<Folder>> MapFoldersAsync(
         IImapSession session, AccountConnection account, CancellationToken cancellation)
     {
-        var remote = await session.ListFoldersAsync(cancellation);
+        var remote = WithRolesByName(await session.ListFoldersAsync(cancellation));
         var byPath = _repository.Folders(account.AccountId)
             .Where(f => f.ImapPath is not null)
             .ToDictionary(f => f.ImapPath!, StringComparer.Ordinal);
@@ -184,6 +185,109 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
         // Pull the Inbox first: it is the one anybody is waiting to see.
         toPull.Sort((a, b) => (a.Role == FolderRole.Inbox ? 0 : 1).CompareTo(b.Role == FolderRole.Inbox ? 0 : 1));
         return toPull;
+    }
+
+    /// <summary>The names a server's archive goes by when it is not marked as one.</summary>
+    private static readonly string[] ArchiveNames = ["Archive", "Archives"];
+
+    /// <summary>
+    /// The names each role's folder goes by on servers that do not mark it, in the order they are
+    /// tried — the names Thunderbird and K-9 recognise, and this application's own.
+    /// </summary>
+    private static readonly (FolderRole Role, string[] Names)[] RoleNames =
+    [
+        (FolderRole.Sent, ["Sent", "Sent Items", "Sent Messages", "Sent Mail"]),
+        (FolderRole.Drafts, ["Drafts", "Draft"]),
+        (FolderRole.Deleted, ["Trash", "Deleted Items", "Deleted Messages", "Deleted"]),
+        (FolderRole.Junk, ["Junk", "Junk Email", "Junk E-mail", "Spam", "Bulk Mail"]),
+        (FolderRole.Archive, ArchiveNames),
+    ];
+
+    /// <summary>
+    /// The server's folder list, with each role nothing is marked for given to the top-level
+    /// folder that goes by one of its names.
+    /// </summary>
+    /// <remarks>
+    /// SPECIAL-USE is optional, and a server without it still has its Drafts and its Sent. Left
+    /// unrecognised, such a folder was added beside the account's own of the same name — which
+    /// the store refuses for two top-level folders, so a server with a plain "Drafts" or
+    /// "Archive" failed every sync. Taken by name, the account's own folder becomes the server's.
+    /// </remarks>
+    private static IReadOnlyList<RemoteFolder> WithRolesByName(IReadOnlyList<RemoteFolder> remote)
+    {
+        var given = new Dictionary<string, FolderRole>(StringComparer.Ordinal);
+
+        foreach (var (role, names) in RoleNames)
+        {
+            if (remote.Any(f => f.Role == role)) continue;
+
+            var named = names
+                .Select(name => remote.FirstOrDefault(f => f.Role == FolderRole.None && f.ParentPath is null
+                    && f.Selectable && !f.IsView && !given.ContainsKey(f.Path)
+                    && string.Equals(f.Name, name, StringComparison.OrdinalIgnoreCase)))
+                .FirstOrDefault(f => f is not null);
+
+            if (named is not null) given[named.Path] = role;
+        }
+
+        return given.Count == 0
+            ? remote
+            : [.. remote.Select(f => given.TryGetValue(f.Path, out var role) ? f with { Role = role } : f)];
+    }
+
+    /// <summary>
+    /// Gives the account's Archive a folder on the server, once there is something to put in it.
+    /// </summary>
+    /// <remarks>
+    /// Every account is created with an Archive, and a server that has no archive leaves it here
+    /// alone. Archiving into it used to be played as a delete — the server's copy destroyed and
+    /// the mail kept on this machine only. Now, the first time it holds anything or has a move
+    /// waiting, the server is given one: the top-level folder already called Archive when there
+    /// is one, else a new one, as Thunderbird does. Whatever the Archive held while it was only
+    /// here goes up with it, which puts back mail an earlier archive took off the server.
+    /// <para>
+    /// Not on Gmail. Its folders are labels, an Archive there would be a label on every archived
+    /// message, and taking a message out of the Inbox is already how it archives: the move is
+    /// played as that (see <see cref="PlayOneAsync"/>), and the mail stays in All Mail.
+    /// </para>
+    /// </remarks>
+    private async Task PlaceArchiveAsync(IImapSession session, AccountConnection account, CancellationToken cancellation)
+    {
+        if (session.Features.HasFlag(ImapFeatures.GMail)) return;
+        if (_repository.FolderWithRole(account.AccountId, FolderRole.Archive) is not { ImapPath: null } archive) return;
+
+        var pending = _repository.PendingOps();
+        var wanted = _repository.Messages(archive.Id).Count > 0 || pending.Any(o => o.TargetFolderId == archive.Id);
+        if (!wanted) return;
+
+        // A folder called Archive that this account already knows as an ordinary one: its
+        // local copies give way to the Archive's, and are pulled again under it.
+        var existing = _repository.Folders(account.AccountId).FirstOrDefault(f =>
+            f.Id != archive.Id && f.ImapPath is not null && f.ParentId is null && f.Synced
+            && ArchiveNames.Contains(f.Name, StringComparer.OrdinalIgnoreCase));
+
+        string path, name;
+        if (existing is not null)
+        {
+            // Anything still waiting to be played against it waits for a later sync, rather
+            // than losing the folder it refers to.
+            if (pending.Any(o => o.FolderId == existing.Id || o.TargetFolderId == existing.Id)) return;
+
+            (path, name) = (existing.ImapPath!, existing.Name);
+            _repository.RemoveFolder(existing.Id);
+        }
+        else
+        {
+            var created = await session.CreateFolderAsync(ArchiveNames[0], cancellation);
+            (path, name) = (created.Path, created.Name);
+        }
+
+        _repository.MapFolder(archive.Id, path, name, null);
+        _repository.SetFolderSynced(archive.Id, true);
+        var uploads = _repository.JournalUploads(archive.Id);
+
+        Log.Info($"The Archive for {account.Address} is now {path} on the server"
+                 + (uploads > 0 ? $"; {uploads} message(s) archived here only are going up to it." : "."));
     }
 
     // ---- Playing the journal --------------------------------------------------------------
@@ -267,6 +371,18 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
             {
                 var source = _repository.GetFolder(op.FolderId);
                 var target = _repository.GetFolder(targetId);
+
+                // Archived on Gmail, into the Archive that is only here: taking the message out of
+                // the folder it was in is Gmail's own archive, and it stays in All Mail.
+                if (source?.ImapPath is { } from && target is { ImapPath: null, Role: FolderRole.Archive }
+                    && session.Features.HasFlag(ImapFeatures.GMail))
+                {
+                    await session.OpenAsync(from, cancellation);
+                    await session.ExpungeAsync([long.Parse(uid)], cancellation);
+                    _repository.CompleteOps([op.Id]);
+                    return true;
+                }
+
                 if (source?.ImapPath is null || target?.ImapPath is null)
                 {
                     _repository.AbandonMove(op);

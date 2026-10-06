@@ -79,6 +79,9 @@ internal sealed class FakeImap : IImapSession
 
     public IReadOnlyList<ServerMessage> Contents(string path) => _folders[path].Messages;
 
+    /// <summary>Whether the server has a folder of that name.</summary>
+    public bool Has(string path) => _folders.ContainsKey(path);
+
     /// <summary>Removes a message from the server as an expunge elsewhere would.</summary>
     public void Expunge(string path, long uid) => _folders[path].Messages.RemoveAll(m => m.Uid == uid);
 

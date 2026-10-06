@@ -462,4 +462,241 @@ public class ImapSyncTests
         // A POP3 store has no server to sync to, so no journal is written for any of it.
         Assert.Empty(repo.PendingOps());
     }
+
+    // ---- Archive ---------------------------------------------------------------------------
+
+    /// <summary>
+    /// A server with no Archive folder. Archive used to file the message into the local-only
+    /// Archive every account is created with, and a move into a folder that is not on the
+    /// server was played as an expunge — the server's copy destroyed, the mail left on this
+    /// machine alone. It now makes an Archive folder on the server and moves the message there.
+    /// </summary>
+    [Fact]
+    public async Task ArchivingWhereTheServerHasNoArchiveKeepsTheMessageOnTheServer()
+    {
+        var (store, repo, accountId) = Imap();
+        using var _ = store;
+
+        var server = new FakeImap();
+        server.Deliver("INBOX", "Keep me");
+        await Sync(repo, server).SyncAsync(Connection(), null, Ct);
+
+        var inbox = repo.FolderWithRole(accountId, FolderRole.Inbox)!;
+        var archive = repo.FolderWithRole(accountId, FolderRole.Archive)!;
+        Assert.Null(archive.ImapPath);
+
+        repo.MoveMessages([repo.Messages(inbox.Id).Single().Id], archive.Id);
+        var result = await Sync(repo, server).SyncAsync(Connection(), null, Ct);
+
+        Assert.True(result.Succeeded, result.Error);
+        Assert.Empty(server.Contents("INBOX"));
+        Assert.True(server.Has("Archive"));
+        Assert.Equal("Keep me", Assert.Single(server.Contents("Archive")).Message.Subject);
+
+        // One Archive, now the server's, holding the one message under its server UID.
+        archive = repo.FolderWithRole(accountId, FolderRole.Archive)!;
+        Assert.Equal("Archive", archive.ImapPath);
+        Assert.True(archive.Synced);
+        Assert.Single(repo.Folders(accountId), f => f.Role == FolderRole.Archive);
+        var kept = Assert.Single(repo.Messages(archive.Id));
+        Assert.Equal(server.Contents("Archive").Single().Uid.ToString(), kept.ServerUid);
+        Assert.Empty(repo.PendingOps());
+
+        // And a further sync leaves it as it is: no second copy pulled, nothing lost.
+        await Sync(repo, server).SyncAsync(Connection(), null, Ct);
+        Assert.Single(repo.Messages(archive.Id));
+        Assert.Single(server.Contents("Archive"));
+    }
+
+    /// <summary>
+    /// A server that already has a folder called Archive without marking it as one is given
+    /// the message there, rather than a second folder of the same name.
+    /// </summary>
+    [Fact]
+    public async Task AnUnmarkedArchiveFolderOnTheServerIsTheOneUsed()
+    {
+        var (store, repo, accountId) = Imap();
+        using var _ = store;
+
+        var server = new FakeImap();
+        server.Folder("Archive");
+        server.Deliver("INBOX", "Keep me");
+        await Sync(repo, server).SyncAsync(Connection(), null, Ct);
+
+        var inbox = repo.FolderWithRole(accountId, FolderRole.Inbox)!;
+        var archive = repo.FolderWithRole(accountId, FolderRole.Archive)!;
+        repo.MoveMessages([repo.Messages(inbox.Id).Single().Id], archive.Id);
+        await Sync(repo, server).SyncAsync(Connection(), null, Ct);
+
+        Assert.Single(server.Contents("Archive"));
+        Assert.Single(repo.Folders(accountId), f => string.Equals(f.Name, "Archive", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("Archive", repo.FolderWithRole(accountId, FolderRole.Archive)!.ImapPath);
+    }
+
+    /// <summary>
+    /// Gmail archives by taking a message out of the Inbox, and keeps it in All Mail. An
+    /// Archive folder there would be a label called Archive on every archived message.
+    /// </summary>
+    [Fact]
+    public async Task ArchivingOnGmailTakesTheMessageOutOfTheInboxAndMakesNoLabel()
+    {
+        var (store, repo, accountId) = Imap();
+        using var _ = store;
+
+        var server = new FakeImap { Features = ImapFeatures.Move | ImapFeatures.UidPlus | ImapFeatures.GMail };
+        server.Folder("[Gmail]/All Mail", FolderRole.None, isView: true);
+        server.Deliver("INBOX", "Keep me");
+        await Sync(repo, server).SyncAsync(Connection(), null, Ct);
+
+        var inbox = repo.FolderWithRole(accountId, FolderRole.Inbox)!;
+        var archive = repo.FolderWithRole(accountId, FolderRole.Archive)!;
+        repo.MoveMessages([repo.Messages(inbox.Id).Single().Id], archive.Id);
+        await Sync(repo, server).SyncAsync(Connection(), null, Ct);
+
+        Assert.Empty(server.Contents("INBOX"));
+        Assert.False(server.Has("Archive"));
+        Assert.Single(repo.Messages(repo.FolderWithRole(accountId, FolderRole.Archive)!.Id));
+    }
+
+    /// <summary>
+    /// Mail archived before this was fixed sits in the local-only Archive with no copy left on
+    /// the server. When the Archive comes to be on the server, that mail goes up with it.
+    /// </summary>
+    [Fact]
+    public async Task MailArchivedOnlyHereGoesUpWhenTheArchiveReachesTheServer()
+    {
+        var (store, repo, accountId) = Imap();
+        using var _ = store;
+
+        var server = new FakeImap();
+        server.Deliver("INBOX", "New");
+        await Sync(repo, server).SyncAsync(Connection(), null, Ct);
+
+        var archive = repo.FolderWithRole(accountId, FolderRole.Archive)!;
+        var raw = System.Text.Encoding.ASCII.GetBytes(
+            "From: a@example.com\r\nTo: you@example.com\r\nSubject: Archived long ago\r\nMessage-Id: <old@example.com>\r\n\r\nBody\r\n");
+        repo.AddMessage(archive.Id, new MessageSummary(0, archive.Id, null, "<old@example.com>", "A", "a@example.com",
+            "Archived long ago", "Body", Now, Now, raw.Length, true, false, false), raw);
+
+        var inbox = repo.FolderWithRole(accountId, FolderRole.Inbox)!;
+        repo.MoveMessages([repo.Messages(inbox.Id).Single().Id], archive.Id);
+        await Sync(repo, server).SyncAsync(Connection(), null, Ct);
+
+        Assert.Equal(["Archived long ago", "New"],
+            server.Contents("Archive").Select(m => m.Message.Subject).Order());
+        Assert.All(repo.Messages(repo.FolderWithRole(accountId, FolderRole.Archive)!.Id), m => Assert.NotNull(m.ServerUid));
+    }
+
+    /// <summary>Nothing archived, nothing made: a server is not given a folder nobody uses.</summary>
+    [Fact]
+    public async Task AServerIsNotGivenAnArchiveNobodyUses()
+    {
+        var (store, repo, _) = Imap();
+        using var __ = store;
+
+        var server = new FakeImap();
+        server.Deliver("INBOX", "Hello");
+        await Sync(repo, server).SyncAsync(Connection(), null, Ct);
+        await Sync(repo, server).SyncAsync(Connection(), null, Ct);
+
+        Assert.False(server.Has("Archive"));
+    }
+
+    /// <summary>
+    /// An account synced before Archive was taken by name knows a server's "Archives" — the name
+    /// Thunderbird gives the folder — as an ordinary folder beside the local-only Archive. The
+    /// first archive makes them one, the server's, and its mail comes back under it.
+    /// </summary>
+    [Fact]
+    public async Task AnArchiveKnownAsAnOrdinaryFolderBecomesTheArchive()
+    {
+        var (store, repo, accountId) = Imap();
+        using var _ = store;
+
+        var server = new FakeImap();
+        server.Folder("Archives");
+        server.Deliver("Archives", "Archived elsewhere");
+        server.Deliver("INBOX", "Keep me");
+
+        // The state an earlier sync left: the server's Archives as a plain folder of its own.
+        var plain = repo.AddFolder(accountId, "Archives", FolderRole.None, null, "Archives");
+        repo.SetFolderSynced(plain.Id, true);
+        await Sync(repo, server).SyncAsync(Connection(), null, Ct);
+        Assert.Single(repo.Messages(plain.Id));
+
+        var inbox = repo.FolderWithRole(accountId, FolderRole.Inbox)!;
+        var archive = repo.FolderWithRole(accountId, FolderRole.Archive)!;
+        Assert.Null(archive.ImapPath);
+        repo.MoveMessages([repo.Messages(inbox.Id).Single().Id], archive.Id);
+        await Sync(repo, server).SyncAsync(Connection(), null, Ct);
+        await Sync(repo, server).SyncAsync(Connection(), null, Ct);
+
+        Assert.False(server.Has("Archive"));
+        Assert.Equal(["Archived elsewhere", "Keep me"], server.Contents("Archives").Select(m => m.Message.Subject).Order());
+        Assert.Null(repo.GetFolder(plain.Id));
+        archive = repo.FolderWithRole(accountId, FolderRole.Archive)!;
+        Assert.Equal("Archives", archive.ImapPath);
+        Assert.Equal(["Archived elsewhere", "Keep me"], repo.Messages(archive.Id).Select(m => m.Subject).Order());
+    }
+
+    /// <summary>
+    /// A server with an unmarked top-level folder called exactly Archive. It used to be added as
+    /// a second folder of the name the account's own Archive already had, which the store
+    /// refuses — and the whole sync failed with it, every time.
+    /// </summary>
+    [Fact]
+    public async Task AnUnmarkedArchiveOnTheServerDoesNotStopTheSync()
+    {
+        var (store, repo, accountId) = Imap();
+        using var _ = store;
+
+        var server = new FakeImap();
+        server.Folder("Archive");
+        server.Deliver("INBOX", "Hello");
+
+        var result = await Sync(repo, server).SyncAsync(Connection(), null, Ct);
+
+        Assert.True(result.Succeeded, result.Error);
+        Assert.Equal(1, result.Downloaded);
+        Assert.Equal("Archive", repo.FolderWithRole(accountId, FolderRole.Archive)!.ImapPath);
+    }
+
+    /// <summary>
+    /// The same for the other roles: a server without SPECIAL-USE whose drafts and junk are
+    /// plain folders gets them as the account's own, rather than failing on a second Drafts.
+    /// </summary>
+    [Fact]
+    public async Task UnmarkedRoleFoldersAreTakenByName()
+    {
+        var (store, repo, accountId) = Imap();
+        using var _ = store;
+
+        var server = new FakeImap();
+        server.Folder("Drafts");
+        server.Folder("Spam");
+        server.Deliver("INBOX", "Hello");
+
+        var result = await Sync(repo, server).SyncAsync(Connection(), null, Ct);
+
+        Assert.True(result.Succeeded, result.Error);
+        Assert.Equal("Drafts", repo.FolderWithRole(accountId, FolderRole.Drafts)!.ImapPath);
+        Assert.Equal("Spam", repo.FolderWithRole(accountId, FolderRole.Junk)!.ImapPath);
+        Assert.Single(repo.Folders(accountId), f => f.Role == FolderRole.Drafts);
+        Assert.Single(repo.Folders(accountId), f => f.Role == FolderRole.Junk);
+    }
+
+    /// <summary>A role the server marks is never moved to another folder by its name.</summary>
+    [Fact]
+    public async Task AMarkedRoleIsNotOverriddenByAName()
+    {
+        var (store, repo, accountId) = Imap();
+        using var _ = store;
+
+        var server = new FakeImap();          // Trash is marked as Deleted.
+        server.Folder("Deleted Messages");
+        await Sync(repo, server).SyncAsync(Connection(), null, Ct);
+
+        Assert.Equal("Trash", repo.FolderWithRole(accountId, FolderRole.Deleted)!.ImapPath);
+        Assert.Equal(FolderRole.None, repo.FolderByPath(accountId, "Deleted Messages")!.Role);
+    }
 }

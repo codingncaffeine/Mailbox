@@ -24,6 +24,12 @@ public enum ImapFeatures
 
     /// <summary>IDLE: the server can say when something changes, instead of being asked.</summary>
     Idle = 8,
+
+    /// <summary>
+    /// X-GM-EXT-1: Gmail, whose folders are labels. Taking a message out of one removes that
+    /// label and nothing else, so an expunge from the Inbox is how Gmail itself archives.
+    /// </summary>
+    GMail = 16,
 }
 
 /// <summary>
@@ -197,6 +203,7 @@ public sealed class MailKitImapSession : IImapSession
             if (_client.Capabilities.HasFlag(ImapCapabilities.Move)) features |= ImapFeatures.Move;
             if (_client.Capabilities.HasFlag(ImapCapabilities.UidPlus)) features |= ImapFeatures.UidPlus;
             if (_client.Capabilities.HasFlag(ImapCapabilities.Idle)) features |= ImapFeatures.Idle;
+            if (_client.Capabilities.HasFlag(ImapCapabilities.GMailExt1)) features |= ImapFeatures.GMail;
             return features;
         }
     }

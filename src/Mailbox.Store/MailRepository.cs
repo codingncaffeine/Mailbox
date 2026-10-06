@@ -1510,6 +1510,46 @@ public sealed class MailRepository(MailStore store)
         "SELECT count(*) FROM folders WHERE id = $id AND imap_path IS NOT NULL AND synced = 1",
         ("$id", folderId)) > 0;
 
+    /// <summary>
+    /// Whether a move into this folder ends up on the server: a synced server folder, or the
+    /// Archive every account is created with while it waits for the server to have one.
+    /// </summary>
+    /// <remarks>
+    /// The Archive is the exception because a move into a folder that is not on the server is
+    /// journalled as a delete, and for the Archive that was the server's copy of every message
+    /// archived destroyed on a server with no Archive folder. Journalled as a move, it is the
+    /// sync that decides where it lands: an Archive it makes on the server, or — on Gmail, where
+    /// archiving is taking a message out of the Inbox — the Inbox's copy taken away.
+    /// </remarks>
+    private bool WillReachServer(long folderId) => IsImapStore && _store.ScalarLong(
+        """
+        SELECT count(*) FROM folders WHERE id = $id
+          AND ((imap_path IS NOT NULL AND synced = 1) OR (imap_path IS NULL AND role = 'archive'))
+        """,
+        ("$id", folderId)) > 0;
+
+    /// <summary>
+    /// Journals an append for every message in a folder that is on no server and has nothing
+    /// pending that will put it there. Returns how many.
+    /// </summary>
+    /// <remarks>
+    /// For a folder that has just been tied to the server: what it held while it was only here
+    /// goes up with it rather than staying on this machine alone.
+    /// </remarks>
+    public int JournalUploads(long folderId) => _store.InTransaction(() =>
+    {
+        var ids = _store.Query(
+            """
+            SELECT m.id FROM messages m
+            WHERE m.folder_id = $folder AND m.server_uid IS NULL AND m.blob_id IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM sync_ops o WHERE o.message_id = m.id)
+            """,
+            r => r.GetInt64(0), ("$folder", folderId));
+
+        foreach (var id in ids) JournalAppend(folderId, id);
+        return ids.Count;
+    });
+
     /// <summary>What the journal needs to know about a row before it changes.</summary>
     private sealed record RowOrigin(long Id, long FolderId, string? ServerUid, bool Synced);
 
@@ -1564,7 +1604,7 @@ public sealed class MailRepository(MailStore store)
         if (!IsImapStore) return false;
         if (Origin(messageId) is not { } origin || origin.FolderId == toFolderId) return false;
 
-        var targetSynced = IsSyncedFolder(toFolderId);
+        var targetSynced = WillReachServer(toFolderId);
 
         if (origin.ServerUid is null)
         {
