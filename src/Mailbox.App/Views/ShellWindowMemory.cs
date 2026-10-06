@@ -65,9 +65,9 @@ internal static class ShellWindowMemory
             {
                 case "wait": await Task.Delay(int.TryParse(argument, out var ms) ? ms : 1000); break;
                 // Through the caption's own button, as a pointer would press it.
-                case "max" or "normal":
+                case "max" or "normal" or "min":
                     var caption = window.FindControl<ContentControl>("CaptionHost")?.Content as CaptionButtons;
-                    if (caption?.Press(step == "max" ? "maximize" : "restore") != true)
+                    if (caption?.Press(step switch { "max" => "maximize", "min" => "minimize", _ => "restore" }) != true)
                     {
                         Log.Warn($"Harness: window step {raw} — no caption button to press.");
                     }
