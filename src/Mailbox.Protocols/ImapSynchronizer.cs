@@ -166,7 +166,14 @@ public sealed class ImapSynchronizer(MailRepository repository, Func<DateTimeOff
             }
             else
             {
-                folder = _repository.AddFolder(account.AccountId, entry.Name, entry.Role, parentId, entry.Path);
+                // A top-level name the account already uses for a folder of its own — the
+                // Outbox, which stays here by design, or one made only on this machine — is not
+                // available twice, and refusing it here failed every sync of the account. The
+                // server's folder keeps its path and takes a name that says whose it is.
+                var name = parentId is null
+                    ? _repository.FreeTopLevelName(account.AccountId, entry.Name, " (server)")
+                    : entry.Name;
+                folder = _repository.AddFolder(account.AccountId, name, entry.Role, parentId, entry.Path);
             }
 
             // A view is listed so a move into it reads, but not pulled.

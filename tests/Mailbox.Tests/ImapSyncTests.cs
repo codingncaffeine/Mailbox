@@ -713,4 +713,60 @@ public class ImapSyncTests
         await Sync(repo, new FakeImap()).SyncAsync(Connection(), null, Ct);
         Assert.False(repo.UsesLabels(accountId));
     }
+
+    /// <summary>
+    /// A server with a folder called Outbox. The account's own Outbox is local by design — mail
+    /// waits there to be sent — so the server's could not take it over, was added beside it
+    /// under the same name, which the store refuses for two top-level folders, and every sync of
+    /// the account failed. The server's is kept, under a name of its own.
+    /// </summary>
+    [Fact]
+    public async Task AServerOutboxSitsBesideTheLocalOneRatherThanStoppingTheSync()
+    {
+        var (store, repo, accountId) = Imap();
+        using var _ = store;
+
+        var server = new FakeImap();
+        server.Folder("Outbox");
+        server.Deliver("Outbox", "Left there by another program");
+        server.Deliver("INBOX", "Hello");
+
+        var result = await Sync(repo, server).SyncAsync(Connection(), null, Ct);
+
+        Assert.True(result.Succeeded, result.Error);
+        Assert.Equal(2, result.Downloaded);
+
+        var outbox = repo.FolderWithRole(accountId, FolderRole.Outbox)!;
+        Assert.Null(outbox.ImapPath);
+        Assert.Equal("Outbox", outbox.Name);
+
+        var theirs = repo.FolderByPath(accountId, "Outbox")!;
+        Assert.NotEqual(outbox.Id, theirs.Id);
+        Assert.Equal("Outbox (server)", theirs.Name);
+        Assert.Single(repo.Messages(theirs.Id));
+
+        // And the next sync finds it where it left it.
+        Assert.True((await Sync(repo, server).SyncAsync(Connection(), null, Ct)).Succeeded);
+        Assert.Single(repo.Folders(accountId), f => f.ImapPath == "Outbox");
+    }
+
+    /// <summary>
+    /// The general case: a folder made here only, and one of the same name made on the server
+    /// from somewhere else.
+    /// </summary>
+    [Fact]
+    public async Task AServerFolderNamedLikeALocalOneDoesNotStopTheSync()
+    {
+        var (store, repo, accountId) = Imap();
+        using var _ = store;
+
+        repo.AddFolder(accountId, "Projects");
+        var server = new FakeImap();
+        server.Folder("Projects");
+
+        var result = await Sync(repo, server).SyncAsync(Connection(), null, Ct);
+
+        Assert.True(result.Succeeded, result.Error);
+        Assert.Equal("Projects (server)", repo.FolderByPath(accountId, "Projects")!.Name);
+    }
 }

@@ -69,6 +69,24 @@ public sealed class MailRepository(MailStore store)
         return GetFolder(_store.LastInsertId)!;
     }
 
+    /// <summary>
+    /// A name no top-level folder of the account has: <paramref name="name"/> itself when it is
+    /// free, else with <paramref name="suffix"/>, then numbered.
+    /// </summary>
+    /// <remarks>Top-level only, because that is where the store holds names unique.</remarks>
+    public string FreeTopLevelName(long accountId, string name, string suffix)
+    {
+        bool Taken(string candidate) => _store.ScalarLong(
+            "SELECT count(*) FROM folders WHERE account_id = $account AND parent_id IS NULL AND name = $name",
+            ("$account", accountId), ("$name", candidate)) > 0;
+
+        if (!Taken(name)) return name;
+
+        var candidate = name + suffix;
+        for (var n = 2; Taken(candidate); n++) candidate = $"{name}{suffix} {n}";
+        return candidate;
+    }
+
     /// <summary>The folder standing for a server folder, by the server's name for it.</summary>
     public Folder? FolderByPath(long accountId, string imapPath) => _store.Query(
         FolderSelect + " WHERE f.account_id = $account AND f.imap_path = $path",
