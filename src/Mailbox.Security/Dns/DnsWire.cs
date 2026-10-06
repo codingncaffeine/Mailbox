@@ -7,7 +7,8 @@ namespace Mailbox.Security.Dns;
 /// <param name="Code">The RCODE. Zero is the only one that carries records.</param>
 /// <param name="Records">
 /// One entry per TXT record. A record split across several character-strings is joined, which
-/// RFC 6376 §3.6.2.2 requires — a key long enough to be worth having is usually split.
+/// RFC 6376 §3.6.2.2 requires — a key long enough to be worth having is usually split. For an MX
+/// question, the exchangers' host names, most preferred first.
 /// </param>
 /// <param name="Ttl">The shortest TTL among the answers, in seconds. What the cache honours.</param>
 public sealed record DnsAnswer(DnsResponseCode Code, IReadOnlyList<string> Records, int Ttl)
@@ -46,15 +47,19 @@ public sealed class DnsProtocolException(string message) : Exception(message);
 /// points, and every length in it is a number that machine wrote. Parsing is therefore bounds-
 /// checked at every step and gives up rather than guessing.
 /// <para>
-/// Only TXT is implemented, because only TXT is needed: a DKIM public key is published as one.
-/// A resolver that can ask for anything is a larger thing to get right than a resolver that
-/// asks one question.
+/// Two questions only, because only two are needed: TXT, the form a DKIM public key is published
+/// in, and MX, which says who handles a domain's mail and so whose servers an address on it
+/// signs in to. A resolver that can ask for anything is a larger thing to get right than a
+/// resolver that asks two questions.
 /// </para>
 /// </remarks>
 public static class DnsWire
 {
     /// <summary>TXT.</summary>
-    internal const ushort TypeText = 16;
+    public const ushort TypeText = 16;
+
+    /// <summary>MX.</summary>
+    public const ushort TypeMail = 15;
 
     /// <summary>IN.</summary>
     internal const ushort ClassInternet = 1;
@@ -76,10 +81,11 @@ public static class DnsWire
     /// <summary>More answers than any real TXT lookup returns.</summary>
     private const int MaxAnswers = 64;
 
-    /// <summary>Builds a TXT query for a name.</summary>
+    /// <summary>Builds a query for a name: TXT unless <paramref name="type"/> says MX.</summary>
     /// <exception cref="ArgumentException">The name is not one that can be asked about.</exception>
-    public static byte[] Query(ushort id, string name)
+    public static byte[] Query(ushort id, string name, ushort type = TypeText)
     {
+        RequireKnown(type);
         var labels = EncodeName(name);
 
         var query = new byte[HeaderBytes + labels.Length + 4];
@@ -94,7 +100,7 @@ public static class DnsWire
         labels.CopyTo(span[HeaderBytes..]);
 
         var tail = span[(HeaderBytes + labels.Length)..];
-        BinaryPrimitives.WriteUInt16BigEndian(tail, TypeText);
+        BinaryPrimitives.WriteUInt16BigEndian(tail, type);
         BinaryPrimitives.WriteUInt16BigEndian(tail[2..], ClassInternet);
 
         return query;
@@ -109,8 +115,10 @@ public static class DnsWire
     /// off-path forger have to guess right rather than merely arrive first.
     /// </remarks>
     /// <exception cref="DnsProtocolException">The response is malformed or answers something else.</exception>
-    public static DnsAnswer ReadResponse(ReadOnlySpan<byte> response, ushort id, string name)
+    public static DnsAnswer ReadResponse(
+        ReadOnlySpan<byte> response, ushort id, string name, ushort type = TypeText)
     {
+        RequireKnown(type);
         if (response.Length < HeaderBytes) throw new DnsProtocolException("The response is too short.");
 
         if (BinaryPrimitives.ReadUInt16BigEndian(response) != id)
@@ -138,7 +146,7 @@ public static class DnsWire
         }
 
         if (offset + 4 > response.Length) throw new DnsProtocolException("The question is truncated.");
-        if (BinaryPrimitives.ReadUInt16BigEndian(response[offset..]) != TypeText)
+        if (BinaryPrimitives.ReadUInt16BigEndian(response[offset..]) != type)
         {
             throw new DnsProtocolException("The response answers a different type.");
         }
@@ -148,6 +156,7 @@ public static class DnsWire
         if (code != DnsResponseCode.NoError) return new DnsAnswer(code, [], 0);
 
         var records = new List<string>();
+        var exchangers = new List<(ushort Preference, string Host)>();
         var ttl = int.MaxValue;
 
         for (var i = 0; i < answers && i < MaxAnswers; i++)
@@ -159,7 +168,7 @@ public static class DnsWire
 
             if (offset + 10 > response.Length) throw new DnsProtocolException("An answer is truncated.");
 
-            var type = BinaryPrimitives.ReadUInt16BigEndian(response[offset..]);
+            var answered = BinaryPrimitives.ReadUInt16BigEndian(response[offset..]);
             var @class = BinaryPrimitives.ReadUInt16BigEndian(response[(offset + 2)..]);
             var recordTtl = BinaryPrimitives.ReadUInt32BigEndian(response[(offset + 4)..]);
             var length = BinaryPrimitives.ReadUInt16BigEndian(response[(offset + 8)..]);
@@ -174,16 +183,63 @@ public static class DnsWire
             // Anything else in the answer section is a CNAME the resolver followed for us, or a
             // type we did not ask for. Stepping over it is the whole of the handling either
             // wants.
-            if (type == TypeText && @class == ClassInternet)
+            if (answered == type && @class == ClassInternet)
             {
-                records.Add(ReadText(response.Slice(offset, length)));
+                if (type == TypeText)
+                {
+                    records.Add(ReadText(response.Slice(offset, length)));
+                }
+                else
+                {
+                    exchangers.Add(ReadExchanger(response, offset, length));
+                }
+
                 ttl = Math.Min(ttl, (int)Math.Min(recordTtl, int.MaxValue));
             }
 
             offset += length;
         }
 
+        // Preference is the order a sender tries them in, so it is the order they are worth
+        // reading in; equal preferences fall back to the name, so the same zone reads the same.
+        records.AddRange(exchangers
+            .OrderBy(e => e.Preference)
+            .ThenBy(e => e.Host, StringComparer.OrdinalIgnoreCase)
+            .Select(e => e.Host));
+
         return new DnsAnswer(code, records, records.Count == 0 ? 0 : ttl);
+    }
+
+    /// <summary>
+    /// An MX record's RDATA: a preference, then the exchanger's name.
+    /// </summary>
+    /// <remarks>
+    /// The name is read out of the whole message rather than the record's slice, because it is
+    /// usually compressed — a pointer back to the question — and must still end inside the
+    /// record it belongs to.
+    /// </remarks>
+    private static (ushort Preference, string Host) ReadExchanger(ReadOnlySpan<byte> message, int offset, int length)
+    {
+        if (length < 3) throw new DnsProtocolException("A mail exchanger record is too short.");
+
+        var preference = BinaryPrimitives.ReadUInt16BigEndian(message[offset..]);
+        var position = offset + 2;
+        var host = ReadName(message, ref position);
+
+        if (position > offset + length)
+        {
+            throw new DnsProtocolException("A mail exchanger's name runs past its record.");
+        }
+
+        return (preference, host);
+    }
+
+    private static void RequireKnown(ushort type)
+    {
+        if (type is not (TypeText or TypeMail))
+        {
+            throw new ArgumentOutOfRangeException(nameof(type), type, "Only TXT and MX are asked.");
+        }
     }
 
     /// <summary>

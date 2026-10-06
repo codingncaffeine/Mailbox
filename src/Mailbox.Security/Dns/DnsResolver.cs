@@ -16,12 +16,26 @@ public interface ITxtLookup
     Task<DnsAnswer> TxtAsync(string name, CancellationToken cancellation = default);
 }
 
+/// <summary>Somewhere a domain's mail exchangers can be asked for.</summary>
+/// <remarks>
+/// Asked only about a domain the reader typed into the account wizard, to tell which provider
+/// hosts it — never about a domain a message names.
+/// </remarks>
+public interface IMxLookup
+{
+    /// <summary>The domain's mail exchangers, most preferred first, in <see cref="DnsAnswer.Records"/>.</summary>
+    Task<DnsAnswer> MxAsync(string domain, CancellationToken cancellation = default);
+}
+
 /// <summary>A lookup that answers nothing, for every path that must not resolve.</summary>
-public sealed class NoLookup : ITxtLookup
+public sealed class NoLookup : ITxtLookup, IMxLookup
 {
     public static NoLookup Instance { get; } = new();
 
     public Task<DnsAnswer> TxtAsync(string name, CancellationToken cancellation = default)
+        => Task.FromResult(DnsAnswer.Empty);
+
+    public Task<DnsAnswer> MxAsync(string domain, CancellationToken cancellation = default)
         => Task.FromResult(DnsAnswer.Empty);
 }
 
@@ -40,7 +54,7 @@ public sealed class NoLookup : ITxtLookup
 /// failure than not verifying a signature.
 /// </para>
 /// </remarks>
-public sealed class DnsResolver : ITxtLookup, IDisposable
+public sealed class DnsResolver : ITxtLookup, IMxLookup, IDisposable
 {
     /// <summary>Larger than any TXT answer, and small enough to bound a hostile one.</summary>
     private const int MaxResponseBytes = 8 * 1024;
@@ -77,13 +91,23 @@ public sealed class DnsResolver : ITxtLookup, IDisposable
     /// be checked is not a signature that failed, and the difference matters to what the reader
     /// is told. The answer says which it was.
     /// </remarks>
-    public async Task<DnsAnswer> TxtAsync(string name, CancellationToken cancellation = default)
+    public Task<DnsAnswer> TxtAsync(string name, CancellationToken cancellation = default)
+        => LookupAsync(name, DnsWire.TypeText, cancellation);
+
+    /// <summary>Asks for a domain's mail exchangers, on the same terms as <see cref="TxtAsync"/>.</summary>
+    public Task<DnsAnswer> MxAsync(string domain, CancellationToken cancellation = default)
+        => LookupAsync(domain, DnsWire.TypeMail, cancellation);
+
+    private async Task<DnsAnswer> LookupAsync(string name, ushort type, CancellationToken cancellation)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         if (string.IsNullOrWhiteSpace(name) || _servers.Count == 0) return DnsAnswer.Empty;
 
-        var key = DnsWire.Normalize(name);
+        var normalized = DnsWire.Normalize(name);
+
+        // One cache for both questions, so the same name asked two ways is two entries.
+        var key = $"{type}:{normalized}";
 
         if (_cache.TryGetValue(key, out var cached) && !cached.Expired) return cached.Answer;
 
@@ -91,7 +115,7 @@ public sealed class DnsResolver : ITxtLookup, IDisposable
 
         try
         {
-            answer = await AskAsync(key, cancellation);
+            answer = await AskAsync(normalized, type, cancellation);
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {
@@ -108,12 +132,12 @@ public sealed class DnsResolver : ITxtLookup, IDisposable
         return answer;
     }
 
-    private async Task<DnsAnswer> AskAsync(string name, CancellationToken cancellation)
+    private async Task<DnsAnswer> AskAsync(string name, ushort type, CancellationToken cancellation)
     {
         // The identifier is the only unpredictable thing in a query an off-path forger has to
         // guess, so it comes from the cryptographic generator rather than from Random.
         var id = (ushort)RandomNumberGenerator.GetInt32(ushort.MaxValue + 1);
-        var query = DnsWire.Query(id, name);
+        var query = DnsWire.Query(id, name, type);
 
         Exception? last = null;
 
@@ -127,7 +151,7 @@ public sealed class DnsResolver : ITxtLookup, IDisposable
                 // does not. TCP is the specified way to ask again rather than a workaround.
                 if (truncated) bytes = await OverTcpAsync(server, query, cancellation);
 
-                return DnsWire.ReadResponse(bytes, id, name);
+                return DnsWire.ReadResponse(bytes, id, name, type);
             }
             catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
             {

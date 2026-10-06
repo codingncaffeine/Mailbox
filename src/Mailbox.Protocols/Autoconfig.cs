@@ -1,4 +1,5 @@
 using MailKit.Security;
+using Mailbox.Security.Dns;
 
 namespace Mailbox.Protocols;
 
@@ -38,6 +39,19 @@ public sealed record AutoconfigResult(
     /// not running instead of sending the reader to correct settings that are right.
     /// </summary>
     public string? LocalService { get; init; }
+
+    /// <summary>
+    /// The authorization server an OAuth2 account signs in to — <c>microsoft</c> — or null. Carried
+    /// in the answer because a domain recognised by its mail exchangers is one the sign-in cannot
+    /// recognise by name.
+    /// </summary>
+    public string? OAuthProviderId { get; init; }
+
+    /// <summary>
+    /// The provider found behind a domain of the reader's own through its MX records, or null
+    /// when the domain was in the table or nothing recognisable answered.
+    /// </summary>
+    public string? HostedBy { get; init; }
 }
 
 /// <summary>Which incoming protocol a provider is configured for.</summary>
@@ -51,9 +65,16 @@ public enum MailProtocolKind
 /// Works out server settings from an email address.
 /// </summary>
 /// <remarks>
-/// Entirely local. A table of the providers most people use, then a guess from the domain —
-/// no lookup service, no network round trip before the user has even typed a password, and
-/// nothing that stops working when someone else's database moves.
+/// A table of the providers most people use, then a guess from the domain — no lookup service,
+/// and nothing that stops working when someone else's database moves.
+/// <para>
+/// A domain of the reader's own is the one case the table cannot know, and the commonest of them
+/// are hosted by a provider in it: a company on Microsoft 365, a family domain on Google. The
+/// domain's MX records say which, so <see cref="DiscoverAsync"/> asks for them — one question, to
+/// the resolver this machine already uses, about the domain the reader typed — and fills in that
+/// provider's servers. It is what the reference and Thunderbird both do, and nothing about the
+/// address goes anywhere a DNS question about its domain would not.
+/// </para>
 /// <para>
 /// The guess is deliberately conservative: implicit TLS on the standard ports, which is what
 /// essentially every provider has offered for a decade. Where it is wrong the user corrects it
@@ -89,6 +110,22 @@ public static class Autoconfig
 
         /// <summary>The program on this machine that serves the account, for one reached through one.</summary>
         public string? LocalService { get; init; }
+
+        /// <summary>What the provider is called, for a domain it was recognised behind.</summary>
+        public string Name { get; init; } = string.Empty;
+
+        /// <summary>
+        /// The mail exchangers that give this provider away, as a host or the domain a host sits
+        /// under: a domain whose MX is one of them has its mail here. Empty for a provider that
+        /// does not host other people's domains, or whose servers for them are not these.
+        /// </summary>
+        public string[] Exchangers { get; init; } = [];
+
+        /// <summary>What to tell someone whose own domain this provider hosts, when it differs.</summary>
+        public string? HostedGuidance { get; init; }
+
+        /// <summary>The authorization server an OAuth2 account here signs in to.</summary>
+        public string? SignIn { get; init; }
     }
 
     /// <summary>
@@ -102,17 +139,39 @@ public static class Autoconfig
             "Gmail no longer accepts your ordinary password. With two-step verification on, "
             + "create an App Password at myaccount.google.com/apppasswords and use that here. "
             + "IMAP or POP also has to be switched on in Gmail's own settings.",
-            "gmail.com", "googlemail.com") { PopIncoming = "pop.gmail.com" },
+            "gmail.com", "googlemail.com")
+        {
+            PopIncoming = "pop.gmail.com",
+            Name = "Google Workspace",
+
+            // aspmx.l.google.com and its alt1–4, the aspmx2–5.googlemail.com backups, and the one
+            // name a domain set up since 2023 is told to publish.
+            Exchangers = ["aspmx.l.google.com", "googlemail.com", "smtp.google.com"],
+            HostedGuidance =
+                "Google Workspace no longer accepts your ordinary password. With two-step "
+                + "verification on, create an App Password at myaccount.google.com/apppasswords "
+                + "and use that here. Your administrator may have to allow IMAP for your account.",
+        },
 
         new("outlook.office365.com", 993, "smtp.office365.com", 587, MailProtocolKind.Imap,
             AuthKind.OAuth2,
             "Microsoft accounts sign in through a browser. Mailbox will open one when you "
             + "continue.",
-            "outlook.com", "hotmail.com", "live.com", "msn.com")
+            "outlook.com", "hotmail.com", "live.com", "msn.com", "passport.com")
         {
             // Both services are on the same host here, so a POP3 account gets a name that
             // resolves rather than the "pop.<domain>" the guess would invent.
             PopIncoming = "outlook.office365.com",
+            Name = "Microsoft 365",
+            SignIn = "microsoft",
+
+            // <tenant>.mail.protection.outlook.com, and <tenant>.<label>.mx.microsoft for the
+            // domains set up with DNSSEC since 2024.
+            Exchangers = ["mail.protection.outlook.com", "mx.microsoft"],
+            HostedGuidance =
+                "Microsoft 365 accounts sign in through a browser. Your organisation may have to "
+                + "approve Mailbox, and have IMAP and SMTP sign-in switched on for you, before it "
+                + "can collect and send mail.",
         },
 
         new("imap.mail.yahoo.com", 993, "smtp.mail.yahoo.com", 465, MailProtocolKind.Imap,
@@ -128,7 +187,11 @@ public static class Autoconfig
         new("imap.fastmail.com", 993, "smtp.fastmail.com", 465, MailProtocolKind.Imap,
             AuthKind.AppPassword,
             "Fastmail requires an app password, created under Settings, Privacy & Security.",
-            "fastmail.com", "fastmail.fm"),
+            "fastmail.com", "fastmail.fm")
+        {
+            Name = "Fastmail",
+            Exchangers = ["messagingengine.com"],
+        },
 
         new("imap.mail.me.com", 993, "smtp.mail.me.com", 587, MailProtocolKind.Imap,
             AuthKind.AppPassword,
@@ -155,6 +218,8 @@ public static class Autoconfig
         {
             ImapOnly = true,
             LocalService = "Proton Mail Bridge",
+            Name = "Proton Mail",
+            Exchangers = ["mail.protonmail.ch", "mailsec.protonmail.ch"],
         },
     ];
 
@@ -179,16 +244,37 @@ public static class Autoconfig
     public static string CurrentHost(string host)
         => Superseded.TryGetValue(host.Trim(), out var current) ? current : host;
 
-    /// <summary>Settings for an address, from the table or guessed from its domain.</summary>
-    public static AutoconfigResult ForAddress(string address, MailProtocolKind prefer = MailProtocolKind.Imap)
+    /// <summary>
+    /// Settings for an address: from the table, from the provider its domain's mail exchangers
+    /// name, or guessed from the domain.
+    /// </summary>
+    /// <param name="address">The address being added.</param>
+    /// <param name="prefer">The protocol the reader chose, which a provider without it overrides.</param>
+    /// <param name="exchangers">
+    /// The domain's MX hosts, most preferred first, when they have been asked for; consulted only
+    /// for a domain the table does not hold.
+    /// </param>
+    public static AutoconfigResult ForAddress(
+        string address, MailProtocolKind prefer = MailProtocolKind.Imap, IReadOnlyList<string>? exchangers = null)
     {
         var domain = DomainOf(address);
         if (domain.Length == 0) return Guess(address, string.Empty, prefer);
 
-        var provider = Known.FirstOrDefault(
-            p => p.Domains.Contains(domain, StringComparer.OrdinalIgnoreCase));
+        var provider = Listed(domain);
+        var hosted = false;
+
+        if (provider is null && exchangers is { Count: > 0 })
+        {
+            provider = HostOf(exchangers);
+            hosted = provider is not null;
+        }
 
         if (provider is null) return Guess(address, domain, prefer);
+
+        var guidance = hosted
+            ? $"Mail for {domain} is handled by {provider.Name}. {provider.HostedGuidance ?? provider.Guidance}"
+            : provider.Guidance;
+        var signIn = provider.Auth == AuthKind.OAuth2 ? provider.SignIn : null;
 
         // A known provider's IMAP host is not always its POP host. The ones whose POP name is
         // documented and stable carry it; for the rest, asking for POP where the table holds IMAP
@@ -203,8 +289,9 @@ public static class Autoconfig
                 return Guess(address, domain, prefer) with
                 {
                     Auth = provider.Auth,
-                    Guidance = provider.Guidance,
+                    Guidance = guidance,
                     IsKnownProvider = false,
+                    OAuthProviderId = signIn,
                 };
             }
 
@@ -225,9 +312,67 @@ public static class Autoconfig
             provider.Auth,
             IsKnownProvider: true)
         {
-            Guidance = provider.Guidance,
+            Guidance = guidance,
             LocalService = provider.LocalService,
+            OAuthProviderId = signIn,
+            HostedBy = hosted ? provider.Name : null,
         };
+    }
+
+    /// <summary>
+    /// Settings for an address, asking the domain's MX records who hosts it when the table does
+    /// not know the domain.
+    /// </summary>
+    /// <remarks>
+    /// Nothing is asked about a domain in the table, and a lookup that fails or finds nothing
+    /// recognisable answers exactly what <see cref="ForAddress"/> does without one: the guess.
+    /// </remarks>
+    public static async Task<AutoconfigResult> DiscoverAsync(
+        string address, MailProtocolKind prefer, IMxLookup lookup, CancellationToken cancellation = default)
+    {
+        ArgumentNullException.ThrowIfNull(lookup);
+
+        var domain = DomainOf(address);
+        if (domain.Length == 0 || Listed(domain) is not null) return ForAddress(address, prefer);
+
+        var answer = await lookup.MxAsync(domain, cancellation).ConfigureAwait(false);
+        return ForAddress(address, prefer, answer.Resolved ? answer.Records : null);
+    }
+
+    /// <summary>Whether the table holds a domain, so there is nothing to ask about it.</summary>
+    public static bool IsListed(string address) => Listed(DomainOf(address)) is not null;
+
+    private static Provider? Listed(string domain)
+        => Known.FirstOrDefault(p => p.Domains.Contains(domain, StringComparer.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// The provider behind a set of mail exchangers, trying them in preference order.
+    /// </summary>
+    /// <remarks>
+    /// A whole label match — the host itself, or a host under it — so that a name merely ending
+    /// in the same letters is not taken for the provider.
+    /// </remarks>
+    private static Provider? HostOf(IReadOnlyList<string> exchangers)
+    {
+        foreach (var raw in exchangers)
+        {
+            var host = raw.Trim().TrimEnd('.');
+            if (host.Length == 0) continue;
+
+            foreach (var provider in Known)
+            {
+                foreach (var suffix in provider.Exchangers)
+                {
+                    if (host.Equals(suffix, StringComparison.OrdinalIgnoreCase)
+                        || host.EndsWith("." + suffix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return provider;
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

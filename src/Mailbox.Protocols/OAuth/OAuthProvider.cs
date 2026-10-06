@@ -120,15 +120,17 @@ public static class OAuthProviders
         => All.FirstOrDefault(p => string.Equals(p.Id, id, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>The provider that signs in to an address's mail, or null for one that needs none.</summary>
+    /// <remarks>
+    /// Read from the setup table, so the domains that sign in are listed in one place. A domain
+    /// recognised by its MX records is not known here — the answer that found it carries the
+    /// provider instead (<see cref="AutoconfigResult.OAuthProviderId"/>).
+    /// </remarks>
     public static OAuthProvider? ForMail(string address)
-    {
-        var domain = Autoconfig.DomainOf(address);
-        return domain.ToLowerInvariant() switch
-        {
-            "outlook.com" or "hotmail.com" or "live.com" or "msn.com" or "passport.com" => Microsoft,
-            _ => null,
-        };
-    }
+        => For(Autoconfig.ForAddress(address));
+
+    /// <summary>The provider an answer from setup signs in to, or null for one that takes a password.</summary>
+    public static OAuthProvider? For(AutoconfigResult found)
+        => found.Auth == AuthKind.OAuth2 && found.OAuthProviderId is { } id ? ById(id) : null;
 }
 
 /// <summary>

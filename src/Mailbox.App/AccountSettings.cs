@@ -289,8 +289,6 @@ public sealed record AccountSettings(
         found.Outgoing.UserName)
     {
         Auth = found.Auth,
-        OAuthProviderId = found.Auth == AuthKind.OAuth2
-            ? OAuthProviders.ForMail(found.Incoming.UserName)?.Id ?? string.Empty
-            : string.Empty,
+        OAuthProviderId = OAuthProviders.For(found)?.Id ?? string.Empty,
     };
 }

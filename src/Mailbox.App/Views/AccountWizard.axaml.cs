@@ -4,6 +4,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using Mailbox.App.Theming;
 using Mailbox.Core.Diagnostics;
 using Mailbox.Protocols;
@@ -45,7 +46,7 @@ public sealed partial class AccountWizard : Window
     };
 
     private readonly Button _add;
-    private readonly Button _signIn = new() { Content = "Sign in…" };
+    private readonly Button _signIn = new() { Content = "Sign in…", Classes = { "sysbutton" } };
     private readonly TextBox _clientId = new() { Classes = { "sysfield" }, Width = 320 };
     private readonly TextBlock _signedIn = new() { TextWrapping = TextWrapping.Wrap, MaxWidth = 430 };
     private Control _passwordRow = null!;
@@ -53,6 +54,18 @@ public sealed partial class AccountWizard : Window
     private Control _clientIdRow = null!;
 
     private AutoconfigResult? _found;
+    private CancellationTokenSource? _discovering;
+    private Task? _discovery;
+
+    /// <summary>
+    /// True from the press of Add until it has finished. Anything that re-reads the form in the
+    /// meantime — an MX answer moving the account type re-runs the address handler — would
+    /// otherwise turn the button back on, and a second press adds the account twice.
+    /// </summary>
+    private bool _adding;
+
+    /// <summary>How long typing has to rest before the domain is looked up.</summary>
+    private static readonly TimeSpan DiscoveryPause = TimeSpan.FromMilliseconds(400);
     private OAuthProvider? _provider;
     private OAuthTokens? _tokens;
     private CancellationTokenSource? _signingIn;
@@ -99,6 +112,20 @@ public sealed partial class AccountWizard : Window
         Bind(_guidance, TextBlock.ForegroundProperty, "systemdialog.foreground.subtle.brush");
         Bind(_status, TextBlock.ForegroundProperty, "systemdialog.foreground.subtle.brush");
         Bind(_signedIn, TextBlock.ForegroundProperty, "systemdialog.foreground.subtle.brush");
+
+        // The control theme fills the Server settings arrow from its own palette, which is the
+        // application's ink — near-white on the Black theme, and so all but invisible on this
+        // light page beside a heading in the dialog's ink. Its template sets the fill, which no
+        // style outranks, so the arrow is bound here, once the template exists, to the ink every
+        // other mark on the page uses.
+        _advanced.Loaded += (_, _) =>
+        {
+            foreach (var arrow in _advanced.GetVisualDescendants().OfType<Avalonia.Controls.Shapes.Path>()
+                         .Where(p => p.TemplatedParent is ToggleButton))
+            {
+                Bind(arrow, Avalonia.Controls.Shapes.Shape.FillProperty, "systemdialog.foreground.brush");
+            }
+        };
 
         // A member of the Account Settings family — drawn the way the desktop draws its own
         // dialogs and light in every theme, never DialogChrome's theme-following palette. And no
@@ -228,8 +255,66 @@ public sealed partial class AccountWizard : Window
         }
 
         var wantsPop = _protocol.SelectedIndex == 0;
-        _found = Autoconfig.ForAddress(
-            address, wantsPop ? MailProtocolKind.Pop3 : MailProtocolKind.Imap);
+        var prefer = wantsPop ? MailProtocolKind.Pop3 : MailProtocolKind.Imap;
+
+        // A lookup for the address as it was a keystroke ago is not wanted any more.
+        _discovering?.Cancel();
+        _discovering = null;
+
+        // Asked once: a plugin answers over everything, and a domain nothing else knows is the
+        // one whose MX records are worth a question.
+        var recognised = App.Plugins.RecognizeAccount(address);
+        var asking = recognised is null && !Autoconfig.IsListed(address);
+        if (!Show(Autoconfig.ForAddress(address, prefer), address, asking)) return;
+
+        // A plugin's account provider answers over the guess — the design's "register account
+        // providers": what the built-in autoconfiguration is for the well-known services, a
+        // plugin is for whatever it knows. The reader's boxes stay the reader's; the sign-in
+        // stays the ordinary password path, which the API says in as many words.
+        if (recognised is { } plugin)
+        {
+            _incomingHost.Text = plugin.Settings.IncomingHost;
+            _incomingPort.Text = plugin.Settings.IncomingPort.ToString();
+            _outgoingHost.Text = plugin.Settings.OutgoingHost;
+            _outgoingPort.Text = plugin.Settings.OutgoingPort.ToString();
+            _protocol.SelectedIndex = string.Equals(plugin.Settings.Protocol, "pop3", StringComparison.OrdinalIgnoreCase) ? 0 : 1;
+
+            _guidance.Text = plugin.Settings.Guidance is { Length: > 0 } line
+                ? $"{plugin.ProviderName}: {line}"
+                : $"Recognised by {plugin.ProviderName} ({plugin.PluginName}). Settings filled in.";
+            _advanced.IsExpanded = false;
+
+            Log.Info($"Wizard: {address} recognised by plugin provider “{plugin.ProviderName}” "
+                     + $"({plugin.PluginName}) — {plugin.Settings.IncomingHost}:{plugin.Settings.IncomingPort} "
+                     + $"/ {plugin.Settings.OutgoingHost}:{plugin.Settings.OutgoingPort}.");
+
+            ShowTheRightCredential(address);
+            return;
+        }
+
+        // A domain of the reader's own: its MX records say whether a provider in the table hosts
+        // it, so the guess is in the boxes now and replaced if they do.
+        if (asking)
+        {
+            _discovering = new CancellationTokenSource();
+            _discovery = DiscoverAsync(address, prefer, _discovering.Token);
+        }
+    }
+
+    /// <summary>
+    /// Fills the form from an answer. False when the answer moved the account type instead, which
+    /// runs <see cref="AddressChanged"/> again for the type it now shows.
+    /// </summary>
+    /// <param name="answer">What setup found.</param>
+    /// <param name="address">The address it was found for.</param>
+    /// <param name="asking">
+    /// True while the domain's MX records are still being asked for. The server settings are
+    /// left as they are rather than opened for the guess and closed again half a second later
+    /// when the lookup recognises the provider — which read as the dialog jumping.
+    /// </param>
+    private bool Show(AutoconfigResult answer, string address, bool asking = false)
+    {
+        _found = answer;
 
         // A provider with only one protocol answered with it — Proton's Bridge has no POP — so
         // the account type follows. Changing the selection runs this again for the type it now
@@ -238,13 +323,20 @@ public sealed partial class AccountWizard : Window
         if (_protocol.SelectedIndex != found)
         {
             _protocol.SelectedIndex = found;
-            return;
+            return false;
         }
 
         _incomingHost.Text = _found.Incoming.Host;
         _incomingPort.Text = _found.Incoming.Port.ToString();
         _outgoingHost.Text = _found.Outgoing.Host;
         _outgoingPort.Text = _found.Outgoing.Port.ToString();
+
+        if (asking)
+        {
+            _guidance.Text = $"Finding the mail servers for {Autoconfig.DomainOf(address)}…";
+            ShowTheRightCredential(address);
+            return true;
+        }
 
         _guidance.Text = _found.Guidance ?? (_found.IsKnownProvider
             ? $"Recognised {Autoconfig.DomainOf(address)}. Settings filled in."
@@ -253,30 +345,65 @@ public sealed partial class AccountWizard : Window
         // A guess is worth looking at; a known provider is not.
         _advanced.IsExpanded = !_found.IsKnownProvider;
 
-        // A plugin's account provider answers over the guess — the design's "register account
-        // providers": what the built-in autoconfiguration is for the well-known services, a
-        // plugin is for whatever it knows. The reader's boxes stay the reader's; the sign-in
-        // stays the ordinary password path, which the API says in as many words.
-        if (App.Plugins.RecognizeAccount(address) is { } recognised)
-        {
-            _incomingHost.Text = recognised.Settings.IncomingHost;
-            _incomingPort.Text = recognised.Settings.IncomingPort.ToString();
-            _outgoingHost.Text = recognised.Settings.OutgoingHost;
-            _outgoingPort.Text = recognised.Settings.OutgoingPort.ToString();
-            _protocol.SelectedIndex = string.Equals(recognised.Settings.Protocol, "pop3", StringComparison.OrdinalIgnoreCase) ? 0 : 1;
-
-            _guidance.Text = recognised.Settings.Guidance is { Length: > 0 } line
-                ? $"{recognised.ProviderName}: {line}"
-                : $"Recognised by {recognised.ProviderName} ({recognised.PluginName}). Settings filled in.";
-            _advanced.IsExpanded = false;
-
-            Log.Info($"Wizard: {address} recognised by plugin provider “{recognised.ProviderName}” "
-                     + $"({recognised.PluginName}) — {recognised.Settings.IncomingHost}:{recognised.Settings.IncomingPort} "
-                     + $"/ {recognised.Settings.OutgoingHost}:{recognised.Settings.OutgoingPort}.");
-        }
-
         ShowTheRightCredential(address);
+        return true;
     }
+
+    /// <summary>
+    /// Asks the domain's MX records who hosts it, and shows that provider's settings if one in
+    /// the table does.
+    /// </summary>
+    /// <remarks>
+    /// A pause first, so typing a domain asks about the domain and not about each prefix of it on
+    /// the way. The lookup itself runs off the interface's thread; only showing the answer comes
+    /// back to it, and only while the address is still the one that was asked about.
+    /// </remarks>
+    private async Task DiscoverAsync(string address, MailProtocolKind prefer, CancellationToken cancellation)
+    {
+        try
+        {
+            await Task.Delay(DiscoveryPause, cancellation);
+
+            var lookup = MxLookup();
+            var answer = await Task.Run(
+                () => Autoconfig.DiscoverAsync(address, prefer, lookup, cancellation), cancellation);
+
+            if (cancellation.IsCancellationRequested
+                || !string.Equals(_address.Text, address, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            // Recognised or not, the lookup is over: either the provider's settings replace the
+            // guess, or the guess is now the answer and is shown as one.
+            Log.Info(answer.HostedBy is { } host
+                ? $"Wizard: {Autoconfig.DomainOf(address)} is hosted by {host} — "
+                  + $"{answer.Incoming.Host}:{answer.Incoming.Port} / {answer.Outgoing.Host}:{answer.Outgoing.Port}."
+                : $"Wizard: nothing recognisable handles {Autoconfig.DomainOf(address)}'s mail; the guess stands.");
+            Show(answer, address);
+        }
+        catch (OperationCanceledException)
+        {
+            // The address changed while this was asking, and the next keystroke asks again.
+        }
+        catch (Exception ex)
+        {
+            // Not finding out leaves the guess as the answer, shown as one rather than as a
+            // lookup still going.
+            Log.Warn($"Wizard: looking up who hosts {Autoconfig.DomainOf(address)} failed.", ex);
+            if (string.Equals(_address.Text, address, StringComparison.Ordinal))
+            {
+                Show(Autoconfig.ForAddress(address, prefer), address);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Where MX records come from: the machine's own resolver, or — in a capture run, which must
+    /// not depend on the network — the answers <c>MAILBOX_MX</c> poses.
+    /// </summary>
+    private static Mailbox.Security.Dns.IMxLookup MxLookup()
+        => Theming.WindowCapture.IsRequested ? PosedMx.FromEnvironment() : App.Resolver;
 
     /// <summary>
     /// A password box or a sign-in button, according to what the provider still accepts.
@@ -289,7 +416,7 @@ public sealed partial class AccountWizard : Window
     /// </remarks>
     private void ShowTheRightCredential(string address)
     {
-        var provider = _found?.Auth == AuthKind.OAuth2 ? OAuthProviders.ForMail(address) : null;
+        var provider = _found is { } found ? OAuthProviders.For(found) : null;
 
         // Changing which account is being added throws away a sign-in for the previous one.
         if (provider?.Id != _provider?.Id || _tokens is not null && !SignedInAs(address))
@@ -329,7 +456,7 @@ public sealed partial class AccountWizard : Window
         // Nothing to save until the sign-in has happened: an account added first and signed in
         // afterwards would sit in the folder pane failing to collect, which is the state the
         // wizard exists to avoid.
-        _add.IsEnabled = addressed && (SignsIn
+        _add.IsEnabled = !_adding && addressed && (SignsIn
             ? _tokens is not null
             : (_password.Text ?? string.Empty).Length > 0);
 
@@ -421,10 +548,46 @@ public sealed partial class AccountWizard : Window
 
     private async Task AddAsync()
     {
+        _adding = true;
+        try
+        {
+            await AddingAsync();
+        }
+        finally
+        {
+            _adding = false;
+        }
+    }
+
+    private async Task AddingAsync()
+    {
         var address = (_address.Text ?? string.Empty).Trim();
         var password = _password.Text ?? string.Empty;
 
         _add.IsEnabled = false;
+
+        // A lookup still in flight decides which servers are being saved, so it finishes first;
+        // the resolver's own timeout bounds the wait.
+        if (_discovery is { IsCompleted: false })
+        {
+            _status.Text = $"Finding the mail servers for {Autoconfig.DomainOf(address)}…";
+            // A loop, because an answer that moves the account type asks once more for the
+            // type it moved to.
+            while (_discovery is { IsCompleted: false } pending) await pending;
+
+            // What it found may sign in through a browser, which the password typed meanwhile
+            // cannot stand in for: the reader is asked for the sign-in rather than an account
+            // saved that could never collect mail.
+            if (SignsIn && _tokens is null)
+            {
+                _status.Text = $"{_found?.HostedBy ?? _provider!.Name} handles this address's mail. "
+                               + $"Sign in with {_provider!.Name} to add it.";
+                _adding = false;
+                UpdateAddButton();
+                return;
+            }
+        }
+
         _status.Text = "Saving…";
 
         try
@@ -615,6 +778,14 @@ public sealed partial class AccountWizard : Window
                     _clientId.Text = argument;
                     break;
 
+                // Waits out the MX lookup the address started, so what follows acts on the
+                // provider it found rather than on the guess shown while it was asking.
+                case "settle":
+                    while (_discovery is { IsCompleted: false } discovery) await discovery;
+                    Log.Info($"Harness: settled — hosted by {_found?.HostedBy ?? "nobody recognised"}; "
+                             + $"guidance “{_guidance.Text}”.");
+                    break;
+
                 case "add":
                     if (!_add.IsEnabled)
                     {
@@ -624,9 +795,10 @@ public sealed partial class AccountWizard : Window
 
                     _add.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
 
-                    // The probes after the save outlive this pass, and what they conclude is the
-                    // status line the reader is left with — so wait for it to stop saying "Saving…".
-                    for (var waited = 0; waited < 8000 && _status.Text == "Saving…"; waited += 100)
+                    // A lookup still in flight and the probes after the save both outlive this
+                    // pass, and what they conclude is the status line the reader is left with —
+                    // so wait for the button to come back, or the window to close on a clean add.
+                    for (var waited = 0; waited < 12000 && !_add.IsEnabled && IsVisible; waited += 100)
                     {
                         await Task.Delay(100);
                     }

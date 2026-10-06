@@ -48,7 +48,7 @@ public class DnsWireTests
 
     private static byte[] Response(
         ushort id, string name, IEnumerable<byte[]> answers, int rcode = 0, uint ttl = 300,
-        ushort type = 16)
+        ushort type = 16, ushort question = 16)
     {
         var records = answers.ToList();
         var bytes = new List<byte>();
@@ -62,7 +62,7 @@ public class DnsWireTests
 
         // The question, echoed.
         bytes.AddRange(Name(name));
-        bytes.AddRange([0, 16, 0, 1]);
+        bytes.AddRange([(byte)(question >> 8), (byte)question, 0, 1]);
 
         foreach (var data in records)
         {
@@ -341,5 +341,80 @@ public class DnsWireTests
 
         var answer = await resolver.TxtAsync("example.com", TestContext.Current.CancellationToken);
         Assert.Empty(answer.Records);
+    }
+    // ---- Mail exchangers -------------------------------------------------------------------
+
+    /// <summary>An MX record's RDATA: a preference, then the exchanger's name.</summary>
+    private static byte[] Exchanger(ushort preference, byte[] name)
+    {
+        var data = new byte[2 + name.Length];
+        BinaryPrimitives.WriteUInt16BigEndian(data, preference);
+        name.CopyTo(data, 2);
+        return data;
+    }
+
+    /// <summary>A compression pointer to an offset in the message.</summary>
+    private static byte[] Pointer(int offset) => [(byte)(0xC0 | (offset >> 8)), (byte)offset];
+
+    [Fact]
+    public void AnMxQueryAsksForMx()
+    {
+        var query = DnsWire.Query(0x1234, "example.com", DnsWire.TypeMail);
+        Assert.Equal([0, 15, 0, 1], query[^4..]);
+    }
+
+    [Fact]
+    public void OnlyTheTwoQuestionsAreAsked()
+        => Assert.Throws<ArgumentOutOfRangeException>(() => DnsWire.Query(1, "example.com", 1));
+
+    /// <summary>
+    /// Exchangers come back most preferred first, whatever order the server listed them in, and
+    /// a name that ends in a pointer back into the question is followed — which is how every
+    /// real server writes "example.com" the second time.
+    /// </summary>
+    [Fact]
+    public void ExchangersAreReadInPreferenceOrderThroughCompression()
+    {
+        // The question's name starts right after the 12-byte header.
+        var backup = Exchanger(20, [.. Name("alt1")[..^1], .. Pointer(12)]);
+        var primary = Exchanger(10, Name("mx.example.net"));
+
+        var response = Response(7, "example.com", [backup, primary], type: 15, question: 15);
+        var answer = DnsWire.ReadResponse(response, 7, "example.com", DnsWire.TypeMail);
+
+        Assert.Equal(["mx.example.net", "alt1.example.com"], answer.Records);
+    }
+
+    [Fact]
+    public void AnMxAnswerToATxtQuestionIsRefused()
+    {
+        var response = Response(7, "example.com", [Exchanger(10, Name("mx.example.net"))], type: 15, question: 16);
+        Assert.Throws<DnsProtocolException>(
+            () => DnsWire.ReadResponse(response, 7, "example.com", DnsWire.TypeMail));
+    }
+
+    [Fact]
+    public void AnExchangerWhoseNameRunsPastItsRecordIsRefused()
+    {
+        // Two bytes of preference and a name that claims a 20-byte label it does not have.
+        var response = Response(7, "example.com", [[0, 10, 20, (byte)'m', (byte)'x']], type: 15, question: 15);
+        Assert.Throws<DnsProtocolException>(
+            () => DnsWire.ReadResponse(response, 7, "example.com", DnsWire.TypeMail));
+    }
+
+    [Fact]
+    public void ATooShortExchangerIsRefused()
+    {
+        var response = Response(7, "example.com", [[0, 10]], type: 15, question: 15);
+        Assert.Throws<DnsProtocolException>(
+            () => DnsWire.ReadResponse(response, 7, "example.com", DnsWire.TypeMail));
+    }
+
+    /// <summary>A TXT record in an MX answer is stepped over, as a CNAME is.</summary>
+    [Fact]
+    public void AnotherTypeInAnMxAnswerIsSteppedOver()
+    {
+        var response = Response(7, "example.com", [Text("v=spf1 -all")], type: 16, question: 15);
+        Assert.Empty(DnsWire.ReadResponse(response, 7, "example.com", DnsWire.TypeMail).Records);
     }
 }

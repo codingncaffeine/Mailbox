@@ -18,13 +18,16 @@ against that same store rather than placeholders, and the Add Account window als
 CalDAV or CardDAV server: it finds the calendars and address books on offer and keeps the ones
 you pick in sync on every send/receive.
 
-**Before you install.** Microsoft accounts (outlook.com, hotmail.com, live.com) sign in through
-your browser with nothing to register; Mailbox 0.6.5 and earlier asked you to register a client
-application of your own, and the next release does not. Proton Mail is reached through Proton
-Mail Bridge, running on the same machine. Gmail, Yahoo and AOL want an app password rather than
-your ordinary one, and Gmail additionally wants two-step verification on and IMAP switched on in its own settings — the wizard says so, with the
-link, when it recognises the address. Servers that speak plain IMAP and SMTP, self-hosted ones
-included, just take a password.
+**Before you install.** Microsoft accounts (outlook.com, hotmail.com, live.com) and work or
+school addresses on Microsoft 365 sign in through your browser with nothing to register;
+Mailbox 0.6.5 and earlier asked you to register a client application of your own, and the next
+release does not. Proton Mail is reached through Proton Mail Bridge, running on the same
+machine. Gmail, Yahoo and AOL want an app password rather than your ordinary one, and Gmail
+additionally wants two-step verification on and IMAP switched on in its own settings — the
+wizard says so, with the link, when it recognises the address. An address on a domain of your
+own is recognised by who handles its mail, so one hosted by Microsoft 365, Google Workspace,
+Fastmail or Proton gets that provider's settings. Servers that speak plain IMAP and SMTP,
+self-hosted ones included, just take a password.
 
 ![The Mailbox shell: folder pane, message list and reading pane](assets/screenshots/shell.png)
 

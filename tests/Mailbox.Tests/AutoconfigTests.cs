@@ -1,5 +1,7 @@
 using MailKit.Security;
 using Mailbox.Protocols;
+using Mailbox.Protocols.OAuth;
+using Mailbox.Security.Dns;
 
 namespace Mailbox.Tests;
 
@@ -210,5 +212,164 @@ public class AutoconfigTests
 
         Assert.Equal(string.Empty, found.Incoming.Host);
         Assert.False(found.Incoming.IsComplete);
+    }
+    // ---- A domain of the reader's own, found by its mail exchangers -------------------------
+
+    /// <summary>
+    /// A company on Microsoft 365: the MX names the tenant under mail.protection.outlook.com, and
+    /// the account signs in through Microsoft rather than taking a password at a guessed host.
+    /// </summary>
+    [Theory]
+    [InlineData("contoso-com.mail.protection.outlook.com")]
+    [InlineData("contoso-com.l-v1.mx.microsoft")]
+    public void ADomainOnMicrosoft365SignsInThroughMicrosoft(string exchanger)
+    {
+        var found = Autoconfig.ForAddress("pat@contoso.com", MailProtocolKind.Imap, [exchanger]);
+
+        Assert.True(found.IsKnownProvider);
+        Assert.Equal("Microsoft 365", found.HostedBy);
+        Assert.Equal("outlook.office365.com", found.Incoming.Host);
+        Assert.Equal("smtp.office365.com", found.Outgoing.Host);
+        Assert.Equal("pat@contoso.com", found.Incoming.UserName);
+        Assert.Equal(AuthKind.OAuth2, found.Auth);
+        Assert.Same(OAuthProviders.Microsoft, OAuthProviders.For(found));
+        Assert.Contains("Mail for contoso.com is handled by Microsoft 365", found.Guidance);
+    }
+
+    [Theory]
+    [InlineData("aspmx.l.google.com")]
+    [InlineData("alt3.aspmx.l.google.com")]
+    [InlineData("aspmx2.googlemail.com")]
+    [InlineData("smtp.google.com")]
+    public void ADomainOnGoogleWorkspaceGetsGmailsServers(string exchanger)
+    {
+        var found = Autoconfig.ForAddress("pat@family.example", MailProtocolKind.Imap, [exchanger]);
+
+        Assert.Equal("Google Workspace", found.HostedBy);
+        Assert.Equal("imap.gmail.com", found.Incoming.Host);
+        Assert.Equal(AuthKind.AppPassword, found.Auth);
+        Assert.Null(OAuthProviders.For(found));
+        Assert.Contains("Google Workspace", found.Guidance);
+    }
+
+    /// <summary>A custom domain on Proton goes through Bridge exactly as a proton.me address does.</summary>
+    [Fact]
+    public void ADomainOnProtonGoesThroughTheBridge()
+    {
+        var found = Autoconfig.ForAddress(
+            "pat@mine.example", MailProtocolKind.Pop3, ["mail.protonmail.ch", "mailsec.protonmail.ch"]);
+
+        Assert.Equal("Proton Mail", found.HostedBy);
+        Assert.Equal(MailProtocolKind.Imap, found.Protocol);
+        Assert.Equal("127.0.0.1", found.Incoming.Host);
+        Assert.Equal("Proton Mail Bridge", found.LocalService);
+    }
+
+    [Fact]
+    public void ADomainOnFastmailGetsFastmailsServers()
+    {
+        var found = Autoconfig.ForAddress("pat@mine.example", MailProtocolKind.Imap, ["in1-smtp.messagingengine.com"]);
+
+        Assert.Equal("Fastmail", found.HostedBy);
+        Assert.Equal("imap.fastmail.com", found.Incoming.Host);
+    }
+
+    /// <summary>
+    /// A whole-label match only. A name that merely ends in the same letters, or carries the
+    /// provider's name further up someone else's domain, is not the provider.
+    /// </summary>
+    [Theory]
+    [InlineData("notaspmx.l.google.com")]
+    [InlineData("aspmx.l.google.com.example.net")]
+    [InlineData("mail.protection.outlook.com.example.net")]
+    [InlineData("mx.example.net")]
+    public void ExchangersThatAreNotTheProviderLeaveTheGuess(string exchanger)
+    {
+        var found = Autoconfig.ForAddress("pat@mine.example", MailProtocolKind.Imap, [exchanger]);
+
+        Assert.False(found.IsKnownProvider);
+        Assert.Null(found.HostedBy);
+        Assert.Equal("imap.mine.example", found.Incoming.Host);
+    }
+
+    /// <summary>
+    /// A filtering service usually comes first; the provider behind it is still found further
+    /// down the list, in preference order.
+    /// </summary>
+    [Fact]
+    public void TheFirstRecognisableExchangerInPreferenceOrderWins()
+    {
+        var found = Autoconfig.ForAddress("pat@mine.example", MailProtocolKind.Imap,
+            ["mx1.filter.example.net", "aspmx.l.google.com", "mine-example.mail.protection.outlook.com"]);
+
+        Assert.Equal("Google Workspace", found.HostedBy);
+    }
+
+    /// <summary>A domain the table holds is answered from the table, whatever its MX says.</summary>
+    [Fact]
+    public void AListedDomainIgnoresItsExchangers()
+    {
+        var found = Autoconfig.ForAddress("pat@gmail.com", MailProtocolKind.Imap, ["x.mail.protection.outlook.com"]);
+
+        Assert.Equal("imap.gmail.com", found.Incoming.Host);
+        Assert.Null(found.HostedBy);
+    }
+
+    [Fact]
+    public async Task DiscoveryAsksAboutTheDomainAndUsesTheAnswer()
+    {
+        var lookup = new CountingMx(["contoso-com.mail.protection.outlook.com"]);
+
+        var found = await Autoconfig.DiscoverAsync("pat@contoso.com", MailProtocolKind.Imap, lookup, Ct);
+
+        Assert.Equal(["contoso.com"], lookup.Asked);
+        Assert.Equal("Microsoft 365", found.HostedBy);
+    }
+
+    /// <summary>Nothing is asked about a domain in the table.</summary>
+    [Fact]
+    public async Task DiscoveryAsksNothingAboutAListedDomain()
+    {
+        var lookup = new CountingMx(["contoso-com.mail.protection.outlook.com"]);
+
+        var found = await Autoconfig.DiscoverAsync("pat@outlook.com", MailProtocolKind.Imap, lookup, Ct);
+
+        Assert.Empty(lookup.Asked);
+        Assert.Null(found.HostedBy);
+        Assert.Same(OAuthProviders.Microsoft, OAuthProviders.For(found));
+    }
+
+    /// <summary>A lookup that fails answers what no lookup would: the guess.</summary>
+    [Fact]
+    public async Task AFailedLookupLeavesTheGuess()
+    {
+        var lookup = new CountingMx(["contoso-com.mail.protection.outlook.com"], DnsResponseCode.ServerFailure);
+
+        var found = await Autoconfig.DiscoverAsync("pat@contoso.com", MailProtocolKind.Imap, lookup, Ct);
+
+        Assert.Null(found.HostedBy);
+        Assert.Equal("imap.contoso.com", found.Incoming.Host);
+    }
+
+    /// <summary>The domains that sign in are read from the one table.</summary>
+    [Theory]
+    [InlineData("pat@outlook.com", true)]
+    [InlineData("pat@passport.com", true)]
+    [InlineData("pat@gmail.com", false)]
+    [InlineData("pat@contoso.com", false)]
+    public void ForMailReadsTheTable(string address, bool signsIn)
+        => Assert.Equal(signsIn, OAuthProviders.ForMail(address) is not null);
+
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    private sealed class CountingMx(string[] hosts, DnsResponseCode code = DnsResponseCode.NoError) : IMxLookup
+    {
+        public List<string> Asked { get; } = [];
+
+        public Task<DnsAnswer> MxAsync(string domain, CancellationToken cancellation = default)
+        {
+            Asked.Add(domain);
+            return Task.FromResult(new DnsAnswer(code, code == DnsResponseCode.NoError ? hosts : [], 300));
+        }
     }
 }
