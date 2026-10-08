@@ -19,6 +19,12 @@ namespace Mailbox.App.Views;
 /// happens.
 /// </para>
 /// <para>
+/// WebKitGTK asked for off screen is another matter: measured with WebKitGTK 2.54.1 in a nested
+/// compositor, it drew the message and its fetched pictures, and a selection copied out of it.
+/// So it is the second choice when WPE is present but cannot be driven — WPE 2.54 built without
+/// the libwpe API the library calls, as Arch ships it.
+/// </para>
+/// <para>
 /// Kept apart from the pane for the reason <see cref="ReadingPaneLoads"/> is: the rule can be
 /// checked with no web engine on the machine at all, and the thing it guards against only
 /// appears on a machine that is missing one.
@@ -47,7 +53,12 @@ internal static class ReadingPaneEngines
         {
             get
             {
-                if (!Supported) return $"{Name} is not supported by this build";
+                if (!Supported)
+                {
+                    return Installed && Unavailable is { Length: > 0 } why
+                        ? $"{Name} cannot be driven ({why})"
+                        : $"{Name} is not supported by this build";
+                }
                 if (!Installed)
                 {
                     return Unavailable is { Length: > 0 } said

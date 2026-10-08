@@ -70,7 +70,8 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
     {
         [Avalonia.Automation.AutomationProperties.NameProperty] = "Message",
     };
-    private readonly TextBlock _fallback = new()
+    // Selectable, so a code in a message is something to copy rather than to retype.
+    private readonly SelectableTextBlock _fallback = new()
     {
         TextWrapping = TextWrapping.Wrap,
         Margin = new Thickness(20, 16),
@@ -118,6 +119,7 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
         Content = root;
 
         _surface.Content = BuildSurface();
+        WireCopy();
         _themes.Changed += (_, _) => Refresh();
     }
 
@@ -707,12 +709,49 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
         var info = WebViewAdapterInfo.GetAdapterInfo(type);
         if (info is null) return new ReadingPaneEngines.Candidate(name, false, false, false, null);
 
+        // WPE WebKit 2.54 can be built without the libwpe API, and Arch's is: the library's WPE
+        // adapter calls webkit_web_view_backend_new as it attaches, which is then not there. The
+        // platform still describes the engine as installed and offscreen, the view is built, and
+        // the throw lands on the UI thread with nothing drawn — every message an empty body.
+        // Asked of the library on disk rather than of its version, because whether the API is
+        // there is a build option, not a release.
+        if (type == WebViewAdapterType.WpeWebKit && info.IsInstalled && WpeMissingExport() is { } missing)
+        {
+            return new ReadingPaneEngines.Candidate(
+                name, true, false, true,
+                $"WPE WebKit {info.Version} has no {missing}, which the web view library calls");
+        }
+
+        // WebKitGTK is described as a native window, because that is what the library builds when
+        // nobody asks. This pane always asks for the offscreen one (OnEnvironmentRequested), and
+        // the library hands that back as an offscreen renderer — so offscreen is what it draws.
+        var offscreen = type == WebViewAdapterType.WebKitGtk
+            ? info.IsInstalled
+            : info.SupportedScenarios.HasFlag(WebViewEmbeddingScenario.OffscreenRenderer);
+
         return new ReadingPaneEngines.Candidate(
             name,
             info.IsInstalled,
             info.IsSupported,
-            info.SupportedScenarios.HasFlag(WebViewEmbeddingScenario.OffscreenRenderer),
+            offscreen,
             info.UnavailableReason);
+    }
+
+    /// <summary>
+    /// The first of the WPE functions the web view library needs that the installed WPE lacks,
+    /// or null when it has them all.
+    /// </summary>
+    private static string? WpeMissingExport()
+    {
+        if (!System.Runtime.InteropServices.NativeLibrary.TryLoad("libWPEWebKit-2.0.so.1", out var library))
+            return null;
+
+        foreach (var export in (string[])["webkit_web_view_backend_new", "webkit_web_view_new"])
+        {
+            if (!System.Runtime.InteropServices.NativeLibrary.TryGetExport(library, export, out _)) return export;
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -729,7 +768,11 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
     {
         if (_web?.AdapterInfo is not { } info) return "unknown";
 
-        var scenarios = WebViewAdapterInfo.GetAdapterInfo(info.Type)?.SupportedScenarios;
+        // WebKitGTK's description is the native window it builds unasked; this pane always asks
+        // for the offscreen one, so that is the embedding it has.
+        var scenarios = info.Type == WebViewAdapterType.WebKitGtk
+            ? WebViewEmbeddingScenario.OffscreenRenderer
+            : WebViewAdapterInfo.GetAdapterInfo(info.Type)?.SupportedScenarios;
         return $"{info.Type} ({info.Engine} {info.Version}), embedding: {scenarios}";
     }
 

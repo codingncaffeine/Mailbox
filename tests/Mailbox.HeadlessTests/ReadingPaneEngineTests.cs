@@ -106,4 +106,24 @@ public class ReadingPaneEngineTests
         Assert.False(choice.UseWebView);
         Assert.Contains("not supported by this build", choice.Reason);
     }
+
+    /// <summary>
+    /// WPE WebKit 2.54 built without the libwpe API: installed, described as offscreen, and
+    /// missing the function the library calls as it attaches. Refused in words that name it,
+    /// and WebKitGTK — asked for off screen — draws instead of an empty body.
+    /// </summary>
+    [Fact]
+    public void AWpeWithoutTheApiTheLibraryCallsGivesWayToWebKitGtk()
+    {
+        var lacking = new ReadingPaneEngines.Candidate(
+            "WPE WebKit", true, false, true,
+            "WPE WebKit 2.54.1 has no webkit_web_view_backend_new, which the web view library calls");
+        var choice = ReadingPaneEngines.Choose(lacking, Gtk(offscreen: true), gtkAsked: false);
+
+        Assert.True(choice.UseWebView);
+        Assert.True(choice.PreferWebKitGtk);
+        Assert.Contains("WPE WebKit cannot be driven", choice.Reason);
+        Assert.Contains("webkit_web_view_backend_new", choice.Reason);
+        Assert.Contains("so WebKitGTK renders the message", choice.Reason);
+    }
 }
