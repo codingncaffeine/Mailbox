@@ -45,6 +45,13 @@ public static class SaslAuthentication
     {
         if (server.Tokens is not { } tokens)
         {
+            // No password for an account that signs in with one is a keyring that did not answer
+            // or never held it — not something the server can be asked about. Sending an empty
+            // password got "the server rejected the username or password", which sent the reader
+            // to check a password that was right all along.
+            if (server.UserName.Length > 0 && string.IsNullOrEmpty(server.Password))
+                throw new PasswordUnavailableException();
+
             await client.AuthenticateAsync(server.UserName, server.Password, cancellation)
                 .ConfigureAwait(false);
             return;
@@ -68,3 +75,11 @@ public static class SaslAuthentication
             .ConfigureAwait(false);
     }
 }
+
+/// <summary>
+/// An account that signs in with a password has none to sign in with: the desktop keyring did not
+/// give it to Mailbox. Its message is the sentence the send/receive window shows.
+/// </summary>
+public sealed class PasswordUnavailableException()
+    : Exception("Mailbox could not get this account's password from the desktop keyring. "
+                + "Check that the keyring is unlocked, or enter the password again in Account Settings.");

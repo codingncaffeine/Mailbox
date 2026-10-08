@@ -72,7 +72,12 @@ public sealed class SecretServiceStore : ICredentialStore
             input: null,
             cancellation).ConfigureAwait(false);
 
-        // secret-tool exits non-zero when nothing matches, which is not an error here.
+        // secret-tool exits non-zero when nothing matches, which is not an error here; anything
+        // with a reason attached is, and is said — a lookup that failed used to read exactly like
+        // a password that was never saved.
+        if (!result.Ok && result.Error.Trim().Length > 0)
+            Log.Warn($"The keyring did not give Mailbox the {purpose} password for {account}: {result.Error.Trim()}");
+
         return result.Ok && result.Output.Length > 0 ? result.Output.TrimEnd('\n') : null;
     }
 

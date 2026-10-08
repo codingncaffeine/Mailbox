@@ -139,7 +139,16 @@ internal static class ChromiumRuntime
             };
 
             // argv[0] first: Chromium reads the program from it, and a .NET args array has none.
-            CefRuntime.Initialize(new CefMainArgs([Helper]), settings, new MailboxCefApp(), IntPtr.Zero);
+            var handlers = SignalHandlers.Save();
+            try
+            {
+                CefRuntime.Initialize(new CefMainArgs([Helper]), settings, new MailboxCefApp(), IntPtr.Zero);
+            }
+            finally
+            {
+                var restored = handlers.Restore();
+                if (restored > 0) Log.Info($"Chromium reset {restored} signal handler(s); .NET's are back.");
+            }
 
             IsRunning = true;
             Unavailable = null;
@@ -307,5 +316,60 @@ internal sealed class MailboxCefApp : CefApp
         commandLine.AppendSwitch("disable-spell-checking");
         commandLine.AppendSwitch("no-pings");
         commandLine.AppendSwitch("mute-audio");
+    }
+}
+
+/// <summary>
+/// The process's signal handlers, as they stood before Chromium started.
+/// </summary>
+/// <remarks>
+/// Chromium resets every signal to its default as it initialises. One of them is SIGCHLD, which
+/// is how .NET learns that a program it started has finished: with it gone, every child's output
+/// still arrives and its exit is never reported, so every wait runs to its timeout. That is what
+/// broke send/receive in 0.6.7 — each password lookup through secret-tool "timed out" after its
+/// ten seconds although the keyring had answered at once, and the accounts signed in with no
+/// password. It needed only one child to have been started before Chromium (the sandbox check
+/// starts one), so the handlers are taken back afterwards whatever ran first. Chromium itself
+/// waits for its own helpers by their ids and does not need them.
+/// </remarks>
+internal sealed class SignalHandlers
+{
+    // Signals 1-31; SIGKILL and SIGSTOP cannot have handlers. A struct sigaction is under 160
+    // bytes on every Linux; it is copied, never read, apart from its first word, the handler.
+    private const int Size = 256;
+    private readonly byte[]?[] _saved = new byte[32][];
+
+    [System.Runtime.InteropServices.DllImport("libc", SetLastError = true)]
+    private static extern int sigaction(int signal, byte[]? action, byte[]? previous);
+
+    public static SignalHandlers Save()
+    {
+        var handlers = new SignalHandlers();
+        for (var signal = 1; signal < 32; signal++)
+        {
+            if (signal is 9 or 19) continue;
+            var buffer = new byte[Size];
+            if (sigaction(signal, null, buffer) == 0) handlers._saved[signal] = buffer;
+        }
+
+        return handlers;
+    }
+
+    /// <summary>Puts back every handler that changed. Returns how many did.</summary>
+    public int Restore()
+    {
+        var restored = 0;
+        for (var signal = 1; signal < 32; signal++)
+        {
+            if (_saved[signal] is not { } before) continue;
+
+            var now = new byte[Size];
+            if (sigaction(signal, null, now) != 0) continue;
+            if (BitConverter.ToInt64(before, 0) == BitConverter.ToInt64(now, 0)) continue;
+
+            if (sigaction(signal, before, null) == 0) restored++;
+        }
+
+        return restored;
     }
 }

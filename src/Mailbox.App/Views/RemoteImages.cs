@@ -58,8 +58,15 @@ public sealed class RemoteImages
         // Says what it is. A user agent naming a browser would be a small lie told to every
         // tracking server the reader ever allows.
         client.DefaultRequestHeaders.UserAgent.ParseAdd("Mailbox/0.1");
+
+        // What a browser asks for an image with. Some image servers answer by what is accepted,
+        // and a request accepting nothing in particular gets a page, or a refusal.
+        client.DefaultRequestHeaders.Accept.ParseAdd("image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8");
         return client;
     }
+
+    /// <summary>How many images are fetched at once: what a browser opens per host, roughly.</summary>
+    private const int AtOnce = 6;
 
     /// <summary>
     /// Fetches what a render blocked, and returns the map the next render inlines from.
@@ -68,20 +75,34 @@ public sealed class RemoteImages
     /// A resource that fails stays blocked rather than failing the message: an image the
     /// sender's CDN will not serve is their problem, and the rest of the mail is still worth
     /// reading.
+    /// <para>
+    /// Several at once, as a browser does. One at a time, a newsletter of forty pictures with a
+    /// slow host among them took minutes, and a reader who allowed images and saw half of them
+    /// was looking at a fetch still under way.
+    /// </para>
     /// </remarks>
     public static async Task<IReadOnlyDictionary<string, string>> FetchAsync(
         IEnumerable<BlockedResource> blocked, CancellationToken cancellation = default)
     {
         ArgumentNullException.ThrowIfNull(blocked);
 
-        var inlined = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var urls = blocked.Select(b => b.Url).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var inlined = new System.Collections.Concurrent.ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var refused = 0;
 
-        foreach (var resource in blocked.DistinctBy(b => b.Url, StringComparer.OrdinalIgnoreCase))
-        {
-            if (await FetchOneAsync(resource.Url, cancellation) is { } uri) inlined[resource.Url] = uri;
-        }
+        await Parallel.ForEachAsync(
+            urls,
+            new ParallelOptions { MaxDegreeOfParallelism = AtOnce, CancellationToken = cancellation },
+            async (url, token) =>
+            {
+                if (await FetchOneAsync(url, token) is { } uri) inlined[url] = uri;
+                else Interlocked.Increment(ref refused);
+            });
 
-        return inlined;
+        Log.Info($"Remote images: {inlined.Count} of {urls.Count} fetched"
+                 + (refused > 0 ? $", {refused} not (each says why above)." : "."));
+
+        return new Dictionary<string, string>(inlined, StringComparer.OrdinalIgnoreCase);
     }
 
     private static async Task<string?> FetchOneAsync(string url, CancellationToken cancellation)
@@ -96,17 +117,49 @@ public sealed class RemoteImages
             using var response = await Client.GetAsync(
                 uri, HttpCompletionOption.ResponseHeadersRead, cancellation);
 
-            if (!response.IsSuccessStatusCode) return null;
+            // Every refusal is said, by host and reason: an image that silently stays a
+            // placeholder is the report "it still isn't pulling in all images" with nothing to
+            // say which, or why.
+            if (!response.IsSuccessStatusCode)
+            {
+                Log.Info($"Remote image from {uri.Host} not shown: the server answered {(int)response.StatusCode}.");
+                return null;
+            }
 
-            var type = response.Content.Headers.ContentType?.MediaType ?? string.Empty;
-            if (!type.StartsWith("image/", StringComparison.OrdinalIgnoreCase)) return null;
-
-            if (response.Content.Headers.ContentLength is > MaxBytes) return null;
+            if (response.Content.Headers.ContentLength is > MaxBytes)
+            {
+                Log.Info($"Remote image from {uri.Host} not shown: larger than {MaxBytes / (1024 * 1024)} MB.");
+                return null;
+            }
 
             var bytes = await response.Content.ReadAsByteArrayAsync(cancellation);
-            if (bytes.Length is 0 or > MaxBytes) return null;
+            if (bytes.Length is 0 or > MaxBytes)
+            {
+                Log.Info($"Remote image from {uri.Host} not shown: {(bytes.Length == 0 ? "empty" : "too large")}.");
+                return null;
+            }
+
+            // The label first, then the bytes, as a browser does: storage services label
+            // everything application/octet-stream, and a picture is a picture whatever its
+            // server calls it. Something that is neither labelled nor shaped like an image —
+            // a page, a script — is refused.
+            var declared = response.Content.Headers.ContentType?.MediaType ?? string.Empty;
+            var type = declared.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
+                ? declared
+                : ImageSniff.TypeOf(bytes);
+
+            if (type is null)
+            {
+                Log.Info($"Remote image from {uri.Host} not shown: it is {(declared.Length > 0 ? declared : "unlabelled")}, "
+                         + "and its bytes are not a picture.");
+                return null;
+            }
 
             return $"data:{type};base64,{Convert.ToBase64String(bytes)}";
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            return null;
         }
         catch (Exception ex)
         {
@@ -116,5 +169,27 @@ public sealed class RemoteImages
             Log.Warn($"Could not fetch a remote image from {uri.Host}.", ex);
             return null;
         }
+    }
+}
+
+/// <summary>What kind of picture some bytes are, by their first bytes, as a browser sniffs.</summary>
+internal static class ImageSniff
+{
+    /// <summary>The image media type the bytes are, or null when they are not a picture.</summary>
+    public static string? TypeOf(ReadOnlySpan<byte> bytes)
+    {
+        if (bytes.StartsWith((ReadOnlySpan<byte>)[0x89, (byte)'P', (byte)'N', (byte)'G'])) return "image/png";
+        if (bytes.StartsWith((ReadOnlySpan<byte>)[0xFF, 0xD8, 0xFF])) return "image/jpeg";
+        if (bytes.StartsWith("GIF87a"u8) || bytes.StartsWith("GIF89a"u8)) return "image/gif";
+        if (bytes.Length >= 12 && bytes.StartsWith("RIFF"u8) && bytes[8..12].SequenceEqual("WEBP"u8)) return "image/webp";
+        if (bytes.Length >= 12 && bytes[4..8].SequenceEqual("ftyp"u8)
+            && (bytes[8..12].SequenceEqual("avif"u8) || bytes[8..12].SequenceEqual("avis"u8))) return "image/avif";
+        if (bytes.StartsWith("BM"u8) && bytes.Length > 14) return "image/bmp";
+        if (bytes.StartsWith((ReadOnlySpan<byte>)[0x00, 0x00, 0x01, 0x00])) return "image/x-icon";
+
+        // SVG is text: an <svg element near the top, after an optional XML declaration, comments
+        // or white space.
+        var head = System.Text.Encoding.UTF8.GetString(bytes[..Math.Min(bytes.Length, 1024)]);
+        return head.Contains("<svg", StringComparison.OrdinalIgnoreCase) ? "image/svg+xml" : null;
     }
 }

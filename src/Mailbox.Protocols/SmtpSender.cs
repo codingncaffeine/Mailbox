@@ -176,6 +176,9 @@ public sealed class SmtpSender(MailRepository repository)
         MailKit.Security.AuthenticationException
             => SendResult.Rejected("The server rejected the username or password."),
 
+        // Kept in the Outbox: the message is fine, and the next send/receive may have the keyring.
+        OAuth.PasswordUnavailableException => SendResult.Deferred(ex.Message),
+
         MailKit.Security.SslHandshakeException
             => SendResult.Rejected(
                 "The secure connection could not be established. The server's certificate may " +
