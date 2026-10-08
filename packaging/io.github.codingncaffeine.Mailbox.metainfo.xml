@@ -67,6 +67,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.6.8" date="2026-10-08">
+      <description>
+        <p>Send/receive works again: since 0.6.7 every account failed to sign in, because Mailbox could not read the passwords from the desktop keyring. A missing password is now said as such rather than blamed on the server. Remote images load several at a time and appear even when their server labels them oddly, and any that cannot be shown are noted in the log.</p>
+      </description>
+    </release>
     <release version="0.6.7" date="2026-10-08">
       <description>
         <p>Messages are drawn by a copy of Chromium that ships inside Mailbox, so a system update can no longer leave the reading pane blank; pictures show again when you ask for them. Text in a message can be selected and copied with Ctrl+C or a right-click menu, and printing works through your PDF viewer. Chromium runs sandboxed with JavaScript off and fetches nothing on its own.</p>
