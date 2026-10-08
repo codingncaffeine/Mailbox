@@ -4,17 +4,21 @@
  * which a multi-threaded process is refused, and every .NET process is multi-threaded. It does
  * nothing but hand control to libcef: every handler Mailbox registers lives in the browser process.
  *
- * `--mailbox-probe-sandbox` answers whether the sandbox can work here, before Chromium is started,
- * because Chromium aborts the whole application when it finds none: 0 when this program may make a
- * user namespace, 2 when the setuid chrome-sandbox beside it is root's, 1 for neither. */
+ * `--mailbox-probe-sandbox` answers whether Chromium's sandbox can work here, before Chromium is
+ * started, because Chromium aborts the whole application when it finds none. It walks the same
+ * steps the sandbox does — new user, PID and network namespaces, the ID maps written, the empty
+ * root entered — because making the namespace is not the test: Ubuntu 24.04 allows that much to
+ * any program and refuses the maps that follow unless an AppArmor profile names the program.
+ * Exit 0 when every step works, 1 when any is refused.
+ *
+ * Kept to calls every supported distribution's C library has: built on a current one, it must
+ * still start on Debian 12 and Ubuntu 22.04 (glibc 2.36 and 2.35), so nothing here may pull in a
+ * newer symbol than the start-up code itself does. */
 #define _GNU_SOURCE
-#include <libgen.h>
-#include <limits.h>
+#include <fcntl.h>
 #include <sched.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -22,32 +26,38 @@ typedef struct { int argc; char **argv; } cef_main_args_t;
 extern const char *cef_api_hash(int version, int entry);
 extern int cef_execute_process(const cef_main_args_t *args, void *application, void *windows_sandbox_info);
 
+static int put(const char *path, const char *text)
+{
+    int fd = open(path, O_WRONLY);
+    if (fd < 0) return -1;
+    ssize_t length = (ssize_t)strlen(text);
+    int ok = write(fd, text, (size_t)length) == length;
+    close(fd);
+    return ok ? 0 : -1;
+}
+
 static int probe_sandbox(void)
 {
+    uid_t uid = getuid();
+    gid_t gid = getgid();
+
     pid_t child = fork();
-    if (child == 0) _exit(unshare(CLONE_NEWUSER) == 0 ? 0 : 1);
+    if (child < 0) return 1;
+    if (child == 0)
+    {
+        char map[64];
+        if (unshare(CLONE_NEWUSER | CLONE_NEWPID | CLONE_NEWNET) != 0) _exit(1);
+        if (put("/proc/self/setgroups", "deny") != 0) _exit(1);
+        snprintf(map, sizeof map, "0 %u 1", (unsigned)uid);
+        if (put("/proc/self/uid_map", map) != 0) _exit(1);
+        snprintf(map, sizeof map, "0 %u 1", (unsigned)gid);
+        if (put("/proc/self/gid_map", map) != 0) _exit(1);
+        if (chroot("/proc/self/fdinfo") != 0 || chdir("/") != 0) _exit(1);
+        _exit(0);
+    }
+
     int status = 0;
-    if (child > 0 && waitpid(child, &status, 0) == child && WIFEXITED(status) && WEXITSTATUS(status) == 0)
-        return 0;
-
-    char self[PATH_MAX];
-    ssize_t n = readlink("/proc/self/exe", self, sizeof self - 1);
-    if (n <= 0) return 1;
-    self[n] = '\0';
-    char sandbox[PATH_MAX];
-    snprintf(sandbox, sizeof sandbox, "%s/chrome-sandbox", dirname(self));
-    struct stat st;
-    if (stat(sandbox, &st) != 0 || st.st_uid != 0 || !(st.st_mode & S_ISUID)) return 1;
-
-    /* A setuid helper is no use where privileges can never be gained (the hardened launcher's
-       NoNewPrivileges): Chromium would try it and abort. */
-    FILE *self_status = fopen("/proc/self/status", "r");
-    char line[256];
-    int no_new_privs = 0;
-    while (self_status && fgets(line, sizeof line, self_status))
-        if (strncmp(line, "NoNewPrivs:", 11) == 0) no_new_privs = atoi(line + 11);
-    if (self_status) fclose(self_status);
-    return no_new_privs ? 1 : 2;
+    return waitpid(child, &status, 0) == child && WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 0 : 1;
 }
 
 int main(int argc, char **argv)

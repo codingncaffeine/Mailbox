@@ -129,7 +129,7 @@ Section: mail
 Priority: optional
 Architecture: $debarch
 Installed-Size: $installed_kb
-Depends: libc6, libgcc-s1, libstdc++6, libicu76 | libicu74 | libicu72, zlib1g, libx11-6, libxext6, libxi6, libxrandr2, libxcursor1, libice6, libsm6, libfontconfig1, libfreetype6, libegl1, libgl1, libglib2.0-0t64 | libglib2.0-0, libwayland-client0, libwayland-egl1, libwayland-server0, libwayland-cursor0, libxkbcommon0, libgbm1, libdrm2, libnss3, libnspr4, libatk1.0-0t64 | libatk1.0-0, libatk-bridge2.0-0t64 | libatk-bridge2.0-0, libatspi2.0-0t64 | libatspi2.0-0, libcups2t64 | libcups2, libdbus-1-3, libexpat1, libpango-1.0-0, libcairo2, libudev1, libxcb1, libxcomposite1, libxdamage1, libxfixes3, libasound2t64 | libasound2
+Depends: libc6, libgcc-s1, libstdc++6, libicu76 | libicu74 | libicu72 | libicu70, zlib1g, libx11-6, libxext6, libxi6, libxrandr2, libxcursor1, libice6, libsm6, libfontconfig1, libfreetype6, libegl1, libgl1, libglib2.0-0t64 | libglib2.0-0, libwayland-client0, libwayland-egl1, libwayland-server0, libwayland-cursor0, libxkbcommon0, libgbm1, libdrm2, libnss3, libnspr4, libatk1.0-0t64 | libatk1.0-0, libatk-bridge2.0-0t64 | libatk-bridge2.0-0, libatspi2.0-0t64 | libatspi2.0-0, libcups2t64 | libcups2, libdbus-1-3, libexpat1, libpango-1.0-0, libcairo2, libudev1, libxcb1, libxcomposite1, libxdamage1, libxfixes3, libasound2t64 | libasound2
 Recommends: libsecret-tools, libnotify-bin, hunspell-en-us, fonts-crosextra-carlito, fonts-crosextra-caladea, libgtk-3-0t64 | libgtk-3-0, xdg-desktop-portal, libldap2 | libldap-2.5-0, xwayland
 Suggests: hunspell-en-gb, fonts-liberation, fonts-noto-core
 Maintainer: Mailbox <codingncaffeine@users.noreply.github.com>

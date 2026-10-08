@@ -131,7 +131,9 @@
   </PropertyGroup>
 
   <ItemGroup Condition="'$(ChromiumShips)' == 'true'">
-    <ChromiumBinary Include="$(ChromiumSource)/*.*" />
+    <!-- chrome-sandbox is Chromium's setuid fallback; nothing sets it up, and found unconfigured
+         it makes Chromium abort rather than use the namespaces Mailbox checked for. -->
+    <ChromiumBinary Include="$(ChromiumSource)/*.*" Exclude="$(ChromiumSource)/chrome-sandbox" />
     <ChromiumResource Include="$(ChromiumSource)/Resources/*.*" />
     <ChromiumLocale Include="$(ChromiumSource)/Resources/locales/*.pak" />
   </ItemGroup>

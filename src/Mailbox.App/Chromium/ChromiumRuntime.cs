@@ -243,10 +243,12 @@ internal static class ChromiumRuntime
     /// Whether Chromium can sandbox its helpers here; null when it can, the reason when not.
     /// </summary>
     /// <remarks>
-    /// Two ways in, the same two Chromium itself tries: a user namespace (most desktops; Ubuntu
-    /// allows one to a program its AppArmor profile names, which the .deb installs), or the setuid
-    /// <c>chrome-sandbox</c> owned by root. The helper answers, because only it knows what its
-    /// own profile allows: 0 for a namespace, 2 for the setuid sandbox, anything else for neither.
+    /// The sandbox lives in user, PID and network namespaces of its own. Most desktops allow them;
+    /// Ubuntu 24.04 allows them only to a program its AppArmor profile names, which the .deb
+    /// installs. The helper walks the sandbox's own steps and answers, because only it knows what
+    /// its own profile allows — and creating the namespace is not enough of a test, since Ubuntu
+    /// permits that and refuses what follows. Chromium's other way in, a setuid helper, is not
+    /// shipped: no package sets it up, and the launcher's NoNewPrivileges would defeat it anyway.
     /// </remarks>
     private static string? SandboxProblem()
     {
@@ -266,10 +268,10 @@ internal static class ChromiumRuntime
                 return "Chromium's helper did not answer";
             }
 
-            return probe.ExitCode is 0 or 2
+            return probe.ExitCode == 0
                 ? null
-                : "Chromium's sandbox is not available here (no user namespace for its helper, "
-                  + "and no root-owned setuid chrome-sandbox)";
+                : "Chromium's sandbox is not available here (its helper may not make the user "
+                  + "namespaces it runs in — on Ubuntu, the .deb's AppArmor profile allows them)";
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
