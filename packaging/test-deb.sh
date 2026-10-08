@@ -48,6 +48,9 @@ else
 fi
 ldd /usr/lib/mailbox/chromium/libcef.so | grep -c "=> /" | sed "s/^/  libcef.so resolves /; s/$/ libraries (positive control)/"
 ls /etc/apparmor.d/mailbox-chromium > /dev/null 2>&1 && echo "  apparmor profile: installed" || echo "  apparmor profile: MISSING"
+probe=$(/usr/lib/mailbox/chromium/mailbox-cef-helper --mailbox-probe-sandbox 2>&1; echo "exit $?")
+echo "  chromium helper on this C library: $probe (exit 0 or 1 = it ran; an error above = it did not)"
+/usr/lib/mailbox/mailbox --version | sed "s/^/  /"
 for tool in secret-tool notify-send; do
     if command -v "$tool" > /dev/null; then echo "  $tool: present"; else echo "  $tool: missing (a Recommends)"; fi
 done

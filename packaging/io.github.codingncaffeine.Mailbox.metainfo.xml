@@ -67,6 +67,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.6.7" date="2026-10-08">
+      <description>
+        <p>Messages are drawn by a copy of Chromium that ships inside Mailbox, so a system update can no longer leave the reading pane blank; pictures show again when you ask for them. Text in a message can be selected and copied with Ctrl+C or a right-click menu, and printing works through your PDF viewer. Chromium runs sandboxed with JavaScript off and fetches nothing on its own.</p>
+      </description>
+    </release>
     <release version="0.6.6" date="2026-10-06">
       <description>
         <p>Proton Mail through Proton Mail Bridge, Microsoft accounts (outlook.com, hotmail.com) signing in with nothing to register, and work, school and family domains on Microsoft 365, Google Workspace, Fastmail or Proton recognised by who handles their mail. The main window opens at the size and place it was left, a new-mail notification brings Mailbox to the front, Archive keeps mail on the server, and a message wearing several Gmail labels is found once.</p>
