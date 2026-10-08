@@ -20,7 +20,7 @@ namespace Mailbox.App.Views;
 /// </remarks>
 public sealed class PrintPreviewWindow : Window
 {
-    private readonly NativeWebView? _web;
+    private readonly Mailbox.App.Chromium.ChromiumView? _web;
 
     public PrintPreviewWindow(ThemeService themes, string folder, IReadOnlyList<TableRow> rows)
         : this(themes, folder, RenderTable(themes, folder, rows))
@@ -94,32 +94,25 @@ public sealed class PrintPreviewWindow : Window
         DockPanel.SetDock(bar, Dock.Top);
         root.Children.Add(bar);
 
-        try
+        if (Mailbox.App.Chromium.ChromiumRuntime.IsRunning)
         {
-            _web = new NativeWebView();
-            Bind(_web, NativeWebView.BackgroundProperty, "reading.background.brush");
+            var background = Avalonia.Media.Color.TryParse(
+                themes.Tokens.GetString(TokenKeys.Reading.Background), out var colour) ? colour : Avalonia.Media.Colors.Magenta;
+            _web = new Mailbox.App.Chromium.ChromiumView(background);
 
-            // A preview that renders nothing looks the same in a capture as one that rendered
-            // correctly, since the engine composites offscreen. The log is where it is checked.
-            _web.NavigationCompleted += (_, e) => Log.Info(
-                e.IsSuccess ? $"Print preview: {html.Length} characters." : "The print preview would not load.");
+            // Said in the log, because a capture of an off-screen engine is not the place to
+            // check that a preview rendered.
+            _web.LoadFinished += (_, ok) => Log.Info(
+                ok ? $"Print preview: {html.Length} characters." : "The print preview would not load.");
             root.Children.Add(_web);
 
             // The same reason the message window releases its own: a preview holds a whole
-            // engine, and printing twice should not cost two.
+            // browser, and printing twice should not cost two.
             var engine = _web;
-            var host = root;
-            Closed += (_, _) =>
-            {
-                try { engine.Stop(); }
-                catch (Exception ex) { Log.Debug($"The preview's engine did not stop cleanly: {ex.Message}"); }
-
-                host.Children.Remove(engine);
-            };
+            Closed += (_, _) => engine.Close();
         }
-        catch (Exception ex)
+        else
         {
-            Log.Warn("No web engine is available, so the list cannot be previewed.", ex);
             root.Children.Add(new TextBlock
             {
                 Text = "This list cannot be printed: no web engine is available.",
@@ -129,7 +122,7 @@ public sealed class PrintPreviewWindow : Window
 
         DialogChrome.Apply(this, root);
 
-        _web?.NavigateToString(html, new Uri("about:blank"));
+        _web?.Navigate(html);
     }
 
     private Control Toolbar()
@@ -143,7 +136,7 @@ public sealed class PrintPreviewWindow : Window
         };
 
         var print = new Button { Content = "Print...", Padding = new Thickness(12, 4) };
-        print.Click += (_, _) => _web?.ShowPrintUI();
+        print.Click += async (_, _) => await PrintAsync();
         row.Children.Add(print);
 
         var pdf = new Button { Content = "Save as PDF...", Padding = new Thickness(12, 4) };
@@ -167,16 +160,23 @@ public sealed class PrintPreviewWindow : Window
 
         if (file?.TryGetLocalPath() is not { } path) return;
 
-        try
-        {
-            await using var pdf = await _web.PrintToPdfStreamAsync();
-            await using var destination = File.Create(path);
-            await pdf.CopyToAsync(destination);
-        }
-        catch (Exception ex)
-        {
-            Log.Warn("Could not write the list to PDF.", ex);
-        }
+        if (!await _web.PrintToPdfAsync(path)) Log.Warn("Could not write the list to PDF.");
+    }
+
+    /// <summary>
+    /// Prints through the desktop: the list becomes a PDF and opens in the reader's own viewer,
+    /// whose Print has their printers in it. An off-screen engine has no print dialog to show.
+    /// </summary>
+    private async Task PrintAsync()
+    {
+        if (_web is null) return;
+
+        var folder = Path.Combine(Path.GetTempPath(), "mailbox-print");
+        Directory.CreateDirectory(folder);
+        var path = Path.Combine(folder, "messages.pdf");
+
+        if (await _web.PrintToPdfAsync(path)) Mailbox.Core.Platform.DesktopOpen.Open(path);
+        else Log.Warn("The list could not be laid out for printing.");
     }
 
     private static void Bind(AvaloniaObject target, AvaloniaProperty property, string key)

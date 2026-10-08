@@ -32,17 +32,9 @@ CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/mailbox"
 # unit, and the named carve-outs below are the only places in it the application may write.
 RUNTIME="${XDG_RUNTIME_DIR:-/tmp}/mailbox"
 
-# The web engine builds its own sandbox in the runtime directory — bubblewrap bookkeeping
-# under .flatpak, its D-Bus and accessibility proxy sockets under wpe — and it aborts the
-# whole process the first time a message renders if it cannot. Two carve-outs rather than
-# opening the runtime directory: everything else in there (other applications' sockets, the
-# session's own) stays out of reach.
-WPE_RUNTIME="${XDG_RUNTIME_DIR:-/tmp}/wpe"
-WEBKIT_RUNTIME="${XDG_RUNTIME_DIR:-/tmp}/.flatpak"
-
 # The write paths must exist before the namespace is built: a ReadWritePaths entry that is
 # missing is skipped (the "-" prefix), and the application could then never create it.
-mkdir -p "$DATA" "$CONFIG" "$STATE" "$CACHE" "$RUNTIME" "$WPE_RUNTIME" "$WEBKIT_RUNTIME"
+mkdir -p "$DATA" "$CONFIG" "$STATE" "$CACHE" "$RUNTIME"
 
 # Where a saved attachment, an export or a backup may land: the reader's own folders — the
 # eight the desktop names (Desktop, Documents, Downloads, Music, Pictures, Videos, Public,
@@ -162,38 +154,29 @@ set -- "--setenv=MAILBOX_SANDBOX=1" "--setenv=MAILBOX_SANDBOX_WRITABLE=${WRITABL
 [ -n "$PANEL_ASK" ] && set -- "--setenv=MAILBOX_PANEL_ICON=$PANEL_ASK" "$@"
 
 # MemoryDenyWriteExecute stays off: the .NET JIT needs W^X mappings and the runtime aborts
-# without them. RestrictNamespaces stays off: the web engine builds its own sandbox out of
-# namespaces, and taking them away would trade its sandbox for this one. The syscall filter
-# admits @mount and seccomp for the same reason — bubblewrap assembles that sandbox out of
-# mount, pivot_root and seccomp calls, and under @system-service alone its helper dies on
-# SIGSYS the first time a message renders.
+# without them, and Chromium's JavaScript engine is built the same way even with scripts off.
+# RestrictNamespaces stays off: Chromium sandboxes the processes that read a message inside
+# user, PID and network namespaces of their own, and taking namespaces away would trade that
+# sandbox for this one — Mailbox then refuses to start Chromium and shows mail as text. The
+# syscall filter admits @mount and seccomp for the same reason: the sandbox chroots its helpers
+# into an empty directory and installs its own seccomp filter on each.
 #
-# ProtectKernelTunables, ProtectKernelLogs and ProtectHostname stay off, each proven alone to
-# be fatal: all three overmount pieces of /proc, the kernel refuses to mount a fresh procfs in
-# a user namespace while the parent's is partly masked, and the engine's sandbox needs that
-# procfs — so any one of them turns the first rendered message into a crash. What they would
-# mask is root's to write anyway (/proc/sys, /proc/kmsg), and sethostname is still refused by
-# the syscall filter, so keeping the engine's own sandbox costs nothing it actually held.
+# ProtectKernelTunables, ProtectKernelLogs and ProtectHostname stay off: all three overmount
+# pieces of /proc, and the kernel refuses a fresh procfs in a user namespace while the parent's
+# is partly masked. What they would mask is root's to write anyway (/proc/sys, /proc/kmsg), and
+# sethostname is still refused by the syscall filter.
 #
-# mincore is admitted by name: the EGL loader probes its own mappings with it while the web
-# process brings up its display, and @system-service does not carry it — so the filter killed
-# the web process with SIGSYS on the first page load, after every whole-process wall above had
-# been taken down. The application stayed up and every message body was silently blank, which
-# is the worst failure shape this launcher can produce: nothing crashed, nothing logged, and
-# the reading pane's engine simply never finished a load. It is a read-only query about page
-# residency — it writes nothing and reaches nothing outside the process's own address space.
+# @pkey is admitted for Chromium's JavaScript engine, which takes a memory protection key for its
+# own code pages as every helper starts, scripts on or off; without it the filter kills the
+# sandbox's first process and Chromium aborts the application. The calls only change how this
+# process may touch its own memory.
 #
-# RestrictSUIDSGID stays off, and openat2 is admitted by name. bubblewrap 0.12 opens every
-# bind source with openat2 — the symlink-safe open, with no fallback to the unprotected one,
-# which is the right choice for a sandbox helper — and RestrictSUIDSGID cannot see openat2's
-# mode bits (they travel in a struct, out of seccomp's sight), so systemd honours the option
-# by refusing the whole call with ENOSYS. The web library treats a child it cannot spawn as a
-# fatal error, so this one wall aborts the entire application at its first page load. What
-# the wall held — creating files with the set-id mode bits — is nearly all held anyway:
-# NoNewPrivileges means nothing in the unit gains from executing such a file, the empty
-# capability set means any file made is owned by the user and no other, and everything
-# outside the mail directories is read-only. The filter entry is for older systemd builds
-# whose @system-service predates openat2; on current ones it is admitted twice, harmlessly.
+# mincore and openat2 are admitted by name, and RestrictSUIDSGID stays off. Both calls are
+# read-only or symlink-safe opens that older @system-service sets lack; RestrictSUIDSGID cannot
+# see openat2's mode bits (they travel in a struct, out of seccomp's sight) and refuses the whole
+# call. What it held — creating set-id files — is held anyway: NoNewPrivileges means nothing in
+# the unit gains from executing one, the capability set is empty, and everything outside the mail
+# directories is read-only.
 # A terminal launch gets a pty so Ctrl+C reaches the application; a desktop launch has no
 # tty and takes the pipe.
 IO=--pipe
@@ -210,8 +193,6 @@ exec systemd-run --user --quiet --collect --wait "$IO" \
     --property=ReadWritePaths="$STATE" \
     --property=ReadWritePaths="$CACHE" \
     --property=ReadWritePaths="$RUNTIME" \
-    --property=ReadWritePaths="$WPE_RUNTIME" \
-    --property=ReadWritePaths="$WEBKIT_RUNTIME" \
     --property=ReadWritePaths="-\"$BACKUP_DIR\"" \
     --property=PrivateTmp=yes \
     --property=CapabilityBoundingSet= \
@@ -221,5 +202,5 @@ exec systemd-run --user --quiet --collect --wait "$IO" \
     --property=ProtectClock=yes \
     --property=RestrictRealtime=yes \
     --property=RestrictAddressFamilies="AF_UNIX AF_INET AF_INET6 AF_NETLINK" \
-    --property=SystemCallFilter="@system-service @mount seccomp mincore openat2" \
+    --property=SystemCallFilter="@system-service @mount @pkey seccomp mincore openat2" \
     "$@"

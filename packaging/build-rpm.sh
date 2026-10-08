@@ -92,23 +92,33 @@ Recommends:     libwayland-egl.so.1()(64bit)
 Recommends:     libwayland-cursor.so.0()(64bit)
 Recommends:     libwayland-server.so.0()(64bit)
 Recommends:     libxkbcommon.so.0()(64bit)
-Recommends:     libgbm.so.1()(64bit)
 Recommends:     libdrm.so.2()(64bit)
-Recommends:     libsoup-3.0.so.0()(64bit)
 
 # XWayland, by the path both families install it at: the send/receive progress window is shown
 # through it on a Wayland session, the one way it can come up without taking the keyboard, and
 # without it those runs keep to the status bar.
 Recommends:     /usr/bin/Xwayland
 
-# The reading pane's engine. Weak deliberately, and by soname rather than by package name: WPE
-# WebKit is not packaged by every distribution — Fedora packages none of it, openSUSE calls it
-# libWPEWebKit-2_0-1 — and the pane renders the message as text where no engine can draw into it
-# rather than showing a blank body. Asked for this way it is installed wherever it exists, under
-# whatever name, and ignored where it does not.
-Recommends:     libWPEWebKit-2.0.so.1()(64bit)
-Recommends:     libwpe-1.0.so.1()(64bit)
-Recommends:     libWPEBackend-fdo-1.0.so.1()(64bit)
+# The reading pane's engine is Chromium, inside the package; these are the system libraries it
+# links against, by soname so each family's own package names answer.
+Requires:       libnss3.so()(64bit)
+Requires:       libnspr4.so()(64bit)
+Requires:       libsmime3.so()(64bit)
+Requires:       libatk-1.0.so.0()(64bit)
+Requires:       libatk-bridge-2.0.so.0()(64bit)
+Requires:       libatspi.so.0()(64bit)
+Requires:       libcups.so.2()(64bit)
+Requires:       libdbus-1.so.3()(64bit)
+Requires:       libexpat.so.1()(64bit)
+Requires:       libpango-1.0.so.0()(64bit)
+Requires:       libcairo.so.2()(64bit)
+Requires:       libudev.so.1()(64bit)
+Requires:       libxcb.so.1()(64bit)
+Requires:       libXcomposite.so.1()(64bit)
+Requires:       libXdamage.so.1()(64bit)
+Requires:       libXfixes.so.3()(64bit)
+Requires:       libasound.so.2()(64bit)
+Requires:       libgbm.so.1()(64bit)
 
 # The two command-line tools the application shells out to, asked for by the path it calls them
 # at: the package that carries secret-tool is libsecret on one distribution and libsecret-tools
@@ -134,9 +144,9 @@ store with instant search, rules, quick steps, junk filtering and follow-up
 flags, and integrates with the desktop: mailto: links, notifications, the
 tray, autostart. Passwords go to the desktop keyring through secret-tool.
 
-The reading pane renders mail through WPE WebKit where the distribution
-packages it. Where it does not, the message is rendered as text: the pane
-refuses an engine that cannot paint into it rather than drawing nothing.
+The reading pane renders mail through the Chromium inside the package, with
+its sandbox on, JavaScript off and the network closed to everything but the
+message.
 
 %install
 cp -a %{_sourcedir}/. %{buildroot}/

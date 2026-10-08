@@ -40,10 +40,14 @@ for f in $(find /usr/lib/mailbox -type f \( -perm -u+x -o -name "*.so*" \) ); do
 done
 sort -u /tmp/missing
 echo "  ($found ELF files scanned)"
-echo "── the reading pane engine and the tools the app calls:"
-for lib in libWPEWebKit-2.0.so.1 libwpe-1.0.so.1 libWPEBackend-fdo-1.0.so.1 libsoup-3.0.so.0; do
-    if ldconfig -p | grep -q "$lib"; then echo "  $lib: present"; else echo "  $lib: MISSING"; fi
-done
+echo "── the reading pane engine (Chromium, inside the package) and the tools the app calls:"
+if [ -f /usr/lib/mailbox/chromium/libcef.so ] && [ -x /usr/lib/mailbox/chromium/mailbox-cef-helper ]; then
+    echo "  chromium: present"
+else
+    echo "  chromium: MISSING"
+fi
+ldd /usr/lib/mailbox/chromium/libcef.so | grep -c "=> /" | sed "s/^/  libcef.so resolves /; s/$/ libraries (positive control)/"
+ls /etc/apparmor.d/mailbox-chromium > /dev/null 2>&1 && echo "  apparmor profile: installed" || echo "  apparmor profile: MISSING"
 for tool in secret-tool notify-send; do
     if command -v "$tool" > /dev/null; then echo "  $tool: present"; else echo "  $tool: missing (a Recommends)"; fi
 done

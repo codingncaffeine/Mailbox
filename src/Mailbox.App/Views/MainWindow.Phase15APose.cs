@@ -100,6 +100,15 @@ public partial class MainWindow
 
             foreach (var name in names) await ReadCaseBackAsync(shell, name, output);
 
+            // MAILBOX_UNSANITIZED=<file>: last, raw markup straight to the engine, so a run can
+            // show that Chromium's own wall holds with the sanitizer out of the way.
+            if (Environment.GetEnvironmentVariable("MAILBOX_UNSANITIZED") is { Length: > 0 } raw
+                && File.Exists(raw) && _reading is { } pane)
+            {
+                pane.LoadUnsanitizedForHarness(File.ReadAllText(raw));
+                await Task.Delay(4_000);
+            }
+
             Log.Info($"Harness: sanitizer — {names.Count} case(s) read back.");
         }
         catch (Exception ex)

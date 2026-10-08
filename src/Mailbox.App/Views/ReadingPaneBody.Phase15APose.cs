@@ -26,4 +26,22 @@ public sealed partial class ReadingPaneBody
 
     /// <summary>How many of them it is holding, fetched by the application rather than the engine.</summary>
     internal int InlinedNow => _inlined.Count;
+
+    /// <summary>
+    /// Hands Chromium a document that never went through the sanitizer. Capture runs only.
+    /// </summary>
+    /// <remarks>
+    /// The proof that the engine's own wall holds without the sanitizer in front of it: every
+    /// message reaches Chromium sanitized, so nothing an ordinary run shows can say whether
+    /// Chromium itself would have fetched a remote picture, stylesheet or frame. A run hands it
+    /// raw markup that asks for all of them, and a server that logs nothing is the answer.
+    /// </remarks>
+    internal void LoadUnsanitizedForHarness(string html)
+    {
+        if (!Mailbox.App.Theming.WindowCapture.IsRequested || _web is not { } web) return;
+
+        _surface.Content = web;
+        web.Navigate(html);
+        Mailbox.Core.Diagnostics.Log.Info($"Harness: unsanitized document handed to the engine ({html.Length} characters).");
+    }
 }

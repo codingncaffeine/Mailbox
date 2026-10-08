@@ -6,6 +6,8 @@
     <RootNamespace>Mailbox.App</RootNamespace>
     <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Chromium hands its frames over as raw memory. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
 
@@ -28,7 +30,6 @@
 
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />
-    <PackageReference Include="Avalonia.Controls.WebView" Version="$(AvaloniaWebViewVersion)" />
     <PackageReference Include="Avalonia.Desktop" Version="$(AvaloniaVersion)" />
     <!-- The native Wayland backend is not part of Avalonia.Desktop's platform detection; it is
          its own package (MIT, over the MIT NWayland bindings) and is selected at startup. It is
@@ -43,6 +44,19 @@
     <PackageReference Include="Avalonia.Themes.Simple" Version="$(AvaloniaVersion)" />
     <!-- No Avalonia.Diagnostics: DevTools moved under the commercial licence at 12.x and is
          not published for this version. Not a runtime dependency either way. -->
+  </ItemGroup>
+
+  <!--
+    Chromium, which draws messages, ships inside Mailbox: the binding (CefGlue, MIT) and the
+    official Chromium Embedded Framework build it speaks to. The runtime package's own copy step
+    is switched off — it drops its files into the output in a layout Chromium cannot find its
+    resources in — and ChromiumFiles below lays them out instead, all under chromium/.
+    See Chromium/ChromiumRuntime.cs.
+  -->
+  <ItemGroup>
+    <PackageReference Include="CefGlue.Next.Core" Version="$(CefGlueVersion)" />
+    <PackageReference Include="cef.runtime.linux-x64" Version="$(CefRuntimeVersion)" GeneratePathProperty="true"
+                      ExcludeAssets="build;buildTransitive" />
   </ItemGroup>
 
   <ItemGroup>
@@ -98,5 +112,40 @@
     <ProjectReference Include="..\Mailbox.Plugins\Mailbox.Plugins.csproj" />
     <ProjectReference Include="..\Mailbox.Import\Mailbox.Import.csproj" />
   </ItemGroup>
+
+  <!--
+    Chromium's files, laid out the way it looks for them: libcef.so, its snapshots, the .pak
+    resources and icudtl.dat side by side, the locale paks under locales/. And its helper: a
+    native program of a few lines (packaging/chromium), because the Linux sandbox needs a
+    single-threaded process to enter its namespaces and no .NET process is one.
+  -->
+  <PropertyGroup>
+    <ChromiumSource>$(Pkgcef_runtime_linux-x64)/CEF/linux-x64</ChromiumSource>
+    <ChromiumHelperSource>$(MSBuildThisFileDirectory)../../packaging/chromium/mailbox-cef-helper.c</ChromiumHelperSource>
+  </PropertyGroup>
+
+  <!-- linux-x64, and a build with no runtime named on an x64 machine. Chromium is the x64 build of
+       CEF; an arm64 publish carries none and its reading pane renders text. -->
+  <PropertyGroup>
+    <ChromiumShips Condition="$([MSBuild]::IsOSPlatform('Linux')) And ('$(RuntimeIdentifier)' == 'linux-x64' Or ('$(RuntimeIdentifier)' == '' And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'X64'))">true</ChromiumShips>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(ChromiumShips)' == 'true'">
+    <ChromiumBinary Include="$(ChromiumSource)/*.*" />
+    <ChromiumResource Include="$(ChromiumSource)/Resources/*.*" />
+    <ChromiumLocale Include="$(ChromiumSource)/Resources/locales/*.pak" />
+  </ItemGroup>
+
+  <Target Name="ChromiumIntoOutput" AfterTargets="Build" Condition="'$(ChromiumShips)' == 'true'">
+    <Copy SourceFiles="@(ChromiumBinary);@(ChromiumResource)" DestinationFolder="$(OutDir)chromium" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(ChromiumLocale)" DestinationFolder="$(OutDir)chromium/locales" SkipUnchangedFiles="true" />
+    <Exec Command="gcc -O2 -Wall -Wextra -Werror -o &quot;$(OutDir)chromium/mailbox-cef-helper&quot; &quot;$(ChromiumHelperSource)&quot; -L&quot;$(OutDir)chromium&quot; -lcef -Wl,-rpath,'$ORIGIN'" />
+  </Target>
+
+  <Target Name="ChromiumIntoPublish" AfterTargets="Publish" Condition="'$(ChromiumShips)' == 'true'">
+    <Copy SourceFiles="@(ChromiumBinary);@(ChromiumResource)" DestinationFolder="$(PublishDir)chromium" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(ChromiumLocale)" DestinationFolder="$(PublishDir)chromium/locales" SkipUnchangedFiles="true" />
+    <Exec Command="gcc -O2 -Wall -Wextra -Werror -o &quot;$(PublishDir)chromium/mailbox-cef-helper&quot; &quot;$(ChromiumHelperSource)&quot; -L&quot;$(PublishDir)chromium&quot; -lcef -Wl,-rpath,'$ORIGIN'" />
+  </Target>
 
 </Project>

@@ -34,11 +34,10 @@
   -->
   <PropertyGroup>
     <AvaloniaVersion>12.1.1</AvaloniaVersion>
-    <!-- Its own release train, not Avalonia's: the WebView package is versioned separately.
-         12.1.0 (2026-08-15, MIT now) carries the WPE script-callback fix the paint nudge
-         leans on; the nudge itself stays, because the offscreen export path it covers is
-         unchanged upstream and that release's "first paint" fix is GTK-only. -->
-    <AvaloniaWebViewVersion>12.1.0</AvaloniaWebViewVersion>
+    <!-- Chromium for the reading pane: the binding and the CEF build it speaks to move together
+         (154.x = Chromium 154). A new Chromium is a new pair, and a release. -->
+    <CefGlueVersion>154.8037.94</CefGlueVersion>
+    <CefRuntimeVersion>154.0.33</CefRuntimeVersion>
     <MailKitVersion>4.17.0</MailKitVersion>
     <SqliteVersion>10.0.11</SqliteVersion>
     <!--

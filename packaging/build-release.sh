@@ -116,11 +116,10 @@ build_one() {
     # name at run time, nobody without a company directory needs one, and the directory says so
     # rather than the application failing to start.
     #
-    # Depends are Debian 13 (trixie) names, the primary .deb target; the ICU alternates reach
-    # back to older releases. WPE WebKit is what renders mail; without it the reading pane
-    # renders the message as text, which the pane now decides for itself rather than building an
-    # engine that would draw nothing. GTK is only for the file dialogs where no desktop portal
-    # answers. XWayland is what the send/receive progress window is shown through on a Wayland
+    # Depends are Debian 13 (trixie) names, the primary .deb target; the alternates reach back to
+    # older releases and to Ubuntu's t64 renames. Chromium, which renders mail, ships inside the
+    # package; the libraries from libnss3 to libasound2 are the system ones it links against.
+    # GTK is only for the file dialogs where no desktop portal answers. XWayland is what the send/receive progress window is shown through on a Wayland
     # session, the one way it can come up without taking the keyboard; without it those runs
     # keep to the status bar.
     cat > "$deb/DEBIAN/control" <<CTRL
@@ -130,7 +129,7 @@ Section: mail
 Priority: optional
 Architecture: $debarch
 Installed-Size: $installed_kb
-Depends: libc6, libgcc-s1, libstdc++6, libicu76 | libicu74 | libicu72, zlib1g, libx11-6, libxext6, libxi6, libxrandr2, libxcursor1, libice6, libsm6, libfontconfig1, libfreetype6, libegl1, libgl1, libglib2.0-0t64 | libglib2.0-0, libsoup-3.0-0, libwayland-client0, libwayland-egl1, libwayland-server0, libwayland-cursor0, libxkbcommon0, libgbm1, libdrm2, libwpewebkit-2.0-1, libwpe-1.0-1, libwpebackend-fdo-1.0-1
+Depends: libc6, libgcc-s1, libstdc++6, libicu76 | libicu74 | libicu72, zlib1g, libx11-6, libxext6, libxi6, libxrandr2, libxcursor1, libice6, libsm6, libfontconfig1, libfreetype6, libegl1, libgl1, libglib2.0-0t64 | libglib2.0-0, libwayland-client0, libwayland-egl1, libwayland-server0, libwayland-cursor0, libxkbcommon0, libgbm1, libdrm2, libnss3, libnspr4, libatk1.0-0t64 | libatk1.0-0, libatk-bridge2.0-0t64 | libatk-bridge2.0-0, libatspi2.0-0t64 | libatspi2.0-0, libcups2t64 | libcups2, libdbus-1-3, libexpat1, libpango-1.0-0, libcairo2, libudev1, libxcb1, libxcomposite1, libxdamage1, libxfixes3, libasound2t64 | libasound2
 Recommends: libsecret-tools, libnotify-bin, hunspell-en-us, fonts-crosextra-carlito, fonts-crosextra-caladea, libgtk-3-0t64 | libgtk-3-0, xdg-desktop-portal, libldap2 | libldap-2.5-0, xwayland
 Suggests: hunspell-en-gb, fonts-liberation, fonts-noto-core
 Maintainer: Mailbox <codingncaffeine@users.noreply.github.com>
@@ -141,6 +140,32 @@ Description: Desktop mail client with a ribbon, calendar peek and reading pane
  flags, and integrates with the desktop: mailto: links, notifications, the
  tray, autostart. Passwords go to the desktop keyring through secret-tool.
 CTRL
+    # Chromium's sandbox needs a user namespace for its helper. Ubuntu 23.10 and later refuse
+    # one to any program AppArmor has no profile for, so the package brings one that grants that
+    # program exactly this, loaded on install and unloaded on removal. Elsewhere the file is
+    # inert; on an AppArmor too old to read it the load fails quietly, and those releases do not
+    # restrict namespaces anyway.
+    mkdir -p "$deb/etc/apparmor.d"
+    cp packaging/chromium/apparmor-mailbox-chromium "$deb/etc/apparmor.d/mailbox-chromium"
+    echo /etc/apparmor.d/mailbox-chromium > "$deb/DEBIAN/conffiles"
+    cat > "$deb/DEBIAN/postinst" <<'POSTINST'
+#!/bin/sh
+set -e
+if [ "$1" = configure ] && command -v apparmor_parser >/dev/null 2>&1 && [ -d /sys/kernel/security/apparmor ]; then
+    apparmor_parser --replace --write-cache /etc/apparmor.d/mailbox-chromium >/dev/null 2>&1 || true
+fi
+POSTINST
+    cat > "$deb/DEBIAN/postrm" <<'POSTRM'
+#!/bin/sh
+set -e
+if [ "$1" = remove ] || [ "$1" = purge ]; then
+    if command -v apparmor_parser >/dev/null 2>&1 && [ -d /sys/kernel/security/apparmor ]; then
+        [ -f /etc/apparmor.d/mailbox-chromium ] \
+            && apparmor_parser --remove /etc/apparmor.d/mailbox-chromium >/dev/null 2>&1 || true
+    fi
+fi
+POSTRM
+    chmod 755 "$deb/DEBIAN/postinst" "$deb/DEBIAN/postrm"
     dpkg-deb --build --root-owner-group "$deb" "$OUT/Mailbox$suffix.deb" > /dev/null
     rm -rf "$deb"
 

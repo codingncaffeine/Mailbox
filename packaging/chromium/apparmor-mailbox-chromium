@@ -1,0 +1,12 @@
+# Lets Mailbox's Chromium helper build its sandbox where AppArmor restricts unprivileged user
+# namespaces (Ubuntu 23.10 and later): the processes that read a message run inside namespaces
+# of their own, and this grants that one program the right to make them — nothing else.
+# Installed by the .deb to /etc/apparmor.d/mailbox-chromium.
+abi <abi/4.0>,
+include <tunables/global>
+
+profile mailbox-chromium /usr/lib/mailbox/chromium/mailbox-cef-helper flags=(unconfined) {
+  userns,
+
+  include if exists <local/mailbox-chromium>
+}

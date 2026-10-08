@@ -21,7 +21,7 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - name: Install a display and the web engine
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb libwebkit2gtk-4.1-0
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb libnss3 libatk-bridge2.0-0t64 libcups2t64 libxcomposite1 libxdamage1 libgbm1 libasound2t64 libpango-1.0-0 libcairo2
       - name: Press every command
         run: xvfb-run -a tools/press-sweep.sh --ci --timeout 90
       - name: Upload the report

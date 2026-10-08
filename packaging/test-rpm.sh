@@ -9,10 +9,9 @@
 #
 # Anything else missing is a Requires gap in build-rpm.sh; fix it before publishing.
 #
-# One difference from the .deb, and it is expected: Fedora packages no WPE WebKit at all, so the
-# reading pane's engine is absent there and the pane says so and renders the message as text.
-# The probe reports which way that went, because "the engine is missing" and "the engine is
-# there and broken" look identical from the outside and only the first is acceptable.
+# The reading pane's engine is the Chromium inside the package, the same on every family; the
+# probe reports what the log says about it, because "text because there is no sandbox" and
+# "text because Chromium broke" look identical from outside and only the first is acceptable.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -45,10 +44,12 @@ echo "── what the platform brought:"
 for lib in libX11.so.6 libEGL.so.1 libGL.so.1 libfreetype.so.6 libfontconfig.so.1 libglib-2.0.so.0 libicuuc.so; do
     if ldconfig -p | grep -q "$lib"; then echo "  $lib: present"; else echo "  $lib: MISSING"; fi
 done
-echo "── the reading pane engine (Fedora packages none — text is the correct answer):"
-for lib in libWPEWebKit-2.0.so.1 libwpe-1.0.so.1 libWPEBackend-fdo-1.0.so.1; do
-    if ldconfig -p | grep -q "$lib"; then echo "  $lib: present"; else echo "  $lib: absent"; fi
-done
+echo "── the reading pane engine (Chromium, inside the package):"
+if [ -f /usr/lib/mailbox/chromium/libcef.so ] && [ -x /usr/lib/mailbox/chromium/mailbox-cef-helper ]; then
+    echo "  chromium: present"
+else
+    echo "  chromium: MISSING"
+fi
 for tool in secret-tool notify-send; do
     if command -v "$tool" > /dev/null; then echo "  $tool: present"; else echo "  $tool: missing (a Recommends)"; fi
 done

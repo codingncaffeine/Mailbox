@@ -139,23 +139,25 @@ bash packaging/test-deb.sh          # installs the .deb in a clean debian:trixie
 bash packaging/test-rpm.sh          # the same in a clean fedora:42 container
 ```
 
-The tests are part of every build: the reading pane's engine (WPE WebKit), the keyring tool and
-the notification tool are exactly the dependencies that are present on a development machine and
-missing on a clean one. They pass when the install resolves, no bundled library wants anything
+The tests are part of every build: the system libraries the bundled Chromium links against, the
+keyring tool and the notification tool are exactly the dependencies that are present on a
+development machine and missing on a clean one. They pass when the install resolves, no bundled library wants anything
 the package did not bring, and the binary gets as far as looking for a display. `rpmbuild` is
 borrowed from a container where the build machine has none, which is the ordinary case on Arch.
 
-Runtime dependencies on the target: X11 or Wayland, fontconfig, ICU; WPE WebKit
-(`libwpewebkit-2.0-1` / `wpewebkit`), libwpe and WPEBackend-fdo for the reading pane; and,
-recommended, `secret-tool` (libsecret) for the keyring, `notify-send` (libnotify) for
+Runtime dependencies on the target: X11 or Wayland, fontconfig, ICU; the libraries the bundled
+Chromium links against (NSS, ATK, CUPS, Pango, ALSA and a few X extensions — the packages declare
+them); and, recommended, `secret-tool` (libsecret) for the keyring, `notify-send` (libnotify) for
 notifications, Hunspell dictionaries for spelling, a desktop portal (with GTK 3 as the fallback)
 for the file dialogs, and the metric-compatible fonts below.
 
-**On a distribution that does not package WPE WebKit — Fedora is one — the reading pane renders
-each message as text.** That is a deliberate answer rather than a degraded one: the only other
-engine the library can reach draws into a native child window, which this pane cannot composite,
-so it would report every message loaded and display nothing. The pane refuses it and says which
-library is missing in the log. Install WPE WebKit and the pane picks it up on the next start.
+**The reading pane is Chromium, shipped inside Mailbox** (in `chromium/` beside the binary), so a
+system update cannot change or break it. It runs with Chromium's sandbox on, JavaScript off, and
+the network closed to everything but the message being shown. The sandbox needs a user namespace
+for Chromium's helper; on Ubuntu 23.10 and later the `.deb` installs the AppArmor profile that
+allows one. **Where no sandbox can be had** — the tarball on a restricted Ubuntu, for instance —
+Mailbox does not run Chromium unsandboxed: it renders each message as text and says why in its
+log. `MAILBOX_NO_CHROMIUM=1` asks for text deliberately.
 
 ### Fonts
 

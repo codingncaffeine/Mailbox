@@ -31,11 +31,10 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
-      - name: Install a display and the web engine
-        # The engine the reading pane renders with; without it every door that opens a message
-        # logs the missing-library exception and the batch reads as thrown. The doors verify
-        # the application as shipped, and shipped means rendering.
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb libwebkit2gtk-4.1-0
+      - name: Install a display and what Chromium links against
+        # Chromium ships inside the build; these are the system libraries it needs. The doors
+        # verify the application as shipped, and shipped means rendering.
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb libnss3 libatk-bridge2.0-0t64 libcups2t64 libxcomposite1 libxdamage1 libgbm1 libasound2t64 libpango-1.0-0 libcairo2
       - name: Open every door
         run: xvfb-run -a tools/audit-ci.sh
       - name: Upload the batch
@@ -56,6 +55,10 @@ jobs:
       - name: Install a display and ImageMagick
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb imagemagick
       - name: Pixel gate
+        # The gate is about the themes' tokens, and its references were drawn with the reading
+        # pane's body as text; Chromium stays off so a message body cannot move a pixel here.
+        env:
+          MAILBOX_NO_CHROMIUM: "1"
         run: xvfb-run -a tools/fidelity-gate.sh
       - name: Upload captures
         if: always()

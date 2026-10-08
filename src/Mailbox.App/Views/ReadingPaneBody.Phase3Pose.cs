@@ -109,43 +109,6 @@ public sealed partial class ReadingPaneBody
     /// <summary>Holds the capture while the engine is still drawing, so the answer below exists.</summary>
     private IDisposable? _engineHold;
 
-    /// <summary>How many times the engine's adapter asked the host to draw. Dump-gate only.</summary>
-    private int _drawRequests;
-
-    /// <summary>
-    /// Counts the adapter's own draw requests, under the dump gate.
-    /// </summary>
-    /// <remarks>
-    /// The frame pipeline has three legs — the engine exports a buffer, the adapter asks the
-    /// host to draw it, the host copies it into the visual — and a failure in any of them looks
-    /// identical from the outside: a healthy page and an empty pane. The words and paint-pulse
-    /// read-backs cover the first leg; this covers the second, by reflection because the
-    /// adapter's interface is the library's own. A pulse with no draw requests means the
-    /// adapter's event never fires; draw requests with no pixels put the fault in the copy or
-    /// the visual.
-    /// </remarks>
-    private void HookDrawRequested(object? adapter)
-    {
-        if (!DumpRequested || !Mailbox.App.Theming.WindowCapture.IsRequested || adapter is null) return;
-
-        try
-        {
-            var drawRequested = adapter.GetType().GetEvent("DrawRequested");
-            if (drawRequested is null)
-            {
-                Log.Info($"Harness: reading engine — {adapter.GetType().Name} has no DrawRequested to hook.");
-                return;
-            }
-
-            drawRequested.AddEventHandler(
-                adapter, new Action(() => Interlocked.Increment(ref _drawRequests)));
-        }
-        catch (Exception ex)
-        {
-            Log.Warn("Harness: reading engine — could not hook the adapter's draw requests.", ex);
-        }
-    }
-
     /// <summary>Takes a hold for the load that is about to start, releasing any earlier one.</summary>
     /// <remarks>
     /// The pane is refreshed more than once as a selection lands, and each load supersedes the
@@ -186,19 +149,16 @@ public sealed partial class ReadingPaneBody
     }
 
     /// <summary>
-    /// Asks the engine what it actually drew, and writes the answer beside the sanitizer's.
+    /// Asks the engine what it holds once a load has finished, and writes the answer beside the
+    /// sanitizer's.
     /// </summary>
     /// <remarks>
-    /// The pane's other read-backs stop at the document: what the sanitizer produced and what
-    /// was handed to the engine. Between that hand-off and the screen sits a whole web engine,
-    /// and a capture cannot arbitrate — the offscreen renderer regularly has no frame yet when
-    /// the settle timer fires, so a blank picture is expected even when everything worked. This
-    /// is the read-back for that last leg: once the engine says the load finished, it is asked
-    /// for the body's own text, which is the words a reader would see. A message whose document
-    /// says one thing and whose engine says nothing is exactly the failure nothing else here
-    /// can catch.
+    /// The pane's other read-backs stop at the document: what the sanitizer produced and what was
+    /// handed to the engine. This is the last leg — the words Chromium laid out, and how many
+    /// frames have reached the pane — because a document that says one thing over a pane that
+    /// shows nothing is the failure nothing else here can catch.
     /// </remarks>
-    private async Task ReportEngineWordsAsync(bool loaded, long generation)
+    private async Task ReportEngineWordsAsync(bool loaded)
     {
         if (!DumpRequested || !Mailbox.App.Theming.WindowCapture.IsRequested) return;
 
@@ -212,80 +172,21 @@ public sealed partial class ReadingPaneBody
 
             if (_web is not { } web) return;
 
-            // A read-back for a load that has already been replaced would report the document
-            // that replaced it — which is how a superseded load used to be recorded as holding
-            // nothing at all. The load on show answers for what the pane holds.
-            if (!IsCurrent(web, generation))
-            {
-                Log.Info("Harness: reading engine — that load was superseded before it could be read.");
-                return;
-            }
-
-            // On the dispatcher, which is where the engine's bridge lives; bounded, because a
-            // hold with no timeout turns an engine that never answers into a run that never ends.
-            object? answer = null;
-            var read = Dispatcher.UIThread.InvokeAsync(
-                async () => answer = await web.InvokeScript("document.body.innerText"));
-            var done = await Task.WhenAny(read, Task.Delay(10_000));
-
-            if (done != read)
+            var read = web.TextAsync();
+            if (await Task.WhenAny(read, Task.Delay(10_000)) != read)
             {
                 Log.Warn("Harness: reading engine — no answer to the text read-back within 10s.");
                 return;
             }
 
-            await read;
-
-            var words = System.Text.RegularExpressions.Regex
-                .Replace(answer?.ToString() ?? string.Empty, @"\s+", " ").Trim();
-
+            var words = Words(await read);
             Log.Info($"Harness: reading engine — the engine holds {words.Length} character(s)"
                      + (words.Length > 0 ? $": “{words[Math.Max(0, words.Length - 110)..]}”" : "."));
 
-            // The DOM holding the words is not the words being drawn: rasterisation happens in
-            // the engine's compositor, a leg the text read-back never touches — it answered
-            // perfectly over a compositor that was producing nothing. requestAnimationFrame is
-            // that compositor's own pulse, so a counter driven by it tells the difference
-            // between a page that is being painted and one that merely parsed: zero after half
-            // a second means no frame has been produced, and the reader's pane is blank however
-            // healthy everything else looks.
-            if (!IsCurrent(web, generation)) return;
-
-            await Dispatcher.UIThread.InvokeAsync(
-                async () => await web.InvokeScript(
-                    "(function(){ window.__mbxFrames = 0;"
-                    + " var f = function(){ window.__mbxFrames++; requestAnimationFrame(f); };"
-                    + " requestAnimationFrame(f); return 'armed'; })()"));
-
-            await Task.Delay(600);
-
-            if (!IsCurrent(web, generation)) return;
-
-            object? frames = null;
-            await Dispatcher.UIThread.InvokeAsync(
-                async () => frames = await web.InvokeScript("String(window.__mbxFrames)"));
-
-            var ticks = frames?.ToString()?.Trim('"') ?? "?";
-            Log.Info($"Harness: reading engine — {ticks} paint frame(s) in 600ms"
-                     + (ticks is "0" ? " — the compositor is producing NOTHING; the pane is blank." : "."));
-
-            Log.Info($"Harness: reading engine — the adapter asked the host to draw "
-                     + $"{Volatile.Read(ref _drawRequests)} time(s).");
-
-            // The surfaces the engine draws through, with their laid-out sizes. The engine's
-            // host is a child control the library adds by hand, and a host that measures to
-            // nothing consumes every frame without drawing one — no exception, no log, no
-            // pixels. The only way to see that from outside is to ask the tree.
-            await Dispatcher.UIThread.InvokeAsync(() =>
-            {
-                foreach (var visual in ((Visual)web).GetSelfAndVisualDescendants())
-                {
-                    Log.Info($"Harness: reading surface — {visual.GetType().Name} bounds {visual.Bounds}"
-                             + (visual.IsVisible ? string.Empty : " (hidden)")
-                             + (TopLevel.GetTopLevel(visual) is null ? " (DETACHED)" : string.Empty));
-                }
-            });
-
+            // A frame or two lands after the load; the count says whether any reached the pane.
+            await Task.Delay(300);
+            Log.Info($"Harness: reading engine — {web.Frames} frame(s) have reached the pane"
+                     + (web.Frames == 0 ? " — NOTHING has been drawn; the pane is blank." : "."));
         }
         catch (Exception ex)
         {
@@ -312,25 +213,14 @@ public sealed partial class ReadingPaneBody
     {
         if (_web is not { } web) return Words(_fallback.Text ?? string.Empty);
 
-        try
-        {
-            object? answer = null;
-            var read = Dispatcher.UIThread.InvokeAsync(
-                async () => answer = await web.InvokeScript("document.body.innerText"));
-
-            if (await Task.WhenAny(read, Task.Delay(10_000)) != read) return "(no answer)";
-
-            await read;
-            return Words(answer?.ToString() ?? string.Empty);
-        }
-        catch (Exception ex)
-        {
-            return $"(the engine would not answer: {ex.Message})";
-        }
-
-        static string Words(string raw)
-            => System.Text.RegularExpressions.Regex.Replace(raw, @"\s+", " ").Trim();
+        var read = web.TextAsync();
+        if (await Task.WhenAny(read, Task.Delay(10_000)) != read) return "(no answer)";
+        return Words(await read);
     }
+
+    /// <summary>Text with its runs of white space folded, as a log line wants it.</summary>
+    private static string Words(string raw)
+        => System.Text.RegularExpressions.Regex.Replace(raw, @"\s+", " ").Trim();
 
     /// <summary>What a run asked to be pressed on the pane's bars, or null.</summary>
     private static readonly string? PressWanted =

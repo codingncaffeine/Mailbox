@@ -36,8 +36,15 @@ Forecasts and air quality are fetched at run time from Open-Meteo (data CC BY 4.
 
 Libraries (bundled in the self-contained publish)
 --------------------------------------------------
-Avalonia, Avalonia.Desktop, Avalonia.Themes.Simple, Avalonia.Wayland, Avalonia.Fonts.Inter,
-  Avalonia.Controls.WebView — MIT License. https://avaloniaui.net
+Avalonia, Avalonia.Desktop, Avalonia.Themes.Simple, Avalonia.Wayland, Avalonia.Fonts.Inter
+  — MIT License. https://avaloniaui.net
+Chromium Embedded Framework (CEF) and Chromium, which render the reading pane (chromium/) —
+  BSD-3-Clause. Copyright (c) 2008-2026 Marshall A. Greenblatt; Copyright (c) the Chromium
+  Authors. Chromium carries third-party components under their own licences, listed at
+  https://chromium.googlesource.com/chromium/src/+/main/third_party and in each component's
+  LICENSE file there.
+CefGlue (the .NET binding to CEF) — MIT / BSD-3-Clause. Copyright (c) Xilium, OutSystems, DEON.
+  https://github.com/Deon-Berlin/CefGlue
 MicroCom.Runtime, NWayland and Tmds.DBus.Protocol (the COM interop, Wayland bindings and D-Bus
   transport Avalonia brings with it) — MIT License.
 AvaloniaRichEditor — MIT License.
@@ -62,7 +69,6 @@ SkiaSharp and HarfBuzzSharp (native rendering, via Avalonia) — MIT License; Sk
 
 Runtime dependencies (installed by the package, not bundled)
 ------------------------------------------------------------
-WPE WebKit, libwpe and WPEBackend-fdo render the reading pane — BSD-2-Clause / LGPL-2.1.
 libsecret's secret-tool keeps passwords in the desktop keyring — LGPL-2.1.
 notify-send raises the desktop notifications — LGPL-2.1.
 Hunspell dictionaries and the Carlito, Caladea and other metric-compatible fonts come from the

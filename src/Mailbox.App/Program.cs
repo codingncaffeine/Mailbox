@@ -116,6 +116,10 @@ internal static class Program
             Theming.WindowCapture.PinLayoutScale();
         }
 
+        // Chromium, which draws messages: after the single-instance hand-off, so a second launch
+        // never starts one, and before the interface, which it must precede.
+        Chromium.ChromiumRuntime.Start();
+
         try
         {
             return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
@@ -126,6 +130,10 @@ internal static class Program
             // rather than printing a truncated trace to a terminal nobody was watching.
             Console.Error.WriteLine(Log.Crash("startup", ex));
             return 1;
+        }
+        finally
+        {
+            Chromium.ChromiumRuntime.Stop();
         }
     }
 

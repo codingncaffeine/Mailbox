@@ -11,13 +11,15 @@ url="https://github.com/codingncaffeine/Mailbox"
 license=('GPL-3.0-or-later')
 provides=('mailbox')
 conflicts=('mailbox')
-# wpewebkit renders the reading pane (text-only without it); libsecret keeps passwords in the
-# keyring through secret-tool; libnotify raises the toasts. The publish is otherwise
-# self-contained (.NET bundled).
+# Chromium renders the reading pane and ships inside the tarball; nss to alsa-lib are the system
+# libraries it links against. libsecret keeps passwords in the keyring through secret-tool;
+# libnotify raises the toasts. The publish is otherwise self-contained (.NET bundled).
 depends=('glibc' 'gcc-libs' 'bash'
          'fontconfig' 'libx11' 'libxext' 'libxi' 'libxrandr' 'libxcursor' 'libice' 'libsm'
-         'libglvnd' 'wayland' 'libxkbcommon' 'mesa' 'glib2' 'libsoup3'
-         'wpewebkit' 'libwpe' 'wpebackend-fdo' 'libsecret' 'libnotify')
+         'libglvnd' 'wayland' 'libxkbcommon' 'mesa' 'glib2'
+         'nss' 'nspr' 'at-spi2-core' 'libcups' 'dbus' 'expat' 'pango' 'cairo' 'systemd-libs'
+         'libxcb' 'libxcomposite' 'libxdamage' 'libxfixes' 'alsa-lib'
+         'libsecret' 'libnotify')
 optdepends=('libldap: look people up in a company or university LDAP directory'
             'hunspell-en_us: spelling, against the desktop dictionaries'
             'ttf-carlito: renders mail set in Calibri at the same metrics'

@@ -50,9 +50,10 @@ public enum PdfSaveResult
 /// the decision has been made and baked into the markup. The sanitizer's remarks say why that is the design
 /// rather than a request veto.
 /// <para>
-/// The WebView is created defensively. The WPE backend is new, and a reading pane that throws on
-/// a machine without it would take the application with it; the fallback renders the message as
-/// text, which is what the pane did before the renderer arrived and is better than a crash.
+/// The message is drawn by the Chromium that ships inside Mailbox (see
+/// <see cref="Mailbox.App.Chromium.ChromiumRuntime"/>). Where it is not running — no sandbox to
+/// be had, or asked off — the pane renders the message as text, which is what it did before the
+/// renderer arrived and is better than a crash or a blank body.
 /// </para>
 /// </remarks>
 public sealed partial class ReadingPaneBody : UserControl, IDisposable
@@ -84,14 +85,8 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
     /// </summary>
     private readonly ScrollViewer _fallbackHost;
 
-    private NativeWebView? _web;
-
-    /// <summary>
-    /// Which engine <see cref="ChooseEngine"/> settled on, for the environment event to pass on.
-    /// The library takes the preference on the way up, so it has to be decided before the view is
-    /// built rather than read out of the environment when it is asked for.
-    /// </summary>
-    private bool _preferWebKitGtk;
+    /// <summary>Chromium, drawing the message; null where it is not running and text is shown.</summary>
+    private Mailbox.App.Chromium.ChromiumView? _web;
 
     private MimeMessage? _message;
     private DkimResult? _verified;
@@ -561,279 +556,41 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
 
     private Control BuildSurface()
     {
-        var choice = ChooseEngine();
-        if (!choice.UseWebView)
+        if (!Mailbox.App.Chromium.ChromiumRuntime.IsRunning)
         {
-            // Not an error and not a crash: this machine has no engine that can paint into the
-            // pane, so the pane renders the message itself. Said once, at Info, because it
-            // changes what the reader sees and is the first thing to check when a body looks
-            // plainer than it should.
-            Log.Info($"Reading pane engine: {choice.Reason}");
+            // Not an error: the reason was logged once, when Chromium was asked to start, and the
+            // pane renders the message as text — which is what the packages say happens.
             _web = null;
             return _fallbackHost;
         }
 
-        _preferWebKitGtk = choice.PreferWebKitGtk;
-
         try
         {
-            Log.Info($"Reading pane engine: {choice.Reason}");
-            _web = new NativeWebView();
-            _web.EnvironmentRequested += OnEnvironmentRequested;
-            _web.NavigationStarted += OnNavigationStarted;
-            _web.NewWindowRequested += OnNewWindowRequested;
-            Bind(_web, NativeWebView.BackgroundProperty, "reading.background.brush");
-
-            // Which engine actually attached, and whether the document loaded. Both are worth
-            // knowing from a log: the backend is chosen at runtime, and a blank pane looks the
-            // same whether the engine is missing or the markup was rejected.
-            _web.AdapterCreated += (_, e) =>
+            _web = new Mailbox.App.Chromium.ChromiumView(ReadingBackground());
+            _web.LinkActivated += (_, uri) => OpenExternally(uri);
+            _web.LoadFinished += (_, ok) =>
             {
-                Log.Info($"Reading pane engine: {Describe()}");
-                HookDrawRequested(e.TryGetPlatformHandle());
-            };
-            _web.NavigationCompleted += (_, e) =>
-            {
-                if (e.IsSuccess) Log.Debug("The reading pane loaded a message.");
-                else Log.Warn("The reading pane could not load the message.");
+                _loadsRan++;
+                if (!ok) Log.Warn("The reading pane could not load the message.");
 
-                var generation = _loads.InFlight;
-                _loads.Finished();
-                _everAnswered = true;
-
-                if (e.IsSuccess && _web is { } loaded) _ = NudgeFrameOutAsync(loaded, generation);
-
-                // Under the dump gate only: the engine has finished loading, so it can be asked
-                // what it drew — which a capture cannot answer, racing the offscreen frame.
-                _ = ReportEngineWordsAsync(e.IsSuccess, generation);
-
-                // The document that arrived while this one was loading, if any. Posted rather
-                // than started here: this runs inside the engine's own completion callback, and
-                // handing it a fresh navigation from inside that is the shape being avoided.
-                Avalonia.Threading.Dispatcher.UIThread.Post(
-                    StartQueued, Avalonia.Threading.DispatcherPriority.Background);
+                // Under the dump gate only: the load has finished, so the engine can be asked
+                // what it holds — which the sanitizer's own account cannot say.
+                _ = ReportEngineWordsAsync(ok);
             };
 
             return _web;
         }
         catch (Exception ex)
         {
-            // No engine on this machine. Say so once, in the log, and render text.
-            Log.Warn("No web engine is available; the reading pane will render text only.", ex);
+            Log.Warn("Chromium would not make a view; the reading pane will render text only.", ex);
             _web = null;
             return _fallbackHost;
         }
     }
 
-    /// <summary>
-    /// Makes the offscreen engine export the frame it has already painted.
-    /// </summary>
-    /// <remarks>
-    /// The offscreen embedding delivers a frame only on damage, and a static message stops
-    /// causing damage the moment its last paint lands — which can be before the text was
-    /// rasterised, leaving the pane holding an earlier, bare frame: an empty body over a
-    /// perfectly healthy engine, with the words readable in the document and nothing on the
-    /// screen. Proven by damaging the page on a timer and photographing the window from
-    /// outside: exports resumed at once and the text appeared. So after every successful load,
-    /// an invisible style flick runs through two animation frames — real damage with no visible
-    /// effect — and the export it forces carries the finished paint. A handful of them on a
-    /// short cadence rather than two far apart: the reader is watching this gap, and the paint
-    /// becomes visible at the first flick after the text is rasterised, so the cadence is the
-    /// worst case a small message waits.
-    /// </remarks>
-    /// <param name="web">The view to nudge.</param>
-    /// <param name="generation">
-    /// The load these nudges belong to. Half a second of them outlives a reader moving to the
-    /// next message, and a script run against a document that is being replaced — or against an
-    /// engine a closing window has already let go — is a call into something that may no longer
-    /// be there. So each pass asks whether its own load is still the one on show, and a nudge
-    /// for a superseded one simply stops: the load that replaced it brings its own.
-    /// </param>
-    private async Task NudgeFrameOutAsync(NativeWebView web, long generation)
-    {
-        const string nudge =
-            "requestAnimationFrame(function(){"
-            + " document.documentElement.style.opacity='0.9999';"
-            + " requestAnimationFrame(function(){ document.documentElement.style.opacity=''; });"
-            + " });";
-        try
-        {
-            for (var i = 0; i < 5; i++)
-            {
-                if (!IsCurrent(web, generation)) return;
-
-                await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(
-                    async () =>
-                    {
-                        if (IsCurrent(web, generation)) await web.InvokeScript(nudge);
-                    });
-                await Task.Delay(120);
-            }
-        }
-        catch
-        {
-            // A pane torn down mid-nudge is a pane that no longer needs one.
-        }
-    }
-
-    /// <summary>
-    /// Whether work started for one load may still touch the engine: the same view, still ours,
-    /// and no later load started since.
-    /// </summary>
-    private bool IsCurrent(NativeWebView web, long generation)
-        => ReferenceEquals(_web, web) && _loads.Started == generation;
-
-    /// <summary>
-    /// Asks the platform which engines are here, and puts the answer to the pane's own rule.
-    /// </summary>
-    /// <remarks>
-    /// <c>MAILBOX_WEBVIEW=webkitgtk</c> is still the escape that reorders the two, so the
-    /// backends can be compared on a machine that has both; it no longer forces an engine that
-    /// would draw nothing, and the log says so when it is refused.
-    /// </remarks>
-    private static ReadingPaneEngines.Choice ChooseEngine()
-        => ReadingPaneEngines.Choose(
-            Probe(WebViewAdapterType.WpeWebKit, "WPE WebKit"),
-            Probe(WebViewAdapterType.WebKitGtk, "WebKitGTK"),
-            string.Equals(
-                Environment.GetEnvironmentVariable("MAILBOX_WEBVIEW"),
-                "webkitgtk",
-                StringComparison.OrdinalIgnoreCase));
-
-    /// <summary>
-    /// One engine as the platform describes it. An adapter the platform will not describe at all
-    /// is one that is not there.
-    /// </summary>
-    private static ReadingPaneEngines.Candidate Probe(WebViewAdapterType type, string name)
-    {
-        var info = WebViewAdapterInfo.GetAdapterInfo(type);
-        if (info is null) return new ReadingPaneEngines.Candidate(name, false, false, false, null);
-
-        // WPE WebKit 2.54 can be built without the libwpe API, and Arch's is: the library's WPE
-        // adapter calls webkit_web_view_backend_new as it attaches, which is then not there. The
-        // platform still describes the engine as installed and offscreen, the view is built, and
-        // the throw lands on the UI thread with nothing drawn — every message an empty body.
-        // Asked of the library on disk rather than of its version, because whether the API is
-        // there is a build option, not a release.
-        if (type == WebViewAdapterType.WpeWebKit && info.IsInstalled && WpeMissingExport() is { } missing)
-        {
-            return new ReadingPaneEngines.Candidate(
-                name, true, false, true,
-                $"WPE WebKit {info.Version} has no {missing}, which the web view library calls");
-        }
-
-        // WebKitGTK is described as a native window, because that is what the library builds when
-        // nobody asks. This pane always asks for the offscreen one (OnEnvironmentRequested), and
-        // the library hands that back as an offscreen renderer — so offscreen is what it draws.
-        var offscreen = type == WebViewAdapterType.WebKitGtk
-            ? info.IsInstalled
-            : info.SupportedScenarios.HasFlag(WebViewEmbeddingScenario.OffscreenRenderer);
-
-        return new ReadingPaneEngines.Candidate(
-            name,
-            info.IsInstalled,
-            info.IsSupported,
-            offscreen,
-            info.UnavailableReason);
-    }
-
-    /// <summary>
-    /// The first of the WPE functions the web view library needs that the installed WPE lacks,
-    /// or null when it has them all.
-    /// </summary>
-    private static string? WpeMissingExport()
-    {
-        if (!System.Runtime.InteropServices.NativeLibrary.TryLoad("libWPEWebKit-2.0.so.1", out var library))
-            return null;
-
-        foreach (var export in (string[])["webkit_web_view_backend_new", "webkit_web_view_new"])
-        {
-            if (!System.Runtime.InteropServices.NativeLibrary.TryGetExport(library, export, out _)) return export;
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// What the engine reports itself as, for the log.
-    /// </summary>
-    /// <remarks>
-    /// The embedding scenario is the part worth recording. A pane embedded as a native child
-    /// window has the airspace problem — Avalonia's own menus and flyouts cannot draw over it,
-    /// which is disqualifying in a mail client where popups overlap the reading pane constantly.
-    /// An offscreen renderer composites into the visual tree and does not. This backend was chosen
-    /// on that basis, and this is where the claim can be checked on a real machine.
-    /// </remarks>
-    private string Describe()
-    {
-        if (_web?.AdapterInfo is not { } info) return "unknown";
-
-        // WebKitGTK's description is the native window it builds unasked; this pane always asks
-        // for the offscreen one, so that is the embedding it has.
-        var scenarios = info.Type == WebViewAdapterType.WebKitGtk
-            ? WebViewEmbeddingScenario.OffscreenRenderer
-            : WebViewAdapterInfo.GetAdapterInfo(info.Type)?.SupportedScenarios;
-        return $"{info.Type} ({info.Engine} {info.Version}), embedding: {scenarios}";
-    }
-
-    /// <summary>
-    /// Configures the engine before it starts.
-    /// </summary>
-    /// <remarks>
-    /// WPE first, WebKitGTK behind an environment variable — the backend choice is a runtime
-    /// flag rather than a redesign, which is what makes preferring the newer one affordable.
-    /// Both are told to keep nothing: there is no session to persist and no cache worth keeping
-    /// for documents that are already in the store.
-    /// </remarks>
-    private void OnEnvironmentRequested(object? sender, WebViewEnvironmentRequestedEventArgs e)
-    {
-        var scratch = Path.Combine(Path.GetTempPath(), "mailbox-webview");
-
-        switch (e)
-        {
-            case LinuxWpeWebViewEnvironmentRequestedEventArgs wpe:
-                wpe.PreferWebKitGtkInstead = _preferWebKitGtk;
-
-                wpe.CacheDirectory = Path.Combine(scratch, "cache");
-                wpe.DataDirectory = Path.Combine(scratch, "data");
-                break;
-
-            case GtkWebViewEnvironmentRequestedEventArgs gtk:
-                gtk.EphemeralDataManager = true;
-                gtk.DisableCache = true;
-
-                // The offscreen embedding, same as the WPE default — without it the GTK
-                // fallback puts the message in a native child window, which the flyout-airspace
-                // rule rules out. Offscreen here is a snapshot into CPU memory per drawn frame,
-                // so it does not depend on the GPU buffer-export path at all.
-                gtk.ExperimentalOffscreen = true;
-                break;
-        }
-    }
-
-    /// <summary>
-    /// The navigation policy, which is the one interception the Linux backend does bind.
-    /// </summary>
-    /// <remarks>
-    /// A document loaded from a string reports its own load as a navigation, and that one has to
-    /// be allowed or nothing ever renders. Everything else is a link the reader clicked, and a
-    /// link opens in their browser rather than in the pane: a reading pane that navigates is a
-    /// browser with no address bar, which is the thing a phishing message wants.
-    /// </remarks>
-    private void OnNavigationStarted(object? sender, WebViewNavigationStartingEventArgs e)
-    {
-        if (e.Request is not { } uri) return;
-        if (uri.Scheme is "about" or "data") return;
-
-        e.Cancel = true;
-        OpenExternally(uri);
-    }
-
-    private void OnNewWindowRequested(object? sender, WebViewNewWindowRequestedEventArgs e)
-    {
-        e.Handled = true;
-        if (e.Request is { } uri) OpenExternally(uri);
-    }
+    /// <summary>The pane's background, for what Chromium shows before its first frame.</summary>
+    private Color ReadingBackground()
+        => Color.TryParse(_themes.Tokens.GetString(TokenKeys.Reading.Background), out var colour) ? colour : Colors.Magenta;
 
     /// <summary>Hands a link to the desktop, which is the only thing that should follow it.</summary>
     private static void OpenExternally(Uri uri)
@@ -851,75 +608,33 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
     }
 
     /// <summary>
-    /// Lets the web engine go.
+    /// Lets the engine go.
     /// </summary>
     /// <remarks>
     /// The pane in the shell lives as long as the window does and never needs this. A message
     /// opened in its own window is the case that matters: double-clicking is the ordinary way to
-    /// read mail, and each window builds a pane of its own with an engine behind it. The engine
-    /// is torn down when its view leaves the visual tree, so this stops the load, takes the view
-    /// out of the tree and drops the last reference to it — at the moment the window closes,
-    /// rather than whenever a collection happens to notice.
+    /// read mail, and each window builds a pane of its own with a browser behind it, which is
+    /// closed here at the moment the window closes rather than whenever a collection notices.
     /// </remarks>
     public void Dispose()
     {
         if (_web is not { } web) return;
 
         _web = null;
-
-        // Nothing more is owed to an engine that is going: the nudges and the read-backs still
-        // running for the last load see this and stop, rather than scripting a view whose engine
-        // is being torn down underneath them.
-        _loads.Forget();
-
-        try
-        {
-            web.Stop();
-            web.EnvironmentRequested -= OnEnvironmentRequested;
-            web.NavigationStarted -= OnNavigationStarted;
-            web.NewWindowRequested -= OnNewWindowRequested;
-        }
-        catch (Exception ex)
-        {
-            // A window is closing; there is nobody left to tell.
-            Log.Debug($"The reading pane's engine did not stop cleanly: {ex.Message}");
-        }
-
-        // Out of the tree, which is what the engine's own teardown waits for.
+        web.Close();
         if (ReferenceEquals(_surface.Content, web)) _surface.Content = null;
     }
 
-    /// <summary>The pane's load discipline: one at a time, and only the newest one waiting.</summary>
-    private readonly ReadingPaneLoads _loads = new();
+    private int _loadsAsked;
+    private int _loadsRan;
 
-    /// <summary>Whether this pane's engine has ever answered for a load, however it answered.</summary>
-    private bool _everAnswered;
-
-    /// <summary>
-    /// Whether an engine could be running behind this pane at all.
-    /// </summary>
-    /// <remarks>
-    /// Attached and not on screen is the reading pane switched off, and the engine of a pane
-    /// nobody is looking at never initialises — the same test <see cref="HoldForEngine"/> makes
-    /// for the same reason. Not attached yet is a message window still being built, and that one
-    /// is about to be shown: its load is real and is answered for.
-    /// </remarks>
-    private bool CouldBeRunning => TopLevel.GetTopLevel(this) is null || IsEffectivelyVisible;
-
-    /// <summary>Whether the load in flight was started while an engine could be running.</summary>
-    private bool _flightCouldRun = true;
-
-    /// <summary>Loads asked for and loads actually run, for a harness run to read back.</summary>
-    internal (int Asked, int Ran) LoadCount => (_loads.Asked, _loads.Ran);
+    /// <summary>Loads asked for and loads finished, for a harness run to read back.</summary>
+    internal (int Asked, int Ran) LoadCount => (_loadsAsked, _loadsRan);
 
     /// <summary>
-    /// Hands the engine a document, waiting for whatever it is already loading.
+    /// Hands Chromium a document. A load still in flight is simply replaced: each document is
+    /// served at a path of its own, so the one that finishes is always the newest.
     /// </summary>
-    /// <remarks>
-    /// Why the wait is there at all is <see cref="ReadingPaneLoads"/>'s own remarks. What is here
-    /// is the machinery around it: the surface swap, the dump run's hold, and the watchdog that
-    /// keeps a wait from becoming a hang when an engine never answers for a navigation.
-    /// </remarks>
     private void Load(string html)
     {
         if (_web is null)
@@ -930,9 +645,7 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
 
         // ShowText hands the surface to the text fallback — an empty selection does it, and a
         // selection cleared by a folder switch does it again — and this is the only path that
-        // hands it back. A web view out of the tree has no engine behind it: a navigate into
-        // one attaches nothing, logs nothing and draws nothing, which reads as an empty pane
-        // over a perfectly healthy application.
+        // hands it back.
         if (!ReferenceEquals(_surface.Content, _web))
         {
             _surface.Content = _web;
@@ -940,87 +653,13 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
                 Log.Info("Harness: reading surface — the web view takes the pane back.");
         }
 
-        // Nothing to wait for: either there is no engine running behind this pane now, or the
-        // load in flight was started when there was not one and will never be answered for.
-        // Both are the reading pane switched off, which is an ordinary way to read mail.
-        if (!CouldBeRunning || !_flightCouldRun)
-        {
-            Start(_loads.Now(html));
-            return;
-        }
+        _loadsAsked++;
 
-        if (_loads.Ask(html) is { } now)
-        {
-            Start(now);
-            return;
-        }
-
-        // Left waiting. Every navigation is answered for by NavigationCompleted, and the one time
-        // it is not, the document waiting behind it would wait forever — so the wait gets a
-        // deadline of its own. Three seconds is a deadline for an engine that has stopped
-        // answering rather than a limit on a load: a message parses in tens of milliseconds, and
-        // what is behind this one is a reader waiting to see it.
-        var waited = _loads.InFlight;
-        _ = Task.Delay(3_000).ContinueWith(
-            _ => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-            {
-                if (!_loads.StillWaitingOn(waited)) return;
-
-                // A pane nobody is looking at never starts an engine at all — the shell's own
-                // pane refreshes with the reading pane switched off, and none of those loads is
-                // ever answered for. That is the ordinary course of events and says nothing.
-                // An engine that has answered before and has now stopped answering is the one
-                // worth saying out loud.
-                var message = "The reading pane's engine never finished a load; starting the next anyway.";
-                if (_everAnswered) Log.Warn(message);
-                else Log.Debug(message);
-                _loads.Finished();
-                StartQueued();
-            }),
-            TaskScheduler.Default);
-    }
-
-    /// <summary>Starts the document that was waiting, if the engine is free and it is still wanted.</summary>
-    private void StartQueued()
-    {
-        if (_web is null) return;
-        if (_loads.Next() is { } html) Start(html);
-    }
-
-    private void Start(string html)
-    {
-        // The engine went between the load being taken and being started — a window closing
-        // while its pane was still queueing. Nothing to navigate, and nothing left in flight.
-        if (_web is not { } web)
-        {
-            _loads.Forget();
-            return;
-        }
-
-        _flightCouldRun = CouldBeRunning;
-
-        try
-        {
-            // The dump run's hold, taken before the navigation so the capture cannot fire
-            // between the two; released when the engine answers for what it drew.
-            HoldForEngine();
-
-            // A base of about:blank, so a relative reference the sanitizer let through has
-            // nowhere to resolve to.
-            web.NavigateToString(html, new Uri("about:blank"));
-        }
-        catch (Exception ex)
-        {
-            Log.Warn("The web engine would not load the message; showing text instead.", ex);
-            _engineHold?.Dispose();
-            _engineHold = null;
-            _surface.Content = _fallbackHost;
-
-            // Dispose rather than just forgetting it: an engine dropped while still in the tree
-            // is one nothing will ever take out of it again.
-            Dispose();
-            ShowText(_message?.TextBody ?? _fallbackText);
-        }
+        // The dump run's hold, taken before the navigation so the capture cannot fire between
+        // the two; released when the engine answers for what it drew.
+        HoldForEngine();
+        _web.Background = ReadingBackground();
+        _web.Navigate(html);
     }
 
     /// <summary>
@@ -1054,26 +693,7 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
             return Math.Abs(_fallbackHost.Offset.Y - before) > 0.5;
         }
 
-        if (_web is null) return false;
-
-        try
-        {
-            // Scrolls, and reports whether it actually moved. Written to work on a document whose
-            // scrolling element is the body and on one where it is the html element, which differ
-            // by quirks mode and are both common.
-            var by = down ? "d" : "-d";
-            var answer = await _web.InvokeScript(
-                "(function(){var e=document.scrollingElement||document.documentElement||document.body;"
-                + "var b=e.scrollTop;var d=window.innerHeight*0.9;"
-                + $"e.scrollTop=b+({by});return String(Math.abs(e.scrollTop-b)>1);}})()");
-
-            return answer?.ToString()?.Contains("true", StringComparison.OrdinalIgnoreCase) ?? false;
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException or TaskCanceledException)
-        {
-            Log.Debug($"The reading pane would not scroll: {ex.Message}");
-            return false;
-        }
+        return _web is { } web && await web.ScrollPageAsync(down);
     }
 
     private void ShowText(string text)
@@ -1780,19 +1400,42 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
     };
 
     /// <summary>
-    /// Prints through the engine, which is the only thing that knows how the message is laid
-    /// out. Nothing to do when the message is rendering as text.
+    /// Prints: the message is laid out by Chromium into a PDF, and the PDF goes to the desktop's
+    /// own viewer, whose Print is the one the reader already knows. Nothing to do when the
+    /// message is rendering as text.
     /// </summary>
+    /// <remarks>
+    /// Off screen, Chromium has no print dialog of its own to show, and Avalonia has none to
+    /// offer; a PDF handed to the desktop is the dialog the reader's system already has, with
+    /// their printers in it.
+    /// </remarks>
     public bool Print()
     {
-        if (_web is null) return false;
+        if (_web is not { } web) return false;
 
-        _web.ShowPrintUI();
+        _ = PrintThroughDesktopAsync(web);
         return true;
     }
 
+    private async Task PrintThroughDesktopAsync(Mailbox.App.Chromium.ChromiumView web)
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "mailbox-print");
+        Directory.CreateDirectory(folder);
+        var path = Path.Combine(folder, Suggested());
+
+        if (await web.PrintToPdfAsync(path))
+        {
+            Log.Info("Printing a message through the desktop's PDF viewer.");
+            Mailbox.Core.Platform.DesktopOpen.Open(path);
+        }
+        else
+        {
+            Log.Warn("The message could not be laid out for printing.");
+        }
+    }
+
     /// <summary>
-    /// Writes the message to a PDF the reader chooses, through the engine's own printer.
+    /// Writes the message to a PDF the reader chooses, through Chromium's own printer.
     /// </summary>
     /// <remarks>
     /// The same Memo layout a printed copy gets: the print stylesheet is part of the document,
@@ -1800,7 +1443,7 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
     /// </remarks>
     public async Task<PdfSaveResult> PrintToPdfAsync()
     {
-        if (_web is null) return PdfSaveResult.Failed;
+        if (_web is not { } web) return PdfSaveResult.Failed;
         if (TopLevel.GetTopLevel(this) is not { } top) return PdfSaveResult.Failed;
 
         var file = await top.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
@@ -1815,20 +1458,14 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
         // four Save As exports beside this one already say nothing when their picker is dismissed.
         if (file?.TryGetLocalPath() is not { } path) return PdfSaveResult.Cancelled;
 
-        try
+        if (await web.PrintToPdfAsync(path))
         {
-            await using var pdf = await _web.PrintToPdfStreamAsync();
-            await using var destination = File.Create(path);
-            await pdf.CopyToAsync(destination);
-
             Log.Info("Wrote a message to PDF.");
             return PdfSaveResult.Saved;
         }
-        catch (Exception ex)
-        {
-            Log.Warn("Could not write the message to PDF.", ex);
-            return PdfSaveResult.Failed;
-        }
+
+        Log.Warn("Could not write the message to PDF.");
+        return PdfSaveResult.Failed;
     }
 
     /// <summary>A file name from the subject, with what a file system will not take removed.</summary>
