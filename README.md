@@ -18,7 +18,7 @@ against that same store rather than placeholders, and the Add Account window als
 CalDAV or CardDAV server: it finds the calendars and address books on offer and keeps the ones
 you pick in sync on every send/receive.
 
-**Before you install.** Microsoft accounts (outlook.com, hotmail.com, live.com) and work or
+Microsoft accounts (outlook.com, hotmail.com, live.com) and work or
 school addresses on Microsoft 365 sign in through your browser with nothing to register;
 Mailbox 0.6.5 and earlier asked you to register a client application of your own, and the next
 release does not. Proton Mail is reached through Proton Mail Bridge, running on the same
