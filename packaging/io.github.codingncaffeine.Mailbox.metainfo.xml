@@ -67,6 +67,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.6.9" date="2026-10-25">
+      <description>
+        <p>Fixes a desktop crash: on KDE Plasma, the moment new mail arrived or the last unread message was read, the compositor could crash and take the whole session with it. The taskbar still shows the full mailbox while mail is waiting and the empty one when it is not, now by switching between two icons the package installs instead of redrawing one. The upgrade also clears the full mailbox earlier versions left in your own icon folder.</p>
+      </description>
+    </release>
     <release version="0.6.8" date="2026-10-08">
       <description>
         <p>Send/receive works again: since 0.6.7 every account failed to sign in, because Mailbox could not read the passwords from the desktop keyring. A missing password is now said as such rather than blamed on the server. Remote images load several at a time and appear even when their server labels them oddly, and any that cannot be shown are noted in the log.</p>
