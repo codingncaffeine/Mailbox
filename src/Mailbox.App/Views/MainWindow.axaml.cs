@@ -8534,9 +8534,9 @@ public partial class MainWindow : Window
     /// <see cref="Mailbox.Core.Platform.PanelIcon"/> does.
     /// <para>
     /// Only when it changes: setting a window icon goes to the window manager and rewriting the
-    /// theme goes to the disk, and doing either on every count change would be work per message
-    /// read. Off the UI thread, because the theme write ends in a process launch. Never during a
-    /// capture — a screenshot run has no business rewriting the reader's icon theme.
+    /// entry goes to the disk, and doing either on every count change would be work per message
+    /// read. Off the UI thread, because the entry write ends in a process launch. Never during a
+    /// capture — a screenshot run has no business rewriting the reader's desktop entry.
     /// </para>
     /// <para>
     /// Logged when it happens, because an icon in a panel is the one part of this nobody can

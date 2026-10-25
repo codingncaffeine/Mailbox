@@ -11,9 +11,9 @@ namespace Mailbox.App;
 /// Started by systemd, not by anybody's click. The launcher sets up a path unit outside its
 /// sandbox that runs this whenever the application replaces its request file — see
 /// <see cref="PanelIcon"/> for why the application cannot draw the icon itself from inside the
-/// wall. This is the same drawing code, run where the icon theme and the service database can be
-/// written: it reads one word, draws that mailbox at every size and tells the desktop, and does
-/// nothing else. No log is opened — that would roll the application's — and nothing of the
+/// wall. This is the same drawing code, run where the desktop entry and the service database can
+/// be written: it reads one word, points the entry at that mailbox and tells the desktop, and
+/// does nothing else. No log is opened — that would roll the application's — and nothing of the
 /// application starts; what it has to say goes to the journal through standard output.
 /// </remarks>
 internal static class PanelIconHelper
@@ -81,11 +81,11 @@ internal static class PanelIconHelper
 
         if (!icon.Show(full ? 1 : 0))
         {
-            Console.Error.WriteLine($"Mailbox taskbar icon: the {art} drawing could not be written to {PanelIcon.DefaultTheme()}.");
+            Console.Error.WriteLine($"Mailbox taskbar icon: {icon.EntryFile} could not be pointed at the {art} drawing.");
             return false;
         }
 
-        Console.WriteLine($"Mailbox taskbar icon: {art}, written to {PanelIcon.DefaultTheme()}; the desktop was asked to draw it again.");
+        Console.WriteLine($"Mailbox taskbar icon: {art}; {icon.EntryFile} names it and the service database was rebuilt.");
         return true;
     }
 }

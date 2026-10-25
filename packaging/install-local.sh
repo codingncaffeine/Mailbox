@@ -82,6 +82,15 @@ for size in 16 24 32 48 64 128 256 512; do
     install -Dm644 "$src" "$ICONS/${size}x${size}/apps/mailbox.png"
 done
 
+# The two mailboxes the taskbar switches between; see install-desktop-files.sh.
+for size in 16 24 32 48 64 128 256 512; do
+    for state in empty full; do
+        src="assets/icons/mailbox-tray-${state}-${size}.png"
+        [ -f "$src" ] || continue
+        install -Dm644 "$src" "$ICONS/${size}x${size}/apps/mailbox-${state}.png"
+    done
+done
+
 mkdir -p "$APPS"
 
 # The shipped entry, pointed at this install rather than at a system one.

@@ -157,6 +157,8 @@ cp -a %{_sourcedir}/. %{buildroot}/
 /usr/share/applications/mailbox.desktop
 /usr/share/metainfo/io.github.codingncaffeine.Mailbox.metainfo.xml
 /usr/share/icons/hicolor/*/apps/mailbox.png
+/usr/share/icons/hicolor/*/apps/mailbox-empty.png
+/usr/share/icons/hicolor/*/apps/mailbox-full.png
 %dir /usr/share/doc/mailbox
 %license /usr/share/doc/mailbox/copyright
 /usr/share/doc/mailbox/NOTICES.txt

@@ -33,6 +33,17 @@ for size in 16 24 32 48 64 128 256 512; do
     install -Dm644 "$src" "$ICONS/${size}x${size}/apps/mailbox.png"
 done
 
+# The two mailboxes the taskbar switches between. The desktop entry names one of them while
+# Mailbox runs — the full one while mail is waiting — and each name always means the same
+# picture, so changing which one the entry names is all it takes to change the panel's icon.
+for size in 16 24 32 48 64 128 256 512; do
+    for state in empty full; do
+        src="$ROOT/assets/icons/mailbox-tray-${state}-${size}.png"
+        [ -f "$src" ] || continue
+        install -Dm644 "$src" "$ICONS/${size}x${size}/apps/mailbox-${state}.png"
+    done
+done
+
 # Only refresh caches for a live install; a packaged build leaves that to the package manager.
 if [ -z "$DESTDIR" ]; then
     command -v update-desktop-database >/dev/null 2>&1 \

@@ -53,7 +53,8 @@ render "$src/mailbox full.png"          mailbox-tray-full
 render "$src/mailbox empty regular.png" mailbox-tray-empty
 
 # The application's own identity icon is the empty mailbox: what a launcher shows before there
-# is anything to say. PanelIcon overwrites the installed copy of it as mail arrives; this is
+# is anything to say. PanelIcon points the desktop entry at mailbox-full while mail is waiting
+# and at mailbox-empty when it is not (the two tray drawings, installed as they are); this is
 # the drawing the install starts from.
 for size in "${SIZES[@]}"; do
     cp "$out/mailbox-tray-empty-${size}.png" "$out/mailbox-app-${size}.png"

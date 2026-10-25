@@ -60,5 +60,6 @@ grep -h "Reading pane engine" /root/.local/state/mailbox/logs/mailbox.log 2>/dev
 echo "── the crash log, if any:"
 tail -n 12 /root/.local/state/mailbox/logs/mailbox.log 2>/dev/null | grep -v " INF " | head -12
 echo "── desktop integration:"
-ls /usr/share/applications/mailbox.desktop /usr/share/icons/hicolor/256x256/apps/mailbox.png
+ls /usr/share/applications/mailbox.desktop /usr/share/icons/hicolor/256x256/apps/mailbox.png \
+    /usr/share/icons/hicolor/256x256/apps/mailbox-empty.png /usr/share/icons/hicolor/256x256/apps/mailbox-full.png
 ' 2>&1 | grep -v -E 'overlay|graph driver|vfs' || true
