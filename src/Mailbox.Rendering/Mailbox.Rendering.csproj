@@ -10,6 +10,7 @@
   <ItemGroup>
     <!-- MimeKit for the MIME tree and its HTML tokenizer, which exists for exactly this. -->
     <PackageReference Include="MimeKit" Version="$(MailKitVersion)" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="$(PkcsVersion)" />
   </ItemGroup>
 
   <ItemGroup>

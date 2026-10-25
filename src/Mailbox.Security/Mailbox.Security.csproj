@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <PackageReference Include="MimeKit" Version="$(MailKitVersion)" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="$(PkcsVersion)" />
     <!-- Named here because this project compiles against it, not because MimeKit brings it. -->
     <PackageReference Include="BouncyCastle.Cryptography" Version="$(BouncyCastleVersion)" />
     <!-- The certificate store is a SQLite file, and MimeKit's own file-name constructor can only
