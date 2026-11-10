@@ -957,7 +957,7 @@ internal sealed class FeedsWorkspace : Border
             Padding = new Thickness(8, 2, 8, 2),
             Content = ActionContent("unread", "Mark all as read"),
         };
-        ToolTip.SetTip(_markAllRead, "Mark everything showing as read");
+        ToolTip.SetTip(_markAllRead, "Mark everything here as read");
         _markAllRead.Click += async (_, _) => await MarkAllReadAsync();
 
         // Top right of the article area, which is where both readers this is measured against
@@ -2850,10 +2850,9 @@ internal sealed class FeedsWorkspace : Border
     /// passes the row it was opened on, which need not be the one selected.</param>
     /// <returns>How many were not already read.</returns>
     /// <remarks>
-    /// The whole row, not the list as drawn. The list stops at its newest five hundred, and
-    /// marking only those left every older unread article unread — the count beside a busy feed
-    /// never moved, and the status line said everything had been read. A search is the one
-    /// exception: what it found is what the reader is looking at, so that is what is marked.
+    /// Everything the row stands for — every unread article in every feed under a heading, every
+    /// one from a feed — whatever the list is showing: not its newest page, and not what a search
+    /// in the box has narrowed it to. The command says all, and all is what it does.
     /// </remarks>
     /// <remarks>
     /// The store's work happens off the interface thread: a heading over a few busy feeds holds
@@ -2865,18 +2864,12 @@ internal sealed class FeedsWorkspace : Border
     {
         if ((target ?? _selected) is not { } row || _account() is not { } account) return 0;
 
-        // A search's findings are already in hand; everything else is asked of the store.
-        IReadOnlyList<long>? found = _query.Length > 0 && ReferenceEquals(row, _selected)
-            ? [.. Articles(row).Where(m => !m.IsRead).Select(m => m.Id)]
-            : null;
-
         var mail = account.Mail;
         var (unread, marked) = await Task.Run(() =>
         {
-            var ids = found
-                ?? (row.Kind == FeedNavKind.Board && row.Board is { } board
-                    ? [.. mail.BoardMessages(board.Id, int.MaxValue).Where(m => !m.IsRead).Select(m => m.Id)]
-                    : mail.UnreadIds(row.Folders, flaggedOnly: row.Kind == FeedNavKind.ReadLater));
+            IReadOnlyList<long> ids = row.Kind == FeedNavKind.Board && row.Board is { } board
+                ? [.. mail.BoardMessages(board.Id, int.MaxValue).Where(m => !m.IsRead).Select(m => m.Id)]
+                : mail.UnreadIds(row.Folders, flaggedOnly: row.Kind == FeedNavKind.ReadLater);
             return (ids.Count, ids.Count == 0 ? 0 : mail.SetRead(ids, read: true));
         });
 
@@ -3272,7 +3265,7 @@ internal sealed class FeedsWorkspace : Border
             ("B", "Save to a board"),
             ("Shift+B", "Take off the board you are reading"),
             ("R", "Update the feeds"),
-            ("Shift+A", "Mark everything showing as read"),
+            ("Shift+A", "Mark everything here as read"),
             ("Delete", "Delete the article"),
             ("?", "This list"),
         ];
