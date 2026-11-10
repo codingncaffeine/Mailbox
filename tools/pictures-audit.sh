@@ -32,6 +32,7 @@ cd "$HERE"
 python3 -I - "$HERE" <<'PY'
 import sys; h=sys.argv[1]
 imgs="".join(f'<img src="http://127.0.0.1:18767/pic-{i}.png" width="60" height="30">' for i in range(6))
+imgs+='<img src="http://127.0.0.1:18767/big.bmp" width="130" height="120">'
 open(f"{h}/cases/pics.html","w").write("<html><body><h1>Audit heading</h1><p>Audit paragraph.</p>"+imgs+"</body></html>")
 PY
 cp "$ROOT/tools/release-gate/imgserver.py" "$ROOT/tools/release-gate/picture.png" "$ROOT/tools/release-gate/plant-feed-picture.py" work/
