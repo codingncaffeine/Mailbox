@@ -13,7 +13,8 @@
 #   2. remote images — against a server that labels a picture as octet-stream, refuses one,
 #      serves a page for another and is slow for twelve: thirteen of fifteen must arrive, in
 #      parallel, and the two refusals must be logged with their reasons;
-#   3. the reading pane — Chromium must start sandboxed and draw frames holding the message.
+#   3. the reading pane — Chromium must start sandboxed and draw frames holding the message;
+#   4. feeds — an article's picture loads without a press while mail's are held back.
 # A run that cannot show a check passing fails it. 0.6.7 shipped broken send/receive because
 # nothing before the tag ever sent or received; this is that something.
 #
@@ -62,7 +63,7 @@ printf '[Xwayland]\nXwaylandEisNoPrompt=true\n' > "$K/config/kwinrc"
 env -u DISPLAY -u WAYLAND_DISPLAY -u DBUS_SESSION_BUS_ADDRESS \
     NESTED_ROOT="$WORK" GATE_APP="$APP" \
     XDG_CONFIG_HOME="$K/config" XDG_STATE_HOME="$K/state" XDG_DATA_HOME="$K/data" XDG_CACHE_HOME="$K/cache" XDG_RUNTIME_DIR="$RT" \
-    timeout -k 5 300 dbus-run-session -- kwin_wayland --virtual --xwayland --no-lockscreen --no-global-shortcuts \
+    timeout -k 5 400 dbus-run-session -- kwin_wayland --virtual --xwayland --no-lockscreen --no-global-shortcuts \
         --socket "wayland-gate-$$" --width 1600 --height 1000 --exit-with-session "$WORK/session.sh" > "$K/kwin.txt" 2>&1 || true
 for _ in 1 2 3 4 5 6 7 8 9 10; do grep -q " $RT/doc " /proc/mounts || break; fusermount3 -uz "$RT/doc" 2>/dev/null; sleep 0.5; done
 rm -rf "$RT"
@@ -79,6 +80,7 @@ check "images: the refusals say why" "[ \$(grep -c 'Remote image from 127.0.0.1 
 check "images: fetched in parallel (under 8 s for 24 s of slow server)" "[ -f '$OUT/images-seconds' ] && [ \$(cat '$OUT/images-seconds') -lt 8 ]"
 check "pane: Chromium started sandboxed" "grep -q 'Reading pane engine: Chromium .*sandboxed' '$OUT/pane-mailbox.log' 2>/dev/null"
 check "pane: frames reached the pane holding the message" "grep -q 'engine holds .*Gate paragraph' '$OUT/pane-mailbox.log' && ! grep -q 'NOTHING has been drawn' '$OUT/pane-mailbox.log'"
-check "no run crashed" "! grep -q 'FATAL' '$OUT'/*-stdout.log 2>/dev/null && grep -q 'sr exit=124' '$OUT/exits' && grep -q 'pane exit=0' '$OUT/exits'"
+check "feeds: an article's picture loads without a press" "grep -q 'step open 0 — .*$(cat "$OUT/feed-article.txt" 2>/dev/null)' '$OUT/feed-mailbox.log' 2>/dev/null && grep -q 'Remote images: 1 of 1 fetched' '$OUT/feed-mailbox.log'"
+check "no run crashed" "! grep -q 'FATAL' '$OUT'/*-stdout.log 2>/dev/null && grep -q 'sr exit=124' '$OUT/exits' && grep -q 'pane exit=0' '$OUT/exits' && grep -q 'feed exit=0' '$OUT/exits'"
 echo "release-gate: logs in $OUT"
 [ "$failed" = 0 ] && echo "release-gate: PASSED" || { echo "release-gate: FAILED"; exit 1; }

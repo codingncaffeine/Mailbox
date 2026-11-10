@@ -46,11 +46,28 @@ env -u WAYLAND_DISPLAY MAILBOX_WAYLAND=0 MAILBOX_CAPTURE="$OUT/pane.png" MAILBOX
     XDG_CONFIG_HOME="$Q/config" XDG_STATE_HOME="$Q/state" XDG_DATA_HOME="$Q/data" XDG_CACHE_HOME="$Q/cache" \
     timeout -k 5 90 "$APP" > "$OUT/pane-stdout.log" 2>&1
 echo "pane exit=$?" >> "$OUT/exits"
-kill $IMG 2>/dev/null
 cp "$Q/state/mailbox/logs/mailbox.log" "$OUT/pane-mailbox.log" 2>/dev/null
 
+# The pane run's requests only: the feed run below asks the same server for one more.
+cp "$OUT/images-server.log" "$OUT/images-pane.log" 2>/dev/null
+
+# ---- 4. a feed article's picture, with mail's pictures held back ------------------------------
+# Settings at their defaults: a feed the reader subscribed to loads its pictures without a press.
+F="$HERE/feed"; mkdir -p "$F/config/mailbox" "$F/store"
+cp -r "$HERE/seed/." "$F/store/"
+python3 -I "$HERE/plant-feed-picture.py" "$F/store/feeds.db" "http://127.0.0.1:18765/feed.png" > "$OUT/feed-article.txt"
+# The subscription the seeded store's Technology/Ars Technica folder is filed under.
+python3 -I -c 'import json, sys; json.dump({"rss.feeds": json.dumps([{"url": "http://127.0.0.1:18765/feed.xml", "name": "Ars Technica", "category": "Technology"}])}, open(sys.argv[1], "w"))' "$F/config/mailbox/settings.json"
+env -u WAYLAND_DISPLAY MAILBOX_WAYLAND=0 MAILBOX_CAPTURE="$OUT/feed.png" MAILBOX_LINGER=8 MAILBOX_SIZE=1400x900 \
+    MAILBOX_MODULE=feeds MAILBOX_FEED_DO="row:Today;open:0" MAILBOX_STORE="$F/store/accounts" \
+    XDG_CONFIG_HOME="$F/config" XDG_STATE_HOME="$F/state" XDG_DATA_HOME="$F/data" XDG_CACHE_HOME="$F/cache" \
+    timeout -k 5 60 "$APP" > "$OUT/feed-stdout.log" 2>&1
+echo "feed exit=$?" >> "$OUT/exits"
+cp "$F/state/mailbox/logs/mailbox.log" "$OUT/feed-mailbox.log" 2>/dev/null
+kill $IMG 2>/dev/null
+
 # How long the fifteen pictures took, from the first request to the last answer.
-python3 -I - "$OUT/images-server.log" > "$OUT/images-seconds" <<'PY'
+python3 -I - "$OUT/images-pane.log" > "$OUT/images-seconds" <<'PY'
 import sys, datetime
 times = [datetime.datetime.strptime(l.split()[0], "%H:%M:%S") for l in open(sys.argv[1]) if l.strip()]
 print(int((max(times) - min(times)).total_seconds()) if times else 999)
