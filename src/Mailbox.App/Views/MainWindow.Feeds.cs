@@ -166,7 +166,7 @@ public partial class MainWindow
                 return true;
 
             case "feeds.markallread":
-                MarkFeedsRead(shell, feeds);
+                _ = MarkFeedsReadAsync(shell, feeds);
                 return true;
 
             // The per-article commands with nothing to act on: each used to return without a
@@ -331,9 +331,9 @@ public partial class MainWindow
 
     // ---- The rest of the buttons --------------------------------------------------------------------
 
-    private static void MarkFeedsRead(ShellViewModel shell, FeedsWorkspace feeds)
+    private static async Task MarkFeedsReadAsync(ShellViewModel shell, FeedsWorkspace feeds)
     {
-        var marked = feeds.MarkAllRead();
+        var marked = await feeds.MarkAllReadAsync();
         shell.StatusRight = marked == 0
             ? "Everything here has been read."
             : $"{marked} article{(marked == 1 ? string.Empty : "s")} marked as read.";

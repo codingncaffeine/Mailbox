@@ -50,7 +50,7 @@ public partial class MainWindow
         if (Environment.GetEnvironmentVariable("MAILBOX_FEED_DO") is { Length: > 0 } steps)
         {
             Opened += (_, _) => Dispatcher.UIThread.Post(
-                () => Dispatcher.UIThread.Post(() => PoseFeedSteps(steps), DispatcherPriority.Background),
+                () => Dispatcher.UIThread.Post(() => _ = PoseFeedStepsAsync(steps), DispatcherPriority.Background),
                 DispatcherPriority.Background);
         }
 
@@ -83,14 +83,21 @@ public partial class MainWindow
     /// <item><description><c>buttons:&lt;n&gt;</c> — what the nth row's strip actually offers.</description></item>
     /// <item><description><c>enabled:&lt;command&gt;</c> — whether the bar draws that command black
     /// or greyed in the state the steps before it have made.</description></item>
+    /// <item><description><c>open:&lt;n&gt;</c> — selects and opens the nth article showing, as a click does.</description></item>
+    /// <item><description><c>row:&lt;label&gt;</c> — selects the pane row with that label.</description></item>
+    /// <item><description><c>markall:&lt;label&gt;</c> — presses Mark All as Read in the right-click
+    /// menu over that row, which need not be the selected one.</description></item>
     /// <item><description><c>report</c> — the boards, read back out of the store.</description></item>
     /// <item><description><c>folders</c> — the feed folder tree, read back out of the store, which
     /// is where an organise verb has to land and the one place a status line cannot say it
     /// did.</description></item>
     /// </list>
     /// </remarks>
-    private void PoseFeedSteps(string steps)
+    private async Task PoseFeedStepsAsync(string steps)
     {
+        // A step may wait on work off the interface thread; the photograph waits for the steps.
+        using var hold = Mailbox.App.Theming.WindowCapture.IsRequested ? Mailbox.App.Theming.WindowCapture.Hold() : null;
+
         if (DataContext is not ShellViewModel shell) return;
         if (shell.Module != MailboxModule.Feeds)
         {
@@ -165,6 +172,19 @@ public partial class MainWindow
                         + (_ribbon?.ControlFor(new CommandId(arg)) is { } control
                             ? control.IsEnabled ? "drawn black" : "greyed"
                             : "not on this bar"));
+                    break;
+
+                case "open" when int.TryParse(arg, System.Globalization.CultureInfo.InvariantCulture, out var opening):
+                    Log.Info($"Harness: step open {opening} — {feeds.PoseSelect(opening, open: true)}.");
+                    break;
+
+                case "row":
+                    Log.Info($"Harness: step row — {feeds.PoseRow(arg)}.");
+                    break;
+
+                case "markall":
+                    // Awaited here so the steps after it see what it did.
+                    Log.Info($"Harness: step markall — {await feeds.PoseMarkAllFromMenuAsync(arg)}.");
                     break;
 
                 case "menu":

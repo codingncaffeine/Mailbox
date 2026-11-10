@@ -366,6 +366,40 @@ public class MailRepositoryTests
         Assert.Empty(store.CheckIntegrity());
     }
 
+    /// <summary>
+    /// Mark All as Read and the unread view reach past the list's page. A busy feed keeps more
+    /// than a page of articles, and its unread ones were all older than the newest page: marking
+    /// the page marked nothing, and the unread view listed nothing, while the count said 115.
+    /// </summary>
+    [Fact]
+    public void UnreadIsFoundBeyondTheNewestPage()
+    {
+        var (store, repo, inbox) = Fresh();
+        using var _ = store;
+        var other = repo.AddFolder(inbox.AccountId, "Other", parentId: inbox.Id);
+
+        // The oldest twenty unread, then a full page of newer read ones on top of them.
+        MessageSummary At(string uid, int minutes, bool read) => Sample(uid, read: read) with
+        {
+            Received = DateTimeOffset.UnixEpoch.AddMinutes(minutes),
+        };
+
+        for (var i = 0; i < 20; i++) repo.AddMessage(inbox.Id, At($"old-{i}", i, read: false));
+        for (var i = 0; i < MailRepository.ListPage; i++) repo.AddMessage(inbox.Id, At($"new-{i}", 1000 + i, read: true));
+        var flagged = repo.AddMessage(other.Id, At("other", 5, read: false))!.Value;
+        repo.SetFlagged([flagged], flagged: true);
+
+        Assert.DoesNotContain(repo.Messages(inbox.Id), m => !m.IsRead);
+        Assert.Equal(20, repo.UnreadMessages(inbox.Id).Count);
+        Assert.Equal(21, repo.UnreadIds([inbox.Id, other.Id]).Count);
+        Assert.Equal([flagged], repo.UnreadIds([inbox.Id, other.Id], flaggedOnly: true));
+
+        Assert.Equal(21, repo.SetRead(repo.UnreadIds([inbox.Id, other.Id]), read: true));
+        Assert.Equal(0, repo.GetFolder(inbox.Id)!.Unread);
+        Assert.Empty(repo.UnreadIds([inbox.Id, other.Id]));
+        Assert.Empty(repo.UnreadIds([]));
+    }
+
     [Fact]
     public void TheBulkPathsDoNothingWhenGivenNothing()
     {

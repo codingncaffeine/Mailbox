@@ -709,6 +709,45 @@ internal sealed class FeedsWorkspace : Border
             + (open ? $", opened; {Length(_showing[at])} characters of article" : string.Empty);
     }
 
+    /// <summary>Selects the pane row with that label, as a click on it does, for a harness run.</summary>
+    public string PoseRow(string label)
+    {
+        if (RowNamed(label) is not { } row) return $"no row is called “{label}”";
+
+        Select(row, keepReading: false);
+        return $"“{row.Label}” selected, {row.Unread} unread, {_showing.Count} showing";
+    }
+
+    /// <summary>
+    /// Opens the pane's right-click menu over the named row and presses its Mark All as Read —
+    /// the item itself, so the run goes through what the reader's click does.
+    /// </summary>
+    public async Task<string> PoseMarkAllFromMenuAsync(string label)
+    {
+        if (RowNamed(label) is not { } row) return $"no row is called “{label}”";
+
+        var before = row.Unread;
+        var menu = NavMenu(row);
+        if (menu.Items.OfType<MenuItem>().FirstOrDefault(i => Equals(i.Header, "Mark All as Read")) is not { } item)
+        {
+            return "the menu has no Mark All as Read";
+        }
+
+        // The click, then the same work awaited so the read-back below is after it: the click
+        // handler starts the marking and returns, as it does for the reader.
+        var marking = _marking = new TaskCompletionSource();
+        item.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
+        await Task.WhenAny(marking.Task, Task.Delay(TimeSpan.FromSeconds(30)));
+        return $"“{label}” had {before} unread, now {RowNamed(label)?.Unread.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?"}; "
+            + $"selected row “{_selected?.Label}”; status “{Status}”";
+    }
+
+    /// <summary>Completed when a Mark All as Read finishes, for the harness's read-back.</summary>
+    private TaskCompletionSource? _marking;
+
+    private FeedNavRow? RowNamed(string label)
+        => _rows.FirstOrDefault(r => string.Equals(r.Label, label, StringComparison.OrdinalIgnoreCase));
+
     /// <summary>Selects the article whose headline carries the words, for a harness run.</summary>
     public string PoseSelect(string named)
     {
@@ -919,11 +958,7 @@ internal sealed class FeedsWorkspace : Border
             Content = ActionContent("unread", "Mark all as read"),
         };
         ToolTip.SetTip(_markAllRead, "Mark everything showing as read");
-        _markAllRead.Click += (_, _) =>
-        {
-            MarkAllRead();
-            Changed?.Invoke(this, EventArgs.Empty);
-        };
+        _markAllRead.Click += async (_, _) => await MarkAllReadAsync();
 
         // Top right of the article area, which is where both readers this is measured against
         // put it, and per feed, which is how they remember it.
@@ -1480,11 +1515,7 @@ internal sealed class FeedsWorkspace : Border
             return item;
         }
 
-        menu.Items.Add(Entry("Mark All as Read", "mark-all-read", () =>
-        {
-            MarkAllRead();
-            Changed?.Invoke(this, EventArgs.Empty);
-        }));
+        menu.Items.Add(Entry("Mark All as Read", "mark-all-read", () => _ = MarkAllReadAsync(row)));
 
         if (row.Kind == FeedNavKind.Feed && row.Feed is { } feed)
         {
@@ -1867,9 +1898,14 @@ internal sealed class FeedsWorkspace : Border
 
         if (folders.Count == 0) return [];
 
+        // A row that shows only unread articles asks the store for unread ones. Taking the newest
+        // page and filtering it lost every unread article older than the page — a feed with a
+        // thousand items listed nothing under Unread while its count said a hundred.
+        var unreadOnly = row.Kind == FeedNavKind.Unread || UnreadOnlyFor(row);
+
         var found = _query.Length > 0
             ? account.Mail.Search(Query(), folders, limit: 500)
-            : Everything(account, folders);
+            : Everything(account, folders, unreadOnly);
 
         if (_query.Length > 0)
         {
@@ -1893,10 +1929,14 @@ internal sealed class FeedsWorkspace : Border
         return [.. ordered.Take(500)];
     }
 
-    private static List<MessageSummary> Everything(OpenAccount account, IReadOnlyList<long> folders)
+    private static List<MessageSummary> Everything(OpenAccount account, IReadOnlyList<long> folders, bool unreadOnly)
     {
         var found = new List<MessageSummary>();
-        foreach (var folder in folders) found.AddRange(account.Mail.Messages(folder));
+        foreach (var folder in folders)
+        {
+            found.AddRange(unreadOnly ? account.Mail.UnreadMessages(folder) : account.Mail.Messages(folder));
+        }
+
         return found;
     }
 
@@ -2804,19 +2844,60 @@ internal sealed class FeedsWorkspace : Border
     public void RefreshBoards() => KeepingPlace(() => { BuildNav(); RefreshCards(); });
 
     /// <summary>
-    /// Marks everything showing as read, which is the button a reader presses most.
+    /// Marks everything a row stands for as read, which is the button a reader presses most.
     /// </summary>
+    /// <param name="target">The row to act on; the selected one when null. The pane's own menu
+    /// passes the row it was opened on, which need not be the one selected.</param>
     /// <returns>How many were not already read.</returns>
-    public int MarkAllRead()
+    /// <remarks>
+    /// The whole row, not the list as drawn. The list stops at its newest five hundred, and
+    /// marking only those left every older unread article unread — the count beside a busy feed
+    /// never moved, and the status line said everything had been read. A search is the one
+    /// exception: what it found is what the reader is looking at, so that is what is marked.
+    /// </remarks>
+    /// <remarks>
+    /// The store's work happens off the interface thread: a heading over a few busy feeds holds
+    /// thousands of unread articles, and marking them held the window still for seconds.
+    /// </remarks>
+    public Task<int> MarkAllReadAsync() => MarkAllReadAsync(null);
+
+    private async Task<int> MarkAllReadAsync(FeedNavRow? target)
     {
-        if (_selected is not { } row || _account() is not { } account) return 0;
+        if ((target ?? _selected) is not { } row || _account() is not { } account) return 0;
 
-        var unread = Articles(row).Where(m => !m.IsRead).Select(m => m.Id).ToList();
-        if (unread.Count == 0) return 0;
+        // A search's findings are already in hand; everything else is asked of the store.
+        IReadOnlyList<long>? found = _query.Length > 0 && ReferenceEquals(row, _selected)
+            ? [.. Articles(row).Where(m => !m.IsRead).Select(m => m.Id)]
+            : null;
 
-        account.Mail.SetRead(unread, read: true);
+        var mail = account.Mail;
+        var (unread, marked) = await Task.Run(() =>
+        {
+            var ids = found
+                ?? (row.Kind == FeedNavKind.Board && row.Board is { } board
+                    ? [.. mail.BoardMessages(board.Id, int.MaxValue).Where(m => !m.IsRead).Select(m => m.Id)]
+                    : mail.UnreadIds(row.Folders, flaggedOnly: row.Kind == FeedNavKind.ReadLater));
+            return (ids.Count, ids.Count == 0 ? 0 : mail.SetRead(ids, read: true));
+        });
+
+        Log.Info($"Feeds: Mark All as Read on “{row.Label}” — {unread} unread, {marked} marked.");
+
+        // Said either way: a press that changes nothing on screen and says nothing reads as a
+        // button that did not work.
+        if (marked == 0)
+        {
+            Status = $"Everything in {row.Label} has been read.";
+            Changed?.Invoke(this, EventArgs.Empty);
+            _marking?.TrySetResult();
+            return 0;
+        }
+
+        // After the reload, which writes its own line about the list and would replace this one.
         Reload();
-        return unread.Count;
+        Status = $"{marked} article{(marked == 1 ? string.Empty : "s")} in {row.Label} marked as read.";
+        Changed?.Invoke(this, EventArgs.Empty);
+        _marking?.TrySetResult();
+        return marked;
     }
 
     /// <summary>
@@ -3069,8 +3150,7 @@ internal sealed class FeedsWorkspace : Border
                 break;
 
             case Key.A when shift:
-                MarkAllRead();
-                Changed?.Invoke(this, EventArgs.Empty);
+                _ = MarkAllReadAsync();
                 break;
 
             case Key.Delete when SelectedArticle is not null:

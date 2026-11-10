@@ -696,6 +696,32 @@ public sealed class MailRepository(MailStore store)
             ReadMessage, ("$folder", folderId), ("$limit", limit));
     }
 
+    /// <summary>
+    /// A folder's unread messages, newest first, however far down the folder they are.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Messages(long, int)"/> filtered afterwards cannot answer this: it has already
+    /// stopped at the newest page, so an unread message older than that page was never in hand.
+    /// </remarks>
+    public IReadOnlyList<MessageSummary> UnreadMessages(long folderId, int limit = ListPage) => _store.Query(
+        MessageSelect + " WHERE folder_id = $folder AND is_read = 0" + Awake + " ORDER BY received_utc DESC LIMIT $limit",
+        ReadMessage, ("$folder", folderId), ("$limit", limit));
+
+    /// <summary>
+    /// Every unread message in the folders, by id — what Mark All as Read acts on.
+    /// </summary>
+    /// <param name="folderIds">The folders.</param>
+    /// <param name="flaggedOnly">Only the flagged ones, for a view that lists only those.</param>
+    public IReadOnlyList<long> UnreadIds(IReadOnlyCollection<long> folderIds, bool flaggedOnly = false)
+    {
+        if (folderIds.Count == 0) return [];
+
+        return _store.Query(
+            $"SELECT id FROM messages WHERE folder_id IN ({Ids(folderIds)}) AND is_read = 0"
+            + (flaggedOnly ? " AND is_flagged = 1" : string.Empty),
+            r => r.GetInt64(0));
+    }
+
     // ---- Ignore Conversation --------------------------------------------------------------------
 
     /// <summary>The thread key the list groups by, for a subject — the store's own rule, exposed.</summary>
