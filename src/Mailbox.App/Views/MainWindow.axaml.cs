@@ -3511,11 +3511,15 @@ public partial class MainWindow : Window
         // A preview belongs to the message it came from; a new message takes the pane back.
         _attachmentPreview.Hide();
 
+        // A feed article read from the mail folder pane is still a feed the reader subscribed
+        // to, and loads its pictures as it does in the Feeds module.
+        _reading.SubscribedSource = shell.SelectedMessage is { } shown
+            && string.Equals(shown.Address, Mailbox.Store.FeedStores.Address, StringComparison.OrdinalIgnoreCase);
+
         _reading.Show(message, shell.SelectedMessage?.Body ?? string.Empty, Verified(shell),
             suspectedJunk: shell.CurrentFolderRole == FolderRole.Junk);
         _attachments.Show(_reading.Carried);
         LogAttachmentStrip();
-        _ = _reading.ApplySenderPolicyAsync();
 
         // A read-receipt request is answered when the message is displayed, and the pane only
         // displays it while it is on — with the pane off, selecting a row shows nobody

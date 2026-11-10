@@ -204,7 +204,7 @@ internal sealed class FeedsWorkspace : Border
         // and on the reading surface's #D4D4D4 it is exactly right.
         this[!BackgroundProperty] = new DynamicResourceExtension("reading.background.brush");
 
-        _reading = new ReadingPaneBody(App.Themes, () => _account()?.Mail);
+        _reading = new ReadingPaneBody(App.Themes, () => _account()?.Mail) { SubscribedSource = true };
         _empty = EmptyState();
         _readingHost.Children.Add(_reading);
         _readingHost.Children.Add(_empty);

@@ -30,8 +30,16 @@ public enum RemoteImagePolicy
 /// </remarks>
 public sealed class RemoteImages
 {
-    /// <summary>Anything larger is not an image worth waiting for in a reading pane.</summary>
-    private const int MaxBytes = 4 * 1024 * 1024;
+    /// <summary>
+    /// Anything larger is not an image worth waiting for in a reading pane.
+    /// </summary>
+    /// <remarks>
+    /// Four megabytes turned away real pictures every day: a retailer's or a game publisher's
+    /// header image is routinely five to ten, and a browser has no cap at all. Sixteen keeps a
+    /// ceiling on what a stranger can make the reader download without refusing what senders
+    /// actually send.
+    /// </remarks>
+    private const int MaxBytes = 16 * 1024 * 1024;
 
     private static readonly HttpClient Client = Build();
 
@@ -41,7 +49,9 @@ public sealed class RemoteImages
         {
             UseCookies = false,
             AllowAutoRedirect = true,
-            MaxAutomaticRedirections = 3,
+            // A browser follows twenty. Mailing services put a click-tracker and a CDN or two in
+            // front of a picture, and at three the chain ran out before the picture arrived.
+            MaxAutomaticRedirections = 10,
             AutomaticDecompression = DecompressionMethods.All,
         };
 

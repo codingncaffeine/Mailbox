@@ -197,6 +197,15 @@ internal sealed class ChromiumView : Control
         }
     }
 
+    /// <summary>Whether a URL is the document on show now, rather than one a later load replaced.</summary>
+    internal bool IsCurrent(string url)
+    {
+        lock (_gate)
+        {
+            return url == $"{Origin}{_generation}";
+        }
+    }
+
     internal (int Width, int Height, double Scale) Viewport =>
         (Math.Max(1, (int)Math.Ceiling(Bounds.Width)), Math.Max(1, (int)Math.Ceiling(Bounds.Height)), _scale);
 
@@ -518,13 +527,16 @@ internal sealed class ChromiumView : Control
     {
         protected override void OnLoadEnd(CefBrowser browser, CefFrame frame, int httpStatusCode)
         {
-            if (frame.IsMain && frame.Url.StartsWith(Origin, StringComparison.Ordinal)) view.LoadEnded(httpStatusCode == 200);
+            // Only the document on show. The pane draws a message and then draws it again with
+            // its pictures, often within milliseconds; how the first of the two ends says nothing
+            // about what is on screen.
+            if (frame.IsMain && view.IsCurrent(frame.Url)) view.LoadEnded(httpStatusCode == 200);
         }
 
         protected override void OnLoadError(CefBrowser browser, CefFrame frame, CefErrorCode errorCode, string errorText, string failedUrl)
         {
             // A load replaced by the next one is aborted, which is not a failure worth a word.
-            if (frame.IsMain && errorCode != CefErrorCode.Aborted && failedUrl.StartsWith(Origin, StringComparison.Ordinal))
+            if (frame.IsMain && errorCode != CefErrorCode.Aborted && view.IsCurrent(failedUrl))
             {
                 Log.Warn($"The reading pane could not load the message: {errorCode} {errorText}");
                 view.LoadEnded(false);

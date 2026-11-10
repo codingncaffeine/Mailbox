@@ -291,7 +291,6 @@ public sealed class MessageWindow : Window
         _attachmentPreview.Hide();
         _attachments.Show(_message);
         _body.Show(_message, _message.TextBody ?? string.Empty, verified);
-        _ = _body.ApplySenderPolicyAsync();
 
         // The ribbon asked CommandEnabled once, when its buttons were built — and this window
         // is not always built around the message it shows: the warm one is built around a

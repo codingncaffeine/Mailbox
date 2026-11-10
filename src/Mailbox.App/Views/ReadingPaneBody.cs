@@ -100,6 +100,24 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
     private IReadOnlyDictionary<string, string> _inlined =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Moves with every message shown, so a fetch that finishes after the reader has moved on
+    /// is dropped rather than applied to whatever is on show by then.
+    /// </summary>
+    private int _picturesGeneration;
+
+    /// <summary>
+    /// Whether what this pane shows comes from somewhere the reader subscribed to — a feed —
+    /// rather than from whoever chose to send it.
+    /// </summary>
+    /// <remarks>
+    /// A feed article's pictures load without asking while "Show pictures" is on in the feeds'
+    /// reading options. Holding them back protects nothing: the request that tells a sender a
+    /// mail was opened tells a publisher only that its own feed, which the reader asked for, was
+    /// read. Every feed reader shows them.
+    /// </remarks>
+    public bool SubscribedSource { get; set; }
+
     public ReadingPaneBody(ThemeService themes, Func<MailRepository?> mail)
     {
         _themes = themes;
@@ -167,8 +185,13 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
         // message to the next would allow a sender the reader never agreed to.
         _policy = RemoteImagePolicy.Block;
         _inlined = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        _picturesGeneration++;
 
         Refresh();
+
+        // Here rather than at each caller, so no surface that shows a message can forget to ask
+        // for the pictures the reader has already agreed to.
+        _ = ApplySenderPolicyAsync();
     }
 
     /// <summary>
@@ -399,7 +422,15 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
         _rendered = MessageRenderer.Render(carrier, options);
 
         if (disableLinks) _bars.Children.Add(JunkBar());
-        if (_rendered.HasRemoteContent) _bars.Children.Add(RemoteImageBar(_rendered));
+        if (_rendered.HasRemoteContent)
+        {
+            // Once pictures were allowed, what is left blocked is what could not be had — a
+            // tracker that did not answer, a web font, a stylesheet — and a bar saying "images
+            // were blocked" over a message whose pictures are showing reads as the switch not
+            // working. Only pictures that failed to arrive are worth a word.
+            if (_policy == RemoteImagePolicy.Block) _bars.Children.Add(RemoteImageBar(_rendered));
+            else if (_rendered.BlockedImages > 0) _bars.Children.Add(MissingImagesBar(_rendered));
+        }
 
         // The way out of a mailing list, surfaced — but never on suspected junk, where
         // "unsubscribe" is exactly the button that confirms the address is read.
@@ -1269,6 +1300,53 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
         return bar;
     }
 
+    /// <summary>After pictures were allowed: the ones that did not come, and a way to try again.</summary>
+    private Control MissingImagesBar(RenderedMessage rendered)
+    {
+        var bar = Bar("reading.infobar.background.brush");
+
+        var count = rendered.BlockedImages;
+        var text = new TextBlock
+        {
+            Text = $"{Images(count)} could not be downloaded.",
+            TextWrapping = TextWrapping.Wrap,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Bind(text, TextBlock.ForegroundProperty, "reading.infobar.text.brush");
+        Grid.SetColumn(text, 1);
+
+        var glyph = Glyph("tracker");
+        Grid.SetColumn(glyph, 0);
+
+        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        var again = BarButton("Try again");
+        again.Click += async (_, _) => await AllowOnceAsync();
+        actions.Children.Add(again);
+
+        if (App.Security.ReportTrackerHosts)
+        {
+            var hosts = rendered.Blocked.Where(b => b.Kind == BlockedResourceKind.Image)
+                .Select(b => b.Host).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var report = BarButton("Details");
+            report.Click += async (_, _) => await ExplainAsync(
+                "Images not downloaded",
+                "These hosts did not send a picture:\n\n"
+                + string.Join("\n", hosts.Select(h => "  • " + h))
+                + "\n\nThe reason for each is in the log.");
+            actions.Children.Add(report);
+        }
+
+        Grid.SetColumn(actions, 2);
+
+        var grid = Row();
+        grid.Children.Add(glyph);
+        grid.Children.Add(text);
+        grid.Children.Add(actions);
+
+        bar.Child = grid;
+        return bar;
+    }
+
     private static string Images(int count) => count == 1 ? "One image" : $"{count} images";
 
     private static string Hosts(int count) => count == 1 ? "one host" : $"{count} hosts";
@@ -1277,8 +1355,20 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
     {
         if (_rendered is null) return;
 
+        var generation = _picturesGeneration;
         _policy = RemoteImagePolicy.AllowOnce;
-        _inlined = await RemoteImages.FetchAsync(_rendered.Blocked);
+        var fetched = await RemoteImages.FetchAsync(_rendered.Blocked);
+
+        // The reader moved to another message while this one's pictures were on their way. Its
+        // own fetch is under way or done; landing this one on top would replace that message's
+        // pictures with these, which match none of its addresses — so it showed none.
+        if (generation != _picturesGeneration) return;
+
+        // Added to what is already here: Try Again asks only for what failed the first time.
+        var merged = new Dictionary<string, string>(_inlined, StringComparer.OrdinalIgnoreCase);
+        foreach (var (url, uri) in fetched) merged[url] = uri;
+
+        _inlined = merged;
         Refresh();
     }
 
@@ -1304,13 +1394,14 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
     {
         if (_rendered is not { HasRemoteContent: true } || _policy != RemoteImagePolicy.Block) return;
 
-        var automatic = !App.Security.BlockRemotePictures;
+        var subscribed = SubscribedSource && App.MailOptions.FeedPictures;
+        var automatic = subscribed || !App.Security.BlockRemotePictures;
         if (!automatic && !IsSafeSender()) return;
 
         if (Mailbox.App.Theming.WindowCapture.IsRequested)
         {
             Log.Info("Harness: reading images — loading without asking "
-                     + $"({(automatic ? "pictures are not held back" : "the sender is on the safe list")}).");
+                     + $"({(subscribed ? "a feed the reader subscribed to" : automatic ? "pictures are not held back" : "the sender is on the safe list")}).");
         }
 
         await AllowOnceAsync();
