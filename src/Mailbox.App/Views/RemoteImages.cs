@@ -100,19 +100,74 @@ public sealed class RemoteImages
         var inlined = new System.Collections.Concurrent.ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var refused = 0;
 
+        // What is already in memory is taken from there, and only the rest goes to the network.
+        var wanted = new List<string>();
+        foreach (var url in urls)
+        {
+            if (Memory.TryGet(url) is { } kept) inlined[url] = kept;
+            else wanted.Add(url);
+        }
+
+        var remembered = inlined.Count;
+
         await Parallel.ForEachAsync(
-            urls,
+            wanted,
             new ParallelOptions { MaxDegreeOfParallelism = AtOnce, CancellationToken = cancellation },
             async (url, token) =>
             {
-                if (await FetchOneAsync(url, token) is { } uri) inlined[url] = uri;
+                if (await SharedFetchAsync(url).WaitAsync(token) is { } uri) inlined[url] = uri;
                 else Interlocked.Increment(ref refused);
             });
 
         Log.Info($"Remote images: {inlined.Count} of {urls.Count} fetched"
+                 + (remembered > 0 ? $" ({remembered} already in memory)" : string.Empty)
                  + (refused > 0 ? $", {refused} not (each says why above)." : "."));
 
         return new Dictionary<string, string>(inlined, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// The pictures fetched this session, so a message read again shows them without asking the
+    /// network a second time.
+    /// </summary>
+    /// <remarks>
+    /// In memory only, and gone when Mailbox closes: nothing a sender's server sent is written to
+    /// disk. Consulted only where pictures are allowed, so a picture fetched for one message
+    /// never appears in another whose pictures are held back. Refusals are not kept, so Try
+    /// Again asks the network again.
+    /// </remarks>
+    internal static readonly PictureMemory Memory = new(PictureMemory.DefaultBudget);
+
+    /// <summary>Fetches under way, by address, so a second request for one joins the first.</summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<string?>>> InFlight =
+        new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// One fetch per address however many ask for it, and its result kept when it succeeds.
+    /// </summary>
+    /// <remarks>
+    /// The fetch is not cancelled with the message that started it. A reader who moves on while
+    /// a slow picture arrives and then comes back finds it ready, or joins the fetch still on its
+    /// way, rather than starting it again.
+    /// </remarks>
+    private static Task<string?> SharedFetchAsync(string url)
+    {
+        var started = InFlight.GetOrAdd(url, key => new Lazy<Task<string?>>(() => FetchAndKeepAsync(key)));
+        return started.Value;
+    }
+
+    private static async Task<string?> FetchAndKeepAsync(string url)
+    {
+        try
+        {
+            var uri = await FetchOneAsync(url, CancellationToken.None);
+            if (uri is not null) Memory.Add(url, uri);
+            return uri;
+        }
+        finally
+        {
+            InFlight.TryRemove(url, out _);
+        }
     }
 
     private static async Task<string?> FetchOneAsync(string url, CancellationToken cancellation)
@@ -201,5 +256,71 @@ internal static class ImageSniff
         // or white space.
         var head = System.Text.Encoding.UTF8.GetString(bytes[..Math.Min(bytes.Length, 1024)]);
         return head.Contains("<svg", StringComparison.OrdinalIgnoreCase) ? "image/svg+xml" : null;
+    }
+}
+
+/// <summary>
+/// Fetched pictures kept in memory, the least recently used given up first once they pass a budget.
+/// </summary>
+/// <remarks>
+/// Measured in the characters of the <c>data:</c> address each is kept as, which is what it costs:
+/// twice that in bytes. The default holds about 48 MB of pictures in about 128 MB of memory —
+/// several hundred newsletters' worth — and a single picture too large to leave room for others
+/// is not kept.
+/// </remarks>
+internal sealed class PictureMemory(long budgetChars)
+{
+    /// <summary>64 million characters: about 128 MB of memory.</summary>
+    public const long DefaultBudget = 64L * 1024 * 1024;
+
+    private readonly Lock _gate = new();
+    private readonly Dictionary<string, LinkedListNode<(string Url, string Uri)>> _byUrl = new(StringComparer.Ordinal);
+    private readonly LinkedList<(string Url, string Uri)> _order = new();
+    private long _used;
+
+    /// <summary>The characters held now, for a test to read.</summary>
+    public long Used
+    {
+        get { lock (_gate) return _used; }
+    }
+
+    public int Count
+    {
+        get { lock (_gate) return _byUrl.Count; }
+    }
+
+    public string? TryGet(string url)
+    {
+        lock (_gate)
+        {
+            if (!_byUrl.TryGetValue(url, out var node)) return null;
+            _order.Remove(node);
+            _order.AddFirst(node);
+            return node.Value.Uri;
+        }
+    }
+
+    public void Add(string url, string uri)
+    {
+        if (uri.Length > budgetChars / 4) return;
+
+        lock (_gate)
+        {
+            if (_byUrl.Remove(url, out var old))
+            {
+                _order.Remove(old);
+                _used -= old.Value.Uri.Length;
+            }
+
+            _byUrl[url] = _order.AddFirst((url, uri));
+            _used += uri.Length;
+
+            while (_used > budgetChars && _order.Last is { } oldest)
+            {
+                _order.RemoveLast();
+                _byUrl.Remove(oldest.Value.Url);
+                _used -= oldest.Value.Uri.Length;
+            }
+        }
     }
 }
