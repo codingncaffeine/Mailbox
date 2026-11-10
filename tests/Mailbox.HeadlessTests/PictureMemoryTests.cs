@@ -14,18 +14,18 @@ public class PictureMemoryTests
     [Fact]
     public void TheLeastRecentlyUsedPictureGoesFirst()
     {
-        var memory = new PictureMemory(budgetChars: 100);
+        var memory = new PictureMemory(budgetBytes: 100);
 
-        memory.Add("a", new string('a', 20));
-        memory.Add("b", new string('b', 20));
-        memory.Add("c", new string('c', 20));
-        memory.Add("d", new string('d', 20));
-        memory.Add("e", new string('e', 20));
+        memory.Add("a", Picture(20));
+        memory.Add("b", Picture(20));
+        memory.Add("c", Picture(20));
+        memory.Add("d", Picture(20));
+        memory.Add("e", Picture(20));
         Assert.Equal(100, memory.Used);
 
         // Reading "a" makes "b" the oldest, so "b" is the one the next picture pushes out.
         Assert.NotNull(memory.TryGet("a"));
-        memory.Add("f", new string('f', 20));
+        memory.Add("f", Picture(20));
 
         Assert.Null(memory.TryGet("b"));
         Assert.NotNull(memory.TryGet("a"));
@@ -36,9 +36,9 @@ public class PictureMemoryTests
     [Fact]
     public void APictureTooLargeToShareTheBudgetIsNotKept()
     {
-        var memory = new PictureMemory(budgetChars: 100);
-        memory.Add("small", new string('s', 10));
-        memory.Add("huge", new string('h', 26));
+        var memory = new PictureMemory(budgetBytes: 100);
+        memory.Add("small", Picture(10));
+        memory.Add("huge", Picture(26));
 
         Assert.Null(memory.TryGet("huge"));
         Assert.NotNull(memory.TryGet("small"));
@@ -47,9 +47,9 @@ public class PictureMemoryTests
     [Fact]
     public void AReplacedPictureIsCountedOnce()
     {
-        var memory = new PictureMemory(budgetChars: 100);
-        memory.Add("a", new string('a', 20));
-        memory.Add("a", new string('a', 10));
+        var memory = new PictureMemory(budgetBytes: 100);
+        memory.Add("a", Picture(20));
+        memory.Add("a", Picture(10));
 
         Assert.Equal(1, memory.Count);
         Assert.Equal(10, memory.Used);
@@ -68,8 +68,8 @@ public class PictureMemoryTests
 
         var first = await RemoteImages.FetchAsync([Blocked(quick)], TestContext.Current.CancellationToken);
         var again = await RemoteImages.FetchAsync([Blocked(quick)], TestContext.Current.CancellationToken);
-        Assert.StartsWith("data:image/png;base64,", first[quick]);
-        Assert.Equal(first[quick], again[quick]);
+        Assert.Equal("image/png", first[quick].Type);
+        Assert.Same(first[quick], again[quick]);
         Assert.Equal(1, server.Requests("quick.png"));
 
         // The reader leaves while the slow one is arriving and comes back before it lands: the
@@ -79,11 +79,13 @@ public class PictureMemoryTests
         var back = await RemoteImages.FetchAsync([Blocked(slow)], TestContext.Current.CancellationToken);
         await leaving;
 
-        Assert.StartsWith("data:image/png;base64,", back[slow]);
+        Assert.Equal("image/png", back[slow].Type);
         Assert.Equal(1, server.Requests("slow.png"));
     }
 
     private static BlockedResource Blocked(string url) => new(url, "127.0.0.1", BlockedResourceKind.Image);
+
+    private static FetchedPicture Picture(int bytes) => new(new byte[bytes], "image/png");
 
     /// <summary>A local server that answers every path with a tiny PNG and counts what it was asked.</summary>
     private sealed class CountingServer : IDisposable

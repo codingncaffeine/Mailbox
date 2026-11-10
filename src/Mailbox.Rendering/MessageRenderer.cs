@@ -132,9 +132,14 @@ public static partial class MessageRenderer
     /// The policy is belt and braces. Nothing that could act on it should have survived
     /// sanitizing — there is no script left, and no remote URL — so it exists to be wrong
     /// twice before anything leaks: <c>default-src 'none'</c> denies every fetch, images are
-    /// allowed only from the <c>data:</c> URIs we produced, and a form has nowhere to post to.
+    /// allowed only from the <c>data:</c> URIs we produced and from the host's own picture
+    /// source when it names one, and a form has nowhere to post to.
     /// </para>
     /// </remarks>
+    /// <summary>The host's picture source for the policy, when it named one.</summary>
+    private static string Pictures(RenderOptions options)
+        => options.PictureSource is { Length: > 0 } source ? " " + source : string.Empty;
+
     private static string Document(string body, RenderOptions options)
     {
         if (options.Fragment) return body;
@@ -147,7 +152,7 @@ public static partial class MessageRenderer
             <!DOCTYPE html>
             <html><head><meta charset="utf-8">
             <meta name="referrer" content="no-referrer">
-            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; form-action 'none'; base-uri 'none'">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:{{Pictures(options)}}; style-src 'unsafe-inline'; font-src data:; form-action 'none'; base-uri 'none'">
             <style>
             html,body{margin:0;padding:0;background:{{style.Background}};color:{{style.Foreground}};
             font-family:{{style.FontFamily}};font-size:{{size}}px;line-height:1.45;

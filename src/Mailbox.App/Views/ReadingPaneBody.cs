@@ -97,8 +97,10 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
     private string? _fromLine;
 
     private RemoteImagePolicy _policy = RemoteImagePolicy.Block;
-    private IReadOnlyDictionary<string, string> _inlined =
-        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The pictures fetched for the message on show, by the address the message named.</summary>
+    private IReadOnlyDictionary<string, FetchedPicture> _inlined =
+        new Dictionary<string, FetchedPicture>(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Moves with every message shown, so a fetch that finishes after the reader has moved on
@@ -184,7 +186,7 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
         // A decision belongs to the message it was made about. Carrying "show images" from one
         // message to the next would allow a sender the reader never agreed to.
         _policy = RemoteImagePolicy.Block;
-        _inlined = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        _inlined = new Dictionary<string, FetchedPicture>(StringComparer.OrdinalIgnoreCase);
         _picturesGeneration++;
 
         Refresh();
@@ -410,7 +412,8 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
         var options = new RenderOptions
         {
             Style = Style(),
-            Inlined = _inlined,
+            Inlined = PictureAddresses(),
+            PictureSource = Mailbox.App.Chromium.ChromiumView.Origin + "pic/",
             PrintHeader = Memo(carrier),
             DisableLinks = disableLinks,
             Isolated = opened.Opened,
@@ -690,7 +693,32 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
         // the two; released when the engine answers for what it drew.
         HoldForEngine();
         _web.Background = ReadingBackground();
-        _web.Navigate(html);
+        _web.Navigate(html, PicturesForEngine());
+    }
+
+    /// <summary>
+    /// The address each fetched picture is written into the document under: one below the
+    /// engine's own origin, so the document asks the pane and nobody else.
+    /// </summary>
+    /// <remarks>
+    /// Named by a digest of the message's own address for it rather than written in as text: a
+    /// picture written into the page as base64 costs several times its size in the page and the
+    /// same again in the engine, which is what forced a cap that refused real pictures. Only the
+    /// address goes in; the bytes are answered from <see cref="PicturesForEngine"/>.
+    /// </remarks>
+    private IReadOnlyDictionary<string, string> PictureAddresses()
+        => _inlined.Keys.ToDictionary(url => url, PictureAddress, StringComparer.OrdinalIgnoreCase);
+
+    private IReadOnlyDictionary<string, Mailbox.App.Chromium.ServedResource> PicturesForEngine()
+        => _inlined.ToDictionary(
+            pair => PictureAddress(pair.Key),
+            pair => new Mailbox.App.Chromium.ServedResource(pair.Value.Bytes, pair.Value.Type),
+            StringComparer.Ordinal);
+
+    private static string PictureAddress(string url)
+    {
+        var digest = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(url.ToLowerInvariant()));
+        return Mailbox.App.Chromium.ChromiumView.Origin + "pic/" + Convert.ToHexStringLower(digest.AsSpan(0, 16));
     }
 
     /// <summary>
@@ -1365,8 +1393,8 @@ public sealed partial class ReadingPaneBody : UserControl, IDisposable
         if (generation != _picturesGeneration) return;
 
         // Added to what is already here: Try Again asks only for what failed the first time.
-        var merged = new Dictionary<string, string>(_inlined, StringComparer.OrdinalIgnoreCase);
-        foreach (var (url, uri) in fetched) merged[url] = uri;
+        var merged = new Dictionary<string, FetchedPicture>(_inlined, StringComparer.OrdinalIgnoreCase);
+        foreach (var (url, picture) in fetched) merged[url] = picture;
 
         _inlined = merged;
         Refresh();

@@ -24,8 +24,9 @@ public enum RemoteImagePolicy
 /// authentication, a timeout, a size cap, and one place to point at a proxy later — none of
 /// which is true of a request the engine makes on the sender's markup — the sanitizer's whole point.
 /// <para>
-/// The bytes come back as <c>data:</c> URIs and go through the same inliner a <c>cid:</c> part
-/// does, so the document still reaches the engine with nothing left in it to request.
+/// The bytes are handed to the engine by the pane under addresses of its own, so the document
+/// still reaches the engine with nothing left in it to request — and nothing written into it: a
+/// picture written into the page as text costs several times its size and had to be capped.
 /// </para>
 /// </remarks>
 public sealed class RemoteImages
@@ -34,12 +35,14 @@ public sealed class RemoteImages
     /// Anything larger is not an image worth waiting for in a reading pane.
     /// </summary>
     /// <remarks>
-    /// Four megabytes turned away real pictures every day: a retailer's or a game publisher's
-    /// header image is routinely five to ten, and a browser has no cap at all. Sixteen keeps a
-    /// ceiling on what a stranger can make the reader download without refusing what senders
-    /// actually send.
+    /// A browser has no cap at all, and a newsletter's animated header can run to tens of
+    /// megabytes; four turned away real pictures every day, and a message whose only picture was
+    /// large showed nothing however often its sender was trusted. The bytes go to the engine as
+    /// they are rather than written into the page, so the ceiling costs memory only, and
+    /// sixty-four is a ceiling on what a stranger can make the reader download rather than one
+    /// that refuses what senders actually send.
     /// </remarks>
-    private const int MaxBytes = 16 * 1024 * 1024;
+    private const int MaxBytes = 64 * 1024 * 1024;
 
     private static readonly HttpClient Client = Build();
 
@@ -109,13 +112,13 @@ public sealed class RemoteImages
     /// was looking at a fetch still under way.
     /// </para>
     /// </remarks>
-    public static async Task<IReadOnlyDictionary<string, string>> FetchAsync(
+    public static async Task<IReadOnlyDictionary<string, FetchedPicture>> FetchAsync(
         IEnumerable<BlockedResource> blocked, CancellationToken cancellation = default)
     {
         ArgumentNullException.ThrowIfNull(blocked);
 
         var urls = blocked.Select(b => b.Url).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        var inlined = new System.Collections.Concurrent.ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var inlined = new System.Collections.Concurrent.ConcurrentDictionary<string, FetchedPicture>(StringComparer.OrdinalIgnoreCase);
         var refused = 0;
 
         // What is already in memory is taken from there, and only the rest goes to the network.
@@ -133,7 +136,7 @@ public sealed class RemoteImages
             new ParallelOptions { MaxDegreeOfParallelism = AtOnce, CancellationToken = cancellation },
             async (url, token) =>
             {
-                if (await SharedFetchAsync(url).WaitAsync(token) is { } uri) inlined[url] = uri;
+                if (await SharedFetchAsync(url).WaitAsync(token) is { } picture) inlined[url] = picture;
                 else Interlocked.Increment(ref refused);
             });
 
@@ -141,7 +144,7 @@ public sealed class RemoteImages
                  + (remembered > 0 ? $" ({remembered} already in memory)" : string.Empty)
                  + (refused > 0 ? $", {refused} not (each says why above)." : "."));
 
-        return new Dictionary<string, string>(inlined, StringComparer.OrdinalIgnoreCase);
+        return new Dictionary<string, FetchedPicture>(inlined, StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -157,7 +160,7 @@ public sealed class RemoteImages
     internal static readonly PictureMemory Memory = new(PictureMemory.DefaultBudget);
 
     /// <summary>Fetches under way, by address, so a second request for one joins the first.</summary>
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<string?>>> InFlight =
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<FetchedPicture?>>> InFlight =
         new(StringComparer.Ordinal);
 
     /// <summary>
@@ -168,19 +171,19 @@ public sealed class RemoteImages
     /// a slow picture arrives and then comes back finds it ready, or joins the fetch still on its
     /// way, rather than starting it again.
     /// </remarks>
-    private static Task<string?> SharedFetchAsync(string url)
+    private static Task<FetchedPicture?> SharedFetchAsync(string url)
     {
-        var started = InFlight.GetOrAdd(url, key => new Lazy<Task<string?>>(() => FetchAndKeepAsync(key)));
+        var started = InFlight.GetOrAdd(url, key => new Lazy<Task<FetchedPicture?>>(() => FetchAndKeepAsync(key)));
         return started.Value;
     }
 
-    private static async Task<string?> FetchAndKeepAsync(string url)
+    private static async Task<FetchedPicture?> FetchAndKeepAsync(string url)
     {
         try
         {
-            var uri = await FetchOneAsync(url, CancellationToken.None);
-            if (uri is not null) Memory.Add(url, uri);
-            return uri;
+            var picture = await FetchOneAsync(url, CancellationToken.None);
+            if (picture is not null) Memory.Add(url, picture);
+            return picture;
         }
         finally
         {
@@ -188,7 +191,7 @@ public sealed class RemoteImages
         }
     }
 
-    private static async Task<string?> FetchOneAsync(string url, CancellationToken cancellation)
+    private static async Task<FetchedPicture?> FetchOneAsync(string url, CancellationToken cancellation)
     {
         var absolute = url.StartsWith("//", StringComparison.Ordinal) ? "https:" + url : url;
 
@@ -238,7 +241,7 @@ public sealed class RemoteImages
                 return null;
             }
 
-            return $"data:{type};base64,{Convert.ToBase64String(bytes)}";
+            return new FetchedPicture(bytes, type);
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {
@@ -277,26 +280,27 @@ internal static class ImageSniff
     }
 }
 
+/// <summary>A picture as fetched: its bytes and the image type they are.</summary>
+public sealed record FetchedPicture(byte[] Bytes, string Type);
+
 /// <summary>
 /// Fetched pictures kept in memory, the least recently used given up first once they pass a budget.
 /// </summary>
 /// <remarks>
-/// Measured in the characters of the <c>data:</c> address each is kept as, which is what it costs:
-/// twice that in bytes. The default holds about 48 MB of pictures in about 128 MB of memory —
-/// several hundred newsletters' worth — and a single picture too large to leave room for others
-/// is not kept.
+/// Measured in bytes as fetched. The default holds 128 MB of pictures — several hundred
+/// newsletters' worth — and a single picture too large to leave room for others is not kept.
 /// </remarks>
-internal sealed class PictureMemory(long budgetChars)
+internal sealed class PictureMemory(long budgetBytes)
 {
-    /// <summary>64 million characters: about 128 MB of memory.</summary>
-    public const long DefaultBudget = 64L * 1024 * 1024;
+    /// <summary>128 MB.</summary>
+    public const long DefaultBudget = 128L * 1024 * 1024;
 
     private readonly Lock _gate = new();
-    private readonly Dictionary<string, LinkedListNode<(string Url, string Uri)>> _byUrl = new(StringComparer.Ordinal);
-    private readonly LinkedList<(string Url, string Uri)> _order = new();
+    private readonly Dictionary<string, LinkedListNode<(string Url, FetchedPicture Picture)>> _byUrl = new(StringComparer.Ordinal);
+    private readonly LinkedList<(string Url, FetchedPicture Picture)> _order = new();
     private long _used;
 
-    /// <summary>The characters held now, for a test to read.</summary>
+    /// <summary>The bytes held now, for a test to read.</summary>
     public long Used
     {
         get { lock (_gate) return _used; }
@@ -307,37 +311,37 @@ internal sealed class PictureMemory(long budgetChars)
         get { lock (_gate) return _byUrl.Count; }
     }
 
-    public string? TryGet(string url)
+    public FetchedPicture? TryGet(string url)
     {
         lock (_gate)
         {
             if (!_byUrl.TryGetValue(url, out var node)) return null;
             _order.Remove(node);
             _order.AddFirst(node);
-            return node.Value.Uri;
+            return node.Value.Picture;
         }
     }
 
-    public void Add(string url, string uri)
+    public void Add(string url, FetchedPicture picture)
     {
-        if (uri.Length > budgetChars / 4) return;
+        if (picture.Bytes.Length > budgetBytes / 4) return;
 
         lock (_gate)
         {
             if (_byUrl.Remove(url, out var old))
             {
                 _order.Remove(old);
-                _used -= old.Value.Uri.Length;
+                _used -= old.Value.Picture.Bytes.Length;
             }
 
-            _byUrl[url] = _order.AddFirst((url, uri));
-            _used += uri.Length;
+            _byUrl[url] = _order.AddFirst((url, picture));
+            _used += picture.Bytes.Length;
 
-            while (_used > budgetChars && _order.Last is { } oldest)
+            while (_used > budgetBytes && _order.Last is { } oldest)
             {
                 _order.RemoveLast();
                 _byUrl.Remove(oldest.Value.Url);
-                _used -= oldest.Value.Uri.Length;
+                _used -= oldest.Value.Picture.Bytes.Length;
             }
         }
     }

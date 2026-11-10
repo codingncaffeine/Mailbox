@@ -337,6 +337,32 @@ public class HtmlSanitizerTests
         Assert.DoesNotContain("cdn.example", result.Html, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// A host that serves fetched pictures itself names where, and the document's policy lets
+    /// pictures come from there and from data:, and from nowhere else. Without a source the
+    /// policy allows data: alone: a picture the engine is told to fetch from the pane must not
+    /// be blocked by the page it is drawn in, and a page that names no source must not open up.
+    /// </summary>
+    [Fact]
+    public void ThePolicyAllowsPicturesFromTheHostsSourceWhenItNamesOne()
+    {
+        const string url = "https://cdn.example/logo.png";
+        const string source = "https://message.invalid/pic/";
+
+        var served = new RenderOptions
+        {
+            Inlined = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { [url] = source + "abc" },
+            PictureSource = source,
+        };
+        var html = MessageRenderer.RenderHtml($"<img src='{url}'>", options: served).Html;
+        Assert.Contains($"img-src data: {source};", html, StringComparison.Ordinal);
+        Assert.Contains($"src=\"{source}abc\"", html, StringComparison.Ordinal);
+
+        var inlined = MessageRenderer.RenderHtml("<p>words</p>", options: new RenderOptions()).Html;
+        Assert.Contains("img-src data:;", inlined, StringComparison.Ordinal);
+        Assert.DoesNotContain("message.invalid", inlined, StringComparison.Ordinal);
+    }
+
     // ---- Inline parts ---------------------------------------------------------------------
 
     [Fact]

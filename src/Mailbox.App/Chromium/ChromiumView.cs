@@ -27,6 +27,9 @@ namespace Mailbox.App.Chromium;
 /// to the desktop.
 /// </para>
 /// </remarks>
+/// <summary>Bytes the view answers a request with, and what they are.</summary>
+internal sealed record ServedResource(byte[] Bytes, string MimeType, string? Charset = null);
+
 internal sealed class ChromiumView : Control
 {
     /// <summary>Where every document is served from. `.invalid` is reserved never to resolve (RFC 6761).</summary>
@@ -44,8 +47,12 @@ internal sealed class ChromiumView : Control
     private WriteableBitmap? _pending;
 
     private string _document = string.Empty;
+    private IReadOnlyDictionary<string, ServedResource> _resources = EmptyResources;
     private long _generation;
-    private string? _queued;
+    private (string Html, IReadOnlyDictionary<string, ServedResource>? Resources)? _queued;
+
+    private static readonly IReadOnlyDictionary<string, ServedResource> EmptyResources =
+        new Dictionary<string, ServedResource>(StringComparer.Ordinal);
 
     private double _scale = 1;
     private double _scrollY;
@@ -85,20 +92,29 @@ internal sealed class ChromiumView : Control
     /// <summary>Frames delivered since the view was made, for a harness run to read back.</summary>
     internal int Frames { get; private set; }
 
-    /// <summary>Shows a document. A load already in flight is simply replaced.</summary>
-    public void Navigate(string html)
+    /// <summary>
+    /// Shows a document, with the resources it may ask for by the addresses it names them under.
+    /// A load already in flight is simply replaced.
+    /// </summary>
+    /// <param name="html">The document.</param>
+    /// <param name="resources">
+    /// What the document is allowed to fetch — the pictures the reader agreed to — each under an
+    /// address below <see cref="Origin"/>. Everything else the document asks for is refused.
+    /// </param>
+    public void Navigate(string html, IReadOnlyDictionary<string, ServedResource>? resources = null)
     {
         if (_closed) return;
 
         if (_browser is null)
         {
-            _queued = html;
+            _queued = (html, resources);
             return;
         }
 
         lock (_gate)
         {
             _document = html;
+            _resources = resources ?? EmptyResources;
             _generation++;
         }
 
@@ -181,19 +197,23 @@ internal sealed class ChromiumView : Control
         browser.GetHost().NotifyScreenInfoChanged();
         browser.GetHost().WasResized();
 
-        if (_queued is { } html)
+        if (_queued is { } queued)
         {
             _queued = null;
-            Navigate(html);
+            Navigate(queued.Html, queued.Resources);
         }
     });
 
-    /// <summary>The document for a request, or null when the request is not for the one on show.</summary>
-    internal byte[]? DocumentFor(string url)
+    /// <summary>
+    /// What a request is answered with: the document on show, one of its resources, or null for
+    /// anything else — a document already replaced, or an address the document was not given.
+    /// </summary>
+    internal ServedResource? ResourceFor(string url)
     {
         lock (_gate)
         {
-            return url == $"{Origin}{_generation}" ? Encoding.UTF8.GetBytes(_document) : null;
+            if (url == $"{Origin}{_generation}") return new ServedResource(Encoding.UTF8.GetBytes(_document), "text/html", "utf-8");
+            return _resources.TryGetValue(url, out var resource) ? resource : null;
         }
     }
 
@@ -591,15 +611,38 @@ internal sealed class ChromiumView : Control
         }
 
         protected override CefResourceHandler? GetResourceHandler(CefBrowser browser, CefFrame frame, CefRequest request)
-            => view.DocumentFor(request.Url) is { } bytes ? new Document(bytes) : null;
+        {
+            var resource = view.ResourceFor(request.Url);
+
+            // A picture the document names that the pane has nothing for is a fault in the pane,
+            // not in the message: the document is written from the same map the answers come from.
+            if (resource is null && request.Url.StartsWith(Origin + "pic/", StringComparison.Ordinal))
+            {
+                Log.Warn($"The reading pane had no bytes for a picture its document names: {request.Url}");
+            }
+
+            return resource is { } found ? new Served(found) : null;
+        }
+
+        /// <summary>The engine's own account of each request, for a harness run: what it asked for and what it got.</summary>
+        protected override void OnResourceLoadComplete(CefBrowser browser, CefFrame frame, CefRequest request,
+            CefResponse response, CefUrlRequestStatus status, long receivedContentLength)
+        {
+            if (!Mailbox.App.Theming.WindowCapture.IsRequested) return;
+            if (!request.Url.StartsWith(Origin, StringComparison.Ordinal)) return;
+
+            Log.Info($"Harness: chromium loaded {request.Url} — {status}, {response.Status} {response.MimeType}, "
+                     + $"{receivedContentLength} byte(s).");
+        }
 
         protected override void OnProtocolExecution(CefBrowser browser, CefFrame frame, CefRequest request, ref bool allowOSExecution)
             => allowOSExecution = false;
     }
 
-    /// <summary>The message, answered from memory.</summary>
-    private sealed class Document(byte[] bytes) : CefResourceHandler
+    /// <summary>The message, or one of its pictures, answered from memory.</summary>
+    private sealed class Served(ServedResource resource) : CefResourceHandler
     {
+        private readonly byte[] bytes = resource.Bytes;
         private int _offset;
 
         protected override bool Open(CefRequest request, out bool handleRequest, CefCallback callback)
@@ -612,8 +655,8 @@ internal sealed class ChromiumView : Control
         {
             response.Status = 200;
             response.StatusText = "OK";
-            response.MimeType = "text/html";
-            response.Charset = "utf-8";
+            response.MimeType = resource.MimeType;
+            if (resource.Charset is { } charset) response.Charset = charset;
             responseLength = bytes.Length;
             redirectUrl = null;
         }

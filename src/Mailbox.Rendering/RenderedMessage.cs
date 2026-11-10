@@ -104,6 +104,14 @@ public sealed record RenderOptions
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
+    /// Where the host serves the pictures it fetched, or null when it inlines them: an origin
+    /// and path such as <c>https://message.invalid/pic/</c>, which the document's policy then
+    /// allows pictures from beside <c>data:</c>. Nothing else is opened: the policy still denies
+    /// every other fetch, and a host that names a source answers only for what it was given.
+    /// </summary>
+    public string? PictureSource { get; init; }
+
+    /// <summary>
     /// The largest resource that will be inlined, in bytes. A part above this is dropped
     /// rather than turned into several megabytes of base64 in the document.
     /// </summary>
