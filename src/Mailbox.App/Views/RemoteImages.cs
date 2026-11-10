@@ -43,6 +43,9 @@ public sealed class RemoteImages
 
     private static readonly HttpClient Client = Build();
 
+    /// <summary>The client as built, for a test to read its request shape.</summary>
+    internal static HttpClient ClientForTests => Client;
+
     private static HttpClient Build()
     {
         var handler = new HttpClientHandler
@@ -59,15 +62,30 @@ public sealed class RemoteImages
         // length, or lies about it, would otherwise be buffered in full before the check that
         // rejects it — and the reader chose to fetch from a host precisely because a stranger
         // asked them to.
+        // Shaped as a browser's request, without claiming to be one: HTTP/2 where the server
+        // speaks it, and the language header every browser sends. The CDNs in front of the
+        // larger retailers' and carriers' pictures score each request, and refuse with 403 one
+        // that asks for HTTP/1.1, as .NET does unless told otherwise, or that names no language
+        // — so every picture in an order confirmation from such a store was refused, however
+        // many times the sender was trusted. A browser's agent string makes it worse: they
+        // compare the string against the connection and refuse a mismatch.
         var client = new HttpClient(handler)
         {
             Timeout = TimeSpan.FromSeconds(10),
             MaxResponseContentBufferSize = MaxBytes,
+            DefaultRequestVersion = HttpVersion.Version20,
+            DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
         };
 
         // Says what it is. A user agent naming a browser would be a small lie told to every
         // tracking server the reader ever allows.
         client.DefaultRequestHeaders.UserAgent.ParseAdd("Mailbox/0.1");
+
+        var language = System.Globalization.CultureInfo.CurrentUICulture.Name;
+        client.DefaultRequestHeaders.AcceptLanguage.ParseAdd(
+            language.Length > 0 && !language.StartsWith("en", StringComparison.OrdinalIgnoreCase)
+                ? $"{language},en;q=0.8"
+                : "en-US,en;q=0.9");
 
         // What a browser asks for an image with. Some image servers answer by what is accepted,
         // and a request accepting nothing in particular gets a page, or a refusal.
