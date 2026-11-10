@@ -745,6 +745,14 @@ internal sealed class FeedsWorkspace : Border
     /// <summary>Completed when a Mark All as Read finishes, for the harness's read-back.</summary>
     private TaskCompletionSource? _marking;
 
+    /// <summary>Opens the selected article in its own window, as Enter or a double-click does.</summary>
+    public string PoseOpenWindow()
+    {
+        if (SelectedArticle is not { } article) return "no article is selected";
+        OpenRequested?.Invoke(this, article.Id);
+        return $"“{article.Subject}” opened in its own window";
+    }
+
     private FeedNavRow? RowNamed(string label)
         => _rows.FirstOrDefault(r => string.Equals(r.Label, label, StringComparison.OrdinalIgnoreCase));
 

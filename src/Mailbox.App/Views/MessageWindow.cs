@@ -110,6 +110,12 @@ public sealed class MessageWindow : Window
     public OpenedMessageContext? Context => _context;
 
     /// <summary>
+    /// Whether the message is a feed article, so its pictures load as they do in the Feeds
+    /// module. Read off the context when there is one; given by a caller that has none.
+    /// </summary>
+    private readonly bool _subscribed;
+
+    /// <summary>
     /// The header fields this message carries inside its cryptography, when it does — what a
     /// reply must be addressed from (RFC 9788), and only this window's pane has opened it.
     /// </summary>
@@ -135,7 +141,7 @@ public sealed class MessageWindow : Window
 
     public MessageWindow(
         ThemeService themes, Func<MailRepository?> mail, MimeMessage message, byte[]? raw,
-        DkimResult? verified = null, OpenedMessageContext? context = null)
+        DkimResult? verified = null, OpenedMessageContext? context = null, bool subscribed = false)
     {
         ArgumentNullException.ThrowIfNull(message);
 
@@ -143,6 +149,7 @@ public sealed class MessageWindow : Window
         _message = message;
         _raw = raw;
         _context = context;
+        _subscribed = subscribed;
 
         Title = TitleOf(message.Subject);
         Width = 1160;
@@ -288,6 +295,9 @@ public sealed class MessageWindow : Window
             : null;
 
         _body.MessageFontSize = 14.5 * (_zoomPercent / 100d);
+        _body.SubscribedSource = _subscribed
+            || (_context is { } opened
+                && string.Equals(opened.Address, Mailbox.Store.FeedStores.Address, StringComparison.OrdinalIgnoreCase));
         _attachmentPreview.Hide();
         _attachments.Show(_message);
         _body.Show(_message, _message.TextBody ?? string.Empty, verified);

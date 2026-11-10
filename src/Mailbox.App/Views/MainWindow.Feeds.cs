@@ -388,7 +388,7 @@ public partial class MainWindow
         {
             using var stream = new MemoryStream(raw);
             var mime = MimeKit.MimeMessage.Load(stream);
-            new MessageWindow(App.Themes, () => account.Mail, mime, raw).Show(this);
+            new MessageWindow(App.Themes, () => account.Mail, mime, raw, subscribed: true).Show(this);
             shell.StatusRight = $"Opened “{message.Subject}”.";
         }
         catch (Exception ex) when (ex is FormatException or IOException)

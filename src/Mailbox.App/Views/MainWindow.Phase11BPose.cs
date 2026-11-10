@@ -84,6 +84,7 @@ public partial class MainWindow
     /// <item><description><c>enabled:&lt;command&gt;</c> — whether the bar draws that command black
     /// or greyed in the state the steps before it have made.</description></item>
     /// <item><description><c>open:&lt;n&gt;</c> — selects and opens the nth article showing, as a click does.</description></item>
+    /// <item><description><c>window</c> — opens the selected article in its own window.</description></item>
     /// <item><description><c>row:&lt;label&gt;</c> — selects the pane row with that label.</description></item>
     /// <item><description><c>markall:&lt;label&gt;</c> — presses Mark All as Read in the right-click
     /// menu over that row, which need not be the selected one.</description></item>
@@ -176,6 +177,13 @@ public partial class MainWindow
 
                 case "open" when int.TryParse(arg, System.Globalization.CultureInfo.InvariantCulture, out var opening):
                     Log.Info($"Harness: step open {opening} — {feeds.PoseSelect(opening, open: true)}.");
+                    break;
+
+                case "window":
+                    // The window the step opens is what the photograph should show.
+                    if (Environment.GetEnvironmentVariable("MAILBOX_CAPTURE_DIALOG") == "1") CaptureNextWindow();
+                    Log.Info($"Harness: step window — {feeds.PoseOpenWindow()}.");
+                    await Task.Delay(400);
                     break;
 
                 case "row":
