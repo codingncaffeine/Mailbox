@@ -18,6 +18,7 @@
 #include <fcntl.h>
 #include <sched.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -66,5 +67,10 @@ int main(int argc, char **argv)
 
     cef_api_hash(15400, 0); /* the API version the binding in the browser process speaks */
     cef_main_args_t args = { argc, argv };
-    return cef_execute_process(&args, 0, 0);
+    /* Chromium's zygote forks the renderer, GPU and utility processes from inside this call and
+     * gives each child a new stack guard, so that a canary cannot leak from one process to the
+     * next. A child that came back out of the call would have this frame's canary checked
+     * against the guard it was not entered under, and be aborted — "stack smashing detected",
+     * a core dump per helper at every shutdown. Leaving through exit() runs no epilogue here. */
+    exit(cef_execute_process(&args, 0, 0));
 }
