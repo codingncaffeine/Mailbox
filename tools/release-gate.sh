@@ -30,6 +30,7 @@ if [ -z "$APP" ]; then
     else APP="$ROOT/src/Mailbox.App/bin/Release/net10.0/mailbox"; fi
 fi
 [ -x "$APP" ] || { echo "release-gate: no application at $APP" >&2; exit 2; }
+APP="$(realpath "$APP")"
 case "$ROOT" in *" "*) echo "release-gate: the repository path has a space; KWin's session launcher would split it" >&2; exit 2;; esac
 
 WORK="$ROOT/scratch/release-gate"
@@ -65,7 +66,7 @@ env -u DISPLAY -u WAYLAND_DISPLAY -u DBUS_SESSION_BUS_ADDRESS \
     XDG_CONFIG_HOME="$K/config" XDG_STATE_HOME="$K/state" XDG_DATA_HOME="$K/data" XDG_CACHE_HOME="$K/cache" XDG_RUNTIME_DIR="$RT" \
     timeout -k 5 400 dbus-run-session -- kwin_wayland --virtual --xwayland --no-lockscreen --no-global-shortcuts \
         --socket "wayland-gate-$$" --width 1600 --height 1000 --exit-with-session "$WORK/session.sh" > "$K/kwin.txt" 2>&1 || true
-for _ in 1 2 3 4 5 6 7 8 9 10; do grep -q " $RT/doc " /proc/mounts || break; fusermount3 -uz "$RT/doc" 2>/dev/null; sleep 0.5; done
+for _ in 1 2 3 4 5 6 7 8 9 10; do grep -q " $RT/doc " /proc/mounts || break; fusermount3 -uz "$RT/doc" 2>/dev/null || true; sleep 0.5; done
 rm -rf "$RT"
 
 # ---- verdicts ---------------------------------------------------------------------------------

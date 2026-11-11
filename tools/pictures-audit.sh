@@ -17,6 +17,8 @@ ROOT="$PWD"
 DOTNET="${DOTNET:-dotnet}"
 APP="${1:-$ROOT/src/Mailbox.App/bin/Release/net10.0/mailbox}"
 [ -x "$APP" ] || { echo "pictures-audit: no application at $APP" >&2; exit 2; }
+# The sessions run from their own folder, so a path given relative to here must not stay so.
+APP="$(realpath "$APP")"
 case "$ROOT" in *" "*) echo "pictures-audit: the repository path has a space; KWin's session launcher would split it" >&2; exit 2;; esac
 
 HERE="$ROOT/scratch/pictures-audit"
@@ -43,6 +45,6 @@ env -u DISPLAY -u WAYLAND_DISPLAY -u DBUS_SESSION_BUS_ADDRESS NESTED_ROOT="$HERE
     XDG_CONFIG_HOME="$K/config" XDG_STATE_HOME="$K/state" XDG_DATA_HOME="$K/data" XDG_CACHE_HOME="$K/cache" XDG_RUNTIME_DIR="$RT" \
     timeout -k 5 900 dbus-run-session -- kwin_wayland --virtual --xwayland --no-lockscreen --no-global-shortcuts \
         --socket "wayland-audit-$$" --width 1600 --height 1000 --exit-with-session "$HERE/session.sh" > "$HERE/out/kwin.txt" 2>&1 || true
-for _ in 1 2 3 4 5; do grep -q " $RT/doc " /proc/mounts || break; fusermount3 -uz "$RT/doc" 2>/dev/null; sleep 0.5; done
+for _ in 1 2 3 4 5; do grep -q " $RT/doc " /proc/mounts || break; fusermount3 -uz "$RT/doc" 2>/dev/null || true; sleep 0.5; done
 rm -rf "$RT"
 bash "$HERE/verdicts.sh"
