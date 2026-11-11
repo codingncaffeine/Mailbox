@@ -133,10 +133,13 @@ runtime and every native library come out of the NuGet runtime pack for the targ
 ```sh
 bash packaging/build-release.sh          # x86_64: tarball, Mailbox.deb, Mailbox.rpm
 bash packaging/build-release.sh arm64    # aarch64: tarball, Mailbox-arm64.deb, Mailbox-aarch64.rpm
-bash packaging/build-release.sh all      # both
+bash packaging/build-release.sh musl     # x86_64 against musl: tarball
+bash packaging/build-release.sh all      # every one
 
 bash packaging/test-deb.sh          # installs the .deb in a clean debian:trixie container (podman) and probes it
 bash packaging/test-rpm.sh          # the same in a clean fedora:42 container
+bash packaging/test-musl.sh         # unpacks the musl tarball in a clean alpine container, probes it, captures the window
+bash packaging/build-alpine.sh      # builds the tree from source on alpine with its own SDK, runs the suite, captures the window
 ```
 
 The tests are part of every build: the system libraries the bundled Chromium links against, the
@@ -158,6 +161,22 @@ for Chromium's helper; on Ubuntu 23.10 and later the `.deb` installs the AppArmo
 allows one. **Where no sandbox can be had** — the tarball on a restricted Ubuntu, for instance —
 Mailbox does not run Chromium unsandboxed: it renders each message as text and says why in its
 log. `MAILBOX_NO_CHROMIUM=1` asks for text deliberately.
+
+### Alpine and other musl systems
+
+Mailbox builds from source against the musl C library with the distribution's own SDK — on
+Alpine, `apk add dotnet10-sdk tzdata` and then the three commands above — and every release carries a
+`linux-musl-x64` tarball published the same way as the others. A musl build has no Chromium,
+which is built for glibc, so its reading pane renders each message as text; everything else is
+the same. To run it, Alpine needs:
+
+```sh
+apk add icu-libs tzdata libstdc++ fontconfig font-dejavu libx11 libice libsm libxext libxi libxrandr \
+        libxcursor libxkbcommon mesa-egl libsecret libnotify
+```
+
+CI builds and tests every change on `alpine:latest` beside Ubuntu, and `packaging/build-alpine.sh`
+does the same in a container here, ending with a capture of the window drawn on musl.
 
 ### Fonts
 

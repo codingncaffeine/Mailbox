@@ -4,10 +4,13 @@
 #                                      packaging/install-desktop-files.sh for the desktop entry
 #   Mailbox.deb / Mailbox-arm64.deb    system install under /usr/lib/mailbox, launcher /usr/bin/mailbox
 #   Mailbox.rpm / Mailbox-aarch64.rpm  the same layout for Fedora, openSUSE and their relatives
+#   Mailbox-<ver>-linux-musl-x64.tar.gz the tarball for the musl C library: Alpine and its relatives
 #
 #   bash packaging/build-release.sh            # x64, the default and the one the AUR reads
 #   bash packaging/build-release.sh arm64      # aarch64 only
-#   bash packaging/build-release.sh all        # both
+#   bash packaging/build-release.sh musl       # x64 against musl, tarball only
+#   bash packaging/build-release.sh x64 musl   # what a release publishes
+#   bash packaging/build-release.sh all        # every one
 #
 # The x64 names are a contract: the AUR package (packaging/aur/PKGBUILD) repackages the tarball
 # from the GitHub release, so its name and layout change together with that file. The .deb and
@@ -21,9 +24,15 @@
 # EM_AARCH64). What it cannot check is the machine's own libraries, which is why the dependency
 # test below is worth running under emulation before an aarch64 release goes out.
 #
-# Every build is meant to be followed by packaging/test-deb.sh and packaging/test-rpm.sh: the
-# reading pane's engine and the rest of the native surface are exactly the dependencies that work
-# on a development box and fail on a clean install.
+# Every build is meant to be followed by packaging/test-deb.sh, packaging/test-rpm.sh and
+# packaging/test-musl.sh: the reading pane's engine and the rest of the native surface are exactly
+# the dependencies that work on a development box and fail on a clean install.
+#
+# The musl build is a publish for linux-musl-x64 and comes out as a tarball only: Alpine installs
+# from its own package format, and the tarball is what a musl user runs or a packager wraps. It
+# carries no Chromium (the engine is built for glibc), so its reading pane renders text, the way
+# the aarch64 build's does. packaging/build-alpine.sh is the other half of musl support: the tree
+# built from source on Alpine with the distribution's own SDK.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -31,12 +40,12 @@ VER=$(grep -oPm1 '(?<=<VersionPrefix>)[^<]+' Directory.Build.props)
 OUT=packaging/out
 
 ARCHES=("${@:-x64}")
-[ "${ARCHES[0]}" = "all" ] && ARCHES=(x64 arm64)
+[ "${ARCHES[0]}" = "all" ] && ARCHES=(x64 arm64 musl)
 
 for arch in "${ARCHES[@]}"; do
     case "$arch" in
-        x64|arm64) ;;
-        *) echo "Unknown architecture '$arch' — expected x64, arm64 or all." >&2; exit 1 ;;
+        x64|arm64|musl) ;;
+        *) echo "Unknown architecture '$arch' — expected x64, arm64, musl or all." >&2; exit 1 ;;
     esac
 done
 
@@ -47,16 +56,17 @@ rm -rf "$OUT" && mkdir -p "$OUT"
 build_one() {
     local arch="$1" pub="$OUT/publish-$1"
     # Debian and RPM each spell the same machine their own way, and neither spells it .NET's way.
-    local debarch rpmarch suffix
+    local debarch rpmarch suffix rid
     case "$arch" in
-        x64)   debarch=amd64; rpmarch=x86_64;  suffix="" ;;
-        arm64) debarch=arm64; rpmarch=aarch64; suffix="-arm64" ;;
+        x64)   debarch=amd64; rpmarch=x86_64;  suffix="";       rid=linux-x64 ;;
+        arm64) debarch=arm64; rpmarch=aarch64; suffix="-arm64"; rid=linux-arm64 ;;
+        musl)  debarch="";    rpmarch="";      suffix="";       rid=linux-musl-x64 ;;
     esac
 
     mkdir -p "$pub"
 
-    echo "── publish v$VER (self-contained linux-$arch, Release)"
-    dotnet publish src/Mailbox.App/Mailbox.App.csproj -c Release -r "linux-$arch" \
+    echo "── publish v$VER (self-contained $rid, Release)"
+    dotnet publish src/Mailbox.App/Mailbox.App.csproj -c Release -r "$rid" \
         --self-contained true -o "$pub" -v q
 
     # What the licences ask to travel with the binaries, and what a person unpacking the tarball
@@ -78,8 +88,12 @@ build_one() {
     mkdir -p "$pub/assets/icons"
     cp assets/icons/mailbox-*.png "$pub/assets/icons/"
 
-    echo "── tarball (linux-$arch)"
-    tar -C "$pub" -czf "$OUT/Mailbox-$VER-linux-$arch.tar.gz" .
+    echo "── tarball ($rid)"
+    tar -C "$pub" -czf "$OUT/Mailbox-$VER-$rid.tar.gz" .
+
+    # The musl build stops at the tarball: no distribution with that C library installs .deb or
+    # .rpm files, and the tarball is the shape a packager wraps.
+    [ "$arch" = musl ] && return 0
 
     # ---- the tree both packages install, assembled once ---------------------------------------
     #
@@ -187,5 +201,6 @@ echo "── artifacts:"
 ls -sh1 "$OUT" | grep -v publish
 echo "── sha256 (for packaging/aur/PKGBUILD):"
 for arch in "${ARCHES[@]}"; do
-    printf '%s  %s\n' "$(sha256sum "$OUT/Mailbox-$VER-linux-$arch.tar.gz" | cut -d' ' -f1)" "linux-$arch"
+    case "$arch" in x64) rid=linux-x64 ;; arm64) rid=linux-arm64 ;; musl) rid=linux-musl-x64 ;; esac
+    printf '%s  %s\n' "$(sha256sum "$OUT/Mailbox-$VER-$rid.tar.gz" | cut -d' ' -f1)" "$rid"
 done

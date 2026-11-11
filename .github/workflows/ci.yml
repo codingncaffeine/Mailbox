@@ -24,6 +24,19 @@ jobs:
       - name: Test
         run: dotnet test tests/Mailbox.Tests/Mailbox.Tests.csproj
 
+  # The same suite on the musl C library with Alpine's own SDK: a build from source there is a
+  # supported way to get Mailbox, and this is what keeps it one.
+  musl:
+    runs-on: ubuntu-24.04
+    container: alpine:latest
+    steps:
+      - name: Install the distribution's SDK
+        # tzdata: the base image carries no zone database, and the calendar reads zones by name.
+        run: apk add --no-cache dotnet10-sdk bash git tzdata
+      - uses: actions/checkout@v7
+      - name: Test
+        run: dotnet test tests/Mailbox.Tests/Mailbox.Tests.csproj
+
   doors:
     runs-on: ubuntu-24.04
     steps:

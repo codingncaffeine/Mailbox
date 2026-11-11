@@ -53,10 +53,25 @@
     resources in — and ChromiumFiles below lays them out instead, all under chromium/.
     See Chromium/ChromiumRuntime.cs.
   -->
+  <!--
+    Chromium is the x64 build of CEF for the GNU C library, and it ships in exactly the builds that
+    can run it: linux-x64, or a build with no runtime named on an x64 machine whose own C library
+    is glibc. An arm64 publish carries none, and so does a musl one (Alpine and its relatives,
+    whether published as linux-musl-x64 or built from source with the distribution's own SDK):
+    their reading pane renders text. The C library is read from the runtime identifier when one is
+    named, else from the SDK's own portable one, which is linux-musl-x64 on a musl system.
+  -->
+  <PropertyGroup>
+    <ChromiumTargetRuntime Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</ChromiumTargetRuntime>
+    <ChromiumTargetRuntime Condition="'$(RuntimeIdentifier)' == ''">$(NETCoreSdkPortableRuntimeIdentifier)</ChromiumTargetRuntime>
+    <ChromiumShips Condition="$([MSBuild]::IsOSPlatform('Linux')) And '$(ChromiumTargetRuntime)' == 'linux-x64'">true</ChromiumShips>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="CefGlue.Next.Core" Version="$(CefGlueVersion)" />
+    <!-- The binaries are only fetched for a build that ships them. -->
     <PackageReference Include="cef.runtime.linux-x64" Version="$(CefRuntimeVersion)" GeneratePathProperty="true"
-                      ExcludeAssets="build;buildTransitive" />
+                      ExcludeAssets="build;buildTransitive" Condition="'$(ChromiumShips)' == 'true'" />
   </ItemGroup>
 
   <ItemGroup>
@@ -122,12 +137,6 @@
   <PropertyGroup>
     <ChromiumSource>$(Pkgcef_runtime_linux-x64)/CEF/linux-x64</ChromiumSource>
     <ChromiumHelperSource>$(MSBuildThisFileDirectory)../../packaging/chromium/mailbox-cef-helper.c</ChromiumHelperSource>
-  </PropertyGroup>
-
-  <!-- linux-x64, and a build with no runtime named on an x64 machine. Chromium is the x64 build of
-       CEF; an arm64 publish carries none and its reading pane renders text. -->
-  <PropertyGroup>
-    <ChromiumShips Condition="$([MSBuild]::IsOSPlatform('Linux')) And ('$(RuntimeIdentifier)' == 'linux-x64' Or ('$(RuntimeIdentifier)' == '' And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'X64'))">true</ChromiumShips>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(ChromiumShips)' == 'true'">
