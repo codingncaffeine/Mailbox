@@ -272,11 +272,11 @@ msgid_plural "{1} emptied: {0} items."
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/Mailbox.App/Views/MainWindow.axaml.cs:7544
+#: src/Mailbox.App/Views/MainWindow.axaml.cs:7556
 msgid "Rule “{0}” created; nothing in {1} matched it."
 msgstr ""
 
-#: src/Mailbox.App/Views/MainWindow.axaml.cs:7546
+#: src/Mailbox.App/Views/MainWindow.axaml.cs:7558
 msgid "Rule “{1}” created and applied to {0} message."
 msgid_plural "Rule “{1}” created and applied to {0} messages."
 msgstr[0] ""

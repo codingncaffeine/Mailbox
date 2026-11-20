@@ -388,7 +388,7 @@ public partial class MainWindow
         {
             using var stream = new MemoryStream(raw);
             var mime = MimeKit.MimeMessage.Load(stream);
-            new MessageWindow(App.Themes, () => account.Mail, mime, raw, subscribed: true).Show(this);
+            new MessageWindow(App.Themes, () => account.Mail, mime, raw, subscribed: true).ShowBeside(this);
             shell.StatusRight = $"Opened “{message.Subject}”.";
         }
         catch (Exception ex) when (ex is FormatException or IOException)
@@ -649,9 +649,9 @@ public partial class MainWindow
                 // blocked behind.
                 Avalonia.Threading.Dispatcher.UIThread.Post(
                     () => Log.Info("Harness: pressing “New heading…” opened: "
-                        + (OwnedWindows.Count == 0
+                        + (OpenedWindows.Count == 0
                             ? "nothing"
-                            : string.Join(", ", OwnedWindows.Select(w => $"“{w.Title}”")))),
+                            : string.Join(", ", OpenedWindows.Select(w => $"“{w.Title}”")))),
                     Avalonia.Threading.DispatcherPriority.Background);
                 return;
 

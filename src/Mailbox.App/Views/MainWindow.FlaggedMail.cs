@@ -122,7 +122,7 @@ public partial class MainWindow
         }
 
         using var stream = new MemoryStream(raw);
-        new MessageWindow(App.Themes, () => account.Mail, MimeKit.MimeMessage.Load(stream), raw).Show(this);
+        new MessageWindow(App.Themes, () => account.Mail, MimeKit.MimeMessage.Load(stream), raw).ShowBeside(this);
         Log.Info($"Flagged mail: opened message {messageId} in {address}.");
 
         // Opened is read, here as from the list. Asked first, because a store write marks the

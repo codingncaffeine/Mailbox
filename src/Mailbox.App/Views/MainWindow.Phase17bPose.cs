@@ -106,7 +106,7 @@ public partial class MainWindow
                         break;
 
                     case "msgwin":
-                        if (OwnedWindows.OfType<MessageWindow>().LastOrDefault() is not { } opened)
+                        if (OpenedWindows.OfType<MessageWindow>().LastOrDefault() is not { } opened)
                         {
                             Log.Info("Harness: menus — no message window is open; pose openmsg first.");
                             break;

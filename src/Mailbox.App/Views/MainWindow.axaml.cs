@@ -2947,7 +2947,7 @@ public partial class MainWindow : Window
 
             // No store behind a loose file, so the pane renders from the file rather than looking
             // up MIME by id — `mail` returns null, which is what tells it to.
-            new MessageWindow(App.Themes, () => null, message, raw).Show(this);
+            new MessageWindow(App.Themes, () => null, message, raw).ShowBeside(this);
         }
         catch (Exception ex)
         {
@@ -4259,8 +4259,20 @@ public partial class MainWindow : Window
 
         WireMessageWindow(shell, window);
         HoldWarmOnClose(window);
-        window.Show(this);
+        window.ShowBeside(this);
     }
+
+    /// <summary>
+    /// The windows open over this one: the ones it owns, and the message windows on show, which
+    /// are windows of their own (<see cref="MessageWindow.ShowBeside"/>) and so not among them.
+    /// </summary>
+    internal IReadOnlyList<Window> OpenedWindows
+        => OwnedWindows
+            .Concat((Application.Current?.ApplicationLifetime
+                        as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)
+                    ?.Windows.OfType<MessageWindow>().Where(w => w.Owner is null && w.IsVisible && w.Opacity > 0)
+                ?? [])
+            .ToList();
 
     /// <summary>The one message window kept alive and hidden between readings, engine and all.</summary>
     private MessageWindow? _warmMessageWindow;

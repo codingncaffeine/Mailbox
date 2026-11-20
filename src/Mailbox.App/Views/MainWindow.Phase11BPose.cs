@@ -435,7 +435,7 @@ public partial class MainWindow
         // "nothing happened" and "a window opened" are otherwise the same evidence.
         Log.Info($"Harness: feeds state — showing {feeds.Status}; "
             + $"feed “{feeds.SelectedFeed?.Name ?? "none"}”, board “{feeds.SelectedBoard?.Name ?? "none"}”; "
-            + $"windows {(OwnedWindows.Count == 0 ? "none" : string.Join(", ", OwnedWindows.Select(w => $"“{w.Title}”")))}.");
+            + $"windows {(OpenedWindows.Count == 0 ? "none" : string.Join(", ", OpenedWindows.Select(w => $"“{w.Title}”")))}.");
 
         if (feeds.SelectedArticle is not { } article)
         {

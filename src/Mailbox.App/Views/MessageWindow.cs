@@ -157,7 +157,7 @@ public sealed class MessageWindow : Window
         MinWidth = 640;
         MinHeight = 420;
         CanResize = true;
-        WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        WindowStartupLocation = WindowStartupLocation.Manual;
 
         WindowFrame.Apply(this);
         FontFamily = (FontFamily)(Application.Current!.FindResource("ui.fontfamily") ?? FontFamily.Default);
@@ -246,13 +246,38 @@ public sealed class MessageWindow : Window
         _notice.IsVisible = false;
     }
 
+    /// <summary>
+    /// Shows the window over the middle of <paramref name="shell"/>, as a window of its own rather
+    /// than one the shell owns.
+    /// </summary>
+    /// <remarks>
+    /// The reference opens a message in a window of its own: the main window can be clicked back
+    /// in front of it, and each has its own button on the taskbar. An owned window cannot be
+    /// stacked under its owner — the window manager keeps it above, on X11 and Wayland alike —
+    /// so a reader with a message open could not get back to the main window without moving the
+    /// message out of the way or closing it. Placed by hand because centring over an owner needs
+    /// one; a native Wayland compositor places it itself and ignores the position.
+    /// </remarks>
+    public void ShowBeside(Window shell)
+    {
+        ArgumentNullException.ThrowIfNull(shell);
+
+        var scaling = shell.DesktopScaling;
+        var frame = shell.FrameSize ?? shell.ClientSize;
+        var own = new Size(double.IsNaN(Width) ? MinWidth : Width, double.IsNaN(Height) ? MinHeight : Height);
+        Position = new PixelPoint(
+            shell.Position.X + (int)((frame.Width - own.Width) * scaling / 2),
+            shell.Position.Y + (int)((frame.Height - own.Height) * scaling / 2));
+        Show();
+    }
+
     /// <summary>Shows the window warmed — the reverse of the invisible warm-up below.</summary>
-    public void ShowWarmed(Window owner)
+    public void ShowWarmed(Window shell)
     {
         Opacity = 1;
         ShowInTaskbar = true;
         ShowActivated = true;
-        Show(owner);
+        ShowBeside(shell);
 
         // Again, after the show: the value was set while the window was hidden, and a windowing
         // backend that applies opacity at map time keeps the glass it mapped with — visible to
@@ -267,12 +292,12 @@ public sealed class MessageWindow : Window
     /// transparent, unactivated and off the taskbar. The compositor honours the opacity, so
     /// nothing flashes; the tree attaches, which is what the engine's life is gated on.
     /// </summary>
-    public void ShowInvisible(Window owner)
+    public void ShowInvisible(Window shell)
     {
         Opacity = 0;
         ShowInTaskbar = false;
         ShowActivated = false;
-        Show(owner);
+        ShowBeside(shell);
     }
 
     private void ShowMessage(DkimResult? verified = null)
