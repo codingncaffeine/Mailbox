@@ -8,14 +8,32 @@ public readonly record struct DesktopArea(int X, int Y, int Width, int Height)
     public int Right => X + Width;
 
     public int Bottom => Y + Height;
+
+    public bool Contains(int x, int y) => x >= X && x < Right && y >= Y && y < Bottom;
 }
+
+/// <summary>One screen as the window system reports it: its name, all of it, and what the panels leave of it.</summary>
+public readonly record struct DesktopScreen(string Name, DesktopArea Bounds, DesktopArea WorkingArea);
+
+/// <summary>
+/// A kept place: the corner in desktop pixels, and — when it was known — the screen it was on and
+/// where on that screen, in that screen's pixels at the time.
+/// </summary>
+public readonly record struct KeptPlace(int X, int Y, string? Screen = null, int OffsetX = 0, int OffsetY = 0, int ScreenWidth = 0, int ScreenHeight = 0);
 
 /// <summary>
 /// Where the reader last left a window that keeps its place, and whether that place can still be
 /// used.
 /// </summary>
 /// <remarks>
-/// Kept as one string, <c>x,y</c>, so the two halves are written together or not at all. A place
+/// Kept as one string, <c>x,y</c>, so the two halves are written together or not at all — followed,
+/// when the screen under it is known, by <c>;name;dx,dy;width,height</c>: the screen's name, the
+/// corner's offset on it, and the screen's size, all in the pixels of that moment. Desktop pixels
+/// alone do not survive a change of scale: under XWayland the whole desktop's pixel grid is the
+/// largest monitor scale, so turning on a monitor scaled to 135% moves every point on every other
+/// screen, and a place kept before is then somewhere else, or nowhere. A screen keeps its name
+/// through that, and an offset on it scales with it, so the screen part is used whenever a screen
+/// of that name is there, and the desktop pixels only when it is not. A place
 /// is only as good as the screens it was on: a monitor unplugged or rearranged since leaves it
 /// pointing at nothing, and a window put there opens where nobody can see it. So a place is used
 /// only while enough of the window's caption lands on a screen to take hold of — the hundred
@@ -29,18 +47,75 @@ public static class WindowPlace
 
     public static string Format(int x, int y) => string.Create(CultureInfo.InvariantCulture, $"{x},{y}");
 
+    /// <summary>
+    /// A place with the screen it is on: <paramref name="screens"/> are the screens there are now,
+    /// and the one holding the corner is named with the corner's offset on it.
+    /// </summary>
+    public static string Format(int x, int y, IEnumerable<DesktopScreen> screens)
+    {
+        ArgumentNullException.ThrowIfNull(screens);
+
+        var plain = Format(x, y);
+        if (screens.FirstOrDefault(s => s.Bounds.Contains(x, y)) is not { Name: { Length: > 0 } name } on
+            || name.Contains(';') || on.Bounds.Width <= 0 || on.Bounds.Height <= 0)
+        {
+            return plain;
+        }
+
+        return string.Create(CultureInfo.InvariantCulture,
+            $"{plain};{name};{x - on.Bounds.X},{y - on.Bounds.Y};{on.Bounds.Width},{on.Bounds.Height}");
+    }
+
     /// <summary>The place a setting holds, or null when it holds none.</summary>
     public static (int X, int Y)? Parse(string? text)
+        => ParseKept(text) is { } kept ? (kept.X, kept.Y) : null;
+
+    /// <summary>Everything a setting holds of a place, or null when it holds none.</summary>
+    public static KeptPlace? ParseKept(string? text)
     {
         if (string.IsNullOrWhiteSpace(text)) return null;
 
+        var sections = text.Split(';');
+        if (Pair(sections[0]) is not { } corner) return null;
+        if (sections.Length != 4 || sections[1].Length == 0) return new KeptPlace(corner.A, corner.B);
+
+        // A screen part that does not read is dropped rather than the whole place: the corner
+        // is still what it was.
+        return Pair(sections[2]) is { } offset && Pair(sections[3]) is { A: > 0, B: > 0 } size
+            ? new KeptPlace(corner.A, corner.B, sections[1], offset.A, offset.B, size.A, size.B)
+            : new KeptPlace(corner.A, corner.B);
+    }
+
+    private static (int A, int B)? Pair(string text)
+    {
         var parts = text.Split(',');
         if (parts.Length != 2) return null;
 
-        return int.TryParse(parts[0], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var x)
-               && int.TryParse(parts[1], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var y)
-            ? (x, y)
+        return int.TryParse(parts[0], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var a)
+               && int.TryParse(parts[1], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var b)
+            ? (a, b)
             : null;
+    }
+
+    /// <summary>
+    /// Where a kept place is on the screens there are now: on the screen it was kept on, at the
+    /// same proportion of that screen, while a screen of that name is there; otherwise the
+    /// desktop pixels it was kept at.
+    /// </summary>
+    public static (int X, int Y) Locate(KeptPlace kept, IEnumerable<DesktopScreen> screens)
+    {
+        ArgumentNullException.ThrowIfNull(screens);
+
+        if (kept.Screen is not { } name
+            || screens.FirstOrDefault(s => s.Name == name) is not { Name: not null } on
+            || kept.ScreenWidth <= 0 || kept.ScreenHeight <= 0)
+        {
+            return (kept.X, kept.Y);
+        }
+
+        return (
+            on.Bounds.X + (int)Math.Round((double)kept.OffsetX * on.Bounds.Width / kept.ScreenWidth),
+            on.Bounds.Y + (int)Math.Round((double)kept.OffsetY * on.Bounds.Height / kept.ScreenHeight));
     }
 
     /// <summary>

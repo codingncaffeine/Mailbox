@@ -168,7 +168,7 @@ internal static class ProgressToasterCompanion
         // This process's settings are a copy that goes nowhere, so the place goes to the
         // application, which keeps it for the next toaster. Before the handler below that ends
         // the process, so a move the window closed on is still sent.
-        ProgressPlacement.Remember(dialog, place => Send(new ToasterMessage.Moved(place.X, place.Y)));
+        ProgressPlacement.Remember(dialog, place => Send(new ToasterMessage.Moved(place)));
 
         // A capture run the application was started for puts its windows off-screen, and the
         // toaster it starts is one of them: a batch on the owner's desktop must not put a window

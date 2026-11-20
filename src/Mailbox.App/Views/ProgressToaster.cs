@@ -81,8 +81,8 @@ internal sealed class ProgressToaster
     /// <summary>The "don't show this dialog box" box, ticked or cleared on the toaster.</summary>
     public event EventHandler<bool>? HideChanged;
 
-    /// <summary>The reader moved the toaster, and it came to rest with its top-left corner here.</summary>
-    public event EventHandler<PixelPoint>? Moved;
+    /// <summary>The reader moved the toaster, and it came to rest here: the place as the setting keeps it.</summary>
+    public event EventHandler<string>? Moved;
 
     /// <summary>The toaster has gone: closed by the reader, closed by this end, or failed.</summary>
     public event EventHandler? Closed;
@@ -305,7 +305,7 @@ internal sealed class ProgressToaster
             // Heard even from a toaster this end has already asked to leave: a window moved and
             // then closed straight away says where it was put on its way out.
             case ToasterMessage.Moved moved:
-                Moved?.Invoke(this, new PixelPoint(moved.X, moved.Y));
+                Moved?.Invoke(this, moved.Place);
                 break;
 
             case ToasterMessage.Closed:

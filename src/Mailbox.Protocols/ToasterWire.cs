@@ -76,8 +76,11 @@ public abstract record ToasterMessage
     /// <summary>"Don't show this dialog box during Send/Receive" was ticked or cleared.</summary>
     public sealed record HideChanged(bool Hidden) : ToasterMessage;
 
-    /// <summary>The reader moved the window, and it came to rest with its top-left corner here.</summary>
-    public sealed record Moved(int X, int Y) : ToasterMessage;
+    /// <summary>
+    /// The reader moved the window, and it came to rest here: the place as the setting keeps it,
+    /// written by the toaster, which is the end that can see the screens it is on.
+    /// </summary>
+    public sealed record Moved(string Place) : ToasterMessage;
 
     /// <summary>The window has gone, whoever closed it; the process is ending.</summary>
     public sealed record Closed : ToasterMessage;
@@ -141,7 +144,7 @@ public static class ToasterWire
             ToasterMessage.Shown shown => new JsonObject { ["op"] = "shown", ["backend"] = shown.Backend },
             ToasterMessage.CancelAll => new JsonObject { ["op"] = "cancel" },
             ToasterMessage.HideChanged hide => new JsonObject { ["op"] = "hide", ["hidden"] = hide.Hidden },
-            ToasterMessage.Moved moved => new JsonObject { ["op"] = "moved", ["x"] = moved.X, ["y"] = moved.Y },
+            ToasterMessage.Moved moved => new JsonObject { ["op"] = "moved", ["place"] = moved.Place },
             ToasterMessage.Closed => new JsonObject { ["op"] = "closed" },
             _ => throw new ArgumentException($"No wire form for {message.GetType().Name}.", nameof(message)),
         };
@@ -180,8 +183,8 @@ public static class ToasterWire
                 "cancel" => new ToasterMessage.CancelAll(),
                 "hide" when o["hidden"] is JsonValue v && v.TryGetValue<bool>(out var hidden)
                     => new ToasterMessage.HideChanged(hidden),
-                "moved" when Number(o, "x") is { } movedX && Number(o, "y") is { } movedY
-                    => new ToasterMessage.Moved(movedX, movedY),
+                "moved" when Text(o, "place") is { Length: > 0 } place
+                    => new ToasterMessage.Moved(place),
                 "closed" => new ToasterMessage.Closed(),
                 _ => null,
             };

@@ -38,21 +38,24 @@ internal static class ProgressPlacement
         ArgumentNullException.ThrowIfNull(dialog);
         ArgumentNullException.ThrowIfNull(settings);
 
-        if (WindowPlace.Parse(settings.GetString(SendReceiveProgressDialog.PlaceSetting)) is not { } left) return false;
+        if (WindowPlace.ParseKept(settings.GetString(SendReceiveProgressDialog.PlaceSetting)) is not { } kept) return false;
 
         var screens = dialog.Screens;
+        var desktop = Desktop(screens);
+        var left = WindowPlace.Locate(kept, desktop);
         var scaling = screens.ScreenFromPoint(new PixelPoint(left.X, left.Y))?.Scaling
                       ?? screens.Primary?.Scaling
                       ?? 1;
         var caption = (
             (int)Math.Ceiling(dialog.Width * scaling),
             (int)Math.Ceiling(DialogChrome.TitleBarHeight * scaling));
-        var areas = screens.All.Select(s => new DesktopArea(
-            s.WorkingArea.X, s.WorkingArea.Y, s.WorkingArea.Width, s.WorkingArea.Height));
-
-        if (WindowPlace.Fit(left, caption, areas) is not { } place)
+        if (WindowPlace.Fit(left, caption, desktop.Select(s => s.WorkingArea)) is not { } place)
         {
-            Log.Info($"Send/receive progress: the place it was left at, {left.X},{left.Y}, is on no screen now, so it opens where it would have.");
+            Log.Info($"Send/receive progress: the place it was left at, {left.X},{left.Y}"
+                     + (kept.Screen is { } name ? $" ({kept.OffsetX},{kept.OffsetY} on {name})" : string.Empty)
+                     + $", is on no screen now, so it opens where it would have. Screens: "
+                     + string.Join("; ", desktop.Select(s => $"{s.Name} {s.Bounds.X},{s.Bounds.Y} {s.Bounds.Width}x{s.Bounds.Height}"))
+                     + ".");
             return false;
         }
 
@@ -61,11 +64,19 @@ internal static class ProgressPlacement
         return true;
     }
 
+    /// <summary>The screens as the window system reports them, in its own pixels.</summary>
+    private static List<DesktopScreen> Desktop(Screens screens)
+        => screens.All.Select(s => new DesktopScreen(
+            s.DisplayName ?? string.Empty,
+            new DesktopArea(s.Bounds.X, s.Bounds.Y, s.Bounds.Width, s.Bounds.Height),
+            new DesktopArea(s.WorkingArea.X, s.WorkingArea.Y, s.WorkingArea.Width, s.WorkingArea.Height))).ToList();
+
     /// <summary>
     /// Hands <paramref name="moved"/> each place the reader moves the dialog to, once it has come
-    /// to rest there — and the last one when the dialog closes before it has.
+    /// to rest there — and the last one when the dialog closes before it has — written as the
+    /// setting keeps it, with the screen it is on.
     /// </summary>
-    public static void Remember(Window dialog, Action<PixelPoint> moved)
+    public static void Remember(Window dialog, Action<string> moved)
     {
         ArgumentNullException.ThrowIfNull(dialog);
         ArgumentNullException.ThrowIfNull(moved);
@@ -81,7 +92,7 @@ internal static class ProgressPlacement
 
             if (waiting is not { } place) return;
             waiting = null;
-            moved(place);
+            moved(WindowPlace.Format(place.X, place.Y, Desktop(dialog.Screens)));
         }
 
         dialog.Opened += (_, _) => open = Stopwatch.StartNew();

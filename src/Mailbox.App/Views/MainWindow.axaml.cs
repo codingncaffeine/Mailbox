@@ -9196,8 +9196,7 @@ public partial class MainWindow : Window
         if (!WindowingBackend.IsNativeWayland(this))
         {
             ProgressPlacement.Restore(dialog, App.Settings);
-            ProgressPlacement.Remember(dialog, place =>
-                App.Settings.Set(SendReceiveProgressDialog.PlaceSetting, WindowPlace.Format(place.X, place.Y)));
+            ProgressPlacement.Remember(dialog, place => App.Settings.Set(SendReceiveProgressDialog.PlaceSetting, place));
         }
 
         if (unactivated)
@@ -9274,8 +9273,7 @@ public partial class MainWindow : Window
             toaster.HideChanged += (_, hidden) => App.Settings.Set(SendReceiveProgressDialog.HideSetting, hidden);
 
             // Kept for the next toaster, which reads it from the settings as it starts.
-            toaster.Moved += (_, place) =>
-                App.Settings.Set(SendReceiveProgressDialog.PlaceSetting, WindowPlace.Format(place.X, place.Y));
+            toaster.Moved += (_, place) => App.Settings.Set(SendReceiveProgressDialog.PlaceSetting, place);
             toaster.Closed += (_, _) =>
             {
                 if (ReferenceEquals(_toaster, toaster)) _toaster = null;

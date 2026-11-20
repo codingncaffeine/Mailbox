@@ -29,8 +29,9 @@ public class ToasterWireTests
         new ToasterMessage.CancelAll(),
         new ToasterMessage.HideChanged(true),
         new ToasterMessage.HideChanged(false),
-        new ToasterMessage.Moved(1834, 612),
-        new ToasterMessage.Moved(-1720, -40),
+        new ToasterMessage.Moved("1834,612"),
+        new ToasterMessage.Moved("3987,2683;DP-2;3987,1378;4644,1944"),
+        new ToasterMessage.Moved("-1720,-40"),
         new ToasterMessage.Closed(),
     ];
 
@@ -92,8 +93,9 @@ public class ToasterWireTests
     [InlineData("{\"op\":\"begin\",\"addresses\":[\"a@b\"],\"rows\":[{\"name\":\"a@b - Sending\",\"state\":\"Exploded\",\"progress\":\"\"},{\"name\":\"a@b - Receiving\",\"state\":\"Waiting\",\"progress\":\"\"}],\"errors\":[],\"x\":0,\"y\":0}")]
     [InlineData("{\"op\":\"begin\",\"addresses\":[\"a@b\"],\"rows\":[{\"name\":\"a@b - Sending\",\"state\":\"7\",\"progress\":\"\"},{\"name\":\"a@b - Receiving\",\"state\":\"Waiting\",\"progress\":\"\"}],\"errors\":[],\"x\":0,\"y\":0}")]
     [InlineData("{\"op\":\"hide\",\"hidden\":\"yes\"}")]
-    [InlineData("{\"op\":\"moved\",\"x\":12}")]
-    [InlineData("{\"op\":\"moved\",\"x\":\"12\",\"y\":40}")]
+    [InlineData("{\"op\":\"moved\",\"x\":12,\"y\":40}")]
+    [InlineData("{\"op\":\"moved\",\"place\":12}")]
+    [InlineData("{\"op\":\"moved\",\"place\":\"\"}")]
     [InlineData("{\"op\":\"finish\",\"accounts\":[{\"address\":\"a@b\"}]}")]
     [InlineData("{\"op\":")]
     public void ADamagedLineIsDroppedRatherThanGuessedAt(string? line)
