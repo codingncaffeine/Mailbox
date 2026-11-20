@@ -294,12 +294,14 @@ internal sealed class ChromiumView : Control
 
     internal void Activated(Uri uri) => Dispatcher.UIThread.Post(() => LinkActivated?.Invoke(this, uri));
 
+    // The plain arrow is no cursor of its own but the one the window shows: over the edge of a
+    // window the body reaches, that is the resize arrow the frame puts up there.
     internal void CursorIs(CefCursorType type) => Dispatcher.UIThread.Post(() =>
         Cursor = type switch
         {
             CefCursorType.Hand => new Cursor(StandardCursorType.Hand),
             CefCursorType.IBeam => new Cursor(StandardCursorType.Ibeam),
-            _ => Cursor.Default,
+            _ => null,
         });
 
     // ---- Avalonia's side -----------------------------------------------------------------

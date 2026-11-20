@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Mailbox.Controls.Ribbon;
@@ -67,6 +68,10 @@ internal static class WindowFrame
                 : Cursor.Default;
         };
 
+        // On the way down, before the control under the pointer sees the press. A control that
+        // takes every press it is given — the message body, which hands each one to the web
+        // engine — reaches the window's edges in the message window, and on the way back up it
+        // had already taken the press, so those edges never resized.
         window.AddHandler(InputElement.PointerPressedEvent, (object? _, PointerPressedEventArgs e) =>
         {
             if (!e.GetCurrentPoint(window).Properties.IsLeftButtonPressed) return;
@@ -74,7 +79,7 @@ internal static class WindowFrame
 
             e.Handled = true;
             window.BeginResizeDrag(edge, e);
-        });
+        }, RoutingStrategies.Tunnel);
     }
 
     /// <summary>
@@ -212,7 +217,7 @@ internal static class WindowFrame
     /// <summary>Which edge the pointer is over, or null when it is not near one.</summary>
     internal static WindowEdge? EdgeAt(Window window, Point p)
     {
-        if (window.WindowState != WindowState.Normal) return null;
+        if (window.WindowState != WindowState.Normal || !window.CanResize) return null;
 
         var west = p.X <= ResizeMargin;
         var east = p.X >= window.Bounds.Width - ResizeMargin;
