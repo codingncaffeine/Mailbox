@@ -67,6 +67,11 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.7.1" date="2026-11-20">
+      <description>
+        <p>A message's own window can be resized from every edge again; the message's body took the presses its frame needed. A message window no longer stays on top of the main window, so the main window can be brought back in front of it. The Send/Receive progress window keeps its place by the screen it was on, so adding or removing a screen, or a change of display scale, no longer sends it back to the middle of the desktop.</p>
+      </description>
+    </release>
     <release version="0.7.0" date="2026-11-10">
       <description>
         <p>Pictures load when you allow them. Feed articles showed none at all; pictures still arriving when you moved on were thrown away and fetched again on the way back; several delivery networks refused every request, which now goes over HTTP/2 with a language; and a newsletter that is one large picture was refused by Mailbox itself. Pictures fetched once are kept for the session. Closing Mailbox no longer leaves a core dump per Chromium helper process. Mark All as Read in Feeds marks everything in the category or site, not only the newest five hundred. Mailbox builds and runs on the musl C library, Alpine among others; that build renders messages as text.</p>
